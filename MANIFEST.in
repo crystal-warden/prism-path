@@ -12,7 +12,7 @@ recursive-include prismpath/nudges *.md
 recursive-include prismpath/policies *.md *.json
 recursive-include prismpath/gallery *.md
 recursive-include prismpath/portable *.mjs *.html *.json
-recursive-include prismpath/tests/fixtures *.md
+recursive-include prismpath/tests/fixtures *.md *.jsonl
 
 prune prismpath/__pycache__
 global-exclude *.py[co]

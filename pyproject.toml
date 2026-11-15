@@ -70,6 +70,7 @@ prismpath = ["flows/*.md",                    # example + reference flows
           "policies/*.md", "policies/*.json", # the guard's statutory floor + P1 lockfile
           "gallery/*.md", "gallery/*/*.md",   # `prismpath init --template` copies these
           "tests/fixtures/broken/*.md",       # the analyzer's broken-flow corpus (test_analysis)
+          "tests/fixtures/core_evidence/*.jsonl",   # the cases a core run is produced from (test_evidence_verify)
           "telemetry/conformance/*.json",     # the frozen Facet corpora every other implementation is judged by
           "*.html",
           "examples/*.md", "examples/*/*.md", "examples/*/*/*.md",   # the flows the shipped demos run
@@ -94,6 +95,11 @@ prismpath = ["flows/*.md",                    # example + reference flows
 "share/doc/prismpath/docs/guides" = ["docs/guides/*.md"]
 "share/doc/prismpath/docs/design" = ["docs/design/*.md"]
 "share/doc/prismpath/docs/research" = ["docs/research/*.md"]
+
+[tool.pytest.ini_options]
+# tests marked cross_language drive another toolchain (the Lean oracle, cargo) and are excluded from single
+# language legs, as in the product line
+markers = ["cross_language: drives a second language toolchain (cargo, rustc); excluded from single language legs"]
 
 [project.urls]
 Homepage = "https://github.com/crystal-warden/prismpath"     # the clean product mirror (browse + quickstart)

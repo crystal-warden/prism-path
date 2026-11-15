@@ -989,7 +989,7 @@ mention `visits` or `error_count`, which also excluded images the oracle refuses
 out. Step 4 excludes an image exactly when the oracle refuses it with `policy:engine-counter`, decided by
 the oracle's own check of the image, Lean's `counterRefusal` (`formal/Core/Scope.lean`: `loadPolicy` on the
 image's bytes fails with `engineCounter`), ported line for line to the producers so that producing a run
-needs no oracle: `formal/diff/core_policy.py` (`load_policy`, `refuses_for_counter`) and the Rust example's
+needs no oracle: `prismpath.kernel.core_policy` (`load_policy`, `refuses_for_counter`; `formal/diff/core_policy.py` is the same module) and the Rust example's
 `oracle_policy` module. Each port computes the whole of `loadPolicy`, accepted or the refusal's cause,
 code, field and reason, in the order of section 4, and `core_evidence.py scope-check --from CASES --rust
 LINES` holds both to the oracle on every image (`core_evidence policy --from CASES` prints the Rust
@@ -1012,7 +1012,10 @@ target or a refusal with a registered nonzero code; and it replays the sampled r
 oracle (`core-oracle --batch`, the image and the reading of each), every decision required to be the
 oracle's with its cause, code, field and reason. A receipt resigned under the right instance key with a
 false decision passes the signature checks and fails the replay, which is why the replay is part of the
-verifier and not an extra.
+verifier and not an extra. Every check but the replay is the package's (`prismpath.ledgers.core_evidence`),
+and the shipped command `prismpath evidence verify RUN` (the same flags) replays through the Python
+reference kernel instead, since the oracle does not ship; the research test holds the two replays to each
+other on every run and altered run above (`prismpath/tests/test_core_evidence.py`, marked `cross_language`).
 
 **The round trip** (`prismpath/tests/test_core_evidence.py` at CI size, and the large run). On the 100,000
 cases of seed 1, step 4: both ported checks name the oracle's verdict on the policy of every one of the

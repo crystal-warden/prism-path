@@ -125,6 +125,17 @@ superseded before any upload. It closes the gaps 0.1.2 left in its signed receip
 flow manifests, receipts and bundles read exactly as 0.1.2 wrote them, and a 0.1.2 log verifies unchanged.
 
 ### Added
+- **`prismpath evidence verify RUN` checks a signed core run with no research tooling.** The verifier of a
+  differential run as evidence (docs/design/spec-verified-core.md, section 11) ships in the package as
+  `prismpath.ledgers.core_evidence`, with the producer, the oracle's ported policy check
+  (`prismpath.kernel.core_policy`, was `formal/diff/core_policy.py`) and the reference's decision path
+  (`prismpath.kernel.core_reference`, was the python leg of `formal/diff/core_diff.py`). It checks the keys
+  against `--pin-authority` and `--pin-instance` (without both the root statement is `signed-unpinned`), the
+  root statement, the Merkle root over the receipts, every image attestation and every receipt's hashes, and
+  replays every receipt (`--sample all`) or a sample through the Python reference kernel; it exits 0 when the
+  run verifies and 1 when it is refused, with the first failed check, and needs the `signing` extra and no
+  numpy. `formal/diff/core_evidence.py` is the same verifier with the replay through the Lean oracle, and the
+  research test holds the two replays to each other.
 - **`resume` writes receipts and signs them like `run`.** It takes `--audit-log`, `--instance-key` and the
   authorization flags, looks for the deployment's key the same way (the flag, `PRISMPATH_INSTANCE_KEY`, then
   `<state dir>/instance.key`, named when used), writes a receipt for each decision taken since the
