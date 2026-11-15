@@ -419,7 +419,7 @@ registry, an attestation or OpenTimestamps manifest, a lock, the policy host's i
 the epoch journal's records) is canon/2 (docs/DICTIONARY.md "canon/2") and names it with
 `"encoding": "canon/2"`; its hash is sha256 over its canon/2 bytes and a signature over it covers the
 domain `prismpath.canon/2` followed by a zero byte and those bytes, unless its format names a domain of
-its own (`prismpath-root-statement/2`). A reader decides by the document's own tag: canon/2 is read by the
+its own (`prismpath-root-statement/3`). A reader decides by the document's own tag: canon/2 is read by the
 strict canon/2 reader, and a document without the member, or with any other tag, is refused: it is never
 read, hashed or verified under another encoding. The strict reader accepts a document only as its exact
 canonical canon/2 bytes: a file or a JSON Lines line holds those bytes followed by at most one line feed,
@@ -436,6 +436,22 @@ verify a document under it, and a reader that meets an untagged document refuses
 log line is skipped and the log does not verify, a statement is `bad_format`, a pack, manifest or registry
 is `manifest:bad-format`, a registry `registry:bad-json`, an envelope `envelope:sig-invalid`). A time in a document is an integer count of
 microseconds since the Unix epoch.
+
+**Merkle trees.** Every Merkle root an implementation writes or checks (an audit log's root and its
+inclusion paths, a root statement, a core run's receipts, an OpenTimestamps anchor batch, the context
+ledger, an epoch's blocks) is RFC 6962's (section 2.1), scheme `rfc6962-sha256`: a leaf, a 32 byte hash of
+the receipt, event or block, enters the tree as SHA-256(0x00 || leaf); an inner node is
+SHA-256(0x01 || left || right); a tree over n ≥ 2 leaves splits at k, the largest power of two below n, the
+tree of the first k leaves on the left and of the rest on the right; the root of one leaf is its leaf hash,
+and no leaf or node is ever duplicated. An inclusion path is the siblings from the leaf up, each with the
+side it sits on, and a leaf in the shorter right part of an unbalanced tree has a shorter path. The tree
+before it (no prefixes, the last node of an odd layer paired with itself), under which [a, b, c] and
+[a, b, c, c] had one root, is retired, and the formats that carry roots were bumped with it:
+`prismpath-root-statement/3`, `prismpath.core-run-root/2`, `prismpath.intent-observation-root/2`, and an
+anchor manifest naming `"merkle": "rfc6962-sha256"`. An implementation MUST refuse a statement in a
+retired format (`prismpath-root-statement/2` is the finding `old_merkle_scheme`, `prismpath.core-run-root/1`
+is refused by name) and MUST NOT check a retired root under the new tree or mix the two. The vectors are
+RFC 6962's own known answers and `prismpath/portable/conformance/receipts.json`.
 
 A float is refused in content an implementation hashes but did not write (a connector's data, a decision
 outcome, a composer item, a proof, an operator's control data): the caller supplies an integer of a stated
