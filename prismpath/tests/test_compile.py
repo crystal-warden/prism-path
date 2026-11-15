@@ -160,7 +160,7 @@ def test_compile_p1(tmp_path):
 
 def test_compile_helpers(tmp_path):
     # Testing individual helpers ensures each stage of the compile pipeline operates independently.
-    from prismpath.cli import _gather_compile_inputs, _build_compile_bundle, _write_compile_output
+    from prismpath.bundle_compile import _gather_compile_inputs, _build_compile_bundle, _write_compile_output
 
     flow_file = tmp_path / "flow.md"
     flow_file.write_text(P0_FLOW, encoding="utf-8")
@@ -215,12 +215,12 @@ def test_compiled_bundle_inlines_the_extracted_engine(tmp_path):
     # The engine the bundle runs is a real file now (portable/bundle_engine.mjs), so the compiler
     # has one job left on it: inline the kernel and drop the import that would make the bundle
     # two files. Both halves of that contract are asserted here.
-    from prismpath import cli
+    from prismpath import bundle_compile, cli
 
-    engine_path = os.path.join(os.path.dirname(cli.__file__), "portable", cli.BUNDLE_ENGINE_FILE)
+    engine_path = os.path.join(os.path.dirname(cli.__file__), "portable", bundle_compile.BUNDLE_ENGINE_FILE)
     engine_source = open(engine_path, encoding="utf-8").read()
-    assert engine_source.count(cli.BUNDLE_STRIP_BEGIN) == 1
-    assert engine_source.count(cli.BUNDLE_STRIP_END) == 1
+    assert engine_source.count(bundle_compile.BUNDLE_STRIP_BEGIN) == 1
+    assert engine_source.count(bundle_compile.BUNDLE_STRIP_END) == 1
     assert 'from "./prismpath.mjs"' in engine_source
 
     flow_file = tmp_path / "flow.md"
@@ -230,7 +230,7 @@ def test_compiled_bundle_inlines_the_extracted_engine(tmp_path):
 
     bundle_text = bundle_file.read_text(encoding="utf-8")
     assert 'from "./prismpath.mjs"' not in bundle_text
-    assert cli.BUNDLE_STRIP_BEGIN not in bundle_text
+    assert bundle_compile.BUNDLE_STRIP_BEGIN not in bundle_text
     assert "export async function runCompiled" in bundle_text
     assert "return runCompiled(GRAPH, EMBEDDED_LOCK, agent, opts);" in bundle_text
     # the engine that drifted from engine.py is gone, not copied forward
