@@ -39,7 +39,8 @@ def measure(threads: int, out: Path) -> None:
     embed.weights = inner.weights
     reader.embed = embed
     fields = {}
-    for case in case_sets.build():
+    from . import cases_r2
+    for case in case_sets.build() + cases_r2.build():      # both rounds' cases
         if case.calls:
             for at, call in enumerate(case.calls):
                 fields[f"{case.id}#{at}"] = reader.read_call(case.task, json.dumps(call), call)
