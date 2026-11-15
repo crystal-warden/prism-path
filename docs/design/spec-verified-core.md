@@ -591,6 +591,18 @@ each stated for the objects at hand and never for all inputs (no hash onto a fin
 tree, over the canon/2 writer and on the documents). No `sorry`: what is not proven is a hypothesis of the
 theorem that needs it.
 
+**A shipped image's invariants** (`Core/Population.lean`). The first theorems about one image rather than
+every image: the governed population's admission and evaluation images
+(`integrations/governed_population/policy/*.core.json`), whose bytes `gen_policy.py` generates into
+`Core/PopulationImage.lean` and holds equal to the files by its `--check`. `admission_loads` and
+`evaluation_loads`: the kernel reads the bytes with `readCanonical` and `loadPolicy` (by `decide +kernel`)
+and gets the written-out checked policies the proofs compute with. Every invariant is then stated of
+`verdictBytes` on the shipped bytes and any reading: `stop_always_allowed` (a stop by the operator or the
+controller is allowed whatever else the reading holds, once it passes the boundary),
+`replicate_allowed_only_within`, `evolve_allowed_only_with_canary`, `protect_never_allowed`,
+`restart_of_stopped_never_allowed`, `allow_fails_closed` and its corollaries, `admission_targets_registered`
+and `canary_passed_iff`. They are about the reading the controller forms; the controller is outside them.
+
 **Not proven, stated as plainly.** That any implementation computes `verdict`: Python, Rust and the
 other targets are *conformant* to the oracle by differential testing (section 8), not proven. The
 order of the image's `fields` members does not change a verdict, because definitions are read in
