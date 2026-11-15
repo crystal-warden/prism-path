@@ -9,27 +9,28 @@ fn test_delivery_layer_parity_merkle_and_hmac_match_python() {
         "00011".to_string(),
     ];
 
+    // the values `prismpath.telemetry.selfheal.commit` and `ackchannel.sign_ack` give (RFC 6962 tree)
     let (root, proofs) = sh::commit(&blocks);
 
-    let expected_root = "df5dab1010711367c84688bb58d0db7c51c1e09486c8ec5c5eab6b92957a7e44";
+    let expected_root = "21083d5f1fc5c412065839349c35e890222cbd8267c81b9e554cd7abb2a105a8";
     assert_eq!(root, expected_root, "Merkle root does not match Python");
 
     let expected_proofs = vec![
         vec![
-            ("R".to_string(), "a8d0b6f0939cfd883251f62b265f971ef8a5ab97eee32b91460f08b965601d93".to_string()),
-            ("R".to_string(), "e70efdaa84ed5bea841a7b01ed10de75238f5b96d3fcdbb9f708d02ae3aa987f".to_string()),
+            ("R".to_string(), "fb9636c7c7b883a67638b081dff7117e82294d0cd3e58d9d05b18d71c4a26c2c".to_string()),
+            ("R".to_string(), "804d4c78e6d8a21b9fab64588f1dac86b1aaa411a438848d82611a8c19b15899".to_string()),
         ],
         vec![
-            ("L".to_string(), "17214e2d30ebb0eafe4b8866d63e3431e7258a23bbbc214cd92ddc72e114ba42".to_string()),
-            ("R".to_string(), "e70efdaa84ed5bea841a7b01ed10de75238f5b96d3fcdbb9f708d02ae3aa987f".to_string()),
+            ("L".to_string(), "b6363bd475cbb8c6b9028a9eab0806260cbe8d658e876b1ffafd1918b5947d30".to_string()),
+            ("R".to_string(), "804d4c78e6d8a21b9fab64588f1dac86b1aaa411a438848d82611a8c19b15899".to_string()),
         ],
         vec![
-            ("R".to_string(), "e961ba8ecc78e96392273dd9021ae3908f7148716455a4d5fa83739bb1476154".to_string()),
-            ("L".to_string(), "7c6aea358ed2bda34076cac9506e5016696713bc2ebf38821cc7185be954923c".to_string()),
+            ("R".to_string(), "6c3f9d6a18f5a820d6809491b95f980e1d4512be767880374d7c8d8b302249cd".to_string()),
+            ("L".to_string(), "9efbbe2f3ca637b23e9cfdea9f777388c7ed2b7b97119f6dba6f84dfc6052b7b".to_string()),
         ],
         vec![
-            ("L".to_string(), "3dd9c0995d54c0abd51a90f1d57b1ce77bc885fc8a7cea52dcad3c2540dda5ee".to_string()),
-            ("L".to_string(), "7c6aea358ed2bda34076cac9506e5016696713bc2ebf38821cc7185be954923c".to_string()),
+            ("L".to_string(), "9258df0599b3f66bc16473644d266caad661fff579893598ff95ba5f72780053".to_string()),
+            ("L".to_string(), "9efbbe2f3ca637b23e9cfdea9f777388c7ed2b7b97119f6dba6f84dfc6052b7b".to_string()),
         ],
     ];
 
@@ -38,7 +39,7 @@ fn test_delivery_layer_parity_merkle_and_hmac_match_python() {
     let secret = b"test-secret-key-123";
     let seq = 42;
     let tag = ack::sign_ack(secret, &root, seq).unwrap();
-    let expected_tag = "5d36b90f92f21035fa4f89e80ce0e1bd4297566a0526dd0486f534a1f4d5fed4";
+    let expected_tag = "9884933ac7a47604ec065a2f5daa2e685049df00b46043a76e5bc9dab8da6c19";
 
     assert_eq!(tag, expected_tag, "HMAC ACK tag does not match Python");
     assert!(ack::verify_ack(secret, &root, seq, &tag).unwrap());

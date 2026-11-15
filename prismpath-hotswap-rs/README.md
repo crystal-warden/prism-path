@@ -38,7 +38,7 @@ wrote and reports what Python would report, finding for finding. It has no signi
 | module | mirrors | checks |
 |---|---|---|
 | `root_statement` | `prismpath/ledgers/root_statement.py` | a statement's form, key id and Ed25519 signature over the domain prefixed canonical bytes; the `prev` chain; leaf counts; the root against the log's leaves; truncation; pinned keys; policy authority keys in the log; one receipt bundle offline |
-| `merkle` | `prismpath/ledgers/ledger_ots.py` | the Bitcoin style tree under the log: root, and leaf to root inclusion paths |
+| `merkle` | `prismpath/ledgers/ledger_ots.py` | the RFC 6962 tree under the log (`prismpath_rs::merkle`): root, and leaf to root inclusion paths |
 | `flow_authority` | `prismpath/hotswap/flow_authority.py` | a flow manifest against the flow (LF normalised hash), the trusted and revoked authority keys, and the version floor |
 
 ```rust

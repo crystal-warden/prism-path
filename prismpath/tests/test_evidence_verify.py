@@ -196,6 +196,110 @@ def test_a_false_receipt_resigned_with_the_instance_key_fails_the_replay(produce
         core_evidence.verify(copy, sample=None, **_pins(produced))
 
 
+# ----------------------------------------------------------------- the stored flow is the signed image's rendering
+def _reseal_cases(produced, copy, change):
+    """`change` applied to cases.jsonl's rows, and the run sealed again around it as an honest producer holding
+    the instance key would: run.json names the new file and the root statement is signed again. Only the
+    flow check is left to notice."""
+    rows = [canon2.loads(line) for line in (copy / "cases.jsonl").read_bytes().split(b"\n")[:-1]]
+    change(rows)
+    (copy / "cases.jsonl").write_bytes(b"".join(canon2.dumps(row) + b"\n" for row in rows))
+    _rewrite_manifest(copy, cases_sha256=core_evidence.sha256_hex((copy / "cases.jsonl").read_bytes()))
+    _resign(produced, copy, _receipts(copy))
+
+
+def _first_with_flow(rows, needle="-> "):
+    return next(row for row in rows if row["flow"] is not None and needle in row["flow"])
+
+
+def test_a_run_whose_stored_flow_was_edited_is_refused(produced, tmp_path):
+    """The reference decides from the flow, so a flow edited away from the signed image would have it decide
+    a policy the authority never signed while every hash and signature still holds."""
+    copy = _copy(produced, tmp_path)
+    edited = {}
+
+    def edit(rows):
+        row = _first_with_flow(rows, "when ")
+        row["flow"] = row["flow"].replace("when ", "when not ", 1)
+        edited["case"] = row["case"]
+    _reseal_cases(produced, copy, edit)
+    with pytest.raises(core_evidence.Bad, match=f"case {edited['case']}: the stored flow is not the rendering of the "
+                                                f"signed image"):
+        core_evidence.verify(copy, sample=None, **_pins(produced))
+
+
+def test_a_flow_given_to_an_image_with_no_rendering_is_refused(produced, tmp_path):
+    copy = _copy(produced, tmp_path)
+
+    def edit(rows):
+        donor = _first_with_flow(rows)
+        next(row for row in rows if row["flow"] is None)["flow"] = donor["flow"]
+    _reseal_cases(produced, copy, edit)
+    with pytest.raises(core_evidence.Bad, match="the stored flow renders no image"):
+        core_evidence.verify(copy, sample=5)
+
+
+def test_a_flow_withheld_from_an_image_that_renders_is_refused(produced, tmp_path):
+    """Dropping a flow would move a case outside the core (`unrenderable`) and take its decisions off the record."""
+    copy = _copy(produced, tmp_path)
+    _reseal_cases(produced, copy, lambda rows: _first_with_flow(rows).update(flow=None))
+    with pytest.raises(core_evidence.Bad, match="the stored flow is not the rendering of the signed image"):
+        core_evidence.verify(copy, sample=5)
+
+
+def test_the_stored_flows_are_the_canonical_renderings(produced):
+    from prismpath.kernel import core_render
+    base, _manifest = produced
+    for case in core_evidence.read_cases(base / "run" / "cases.jsonl"):
+        assert case["flow"] == core_render.flow_of(case["image"])[0]
+        assert core_evidence.flow_problem(case) is None
+
+
+def test_produce_refuses_cases_whose_flow_is_not_the_rendering(produced, tmp_path):
+    rows = [canon2.loads(line) for line in CASES.read_bytes().split(b"\n")[:-1]]
+    row = _first_with_flow(rows, "when ")
+    row["flow"] = row["flow"].replace("when ", "when not ", 1)
+    edited = tmp_path / "cases.jsonl"
+    edited.write_bytes(b"".join(canon2.dumps(item) + b"\n" for item in rows))
+    with pytest.raises(RuntimeError, match="the stored flow is not the rendering of the signed image"):
+        core_evidence.produce(edited, tmp_path / "run", produced[0] / "keys")
+
+
+# ----------------------------------------------------------------- the retired Merkle tree
+def _retired_root(leaves):
+    """The root the retired tree gave: no domain prefixes, the last node of an odd layer paired with itself."""
+    import hashlib
+    layer = [bytes.fromhex(leaf) for leaf in leaves]
+    while len(layer) > 1:
+        layer = layer + layer[-1:] if len(layer) % 2 else layer
+        layer = [hashlib.sha256(layer[i] + layer[i + 1]).digest() for i in range(0, len(layer), 2)]
+    return layer[0].hex()
+
+
+def test_a_run_rooted_in_the_retired_tree_is_refused_as_old_scheme(produced, tmp_path):
+    """A run produced before the RFC 6962 tree: its root statement is `prismpath.core-run-root/1`, signed over
+    the retired tree's root. It is refused by name, never checked under the new tree."""
+    base, _manifest = produced
+    copy = _copy(produced, tmp_path)
+    leaves = [core_evidence.sha256_hex(line) for line in _receipts(copy)]
+    instance = root_statement.InstanceKey.load(str(base / "keys" / "instance.key"))
+    statement = canon2.loads((copy / "receipts.roots.jsonl").read_bytes().rstrip(b"\n"))
+    statement.update(format="prismpath.core-run-root/1", root=_retired_root(leaves))
+    del statement["sig"]
+    statement["sig"] = instance.sign(b"prismpath.core-run-root/1\x00" + canon2.dumps(statement)).hex()
+    (copy / "receipts.roots.jsonl").write_bytes(canon2.dumps(statement) + b"\n")
+    with pytest.raises(core_evidence.Bad, match="prismpath.core-run-root/1, whose root is of the retired Merkle tree"):
+        core_evidence.verify(copy, sample=5, **_pins(produced))
+
+
+def test_the_new_root_is_not_the_retired_one(produced):
+    base, _manifest = produced
+    leaves = [core_evidence.sha256_hex(line) for line in _receipts(base / "run")]
+    statement = canon2.loads((base / "run" / "receipts.roots.jsonl").read_bytes().rstrip(b"\n"))
+    assert statement["format"] == core_evidence.ROOT_FORMAT == "prismpath.core-run-root/2"
+    assert statement["root"] == root_statement.merkle_root(leaves) != _retired_root(leaves)
+
+
 # ----------------------------------------------------------------- the command line
 def _cli(capsys, *argv):
     code = cli.main(["evidence", "verify", *map(str, argv)])

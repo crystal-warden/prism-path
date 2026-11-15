@@ -5,19 +5,21 @@
 //! `run.json` (the manifest), `cases.jsonl` (the inputs), `images.jsonl` (an image attestation per case,
 //! Ed25519 with the authority key over `prismpath.core-image/1\0` and the image's canon/2 bytes),
 //! `receipts.jsonl` (a canon/2 receipt per decision; a receipt is not signed by itself) and
-//! `receipts.roots.jsonl` (one canon/2 root statement, `prismpath.core-run-root/1`, signed with the
-//! instance key over its own domain prefix, over the receipts' Merkle root, binding the manifest, its time
+//! `receipts.roots.jsonl` (one canon/2 root statement, `prismpath.core-run-root/2`, signed with the
+//! instance key over its own domain prefix, over the receipts' RFC 6962 Merkle root, binding the manifest, its time
 //! an integer count of microseconds), with the two public keys beside them.
 //!
 //!     core_evidence produce --from CASES.jsonl --out RUN --keys KEYS   # the Rust port decides
 //!     core_evidence policy --from CASES.jsonl   # the ported oracle check of every image, one line each
+//!     core_evidence render --from CASES.jsonl   # every image's canonical rendering, one line each
 //!     core_evidence verify RUN [--sample N|all] [--seed S] [--pin-authority PUB --pin-instance PUB] [--oracle BIN]
 //!
 //! `produce` decides every case with the Rust port, composed as the differential harness's Rust leg
 //! composes it (`prismpath-rs/examples/core_diff.rs`), and signs with test keys it generates in `--keys`
 //! when none are there (`keygen`, the pack signing code); a case outside the core is excluded with its
 //! reason (`outside_core`). `verify` re-checks the root statement, every
-//! receipt and every image attestation, and replays a sample of the decisions through the Lean oracle;
+//! receipt, every image attestation and that every stored flow is its image's canonical rendering
+//! (`render`, the port of `prismpath.kernel.core_render`), and replays a sample of the decisions through the Lean oracle;
 //! it verifies a run the Python module produced, and the Python module verifies one produced here.
 
 use ed25519_dalek::Signer;
@@ -36,8 +38,10 @@ const RECEIPT_FORMAT: &str = "prismpath.core-receipt/1";
 const IMAGE_DOMAIN: &[u8] = b"prismpath.core-image/1\x00";
 const LOG_CORE_RUN: &str = "core-run";
 /// The run's root statement: canon/2, its own format and domain prefix (`core_evidence.ROOT_FORMAT`).
-const ROOT_FORMAT: &str = "prismpath.core-run-root/1";
-const ROOT_DOMAIN: &[u8] = b"prismpath.core-run-root/1\x00";
+/// `/2` states a root of the RFC 6962 tree; `/1` stated one of the retired tree and is refused by name.
+const ROOT_FORMAT: &str = "prismpath.core-run-root/2";
+const ROOT_DOMAIN: &[u8] = b"prismpath.core-run-root/2\x00";
+const OLD_ROOT_FORMATS: [&str; 1] = ["prismpath.core-run-root/1"];
 const ROOT_MEMBERS: [&str; 10] = ["format", "log", "root", "leaves", "time_us", "trigger", "key_id", "public_key", "policy", "sig"];
 const FILES: [&str; 7] = ["run.json", "cases.jsonl", "images.jsonl", "receipts.jsonl", "receipts.roots.jsonl", "authority.pub", "instance.pub"];
 
@@ -111,6 +115,225 @@ fn read_cases(bytes: &[u8]) -> Result<Vec<Case>, String> {
         cases.push(Case { id: str_of(&row, "case")?.to_string(), image: unhex(str_of(&row, "image")?)?, flow, readings });
     }
     Ok(cases)
+}
+
+// ----------------------------------------------------------------- the canonical rendering
+/// An image's canonical rendering as the flow text the kernels parse, the port of
+/// `prismpath.kernel.core_render.render` with no random source (every choice takes its plainest spelling),
+/// or None for an image with no faithful rendering. A run stores this text beside each image, and `verify`
+/// refuses a run whose stored flow is not it: the decisions come from the flow, so a flow edited away from
+/// the signed image would decide a policy the authority never signed. `core_evidence render` prints it for
+/// every case, so the Python suite holds the two renderings equal.
+mod render {
+    use prismpath_rs::canon2::{self, Doc};
+
+    const FORMAT: &str = "prismpath.core/1";
+    const START: &str = "core_decision";
+    const ALWAYS: [&str; 6] = ["always", "true", "else", "otherwise", "default", "_"];
+    const NEVER: [&str; 2] = ["false", "never"];
+    const OPERATORS: [&str; 6] = ["<", "<=", ">", ">=", "==", "!="];
+    const BREAKS: [char; 10] = ['\n', '\r', '\x0b', '\x0c', '\x1c', '\x1d', '\x1e', '\u{85}', '\u{2028}', '\u{2029}'];
+
+    type R = Result<String, ()>;
+
+    fn ident(name: &str) -> bool {
+        let mut chars = name.chars();
+        matches!(chars.next(), Some(first) if first.is_ascii_alphabetic() || first == '_')
+            && chars.all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
+    }
+
+    fn name_of(doc: &Doc) -> R {
+        match doc {
+            Doc::Str(name) if ident(name) => Ok(name.clone()),
+            _ => Err(()),
+        }
+    }
+
+    fn py_string(value: &str) -> String {
+        let mut out = String::from("\"");
+        for ch in value.chars() {
+            let code = ch as u32;
+            match ch {
+                '\\' => out.push_str("\\\\"),
+                '"' => out.push_str("\\\""),
+                _ if code < 0x20 || code == 0x7f || code == 0x85 || code == 0x2028 || code == 0x2029 => {
+                    out.push_str(&if code < 0x100 { format!("\\x{code:02x}") } else { format!("\\u{code:04x}") })
+                }
+                _ => out.push(ch),
+            }
+        }
+        out.push('"');
+        out
+    }
+
+    fn digits(text: &str) -> bool {
+        !text.is_empty() && text.bytes().all(|byte| byte.is_ascii_digit())
+    }
+
+    /// `-?[1-9][0-9]*`
+    fn plain_integer(text: &str) -> bool {
+        let body = text.strip_prefix('-').unwrap_or(text);
+        body.as_bytes().first().is_some_and(|first| (b'1'..=b'9').contains(first)) && digits(body) 
+    }
+
+    /// `[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?`
+    fn decimal(text: &str) -> bool {
+        let body = text.strip_prefix(['+', '-']).unwrap_or(text);
+        let (mantissa, exponent) = match body.find(['e', 'E']) {
+            Some(at) => (&body[..at], Some(&body[at + 1..])),
+            None => (body, None),
+        };
+        let mantissa_ok = match mantissa.split_once('.') {
+            Some((whole, fraction)) => (digits(whole) && (fraction.is_empty() || digits(fraction))) || (whole.is_empty() && digits(fraction)),
+            None => digits(mantissa),
+        };
+        let exponent_ok = exponent.is_none_or(|exp| digits(exp.strip_prefix(['+', '-']).unwrap_or(exp)));
+        mantissa_ok && exponent_ok
+    }
+
+    fn constant(k: &Doc) -> R {
+        let Doc::Arr(items) = k else { return Err(()) };
+        let Some(Doc::Str(tag)) = items.first() else { return Err(()) };
+        match (tag.as_str(), &items[1..]) {
+            ("num", [Doc::Int(value)]) => Ok(value.to_string()),
+            ("num", [Doc::Str(value)]) if plain_integer(value) || (decimal(value) && value.contains(['.', 'e', 'E'])) => Ok(value.clone()),
+            ("bool", [Doc::Bool(value)]) => Ok(if *value { "True" } else { "False" }.to_string()),
+            ("str", [Doc::Str(value)]) => Ok(py_string(value)),
+            ("none", []) => Ok("None".to_string()),
+            ("field", [Doc::Str(name)]) if ident(name) => Ok(name.clone()),
+            _ => Err(()),
+        }
+    }
+
+    fn is_junction(doc: &Doc) -> bool {
+        matches!(doc, Doc::Arr(items) if matches!(items.first(), Some(Doc::Str(tag)) if tag == "and" || tag == "or"))
+    }
+
+    fn condition(c: &Doc, top: bool) -> R {
+        let Doc::Arr(items) = c else { return Err(()) };
+        let Some(Doc::Str(tag)) = items.first() else { return Err(()) };
+        match tag.as_str() {
+            "truthy" if items.len() == 2 => {
+                let name = name_of(&items[1])?;
+                let lower = name.to_lowercase();
+                Ok(if top && (ALWAYS.contains(&lower.as_str()) || NEVER.contains(&lower.as_str())) { format!("({name})") } else { name })
+            }
+            "cmp" if items.len() == 4 && matches!(items[2], Doc::Str(_)) => {
+                let Doc::Str(op) = &items[2] else { unreachable!() };
+                if !OPERATORS.contains(&op.as_str()) {
+                    return Err(());
+                }
+                let name = name_of(&items[1])?;
+                Ok(format!("{name} {op} {}", constant(&items[3])?))
+            }
+            "in" | "not in" if items.len() == 3 && matches!(items[2], Doc::Arr(_)) => {
+                let name = name_of(&items[1])?;
+                let Doc::Arr(set) = &items[2] else { unreachable!() };
+                let members = set.iter().map(constant).collect::<Result<Vec<_>, _>>()?;
+                Ok(format!("{name} {tag} [{}]", members.join(", ")))
+            }
+            "not" if items.len() == 2 => {
+                let inner = condition(&items[1], false)?;
+                Ok(if is_junction(&items[1]) { format!("not ({inner})") } else { format!("not {inner}") })
+            }
+            "and" | "or" if items.len() >= 3 => {
+                let parts = items[1..]
+                    .iter()
+                    .map(|operand| condition(operand, false).map(|text| if is_junction(operand) { format!("({text})") } else { text }))
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok(parts.join(&format!(" {tag} ")))
+            }
+            _ => Err(()),
+        }
+    }
+
+    fn member<'a>(members: &'a [(String, Doc)], key: &str) -> Option<&'a Doc> {
+        members.iter().find(|(name, _)| name == key).map(|(_, value)| value)
+    }
+
+    fn python_space(ch: char) -> bool {
+        ch.is_whitespace() || ('\x1c'..='\x1f').contains(&ch)
+    }
+
+    /// The canonical rendering of a canon/2 document in the core's abstract syntax, or Err.
+    pub fn render(doc: &Doc) -> R {
+        let Doc::Obj(members) = doc else { return Err(()) };
+        let mut keys: Vec<&str> = members.iter().map(|(key, _)| key.as_str()).collect();
+        keys.sort_unstable();
+        if keys != ["fields", "format", "rules"] || member(members, "format") != Some(&Doc::Str(FORMAT.to_string())) {
+            return Err(());
+        }
+        let (Some(Doc::Obj(fields)), Some(Doc::Arr(rules))) = (member(members, "fields"), member(members, "rules")) else { return Err(()) };
+        let mut lines = vec!["---".to_string(), "name: core".to_string(), format!("start: {START}")];
+        for (name, definition) in fields {
+            let Doc::Str(definition) = definition else { return Err(()) };
+            if name.is_empty() || name.contains(':') || name.chars().chain(definition.chars()).any(|ch| BREAKS.contains(&ch))
+                || name.trim_matches(python_space) != name || name.starts_with('-')
+            {
+                return Err(());
+            }
+            lines.push(format!("field.{name}: {definition}"));
+        }
+        lines.push("---".to_string());
+        lines.push(format!("## {START}"));
+        let mut targets: Vec<String> = Vec::new();
+        for rule in rules {
+            let Doc::Obj(parts) = rule else { return Err(()) };
+            let mut keys: Vec<&str> = parts.iter().map(|(key, _)| key.as_str()).collect();
+            keys.sort_unstable();
+            let (Some(Doc::Str(target)), Some(when)) = (member(parts, "target"), member(parts, "when")) else { return Err(()) };
+            if keys != ["target", "when"] || target.is_empty() || !target.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'-') {
+                return Err(());
+            }
+            let single = |word: &str| matches!(when, Doc::Arr(items) if items.len() == 1 && items[0] == Doc::Str(word.to_string()));
+            let cond = if single("always") {
+                "always".to_string()
+            } else if single("never") {
+                "never".to_string()
+            } else {
+                format!("when {}", condition(when, true)?)
+            };
+            lines.push(format!("-> {target}: {cond}"));
+            let lower = target.to_lowercase();
+            if lower != START && !targets.contains(&lower) {
+                targets.push(lower);
+            }
+        }
+        for target in targets {
+            lines.push(format!("## {target}"));
+        }
+        Ok(lines.join("\n") + "\n")
+    }
+
+    /// The canonical flow of an image's bytes, or None when it has none (unreadable or unrenderable).
+    pub fn flow_of(image: &[u8]) -> Option<String> {
+        render(&canon2::read(image).ok()?).ok()
+    }
+}
+
+/// Why a case's stored flow is not the canonical rendering of its signed image (`core_evidence.flow_problem`).
+fn flow_problem(case: &Case) -> Option<String> {
+    let flow = render::flow_of(&case.image);
+    if case.flow == flow {
+        return None;
+    }
+    Some(match flow {
+        None => format!("case {}: the stored flow renders no image: the signed image has no rendering", case.id),
+        Some(_) => format!("case {}: the stored flow is not the rendering of the signed image", case.id),
+    })
+}
+
+/// The canonical rendering of every case's image, one canon/2 line each (`{"case", "flow"}`), for the
+/// Python suite to hold to `core_render.flow_of`.
+fn render_lines(source: &Path) -> Result<String, String> {
+    let cases = read_cases(&std::fs::read(source).map_err(|error| error.to_string())?)?;
+    let mut out = Vec::new();
+    for case in &cases {
+        let flow = render::flow_of(&case.image).map_or(Doc::Null, Doc::Str);
+        let line = canon2::write(&obj(vec![("case", text(&case.id)), ("flow", flow)])).map_err(|error| error.to_string())?;
+        out.push(String::from_utf8(line).map_err(|error| error.to_string())?);
+    }
+    Ok(out.join("\n"))
 }
 
 // ----------------------------------------------------------------- the core's scope
@@ -876,8 +1099,13 @@ fn verify_root_statement(data: &[u8], leaves: &[String], manifest_bytes: &[u8], 
         && member(&statement, "format") == Some(&text(ROOT_FORMAT))
         && member(&statement, "log") == Some(&text(LOG_CORE_RUN))
         && member(&statement, "trigger") == Some(&text(LOG_CORE_RUN));
+    if let Some(Doc::Str(old)) = member(&statement, "format").filter(|format| matches!(format, Doc::Str(f) if OLD_ROOT_FORMATS.contains(&f.as_str()))) {
+        return Err(format!("the root statement is {old}, whose root is of the retired Merkle tree (no domain prefixes, \
+                            the last node of an odd layer duplicated); this verifier reads only {ROOT_FORMAT} ({}), so produce \
+                            the run again", prismpath_rs::merkle::MERKLE_SCHEME));
+    }
     if !shaped {
-        return Err("the root statement is not a prismpath.core-run-root/1 statement".to_string());
+        return Err(format!("the root statement is not a {ROOT_FORMAT} statement"));
     }
     for key in ["leaves", "time_us"] {
         if !matches!(member(&statement, key), Some(Doc::Int(value)) if *value >= 0) {
@@ -923,6 +1151,9 @@ fn produce(source: &Path, out: &Path, keys: &Path) -> Result<String, String> {
     let cases_bytes = std::fs::read(source).map_err(|error| error.to_string())?;
     std::fs::write(out.join("cases.jsonl"), &cases_bytes).map_err(|error| error.to_string())?;
     let cases = read_cases(&cases_bytes)?;
+    if let Some(problem) = cases.iter().find_map(flow_problem) {
+        return Err(format!("{problem}; write the cases with `core_evidence.write_cases`"));
+    }
 
     let mut images = Vec::new();
     for case in &cases {
@@ -1091,6 +1322,9 @@ fn verify(run: &Path, options: &Options) -> Result<String, String> {
     if cases.len() as i64 != int_of(&manifest, "cases")? || image_lines.len() != cases.len() {
         return Err("run.json, cases.jsonl and images.jsonl count other cases".to_string());
     }
+    if let Some(problem) = cases.iter().find_map(flow_problem) {
+        return Err(problem);
+    }
     for (case, line) in cases.iter().zip(&image_lines) {
         let attestation = canon2::read(line).map_err(|error| format!("images.jsonl: {error}"))?;
         let mut signed = IMAGE_DOMAIN.to_vec();
@@ -1249,6 +1483,10 @@ fn main() -> ExitCode {
             Some(source) => policy_lines(Path::new(&source)),
             None => Err("policy --from CASES".to_string()),
         },
+        Some("render") => match flag("--from") {
+            Some(source) => render_lines(Path::new(&source)),
+            None => Err("render --from CASES".to_string()),
+        },
         Some("verify") if args.len() > 1 => {
             let sample = match flag("--sample").as_deref() {
                 Some("all") => None,
@@ -1265,7 +1503,7 @@ fn main() -> ExitCode {
             };
             verify(Path::new(&args[1]), &options).map_err(|why| format!("core_evidence: REFUSED {}: {why}", args[1]))
         }
-        _ => Err("usage: core_evidence produce --from CASES --out RUN --keys KEYS | policy --from CASES | verify RUN [--sample N|all] [--seed S] [--pin-authority PUB --pin-instance PUB] [--oracle BIN]".to_string()),
+        _ => Err("usage: core_evidence produce --from CASES --out RUN --keys KEYS | policy --from CASES | render --from CASES | verify RUN [--sample N|all] [--seed S] [--pin-authority PUB --pin-instance PUB] [--oracle BIN]".to_string()),
     };
     match outcome {
         Ok(line) => {

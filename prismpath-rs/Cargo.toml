@@ -14,7 +14,10 @@ categories = ["algorithms", "embedded"]
 # pure-Rust). Default-on so the conformance gate always runs; embedded builds that want the bare
 # kernel use `default-features = false` and keep only serde.
 default = ["durable"]
-durable = ["dep:sha2", "dep:hmac", "dep:hex"]
+durable = ["merkle", "dep:sha2", "dep:hmac", "dep:hex"]
+# `merkle` = the RFC 6962 tree every ledger shares (sha2 and hex only), for crates that need the tree
+# without the rest of `durable`, such as the telemetry transport.
+merkle = ["dep:sha2", "dep:hex"]
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }

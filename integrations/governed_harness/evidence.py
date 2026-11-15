@@ -72,8 +72,7 @@ class EpisodeRun:
         instance = root_statement.InstanceKey.load(str(instance_key))
         authority_id = core_evidence.sha256_hex(authority_pub.read_bytes())
         root_statement.check_separation(instance, [authority_id])
-        cases = [{"id": self.case_id, "image": self.image, "readings": list(self.readings),
-                  "render_seed": 0}]
+        cases = [{"id": self.case_id, "image": self.image, "readings": list(self.readings)}]
         core_evidence.write_cases(cases, self.run / "cases.jsonl")
         signer = policy_pack._load_private(str(authority_key))
         images = canon2.dumps({"format": core_evidence.IMAGE_FORMAT, "case": self.case_id,

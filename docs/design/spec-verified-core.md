@@ -217,8 +217,9 @@ Signed bytes cannot be rewritten, so the rest moved by versioning, and then the 
 1. **A name and a domain tag.** A document written under canon/2 says so: the core's image carries
    `prismpath.core/1` (whose definition includes canon/2), and every other artifact that moved gained an
    `encoding: "canon/2"` member, and its signature a `canon/2` domain prefix (root statements carry one of their
-   own, `prismpath-root-statement/2`), so a verifier never guesses which reader to use. A differential run's
-   root statement is `prismpath.core-run-root/1` (section 11).
+   own, `prismpath-root-statement/2`, now `/3`), so a verifier never guesses which reader to use. A differential
+   run's root statement is `prismpath.core-run-root/1`, now `/2` (section 11: both were bumped when the tree
+   became RFC 6962's).
 2. **canon/1 is retired.** The first plan kept a verify only canon/1 reader and frozen canon/1 twins of the
    corpora. The owner decided (2026-11-10, evening) to retire it at once, since no one has used the system yet:
    no reader, no encoder and no corpus of canon/1 remains. A document with no tag, or any tag but canon/2, is
@@ -252,7 +253,7 @@ Signed bytes cannot be rewritten, so the rest moved by versioning, and then the 
 signature domain of a document without one of its own is `prismpath.canon/2` and a zero byte (`CANON2_DOMAIN`).
 
 - The audit log's and the epoch chain's statements are `prismpath-root-statement/2` (canon/2, `encoding`,
-  `time_us`, its own domain). Pack and flow manifests, envelopes and the crypto registry carry `encoding` and
+  `time_us`, its own domain), and `/3` since the tree became RFC 6962's (section 11). Pack and flow manifests, envelopes and the crypto registry carry `encoding` and
   are signed over the canon/2 domain; so are the compliance adapter's receipts.
 - `canon.loads_document` and `durable::read_document` read a document that names canon/2 with the strict
   canon/2 reader and refuse anything else, an object with another tag or none and a value that is not an object.
@@ -963,15 +964,45 @@ implementation, the harness or whoever ran it. A run is a directory, written by
 
 | file | what it holds |
 |---|---|
-| `cases.jsonl` | the inputs, one canon/2 line per case: the image's and every reading's bytes in hex, and the flow text the image renders to (what the reference and the port read), or null |
+| `cases.jsonl` | the inputs, one canon/2 line per case: the image's and every reading's bytes in hex, and the image's canonical rendering as flow text (what the reference and the port read; `prismpath.kernel.core_render`), or null for an image with none |
 | `images.jsonl` | one image attestation per case, `prismpath.core-image/1`: the case, the image's SHA-256, the authority key's id, and an Ed25519 signature over the domain prefix `prismpath.core-image/1\0` followed by the image's canon/2 bytes |
 | `receipts.jsonl` | one receipt per decision, `prismpath.core-receipt/1`, a canon/2 line: its position `idx`, the case and the reading's index, the image's SHA-256, the reading's SHA-256, the decider (`python` or `rust`), and the decision, `route` with its target or `refuse` with the registered cause, its nonzero `cause_code` and the field and reason where the refusal has them |
-| `receipts.roots.jsonl` | one root statement, `prismpath.core-run-root/1`, a canon/2 line signed with the instance key over the domain prefix `prismpath.core-run-root/1\0` followed by the canon/2 bytes of every member but `sig`: the log `core-run`, the Merkle root of the receipts' SHA-256 leaves (the tree of `ledger_ots`) and their count, the signer's clock `time_us` (an integer count of microseconds since the epoch), the instance key's id and public half, and `policy`, the SHA-256 of `run.json` |
+| `receipts.roots.jsonl` | one root statement, `prismpath.core-run-root/2`, a canon/2 line signed with the instance key over the domain prefix `prismpath.core-run-root/2\0` followed by the canon/2 bytes of every member but `sig`: the log `core-run`, the RFC 6962 Merkle root of the receipts' SHA-256 leaves (the tree of `ledger_ots`, below) and their count, the signer's clock `time_us` (an integer count of microseconds since the epoch), the instance key's id and public half, and `policy`, the SHA-256 of `run.json` |
 | `run.json` | the manifest, `prismpath.core-run/1`: the decider, the counts, the excluded cases with their reasons, the SHA-256 of `cases.jsonl` and `images.jsonl`, and the two keys' ids |
 | `authority.pub`, `instance.pub` | the two public keys, raw 32 bytes |
 
 A receipt is not signed by itself: the root statement attests every receipt at once, and each receipt is a
-leaf under the root it signs. The authority key, which says which policy may run, signs the images, and
+leaf under the root it signs.
+
+**The tree (step 5).** The receipts' tree is RFC 6962's (section 2.1, the Certificate Transparency tree),
+the one every PrismPath ledger builds (`prismpath.ledgers.ledger_ots`, `prismpath_rs::merkle`, the eBPF
+`merkle.h`): a leaf, here a receipt line's SHA-256, is hashed into the tree as SHA-256(0x00 || leaf); an
+inner node is SHA-256(0x01 || left || right); a tree over n ≥ 2 leaves splits at k, the largest power of two
+below n, the root of the first k leaves on the left and of the rest on the right; one leaf's root is its leaf
+hash; nothing is duplicated. The tree before it, Bitcoin's (no prefixes, the last node of an odd layer paired
+with itself), gave [a, b, c] and [a, b, c, c] one root, so a root alone did not fix how many receipts were
+under it and only the statement's leaf count told the two apart, and a leaf could be presented as a node.
+With the prefixes and the split, two nonempty lists with one root are one list, of any lengths, unless
+SHA-256 collides: `Core/Merkle.lean` proves it over the hash as a parameter (`mth_injective`) and that the
+retired tree collides for every hash (`retired_collides`). The scheme is carried by the format:
+`prismpath.core-run-root/2` (and `prismpath-root-statement/3` for audit logs and epoch chains) states an
+RFC 6962 root, and a `prismpath.core-run-root/1` statement, a root of the retired tree, is refused by both
+verifiers by name ("whose root is of the retired Merkle tree"), never checked under the new one. Every run
+written before step 5 is refused that way and has to be produced again. The known answer vectors are RFC
+6962's own (the Certificate Transparency reference implementations' eight inputs, roots of the first one to
+eight; `prismpath/tests/test_merkle_rfc6962.py` and `prismpath-rs/src/merkle.rs`).
+
+**The stored flow is the image's rendering (step 5).** The authority signs the image, and the reference
+kernel decides from the flow, so a producer holding the instance key could store a flow that is not the
+image's and receipt its decisions with every hash and signature intact, the replay through the reference
+agreeing because it reads the same edited flow. The renderer is therefore part of the package
+(`prismpath.kernel.core_render`; the differential imports it, `render(doc, rng)`, and varies the spelling with
+its random source): with no random source it writes the image's canonical rendering, every choice in its
+plainest spelling, a function of the image alone. A run stores that rendering (`core_evidence.write_cases`),
+the producers refuse cases whose flow is not it, and both verifiers refuse a run in which any case's flow is
+not the canonical rendering of its signed image, or is null for an image that renders, or names a flow for
+one that does not. The Rust twin carries a port of the canonical rendering (`core_evidence render --from
+CASES` prints it), held equal to the Python on every image of the CI run and of 3,000 more. The authority key, which says which policy may run, signs the images, and
 the instance key, which attests what was recorded, signs the root statement; they are never the same key
 (`root_statement.check_separation`), and both are test keys, generated per run by the repository's own
 code (`swap keygen`'s `policy_pack.keygen` and `ledger keygen`'s `root_statement.keygen` in Python, the
@@ -1000,11 +1031,12 @@ problem is receipted with the oracle's refusal, which the replay checks.
 **The verifier** (`core_evidence.py verify RUN`, and `core_evidence verify RUN` in Rust; `--sample N` or
 `all`, `--pin-authority PUB --pin-instance PUB`) checks, and refuses the run at the first failure: the
 two keys against the pins and against `run.json`, and that they differ; the root statement through
-`verify_root_statement` (one line, read by canon/2 and in its canonical spelling, exactly the members of
-`prismpath.core-run-root/1` with integers where the format has them, the run's instance key, the
+`verify_root_statement` (one line, read by canon/2 and in its canonical spelling, not a retired
+`prismpath.core-run-root/1`, exactly the members of `prismpath.core-run-root/2` with integers where the format has them, the run's instance key, the
 signature under it over the domain prefix and the body, the Merkle root of every receipt and their count)
 and that its `policy` binds this `run.json`; that `cases.jsonl` and
-`images.jsonl` are the files `run.json` names; every image attestation's signature under the authority key
+`images.jsonl` are the files `run.json` names; that every case's stored flow is its image's canonical
+rendering; every image attestation's signature under the authority key
 over its image's bytes; that the excluded cases are exactly those the image says are outside the core;
 that the receipts are, in order, one per reading of every other case, each in its canonical canon/2
 spelling, binding that case's image and reading by hash, naming the run's decider, and a route with a
@@ -1031,7 +1063,8 @@ step 4 receipts 9,420 more decisions, every one replayed and agreeing. The test 
 alters each part of a run (a decision, a dropped receipt, a reading, an image signature, the manifest, a
 key, the root statement's signature, its clock written as a float of seconds, a later clock, the
 statement respelled with whitespace, a second statement), resigns a false receipt, puts an audit log's
-root statement format in place of the run's, and pins a foreign key, and both verifiers refuse each.
+root statement format in place of the run's, pins a foreign key, edits a flow and seals the run again
+around it, and signs a `/1` statement over the retired tree's root, and both verifiers refuse each.
 
 Lean states what a verified run shows about `Core.verdict` (`Core/Evidence.lean`, section 7):
 `evidence_sound`, over a model of the run and of this verifier with every receipt replayed, the
@@ -1048,6 +1081,7 @@ audit log's statement format, `prismpath-root-statement/1`, whose bytes were can
 was an ISO 8601 string; step 4 gave the core run its own format, `prismpath.core-run-root/1`, with its own
 domain prefix, integers and strings only and the time as `time_us`, an integer. It is written by
 `core_evidence.make_root_statement` in Python and by the Rust example, each verifying the other's. The
-audit log's and epoch chain's statements have since become `prismpath-root-statement/2` (section 3.1),
-a format of its own with its own domain, and the run's verifier refuses a statement in either audit log format. The hash of the statement, what an
+audit log's and epoch chain's statements have since become `prismpath-root-statement/2` (section 3.1) and,
+with the RFC 6962 tree, `prismpath-root-statement/3`, and the run's statement `prismpath.core-run-root/2`;
+the run's verifier refuses a statement in any audit log format. The hash of the statement, what an
 anchor would stamp, is the SHA-256 of its canon/2 line; `ledger anchor` is not yet taught this format.

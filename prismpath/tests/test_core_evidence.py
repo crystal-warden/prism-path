@@ -195,7 +195,7 @@ def test_the_root_statement_is_canon2_with_an_integer_clock(runs):
 
 
 def test_an_audit_log_root_statement_is_refused(runs, tmp_path):
-    """The audit log's statement format (`prismpath-root-statement/2`, its own domain) signed over the same root
+    """The audit log's statement format (`prismpath-root-statement/3`, its own domain) signed over the same root
     with the run's instance key does not pass as the run's root statement."""
     import json
     from prismpath.ledgers import root_statement
@@ -214,6 +214,84 @@ def test_an_audit_log_root_statement_is_refused(runs, tmp_path):
         core_evidence.verify(copy, sample=5)
     checked = _rust_verify(rust, copy)
     assert checked.returncode == 1 and "root statement" in checked.stdout, checked.stdout
+
+
+def _reseal(base, copy):
+    """run.json named again over the run's files and the root statement signed again with the run's instance
+    key, as the producer holding it would: only a check past the hashes and signatures can then refuse."""
+    from prismpath.kernel import canon2
+    from prismpath.ledgers import root_statement
+    manifest = canon2.loads((copy / "run.json").read_bytes().rstrip(b"\n"))
+    manifest["cases_sha256"] = core_evidence.sha256_hex((copy / "cases.jsonl").read_bytes())
+    (copy / "run.json").write_bytes(canon2.dumps(manifest) + b"\n")
+    leaves = [core_evidence.sha256_hex(line) for line in (copy / "receipts.jsonl").read_bytes().split(b"\n")[:-1]]
+    instance = root_statement.InstanceKey.load(str(base / "keys-py" / "instance.key"))
+    statement = core_evidence.make_root_statement(instance, root_statement.merkle_root(leaves), len(leaves),
+                                                  canon2.dumps(manifest))
+    (copy / "receipts.roots.jsonl").write_bytes(canon2.dumps(statement) + b"\n")
+
+
+def test_the_rust_rendering_is_the_pythons(runs, tmp_path):
+    """The Rust twin's port of the canonical rendering (`core_evidence render`) gives every image the flow
+    `prismpath.kernel.core_render.flow_of` gives it, or none where it gives none, on the CI run's cases and on
+    a larger generated set."""
+    from prismpath.kernel import canon2, core_render
+    base, rust = runs
+    more = tmp_path / "more.jsonl"
+    core_evidence.write_cases(core_diff.generate(3000, 23), more)
+    for source in (base / "cases.jsonl", more):
+        rendered = subprocess.run([str(rust), "render", "--from", str(source)], capture_output=True, text=True)
+        assert rendered.returncode == 0, rendered.stdout + rendered.stderr
+        rows = [canon2.loads(line.encode()) for line in rendered.stdout.splitlines()]
+        cases = core_evidence.read_cases(source)
+        assert len(rows) == len(cases) and any(row["flow"] is None for row in rows)
+        for case, row in zip(cases, rows):
+            assert row == {"case": case["id"], "flow": core_render.flow_of(case["image"])[0]}, case["id"]
+
+
+def test_a_run_with_an_edited_flow_is_refused_by_both(runs, tmp_path):
+    """A flow edited away from its signed image, the run sealed again around it with the instance key: every
+    hash and signature holds, and both verifiers refuse it because the flow is not the image's rendering."""
+    from prismpath.kernel import canon2
+    base, rust = runs
+    copy = tmp_path / "edited-flow"
+    shutil.copytree(base / "run-py", copy)
+    rows = [canon2.loads(line) for line in (copy / "cases.jsonl").read_bytes().split(b"\n")[:-1]]
+    row = next(row for row in rows if row["flow"] is not None and "when " in row["flow"])
+    row["flow"] = row["flow"].replace("when ", "when not ", 1)
+    (copy / "cases.jsonl").write_bytes(b"".join(canon2.dumps(item) + b"\n" for item in rows))
+    _reseal(base, copy)
+    message = f"case {row['case']}: the stored flow is not the rendering of the signed image"
+    with pytest.raises(core_evidence.Bad, match=message):
+        core_evidence.verify(copy, sample=None)
+    checked = _rust_verify(rust, copy)
+    assert checked.returncode == 1 and message in checked.stdout, checked.stdout
+
+
+def test_a_run_rooted_in_the_retired_tree_is_refused_by_both(runs, tmp_path):
+    """A `prismpath.core-run-root/1` statement, signed with the run's key over the retired tree's root (no
+    prefixes, the last node of an odd layer duplicated), is refused by name by both verifiers."""
+    import hashlib
+    from prismpath.kernel import canon2
+    from prismpath.ledgers import root_statement
+    base, rust = runs
+    copy = tmp_path / "old-scheme"
+    shutil.copytree(base / "run-py", copy)
+    layer = [hashlib.sha256(line).digest() for line in (copy / "receipts.jsonl").read_bytes().split(b"\n")[:-1]]
+    while len(layer) > 1:
+        layer = layer + layer[-1:] if len(layer) % 2 else layer
+        layer = [hashlib.sha256(layer[i] + layer[i + 1]).digest() for i in range(0, len(layer), 2)]
+    statement = canon2.loads((copy / "receipts.roots.jsonl").read_bytes().rstrip(b"\n"))
+    statement.update(format="prismpath.core-run-root/1", root=layer[0].hex())
+    del statement["sig"]
+    instance = root_statement.InstanceKey.load(str(base / "keys-py" / "instance.key"))
+    statement["sig"] = instance.sign(b"prismpath.core-run-root/1\x00" + canon2.dumps(statement)).hex()
+    (copy / "receipts.roots.jsonl").write_bytes(canon2.dumps(statement) + b"\n")
+    message = "the root statement is prismpath.core-run-root/1, whose root is of the retired Merkle tree"
+    with pytest.raises(core_evidence.Bad, match=message):
+        core_evidence.verify(copy, sample=5)
+    checked = _rust_verify(rust, copy)
+    assert checked.returncode == 1 and message in checked.stdout, checked.stdout
 
 
 def _image(fields, *whens):

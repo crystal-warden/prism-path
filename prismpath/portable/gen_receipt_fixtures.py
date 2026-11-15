@@ -237,6 +237,36 @@ def legacy_statement(key, *, seq: int, root: str, leaves: int, prev: str, trigge
     return body
 
 
+# What the retired Merkle tree gave (no domain prefixes, the last node of an odd layer paired with itself),
+# built here by hand (the product no longer computes it) so the cases can show a statement over it is refused.
+RETIRED_FORMAT = "prismpath-root-statement/2"
+RETIRED_SIGNING_DOMAIN = b"prismpath-root-statement/2\x00"
+
+
+def retired_root(leaves: list) -> str:
+    layer = [bytes.fromhex(leaf) for leaf in leaves]
+    while len(layer) > 1:
+        layer = layer + layer[-1:] if len(layer) % 2 else layer
+        layer = [hashlib.sha256(layer[index] + layer[index + 1]).digest() for index in range(0, len(layer), 2)]
+    return layer[0].hex() if layer else ""
+
+
+def retired_run() -> "Run":
+    """A run signed before the RFC 6962 tree: `/2` statements over the retired tree's roots, chained and signed
+    by the pinned key as the signer wrote them."""
+    run = Run(runs=())
+    run.events = make_events(5)
+    for count, trigger in ((3, "checkpoint"), (5, "run-end")):
+        body = {"format": RETIRED_FORMAT, canon.ENCODING_KEY: canon.CANON2, "log": rs.LOG_AUDIT,
+                "seq": len(run.statements), "root": retired_root(run.leaves[:count]), "leaves": count,
+                "prev": link_of(run.statements[-1]) if run.statements else "", "time_us": stamp(len(run.statements)),
+                "trigger": trigger, "key_id": INSTANCE.key_id, "public_key": INSTANCE.public_raw.hex(),
+                "policy": run.policy}
+        body["sig"] = INSTANCE.sign(RETIRED_SIGNING_DOMAIN + canon.canon2_bytes(body)).hex()
+        run.statements.append(body)
+    return run
+
+
 def mixed_run() -> "Run":
     """Three canon/1 events under one `/1` statement, then three canon/2 events under a `/2` statement."""
     run = Run(runs=())
@@ -493,7 +523,8 @@ def trail_cases() -> list:
         broken = {key: value for key, value in base.items() if key != field}
         cases.append(trail_case(f"statement_without_{field}", run.log, join([line_of(broken)] + status[1:]), pin))
     variants = {
-        "wrong_format_string": {"format": "prismpath-root-statement/3"},
+        "wrong_format_string": {"format": "prismpath-root-statement/9"},
+        "retired_merkle_scheme_format": {"format": "prismpath-root-statement/2"},
         "legacy_format_with_a_canon2_body": {"format": "prismpath-root-statement/1"},
         "unknown_encoding": {"encoding": "canon/3"},
         "time_us_is_a_string": {"time_us": "1762257600250000"},
@@ -563,6 +594,12 @@ def trail_cases() -> list:
     notswap.sign("append")
     cases.append(trail_case("only_swap_events_name_authority_keys", notswap.log, notswap.roots, pin))
     cases.append(trail_case("authority_key_flagged_without_a_pin", swaps.log, swaps.roots))
+
+    # A log signed under the retired Merkle tree: `/2` statements, each a root of that tree, chained and signed
+    # by the pinned key. Refused by name (`old_merkle_scheme`), never checked under the RFC 6962 tree.
+    retired = retired_run()
+    cases.append(trail_case("statements_over_the_retired_merkle_tree_are_refused", retired.log, retired.roots, pin))
+    cases.append(trail_case("statements_over_the_retired_merkle_tree_are_refused_unpinned", retired.log, retired.roots))
 
     # A log that crosses the migration: canon/1 events under `/1` statements, then canon/2 events under
     # `/2` statements chained to them. Each leaf and each statement is hashed under its own encoding.
@@ -645,7 +682,9 @@ def bundle_cases() -> list:
     single = Run(runs=((1, "run-end"),))
     cases.append(bundle_case("single_leaf_has_an_empty_path", bundle_for(single, 0), pin))
     seven = Run(runs=((7, "run-end"),))
-    cases.append(bundle_case("odd_tree_duplicates_the_last_leaf", bundle_for(seven, 6), pin))
+    cases.append(bundle_case("odd_tree_splits_at_the_largest_power_of_two", bundle_for(seven, 6), pin))
+    cases.append(bundle_case("receipt_under_a_retired_merkle_tree_statement_is_refused",
+                             bundle_for(retired_run(), 1), pin))
     cases.append(bundle_case("receipt_with_decimal_strings_and_unicode_values", bundle_for(run, 5), pin))
 
     def edit_of(source, change):

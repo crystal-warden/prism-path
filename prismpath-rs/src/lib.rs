@@ -24,6 +24,9 @@ pub mod value;
 #[cfg(feature = "durable")]
 pub mod durable;
 
+#[cfg(feature = "merkle")]
+pub mod merkle;
+
 #[cfg(feature = "durable")]
 pub mod connector;
 

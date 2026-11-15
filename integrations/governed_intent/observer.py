@@ -53,8 +53,11 @@ from integrations.governed_harness import evidence
 from . import intent_reader as ir
 
 OBSERVATION_FORMAT = "prismpath.intent-observation/1"
-ROOT_FORMAT = "prismpath.intent-observation-root/1"
-ROOT_DOMAIN = b"prismpath.intent-observation-root/1\x00"
+# `/2` states a root of the RFC 6962 tree (`ledger_ots.MERKLE_SCHEME`); `/1` stated one of the retired tree
+# (no domain prefixes, the last node of an odd layer duplicated) and is refused by name.
+ROOT_FORMAT = "prismpath.intent-observation-root/2"
+ROOT_DOMAIN = b"prismpath.intent-observation-root/2\x00"
+OLD_ROOT_FORMATS = ("prismpath.intent-observation-root/1",)
 REVIEW_FORMAT = "prismpath.intent-owner-review/1"
 OBSERVER_VERSION = 1
 HARM_ADJACENT_BP = 7000
@@ -193,6 +196,11 @@ def verify(obs_dir: Path, decision_run: Path, pin_observer: Path, reader: Option
     records = [canon2.loads(line) for line in lines]
     statement = canon2.loads(list(ce._lines(obs_dir / "observations.roots.jsonl"))[0])
     pinned = root_statement.load_public(str(pin_observer))
+    if statement.get("format") in OLD_ROOT_FORMATS:
+        problems.append(f"the root statement is {statement['format']}, whose root is of the retired Merkle tree; "
+                        f"this verifier reads only {ROOT_FORMAT}")
+    elif statement.get("format") != ROOT_FORMAT:
+        problems.append(f"the root statement is not a {ROOT_FORMAT} statement")
     if bytes.fromhex(statement["public_key"]) != pinned:
         problems.append("the stream is not signed by the pinned observer key")
     body = {key: value for key, value in statement.items() if key != "sig"}

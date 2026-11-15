@@ -2,7 +2,9 @@
 // Copyright 2026 Crystal Warden Supply Chain Labs LLC
 //! Root statements, verified: a deployment's own Ed25519 signature over the Merkle root of what it
 //! recorded, chained, as `prismpath/ledgers/root_statement.py` defines them (format
-//! `prismpath-root-statement/2`, canon/2 with an integer `time_us`; SPEC 4.5, PROTOCOL 2.10). The earlier
+//! `prismpath-root-statement/3`, canon/2 with an integer `time_us`, a root of the RFC 6962 tree; SPEC 4.5,
+//! PROTOCOL 2.10). `prismpath-root-statement/2`, the same document over the retired tree (no domain
+//! prefixes, the last node of an odd layer duplicated), is refused as `old_merkle_scheme`; the earlier
 //! `prismpath-root-statement/1` (canon/1) is retired and is a `bad_format` finding.
 //!
 //! This is the verify side only. Nothing here signs, generates or loads a private key: a Rust
@@ -24,10 +26,12 @@ use prismpath_rs::durable;
 use crate::{canonical_bytes, sha256_hex, verify_ed25519};
 use serde_json::{json, Map, Value};
 
-pub const STATEMENT_FORMAT: &str = "prismpath-root-statement/2";
+pub const STATEMENT_FORMAT: &str = "prismpath-root-statement/3";
+/// Statements whose root is of the retired Merkle tree: refused by name, never checked under the new one.
+pub const OLD_SCHEME_FORMATS: [&str; 1] = ["prismpath-root-statement/2"];
 /// Prefixed to the canonical bytes before signing, so a root statement signature can never be
 /// presented as a pack or flow manifest signature or the reverse.
-pub const SIGNING_DOMAIN: &[u8] = b"prismpath-root-statement/2\x00";
+pub const SIGNING_DOMAIN: &[u8] = b"prismpath-root-statement/3\x00";
 /// An audit log's root is the Merkle root of its first `leaves` events.
 pub const LOG_AUDIT: &str = "audit-log";
 /// An epoch chain's root is the chained root of its first `leaves` epochs.
@@ -39,9 +43,9 @@ const BODY_FIELDS: [&str; 12] = [
 
 /// Findings that make a chain invalid. `interrupted_statement` (a torn final line from a crash mid
 /// write) is reported and is not one of them.
-pub const FATAL_FINDINGS: [&str; 10] = [
+pub const FATAL_FINDINGS: [&str; 11] = [
     "bad_format", "key_id_mismatch", "bad_signature", "unpinned_key", "authority_key", "chain_broken",
-    "leaf_count_regressed", "log_truncated", "root_mismatch", "no_statements",
+    "leaf_count_regressed", "log_truncated", "root_mismatch", "no_statements", "old_merkle_scheme",
 ];
 
 pub const SIGNED: &str = "signed";
@@ -251,7 +255,10 @@ pub fn verify_chain(
     let mut key_ids: Vec<String> = Vec::new();
     for (index, statement) in statements.iter().enumerate() {
         if is_empty_object(statement) || !well_formed(statement, options.log) {
-            if !is_empty_object(statement) {
+            let format = statement.get("format").and_then(Value::as_str);
+            if let Some(old) = format.filter(|format| OLD_SCHEME_FORMATS.contains(format)) {
+                findings.push(json!({"finding": "old_merkle_scheme", "statement": index, "format": old}));
+            } else if !is_empty_object(statement) {
                 findings.push(json!({"finding": "bad_format", "statement": index}));
             }
             prev_hash = if is_empty_object(statement) { String::new() } else { link_hash(statement) };
@@ -515,7 +522,14 @@ fn idx_equals(idx: Option<&Value>, index: i128) -> bool {
 /// pinned, one that is a list or object, which cannot be compared).
 pub fn verify_receipt_bundle(bundle: &Value, pinned: &[Vec<u8>]) -> Result<BundleVerdict, String> {
     let pinned_ids: Vec<String> = pinned.iter().map(|raw| key_id_of(raw)).collect();
-    if let Some(problem) = bundle_problem(bundle) {
+    let old_scheme = || {
+        let format = bundle["statement"].get("format").and_then(Value::as_str)?;
+        OLD_SCHEME_FORMATS.contains(&format).then(|| {
+            format!("the statement is {format}, whose root is of the retired Merkle tree; this verifier reads only \
+                     {STATEMENT_FORMAT} ({})", prismpath_rs::merkle::MERKLE_SCHEME)
+        })
+    };
+    if let Some(problem) = bundle_problem(bundle).or_else(old_scheme) {
         return Ok(BundleVerdict {
             ok: false,
             status: INVALID,
