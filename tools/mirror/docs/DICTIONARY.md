@@ -1,0 +1,309 @@
+# The Decision Dictionary
+
+One thing, one name, at one layer. This is the vocabulary the product uses in its code, its documents and
+its receipts, each term defined from the point of view of a single decision as it moves through the system.
+It is the product subset of the research Dictionary at the adopted revision recorded in COMPATIBILITY.md:
+the entries for the layers this distribution carries, with their meanings unchanged. Entries for substrate
+execution (the fabric, microcontroller and kernel targets) and for GRC (the compliance adapter) live in the
+research repository with the code they describe. A term shared with research keeps its meaning here; wording
+and organization may differ.
+
+## The layers
+
+
+Every entry names one of seven layers, the moments in the life of a decision: **flow authoring** (a
+person writes the flow), **kernel evaluation** (the engine or a compiled table decides), **wire and
+transport** (a reading crosses a link), **substrate execution** (a port, a fabric, a kernel program or a
+microcontroller runs the same table), **evidence and receipts** (the decision is recorded, sealed and
+anchored), **control plane** (operators, orchestration, the console), **GRC** (controls, adjudication,
+assessment).
+
+## Entries
+
+114 entries, alphabetical, as in the research Dictionary. `Layer` is one of flow authoring,
+kernel evaluation, wire and transport, evidence and receipts, control plane.
+
+**absent**: the value of a field that is missing from a reading or null in it, which the engine reads as one value. In a flow that defines its fields it is a value of its own, never zero, false or the empty string, allowed only where the field's definition allows it, tested only by `== None` or `!= None`, and carried by the codec in a cell of its own. Layer: kernel evaluation. Not to be confused with: abstain (a decision not to decide), park, a refused value.
+
+**abstain**: the decision to make no decision because the information required is absent. Distinct from a denial, which is a decision. Layer: kernel evaluation. Not to be confused with: deny, refusal with cause, escalate. Also called (deprecated): defer (in the kernel sense only; `defer` keeps its GRC and port meaning).
+
+**acceptance**: the rules deciding which values a field kind accepts at the codec boundary and how each converts, frozen as a corpus that both implementations read. A value acceptance refuses never reaches the codec; it is reported with the field and the reason, and preflight reports the same refusals, so a preflight that passes predicts the boundary. Layer: wire and transport. Not to be confused with: contract (the worker interface a flow derives). Since October 2026 every encoder applies it, so there is no permissive path left that converts more.
+
+**action**: a concrete operation proposed or authorized for execution against a consequence producing boundary. An action is not a decision; a decision may authorize, deny, abstain from, or refuse an action. Layer: control plane. Not to be confused with: decision (the act that rules on an action), match action fragment (the kernel fragment that selects an edge, unrelated to this sense), outcome (the worker's return that a decision reads).
+
+**adapter**: an implementation of one or more ports that carries all of one domain's knowledge, so the core carries none. Layer: control plane. Not to be confused with: connector (the SDK base class an adapter subclasses), port (the interface the adapter implements).
+
+**adjudicate**: to turn one unit of work into one structured result through the Adjudicator port, by a model, a comparator, or a circuit. Layer: control plane. Not to be confused with: route (choosing an edge), decide (the whole act). Also called (deprecated): `adjudicate` in `prismpath/evals/kappa.py:100`, which reconciles two human label sets and should be `reconcile`.
+
+**adopted revision**: the research commit a product tree was exported from, named in `PROVENANCE.md`; `COMPATIBILITY.md` records the revision its frozen reference hashes were taken at. Layer: control plane. Not to be confused with: a release version, a spec version.
+
+**air gap**: a deliberate absence of network connectivity, and the ledger tier built for it. Layer: evidence and receipts. Not to be confused with: over the air, which means the opposite and is spelled out in full, never abbreviated to `air`.
+
+**anchor**: to bind a Merkle root to a timestamp a third party can verify without trusting the emitter, by OpenTimestamps into Bitcoin or by an RFC 3161 authority. Anchoring a root statement's hash, which covers its signature, timestamps the signed root rather than the bare one; `ledger anchor --log` stamps an audit log's latest statement, or its Merkle root when it has none, and says which. Layer: evidence and receipts. Not to be confused with: seal (closing an epoch, which happens first), attest (binding a claim to a key), the LSP sense of attaching a diagnostic to a line (`prismpath/tests/test_lsp.py:101`), and the identity sense at `prismpath/ledgers/ledger.py:21`.
+
+**annotation**: a line inside a node of the form `@name(args)` that declares something the toolchain acts on, such as `@emits`, `@field_only`, `@spawn`, `@state_bound`, `@checkpoint`, `@worker`. The engine parses annotations and never interprets the instruction prose. Layer: flow authoring. Not to be confused with: `prismpath annotate`, the blind relabelling command for agreement measurement.
+
+**assessor**: the person who anchors, verifies and audits receipts; the fourth persona. Layer: control plane. Not to be confused with: evaluator (the certified routine). Also called (deprecated): evaluator (the persona sense, until September 2026).
+
+**atom**: the irreducible unit of a predicate, a `(field, operator, constant)` triple or a bare field truthiness test. Every atom is total: it is satisfied or unsatisfied, never an error. Layer: kernel evaluation. Not to be confused with: atomic, which means indivisible in time (a pointer flip, a file write) and shares no root sense. Also called (deprecated): row (`ROADMAP.md:89`), comparator (keep only as the fabric materialization).
+
+**attest**: to bind a claim to a key and a content address, so a later reader can check the claim without trusting whoever made it. Layer: evidence and receipts. Not to be confused with: anchor (adding a timestamp), certify (running a corpus), verify (checking someone else's attestation).
+
+**audit event**: a durable record of an administrative action, principally a policy swap, written whether the action succeeded or was refused. Layer: control plane. Not to be confused with: receipt, which records a *decision* rather than an administrative action.
+
+**authority**: what a system is permitted to do, as authored by a person and held in the flow document. One of the three concerns POSITION keeps separate, the other two being computation and evidence. Layer: flow authoring.
+
+**authority key**: the Ed25519 key that says which policy may run. It signs packs, envelopes and flow manifests, `swap keygen` writes it, and its key id is the sha256 of its raw public key. Layer: control plane. Not to be confused with: the instance key, which attests what a deployment recorded and is never the same key, because whoever held one key for both could write the policy and the evidence that it held; authority, what a system is permitted to do.
+
+**band**: a contiguous range of the joint spiral index whose members all route the same way, so one band identifier is a decision sufficient wire symbol. Layer: wire and transport. Not to be confused with: a cause code numeric range (`prismpath/kernel/causes.py:12`), a gray level in the vision encoder, a cell (one field's bucket rather than a joint range). Also called (deprecated): level, quartile, `q0` to `q3`.
+
+**bound**: see WCET bound. Used bare, `bound` in this project means a worst case execution bound unless qualified; every other kind of bound is named (version floor, replay window, staleness bound, step bound).
+
+**candidate**: a built artifact under acceptance and before any publication decision: a wheel, a source distribution, a packaged crate. Candidates that depend on one another are tested together, patched to one another, never one alone against a registry whose published version may lag. Layer: control plane. Not to be confused with: a release, which is the owner's decision after acceptance.
+
+**canon/1**: retired. The encoding PrismPath hashed and signed with before canon/2: Python's `json.dumps` with sorted keys, compact for signatures and Merkle leaves and spaced for attestation manifests, lock hashes and content hashes, with floats spelled as `repr` writes them. No encoder, no reader and no corpus of it remains in Python, Rust, JavaScript, Go or the eBPF and hardware code, and a document that does not name `"encoding": "canon/2"` is refused with a named cause, never read under another encoding (`prismpath/tests/test_canon2_migration.py`). Layer: evidence and receipts. Not to be confused with: canon/2; a document's format version (`prismpath-root-statement/1` was a format whose bytes were canon/1 and is no longer read).
+
+**canon/2**: the integer only profile of RFC 8785 (JCS) in which every document PrismPath hashes or signs is written: no whitespace, members in UTF-16 code unit order, strings raw UTF-8, integers within plus or minus 2^53 minus 1, no float (`prismpath.kernel.canon2`, `prismpath_rs::canon2`, vectors `prismpath/portable/conformance/canon2.json`). A document written in it says so with `"encoding": "canon/2"` (or with a format whose definition includes it, as `prismpath.core/1` and `prismpath.core-run-root/1` do), its hash is sha256 over its canon/2 bytes, and a signature over it covers the domain `prismpath.canon/2` and a zero byte before those bytes unless its format has a domain of its own. A time is an integer of microseconds (`ts_us`, `time_us`), and a float in content PrismPath hashes but did not write is refused, never converted: the caller supplies an integer of a stated unit or a decimal string (`canon.content_bytes`, `canon.FloatRefused`). JSON that is not hashed or signed (a durable run checkpoint, a sink line, the version floor file) is plain JSON (`canon.plain_loads`), and a document read that way is refused by every hashing helper. Every reader is strict: a hashed or signed document and a reading are accepted only as their exact canonical bytes (a file or a line may end with one line feed), and any other spelling is refused as not canonical (see not canonical). Layer: evidence and receipts. Not to be confused with: canon/1; the canonical reading, which is about the values a decision reads.
+
+**not canonical**: the refusal of a document that reads as canon/2 but is not its exact canonical bytes: whitespace, members out of key order, a needless escape, a carriage return. It is never re-canonicalized on the way in. Registered causes: `policy:not-canonical` (101) for the core's policy image, `reading:not-canonical` (102) for a reading, `document:not-canonical` (103) for every other hashed or signed document (`canon.NotCanonical`, `durable::NOT_CANONICAL_CAUSE`); the canon/2 rule name is `not-canonical`, and the Lean cause is `Core.DocErr.notCanonical`, returned only by the strict reader `Core.readCanonical`. Layer: evidence and receipts. Not to be confused with: unreadable (a text that breaks one of the eight canon/2 rules, which is refused for that rule first).
+
+**canonicalize**: the writer's step that turns a document a person wrote, in any legal spelling, into its canonical canon/2 bytes, keeping every other canon/2 rule (a float, a duplicate key, an integer out of range, a lone surrogate, nesting past 128 are still refused): `prismpath canonicalize FILE` (`--out`, `--in-place`, `--check`), `canon.canonicalize_document`, `canon2.canonicalize`, and their Rust, JavaScript, Go and Lean twins (`Core.canonicalize`). No reader calls it. Layer: evidence and receipts. Not to be confused with: the strict reader, which only accepts canonical bytes.
+
+**canonical conversion**: the one function that turns a source value into a canonical value under its field's signed definition, in exact arithmetic, `field_definitions.canonical_value`. Adapters call it instead of carrying numeric semantics of their own, and frozen vectors hold every implementation to it. Layer: wire and transport. Not to be confused with: acceptance, which checks that a value is already canonical and converts nothing.
+
+**canonical reading**: a reading in which every defined field the flow routes on holds a canonical value of its kind within its range, or is absent where its definition allows absence. The only reading the decision boundary accepts for a flow that defines its fields. Layer: wire and transport. Not to be confused with: the representative reading a decode produces, a raw source value before canonical conversion.
+
+**cause**: the registered reason a decision refused, parked or escalated, carried as one byte with a frozen canonical name and a class, identical in the engine, the pack verifier, the fabric register, the kernel loader and on the wire. Layer: evidence and receipts (defined in kernel evaluation). Not to be confused with: reason (human prose), diagnostic code (authoring time static analysis), error code (an implementation return value), stop state. Also called (deprecated): the unregistered `class:detail` strings in `prismpath/hotswap/policy_pack.py`, which are registry rows now. The identifier is `cause_code` wherever a registry byte and a decoder status string are both in scope; the canonical wire field stays `cause` and carries the byte.
+
+**cell**: a maximal set of values of one field on which every atom of the policy has constant truth, so any two values in the same cell route identically. The unit Figueroa quantization derives and the wire transmits. Layer: wire and transport. Not to be confused with: a vision grid cell (a region of a picture), a register cell (one field's typed slot in the register file), a band.
+
+**codebook**: the whole set of cells a policy induces, every field with its cut points and the symbol each range maps to, derived from the policy text and printed by the adoption gate before anything encodes. The quantizer's output considered as a table rather than as an act. Layer: wire and transport. Not to be confused with: the image (the decision table, not the partition), a compression dictionary, the field dictionary in a pack manifest (which names and orders fields and holds no cut points).
+
+**codeword**: one self delimiting Zeckendorf code on the wire, ending in the unique `11` that closes it. Layer: wire and transport. Not to be confused with: symbol (the integer the codeword encodes), packet, record. Also called (deprecated): frame, in `prismpath/telemetry/zeckendorf.py` and `packed.py`.
+
+**concentrator**: a bridge that concatenates records from many streams into one datagram so a fleet amortises the transport envelope. Layer: wire and transport. Not to be confused with: relay (which forwards without aggregating).
+
+**condition**: the raw text after the colon on an edge, before any tier classification. Broader than a predicate: a condition may be deterministic, an error condition, an event condition, or natural language. Layer: flow authoring. Not to be confused with: predicate (only the deterministic subset of conditions).
+
+**conformance**: the property an implementation has when it reproduces every committed vector of the frozen corpus exactly. Layer: kernel evaluation. Not to be confused with: certification (one run of a corpus on one substrate), a CycloneDX conformance score (a graded GRC field about an organization).
+
+**connector**: the SDK base class an adapter subclasses, carrying the six ports. Layer: control plane. Not to be confused with: adapter, port.
+
+**contract**: the interface between a flow and its workers, the fields each node must emit and their types, derived by `prismpath contract` and enforceable by the type gate. Layer: flow authoring. Not to be confused with: the adapter contract document, the cadence contract of the refresh profile, the normative spec.
+
+**control plane**: the category of system that decides what an autonomous system is permitted to do, as against the components that produce candidate actions. PrismPath is one of many; it is never "the" control plane and never a distinct layer. Layer: control plane. Not to be confused with: the build orchestration layer (the sprint and swarm machinery, which is `orchestration`, never "the control plane"), the FPGA's AXI control path, the data plane.
+
+**corpus**: the frozen set of vectors an implementation is judged by. Always qualified when more than one is in scope: the conformance corpus, the decisions corpus, the safety corpus, the comparison corpus, the pcap corpus. Layer: kernel evaluation. Not to be confused with: a single vector, a fixture table.
+
+**ctx**: the evaluation environment a predicate sees: the outcome's fields plus the engine owned counters `visits` and `error_count`. Layer: kernel evaluation. Not to be confused with: the register file (the substrate's materialization of the same thing), the reading (the wire's).
+
+**datagram**: the delivery unit of the transport a Facet stream is bound to, and the boundary at which a concentrated stream fails closed. Layer: wire and transport. Not to be confused with: codeword, record, reading. Also called (deprecated): packet, when the Facet sense is meant.
+
+**decision**: the act of determining where a run goes next and whether an action is permitted. The centre of this dictionary: every other term is defined by its position relative to one of these. The durable record of a decision is the receipt, not the decision itself, so the act and its record are two terms, never one. Layer: all. Not to be confused with: outcome (the worker's return, which is an *input* to a decision), receipt (the record of the decision, not the act itself), action (what a decision rules on). Also called (deprecated): verdict, in all its senses.
+
+**deny**: the decision that an action is not authorized. A decision, not an absence of one. Layer: kernel evaluation. Not to be confused with: abstain (information absent), refusal with cause (nothing matched), park (holding on the fail safe).
+
+**deterministic edge**: an edge whose condition begins with `when` or is one of the keyword catch alls, resolved by evaluating a predicate against the outcome fields, free and exact. Layer: flow authoring. Not to be confused with: semantic, error and event edges, which are the other three tiers.
+
+**device_id**: the identifier of one physical board or host on a link, carried in a record so a receiver can say which device a reading came from. Layer: wire and transport. Not to be confused with: node (a step of a flow, never a device), a node index inside an image, a MAC address (which is one way to derive a `device_id`, not the term for it). Also called (deprecated): `nid`, and `node_id` where a device rather than a flow node was meant; rule 14 allows an abbreviation only for a term whose full form is in this dictionary, and `node` is not that term.
+
+**divergence**: a place where a Rust crate answers differently from the Python reference on purpose, recorded with its reason and the test that holds it in `DIVERGENCES.md`. Layer: control plane. Not to be confused with: drift, a difference nobody intended, which is a defect.
+
+**edge**: a line of the form `-> target: condition` inside a node, the authored transition. Document order is significant: the first true deterministic edge wins. Layer: flow authoring. Not to be confused with: a clock edge in RTL (`posedge`, `negedge`), an edge device, a graph edge in a rendering library.
+
+**engine**: the full run loop: parse, dispatch to a worker, route, count visits, suspend, checkpoint, receipt. The Python engine is the reference for the flow language. Layer: kernel evaluation. Not to be confused with: interpreter (a table image executor with no run loop), evaluator (one evaluate call), kernel (any conformant implementation of the language), core.
+
+**envelope**: the declared bounds a signed artifact must fit inside, checked at admission and refused rather than clamped. Layer: control plane. Not to be confused with: the camera's capture envelope, the transport envelope the concentrator amortises, the pack (which the envelope constrains).
+
+**epoch**: a sealed window of the Facet stream whose Merkle root chains to the previous one, giving total ordering and tamper evidence across time. Layer: wire and transport. Not to be confused with: a boot nonce (`prismpath-hw/esp-vision-node/WIRE.md:9`), a swap generation counter (`prismpath-hw/mesh/main/ppt_mesh.c:189`), Unix epoch seconds. Those three should be named `boot_nonce`, `swap_generation` and `unix_time`.
+
+**escalate**: to hand a decision to something more expensive because confidence is insufficient: to a model from the embedding router, or to a person from either. Not a refusal. Layer: kernel evaluation. Not to be confused with: abstain (the act of declining, which escalation is one response to), the firmware's `escalates(node)` bitmask, which marks target nodes that trigger evidence capture and should be renamed `captures_evidence`.
+
+**evidence**: in this project's own operations, the committed artifact that backs a claim (hashes, stamps, reproduction scripts). In GRC, the material that supports a determination about a control. Always qualified. Layer: evidence and receipts, and GRC. Not to be confused with: the evidence ledger (a document), an `EVD1` record (a picture behind an escalating decision, which should be named `capture`), the payload in `pending` on a suspended run (which should be named `handoff`).
+
+**evidence ledger**: the Markdown document in which every public claim is a numbered row with its method, result, honest scope and provenance, linted by `tools/ledger_lint.py` and anchored. Layer: evidence and receipts. Not to be confused with: the Flow Ledger, the context ledger, the guard ledger, which are cryptographic structures and not documents. Never called just "the ledger".
+
+**export**: the generation of the product tree from the research repository by `tools/export_clean.py`. The product repository changes only by export, never by a hand edit, so there is nothing to promote into it and nothing to merge from it. Layer: control plane. Not to be confused with: synchronization between two lines, of which there is one.
+
+**Facet**: the decision sufficient telemetry wire: self framing Fibonacci codes carrying quantized symbols, with per packet Merkle roots, a staleness bound, replay refusal with a named cause, and a concentrator for fleets. Layer: wire and transport. Not to be confused with: the unrelated Rust `facet` reflection crate, which is why the crates are named `prismpath-*`.
+
+**field**: a named value a predicate can test. The one term that survives every layer unchanged: authored, evaluated, partitioned, compiled to a register, ordered on the wire. Layer: all. Not to be confused with: a C struct field, "in the field" meaning a deployment.
+
+**field definition**: a `field.<name>` front matter line giving a field's kind (`int`, `fixed`, `bool`, `category`) and, as the kind takes them, its range, scale, unit, rounding and whether it may be absent. Part of the policy text, so it is bound by whatever hash or signature covers the policy. Layer: flow authoring. Not to be confused with: an `@emits` type token, which the analyzer cross checks and which binds nothing; the field dictionary of a pack manifest; the `field_declaration` lint.
+
+**Figueroa quantization**: the map from a policy's text to the cells of each field that can change a decision, so a reading can be sent as one symbol per cell and still route identically. Proven decision preserving in Lean 4 within a declared domain. Layer: wire and transport. Not to be confused with: Facet, which is the wire that carries the result.
+
+**finding**: a diagnostic PrismPath emits about an authored flow, with a stable code and a severity. Layer: flow authoring. Not to be confused with: a scanner finding, which is an *input fact* PrismPath ingests in the GRC layer and must be called a scan result.
+
+**fixed field**: a field defined with kind `fixed`, whose canonical value is an integer counting units of one over its scale, and whose rounding mode decides which comparisons a policy may make on it. Layer: flow authoring. Not to be confused with: a float, which Level M does not have; fixed point arithmetic inside firmware.
+
+**floor**: a bound below which a decision is refused rather than degraded. Always qualified: version floor, confidence floor, suite class floor, statutory floor, power floor. Layer: varies with the qualifier. Not to be confused with: any use of bare "floor", which is banned.
+
+**flow**: the authored Markdown document that holds a decision structure. The source artifact of everything else. Layer: flow authoring. Not to be confused with: graph, image, pack, policy, which are the same artifact at later stages; control flow.
+
+**flow manifest**: the signed metadata of an authored flow document, the sha256 of its text with line endings read as LF, its name, a monotonic version, its field dictionary when it defines one, the authority key's identity and the time, kept as `<flow>.manifest.json` with its signature in `<flow>.manifest.sig`. It is how the authority authorizes a flow that has no table image, and `run --require-authorization` refuses a flow without a valid one, with a registered cause. Layer: control plane. Not to be confused with: manifest, which is a pack's and covers a compiled image; a provenance manifest.
+
+**fragment**: see match action fragment for the language sense. As a wire term, a fragment is a piece of an oversized payload on the first hop, reassembled by the receiver. Layer: wire and transport. Not to be confused with: the match action fragment, sub frame (the same operation on the second hop). One of these two senses must go; see section 6.
+
+**gate**: a machine check that decides whether work may proceed, in CI or at admission. Layer: control plane. Not to be confused with: `gate_id`, which names a *governed decision point* in an attestation and should be renamed; the type gate; a logic gate; the `gate=` annotation argument.
+
+**graph**: the parsed, in memory form of a flow: nodes, edges, annotations, start. Layer: kernel evaluation. Not to be confused with: flow (the source text), the rendered Mermaid picture, a rendering library's graph model.
+
+**guard**: the deterministic safety floor whose policy grammar has no verb for permitting, so layering can only ever restrict. Layer: control plane. Not to be confused with: `arch_guard` (a CI architecture check), "guard rails" used loosely for deterministic edges, a runtime bound check.
+
+**hop**: one link in the bench topology, named for the specific segment it is. Always qualified when more than one exists. Layer: wire and transport. Not to be confused with: a routing hop count, a Wi-Fi SSID that happens to be called `prismpath-hop`, a relay device.
+
+**host**: the application or daemon that owns a governed decision boundary, principally the PolicyHost that verifies and admits a pack. Layer: control plane. Not to be confused with: the development workstation, a network address, the host relay. Those three are spelled workstation, address and host relay.
+
+**hot swap**: replacing the live policy without rebuilding the system, after its signature, envelope and version floor are checked, flipping atomically and writing one audit event either way. Layer: control plane. Not to be confused with: compare and swap, a pointer swap (the mechanism), a button driven table selection in a demo.
+
+**image**: the compiled Level M table: header, atoms, nodes, edges, programs, optional colors. A few hundred bytes, identical on every substrate. Layer: substrate execution. Not to be confused with: a camera image, a register file, an FPGA bitstream, a container image. Also called (deprecated): table, used alone.
+
+**instance key**: the Ed25519 key a deployment signs its root statements with, generated by `prismpath ledger keygen` and kept on the deployment, private half mode 0600. It attests what the deployment recorded and never authorizes policy. Its key id is the sha256 of its raw public key and the first 16 hex characters of that id are its fingerprint. Layer: evidence and receipts. Not to be confused with: the authority key, which a host and `run` refuse to accept as an instance key.
+
+**instruction**: the prose inside a node, handed to the worker verbatim. The engine never interprets it. Layer: flow authoring.
+
+**manifest of the export**: the include and exclude rules in the research repository's `tools/export_clean.py` that say what the product tree carries and what stays in research. A file is in the tree because a rule includes it and none excludes it, never because someone copied it. Layer: control plane. Not to be confused with: manifest, which is the signed pack's manifest and nothing else.
+
+**journal**: the durable form of the epoch store: every state change written to disk in a fixed order, replayed in a fixed order at every start, and every interruption reported by name rather than repaired silently. Layer: wire and transport. Not to be confused with: the evidence ledger, the audit log, the chain of roots the journal persists.
+
+**kernel**: a conformant implementation of the flow language, judged by the frozen corpus. Four exist: Python, JavaScript, Rust, Go. Layer: kernel evaluation. Not to be confused with: the Linux kernel (always spelled in full), the Lean proof kernel, the decision kernel's C interpreter.
+
+**keyframe**: under the refresh profile, an ordinary Facet frame sent on a cadence so staleness is bounded; byte identical to any other frame. Layer: wire and transport. Not to be confused with: the vision bench's `KEY3` record, which carries a full JPEG and is the most expensive object on the link. One of these two must be renamed; see section 6.
+
+**Level M**: the match action fragment, the decidable subset of the predicate language that every substrate can execute. Layer: kernel evaluation. Not to be confused with: P0, P1 and P2, which describe how much of a flow runs without a model. The two are different axes and POSITION section 6 insists on keeping them apart.
+
+**lockfile**: the committed embeddings and embedder identity for every semantic condition of a flow, making semantic routing reproducible bit for bit and promoting P2 to P1. Layer: flow authoring. Not to be confused with: a dependency lockfile, a mutex, a corpus freeze hash. Never called just "the lock".
+
+**lowering**: the parse time rewrite of every decimal literal compared with a fixed field into its canonical integer, exact, and refused when the literal is off the field's grid or outside its range. Every kernel lowers, or refuses a flow with a fixed field. Layer: flow authoring. Not to be confused with: compiling a flow to an image; desugaring a chained comparison.
+
+**manifest**: the signed metadata of a pack: image hash, field dictionary, version, envelope identity, WCET bound, key identity. Layer: control plane. Not to be confused with: a flow manifest, which authorizes a flow document that has no image; a provenance manifest (evidence and receipts), a packaging manifest. All three are always qualified.
+
+**margin**: the gap between the best and second best similarity score from the embedding router. The confidence signal escalation is keyed to, not the raw score. Layer: kernel evaluation.
+
+**match action fragment**: the decidable subset of the predicate language, boolean combinations of field against constant comparisons, membership in literal lists, and bare truthiness. Compiles exactly to a match action table. Layer: kernel evaluation. Not to be confused with: a link layer fragment. Also called: Level M. Never called just "the fragment" in a document that also discusses the wire.
+
+**Mission Control**: the operator's single user, loopback console for observing runs, driving them and reading proofs. Layer: control plane. Not to be confused with: the orchestration layer it can drive.
+
+**node**: one step of a flow: a heading, its instruction, and its ordered edges. Layer: flow authoring. Not to be confused with: a hardware node (always "device" or "board"), a predicate AST node, a code node (which is a flow node with a code worker), a log host field.
+
+**operator**: the person who runs a deployment day to day: monitors, swaps and attests policy, authors short lived changes, reads the trail. One of the four personas. Layer: control plane.
+
+**orchestration**: the build loop that decides which unit of work runs next and collects what came back: the sprint and swarm machinery in `prismpath/orchestration/`. A fallback for an organisation with no orchestrator of its own, never required by the format. Layer: control plane. Not to be confused with: the control plane (the category PrismPath belongs to, which is about what a system is permitted to do rather than what runs next), Mission Control (the console that can drive orchestration), the engine's run loop over one flow. Also called (deprecated): "the control plane", for this machinery.
+
+**outcome**: what a worker returns for one node: a text and a set of fields. The *input* to a routing decision, never its result. Layer: kernel evaluation. Not to be confused with: decision, stop state, the actuator's answer on the wire (which is an action result).
+
+**overlay**: a short lived policy pack that names the policy of record it temporarily overrides, so `attest` can show both. Layer: control plane. Not to be confused with: an FPGA overlay (a bitstream), which is always spelled bitstream.
+
+**P0, P1, P2**: portability levels describing how much of a flow the general engine runs without a model. P0 needs none; P1 has semantic edges all pinned in a lockfile; P2 needs the full engine. Layer: flow authoring. Not to be confused with: Level M, which is a fragment inside P0 and a different axis.
+
+**pack**: the signed distribution unit: the byte identical image, a detached signed manifest, and the signature. Layer: control plane. Not to be confused with: bit packing into words, the `packing` profile, a C struct packing attribute, a content pack. The bit packing verb must be renamed; see section 6.
+
+**packet**: the transport unit a Facet stream is carried in, over which a Merkle root commits. Layer: wire and transport. Not to be confused with: a network packet that is itself the subject of a decision, as in the eBPF classifier. That one is "the classified packet", spelled in full.
+
+**persona**: one of the four people a deployment is organised around: process owner, engineer, operator, assessor. The CLI groups its commands by them and the docs are indexed by them. Layer: control plane.
+
+**policy of record**: the authored decision structure a deployment is actually governed by, as against an overlay or a test pack. Layer: flow authoring. Not to be confused with: "policy" used loosely for the compiled image, for a competitor's rule file, or for a severity setting.
+
+**port**: an interface the core owns and the outside world implements, written in the core's own vocabulary. Six exist: Ingestion, Retrieval, Adjudicator, Action/Sink, Attestation, Deferral. Layer: control plane. Not to be confused with: a network or serial port, an RTL port, or "port" as a verb meaning reimplement. The verb is fine; the noun is reserved.
+
+**predicate**: the restricted, side effect free expression after `when`, evaluated against the ctx. Total by construction: an impossible comparison is unsatisfied, never an error. Layer: kernel evaluation. Not to be confused with: condition (the broader raw string), guard.
+
+**process owner**: the person who authors and tests the policy of record. One of the four personas. Layer: flow authoring.
+
+**profile**: an optional Facet capability that becomes normative when declared: spiral packing, refresh, concentrator, receipt streams. Layer: wire and transport. Not to be confused with: a sandbox profile, an organization profile, the predicate profile returned on escalation (which should be named `atom_truth`).
+
+**provenance**: the cryptographic binding of an artifact to what produced it. Layer: evidence and receipts. Not to be confused with: the static dataflow check that a `when` edge reads a field some node declares emitting, which is a lint and should be named `field_declaration`.
+
+**quantizer**: the component that derives each field's cells from the policy text and maps a reading to its symbols. Layer: wire and transport. Not to be confused with: the codec, which turns symbols into codewords.
+
+**reading**: one measurement of the world as a map of field names to values; the unit Figueroa quantization consumes. Layer: wire and transport. Not to be confused with: record (the framed bytes that carry a reading), event, sample, frame.
+
+**receipt**: the durable per decision record: what decided, what it decided, under which policy version, at what time, with the cause byte if it refused, parked or escalated. The artifact the whole dictionary is written to serve. Each receipt is a leaf of its audit log's Merkle tree, and a root statement signed with the deployment's instance key binds it to the deployment that wrote it; a receipt `run` writes names the flow's hash and the flow manifest in force, or says the flow ran unauthorized. Layer: evidence and receipts. Not to be confused with: audit event (an administrative action), row (an evidence ledger entry), record.
+
+**record**: a magic tagged, fixed layout struct on a link. Layer: wire and transport. Not to be confused with: reading (its payload), receipt, a compliance record, a route log entry.
+
+**refusal cause**: why a decoder rejected a frame outright, as a status string of its own: `receipt-truncated`, `receipt-field-mismatch`, `receipt-invalid-cause`, and `ok` when it did not. Never one of the registry's names: a registered cause explains a decision, a refusal cause explains why there was no decision to read. The identifier is `refusal_cause`, and a decode returns it as the named half of its result beside the receipt. Where a refusal is exactly one of the strict decode causes (`wire:no-terminator`, `wire:dangling-codeword`, `wire:codebook-mismatch`) the result also carries that registry code under `cause`, beside the status string and not in place of it; a refusal that matches none carries no `cause`. Layer: wire and transport. Not to be confused with: cause (the registered byte, which the same decode returns under `cause_code`), reason (prose for a person), the `wire:` class of the registry, whose codes are decisions a receiving substrate made and did receipt.
+
+**refuse**: to decline to act and say why with a registered cause. In this system a refusal is a decision and carries a receipt; it is never silence. Layer: kernel evaluation. Not to be confused with: abstain, deny, park. Also called (deprecated): reject.
+
+**relay**: a device that forwards records between links without aggregating them. Always qualified when more than one exists: the air relay, the host relay. Layer: wire and transport. Not to be confused with: the concentrator (which aggregates), the air gap courier (which should be named courier).
+
+**root statement**: a deployment's signed statement of a log's Merkle root, giving the root, how many leaves it covers, the hash of the statement before it, the time, the instance key's identity and the policy in force, signed with the instance key and kept one per line beside the log (`run.audit.jsonl` beside `run.audit.roots.jsonl`). A receipt verifies offline through its inclusion path to the root a statement signed (alone, from a bundle the reader was handed, by `trail --verify-bundle`), and a chain of statements shows a shortened log, a rewritten receipt, a removed statement or a foreign key. It attests and does not timestamp; anchoring the statement's hash adds the time a third party saw it. Layer: evidence and receipts. Not to be confused with: seal, closing an epoch, which a journal with an instance key follows with a root statement; anchor; a checkpoint, the saved state of a resumable run; the bare Merkle root, which says nothing about who computed it.
+
+**route**: the outcome of routing, the one target node a decision picked for one reading. Layer: kernel evaluation. Not to be confused with: target (the destination an edge declares, which is the same node named as a part of the flow rather than as the result of deciding), band (the spiral range whose members all take one route), path (the sequence of routes a run walks). A struct field that stores an edge's declared destination is `target`; a value that holds what routing produced is `route`. Also called (deprecated): band verdict, next_node, verdict, chosen.
+
+**row**: one numbered claim in the evidence ledger, with its method, result, scope and provenance. Layer: evidence and receipts. Not to be confused with: a conformance case (a vector), a sensor line (a reading), a ledger entry, an atom.
+
+**run**: one traversal of a flow from its start node to a terminal, a refusal, a suspension or the step bound. Layer: kernel evaluation.
+
+**seal**: to close an epoch and commit its blocks to a Merkle root. Layer: wire and transport. Not to be confused with: anchor (which timestamps a root), receipt sealing in kernel (which should be named `emit_receipt`).
+
+**spawn**: fan out from one node to child runs, with a declared join policy and deterministic child identity. Layer: flow authoring. Not to be confused with: `spawn` the process primitive.
+
+**spiral**: the layout that packs a multi field reading onto one index whose contiguous ranges are the routes, so the wire carries one band identifier. Proven a bijection over the cell space in Lean. Layer: wire and transport.
+
+**stop state**: what ended a run: `terminal`, `stuck`, `max_steps`, `needs_human`, `waiting`, `contract_violation`. The `stopped` field. Layer: kernel evaluation. Not to be confused with: cause (finer, and registered), outcome. Also called (deprecated): stop reason, outcome (in `prismpath-hw/TABLE_FORMAT.md:23`).
+
+**symbol**: the index of the cell a field's value falls into, the atomic unit of the Facet wire, transmitted as `symbol + 1` under Zeckendorf coding. Layer: wire and transport. Not to be confused with: codeword (the bits), a document symbol in the language server, a cause byte (which rides the same slot under the receipt profile).
+
+**table image**: see image. Use the full phrase on first mention in any document; `image` thereafter.
+
+**target**: the destination node of an edge. Layer: flow authoring, and carried unchanged into kernel evaluation and substrate execution. Not to be confused with: a substrate, a build target, a risk target, the Rust build directory. Also called (deprecated): chosen, and `route` where the name holds an edge's declared destination rather than the outcome of a decision.
+
+**terminal node**: a node with no edges. Reaching one ends the run cleanly, with no cause code. Layer: flow authoring.
+
+**tier**: which mechanism resolves an edge: deterministic, semantic, error, or event. Selected by the syntactic shape of the condition, never chosen by the author. Layer: flow authoring. Not to be confused with: ledger anchoring tiers, portability levels.
+
+**trail**: the Merkle rooted sequence of receipts over a window, and the operator's read side of it. Layer: evidence and receipts. Not to be confused with: a git commit trailer, the audit log.
+
+**tree digest**: a sha256 over one line per tracked file, the git mode, the sha256 of the bytes and the path, sorted by path, with the provenance and checksum files excluded so it never refers to itself. A way to tell two trees apart and to notice a hand edit; not a signature, and no proof of who produced the tree. Layer: evidence and receipts. Not to be confused with: a Merkle root, an anchor.
+
+**vector**: one case in a frozen corpus: a condition and a ctx with a recorded result, or a scripted run with a recorded path. Layer: kernel evaluation. Not to be confused with: an embedding vector, which is always "embedding".
+
+**visits**: the per node counter the engine increments before a worker runs and exposes to that node's predicates. An engine owned register, not a worker emitted field. Layer: kernel evaluation.
+
+**wire**: the Facet encoding, a transport agnostic bitstream format. Layer: wire and transport. Not to be confused with: a link or a transport (Facet is explicitly not one), the vision bench's whole record catalogue (which is "the bench links"), the `wire[]` byte array inside a record.
+
+**witness**: something that makes a claim checkable by observation: a concrete path for reachability, a pin measurement for a timing bound, a second sensor for a fused reading. Always qualified. Layer: varies.
+
+**worker**: whatever produces a candidate outcome for a node: a hosted model, a local model, a shell process, a function, another orchestration system, or a deterministic program. PrismPath does not own it. Layer: control plane. Not to be confused with: an LLM agent (one kind of worker), a server process. `WorkerFn` is the type. Also called (deprecated): agent, in every surface that still answers to it and warns or hides it, `run(agent=)`, `cli_agent`, `worker_agent` and `prismpath run --agent`; executor.
+
+**Zeckendorf coding**: the self delimiting Fibonacci integer code the wire uses, where every code ends in a unique `11` so a stream needs no header and no length field. Prior art, used here and not claimed. Layer: wire and transport.
+
+---
+
+## Naming rules
+
+
+Fourteen rules a contributor can apply without consulting anyone.
+
+1. **One thing, one word, at one layer.** If a word already names something else in the dictionary, do not reuse it, even in a different directory and even when your field's usage is the standard one. Context resolution works for the author and fails for the reader.
+
+2. **Name from the decision's point of view.** Before you name anything, answer: which moment in the life of a decision is this, authoring, proving, compiling, carrying, evaluating, receipting, or auditing? If you cannot answer, the name is wrong, not the question.
+
+3. **A borrowed word keeps its borrowed meaning or is not borrowed.** If a networking engineer, an auditor or a video engineer would be misled by your use of their word, use a plain English word instead. Do not borrow a *different* word from the same field to escape the problem.
+
+4. **When two domains offer a word, the receipt reader wins.** The receipt is the one artifact where all seven layers speak at once, to a person who knows none of them.
+
+5. **No bare word that has two senses in this repository.** Banned unqualified, in prose and in identifiers: `core`, `floor`, `host`, `lock`, `gate`, `spec`, `air`, `reference`, `band`, `frame`, `image` (outside the substrate layer), `the ledger`, `the evaluator`, `the target`, `the control plane`, `the relay`, `the fragment`. Qualify or rename.
+
+6. **Wire record fields carry the dictionary's term, not the layer's habit.** A field that holds a target node index is named `target`, not `route`, in the struct, in `WIRE.md`, and in the receiver that mirrors it by hand. A record's identity is its whole four byte magic; never compare the version digit alone (`prismpath-hw/esp-vision-node/WIRE.md:12` already warns about this and it is still worth a rule).
+
+7. **Every machine readable refusal is a registered cause.** Named `class:detail`, lowercase, hyphenated after the colon, appended to `prismpath/kernel/causes.py` and never renumbered or renamed. A string that *looks* like a cause name and is not in the registry is a bug, not a convenience.
+
+8. **`cause` is the machine value, `reason` is prose for a human.** Never both for one thing, never one in place of the other. A function that returns refusal codes returns causes; a field that holds a sentence is named `explanation` or `note`, not `reason`.
+
+9. **Return codes that are not causes get their own named enum and a distinct numeric base**, and the call site that maps them into causes states the mapping in a comment. Two small integer namespaces sharing a range on one board is how a wrong cause reaches a receipt.
+
+10. **The checking verbs are pinned and not interchangeable.** `validate` is static analysis of an authored artifact before anything runs. `verify` checks a signature or a proof someone else produced. `certify` runs a frozen corpus on one substrate and records the score. `check` is an internal predicate. `gate` blocks a merge. `guard` restricts at runtime. Pick the verb that matches the job, never the one that sounds strongest.
+
+11. **The proof words are earned.** `proven` means a machine checked proof or an exhaustive model check, and nothing else. A green gate is "gate green"; a unit with a ledger commit is "attested"; neither is "proven". `machine checked` means a proof assistant or exhaustive search, never coverage.
+
+12. **Documents change first, identifiers follow, certified bytes do not move.** Fix the term in `docs/POSITION.md` and the dictionary, then in prose, then in code. Where a rename would touch bytes that are certified (`prismpath-hw/interp.c`, the RTL, the eBPF programs, the frozen corpora, the append only cause registry), do not rename: record the frozen name in the dictionary as a deprecated alias and write the companion walkthrough instead.
+
+13. **A new domain word enters the dictionary in the same commit that introduces it**, and is added to `tools/arch_guard.py`'s word list if it is a domain noun, so the hexagonal boundary is enforced rather than intended. A pull request that introduces a domain noun with no dictionary entry is incomplete.
+
+14. **Abbreviations inherit their term's rules.** `nid` is legal only where `node` means a device, which it no longer does; a device identifier is `device_id`. Abbreviate only terms whose full form is in the dictionary, and abbreviate the same way everywhere (`pver` for policy version, `ctx` for the evaluation environment, `seq` for the sequence counter).
+
+---

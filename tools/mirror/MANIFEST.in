@@ -1,0 +1,21 @@
+# Source-distribution contents beyond the package itself.
+# (Wheel contents are governed by pyproject.toml's package-data + data-files.)
+
+include README.md SPEC.md PROTOCOL.md GETTING_STARTED.md CHANGELOG.md COMPATIBILITY.md DIVERGENCES.md PROVENANCE.md SHA256SUMS
+include CONTRIBUTING.md CODE_OF_CONDUCT.md SECURITY.md LICENSE NOTICE CITATION.cff
+include action.yml .pre-commit-hooks.yaml
+recursive-include docs *.md
+
+# Runtime data the package reads and the fixtures the shipped tests read (also declared as
+# package-data, listed here for sdist parity).
+recursive-include prismpath/flows *.md
+recursive-include prismpath/nudges *.md
+recursive-include prismpath/policies *.md *.json
+recursive-include prismpath/gallery *.md
+recursive-include prismpath/examples *
+recursive-include prismpath/portable/conformance *.json
+recursive-include prismpath/telemetry/conformance *.json
+recursive-include prismpath/tests/fixtures *.md *.jsonl *.ppt *.json SHA256SUMS
+
+prune prismpath/__pycache__
+global-exclude *.py[co]

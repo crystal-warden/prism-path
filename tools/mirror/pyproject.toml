@@ -1,0 +1,107 @@
+[build-system]
+requires = ["setuptools>=77"]      # 77 reads the SPDX license expression and license-files below
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "prismpath"
+version = "0.1.0"
+description = "A control plane for autonomous systems: author a decision structure in Markdown, prove it before it runs, enforce it where the system runs, and get a signed receipt for every decision."
+readme = "README.md"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Crystal Warden Labs" }]
+requires-python = ">=3.10"
+keywords = ["llm", "agents", "workflow", "orchestration", "markdown", "routing", "declarative"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Information Technology",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: System :: Distributed Computing",
+]
+
+dependencies = [
+    "numpy",                   # required to import the CLI (routing/embedding math)
+]
+
+[project.optional-dependencies]
+embeddings = [
+    "sentence-transformers",   # the bge embedder — semantic routing, lockfile, calibrate, centroids,
+]                              # lint's semantic checks. Lazy-loaded, so the CLI core installs without it.
+control-plane = [
+    "requests",                # served-model endpoints, wazuh adapter
+    "fastapi",                 # orchestrator (SSE backend)
+    "uvicorn",
+    "pydantic",
+]
+llm-local = [
+    "transformers",            # llm_local fallback router/agent
+]
+signing = [
+    "cryptography",           # Ed25519 policy-pack signing (spec-secure-hotswap) — loud absence without it
+]
+test = ["pytest"]
+
+[project.scripts]
+prismpath = "prismpath.cli:main"
+
+[tool.setuptools.packages.find]
+# Every package under prismpath/ ships, found by its __init__.py, so a subpackage added to the tree
+# cannot be left out of the wheel by hand; the shipped test suite imports prismpath.portable and
+# prismpath.telemetry.tests, and a hand kept list once omitted a subpackage.
+where = ["."]
+include = ["prismpath*"]
+
+[tool.setuptools.package-data]
+# Everything here is READ AT RUNTIME by shipped code — not documentation. The prose docs live in
+# the repo's top-level docs/ tree and ship via [tool.setuptools.data-files] below.
+prismpath = ["flows/*.md",                    # example + reference flows
+          "nudges/*.md",                      # prompt assets (orchestrator/run_sprint read these)
+          "policies/*.md", "policies/*.json", # the guard's statutory floor + P1 lockfile
+          "gallery/*.md", "gallery/*/*.md",   # `prismpath init --template` copies these
+          "tests/fixtures/broken/*.md",       # the analyzer's broken-flow corpus (test_analysis)
+          "examples/README.md", "examples/*/*",   # the persona examples; the compiler references and two tests read them
+          "tests/fixtures/*.md", "tests/fixtures/*.jsonl",   # the lint fixture and the kappa dataset
+          "tests/fixtures/core_evidence/*.jsonl",   # the cases a core run is produced from (test_evidence_verify)
+          "tests/fixtures/compiler/*", "tests/fixtures/compiler/anchored/*",   # the compiler references
+          "telemetry/conformance/*.json",     # the frozen Facet corpora every other implementation is judged by
+          "portable/conformance/*.json"]      # the frozen kernel spec
+"prismpath.plugins.pysprint" = ["*.md"]   # ARCH.md / LESSONS.md read at runtime by the sprint plugin
+# Mission Control's browser command center — served at runtime by the FastAPI app (control-plane extra).
+"prismpath.mission_control" = ["static/*", "static/vendor/*"]
+
+# Prose documentation, installed beside the package (sys.prefix/share/doc/prismpath/…) so an
+# air-gapped install still carries it. Not importable — read these from the repo or GitHub normally.
+#
+# The layout MIRRORS THE REPO on purpose: root entry points at the top, everything else under
+# docs/. Two reasons. (1) Flattening collides — README.md and docs/README.md would both land as
+# share/doc/prismpath/README.md and one would silently win. (2) The relative links inside the docs
+# (`../../SPEC.md` from docs/guides/, `../README.md` from docs/) only resolve if the depth is
+# preserved; flattened, every cross-doc link in the installed tree would dangle.
+[tool.setuptools.data-files]
+"share/doc/prismpath" = ["README.md", "SPEC.md", "PROTOCOL.md", "GETTING_STARTED.md", "COMPATIBILITY.md", "DIVERGENCES.md"]
+"share/doc/prismpath/docs" = ["docs/*.md"]          # index + the Dictionary
+"share/doc/prismpath/docs/guides" = ["docs/guides/*.md"]
+"share/doc/prismpath/docs/design" = ["docs/design/*.md"]
+
+[tool.pytest.ini_options]
+# The suites, selected explicitly (tools/README.md): prismpath.tests and prismpath.telemetry.tests are
+# the product runtime suite and ship in the wheel; tests marked cross_language drive another toolchain
+# and run only in the combined gate; tools/tests is the repository maintenance suite and needs the
+# source tree.
+markers = ["cross_language: drives a second language toolchain (cargo, rustc); excluded from single language legs"]
+
+[project.urls]
+Homepage = "https://github.com/crystal-warden/prismpath"
+Repository = "https://github.com/crystal-warden/prismpath"
+"Getting Started" = "https://github.com/crystal-warden/prismpath/blob/main/GETTING_STARTED.md"
+Specification = "https://github.com/crystal-warden/prismpath/blob/main/SPEC.md"
+Compatibility = "https://github.com/crystal-warden/prismpath/blob/main/COMPATIBILITY.md"
+Changelog = "https://github.com/crystal-warden/prismpath/blob/main/CHANGELOG.md"
+Security = "https://github.com/crystal-warden/prismpath/blob/main/SECURITY.md"
+Research = "https://github.com/crystal-warden/prism-path"

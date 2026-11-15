@@ -1,330 +1,237 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
-"""Generate the lean product mirror of this monorepo.
+"""Generate the product repository's tree from this repository.
 
-This repo (crystal-warden/prism-path) is the single source of truth: the full
-research, the evidence ledger, the hardware sprints, the OpenTimestamps anchors.
-The public product mirror (crystal-warden/prismpath) is a GENERATED subset of it
--- the runnable control plane and its tooling, with the research demoted to a
-link. You never hand-edit the mirror; you run this and it is rebuilt, so the two
-can never drift and the provenance chain never fragments.
+This repo (crystal-warden/prism-path) is the only place work lands. The product repository
+(crystal-warden/prismpath) is a GENERATED subset of it: the Python engine and command line, the four
+Rust crates, the frozen conformance corpora and the tools that check them, with the research, the
+evidence ledger, the hardware and kernel substrates and the other language ports left here. The one
+rule is
+
+    all work lands in research main; the product repo's main changes only by export.
+
+Nothing in the product repository is edited by hand, so the two cannot drift and there is no second
+line to promote into or merge from. Run this on a clean checkout of research main, write the result
+over the product repository's working tree, and commit it there:
 
     python tools/export_clean.py --out ../prismpath-clean
 
-By default this only writes the tree and prints a summary. It never inits a git
-repo, never commits, never pushes -- creating and publishing the public repo is
-a human step. `--commit` will make a local commit in the target if it is already
-a git repo; there is deliberately no --push.
+By default this only writes the tree and prints a summary. It never inits a git repo, never commits and
+never pushes; creating and publishing the commit in the product repository is a human step. `--commit`
+makes a local commit in the target if it is already a git repo; there is deliberately no --push. The
+export refuses a working tree with uncommitted changes to tracked files, so a product tree always
+names a research commit that exists (`--allow-dirty` is for working on this script).
 
-What the mirror contains, and what it points elsewhere for, is the MANIFEST
-below -- it is meant to be read and adjusted. The one judgement call worth your
-eye is HARDWARE / EBPF: by default the down-to-silicon proofs live in the
-research repo (the mirror is "install and run"), and the README's portability
-pillar links to them there. Flip them into INCLUDE_PREFIXES if you want the
-mirror to carry the substrates too.
+What the product carries is the MANIFEST below, meant to be read and adjusted. A tracked file lands in
+the tree if an include rule matches it and no exclude rule does. Three things are not copied as they
+are:
+
+  * `tools/mirror/` is an overlay: each file in it is written into the tree at its path under that
+    directory, replacing the research file of the same path. It holds what the product's packaging and
+    CI say about a tree that carries less than research does (pyproject.toml, MANIFEST.in, the CI
+    workflow, the Dictionary subset).
+  * `tools/mirror_readme.md` is the product's README.md, and the page PyPI shows.
+  * PROVENANCE.md and SHA256SUMS are generated: the research commit and tree the export was made from,
+    and the sha256 of every other file in it.
+
+Nothing is rewritten on the way: a file in the tree is a research file byte for byte, or an overlay file
+byte for byte, or one of the two generated records.
 """
 import argparse
-import posixpath
-import re
 import shutil
 import subprocess
 import sys
 from pathlib import Path
 
 # ------------------------------------------------------------------ manifest
-# A tracked file lands in the mirror if it matches an INCLUDE rule and no
-# EXCLUDE rule. Order: excludes win.
+# Order: excludes win over includes.
 INCLUDE_PREFIXES = [
-    "prismpath/",              # the Python kernel + CLI + portable JS + examples + tests
-    "prismpath-rs/",           # the four published crates
+    "prismpath/",              # the Python engine, command line, Mission Control, telemetry, the corpora and tests
+    "prismpath-rs/",           # the four crates
     "prismpath-telemetry-rs/",
     "prismpath-hotswap-rs/",
     "prismpath-preflight/",
-    "prismpath-go/",           # the Go conformance port
-    "adapters/",               # telemetry + fusion adapters (the Vector-facing tools)
-    "integrations/",           # the Vector integration
-    "tools/",                  # lint / gate tooling
-    "docs/guides/",            # product docs (the tour, code nodes)
-    "docs/design/",            # design specs (incl. the secure-hotswap prior-art note)
+    "tools/",                  # the maintenance, boundary and acceptance tools and their tests
+    "docs/guides/",            # product guides
+    "docs/design/",            # design specs
     ".github/ISSUE_TEMPLATE/",
 ]
 INCLUDE_FILES = [
-    "LICENSE", "NOTICE", "CHANGELOG.md", "CONTRIBUTING.md", "CODE_OF_CONDUCT.md",
-    "SECURITY.md", "CITATION.cff", "GETTING_STARTED.md", "ROADMAP.md",
-    "SPEC.md", "PROTOCOL.md", "action.yml", "MANIFEST.in", "pyproject.toml",
-    "Cargo.toml", "Cargo.lock", ".gitignore", ".pre-commit-hooks.yaml",
-    "docs/README.md", "docs/decoder-ring.md", "docs/objections.md",
-    "docs/DICTIONARY.md", "docs/vocabulary.json", "docs/POSITION.md",   # arch_guard reads the first two
-    ".github/PULL_REQUEST_TEMPLATE.md", ".github/ISSUE_TEMPLATE/config.yml",
-    # README.md is generated below (banner + link rewrite), not copied verbatim.
+    "LICENSE", "NOTICE", "CHANGELOG.md", "CONTRIBUTING.md", "CODE_OF_CONDUCT.md", "SECURITY.md",
+    "CITATION.cff", "GETTING_STARTED.md", "SPEC.md", "PROTOCOL.md", "DIVERGENCES.md", "COMPATIBILITY.md",
+    "action.yml", "Cargo.toml", "Cargo.lock", ".gitignore", ".pre-commit-hooks.yaml",
+    "docs/README.md", ".github/PULL_REQUEST_TEMPLATE.md",
+    # pyproject.toml, MANIFEST.in, docs/DICTIONARY.md and .github/workflows/ci.yml come from tools/mirror/,
+    # README.md from tools/mirror_readme.md, PROVENANCE.md and SHA256SUMS are generated.
 ]
-# Excludes win over includes. These are the research/evidence/hardware/scratch.
+# Research only: held back, and what each holds back is named so the next reader need not guess.
 EXCLUDE_PREFIXES = [
-    "docs/research/",          # papers, evidence ledger, OTS anchors
-    "research/",               # embedder scouts, route-eval experiments
-    "prismpath-hw/",           # hardware sprints  (flip to INCLUDE to ship substrates)
-    "prismpath-ebpf/",         # kernel decode plane  (flip to INCLUDE to ship substrates)
-    "integrations/governed_harness/",  # a research example run against a local model; its causes and
-                               # policy shape reach the product through promotion, not this folder
-    "integrations/governed_net/",      # the same harness over a network wire with an XDP enforcement point,
-                               # a research example like governed_harness (its XDP side is prismpath-ebpf)
-    "integrations/governed_intent/",   # intent routing over the harness with the P1 embedder, a research
-                               # example; its causes reach the product through promotion
-    "integrations/governed_population/",  # a governed agent population (replication, evolution, stop) under
-                               # admission policy, a research example; its causes reach the product through promotion
-    "prismpath/evidence/",     # OTS anchors over the RESEARCH ledger/papers (docs/research/, absent
-                               # here) + hardware evidence — provenance is a research-repo concern, and
-                               # shipping anchors that reference files not in the mirror is a dangling ref
-    ".github/workflows/",      # CI is regenerated clean below
+    # research areas and the other language ports
+    "docs/research/",          # papers, the evidence ledger, protocols
+    "research/",               # experiments
+    "formal/",                 # the Lean development
+    "prismpath-hw/",           # the C target, the fabric, the firmware
+    "prismpath-ebpf/",         # the kernel target
+    "prismpath-go/",           # the Go kernel
+    "prismpath-reflect-bindings/",
+    "adapters/",               # the compliance and fusion adapters
+    "integrations/",           # Vector and the other integrations, the governed examples
+    "prismpath/comparisons/",  # the comparison harness and its results
+    "prismpath/benchmark/",
+    "prismpath/measurements/",
+    "prismpath/evidence/",     # OpenTimestamps anchors over research documents
+    "prismpath/telemetry/bench/",
+    "prismpath/telemetry/evidence/",
+    "prismpath/editor/",       # editor tooling
+    "prismpath/deploy/",       # timestamp service wrappers
+    "prismpath/portable/prismpath",     # the standalone JavaScript kernel and its test
+    "prismpath/portable/run_",          # the JavaScript runners
+    "prismpath/portable/bundle_engine.mjs",
+    "prismpath/portable/crypto_migration_policy.mjs",
+    "prismpath/portable/playground.html",
+    "prismpath/portable/README.md",     # describes the JavaScript kernel
+    "prismpath/bundle_compile.py",      # the bundle compiler for the JavaScript engine; the command is withdrawn without it
+    "prismpath/safety/bypass_", "prismpath/safety/measure_p1.py", "prismpath/safety/gen_p1_lockfile.py",
+    "prismpath/safety/benign_corpus.py",
+    "prismpath/evals/eval_",
+    "prismpath/bypass_", "prismpath/eval_", "prismpath/measure_p1.py", "prismpath/gen_p1_lockfile.py",
+    "prismpath/benign_corpus.py",       # alias shims for the held modules
+    "prismpath/examples/code_nodes_gemma/", "prismpath/examples/mdflow_interop/",
+    "prismpath/examples/cli_worker/log_alert", "prismpath/examples/cli_worker/release_gate",
+    "prismpath-rs/examples/core_diff.rs", "prismpath-rs/examples/canon2_diff.rs",
+    "prismpath-hotswap-rs/examples/core_evidence.rs",   # legs of the Lean differential harness
+    "docs/SYSTEM_MAP.md", "docs/POSITION.md", "docs/decoder-ring.md", "docs/objections.md",
+    "docs/CONVENTIONS.md", "docs/media/", "docs/vocabulary.json", "docs/design/arch-scorecard.md",
+    "docs/DICTIONARY.md",      # the full Dictionary; the product carries its subset from tools/mirror/
+    "ROADMAP.md", "METHODOLOGY.md", "README.md", "pyproject.toml", "MANIFEST.in",
+    ".github/workflows/",      # CI is the overlay's
+    # tests whose subject is held above
+    "prismpath/tests/test_research_only.py", "prismpath/tests/conftest.py",   # the conftest only skips what research can't run as the product does
+    "prismpath/tests/test_capability_audit.py",     # reads the JavaScript kernel
+    "prismpath/tests/test_benchmark.py", "prismpath/tests/test_comparison.py",
+    "prismpath/tests/test_comparisons_", "prismpath/tests/test_glue_opa_", "prismpath/tests/test_gate_zero_kappa.py",
+    "prismpath/tests/test_benign_corpus.py", "prismpath/tests/test_bypass_", "prismpath/tests/test_gen_p1_lockfile.py",
+    "prismpath/tests/test_compile.py", "prismpath/tests/test_portable_", "prismpath/tests/test_docs_health.py",
+    "prismpath/tests/test_evidence_check_manifest.py", "prismpath/tests/test_mdflow_interop.py",
+    "prismpath/tests/test_net_swap.py", "prismpath/telemetry/tests/test_bench_codecs.py",
+    "prismpath/tests/test_core_diff.py", "prismpath/tests/test_core_evidence.py",
+    "prismpath/tests/test_ebpf_", "prismpath/tests/test_arch_guard.py",
+    "prismpath/tests/test_field_definitions_tables.py",
+    # research tooling beside the product's
+    "tools/mirror/", "tools/mirror_readme.md", "tools/tests/test_export.py", "tools/mirror_publish.yml", "tools/export_clean.py",
+    "tools/arch_guard.", "tools/arch_scorecard.json", "tools/arith_lint.py", "tools/docs_health.py",
+    "tools/evidence_check.py", "tools/ledger_lint.py", "tools/run_corpora.py",
 ]
 EXCLUDE_SUFFIXES = [".deferrals"]           # empty top-level scratch files
-EXCLUDE_EXACT = {"docs_health_report.md", "tools/arch_scorecard.json",  # generated reports
-                 "tools/mirror_readme.md",  # the mirror's README SOURCE (used below, then copied verbatim)
-                 "tools/mirror_publish.yml"}  # the mirror's PyPI publish workflow SOURCE (written below)
+EXCLUDE_EXACT = {"docs_health_report.md", "interactions.jsonl"}
 
-RESEARCH_REPO = "https://github.com/crystal-warden/prism-path/blob/main/"
-MIRROR_BANNER = (
-    "> **This is the lean product mirror of "
-    "[crystal-warden/prism-path](https://github.com/crystal-warden/prism-path).** "
-    "It is generated: the runnable control plane and its tooling, nothing more. "
-    "The research, the FQ paper, the evidence ledger timestamped to Bitcoin, and "
-    "the hardware and kernel substrates all live in that repo.\n\n"
-)
-
+OVERLAY_DIR = "tools/mirror"
+README_SOURCE = "tools/mirror_readme.md"
+GENERATED = ("PROVENANCE.md", "SHA256SUMS")
 
 ROOT = Path(__file__).resolve().parent.parent    # the source repo, wherever this is run from
+sys.path.insert(0, str(ROOT))
+from tools import provenance  # noqa: E402   the one definition of SHA256SUMS
+
+
+def git(*args):
+    return subprocess.check_output(["git", *args], text=True, cwd=ROOT).strip()
 
 
 def tracked_files():
-    out = subprocess.check_output(["git", "ls-files"], text=True, cwd=ROOT)
-    return [path for path in out.splitlines() if path]
+    return [path for path in git("ls-files").splitlines() if path]
 
 
 def is_included(path):
-    if path in EXCLUDE_EXACT:
+    if path in EXCLUDE_EXACT or any(path.endswith(suffix) for suffix in EXCLUDE_SUFFIXES):
         return False
     if any(path.startswith(prefix) for prefix in EXCLUDE_PREFIXES):
         return False
-    if any(path.endswith(suffix) for suffix in EXCLUDE_SUFFIXES):
-        return False
-    if path in INCLUDE_FILES:
-        return True
-    return any(path.startswith(prefix) for prefix in INCLUDE_PREFIXES)
+    return path in INCLUDE_FILES or any(path.startswith(prefix) for prefix in INCLUDE_PREFIXES)
 
 
-# ------------------------------------------------------------ link rewriting
-LINK = re.compile(r"(\]\()([^)]+)(\))")
+def overlay_files():
+    """Every file under tools/mirror/, as (path in the tree, source path in this repo)."""
+    base = ROOT / OVERLAY_DIR
+    return sorted((str(p.relative_to(base)), p) for p in base.rglob("*") if p.is_file())
 
 
-def classify_target(raw, md_path, included, tracked):
-    """keep | rewrite | leave for a markdown link target relative to md_path."""
-    target = raw.strip()
-    if target.startswith(("http://", "https://", "mailto:", "#", "//", "www.")):
-        return "leave", None
-    core = target.split("#", 1)[0].split("?", 1)[0]
-    anchor = target[len(core):]
-    if not core:
-        return "leave", None
-    base = posixpath.dirname(md_path)
-    rp = posixpath.normpath(posixpath.join(base, core))
-    if rp.startswith(".."):
-        return "leave", None
-    if rp in included:
-        return "keep", None
-    if rp in tracked:                                   # excluded-but-real -> research repo
-        return "rewrite", RESEARCH_REPO + rp + anchor
-    # directory link: does it name a real subtree?
-    inc_dir = any(repo_path == rp or repo_path.startswith(rp + "/") for repo_path in included)
-    trk_dir = any(repo_path == rp or repo_path.startswith(rp + "/") for repo_path in tracked)
-    if inc_dir:
-        return "keep", None
-    if trk_dir:
-        return "rewrite", RESEARCH_REPO + rp + anchor
-    return "leave", None                                # not tracked anywhere: don't invent a URL
+def export_plan(tracked):
+    """The whole tree as {path in the tree: source file}, before the generated records."""
+    plan = {path: ROOT / path for path in tracked if is_included(path)}
+    for path, source in overlay_files():
+        plan[path] = source
+    plan["README.md"] = ROOT / README_SOURCE
+    for name in GENERATED:
+        plan.pop(name, None)
+    return plan
 
 
-def rewrite_markdown(text, md_path, included, tracked, stats):
-    def repl(link_match):
-        kind, new = classify_target(link_match.group(2), md_path, included, tracked)
-        if kind == "rewrite":
-            stats.append((md_path, link_match.group(2), new))
-            return link_match.group(1) + new + link_match.group(3)
-        return link_match.group(0)
-    return LINK.sub(repl, text)
-
-
-# --------------------------------------------------------------- clean CI
-CLEAN_CI = """\
-name: ci
-
-on:
-  push:
-    branches: [main]
-  pull_request:
-  workflow_dispatch:
-
-# Generated by tools/export_clean.py in crystal-warden/prism-path. Do not hand-edit
-# here; edit the generator in the source repo and re-export.
-
-permissions:
-  contents: read
-
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.10", "3.11", "3.12"]
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          persist-credentials: false
-      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
-        with:
-          python-version: ${{ matrix.python-version }}
-      - name: Install
-        run: pip install numpy pytest cryptography
-      - name: Unit tests
-        run: python -m pytest prismpath/tests -q
-      - name: Fuzz the predicate sandbox
-        run: python -m prismpath.safety.fuzz_predicates -n 20000
-
-  conformance:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          persist-credentials: false
-      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
-        with:
-          python-version: "3.12"
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
-        with:
-          node-version: "22"
-      - name: Install
-        run: pip install numpy pytest
-      - name: Port unit tests
-        run: node --test prismpath/portable/prismpath.test.mjs
-      - name: Editor grammar tests
-        run: node --test prismpath/editor/vscode/test/grammar.test.mjs
-      - name: Frozen conformance vectors (port side)
-        run: node prismpath/portable/run_vectors.mjs prismpath/portable/conformance
-      - name: Crypto-agility proofs (JS twin)
-        run: node prismpath/portable/run_crypto_agility.mjs
-      - name: Frozen conformance vectors (reference-drift side)
-        run: python -m pytest prismpath/tests/test_conformance_vectors.py -q
-
-  crates:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          persist-credentials: false
-      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
-        with:
-          toolchain: stable
-      - name: Build + test the workspace
-        run: cargo test --workspace
-
-  go:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          persist-credentials: false
-      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
-        with:
-          go-version: "1.22"
-      - name: Go conformance
-        run: cd prismpath-go && go test ./...
-"""
-
-
-def strip_research_datafiles(text):
-    """Drop the pyproject data-files line that ships docs/research (absent in the mirror)."""
-    return "\n".join(line for line in text.splitlines()
-                     if "docs/research" not in line) + ("\n" if text.endswith("\n") else "")
+def provenance_text(commit, tree):
+    return (
+        "# Provenance\n\n"
+        "This tree is generated. It is the research repository crystal-warden/prism-path at one commit,\n"
+        "exported by `tools/export_clean.py`, and it is never edited by hand: a change to it is a change\n"
+        "to the research repository, made there and exported again.\n\n"
+        f"Research commit: `{commit}`\n"
+        f"Research tree: `{tree}`\n\n"
+        "`SHA256SUMS` holds the sha256 of every other file in this tree. Every file is the research file\n"
+        "of the same path byte for byte, except those that `tools/mirror/` and `tools/mirror_readme.md`\n"
+        "supply in research for this repository (the README, the packaging, the CI workflow and the\n"
+        "Dictionary subset), which are copied as written there. `python -m tools.provenance check`\n"
+        "verifies the hashes, and `python -m tools.provenance check --research PATH` also checks the tree\n"
+        "against a research checkout at the commit named above.\n")
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default="../prismpath-clean",
-                    help="target directory for the mirror (default ../prismpath-clean)")
+                    help="target directory for the tree (default ../prismpath-clean)")
     ap.add_argument("--commit", action="store_true",
                     help="make a local commit if --out is already a git repo (never pushes)")
+    ap.add_argument("--allow-dirty", action="store_true",
+                    help="export with uncommitted changes to tracked files (the commit named is then not the tree)")
     args = ap.parse_args()
 
-    root = ROOT
     out = Path(args.out).resolve()
-    if out == root:
+    if out == ROOT:
         sys.exit("refusing to export onto the source repo")
+    if not args.allow_dirty and git("status", "--porcelain", "--untracked-files=no"):
+        sys.exit("refusing to export a working tree with uncommitted changes: the tree would name a commit it is not")
 
-    tracked = set(tracked_files())
-    included = sorted(repo_path for repo_path in tracked if is_included(repo_path))
-    # README.md is generated (not copied from INCLUDE_FILES) but DOES exist in the
-    # mirror, so links to it must classify as "keep", not redirect to the research repo.
-    included_set = set(included) | {"README.md"}
+    tracked = tracked_files()
+    plan = export_plan(tracked)
+    commit = git("rev-parse", "HEAD")
+    tree = git("rev-parse", "HEAD^{tree}")
 
-    # wipe only the tracked-content areas of the target, preserve its .git
+    # wipe only the content of the target, preserving its .git
     if out.exists():
         for child in out.iterdir():
-            if child.name == ".git":
-                continue
-            shutil.rmtree(child) if child.is_dir() else child.unlink()
+            if child.name != ".git":
+                shutil.rmtree(child) if child.is_dir() else child.unlink()
     out.mkdir(parents=True, exist_ok=True)
 
-    rewrites = []
-    for rel in included:
-        src = root / rel
+    contents = {}
+    for rel, source in sorted(plan.items()):
         dst = out / rel
         dst.parent.mkdir(parents=True, exist_ok=True)
-        if rel.endswith(".md"):
-            text = src.read_text()
-            dst.write_text(rewrite_markdown(text, rel, included_set, tracked, rewrites))
-        elif rel == "pyproject.toml":
-            dst.write_text(strip_research_datafiles(src.read_text()))
-        else:
-            shutil.copy2(src, dst)
+        shutil.copy2(source, dst)
+        contents[rel] = dst.read_bytes()
 
-    # generated README: mirror banner + link rewrite. Prefer the lean, hand-authored mirror template
-    # (tools/mirror_readme.md) if present; otherwise fall back to the research README. Either way the
-    # link rewriter redirects any stray relative link to excluded content at the research repo.
-    mirror_src = root / "tools" / "mirror_readme.md"
-    base_readme = (mirror_src if mirror_src.exists() else (root / "README.md")).read_text()
-    readme = rewrite_markdown(base_readme, "README.md", included_set, tracked, rewrites)
-    lines = readme.split("\n")
-    banner_index = 1 if lines and lines[0].startswith("# ") else 0            # banner after the H1
-    (out / "README.md").write_text("\n".join(lines[:banner_index] + ["", MIRROR_BANNER.rstrip()] + lines[banner_index:]))
-    # pyproject's `readme` names the template, so the mirror ships it unchanged and builds the same PyPI page
-    if mirror_src.exists():
-        (out / "tools").mkdir(exist_ok=True)
-        shutil.copy2(mirror_src, out / "tools" / "mirror_readme.md")
+    (out / "PROVENANCE.md").write_text(provenance_text(commit, tree))
+    contents["PROVENANCE.md"] = (out / "PROVENANCE.md").read_bytes()
+    (out / "SHA256SUMS").write_text(provenance.sha256_lines(contents))
 
-    # generated clean CI
-    (out / ".github" / "workflows").mkdir(parents=True, exist_ok=True)
-    (out / ".github" / "workflows" / "ci.yml").write_text(CLEAN_CI)
-
-    # the PyPI Trusted Publishing workflow lives in this repo as tools/mirror_publish.yml, because the
-    # wipe above removes everything in the mirror but .git, so a file added there by hand would not survive
-    publish_src = root / "tools" / "mirror_publish.yml"
-    if publish_src.exists():
-        (out / ".github" / "workflows" / "publish.yml").write_text(publish_src.read_text())
-
-    n_files = len(included) + 2 + mirror_src.exists() + publish_src.exists()   # + README + ci.yml (+ the PyPI page template, publish.yml)
-    total_kb = sum((out / repo_path).stat().st_size for repo_path in included) // 1024
-    print(f"mirror written to {out}")
-    print(f"  files:        {n_files}  (~{total_kb} KB of tracked content)")
-    print(f"  excluded:     {len(tracked) - len(included)} tracked files held back")
-    print(f"  link rewrites {len(rewrites)} -> research repo:")
-    for md, old, new in rewrites:
-        print(f"    {md}: {old}  ->  {new}")
+    print(f"product tree written to {out}")
+    print(f"  research commit: {commit}")
+    print(f"  files:           {len(contents) + 1}")
+    print(f"  held back:       {len(tracked) - len([p for p in plan if p in set(tracked)])} tracked files")
 
     if args.commit and (out / ".git").exists():
         subprocess.run(["git", "-C", str(out), "add", "-A"], check=True)
         subprocess.run(["git", "-C", str(out), "commit", "-q", "-m",
-                        "export: regenerate product mirror from prism-path"], check=True)
+                        f"Export of crystal-warden/prism-path at {commit[:12]}"], check=True)
         print("  committed locally (not pushed)")
 
 

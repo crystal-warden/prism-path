@@ -1,0 +1,114 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# The product CI. Every job runs from this repository alone: no research checkout, no network beyond
+# package registries. tools/README.md names the suites.
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Build and install the wheel with the extras the shipped tests exercise
+        run: |
+          pip install build
+          python -m build --outdir dist .
+          pip install "$(ls dist/*.whl)[signing,control-plane,test]" httpx
+      - name: Product runtime suite against the installed package
+        run: cd /tmp && PRISMPATH_ACCEPTANCE_INSTALLED=1 python -m pytest --pyargs prismpath.tests prismpath.telemetry.tests -q -m "not cross_language" -rs
+      - name: Fuzz the predicate sandbox
+        run: cd /tmp && python -m prismpath.safety.fuzz_predicates -n 20000
+
+  compatibility_and_boundary:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: pip install numpy pytest build
+      - name: Boundary
+        run: python -m tools.check_boundary
+      - name: Compatibility with the adopted research revision
+        run: python -m tools.check_compatibility
+      - name: Crate fixtures byte identical to the product corpora
+        run: python -m tools.fixture_sync
+      - name: Provenance matches the tree
+        run: python -m tools.provenance check
+      - name: Repository maintenance suite
+        run: python -m pytest tools/tests -q
+      - name: Package boundary
+        run: |
+          python -m build --outdir dist .
+          python -m tools.check_boundary --wheel dist/*.whl --sdist dist/*.tar.gz
+
+  crates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Workspace tests
+        run: cargo test --workspace -q
+      - name: Clippy, warnings denied (baseline clean at the seed)
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Each crate packages with its fixtures
+        run: |
+          for crate in prismpath-rs prismpath-telemetry-rs prismpath-hotswap-rs prismpath-preflight; do
+            (cd "$crate" && cargo package --allow-dirty --no-verify --list | grep -E 'tests/' )
+          done
+
+  cross_language:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: pip install -e ".[test,signing]"
+      - name: Tests that drive the Rust toolchain
+        run: python -m pytest prismpath/tests -q -m cross_language -rs
+      - name: The Rust and Python hosts, packs and deferral stores check each other, and no leg may be skipped
+        env:
+          PRISMPATH_REQUIRE_CROSS_LANGUAGE: "1"
+        run: |
+          set -o pipefail
+          export PRISMPATH_PYTHON="$(command -v python)"
+          cargo test -p prismpath-hotswap-rs --test test_hotswap_conformance --test test_host_trace --test test_host_crash --test test_host_cross_language -- --nocapture 2>&1 | tee cross_language.log
+          cargo test -p prismpath-rs --test test_connector file_deferral_store_is_cross_runtime -- --nocapture 2>&1 | tee -a cross_language.log
+          cargo test -p prismpath-rs --test test_causes -- --nocapture 2>&1 | tee -a cross_language.log
+          cargo test -p prismpath-rs --test test_contract --test test_engine_surface --test test_engine_cross_language --test test_parse_limits -- --nocapture 2>&1 | tee -a cross_language.log
+          cargo test -p prismpath-telemetry-rs --test test_cross_language -- --nocapture 2>&1 | tee -a cross_language.log
+          grep -q "bidirectional: Python verified the Rust-signed packs" cross_language.log
+          grep -q "file deferral: cross-runtime round-trips both ways" cross_language.log
+          grep -q "cross-language host: each runtime restored the other's active policy" cross_language.log
+          grep -q "cross-language host: each runtime recovered the other's interrupted commit" cross_language.log
+          grep -q "cross-language host: non ASCII log identical in both runtimes" cross_language.log
+          grep -q "host trace: .* cases" cross_language.log
+          grep -q "engine cross language: .* scenarios" cross_language.log
+          grep -q "cross-language telemetry: Python decoded, re-encoded, demultiplexed and replayed what Rust wrote" cross_language.log
+          grep -q "cross-language telemetry: Rust decoded, re-encoded, demultiplexed and replayed what Python wrote" cross_language.log
+          if grep -q SKIP cross_language.log; then echo "a cross language leg was skipped"; exit 1; fi
