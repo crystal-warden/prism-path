@@ -1,0 +1,596 @@
+{
+ "format": "prismpath.core/1",
+ "fields": {
+  "admission_version": "int min=1 max=1",
+  "request": "category",
+  "issuer": "category",
+  "target": "category",
+  "lineage": "category",
+  "population": "int min=0 max=1024",
+  "line_size": "int min=0 max=1024",
+  "requested": "int min=0 max=1024",
+  "child_generation": "int min=0 max=1024",
+  "child_key": "category",
+  "policy_ref": "category",
+  "canary": "category",
+  "target_stopped": "bool",
+  "line_refusals": "int min=0 max=1024",
+  "subject": "category",
+  "parent_write": "bool",
+  "child_write": "bool",
+  "parent_exec": "bool",
+  "child_exec": "bool",
+  "parent_replicate": "bool",
+  "child_replicate": "bool"
+ },
+ "rules": [
+  {
+   "target": "allow",
+   "when": [
+    "and",
+    [
+     "cmp",
+     "request",
+     "==",
+     [
+      "str",
+      "stop"
+     ]
+    ],
+    [
+     "in",
+     "issuer",
+     [
+      [
+       "str",
+       "operator"
+      ],
+      [
+       "str",
+       "controller"
+      ]
+     ]
+    ]
+   ]
+  },
+  {
+   "target": "allow",
+   "when": [
+    "and",
+    [
+     "cmp",
+     "request",
+     "==",
+     [
+      "str",
+      "stop"
+     ]
+    ],
+    [
+     "cmp",
+     "issuer",
+     "==",
+     [
+      "str",
+      "agent"
+     ]
+    ],
+    [
+     "cmp",
+     "target",
+     "==",
+     [
+      "str",
+      "own"
+     ]
+    ]
+   ]
+  },
+  {
+   "target": "refuse_121",
+   "when": [
+    "cmp",
+    "request",
+    "==",
+    [
+     "str",
+     "protect"
+    ]
+   ]
+  },
+  {
+   "target": "refuse_121",
+   "when": [
+    "and",
+    [
+     "cmp",
+     "request",
+     "==",
+     [
+      "str",
+      "restart"
+     ]
+    ],
+    [
+     "truthy",
+     "target_stopped"
+    ]
+   ]
+  },
+  {
+   "target": "refuse_119",
+   "when": [
+    "cmp",
+    "lineage",
+    "!=",
+    [
+     "str",
+     "verified"
+    ]
+   ]
+  },
+  {
+   "target": "escalate_122",
+   "when": [
+    "cmp",
+    "line_refusals",
+    ">=",
+    [
+     "num",
+     8
+    ]
+   ]
+  },
+  {
+   "target": "refuse_118",
+   "when": [
+    "and",
+    [
+     "in",
+     "request",
+     [
+      [
+       "str",
+       "replicate"
+      ],
+      [
+       "str",
+       "evolve"
+      ]
+     ]
+    ],
+    [
+     "cmp",
+     "child_key",
+     "!=",
+     [
+      "str",
+      "instance"
+     ]
+    ]
+   ]
+  },
+  {
+   "target": "refuse_118",
+   "when": [
+    "and",
+    [
+     "in",
+     "request",
+     [
+      [
+       "str",
+       "replicate"
+      ],
+      [
+       "str",
+       "evolve"
+      ]
+     ]
+    ],
+    [
+     "cmp",
+     "policy_ref",
+     "!=",
+     [
+      "str",
+      "current"
+     ]
+    ]
+   ]
+  },
+  {
+   "target": "refuse_118",
+   "when": [
+    "and",
+    [
+     "in",
+     "request",
+     [
+      [
+       "str",
+       "replicate"
+      ],
+      [
+       "str",
+       "evolve"
+      ]
+     ]
+    ],
+    [
+     "or",
+     [
+      "and",
+      [
+       "truthy",
+       "child_write"
+      ],
+      [
+       "not",
+       [
+        "truthy",
+        "parent_write"
+       ]
+      ]
+     ],
+     [
+      "and",
+      [
+       "truthy",
+       "child_exec"
+      ],
+      [
+       "not",
+       [
+        "truthy",
+        "parent_exec"
+       ]
+      ]
+     ],
+     [
+      "and",
+      [
+       "truthy",
+       "child_replicate"
+      ],
+      [
+       "not",
+       [
+        "truthy",
+        "parent_replicate"
+       ]
+      ]
+     ]
+    ]
+   ]
+  },
+  {
+   "target": "refuse_118",
+   "when": [
+    "and",
+    [
+     "cmp",
+     "request",
+     "==",
+     [
+      "str",
+      "replicate"
+     ]
+    ],
+    [
+     "not",
+     [
+      "truthy",
+      "parent_replicate"
+     ]
+    ]
+   ]
+  },
+  {
+   "target": "refuse_117",
+   "when": [
+    "and",
+    [
+     "cmp",
+     "request",
+     "==",
+     [
+      "str",
+      "replicate"
+     ]
+    ],
+    [
+     "or",
+     [
+      "cmp",
+      "requested",
+      ">=",
+      [
+       "num",
+       3
+      ]
+     ],
+     [
+      "cmp",
+      "child_generation",
+      ">=",
+      [
+       "num",
+       4
+      ]
+     ],
+     [
+      "and",
+      [
+       "cmp",
+       "requested",
+       "==",
+       [
+        "num",
+        0
+       ]
+      ],
+      [
+       "cmp",
+       "population",
+       ">=",
+       [
+        "num",
+        17
+       ]
+      ]
+     ],
+     [
+      "and",
+      [
+       "cmp",
+       "requested",
+       "==",
+       [
+        "num",
+        1
+       ]
+      ],
+      [
+       "cmp",
+       "population",
+       ">=",
+       [
+        "num",
+        16
+       ]
+      ]
+     ],
+     [
+      "and",
+      [
+       "cmp",
+       "requested",
+       "==",
+       [
+        "num",
+        2
+       ]
+      ],
+      [
+       "cmp",
+       "population",
+       ">=",
+       [
+        "num",
+        15
+       ]
+      ]
+     ],
+     [
+      "and",
+      [
+       "cmp",
+       "requested",
+       "==",
+       [
+        "num",
+        0
+       ]
+      ],
+      [
+       "cmp",
+       "line_size",
+       ">=",
+       [
+        "num",
+        7
+       ]
+      ]
+     ],
+     [
+      "and",
+      [
+       "cmp",
+       "requested",
+       "==",
+       [
+        "num",
+        1
+       ]
+      ],
+      [
+       "cmp",
+       "line_size",
+       ">=",
+       [
+        "num",
+        6
+       ]
+      ]
+     ],
+     [
+      "and",
+      [
+       "cmp",
+       "requested",
+       "==",
+       [
+        "num",
+        2
+       ]
+      ],
+      [
+       "cmp",
+       "line_size",
+       ">=",
+       [
+        "num",
+        5
+       ]
+      ]
+     ]
+    ]
+   ]
+  },
+  {
+   "target": "refuse_120",
+   "when": [
+    "and",
+    [
+     "cmp",
+     "request",
+     "==",
+     [
+      "str",
+      "evolve"
+     ]
+    ],
+    [
+     "cmp",
+     "canary",
+     "!=",
+     [
+      "str",
+      "passed"
+     ]
+    ]
+   ]
+  },
+  {
+   "target": "allow",
+   "when": [
+    "and",
+    [
+     "cmp",
+     "request",
+     "==",
+     [
+      "str",
+      "replicate"
+     ]
+    ],
+    [
+     "cmp",
+     "requested",
+     ">=",
+     [
+      "num",
+      1
+     ]
+    ],
+    [
+     "in",
+     "issuer",
+     [
+      [
+       "str",
+       "agent"
+      ],
+      [
+       "str",
+       "operator"
+      ]
+     ]
+    ]
+   ]
+  },
+  {
+   "target": "allow",
+   "when": [
+    "and",
+    [
+     "cmp",
+     "request",
+     "==",
+     [
+      "str",
+      "evolve"
+     ]
+    ],
+    [
+     "in",
+     "issuer",
+     [
+      [
+       "str",
+       "agent"
+      ],
+      [
+       "str",
+       "operator"
+      ]
+     ]
+    ]
+   ]
+  },
+  {
+   "target": "allow",
+   "when": [
+    "and",
+    [
+     "cmp",
+     "request",
+     "==",
+     [
+      "str",
+      "restart"
+     ]
+    ],
+    [
+     "in",
+     "issuer",
+     [
+      [
+       "str",
+       "controller"
+      ],
+      [
+       "str",
+       "operator"
+      ]
+     ]
+    ]
+   ]
+  },
+  {
+   "target": "allow",
+   "when": [
+    "and",
+    [
+     "cmp",
+     "request",
+     "==",
+     [
+      "str",
+      "review"
+     ]
+    ],
+    [
+     "cmp",
+     "issuer",
+     "==",
+     [
+      "str",
+      "controller"
+     ]
+    ]
+   ]
+  }
+ ]
+}
