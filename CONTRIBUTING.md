@@ -27,16 +27,13 @@ This repository is the developer product: `prismpath/` is the Python engine grou
 `mission_control`), `prismpath-rs`, `prismpath-telemetry-rs`, `prismpath-hotswap-rs` and
 `prismpath-preflight` are the Rust crates, `prismpath/portable/conformance` and
 `prismpath/telemetry/conformance` are the frozen corpora every implementation is judged by, and
-`tools/` is the small maintenance system that keeps the product compatible with the research
-revision it adopted. The research repository, [crystal-warden/prism-path](https://github.com/crystal-warden/prism-path),
-holds the other kernels, the hardware and kernel targets, the adapters, the Lean development, the
-comparison and the evidence ledger; [COMPATIBILITY.md](COMPATIBILITY.md) records the adopted revision.
-
-Changes to shared semantics are not a product decision. If your change alters predicate or engine
-semantics, the conformance drift test fails by design; do not regenerate the vectors here. Propose the
-change to research first, and it reaches the product through a reviewed promotion (`tools/README.md`).
-A product fix that research would also want is proposed there separately; nothing synchronizes
-automatically in either direction.
+`tools/` checks that this tree is what the research repository makes. The research repository,
+[crystal-warden/prism-path](https://github.com/crystal-warden/prism-path), holds the other kernels, the
+hardware and kernel targets, the adapters, the Lean development, the comparison and the evidence ledger,
+and it is where every change lands: this repository is generated from it by `tools/export_clean.py`
+([PROVENANCE.md](PROVENANCE.md) names the commit), so a pull request here cannot be merged as it is and is
+made again there. If your change alters predicate or engine semantics, the conformance drift test fails by
+design; do not regenerate the vectors in the change, say why in it.
 
 ## Sign-off (DCO, not CLA)
 

@@ -1141,7 +1141,7 @@ record, and some of them predate the upload.
 - **mdflow interop** (`prismpath/examples/mdflow_interop/`): mdflow tasks run as PrismPath workers
   behind the routing kernel ("PrismPath governs the routing; mdflow provides the action"), via mdflow's
   `--json` envelope; gated example + tests.
-- **The Level M hardware target ([`prismpath-hw/`](prismpath-hw/README.md))**;
+- **The Level M hardware target ([`prismpath-hw/`](https://github.com/crystal-warden/prism-path/blob/40a9b05b3523cb4943b583b77c6fb86f93d795ee/prismpath-hw/README.md))**;
   a Level M flow compiles to a binary table image (`wazuh_triage`, unmodified: 302 bytes)
   interpreted by one fixed FPGA circuit on a Zynq-7020; C and RTL interpreters certified on a
   **declared subset** of the frozen corpus (114/1,067 predicate + 6/27 engine vectors, zero

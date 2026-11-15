@@ -1,20 +1,19 @@
 # Compatibility
 
-What this product adopted from research, at which revision, and what it promises about it. A check
-that passes here means the product is compatible with the adopted revision. It does not mean the
-product is current with research; `tools/compare_upstream.py` answers that, on request, and never as
-part of a build.
+What this product promises about the research material it carries: the frozen reference hashes below, at the
+research revision they were taken at. A check that passes here means the product still agrees with those
+hashes. The product repository is generated from the research repository (`PROVENANCE.md` names the commit
+of this tree), so there is no separate line to be current with.
 
-## Adopted revision
+## Revision the hashes were taken at
 
-Research source: crystal-warden/prism-path at commit `386539913bf721e6f7fff42f2d49ddd38212406d` (research main), promoted 2026-11-15 onto
-the promotion of 2026-11-14 from `5052082f80cc8fa4d701f155d418b6caad23bf16`, the promotion of 2026-11-14 from `a6d3496a9b98f93930bd38187e69ce9f1f7f368f`, the promotion of 2026-11-11 from `6c908b001220edf6bfde4704cedf309da7b45ba2`, the promotion of 2026-11-10 from `e0ca190e0727d770951be4da4427e718789c96d1`, the promotion to `a0cccf85e92823b3ec5cc8b102c1420bdf3dfb47` of 2026-10-13 and the seed adopted 2026-09-19 at `40a9b05b3523cb4943b583b77c6fb86f93d795ee`. Every file this product carries from research is the research file at
-that commit, byte for byte or merged with a product difference listed in `DIVERGENCES.md`. The lock
-records 3865399 on every path the promotion changed and keeps an earlier revision on the paths research
-left untouched since, whose bytes are therefore the same at both, and `PROVENANCE.md` records
-the source blob of each. Adopted hashes below are the hashes of the research files at 3865399. The hashes of the product's own copies, which may be edited afterwards, are in
-`SHA256SUMS` and are a different thing. The Rust parity work (the engine, causes, wire profiles, hot swap host and receipt
-verifiers) was done in the product first and is now research's too, so the corpora it generates are research's bytes.
+Research source: crystal-warden/prism-path at commit `386539913bf721e6f7fff42f2d49ddd38212406d` (research main).
+The hashes of the research files at that commit are the adopted hashes below, and they change only when a
+frozen corpus, the cause registry or a compiler reference changes on purpose, in the same research commit.
+The product's own copies of the specifications are the research files, so a product copy may have been
+reworded with the meanings preserved; `SHA256SUMS` holds the hashes of every file of this tree, which are a
+different thing. The Rust parity work (the engine, causes, wire profiles, hot swap host and receipt verifiers)
+was done in the product first and is research's too, so the corpora it generates are research's bytes.
 
 ## Specifications
 
@@ -165,8 +164,8 @@ here establishes nothing new about FPGA, microcontroller, eBPF, timing or field 
 
 ## Dictionary
 
-The product Dictionary is generated from the research Dictionary at the adopted revision by keeping
-every entry whose layer is flow authoring, kernel evaluation, wire and transport, evidence and
+The product Dictionary is the file `tools/mirror/docs/DICTIONARY.md` in the research repository, kept by hand
+beside the research Dictionary it is a subset of: every entry whose layer is flow authoring, kernel evaluation, wire and transport, evidence and
 receipts, control plane, or all, plus `image`, and dropping the substrate execution and GRC entries.
 Entry text is unchanged; the preamble is the product's. A term shared with research keeps its
 meaning here.
@@ -175,9 +174,9 @@ meaning here.
 
 The research evidence ledger at the adopted revision
 ([`docs/research/supporting-evidence.md`](https://github.com/crystal-warden/prism-path/blob/a0cccf85e92823b3ec5cc8b102c1420bdf3dfb47/docs/research/supporting-evidence.md)) supports
-the adopted behavior of the code as it was at that commit. Once a product file is edited, only the
-checks run on the shipped version speak for it: the product CI and the acceptance gates listed in
-`tools/README.md`. A pinned evidence link certifies the adopted revision, not modified code.
+the behavior of the code as it was at that commit. Once the code changes, only the checks run on the shipped
+version speak for it: the product CI and the acceptance gates listed in `tools/README.md`. A pinned
+evidence link certifies the commit it names, not later code.
 
 ## Running the checks
 
