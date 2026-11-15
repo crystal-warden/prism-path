@@ -351,9 +351,9 @@ def test_a_log_signed_after_every_event_verifies_in_linear_time(key, tmp_path, m
     hashes = {"calls": 0}
     original = ledger_ots.node_hash
 
-    def counting(payload):
+    def counting(left, right):
         hashes["calls"] += 1
-        return original(payload)
+        return original(left, right)
 
     monkeypatch.setattr(ledger_ots, "node_hash", counting)
     log = audit_log.AuditLog(str(tmp_path / "long.audit.jsonl"), instance_key=key, sign_appends=True)
@@ -833,7 +833,8 @@ def test_anchor_log_stamps_the_latest_statement_and_says_which(key, tmp_path, ca
     assert code == 0 and result["stamped"] is True
     assert anchored["kind"] == "root-statement" and anchored["hash"] == rs.statement_hash(statements[-1])
     assert anchored["statement"] == 2 and anchored["leaves"] == 9 and anchored["log_leaves"] == 11 and anchored["unsigned_tail"] == 2
-    assert result["root"] == anchored["hash"]                          # the single hash is its own Merkle root
+    # the anchor batch is the one statement hash, a tree of one leaf: its root is the leaf's RFC 6962 hash
+    assert result["root"] == ledger_ots.merkle_root([anchored["hash"]]) != anchored["hash"]
     assert "anchoring root statement 2" in err and "covers 9 of the log's 11 events" in err
     assert "the 2 later events are not covered" in err
     assert os.path.exists(tmp_path / "proofs" / "root_v1.txt.ots") and os.path.exists(tmp_path / "proofs" / "log_v1.json")

@@ -26,6 +26,15 @@ of the run and of its verifier, with the cryptography as parameters and its secu
   verified one; and each receipt records `Core.verdict` on any bytes with its hashes that exhibit no
   collision with the run's documents.
 
+The tree is RFC 6962's (`Core/Merkle.lean`): a leaf hashes with prefix 0x00, a node with 0x01, split at the
+largest power of two below the count, nothing duplicated. `Merkle.mth_injective` shows two nonempty lists of
+leaves with one root are one list, of any lengths, unless SHA-256 exhibits a collision, which is the tree's
+half of `NoTreeCollision`; the retired tree (no prefixes, the last node of an odd layer repeated) gave
+[a, b, c] and [a, b, c, c] one root for every hash (`Merkle.retired_collides`), and only the leaf count told
+them apart. The verifier's check that each case's stored flow is its image's rendering is outside this model:
+the replay here is the oracle's `Core.verdict` on the image itself, which reads no flow; the check guards the
+package verifier's replay through the reference kernel, which decides from the flow.
+
 The cryptography is stated for the objects at hand (`Unforgeable`, `NoTreeCollision`, `NoCollision`), each
 an explicit hypothesis of the theorem that uses it, never for all inputs, which no hash onto a finite set
 satisfies. What is assumed and not proven: those hypotheses (Ed25519 and SHA-256), that the Python and Rust

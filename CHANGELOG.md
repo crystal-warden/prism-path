@@ -8,6 +8,38 @@ spec stable.
 
 ## [Unreleased]
 
+### Changed, breaking: every Merkle tree is RFC 6962's, and a core run's stored flow must be its image's rendering (2026-11-14)
+
+The first consumer of the receipts and roots (the governed agents Journeyman pack) found that the shared tree
+repeated the last node of an odd layer and used no domain prefix, so [a, b, c] and [a, b, c, c] had one root
+and only the stated leaf count told them apart, and that nothing held a core run's stored flow to its signed
+image (SPEC.md §8 "Merkle trees"; docs/design/spec-verified-core.md, section 11).
+
+- **The tree is RFC 6962's** (`ledger_ots.MERKLE_SCHEME`, `rfc6962-sha256`): a leaf is SHA-256(0x00 || leaf),
+  a node SHA-256(0x01 || left || right), split at the largest power of two below the count, nothing
+  duplicated. One implementation per language: `prismpath.ledgers.ledger_ots` (which `root_statement`, the
+  audit log, the context ledger, the OpenTimestamps anchor, the telemetry transport, core runs and the
+  governed harness, net and intent integrations all use), `prismpath_rs::merkle` (new `merkle` feature; the
+  hot swap crate's audit log, receipt and root statement verifiers, the context ledger and the telemetry
+  transport use it), and the eBPF `merkle.h` (the tracked `seal_receipts` tool is rebuilt). A one leaf
+  root is now its leaf hash, not the leaf.
+- **Formats bumped with it**: `prismpath-root-statement/3` (a `/2` statement is the fatal finding
+  `old_merkle_scheme`, and a bundle under one is refused with that reason), `prismpath.core-run-root/2` (a
+  `/1` statement is refused by name by the Python and Rust verifiers), `prismpath.intent-observation-root/2`,
+  and an anchor manifest names `"merkle": "rfc6962-sha256"` (one without it is refused). Every audit log,
+  epoch chain, anchor batch and core run written before is refused as old scheme and has to be written again.
+- **The renderer ships**: `prismpath.kernel.core_render` (moved from `formal/diff/core_diff.py`, which imports
+  it). With no random source it writes an image's canonical rendering. Core runs store it
+  (`core_evidence.write_cases`), the producers refuse cases whose flow is not it, and both verifiers refuse a
+  run in which a case's flow is not the canonical rendering of its signed image. The Rust twin ports the
+  canonical rendering (`core_evidence render --from CASES`), held equal to the Python on every image tested.
+- **Proved**: `Core/Merkle.lean`, `mth_injective` (one RFC 6962 root, one list, of any length, unless the
+  hashes exhibit a collision) and `retired_collides` (the retired tree gives [a, b, c] and [a, b, c, c] one
+  root for every hash).
+- **Vectors regenerated** by their generators: `receipts.json` (251 cases, with retired scheme refusals),
+  `host_trace.json`, `context.json`, and `prismpath/tests/fixtures/core_evidence/cases.jsonl` (canonical
+  flows).
+
 ### Changed, breaking: every reader is strict, and a lock holds integers of millionths (2026-11-10)
 
 Every reader of a hashed or signed document and of a reading accepts only its exact canonical canon/2 bytes

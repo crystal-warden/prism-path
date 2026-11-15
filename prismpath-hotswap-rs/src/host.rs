@@ -3,8 +3,8 @@
 //! PolicyHost + AuditLog — the Attested + Audited-and-atomic half (policy_host.py / audit_log.py).
 //!
 //! The audit log is append-only JSONL whose leaves are sha256 over each event's canonical form, rolled
-//! into a Bitcoin-style Merkle root (duplicate-last-if-odd), so a log written by either runtime
-//! verifies on the other. An event is written as canon/2 (it names `"encoding": "canon/2"` and its time
+//! into an RFC 6962 Merkle root (`prismpath_rs::merkle`: domain separated, nothing duplicated), so a log
+//! written by either runtime verifies on the other. An event is written as canon/2 (it names `"encoding": "canon/2"` and its time
 //! is the integer `ts_us`, microseconds since the epoch), and its line is its canon/2 bytes; a line
 //! without the tag (canon/1, retired) is not an event and is skipped, so the log no longer verifies.
 //! Anti-rollback is the same fsync'd `active_version` file floor (software tier: tamper-EVIDENT
@@ -305,68 +305,31 @@ fn py_int(text: &str) -> Option<i128> {
 
 // -------------------------------------------------------------------- Merkle (ledger_ots.py)
 
-fn digest_bytes(bytes: &[u8]) -> Vec<u8> {
-    Sha256::digest(bytes).to_vec()
-}
-
 /// One step of an inclusion path: the side the sibling is on (`'R'` or `'L'`) and its hash in hex.
-pub type ProofStep = (char, String);
+pub type ProofStep = prismpath_rs::merkle::Step;
 
-/// Bitcoin-style Merkle root over hex leaves (duplicate last if odd). None for an empty list.
+/// The RFC 6962 Merkle root over hex leaves (`prismpath_rs::merkle`). None for an empty list.
 pub fn merkle_root(leaves_hex: &[String]) -> Option<String> {
-    merkle_root_and_paths(leaves_hex).0
+    let leaves: Vec<Vec<u8>> = leaves_hex.iter().map(|leaf| hex::decode(leaf).unwrap_or_default()).collect();
+    prismpath_rs::merkle::root_of_bytes(&leaves).map(hex::encode)
 }
 
 /// `ledger_ots.merkle_root_and_paths`: the root and an inclusion path for every leaf.
 pub fn merkle_root_and_paths(leaves_hex: &[String]) -> (Option<String>, Vec<Vec<ProofStep>>) {
-    if leaves_hex.is_empty() {
-        return (None, Vec::new());
-    }
-    let mut layers: Vec<Vec<Vec<u8>>> =
-        vec![leaves_hex.iter().map(|leaf| hex::decode(leaf).unwrap_or_default()).collect()];
-    while layers.last().expect("non-empty").len() > 1 {
-        let mut current = layers.last().expect("non-empty").clone();
-        if current.len() % 2 == 1 {
-            current.push(current.last().expect("non-empty").clone());
-        }
-        let next = current.chunks(2).map(|pair| digest_bytes(&[pair[0].as_slice(), pair[1].as_slice()].concat())).collect();
-        layers.push(next);
-    }
-    let root = hex::encode(&layers.last().expect("non-empty")[0]);
-    let paths = (0..leaves_hex.len())
-        .map(|leaf_index| {
-            let mut index = leaf_index;
-            let mut path = Vec::new();
-            for layer_ref in &layers[..layers.len() - 1] {
-                let mut layer = layer_ref.clone();
-                if layer.len() % 2 == 1 {
-                    layer.push(layer.last().expect("non-empty").clone());
-                }
-                if index % 2 == 0 {
-                    path.push(('R', hex::encode(&layer[index + 1])));
-                } else {
-                    path.push(('L', hex::encode(&layer[index - 1])));
-                }
-                index /= 2;
-            }
-            path
-        })
-        .collect();
-    (Some(root), paths)
+    let leaves: Vec<Vec<u8>> = leaves_hex.iter().map(|leaf| hex::decode(leaf).unwrap_or_default()).collect();
+    let (root, paths) = prismpath_rs::merkle::root_and_paths_of_bytes(&leaves);
+    (root.map(hex::encode), paths)
 }
 
 /// `ledger_ots.verify_leaf`: fold the path over the leaf and compare with the root.
 pub fn verify_leaf(leaf_hex: &str, path: &[ProofStep], root_hex: &str) -> bool {
-    let Ok(mut current) = hex::decode(leaf_hex) else { return false };
+    let Ok(leaf) = hex::decode(leaf_hex) else { return false };
+    let mut steps = Vec::with_capacity(path.len());
     for (side, sibling_hex) in path {
         let Ok(sibling) = hex::decode(sibling_hex) else { return false };
-        current = if *side == 'R' {
-            digest_bytes(&[current.as_slice(), sibling.as_slice()].concat())
-        } else {
-            digest_bytes(&[sibling.as_slice(), current.as_slice()].concat())
-        };
+        steps.push((*side == 'R', sibling));
     }
-    hex::encode(current) == root_hex
+    hex::encode(prismpath_rs::merkle::fold(&leaf, &steps)) == root_hex
 }
 
 /// `audit_log.verify`: a leaf's inclusion against a root. An empty root verifies nothing.

@@ -2,6 +2,7 @@
 // Copyright 2026 Crystal Warden Supply Chain Labs LLC
 //! Self-healing transport — Merkle-committed blocks + selective retransmission.
 
+use prismpath_rs::merkle;
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 
@@ -21,90 +22,36 @@ pub fn chunk(bits: &str, block_bits: usize) -> Result<Vec<String>, String> {
     Ok(out)
 }
 
-fn leaf_hash(block: &str) -> String {
-    hex::encode(leaf_bytes(block))
-}
-
 fn leaf_bytes(block: &str) -> Vec<u8> {
     let mut hasher = Sha256::new();
     hasher.update(block.as_bytes());
     hasher.finalize().to_vec()
 }
 
-/// (root_hex, per-block inclusion proof) over block hashes — reproduces ledger_ots's Merkle tree byte-for-byte.
+/// (root_hex, per-block inclusion proof) over the block hashes: the RFC 6962 tree of `ledger_ots`
+/// (`prismpath_rs::merkle`), each leaf the SHA-256 of a block, so it matches the Python byte for byte.
 pub fn commit(blocks: &[String]) -> (String, Vec<Vec<(String, String)>>) {
     if blocks.is_empty() {
         return ("".to_string(), vec![]);
     }
-    // Build the leaf layer as raw hash bytes directly — no hex round-trip, no fallible decode.
-    let mut layers: Vec<Vec<Vec<u8>>> = vec![blocks.iter().map(|b| leaf_bytes(b)).collect()];
-
-    // `layers` is seeded with one non-empty layer above and only grows, so `.last()` is always Some.
-    while layers.last().expect("layers is seeded non-empty").len() > 1 {
-        let mut cur = layers.last().expect("layers is seeded non-empty").clone();
-        if cur.len() % 2 == 1 {
-            let last = cur.last().expect("cur is non-empty (len > 1 above)").clone();
-            cur.push(last);
-        }
-        let mut next_layer = Vec::new();
-        for i in (0..cur.len()).step_by(2) {
-            let mut hasher = Sha256::new();
-            hasher.update(&cur[i]);
-            hasher.update(&cur[i + 1]);
-            next_layer.push(hasher.finalize().to_vec());
-        }
-        layers.push(next_layer);
-    }
-
-    let root = hex::encode(&layers.last().expect("layers is seeded non-empty")[0]);
-
-    let mut proofs = Vec::new();
-    for idx in 0..blocks.len() {
-        let mut path = Vec::new();
-        let mut cur_idx = idx;
-        for layer in layers.iter().take(layers.len() - 1) {
-            let mut layer_l = layer.clone();
-            if layer_l.len() % 2 == 1 {                    // odd -> duplicate the last (non-empty: len is odd, so >= 1)
-                let last = layer_l.last().expect("layer is non-empty (odd length)").clone();
-                layer_l.push(last);
-            }
-            if cur_idx % 2 == 0 {
-                path.push(("R".to_string(), hex::encode(&layer_l[cur_idx + 1])));
-            } else {
-                path.push(("L".to_string(), hex::encode(&layer_l[cur_idx - 1])));
-            }
-            cur_idx /= 2;
-        }
-        proofs.push(path);
-    }
-
-    (root, proofs)
+    let leaves: Vec<Vec<u8>> = blocks.iter().map(|block| leaf_bytes(block)).collect();
+    let (root, paths) = merkle::root_and_paths_of_bytes(&leaves);
+    let proofs = paths
+        .into_iter()
+        .map(|path| path.into_iter().map(|(side, hash)| (side.to_string(), hash)).collect())
+        .collect();
+    (hex::encode(root.expect("blocks is non-empty")), proofs)
 }
 
 pub fn verify_block(block: &str, proof: &[(String, String)], root: &str) -> bool {
-    let leaf_hex = leaf_hash(block);
-    let mut cur = match hex::decode(leaf_hex) {
-        Ok(c) => c,
-        Err(_) => return false,
-    };
-
+    let mut steps = Vec::with_capacity(proof.len());
     for (side, sib) in proof {
-        let s = match hex::decode(sib) {
-            Ok(bytes) => bytes,
+        match hex::decode(sib) {
+            Ok(bytes) => steps.push((side == "R", bytes)),
             Err(_) => return false,
-        };
-        let mut hasher = Sha256::new();
-        if side == "R" {
-            hasher.update(&cur);
-            hasher.update(&s);
-        } else {
-            hasher.update(&s);
-            hasher.update(&cur);
         }
-        cur = hasher.finalize().to_vec();
     }
-
-    hex::encode(&cur) == root
+    hex::encode(merkle::fold(&leaf_bytes(block), &steps)) == root
 }
 
 #[derive(Debug, Clone)]
