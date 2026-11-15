@@ -1,0 +1,116 @@
+{
+ "format": "PPT",
+ "version": 1,
+ "max_steps": 25,
+ "fields": {
+  "category": 0,
+  "sentiment": 1
+ },
+ "intern": {
+  "": 0,
+  "billing": 1,
+  "billing_dispute": 2,
+  "outage": 3,
+  "angry": 4
+ },
+ "atoms": [
+  {
+   "i": 0,
+   "field": "category",
+   "op": "==",
+   "type": "str",
+   "val": 1
+  },
+  {
+   "i": 1,
+   "field": "category",
+   "op": "==",
+   "type": "str",
+   "val": 2
+  },
+  {
+   "i": 2,
+   "field": "category",
+   "op": "==",
+   "type": "str",
+   "val": 3
+  },
+  {
+   "i": 3,
+   "field": "sentiment",
+   "op": "==",
+   "type": "str",
+   "val": 4
+  }
+ ],
+ "start": 0,
+ "colors_present": false,
+ "stateful": false,
+ "migration": null,
+ "safe_node": null,
+ "wcet_cycles": 16,
+ "nodes": [
+  {
+   "i": 0,
+   "name": "classify",
+   "color": 0,
+   "edges": [
+    {
+     "target": 1,
+     "condition": "when category in (\"billing\", \"billing_dispute\")",
+     "program": [
+      "ATOM 0",
+      "ATOM 1",
+      "OR"
+     ]
+    },
+    {
+     "target": 2,
+     "condition": "when category == \"outage\"",
+     "program": [
+      "ATOM 2"
+     ]
+    },
+    {
+     "target": 3,
+     "condition": "when sentiment == \"angry\"",
+     "program": [
+      "ATOM 3"
+     ]
+    },
+    {
+     "target": 4,
+     "condition": "else",
+     "program": [
+      "TRUE"
+     ]
+    }
+   ]
+  },
+  {
+   "i": 1,
+   "name": "billing",
+   "color": 0,
+   "edges": []
+  },
+  {
+   "i": 2,
+   "name": "outage",
+   "color": 0,
+   "edges": []
+  },
+  {
+   "i": 3,
+   "name": "retention",
+   "color": 0,
+   "edges": []
+  },
+  {
+   "i": 4,
+   "name": "general",
+   "color": 0,
+   "edges": []
+  }
+ ],
+ "host_side_edges": []
+}

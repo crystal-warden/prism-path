@@ -1,0 +1,2797 @@
+{
+ "derive": [
+  {
+   "contract": {
+    "n": [
+     [
+      "tests_pass",
+      {
+       "type": "boolean"
+      }
+     ]
+    ],
+    "t": []
+   },
+   "describe": "## n\n    tests_pass: boolean",
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when tests_pass\n\n## t\nDone.\n",
+   "name": "bare-name-is-boolean",
+   "schemas": {
+    "n": {
+     "properties": {
+      "tests_pass": {
+       "type": "boolean"
+      }
+     },
+     "required": [
+      "tests_pass"
+     ],
+     "type": "object"
+    },
+    "t": {
+     "properties": {},
+     "required": [],
+     "type": "object"
+    }
+   }
+  },
+  {
+   "contract": {
+    "n": [
+     [
+      "a",
+      {
+       "type": "boolean"
+      }
+     ],
+     [
+      "b",
+      {
+       "type": "boolean"
+      }
+     ],
+     [
+      "c",
+      {
+       "type": "boolean"
+      }
+     ],
+     [
+      "d",
+      {
+       "type": "boolean"
+      }
+     ]
+    ],
+    "t": []
+   },
+   "describe": "## n\n    a: boolean\n    b: boolean\n    c: boolean\n    d: boolean",
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when a and not b\n-> t: when c or d\n\n## t\nDone.\n",
+   "name": "not-and-or-operands-are-boolean",
+   "schemas": {
+    "n": {
+     "properties": {
+      "a": {
+       "type": "boolean"
+      },
+      "b": {
+       "type": "boolean"
+      },
+      "c": {
+       "type": "boolean"
+      },
+      "d": {
+       "type": "boolean"
+      }
+     },
+     "required": [
+      "a",
+      "b",
+      "c",
+      "d"
+     ],
+     "type": "object"
+    },
+    "t": {
+     "properties": {},
+     "required": [],
+     "type": "object"
+    }
+   }
+  },
+  {
+   "contract": {
+    "n": [
+     [
+      "flag",
+      {
+       "type": "boolean"
+      }
+     ],
+     [
+      "other",
+      {
+       "type": "boolean"
+      }
+     ]
+    ],
+    "t": []
+   },
+   "describe": "## n\n    flag: boolean\n    other: boolean",
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when flag == True\n-> t: when other != False\n\n## t\nDone.\n",
+   "name": "bool-literal-equality",
+   "schemas": {
+    "n": {
+     "properties": {
+      "flag": {
+       "type": "boolean"
+      },
+      "other": {
+       "type": "boolean"
+      }
+     },
+     "required": [
+      "flag",
+      "other"
+     ],
+     "type": "object"
+    },
+    "t": {
+     "properties": {},
+     "required": [],
+     "type": "object"
+    }
+   }
+  },
+  {
+   "contract": {
+    "n": [
+     [
+      "action",
+      {
+       "type": "enum",
+       "values": [
+        "contain",
+        "ignore"
+       ]
+      }
+     ]
+    ],
+    "t": []
+   },
+   "describe": "## n\n    action: enum{contain, ignore}",
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when action == \"contain\"\n-> t: when action != 'ignore'\n\n## t\nDone.\n",
+   "name": "string-equality-is-an-enum",
+   "schemas": {
+    "n": {
+     "properties": {
+      "action": {
+       "enum": [
+        "contain",
+        "ignore"
+       ],
+       "type": "string"
+      }
+     },
+     "required": [
+      "action"
+     ],
+     "type": "object"
+    },
+    "t": {
+     "properties": {},
+     "required": [],
+     "type": "object"
+    }
+   }
+  },
+  {
+   "contract": {
+    "n": [
+     [
+      "action",
+      {
+       "type": "enum",
+       "values": [
+        "a",
+        "b",
+        "c"
+       ]
+      }
+     ]
+    ],
+    "t": []
+   },
+   "describe": "## n\n    action: enum{a, b, c}",
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when action in [\"a\", \"b\"]\n-> t: when action in (\"c\", \"a\")\n\n## t\nDone.\n",
+   "name": "in-a-string-list-is-an-enum",
+   "schemas": {
+    "n": {
+     "properties": {
+      "action": {
+       "enum": [
+        "a",
+        "b",
+        "c"
+       ],
+       "type": "string"
+      }
+     },
+     "required": [
+      "action"
+     ],
+     "type": "object"
+    },
+    "t": {
+     "properties": {},
+     "required": [],
+     "type": "object"
+    }
+   }
+  },
+  {
+   "contract": {
+    "n": [
+     [
+      "score",
+      {
+       "type": "number"
+      }
+     ]
+    ],
+    "t": []
+   },
+   "describe": "## n\n    score: number",
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when score >= 0.8\n-> t: when score < 3\n\n## t\nDone.\n",
+   "name": "ordering-is-a-ranged-number",
+   "schemas": {
+    "n": {
+     "properties": {
+      "score": {
+       "type": "number"
+      }
+     },
+     "required": [
+      "score"
+     ],
+     "type": "object"
+    },
+    "t": {
+     "properties": {},
+     "required": [],
+     "type": "object"
+    }
+   }
+  },
+  {
+   "contract": {
+    "n": [
+     [
+      "priority",
+      {
+       "type": "number",
+       "values": [
+        1,
+        2,
+        3
+       ]
+      }
+     ]
+    ],
+    "t": []
+   },
+   "describe": "## n\n    priority: number{1, 2, 3}",
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when priority == 3\n-> t: when priority in [1, 2]\n\n## t\nDone.\n",
+   "name": "numeric-enum",
+   "schemas": {
+    "n": {
+     "properties": {
+      "priority": {
+       "enum": [
+        1,
+        2,
+        3
+       ],
+       "type": "number"
+      }
+     },
+     "required": [
+      "priority"
+     ],
+     "type": "object"
+    },
+    "t": {
+     "properties": {},
+     "required": [],
+     "type": "object"
+    }
+   }
+  },
+  {
+   "contract": {
+    "n": [
+     [
+      "level",
+      {
+       "type": "number"
+      }
+     ]
+    ],
+    "t": []
+   },
+   "describe": "## n\n    level: number",
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when level == 3\n-> t: when level > 9\n\n## t\nDone.\n",
+   "name": "a-ranged-number-has-no-closed-set",
+   "schemas": {
+    "n": {
+     "properties": {
+      "level": {
+       "type": "number"
+      }
+     },
+     "required": [
+      "level"
+     ],
+     "type": "object"
+    },
+    "t": {
+     "properties": {},
+     "required": [],
+     "type": "object"
+    }
+   }
+  },
+  {
+   "contract": {
+    "n": [
+     [
+      "x",
+      {
+       "type": "number",
+       "values": [
+        2.5,
+        1
+       ]
+      }
+     ]
+    ],
+    "t": []
+   },
+   "describe": "## n\n    x: number{2.5, 1}",
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when x == 1 or x == 1.0 or x == 2.5\n\n## t\nDone.\n",
+   "name": "an-integer-and-a-float-of-one-value-are-one-value",
+   "schemas": {
+    "n": {
+     "properties": {
+      "x": {
+       "enum": [
+        2.5,
+        1
+       ],
+       "type": "number"
+      }
+     },
+     "required": [
+      "x"
+     ],
+     "type": "object"
+    },
+    "t": {
+     "properties": {},
+     "required": [],
+     "type": "object"
+    }
+   }
+  },
+  {
+   "contract": {
+    "n": [
+     [
+      "x",
+      {
+       "type": "number",
+       "values": [
+        1.0
+       ]
+      }
+     ]
+    ],
+    "t": []
+   },
+   "describe": "## n\n    x: number{1.0}",
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when x == 1.0 or x == 1\n\n## t\nDone.\n",
+   "name": "a-float-first-keeps-the-float",
+   "schemas": {
+    "n": {
+     "properties": {
+      "x": {
+       "enum": [
+        1.0
+       ],
+       "type": "number"
+      }
+     },
+     "required": [
+      "x"
+     ],
+     "type": "object"
+    },
+    "t": {
+     "properties": {},
+     "required": [],
+     "type": "object"
+    }
+   }
+  },
+  {
+   "contract": {
+    "n": [
+     [
+      "x",
+      {
+       "type": "number",
+       "values": [
+        3,
+        15,
+        16,
+        1000
+       ]
+      }
+     ]
+    ],
+    "t": []
+   },
+   "describe": "## n\n    x: number{3, 15, 16, 1000}",
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when x == 0x10 or x == 1_000 or x == 1e3 or x == 0o17 or x == 0b11\n\n## t\nDone.\n",
+   "name": "number-spellings",
+   "schemas": {
+    "n": {
+     "properties": {
+      "x": {
+       "enum": [
+        3,
+        15,
+        16,
+        1000
+       ],
+       "type": "number"
+      }
+     },
+     "required": [
+      "x"
+     ],
+     "type": "object"
+    },
+    "t": {
+     "properties": {},
+     "required": [],
+     "type": "object"
+    }
+   }
+  },
+  {
+   "contract": {
+    "n": [
+     [
+      "x",
+      {
+       "conflict": "used as both enum and number",
+       "type": "enum",
+       "values": [
+        1.5,
+        1,
+        2,
+        "a",
+        "b"
+       ]
+      }
+     ]
+    ],
+    "t": []
+   },
+   "describe": "## n\n    x: enum{1.5, 1, 2, a, b}   ⚠ used as both enum and number",
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when x == \"b\" or x == 2 or x == 1.5 or x == \"a\" or x == 1\n\n## t\nDone.\n",
+   "name": "a-mixed-set-sorts-floats-then-ints-then-strings",
+   "schemas": {
+    "n": {
+     "properties": {
+      "x": {
+       "enum": [
+        1.5,
+        1,
+        2,
+        "a",
+        "b"
+       ],
+       "type": "string"
+      }
+     },
+     "required": [
+      "x"
+     ],
+     "type": "object"
+    },
+    "t": {
+     "properties": {},
+     "required": [],
+     "type": "object"
+    }
+   }
+  },
+  {
+   "contract": {
+    "n": [
+     [
+      "flag",
+      {
+       "conflict": "used as both boolean and number",
+       "type": "boolean"
+      }
+     ]
+    ],
+    "t": []
+   },
+   "describe": "## n\n    flag: boolean   ⚠ used as both boolean and number",
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when flag\n-> t: when flag > 3\n\n## t\nDone.\n",
+   "name": "conflict-boolean-then-number",
+   "schemas": {
+    "n": {
+     "properties": {
+      "flag": {
+       "type": "boolean"
+      }
+     },
+     "required": [
+      "flag"
+     ],
+     "type": "object"
+    },
+    "t": {
+     "properties": {},
+     "required": [],
+     "type": "object"
+    }
+   }
+  },
+  {
+   "contract": {
+    "n": [
+     [
+      "x",
+      {
+       "conflict": "used as both enum and number",
+       "type": "enum",
+       "values": [
+        3,
+        "a"
+       ]
+      }
+     ]
+    ],
+    "t": []
+   },
+   "describe": "## n\n    x: enum{3, a}   ⚠ used as both enum and number",
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when x == \"a\"\n-> t: when x == 3\n\n## t\nDone.\n",
+   "name": "conflict-enum-then-number",
+   "schemas": {
+    "n": {
+     "properties": {
+      "x": {
+       "enum": [
+        3,
+        "a"
+       ],
+       "type": "string"
+      }
+     },
+     "required": [
+      "x"
+     ],
+     "type": "object"
+    },
+    "t": {
+     "properties": {},
+     "required": [],
+     "type": "object"
+    }
+   }
+  },
+  {
+   "contract": {
+    "n": [
+     [
+      "x",
+      {
+       "type": "unknown"
+      }
+     ]
+    ],
+    "t": []
+   },
+   "describe": "## n\n    x: unknown",
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when x in y\n\n## t\nDone.\n",
+   "name": "a-membership-in-a-name-types-nothing",
+   "schemas": {
+    "n": {
+     "properties": {
+      "x": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "x"
+     ],
+     "type": "object"
+    },
+    "t": {
+     "properties": {},
+     "required": [],
+     "type": "object"
+    }
+   }
+  },
+  {
+   "contract": {
+    "n": [
+     [
+      "x",
+      {
+       "type": "unknown"
+      }
+     ]
+    ],
+    "t": []
+   },
+   "describe": "## n\n    x: unknown",
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when x in [1, \"a\"]\n\n## t\nDone.\n",
+   "name": "a-mixed-list-is-unknown",
+   "schemas": {
+    "n": {
+     "properties": {
+      "x": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "x"
+     ],
+     "type": "object"
+    },
+    "t": {
+     "properties": {},
+     "required": [],
+     "type": "object"
+    }
+   }
+  },
+  {
+   "contract": {
+    "n": [
+     [
+      "x",
+      {
+       "type": "unknown"
+      }
+     ],
+     [
+      "y",
+      {
+       "type": "unknown"
+      }
+     ]
+    ],
+    "t": []
+   },
+   "describe": "## n\n    x: unknown\n    y: unknown",
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when x in []\n-> t: when y not in ()\n\n## t\nDone.\n",
+   "name": "an-empty-list-is-unknown",
+   "schemas": {
+    "n": {
+     "properties": {
+      "x": {
+       "type": "string"
+      },
+      "y": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "x",
+      "y"
+     ],
+     "type": "object"
+    },
+    "t": {
+     "properties": {},
+     "required": [],
+     "type": "object"
+    }
+   }
+  },
+  {
+   "contract": {
+    "n": [
+     [
+      "x",
+      {
+       "type": "unknown"
+      }
+     ]
+    ],
+    "t": []
+   },
+   "describe": "## n\n    x: unknown",
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when x in [None]\n\n## t\nDone.\n",
+   "name": "a-list-of-none-adds-no-type",
+   "schemas": {
+    "n": {
+     "properties": {
+      "x": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "x"
+     ],
+     "type": "object"
+    },
+    "t": {
+     "properties": {},
+     "required": [],
+     "type": "object"
+    }
+   }
+  },
+  {
+   "contract": {
+    "n": [
+     [
+      "x",
+      {
+       "type": "boolean"
+      }
+     ]
+    ],
+    "t": []
+   },
+   "describe": "## n\n    x: boolean",
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when x in [True, False]\n\n## t\nDone.\n",
+   "name": "a-list-of-booleans-is-boolean",
+   "schemas": {
+    "n": {
+     "properties": {
+      "x": {
+       "type": "boolean"
+      }
+     },
+     "required": [
+      "x"
+     ],
+     "type": "object"
+    },
+    "t": {
+     "properties": {},
+     "required": [],
+     "type": "object"
+    }
+   }
+  },
+  {
+   "contract": {
+    "n": [
+     [
+      "x",
+      {
+       "type": "unknown"
+      }
+     ],
+     [
+      "y",
+      {
+       "type": "unknown"
+      }
+     ]
+    ],
+    "t": []
+   },
+   "describe": "## n\n    x: unknown\n    y: unknown",
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when x == None\n-> t: when y == ...\n\n## t\nDone.\n",
+   "name": "none-and-ellipsis-equality-type-nothing",
+   "schemas": {
+    "n": {
+     "properties": {
+      "x": {
+       "type": "string"
+      },
+      "y": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "x",
+      "y"
+     ],
+     "type": "object"
+    },
+    "t": {
+     "properties": {},
+     "required": [],
+     "type": "object"
+    }
+   }
+  },
+  {
+   "contract": {
+    "n": [
+     [
+      "x",
+      {
+       "type": "unknown"
+      }
+     ],
+     [
+      "y",
+      {
+       "type": "unknown"
+      }
+     ]
+    ],
+    "t": []
+   },
+   "describe": "## n\n    x: unknown\n    y: unknown",
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when x is None\n-> t: when y is not None\n\n## t\nDone.\n",
+   "name": "is-types-nothing",
+   "schemas": {
+    "n": {
+     "properties": {
+      "x": {
+       "type": "string"
+      },
+      "y": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "x",
+      "y"
+     ],
+     "type": "object"
+    },
+    "t": {
+     "properties": {},
+     "required": [],
+     "type": "object"
+    }
+   }
+  },
+  {
+   "contract": {
+    "n": [
+     [
+      "real",
+      {
+       "type": "boolean"
+      }
+     ]
+    ],
+    "t": []
+   },
+   "describe": "## n\n    real: boolean",
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when visits < 3 and error_count > 1 and error and error_type == 'x' and error_message\n-> t: when real\n\n## t\nDone.\n",
+   "name": "engine-fields-are-not-the-workers",
+   "schemas": {
+    "n": {
+     "properties": {
+      "real": {
+       "type": "boolean"
+      }
+     },
+     "required": [
+      "real"
+     ],
+     "type": "object"
+    },
+    "t": {
+     "properties": {},
+     "required": [],
+     "type": "object"
+    }
+   }
+  },
+  {
+   "contract": {
+    "n": [
+     [
+      "x",
+      {
+       "type": "number"
+      }
+     ],
+     [
+      "a",
+      {
+       "type": "number"
+      }
+     ],
+     [
+      "b",
+      {
+       "type": "number"
+      }
+     ]
+    ],
+    "t": []
+   },
+   "describe": "## n\n    a: number\n    b: number\n    x: number",
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when 1 < x < 5\n-> t: when a <= b <= c\n\n## t\nDone.\n",
+   "name": "chained-comparison",
+   "schemas": {
+    "n": {
+     "properties": {
+      "a": {
+       "type": "number"
+      },
+      "b": {
+       "type": "number"
+      },
+      "x": {
+       "type": "number"
+      }
+     },
+     "required": [
+      "a",
+      "b",
+      "x"
+     ],
+     "type": "object"
+    },
+    "t": {
+     "properties": {},
+     "required": [],
+     "type": "object"
+    }
+   }
+  },
+  {
+   "contract": {
+    "n": [
+     [
+      "a",
+      {
+       "type": "unknown"
+      }
+     ]
+    ],
+    "t": []
+   },
+   "describe": "## n\n    a: unknown",
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when a == b\n\n## t\nDone.\n",
+   "name": "two-names-type-the-left",
+   "schemas": {
+    "n": {
+     "properties": {
+      "a": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "a"
+     ],
+     "type": "object"
+    },
+    "t": {
+     "properties": {},
+     "required": [],
+     "type": "object"
+    }
+   }
+  },
+  {
+   "contract": {
+    "n": [
+     [
+      "x",
+      {
+       "type": "number"
+      }
+     ],
+     [
+      "y",
+      {
+       "type": "enum",
+       "values": [
+        "hi"
+       ]
+      }
+     ]
+    ],
+    "t": []
+   },
+   "describe": "## n\n    x: number\n    y: enum{hi}",
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when 3 < x\n-> t: when \"hi\" == y\n\n## t\nDone.\n",
+   "name": "a-constant-on-the-left",
+   "schemas": {
+    "n": {
+     "properties": {
+      "x": {
+       "type": "number"
+      },
+      "y": {
+       "enum": [
+        "hi"
+       ],
+       "type": "string"
+      }
+     },
+     "required": [
+      "x",
+      "y"
+     ],
+     "type": "object"
+    },
+    "t": {
+     "properties": {},
+     "required": [],
+     "type": "object"
+    }
+   }
+  },
+  {
+   "contract": {
+    "n": [
+     [
+      "flag",
+      {
+       "type": "boolean"
+      }
+     ],
+     [
+      "a",
+      {
+       "type": "boolean"
+      }
+     ],
+     [
+      "b",
+      {
+       "type": "boolean"
+      }
+     ]
+    ],
+    "t": []
+   },
+   "describe": "## n\n    a: boolean\n    b: boolean\n    flag: boolean",
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when (flag)\n-> t: when ((a)) and (not (b))\n\n## t\nDone.\n",
+   "name": "a-parenthesised-name",
+   "schemas": {
+    "n": {
+     "properties": {
+      "a": {
+       "type": "boolean"
+      },
+      "b": {
+       "type": "boolean"
+      },
+      "flag": {
+       "type": "boolean"
+      }
+     },
+     "required": [
+      "a",
+      "b",
+      "flag"
+     ],
+     "type": "object"
+    },
+    "t": {
+     "properties": {},
+     "required": [],
+     "type": "object"
+    }
+   }
+  },
+  {
+   "contract": {
+    "n": [
+     [
+      "c",
+      {
+       "type": "unknown"
+      }
+     ]
+    ],
+    "t": []
+   },
+   "describe": "## n\n    c: unknown",
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when (a and b) == c\n\n## t\nDone.\n",
+   "name": "a-bool-op-in-an-operand-is-not-walked",
+   "schemas": {
+    "n": {
+     "properties": {
+      "c": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "c"
+     ],
+     "type": "object"
+    },
+    "t": {
+     "properties": {},
+     "required": [],
+     "type": "object"
+    }
+   }
+  },
+  {
+   "contract": {
+    "n": [
+     [
+      "x",
+      {
+       "type": "unknown"
+      }
+     ]
+    ],
+    "t": []
+   },
+   "describe": "## n\n    x: unknown",
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when x in [a, b]\n\n## t\nDone.\n",
+   "name": "a-list-element-is-not-walked",
+   "schemas": {
+    "n": {
+     "properties": {
+      "x": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "x"
+     ],
+     "type": "object"
+    },
+    "t": {
+     "properties": {},
+     "required": [],
+     "type": "object"
+    }
+   }
+  },
+  {
+   "contract": {
+    "n": [],
+    "t": []
+   },
+   "describe": "(no deterministic edges - nothing to constrain)",
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when x, y\n\n## t\nDone.\n",
+   "name": "a-bare-tuple-types-nothing",
+   "schemas": {
+    "n": {
+     "properties": {},
+     "required": [],
+     "type": "object"
+    },
+    "t": {
+     "properties": {},
+     "required": [],
+     "type": "object"
+    }
+   }
+  },
+  {
+   "contract": {
+    "n": [
+     [
+      "x",
+      {
+       "type": "number",
+       "values": [
+        -3
+       ]
+      }
+     ],
+     [
+      "y",
+      {
+       "type": "number",
+       "values": [
+        -3,
+        -1,
+        2
+       ]
+      }
+     ],
+     [
+      "z",
+      {
+       "type": "number",
+       "values": [
+        7
+       ]
+      }
+     ]
+    ],
+    "t": []
+   },
+   "describe": "## n\n    x: number{-3}\n    y: number{-3, -1, 2}\n    z: number{7}",
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when x == -3\n-> t: when y in [-3, -1, 2]\n-> t: when z == +7\n\n## t\nDone.\n",
+   "name": "a-signed-integer-literal-is-a-number",
+   "schemas": {
+    "n": {
+     "properties": {
+      "x": {
+       "enum": [
+        -3
+       ],
+       "type": "number"
+      },
+      "y": {
+       "enum": [
+        -3,
+        -1,
+        2
+       ],
+       "type": "number"
+      },
+      "z": {
+       "enum": [
+        7
+       ],
+       "type": "number"
+      }
+     },
+     "required": [
+      "x",
+      "y",
+      "z"
+     ],
+     "type": "object"
+    },
+    "t": {
+     "properties": {},
+     "required": [],
+     "type": "object"
+    }
+   }
+  },
+  {
+   "contract": {
+    "n": [
+     [
+      "a",
+      {
+       "type": "number",
+       "values": [
+        3
+       ]
+      }
+     ],
+     [
+      "b",
+      {
+       "type": "number",
+       "values": [
+        -5
+       ]
+      }
+     ],
+     [
+      "c",
+      {
+       "type": "number",
+       "values": [
+        -4
+       ]
+      }
+     ],
+     [
+      "d",
+      {
+       "type": "number",
+       "values": [
+        -2
+       ]
+      }
+     ],
+     [
+      "e",
+      {
+       "type": "number",
+       "values": [
+        -3
+       ]
+      }
+     ]
+    ],
+    "t": []
+   },
+   "describe": "## n\n    a: number{3}\n    b: number{-5}\n    c: number{-4}\n    d: number{-2}\n    e: number{-3}",
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when a == -(-3)\n-> t: when b == -(5)\n-> t: when c == +-4\n-> t: when d != - 2\n-> t: when -3 == e\n\n## t\nDone.\n",
+   "name": "a-signed-integer-literal-folds-like-the-engine-does",
+   "schemas": {
+    "n": {
+     "properties": {
+      "a": {
+       "enum": [
+        3
+       ],
+       "type": "number"
+      },
+      "b": {
+       "enum": [
+        -5
+       ],
+       "type": "number"
+      },
+      "c": {
+       "enum": [
+        -4
+       ],
+       "type": "number"
+      },
+      "d": {
+       "enum": [
+        -2
+       ],
+       "type": "number"
+      },
+      "e": {
+       "enum": [
+        -3
+       ],
+       "type": "number"
+      }
+     },
+     "required": [
+      "a",
+      "b",
+      "c",
+      "d",
+      "e"
+     ],
+     "type": "object"
+    },
+    "t": {
+     "properties": {},
+     "required": [],
+     "type": "object"
+    }
+   }
+  },
+  {
+   "contract": {
+    "n": [
+     [
+      "a",
+      {
+       "type": "unknown"
+      }
+     ],
+     [
+      "b",
+      {
+       "type": "unknown"
+      }
+     ],
+     [
+      "d",
+      {
+       "type": "unknown"
+      }
+     ],
+     [
+      "e",
+      {
+       "type": "unknown"
+      }
+     ],
+     [
+      "f",
+      {
+       "type": "unknown"
+      }
+     ],
+     [
+      "g",
+      {
+       "type": "unknown"
+      }
+     ]
+    ],
+    "t": []
+   },
+   "describe": "## n\n    a: unknown\n    b: unknown\n    d: unknown\n    e: unknown\n    f: unknown\n    g: unknown",
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when a == -1.5\n-> t: when b == -c\n-> t: when d == -True\n-> t: when e in [-1, -2.5]\n-> t: when f == ~3\n-> t: when g == -3 ** 2\n\n## t\nDone.\n",
+   "name": "a-signed-float-or-field-or-bool-does-not-fold",
+   "schemas": {
+    "n": {
+     "properties": {
+      "a": {
+       "type": "string"
+      },
+      "b": {
+       "type": "string"
+      },
+      "d": {
+       "type": "string"
+      },
+      "e": {
+       "type": "string"
+      },
+      "f": {
+       "type": "string"
+      },
+      "g": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "a",
+      "b",
+      "d",
+      "e",
+      "f",
+      "g"
+     ],
+     "type": "object"
+    },
+    "t": {
+     "properties": {},
+     "required": [],
+     "type": "object"
+    }
+   }
+  },
+  {
+   "contract": {
+    "n": [
+     [
+      "x",
+      {
+       "type": "number"
+      }
+     ],
+     [
+      "y",
+      {
+       "type": "number"
+      }
+     ],
+     [
+      "z",
+      {
+       "type": "number"
+      }
+     ]
+    ],
+    "t": []
+   },
+   "describe": "## n\n    x: number\n    y: number\n    z: number",
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when x >= -5\n-> t: when -1 < y\n-> t: when z >= -0.5\n\n## t\nDone.\n",
+   "name": "a-signed-literal-still-gives-an-ordering-type",
+   "schemas": {
+    "n": {
+     "properties": {
+      "x": {
+       "type": "number"
+      },
+      "y": {
+       "type": "number"
+      },
+      "z": {
+       "type": "number"
+      }
+     },
+     "required": [
+      "x",
+      "y",
+      "z"
+     ],
+     "type": "object"
+    },
+    "t": {
+     "properties": {},
+     "required": [],
+     "type": "object"
+    }
+   }
+  },
+  {
+   "contract": {
+    "n": [
+     [
+      "y",
+      {
+       "type": "boolean"
+      }
+     ]
+    ],
+    "t": []
+   },
+   "describe": "## n\n    y: boolean",
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when f(x) > 3 and y\n\n## t\nDone.\n",
+   "name": "a-call-is-not-walked-but-its-sibling-is",
+   "schemas": {
+    "n": {
+     "properties": {
+      "y": {
+       "type": "boolean"
+      }
+     },
+     "required": [
+      "y"
+     ],
+     "type": "object"
+    },
+    "t": {
+     "properties": {},
+     "required": [],
+     "type": "object"
+    }
+   }
+  },
+  {
+   "contract": {
+    "n": [
+     [
+      "z",
+      {
+       "type": "boolean"
+      }
+     ],
+     [
+      "v",
+      {
+       "type": "boolean"
+      }
+     ],
+     [
+      "u",
+      {
+       "type": "unknown"
+      }
+     ]
+    ],
+    "t": []
+   },
+   "describe": "## n\n    u: unknown\n    v: boolean\n    z: boolean",
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when x.y == 1 and z\n-> t: when w + 1 > 2 and v\n-> t: when u == x + 1\n\n## t\nDone.\n",
+   "name": "an-attribute-or-arithmetic-operand",
+   "schemas": {
+    "n": {
+     "properties": {
+      "u": {
+       "type": "string"
+      },
+      "v": {
+       "type": "boolean"
+      },
+      "z": {
+       "type": "boolean"
+      }
+     },
+     "required": [
+      "u",
+      "v",
+      "z"
+     ],
+     "type": "object"
+    },
+    "t": {
+     "properties": {},
+     "required": [],
+     "type": "object"
+    }
+   }
+  },
+  {
+   "contract": {
+    "n": [
+     [
+      "b",
+      {
+       "type": "boolean"
+      }
+     ],
+     [
+      "f",
+      {
+       "type": "boolean"
+      }
+     ]
+    ],
+    "t": []
+   },
+   "describe": "## n\n    b: boolean\n    f: boolean",
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when a[0] == 1 and b\n-> t: when (c if d else e) == 1 and f\n\n## t\nDone.\n",
+   "name": "a-subscript-and-a-conditional",
+   "schemas": {
+    "n": {
+     "properties": {
+      "b": {
+       "type": "boolean"
+      },
+      "f": {
+       "type": "boolean"
+      }
+     },
+     "required": [
+      "b",
+      "f"
+     ],
+     "type": "object"
+    },
+    "t": {
+     "properties": {},
+     "required": [],
+     "type": "object"
+    }
+   }
+  },
+  {
+   "contract": {
+    "n": [
+     [
+      "x",
+      {
+       "type": "number"
+      }
+     ]
+    ],
+    "t": []
+   },
+   "describe": "## n\n    x: number",
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when x > 3 # large\n\n## t\nDone.\n",
+   "name": "a-comment-after-the-predicate",
+   "schemas": {
+    "n": {
+     "properties": {
+      "x": {
+       "type": "number"
+      }
+     },
+     "required": [
+      "x"
+     ],
+     "type": "object"
+    },
+    "t": {
+     "properties": {},
+     "required": [],
+     "type": "object"
+    }
+   }
+  },
+  {
+   "contract": {
+    "n": [
+     [
+      "x",
+      {
+       "type": "unknown"
+      }
+     ],
+     [
+      "z",
+      {
+       "type": "boolean"
+      }
+     ]
+    ],
+    "t": []
+   },
+   "describe": "## n\n    x: unknown\n    z: boolean",
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when x in [i for i in y] and z\n\n## t\nDone.\n",
+   "name": "a-comprehension-is-opaque",
+   "schemas": {
+    "n": {
+     "properties": {
+      "x": {
+       "type": "string"
+      },
+      "z": {
+       "type": "boolean"
+      }
+     },
+     "required": [
+      "x",
+      "z"
+     ],
+     "type": "object"
+    },
+    "t": {
+     "properties": {},
+     "required": [],
+     "type": "object"
+    }
+   }
+  },
+  {
+   "contract": {
+    "n": [
+     [
+      "z",
+      {
+       "type": "boolean"
+      }
+     ]
+    ],
+    "t": []
+   },
+   "describe": "## n\n    z: boolean",
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when (lambda q: q)(1) and z\n\n## t\nDone.\n",
+   "name": "a-lambda-is-opaque",
+   "schemas": {
+    "n": {
+     "properties": {
+      "z": {
+       "type": "boolean"
+      }
+     },
+     "required": [
+      "z"
+     ],
+     "type": "object"
+    },
+    "t": {
+     "properties": {},
+     "required": [],
+     "type": "object"
+    }
+   }
+  },
+  {
+   "contract": {
+    "n": [
+     [
+      "x",
+      {
+       "type": "enum",
+       "values": [
+        "abcd"
+       ]
+      }
+     ]
+    ],
+    "t": []
+   },
+   "describe": "## n\n    x: enum{abcd}",
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when x == \"ab\" \"cd\"\n\n## t\nDone.\n",
+   "name": "adjacent-strings-are-one-constant",
+   "schemas": {
+    "n": {
+     "properties": {
+      "x": {
+       "enum": [
+        "abcd"
+       ],
+       "type": "string"
+      }
+     },
+     "required": [
+      "x"
+     ],
+     "type": "object"
+    },
+    "t": {
+     "properties": {},
+     "required": [],
+     "type": "object"
+    }
+   }
+  },
+  {
+   "contract": {
+    "n": [
+     [
+      "x",
+      {
+       "type": "enum",
+       "values": [
+        "A",
+        "\\n",
+        "a\tb",
+        "q\\qq",
+        "é"
+       ]
+      }
+     ]
+    ],
+    "t": []
+   },
+   "describe": "## n\n    x: enum{A, \\n, a\tb, q\\qq, é}",
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when x == \"a\\tb\" or x == \"\\x41\" or x == \"é\" or x == r\"\\n\" or x == \"q\\qq\"\n\n## t\nDone.\n",
+   "name": "string-escapes",
+   "schemas": {
+    "n": {
+     "properties": {
+      "x": {
+       "enum": [
+        "A",
+        "\\n",
+        "a\tb",
+        "q\\qq",
+        "é"
+       ],
+       "type": "string"
+      }
+     },
+     "required": [
+      "x"
+     ],
+     "type": "object"
+    },
+    "t": {
+     "properties": {},
+     "required": [],
+     "type": "object"
+    }
+   }
+  },
+  {
+   "contract": {
+    "n": [
+     [
+      "x",
+      {
+       "type": "unknown"
+      }
+     ],
+     [
+      "y",
+      {
+       "type": "unknown"
+      }
+     ]
+    ],
+    "t": []
+   },
+   "describe": "## n\n    x: unknown\n    y: unknown",
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when x == b\"a\"\n-> t: when y == 1j\n\n## t\nDone.\n",
+   "name": "bytes-and-complex-constants-type-nothing",
+   "schemas": {
+    "n": {
+     "properties": {
+      "x": {
+       "type": "string"
+      },
+      "y": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "x",
+      "y"
+     ],
+     "type": "object"
+    },
+    "t": {
+     "properties": {},
+     "required": [],
+     "type": "object"
+    }
+   }
+  },
+  {
+   "contract": {
+    "n": [
+     [
+      "x",
+      {
+       "type": "unknown"
+      }
+     ],
+     [
+      "z",
+      {
+       "type": "boolean"
+      }
+     ]
+    ],
+    "t": []
+   },
+   "describe": "## n\n    x: unknown\n    z: boolean",
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when x == f\"{y}\" and z\n\n## t\nDone.\n",
+   "name": "a-fstring-is-opaque",
+   "schemas": {
+    "n": {
+     "properties": {
+      "x": {
+       "type": "string"
+      },
+      "z": {
+       "type": "boolean"
+      }
+     },
+     "required": [
+      "x",
+      "z"
+     ],
+     "type": "object"
+    },
+    "t": {
+     "properties": {},
+     "required": [],
+     "type": "object"
+    }
+   }
+  },
+  {
+   "contract": {
+    "n": [
+     [
+      "niño",
+      {
+       "type": "enum",
+       "values": [
+        "sí"
+       ]
+      }
+     ],
+     [
+      "café",
+      {
+       "type": "boolean"
+      }
+     ]
+    ],
+    "t": []
+   },
+   "describe": "## n\n    café: boolean\n    niño: enum{sí}",
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when niño == \"sí\" and café\n\n## t\nDone.\n",
+   "name": "unicode-names",
+   "schemas": {
+    "n": {
+     "properties": {
+      "café": {
+       "type": "boolean"
+      },
+      "niño": {
+       "enum": [
+        "sí"
+       ],
+       "type": "string"
+      }
+     },
+     "required": [
+      "café",
+      "niño"
+     ],
+     "type": "object"
+    },
+    "t": {
+     "properties": {},
+     "required": [],
+     "type": "object"
+    }
+   }
+  },
+  {
+   "contract": {
+    "n": [
+     [
+      "ok",
+      {
+       "type": "boolean"
+      }
+     ]
+    ],
+    "t": []
+   },
+   "describe": "## n\n    ok: boolean",
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when class == \"a\" and z\n-> t: when ok\n\n## t\nDone.\n",
+   "name": "a-hard-keyword-name-is-a-syntax-error",
+   "schemas": {
+    "n": {
+     "properties": {
+      "ok": {
+       "type": "boolean"
+      }
+     },
+     "required": [
+      "ok"
+     ],
+     "type": "object"
+    },
+    "t": {
+     "properties": {},
+     "required": [],
+     "type": "object"
+    }
+   }
+  },
+  {
+   "contract": {
+    "n": [
+     [
+      "ok",
+      {
+       "type": "boolean"
+      }
+     ]
+    ],
+    "t": []
+   },
+   "describe": "## n\n    ok: boolean",
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when x ==\n-> t: when (a\n-> t: when ok\n\n## t\nDone.\n",
+   "name": "an-unparseable-predicate-is-skipped",
+   "schemas": {
+    "n": {
+     "properties": {
+      "ok": {
+       "type": "boolean"
+      }
+     },
+     "required": [
+      "ok"
+     ],
+     "type": "object"
+    },
+    "t": {
+     "properties": {},
+     "required": [],
+     "type": "object"
+    }
+   }
+  },
+  {
+   "contract": {
+    "n": [
+     [
+      "ok",
+      {
+       "type": "boolean"
+      }
+     ]
+    ],
+    "t": []
+   },
+   "describe": "## n\n    ok: boolean",
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when x == 007 and z\n-> t: when ok\n\n## t\nDone.\n",
+   "name": "a-leading-zero-integer-is-a-syntax-error",
+   "schemas": {
+    "n": {
+     "properties": {
+      "ok": {
+       "type": "boolean"
+      }
+     },
+     "required": [
+      "ok"
+     ],
+     "type": "object"
+    },
+    "t": {
+     "properties": {},
+     "required": [],
+     "type": "object"
+    }
+   }
+  },
+  {
+   "contract": {
+    "n": [
+     [
+      "ok",
+      {
+       "type": "boolean"
+      }
+     ]
+    ],
+    "t": []
+   },
+   "describe": "## n\n    ok: boolean",
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: always\n-> t: else\n-> t: never\n-> t: when always\n-> t: when ok\n\n## t\nDone.\n",
+   "name": "keyword-edges-are-skipped",
+   "schemas": {
+    "n": {
+     "properties": {
+      "ok": {
+       "type": "boolean"
+      }
+     },
+     "required": [
+      "ok"
+     ],
+     "type": "object"
+    },
+    "t": {
+     "properties": {},
+     "required": [],
+     "type": "object"
+    }
+   }
+  },
+  {
+   "contract": {
+    "n": [
+     [
+      "ok",
+      {
+       "type": "boolean"
+      }
+     ]
+    ],
+    "t": []
+   },
+   "describe": "## n\n    ok: boolean",
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: the answer is right\n-> t: on error when error_count > 2\n-> t: on event done\n-> t: on timeout\n-> t: when ok\n\n## t\nDone.\n",
+   "name": "semantic-error-and-event-edges-are-not-read",
+   "schemas": {
+    "n": {
+     "properties": {
+      "ok": {
+       "type": "boolean"
+      }
+     },
+     "required": [
+      "ok"
+     ],
+     "type": "object"
+    },
+    "t": {
+     "properties": {},
+     "required": [],
+     "type": "object"
+    }
+   }
+  },
+  {
+   "contract": {
+    "n": []
+   },
+   "describe": "(no deterministic edges - nothing to constrain)",
+   "flow": "---\nname: leaf\nstart: n\n---\n## n\nDone.\n",
+   "name": "a-node-with-no-edges",
+   "schemas": {
+    "n": {
+     "properties": {},
+     "required": [],
+     "type": "object"
+    }
+   }
+  },
+  {
+   "contract": {
+    "m": [
+     [
+      "a",
+      {
+       "type": "number",
+       "values": [
+        1
+       ]
+      }
+     ],
+     [
+      "c",
+      {
+       "type": "boolean"
+      }
+     ]
+    ],
+    "n": [
+     [
+      "b",
+      {
+       "type": "boolean"
+      }
+     ],
+     [
+      "a",
+      {
+       "type": "boolean"
+      }
+     ]
+    ],
+    "t": []
+   },
+   "describe": "## m\n    a: number{1}\n    c: boolean\n## n\n    a: boolean\n    b: boolean",
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when b and a\n\n## m\nDo the work.\n-> t: when a == 1\n-> t: when c\n\n## t\nDone.\n",
+   "name": "two-nodes-and-document-order",
+   "schemas": {
+    "m": {
+     "properties": {
+      "a": {
+       "enum": [
+        1
+       ],
+       "type": "number"
+      },
+      "c": {
+       "type": "boolean"
+      }
+     },
+     "required": [
+      "a",
+      "c"
+     ],
+     "type": "object"
+    },
+    "n": {
+     "properties": {
+      "a": {
+       "type": "boolean"
+      },
+      "b": {
+       "type": "boolean"
+      }
+     },
+     "required": [
+      "a",
+      "b"
+     ],
+     "type": "object"
+    },
+    "t": {
+     "properties": {},
+     "required": [],
+     "type": "object"
+    }
+   }
+  },
+  {
+   "contract": {
+    "n": [
+     [
+      "a",
+      {
+       "type": "enum",
+       "values": [
+        "x",
+        "y",
+        "z"
+       ]
+      }
+     ]
+    ],
+    "t": []
+   },
+   "describe": "## n\n    a: enum{x, y, z}",
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when a == \"x\"\n-> t: when a == \"y\"\n-> t: when a in [\"y\", \"z\"]\n\n## t\nDone.\n",
+   "name": "the-same-field-on-two-edges-unions-its-values",
+   "schemas": {
+    "n": {
+     "properties": {
+      "a": {
+       "enum": [
+        "x",
+        "y",
+        "z"
+       ],
+       "type": "string"
+      }
+     },
+     "required": [
+      "a"
+     ],
+     "type": "object"
+    },
+    "t": {
+     "properties": {},
+     "required": [],
+     "type": "object"
+    }
+   }
+  },
+  {
+   "contract": {
+    "n": [
+     [
+      "zed",
+      {
+       "type": "boolean"
+      }
+     ],
+     [
+      "alpha",
+      {
+       "type": "number"
+      }
+     ],
+     [
+      "mid",
+      {
+       "type": "boolean"
+      }
+     ]
+    ],
+    "t": []
+   },
+   "describe": "## n\n    alpha: number\n    mid: boolean\n    zed: boolean",
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when zed\n-> t: when alpha > 1 and mid\n\n## t\nDone.\n",
+   "name": "field-order-follows-the-edges",
+   "schemas": {
+    "n": {
+     "properties": {
+      "alpha": {
+       "type": "number"
+      },
+      "mid": {
+       "type": "boolean"
+      },
+      "zed": {
+       "type": "boolean"
+      }
+     },
+     "required": [
+      "alpha",
+      "mid",
+      "zed"
+     ],
+     "type": "object"
+    },
+    "t": {
+     "properties": {},
+     "required": [],
+     "type": "object"
+    }
+   }
+  },
+  {
+   "contract": {
+    "n": [
+     [
+      "Flag",
+      {
+       "type": "boolean"
+      }
+     ],
+     [
+      "flag",
+      {
+       "type": "boolean"
+      }
+     ]
+    ],
+    "t": []
+   },
+   "describe": "## n\n    Flag: boolean\n    flag: boolean",
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when Flag and flag\n\n## t\nDone.\n",
+   "name": "case-is-kept-in-field-names",
+   "schemas": {
+    "n": {
+     "properties": {
+      "Flag": {
+       "type": "boolean"
+      },
+      "flag": {
+       "type": "boolean"
+      }
+     },
+     "required": [
+      "Flag",
+      "flag"
+     ],
+     "type": "object"
+    },
+    "t": {
+     "properties": {},
+     "required": [],
+     "type": "object"
+    }
+   }
+  },
+  {
+   "contract": {
+    "n": [
+     [
+      "a",
+      {
+       "type": "boolean"
+      }
+     ],
+     [
+      "b",
+      {
+       "type": "number",
+       "values": [
+        3
+       ]
+      }
+     ]
+    ],
+    "t": []
+   },
+   "describe": "## n\n    a: boolean\n    b: number{3}",
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when not not a\n-> t: when not (b == 3)\n\n## t\nDone.\n",
+   "name": "a-nested-not",
+   "schemas": {
+    "n": {
+     "properties": {
+      "a": {
+       "type": "boolean"
+      },
+      "b": {
+       "enum": [
+        3
+       ],
+       "type": "number"
+      }
+     },
+     "required": [
+      "a",
+      "b"
+     ],
+     "type": "object"
+    },
+    "t": {
+     "properties": {},
+     "required": [],
+     "type": "object"
+    }
+   }
+  },
+  {
+   "contract": {
+    "n": [],
+    "t": []
+   },
+   "describe": "(no deterministic edges - nothing to constrain)",
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when a if b else c\n\n## t\nDone.\n",
+   "name": "a-top-level-ternary-is-opaque",
+   "schemas": {
+    "n": {
+     "properties": {},
+     "required": [],
+     "type": "object"
+    },
+    "t": {
+     "properties": {},
+     "required": [],
+     "type": "object"
+    }
+   }
+  },
+  {
+   "contract": {
+    "n": [
+     [
+      "c",
+      {
+       "type": "boolean"
+      }
+     ],
+     [
+      "e",
+      {
+       "type": "boolean"
+      }
+     ]
+    ],
+    "t": []
+   },
+   "describe": "## n\n    c: boolean\n    e: boolean",
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when a | b > 1 and c\n-> t: when d ** 2 == 4 and e\n\n## t\nDone.\n",
+   "name": "a-power-and-bitwise-operand",
+   "schemas": {
+    "n": {
+     "properties": {
+      "c": {
+       "type": "boolean"
+      },
+      "e": {
+       "type": "boolean"
+      }
+     },
+     "required": [
+      "c",
+      "e"
+     ],
+     "type": "object"
+    },
+    "t": {
+     "properties": {},
+     "required": [],
+     "type": "object"
+    }
+   }
+  },
+  {
+   "contract": {
+    "n": [
+     [
+      "x",
+      {
+       "type": "number"
+      }
+     ],
+     [
+      "y",
+      {
+       "type": "unknown"
+      }
+     ]
+    ],
+    "t": []
+   },
+   "describe": "## n\n    x: number\n    y: unknown",
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when x > 1.5e300\n-> t: when {1: 2} == y\n\n## t\nDone.\n",
+   "name": "a-negative-float-ordering-and-a-dict-operand",
+   "schemas": {
+    "n": {
+     "properties": {
+      "x": {
+       "type": "number"
+      },
+      "y": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "x",
+      "y"
+     ],
+     "type": "object"
+    },
+    "t": {
+     "properties": {},
+     "required": [],
+     "type": "object"
+    }
+   }
+  }
+ ],
+ "note": "contract.derive_contract, to_json_schema, describe and validate_output from the Python reference. `contract` lists [field, spec] pairs in the order the node's edges first read them; any implementation must reproduce each list, each schema, each description and each problem, in order.",
+ "validate": [
+  {
+   "fields": {
+    "action": "contain",
+    "text": "t"
+   },
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when action == \"contain\"\n-> t: when action != 'ignore'\n\n## t\nDone.\n",
+   "name": "ok",
+   "node": "n",
+   "problems": []
+  },
+  {
+   "fields": {
+    "tests_pass": "yes",
+    "text": "t"
+   },
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when tests_pass\n\n## t\nDone.\n",
+   "name": "wrong-type-boolean",
+   "node": "n",
+   "problems": [
+    "type: 'tests_pass' should be boolean but worker emitted str ('yes')"
+   ]
+  },
+  {
+   "fields": {
+    "score": "high"
+   },
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when score >= 0.8\n-> t: when score < 3\n\n## t\nDone.\n",
+   "name": "wrong-type-number-is-a-string",
+   "node": "n",
+   "problems": [
+    "type: 'score' should be number but worker emitted str ('high')"
+   ]
+  },
+  {
+   "fields": {
+    "score": true,
+    "x": 1
+   },
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when score >= 0.8\n-> t: when score < 3\n\n## t\nDone.\n",
+   "name": "wrong-type-number-is-a-bool",
+   "node": "n",
+   "problems": [
+    "type: 'score' should be number but worker emitted bool (True)"
+   ]
+  },
+  {
+   "fields": {
+    "action": 7
+   },
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when action == \"contain\"\n-> t: when action != 'ignore'\n\n## t\nDone.\n",
+   "name": "wrong-type-enum-is-a-number",
+   "node": "n",
+   "problems": [
+    "type: 'action' should be enum but worker emitted int (7)"
+   ]
+  },
+  {
+   "fields": {
+    "action": [
+     "a",
+     "b"
+    ]
+   },
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when action == \"contain\"\n-> t: when action != 'ignore'\n\n## t\nDone.\n",
+   "name": "wrong-type-enum-is-a-list",
+   "node": "n",
+   "problems": [
+    "type: 'action' should be enum but worker emitted list (['a', 'b'])"
+   ]
+  },
+  {
+   "fields": {
+    "action": {
+     "it's": "a \"b\""
+    }
+   },
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when action == \"contain\"\n-> t: when action != 'ignore'\n\n## t\nDone.\n",
+   "name": "wrong-type-with-a-quote-in-the-value",
+   "node": "n",
+   "problems": [
+    "type: 'action' should be enum but worker emitted dict ({\"it's\": 'a \"b\"'})"
+   ]
+  },
+  {
+   "fields": {
+    "tests_pass": 2.5
+   },
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when tests_pass\n\n## t\nDone.\n",
+   "name": "a-float-where-a-boolean-is-read",
+   "node": "n",
+   "problems": [
+    "type: 'tests_pass' should be boolean but worker emitted float (2.5)"
+   ]
+  },
+  {
+   "fields": {
+    "tests_pass": null
+   },
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when tests_pass\n\n## t\nDone.\n",
+   "name": "a-null-is-not-a-type-error",
+   "node": "n",
+   "problems": []
+  },
+  {
+   "fields": {
+    "text": "t"
+   },
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when tests_pass\n\n## t\nDone.\n",
+   "name": "a-missing-field-is-a-soft-note",
+   "node": "n",
+   "problems": [
+    "missing: worker did not emit 'tests_pass' (read by a `when` edge)"
+   ]
+  },
+  {
+   "fields": {
+    "action": "other"
+   },
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when action == \"contain\"\n-> t: when action != 'ignore'\n\n## t\nDone.\n",
+   "name": "an-unrouted-enum-value",
+   "node": "n",
+   "problems": [
+    "note: 'action'='other' is not one of the routed values ['contain', 'ignore'] (will fall through the deterministic tier)"
+   ]
+  },
+  {
+   "fields": {
+    "priority": 9
+   },
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when priority == 3\n-> t: when priority in [1, 2]\n\n## t\nDone.\n",
+   "name": "an-unrouted-numeric-enum-value",
+   "node": "n",
+   "problems": [
+    "note: 'priority'=9 is not one of the routed values [1, 2, 3] (will fall through the deterministic tier)"
+   ]
+  },
+  {
+   "fields": {
+    "priority": 3
+   },
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when priority == 3\n-> t: when priority in [1, 2]\n\n## t\nDone.\n",
+   "name": "a-routed-numeric-enum-value",
+   "node": "n",
+   "problems": []
+  },
+  {
+   "fields": {
+    "action": null
+   },
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when action == \"contain\"\n-> t: when action != 'ignore'\n\n## t\nDone.\n",
+   "name": "a-null-where-an-enum-is-routed",
+   "node": "n",
+   "problems": [
+    "note: 'action'=None is not one of the routed values ['contain', 'ignore'] (will fall through the deterministic tier)"
+   ]
+  },
+  {
+   "fields": {
+    "priority": null
+   },
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when priority == 3\n-> t: when priority in [1, 2]\n\n## t\nDone.\n",
+   "name": "a-null-where-a-numeric-enum-is-routed",
+   "node": "n",
+   "problems": [
+    "note: 'priority'=None is not one of the routed values [1, 2, 3] (will fall through the deterministic tier)"
+   ]
+  },
+  {
+   "fields": {
+    "alpha": "x",
+    "zed": 1
+   },
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when zed\n-> t: when alpha > 1 and mid\n\n## t\nDone.\n",
+   "name": "two-problems-in-field-order",
+   "node": "n",
+   "problems": [
+    "type: 'zed' should be boolean but worker emitted int (1)",
+    "type: 'alpha' should be number but worker emitted str ('x')",
+    "missing: worker did not emit 'mid' (read by a `when` edge)"
+   ]
+  },
+  {
+   "fields": {
+    "x": "a"
+   },
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when x == \"a\"\n-> t: when x == 3\n\n## t\nDone.\n",
+   "name": "a-conflict-field-takes-the-first-type",
+   "node": "n",
+   "problems": []
+  },
+  {
+   "fields": {
+    "x": "zzz"
+   },
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when x == \"b\" or x == 2 or x == 1.5 or x == \"a\" or x == 1\n\n## t\nDone.\n",
+   "name": "a-mixed-set-note-lists-every-value",
+   "node": "n",
+   "problems": [
+    "note: 'x'='zzz' is not one of the routed values [1.5, 1, 2, 'a', 'b'] (will fall through the deterministic tier)"
+   ]
+  },
+  {
+   "fields": {
+    "x": 1
+   },
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when x == 1 or x == 1.0 or x == 2.5\n\n## t\nDone.\n",
+   "name": "an-integer-is-routed-by-a-float-of-the-same-value",
+   "node": "n",
+   "problems": []
+  },
+  {
+   "fields": {
+    "x": {
+     "any": [
+      1
+     ]
+    }
+   },
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when x in y\n\n## t\nDone.\n",
+   "name": "unknown-type-is-not-constrained",
+   "node": "n",
+   "problems": []
+  },
+  {
+   "fields": {
+    "x": -3,
+    "y": -1,
+    "z": 7
+   },
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when x == -3\n-> t: when y in [-3, -1, 2]\n-> t: when z == +7\n\n## t\nDone.\n",
+   "name": "a-signed-routed-value-is-routed",
+   "node": "n",
+   "problems": []
+  },
+  {
+   "fields": {
+    "x": -2,
+    "y": 0,
+    "z": -7
+   },
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when x == -3\n-> t: when y in [-3, -1, 2]\n-> t: when z == +7\n\n## t\nDone.\n",
+   "name": "a-signed-unrouted-value-is-a-note",
+   "node": "n",
+   "problems": [
+    "note: 'x'=-2 is not one of the routed values [-3] (will fall through the deterministic tier)",
+    "note: 'y'=0 is not one of the routed values [-3, -1, 2] (will fall through the deterministic tier)",
+    "note: 'z'=-7 is not one of the routed values [7] (will fall through the deterministic tier)"
+   ]
+  },
+  {
+   "fields": {
+    "anything": 1
+   },
+   "flow": "---\nname: leaf\nstart: n\n---\n## n\nDone.\n",
+   "name": "a-node-with-no-contract",
+   "node": "n",
+   "problems": []
+  }
+ ],
+ "version": 1
+}

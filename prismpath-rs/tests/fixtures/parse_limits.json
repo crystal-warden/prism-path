@@ -1,0 +1,977 @@
+{
+ "cases": [
+  {
+   "expect": {
+    "nodes": [
+     [
+      "a",
+      0
+     ]
+    ],
+    "ok": true,
+    "start": "a"
+   },
+   "flow": "## a\nxx",
+   "limits": {
+    "max_edges": 100,
+    "max_flow_bytes": 7,
+    "max_nodes": 100
+   },
+   "name": "size-plain-at-the-cap"
+  },
+  {
+   "expect": {
+    "error": "flow document exceeds PRISMPATH_MAX_FLOW_BYTES (6 bytes)",
+    "error_class": "ParseError"
+   },
+   "flow": "## a\nxx",
+   "limits": {
+    "max_edges": 100,
+    "max_flow_bytes": 6,
+    "max_nodes": 100
+   },
+   "name": "size-plain-one-over-the-cap"
+  },
+  {
+   "expect": {
+    "nodes": [
+     [
+      "a",
+      0
+     ]
+    ],
+    "ok": true,
+    "start": "a"
+   },
+   "flow": "## a\nééé",
+   "limits": {
+    "max_edges": 100,
+    "max_flow_bytes": 8,
+    "max_nodes": 100
+   },
+   "name": "size-two-byte-characters-count-once-at-the-cap"
+  },
+  {
+   "expect": {
+    "error": "flow document exceeds PRISMPATH_MAX_FLOW_BYTES (7 bytes)",
+    "error_class": "ParseError"
+   },
+   "flow": "## a\nééé",
+   "limits": {
+    "max_edges": 100,
+    "max_flow_bytes": 7,
+    "max_nodes": 100
+   },
+   "name": "size-two-byte-characters-count-once-one-over-the-cap"
+  },
+  {
+   "expect": {
+    "nodes": [
+     [
+      "a",
+      0
+     ]
+    ],
+    "ok": true,
+    "start": "a"
+   },
+   "flow": "## a\n😀😀😀",
+   "limits": {
+    "max_edges": 100,
+    "max_flow_bytes": 8,
+    "max_nodes": 100
+   },
+   "name": "size-an-astral-character-counts-once-at-the-cap"
+  },
+  {
+   "expect": {
+    "error": "flow document exceeds PRISMPATH_MAX_FLOW_BYTES (7 bytes)",
+    "error_class": "ParseError"
+   },
+   "flow": "## a\n😀😀😀",
+   "limits": {
+    "max_edges": 100,
+    "max_flow_bytes": 7,
+    "max_nodes": 100
+   },
+   "name": "size-an-astral-character-counts-once-one-over-the-cap"
+  },
+  {
+   "expect": {
+    "nodes": [
+     [
+      "a",
+      0
+     ]
+    ],
+    "ok": true,
+    "start": "a"
+   },
+   "flow": "---\nname: x\n---\n## a\n",
+   "limits": {
+    "max_edges": 100,
+    "max_flow_bytes": 21,
+    "max_nodes": 100
+   },
+   "name": "size-front-matter-counts-at-the-cap"
+  },
+  {
+   "expect": {
+    "error": "flow document exceeds PRISMPATH_MAX_FLOW_BYTES (20 bytes)",
+    "error_class": "ParseError"
+   },
+   "flow": "---\nname: x\n---\n## a\n",
+   "limits": {
+    "max_edges": 100,
+    "max_flow_bytes": 20,
+    "max_nodes": 100
+   },
+   "name": "size-front-matter-counts-one-over-the-cap"
+  },
+  {
+   "expect": {
+    "nodes": [
+     [
+      "a",
+      1
+     ]
+    ],
+    "ok": true,
+    "start": "a"
+   },
+   "flow": "## a\r\n-> b: x\r\n",
+   "limits": {
+    "max_edges": 100,
+    "max_flow_bytes": 15,
+    "max_nodes": 100
+   },
+   "name": "size-carriage-returns-count-at-the-cap"
+  },
+  {
+   "expect": {
+    "error": "flow document exceeds PRISMPATH_MAX_FLOW_BYTES (14 bytes)",
+    "error_class": "ParseError"
+   },
+   "flow": "## a\r\n-> b: x\r\n",
+   "limits": {
+    "max_edges": 100,
+    "max_flow_bytes": 14,
+    "max_nodes": 100
+   },
+   "name": "size-carriage-returns-count-one-over-the-cap"
+  },
+  {
+   "expect": {
+    "nodes": [],
+    "ok": true,
+    "start": ""
+   },
+   "flow": "",
+   "limits": {
+    "max_edges": 100,
+    "max_flow_bytes": 0,
+    "max_nodes": 100
+   },
+   "name": "size-empty-document-at-a-cap-of-zero"
+  },
+  {
+   "expect": {
+    "error": "flow document exceeds PRISMPATH_MAX_FLOW_BYTES (0 bytes)",
+    "error_class": "ParseError"
+   },
+   "flow": "x",
+   "limits": {
+    "max_edges": 100,
+    "max_flow_bytes": 0,
+    "max_nodes": 100
+   },
+   "name": "size-one-character-over-a-cap-of-zero"
+  },
+  {
+   "expect": {
+    "error": "flow document exceeds PRISMPATH_MAX_FLOW_BYTES (-1 bytes)",
+    "error_class": "ParseError"
+   },
+   "flow": "",
+   "limits": {
+    "max_edges": 100,
+    "max_flow_bytes": -1,
+    "max_nodes": 100
+   },
+   "name": "size-empty-document-over-a-negative-cap"
+  },
+  {
+   "expect": {
+    "error": "flow document exceeds PRISMPATH_MAX_FLOW_BYTES (5 bytes)",
+    "error_class": "ParseError"
+   },
+   "flow": "## a\n## b\n## c\n",
+   "limits": {
+    "max_edges": 100,
+    "max_flow_bytes": 5,
+    "max_nodes": 1
+   },
+   "name": "size-is-checked-before-the-nodes"
+  },
+  {
+   "expect": {
+    "error": "flow document exceeds PRISMPATH_MAX_FLOW_BYTES (5 bytes)",
+    "error_class": "ParseError"
+   },
+   "flow": "## a\n-> b: x\n-> c: y\n",
+   "limits": {
+    "max_edges": 1,
+    "max_flow_bytes": 5,
+    "max_nodes": 100
+   },
+   "name": "size-is-checked-before-the-edges"
+  },
+  {
+   "expect": {
+    "nodes": [
+     [
+      "a",
+      0
+     ],
+     [
+      "b",
+      0
+     ],
+     [
+      "c",
+      0
+     ]
+    ],
+    "ok": true,
+    "start": "a"
+   },
+   "flow": "## a\n## b\n## c\n",
+   "limits": {
+    "max_edges": 100,
+    "max_flow_bytes": 10000,
+    "max_nodes": 3
+   },
+   "name": "nodes-exactly-at-the-cap"
+  },
+  {
+   "expect": {
+    "error": "flow document exceeds PRISMPATH_MAX_NODES (3 nodes)",
+    "error_class": "ParseError"
+   },
+   "flow": "## a\n## b\n## c\n## d\n",
+   "limits": {
+    "max_edges": 100,
+    "max_flow_bytes": 10000,
+    "max_nodes": 3
+   },
+   "name": "nodes-one-over-the-cap"
+  },
+  {
+   "expect": {
+    "nodes": [
+     [
+      "a",
+      0
+     ],
+     [
+      "b",
+      0
+     ]
+    ],
+    "ok": true,
+    "start": "a"
+   },
+   "flow": "## a\n## b\n## a\n",
+   "limits": {
+    "max_edges": 100,
+    "max_flow_bytes": 10000,
+    "max_nodes": 2
+   },
+   "name": "nodes-a-repeated-heading-is-not-a-new-node"
+  },
+  {
+   "expect": {
+    "error": "flow document exceeds PRISMPATH_MAX_NODES (2 nodes)",
+    "error_class": "ParseError"
+   },
+   "flow": "## a\n## b\n## a\n## c\n",
+   "limits": {
+    "max_edges": 100,
+    "max_flow_bytes": 10000,
+    "max_nodes": 2
+   },
+   "name": "nodes-a-repeated-heading-then-a-new-one"
+  },
+  {
+   "expect": {
+    "nodes": [
+     [
+      "a_b",
+      0
+     ]
+    ],
+    "ok": true,
+    "start": "a_b"
+   },
+   "flow": "## A B\n## a_b\n## a b\n",
+   "limits": {
+    "max_edges": 100,
+    "max_flow_bytes": 10000,
+    "max_nodes": 1
+   },
+   "name": "nodes-names-are-lowered-and-spaces-become-underscores"
+  },
+  {
+   "expect": {
+    "nodes": [
+     [
+      "a_b",
+      0
+     ],
+     [
+      "c",
+      0
+     ]
+    ],
+    "ok": true,
+    "start": "a_b"
+   },
+   "flow": "## A B\n## c\n## a_b\n",
+   "limits": {
+    "max_edges": 100,
+    "max_flow_bytes": 10000,
+    "max_nodes": 2
+   },
+   "name": "nodes-two-spellings-of-two-names"
+  },
+  {
+   "expect": {
+    "nodes": [],
+    "ok": true,
+    "start": ""
+   },
+   "flow": "text only\n",
+   "limits": {
+    "max_edges": 100,
+    "max_flow_bytes": 10000,
+    "max_nodes": 0
+   },
+   "name": "nodes-a-cap-of-zero-and-no-heading"
+  },
+  {
+   "expect": {
+    "error": "flow document exceeds PRISMPATH_MAX_NODES (0 nodes)",
+    "error_class": "ParseError"
+   },
+   "flow": "## a\n",
+   "limits": {
+    "max_edges": 100,
+    "max_flow_bytes": 10000,
+    "max_nodes": 0
+   },
+   "name": "nodes-a-cap-of-zero-and-one-heading"
+  },
+  {
+   "expect": {
+    "nodes": [
+     [
+      "a",
+      1
+     ]
+    ],
+    "ok": true,
+    "start": "a"
+   },
+   "flow": "## a\n-> a: x\n",
+   "limits": {
+    "max_edges": 100,
+    "max_flow_bytes": 10000,
+    "max_nodes": 1
+   },
+   "name": "nodes-a-cap-of-one-and-one-heading"
+  },
+  {
+   "expect": {
+    "error": "flow document exceeds PRISMPATH_MAX_NODES (-1 nodes)",
+    "error_class": "ParseError"
+   },
+   "flow": "## a\n",
+   "limits": {
+    "max_edges": 100,
+    "max_flow_bytes": 10000,
+    "max_nodes": -1
+   },
+   "name": "nodes-a-negative-cap"
+  },
+  {
+   "expect": {
+    "nodes": [
+     [
+      "a",
+      0
+     ]
+    ],
+    "ok": true,
+    "start": "a"
+   },
+   "flow": "## a\n### b\n### c\n",
+   "limits": {
+    "max_edges": 100,
+    "max_flow_bytes": 10000,
+    "max_nodes": 1
+   },
+   "name": "nodes-three-hashes-are-not-a-heading"
+  },
+  {
+   "expect": {
+    "error": "flow document exceeds PRISMPATH_MAX_NODES (1 nodes)",
+    "error_class": "ParseError"
+   },
+   "flow": "## a\n##   \n",
+   "limits": {
+    "max_edges": 100,
+    "max_flow_bytes": 10000,
+    "max_nodes": 1
+   },
+   "name": "nodes-a-heading-of-only-spaces-is-a-node-with-an-empty-name"
+  },
+  {
+   "expect": {
+    "nodes": [
+     [
+      "a",
+      0
+     ]
+    ],
+    "ok": true,
+    "start": "a"
+   },
+   "flow": "## a\n##\n##x\n",
+   "limits": {
+    "max_edges": 100,
+    "max_flow_bytes": 10000,
+    "max_nodes": 1
+   },
+   "name": "nodes-two-hashes-alone-are-not-a-heading"
+  },
+  {
+   "expect": {
+    "nodes": [
+     [
+      "a",
+      0
+     ],
+     [
+      "b",
+      0
+     ]
+    ],
+    "ok": true,
+    "start": "a"
+   },
+   "flow": "---\nname: x\nstart: a\n---\n## a\n## b\n",
+   "limits": {
+    "max_edges": 100,
+    "max_flow_bytes": 10000,
+    "max_nodes": 2
+   },
+   "name": "nodes-front-matter-names-are-not-nodes"
+  },
+  {
+   "expect": {
+    "nodes": [
+     [
+      "a",
+      3
+     ]
+    ],
+    "ok": true,
+    "start": "a"
+   },
+   "flow": "## a\n-> b: x\n-> c: y\n-> d: z\n",
+   "limits": {
+    "max_edges": 3,
+    "max_flow_bytes": 10000,
+    "max_nodes": 100
+   },
+   "name": "edges-exactly-at-the-cap"
+  },
+  {
+   "expect": {
+    "error": "flow document exceeds PRISMPATH_MAX_EDGES (3 edges)",
+    "error_class": "ParseError"
+   },
+   "flow": "## a\n-> b: x\n-> c: y\n-> d: z\n-> e: w\n",
+   "limits": {
+    "max_edges": 3,
+    "max_flow_bytes": 10000,
+    "max_nodes": 100
+   },
+   "name": "edges-one-over-the-cap"
+  },
+  {
+   "expect": {
+    "error": "flow document exceeds PRISMPATH_MAX_EDGES (2 edges)",
+    "error_class": "ParseError"
+   },
+   "flow": "## a\n-> b: x\n-> c: y\n## b\n-> a: z\n",
+   "limits": {
+    "max_edges": 2,
+    "max_flow_bytes": 10000,
+    "max_nodes": 100
+   },
+   "name": "edges-are-counted-across-nodes"
+  },
+  {
+   "expect": {
+    "nodes": [
+     [
+      "a",
+      1
+     ]
+    ],
+    "ok": true,
+    "start": "a"
+   },
+   "flow": "-> a: x\n-> b: y\n-> c: z\n## a\n-> b: w\n",
+   "limits": {
+    "max_edges": 1,
+    "max_flow_bytes": 10000,
+    "max_nodes": 100
+   },
+   "name": "edges-before-the-first-heading-are-not-counted"
+  },
+  {
+   "expect": {
+    "nodes": [
+     [
+      "a",
+      1
+     ]
+    ],
+    "ok": true,
+    "start": "a"
+   },
+   "flow": "---\nname: x\nnote: -> a: b\n---\n## a\n-> b: w\n",
+   "limits": {
+    "max_edges": 1,
+    "max_flow_bytes": 10000,
+    "max_nodes": 100
+   },
+   "name": "edges-in-the-front-matter-are-not-counted"
+  },
+  {
+   "expect": {
+    "error": "flow document exceeds PRISMPATH_MAX_EDGES (1 edges)",
+    "error_class": "ParseError"
+   },
+   "flow": "## a\n- -> b: x\n-> c: y\n",
+   "limits": {
+    "max_edges": 1,
+    "max_flow_bytes": 10000,
+    "max_nodes": 100
+   },
+   "name": "edges-a-bulleted-edge-counts"
+  },
+  {
+   "expect": {
+    "nodes": [
+     [
+      "a",
+      1
+     ]
+    ],
+    "ok": true,
+    "start": "a"
+   },
+   "flow": "## a\nplain\n@note(x)\n-> b\n-> : x\n-> b: x\n",
+   "limits": {
+    "max_edges": 1,
+    "max_flow_bytes": 10000,
+    "max_nodes": 100
+   },
+   "name": "edges-lines-that-are-not-edges-do-not-count"
+  },
+  {
+   "expect": {
+    "nodes": [
+     [
+      "a",
+      1
+     ]
+    ],
+    "ok": true,
+    "start": "a"
+   },
+   "flow": "## a\n@emits(x)\n@checkpoint(unit=y)\n-> b: x\n",
+   "limits": {
+    "max_edges": 1,
+    "max_flow_bytes": 10000,
+    "max_nodes": 100
+   },
+   "name": "edges-an-annotation-is-not-an-edge"
+  },
+  {
+   "expect": {
+    "error": "flow document exceeds PRISMPATH_MAX_EDGES (2 edges)",
+    "error_class": "ParseError"
+   },
+   "flow": "## a\n-> b: x\n-> c: y\n## a\n-> d: z\n",
+   "limits": {
+    "max_edges": 2,
+    "max_flow_bytes": 10000,
+    "max_nodes": 100
+   },
+   "name": "edges-a-repeated-heading-keeps-the-count"
+  },
+  {
+   "expect": {
+    "nodes": [
+     [
+      "a",
+      1
+     ]
+    ],
+    "ok": true,
+    "start": "a"
+   },
+   "flow": "## a\n-> b: x\n-> c: y\n## a\n-> d: z\n",
+   "limits": {
+    "max_edges": 3,
+    "max_flow_bytes": 10000,
+    "max_nodes": 100
+   },
+   "name": "edges-a-repeated-heading-within-the-cap"
+  },
+  {
+   "expect": {
+    "nodes": [
+     [
+      "a",
+      0
+     ]
+    ],
+    "ok": true,
+    "start": "a"
+   },
+   "flow": "## a\ntext\n",
+   "limits": {
+    "max_edges": 0,
+    "max_flow_bytes": 10000,
+    "max_nodes": 100
+   },
+   "name": "edges-a-cap-of-zero-and-no-edge"
+  },
+  {
+   "expect": {
+    "error": "flow document exceeds PRISMPATH_MAX_EDGES (0 edges)",
+    "error_class": "ParseError"
+   },
+   "flow": "## a\n-> b: x\n",
+   "limits": {
+    "max_edges": 0,
+    "max_flow_bytes": 10000,
+    "max_nodes": 100
+   },
+   "name": "edges-a-cap-of-zero-and-one-edge"
+  },
+  {
+   "expect": {
+    "nodes": [
+     [
+      "a",
+      0
+     ]
+    ],
+    "ok": true,
+    "start": "a"
+   },
+   "flow": "## a\n",
+   "limits": {
+    "max_edges": -1,
+    "max_flow_bytes": 10000,
+    "max_nodes": 100
+   },
+   "name": "edges-a-negative-cap"
+  },
+  {
+   "expect": {
+    "error": "flow document exceeds PRISMPATH_MAX_EDGES (1 edges)",
+    "error_class": "ParseError"
+   },
+   "flow": "## a\n-> b: x\n-> c: y\n## b\n",
+   "limits": {
+    "max_edges": 1,
+    "max_flow_bytes": 10000,
+    "max_nodes": 1
+   },
+   "name": "order-the-edges-first"
+  },
+  {
+   "expect": {
+    "error": "flow document exceeds PRISMPATH_MAX_NODES (1 nodes)",
+    "error_class": "ParseError"
+   },
+   "flow": "## a\n## b\n-> x: y\n-> z: w\n",
+   "limits": {
+    "max_edges": 1,
+    "max_flow_bytes": 10000,
+    "max_nodes": 1
+   },
+   "name": "order-the-nodes-first"
+  },
+  {
+   "expect": {
+    "error": "flow document exceeds PRISMPATH_MAX_EDGES (1 edges)",
+    "error_class": "ParseError"
+   },
+   "flow": "## a\n-> b: x\n-> c: y\n## b\n",
+   "limits": {
+    "max_edges": 1,
+    "max_flow_bytes": 10000,
+    "max_nodes": 1
+   },
+   "name": "order-the-second-edge-before-the-second-node"
+  },
+  {
+   "expect": {
+    "error": "flow document exceeds PRISMPATH_MAX_NODES (1 nodes)",
+    "error_class": "ParseError"
+   },
+   "flow": "## a\n-> b: x\n## b\n-> c: y\n",
+   "limits": {
+    "max_edges": 1,
+    "max_flow_bytes": 10000,
+    "max_nodes": 1
+   },
+   "name": "order-the-second-node-before-the-second-edge"
+  },
+  {
+   "expect": {
+    "error": "flow document exceeds PRISMPATH_MAX_EDGES (1 edges)",
+    "error_class": "ParseError"
+   },
+   "flow": "## a\n-> b: x\n## b\n-> c: y\n",
+   "limits": {
+    "max_edges": 1,
+    "max_flow_bytes": 10000,
+    "max_nodes": 2
+   },
+   "name": "order-nodes-at-the-cap-and-the-second-edge-over"
+  },
+  {
+   "expect": {
+    "nodes": [
+     [
+      "a",
+      2
+     ],
+     [
+      "b",
+      0
+     ]
+    ],
+    "ok": true,
+    "start": "a"
+   },
+   "flow": "---\nname: tiny\nstart: a\n---\n## a\nDo it.\n-> b: when ok\n-> a: else\n\n## b\nDone.\n",
+   "limits": {
+    "max_edges": 100,
+    "max_flow_bytes": 10000,
+    "max_nodes": 100
+   },
+   "name": "a-small-document-within-every-cap"
+  },
+  {
+   "expect": {
+    "nodes": [],
+    "ok": true,
+    "start": ""
+   },
+   "flow": "nothing here\n",
+   "limits": {
+    "max_edges": 100,
+    "max_flow_bytes": 10000,
+    "max_nodes": 100
+   },
+   "name": "a-document-with-no-heading"
+  }
+ ],
+ "defaults": [
+  {
+   "count": 5000,
+   "expect": {
+    "edge_count": 0,
+    "node_count": 5000,
+    "ok": true
+   },
+   "kind": "nodes",
+   "limits": {
+    "max_edges": 20000,
+    "max_flow_bytes": 2097152,
+    "max_nodes": 5000
+   },
+   "name": "default-nodes-at-the-cap"
+  },
+  {
+   "count": 5001,
+   "expect": {
+    "error": "flow document exceeds PRISMPATH_MAX_NODES (5000 nodes)",
+    "error_class": "ParseError"
+   },
+   "kind": "nodes",
+   "limits": {
+    "max_edges": 20000,
+    "max_flow_bytes": 2097152,
+    "max_nodes": 5000
+   },
+   "name": "default-nodes-one-over"
+  },
+  {
+   "count": 20000,
+   "expect": {
+    "edge_count": 20000,
+    "node_count": 1,
+    "ok": true
+   },
+   "kind": "edges",
+   "limits": {
+    "max_edges": 20000,
+    "max_flow_bytes": 2097152,
+    "max_nodes": 5000
+   },
+   "name": "default-edges-at-the-cap"
+  },
+  {
+   "count": 20001,
+   "expect": {
+    "error": "flow document exceeds PRISMPATH_MAX_EDGES (20000 edges)",
+    "error_class": "ParseError"
+   },
+   "kind": "edges",
+   "limits": {
+    "max_edges": 20000,
+    "max_flow_bytes": 2097152,
+    "max_nodes": 5000
+   },
+   "name": "default-edges-one-over"
+  },
+  {
+   "count": 2097152,
+   "expect": {
+    "edge_count": 0,
+    "node_count": 1,
+    "ok": true
+   },
+   "kind": "characters",
+   "limits": {
+    "max_edges": 20000,
+    "max_flow_bytes": 2097152,
+    "max_nodes": 5000
+   },
+   "name": "default-characters-at-the-cap"
+  },
+  {
+   "count": 2097153,
+   "expect": {
+    "error": "flow document exceeds PRISMPATH_MAX_FLOW_BYTES (2097152 bytes)",
+    "error_class": "ParseError"
+   },
+   "kind": "characters",
+   "limits": {
+    "max_edges": 20000,
+    "max_flow_bytes": 2097152,
+    "max_nodes": 5000
+   },
+   "name": "default-characters-one-over"
+  }
+ ],
+ "env": [
+  {
+   "raw": "5",
+   "value": 5
+  },
+  {
+   "raw": "  7 ",
+   "value": 7
+  },
+  {
+   "raw": "+8",
+   "value": 8
+  },
+  {
+   "raw": "-3",
+   "value": -3
+  },
+  {
+   "raw": "0",
+   "value": 0
+  },
+  {
+   "raw": "00012",
+   "value": 12
+  },
+  {
+   "raw": "1_000",
+   "value": 1000
+  },
+  {
+   "raw": "1__0",
+   "refused": true
+  },
+  {
+   "raw": "_1",
+   "refused": true
+  },
+  {
+   "raw": "1_",
+   "refused": true
+  },
+  {
+   "raw": "",
+   "refused": true
+  },
+  {
+   "raw": " ",
+   "refused": true
+  },
+  {
+   "raw": "x",
+   "refused": true
+  },
+  {
+   "raw": "1.5",
+   "refused": true
+  },
+  {
+   "raw": "0x10",
+   "refused": true
+  },
+  {
+   "raw": "1e3",
+   "refused": true
+  },
+  {
+   "raw": "- 1",
+   "refused": true
+  },
+  {
+   "raw": "+-1",
+   "refused": true
+  },
+  {
+   "raw": "5\n",
+   "value": 5
+  },
+  {
+   "raw": "2097152",
+   "value": 2097152
+  },
+  {
+   "raw": "9223372036854775807",
+   "value": 9223372036854775807
+  }
+ ],
+ "note": "kernel/parser.py parse under its input bounds. `cases` are small documents under small caps with the reference's outcome (the nodes with their edge counts, or the ParseError message); `defaults` are documents built from a rule (see the generator) under the default caps; `env` is what int() makes of the strings an environment variable may hold. Any implementation must give each outcome.",
+ "version": 1
+}

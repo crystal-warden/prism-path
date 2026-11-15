@@ -1,0 +1,708 @@
+{
+ "attestation": {
+  "gate_id": "wazuh_triage@v3",
+  "ingestion_hashes": [
+   "sha256:aa"
+  ],
+  "kb_hash": "sha256:kb",
+  "manifest": {
+   "created": "2026-08-12T00:00:00Z",
+   "encoding": "canon/2",
+   "gate_id": "wazuh_triage@v3",
+   "ingestion_hashes": [
+    "sha256:aa"
+   ],
+   "knowledge_base_hash": "sha256:kb",
+   "label": "echo:decision",
+   "manifest_hash": "ee11d1d0882cac1f6fa5998a7fc8b61e4f09608fb8f3b9e558a2b89323be5796",
+   "policy_hash": "sha256:deadbeef",
+   "root": "f88f331b5fa4310e16b4f12e8b6927c9850b5d18efddf0b043bcdbf256e3d815"
+  },
+  "outcome": {
+   "score_bp": 9300,
+   "verdict": "contain"
+  },
+  "policy_hash": "sha256:deadbeef"
+ },
+ "fanout": {
+  "child_flow": "---\nname: fx_child\nstart: work\n---\n## work\nProcess one item.\n-> finish: always\n## finish\nDone.\n",
+  "child_script": {
+   "finish": [
+    {
+     "text": "done"
+    }
+   ],
+   "work": [
+    {
+     "text": "worked"
+    }
+   ]
+  },
+  "children": [
+   {
+    "item": {
+     "id": 1
+    },
+    "path": [
+     "work",
+     "finish"
+    ],
+    "stopped": "terminal"
+   },
+   {
+    "item": {
+     "id": 2
+    },
+    "path": [
+     "work",
+     "finish"
+    ],
+    "stopped": "terminal"
+   },
+   {
+    "item": {
+     "id": 3
+    },
+    "path": [
+     "work",
+     "finish"
+    ],
+    "stopped": "terminal"
+   }
+  ],
+  "final": {
+   "children_in_state": [
+    {
+     "item": {
+      "id": 1
+     },
+     "path": [
+      "work",
+      "finish"
+     ],
+     "stopped": "terminal"
+    },
+    {
+     "item": {
+      "id": 2
+     },
+     "path": [
+      "work",
+      "finish"
+     ],
+     "stopped": "terminal"
+    },
+    {
+     "item": {
+      "id": 3
+     },
+     "path": [
+      "work",
+      "finish"
+     ],
+     "stopped": "terminal"
+    }
+   ],
+   "path": [
+    "plan",
+    "gather",
+    "merge",
+    "end"
+   ],
+   "stopped": "terminal"
+  },
+  "items": [
+   {
+    "id": 1
+   },
+   {
+    "id": 2
+   },
+   {
+    "id": 3
+   }
+  ],
+  "parent_flow": "---\nname: fx_parent\nstart: plan\n---\n## plan\nPlan the fan-out.\n-> gather: always\n## gather\nFan out one child per item.\n-> merge: on event all_done\n## merge\nCombine child results.\n-> end: always\n## end\nDone.\n",
+  "parent_script": {
+   "gather": [
+    {
+     "spawn": {
+      "flow": "fx_child",
+      "items": [
+       {
+        "id": 1
+       },
+       {
+        "id": 2
+       },
+       {
+        "id": 3
+       }
+      ],
+      "join": "all_done"
+     }
+    }
+   ],
+   "merge": [
+    {
+     "text": "merged"
+    }
+   ],
+   "plan": [
+    {
+     "text": "planned"
+    }
+   ]
+  },
+  "suspended": {
+   "path": [
+    "plan",
+    "gather"
+   ],
+   "spawn": {
+    "flow": "fx_child",
+    "items": [
+     {
+      "id": 1
+     },
+     {
+      "id": 2
+     },
+     {
+      "id": 3
+     }
+    ],
+    "join": "all_done"
+   },
+   "stopped": "waiting"
+  }
+ },
+ "flatten": [
+  {
+   "data": {
+    "agent": "web-01",
+    "alert": {
+     "id": 7,
+     "severity": "high"
+    }
+   },
+   "flat": {
+    "agent": "web-01",
+    "alert.id": 7,
+    "alert.severity": "high"
+   }
+  },
+  {
+   "data": {
+    "active": true,
+    "ratio": "0.25",
+    "roles": [
+     "admin",
+     "dev"
+    ],
+    "score_milli": 1500
+   },
+   "flat": {
+    "active": true,
+    "ratio": "0.25",
+    "roles": "admin, dev",
+    "roles.0": "admin",
+    "roles.1": "dev",
+    "score_milli": 1500
+   }
+  },
+  {
+   "data": {
+    "nested": {
+     "deep": {
+      "leaf": null
+     }
+    },
+    "note": "caf\u00e9"
+   },
+   "flat": {
+    "nested.deep.leaf": null,
+    "note": "caf\u00e9"
+   }
+  },
+  {
+   "data": {
+    "roles": [
+     "admin"
+    ],
+    "score": 1.5
+   },
+   "flat": {
+    "roles": "admin",
+    "roles.0": "admin",
+    "score": 1.5
+   }
+  },
+  {
+   "data": {
+    "nested": {
+     "deep": [
+      1,
+      2.5
+     ]
+    }
+   },
+   "flat": {
+    "nested.deep": "1, 2.5",
+    "nested.deep.0": 1,
+    "nested.deep.1": 2.5
+   }
+  },
+  {
+   "data": {
+    "exp": 1e+30
+   },
+   "flat": {
+    "exp": 1e+30
+   }
+  }
+ ],
+ "float_refusals": [
+  {
+   "roles": [
+    "admin"
+   ],
+   "score": 1.5
+  },
+  {
+   "nested": {
+    "deep": [
+     1,
+     2.5
+    ]
+   }
+  },
+  {
+   "exp": 1e+30
+  }
+ ],
+ "hashes": [
+  {
+   "data": {
+    "agent": "web-01",
+    "alert": {
+     "id": 7,
+     "severity": "high"
+    }
+   },
+   "ingestion": "sha256:799c0880565d9829",
+   "knowledge": "sha256:799c0880565d9829"
+  },
+  {
+   "data": {
+    "active": true,
+    "ratio": "0.25",
+    "roles": [
+     "admin",
+     "dev"
+    ],
+    "score_milli": 1500
+   },
+   "ingestion": "sha256:077be8e744ab4077",
+   "knowledge": "sha256:077be8e744ab4077"
+  },
+  {
+   "data": {
+    "nested": {
+     "deep": {
+      "leaf": null
+     }
+    },
+    "note": "caf\u00e9"
+   },
+   "ingestion": "sha256:b313272c28f9890a",
+   "knowledge": "sha256:b313272c28f9890a"
+  }
+ ],
+ "joins": [
+  {
+   "done": [
+    true,
+    true,
+    true
+   ],
+   "event": "all_done",
+   "join": "all_done",
+   "threshold": null
+  },
+  {
+   "done": [
+    true,
+    true,
+    false
+   ],
+   "event": null,
+   "join": "all_done",
+   "threshold": null
+  },
+  {
+   "done": [
+    true,
+    false,
+    false
+   ],
+   "event": null,
+   "join": "all_done",
+   "threshold": null
+  },
+  {
+   "done": [
+    false,
+    false,
+    false
+   ],
+   "event": null,
+   "join": "all_done",
+   "threshold": null
+  },
+  {
+   "done": [
+    true
+   ],
+   "event": "all_done",
+   "join": "all_done",
+   "threshold": null
+  },
+  {
+   "done": [
+    false
+   ],
+   "event": null,
+   "join": "all_done",
+   "threshold": null
+  },
+  {
+   "done": [
+    true,
+    true,
+    true
+   ],
+   "event": "any",
+   "join": "any",
+   "threshold": null
+  },
+  {
+   "done": [
+    true,
+    true,
+    false
+   ],
+   "event": "any",
+   "join": "any",
+   "threshold": null
+  },
+  {
+   "done": [
+    true,
+    false,
+    false
+   ],
+   "event": "any",
+   "join": "any",
+   "threshold": null
+  },
+  {
+   "done": [
+    false,
+    false,
+    false
+   ],
+   "event": null,
+   "join": "any",
+   "threshold": null
+  },
+  {
+   "done": [
+    true
+   ],
+   "event": "any",
+   "join": "any",
+   "threshold": null
+  },
+  {
+   "done": [
+    false
+   ],
+   "event": null,
+   "join": "any",
+   "threshold": null
+  },
+  {
+   "done": [
+    true,
+    true,
+    true
+   ],
+   "event": "quorum",
+   "join": "quorum:2",
+   "threshold": 2
+  },
+  {
+   "done": [
+    true,
+    true,
+    false
+   ],
+   "event": "quorum",
+   "join": "quorum:2",
+   "threshold": 2
+  },
+  {
+   "done": [
+    true,
+    false,
+    false
+   ],
+   "event": null,
+   "join": "quorum:2",
+   "threshold": 2
+  },
+  {
+   "done": [
+    false,
+    false,
+    false
+   ],
+   "event": null,
+   "join": "quorum:2",
+   "threshold": 2
+  },
+  {
+   "done": [
+    true
+   ],
+   "event": "quorum",
+   "join": "quorum:2",
+   "threshold": 1
+  },
+  {
+   "done": [
+    false
+   ],
+   "event": null,
+   "join": "quorum:2",
+   "threshold": 1
+  },
+  {
+   "done": [
+    true,
+    true,
+    true
+   ],
+   "event": "quorum",
+   "join": "quorum:0.6",
+   "threshold": 2
+  },
+  {
+   "done": [
+    true,
+    true,
+    false
+   ],
+   "event": "quorum",
+   "join": "quorum:0.6",
+   "threshold": 2
+  },
+  {
+   "done": [
+    true,
+    false,
+    false
+   ],
+   "event": null,
+   "join": "quorum:0.6",
+   "threshold": 2
+  },
+  {
+   "done": [
+    false,
+    false,
+    false
+   ],
+   "event": null,
+   "join": "quorum:0.6",
+   "threshold": 2
+  },
+  {
+   "done": [
+    true
+   ],
+   "event": "quorum",
+   "join": "quorum:0.6",
+   "threshold": 1
+  },
+  {
+   "done": [
+    false
+   ],
+   "event": null,
+   "join": "quorum:0.6",
+   "threshold": 1
+  },
+  {
+   "done": [
+    true,
+    true,
+    true
+   ],
+   "event": "quorum",
+   "join": "quorum:5",
+   "threshold": 3
+  },
+  {
+   "done": [
+    true,
+    true,
+    false
+   ],
+   "event": null,
+   "join": "quorum:5",
+   "threshold": 3
+  },
+  {
+   "done": [
+    true,
+    false,
+    false
+   ],
+   "event": null,
+   "join": "quorum:5",
+   "threshold": 3
+  },
+  {
+   "done": [
+    false,
+    false,
+    false
+   ],
+   "event": null,
+   "join": "quorum:5",
+   "threshold": 3
+  },
+  {
+   "done": [
+    true
+   ],
+   "event": "quorum",
+   "join": "quorum:5",
+   "threshold": 1
+  },
+  {
+   "done": [
+    false
+   ],
+   "event": null,
+   "join": "quorum:5",
+   "threshold": 1
+  },
+  {
+   "done": [
+    true,
+    true,
+    true
+   ],
+   "event": "quorum",
+   "join": "quorum:oops",
+   "threshold": 3
+  },
+  {
+   "done": [
+    true,
+    true,
+    false
+   ],
+   "event": null,
+   "join": "quorum:oops",
+   "threshold": 3
+  },
+  {
+   "done": [
+    true,
+    false,
+    false
+   ],
+   "event": null,
+   "join": "quorum:oops",
+   "threshold": 3
+  },
+  {
+   "done": [
+    false,
+    false,
+    false
+   ],
+   "event": null,
+   "join": "quorum:oops",
+   "threshold": 3
+  },
+  {
+   "done": [
+    true
+   ],
+   "event": "quorum",
+   "join": "quorum:oops",
+   "threshold": 1
+  },
+  {
+   "done": [
+    false
+   ],
+   "event": null,
+   "join": "quorum:oops",
+   "threshold": 1
+  }
+ ],
+ "note": "Connector-SDK + composition fixtures from the Python reference. Rust must reproduce hashes and prompt strings byte-for-byte, the attestation manifest exactly, a refusal (never a hash) for content that holds a float, the fan-out final path/stopped with _children aggregated, and the join-policy grid (composer._quorum_threshold/_join_event) value-for-value.",
+ "prompts": [
+  {
+   "criteria": null,
+   "payload": {
+    "agent": "web-01",
+    "alert": {
+     "id": 7,
+     "severity": "high"
+    }
+   },
+   "prompt": "agent: web-01\nalert.id: 7\nalert.severity: high",
+   "schema": null
+  },
+  {
+   "criteria": "rule 12 governs",
+   "payload": {
+    "active": true,
+    "ratio": "0.25",
+    "roles": [
+     "admin",
+     "dev"
+    ],
+    "score_milli": 1500
+   },
+   "prompt": "active: True\nratio: 0.25\nroles: admin, dev\nroles.0: admin\nroles.1: dev\nscore_milli: 1500\n\nCRITERIA:\nrule 12 governs",
+   "schema": null
+  },
+  {
+   "criteria": null,
+   "payload": {
+    "nested": {
+     "deep": {
+      "leaf": null
+     }
+    },
+    "note": "caf\u00e9"
+   },
+   "prompt": "nested.deep.leaf: None\nnote: caf\u00e9\n\nReply with ONE flat JSON object (no nesting) with keys: reason, verdict.",
+   "schema": {
+    "properties": {
+     "reason": {},
+     "verdict": {}
+    }
+   }
+  }
+ ],
+ "version": 2
+}

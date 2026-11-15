@@ -1,0 +1,85 @@
+{
+ "format": "PPT",
+ "version": 1,
+ "max_steps": 25,
+ "fields": {
+  "files": 0
+ },
+ "intern": {
+  "": 0
+ },
+ "atoms": [
+  {
+   "i": 0,
+   "field": "files",
+   "op": "truthy",
+   "type": "none",
+   "val": 0
+  }
+ ],
+ "start": 0,
+ "colors_present": false,
+ "stateful": false,
+ "migration": null,
+ "safe_node": null,
+ "wcet_cycles": 8,
+ "nodes": [
+  {
+   "i": 0,
+   "name": "gather",
+   "color": 0,
+   "edges": [
+    {
+     "target": 2,
+     "condition": "when files",
+     "program": [
+      "ATOM 0"
+     ]
+    },
+    {
+     "target": 1,
+     "condition": "else",
+     "program": [
+      "TRUE"
+     ]
+    }
+   ]
+  },
+  {
+   "i": 1,
+   "name": "nothing_to_review",
+   "color": 0,
+   "edges": []
+  },
+  {
+   "i": 2,
+   "name": "dispatch",
+   "color": 0,
+   "edges": []
+  },
+  {
+   "i": 3,
+   "name": "aggregate",
+   "color": 0,
+   "edges": []
+  },
+  {
+   "i": 4,
+   "name": "escalate",
+   "color": 0,
+   "edges": []
+  }
+ ],
+ "host_side_edges": [
+  {
+   "node": "dispatch",
+   "target": "aggregate",
+   "condition": "on event all_done"
+  },
+  {
+   "node": "dispatch",
+   "target": "escalate",
+   "condition": "on timeout"
+  }
+ ]
+}
