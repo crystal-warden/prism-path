@@ -71,6 +71,8 @@ EXCLUDE_PREFIXES = [
                                # a research example like governed_harness (its XDP side is prismpath-ebpf)
     "integrations/governed_intent/",   # intent routing over the harness with the P1 embedder, a research
                                # example; its causes reach the product through promotion
+    "integrations/governed_population/",  # a governed agent population (replication, evolution, stop) under
+                               # admission policy, a research example; its causes reach the product through promotion
     "prismpath/evidence/",     # OTS anchors over the RESEARCH ledger/papers (docs/research/, absent
                                # here) + hardware evidence — provenance is a research-repo concern, and
                                # shipping anchors that reference files not in the mirror is a dangling ref
