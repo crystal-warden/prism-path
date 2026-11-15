@@ -131,6 +131,44 @@ def test_kill_by_pattern(world, argv, pattern):
     assert classify({"tool": "run_command", "args": {"argv": argv}}, world[0])["kill_by_pattern"] is pattern
 
 
+GIT_LISTINGS = [
+    ("tag", []), ("tag", ["-l"]), ("tag", ["--list"]), ("tag", ["-l", "v1.*"]), ("tag", ["-n"]), ("tag", ["-n3"]),
+    ("tag", ["--sort=-creatordate"]), ("tag", ["--list", "--contains", "HEAD"]), ("tag", ["--list", "--format=%(refname)"]),
+    ("branch", []), ("branch", ["-a"]), ("branch", ["--all"]), ("branch", ["-r"]), ("branch", ["--list"]),
+    ("branch", ["-v"]), ("branch", ["-vv"]), ("branch", ["--list", "feat/*"]), ("branch", ["--show-current"]),
+    ("branch", ["--merged", "main"]), ("branch", ["-a", "-v", "--list"]), ("branch", ["--sort=-committerdate"]),
+]
+GIT_BRANCH_TAG_WRITES = [
+    ("tag", ["v1"]), ("tag", ["-a", "v1", "-m", "x"]), ("tag", ["-d", "v1"]), ("tag", ["--delete", "v1"]),
+    ("tag", ["-f", "v1"]), ("tag", ["-s", "v1"]), ("tag", ["-l", "-d", "v1"]), ("tag", ["--list", "--force"]),
+    ("tag", ["--contains"]), ("tag", ["--contains", "-d"]), ("tag", ["-n", "v1"]), ("tag", ["--frob"]),
+    ("branch", ["feat"]), ("branch", ["-d", "feat"]), ("branch", ["-D", "feat"]), ("branch", ["-m", "a", "b"]),
+    ("branch", ["-M", "a", "b"]), ("branch", ["--set-upstream-to=origin/main"]), ("branch", ["-u", "origin/main"]),
+    ("branch", ["--unset-upstream"]), ("branch", ["-f", "feat", "HEAD"]), ("branch", ["-a", "feat"]),
+    ("branch", ["-v", "feat"]), ("branch", ["--list", "-D", "feat"]), ("branch", ["-l"]), ("branch", ["--frob"]),
+    ("branch", ["--edit-description"]), ("branch", ["--contains"]),
+]
+
+
+@pytest.mark.parametrize("sub,args", GIT_LISTINGS)
+def test_git_listings_read_only(world, sub, args):
+    for call in ({"tool": "git", "args": {"subcommand": sub, "args": args}},
+                 {"tool": "run_command", "args": {"argv": ["git", sub, *args]}}):
+        assert fields(classify(call, world[0]), "git_op", "remote_class") == ("local_read", "none"), call
+
+
+@pytest.mark.parametrize("sub,args", GIT_BRANCH_TAG_WRITES)
+def test_git_branch_tag_writes_stay_writes(world, sub, args):
+    for call in ({"tool": "git", "args": {"subcommand": sub, "args": args}},
+                 {"tool": "run_command", "args": {"argv": ["git", sub, *args]}}):
+        assert classify(call, world[0])["git_op"] == "local_write", call
+
+
+def test_git_branch_copy_is_not_read(world):
+    # -c is on GIT_UNSAFE_OPTIONS, so it was already the unknown reading; it must never become a listing.
+    assert classify({"tool": "git", "args": {"subcommand": "branch", "args": ["-c", "a", "b"]}}, world[0])["git_op"] != "local_read"
+
+
 @pytest.mark.parametrize("sub,args,op,remote", [
     ("status", [], "local_read", "none"), ("log", ["--oneline"], "local_read", "none"), ("diff", [], "local_read", "none"),
     ("add", ["notes.txt"], "local_write", "none"), ("commit", ["-m", "a message with / and .."], "local_write", "none"),
