@@ -12,7 +12,7 @@
   "kill_by_pattern": "bool",
   "git_op": "category",
   "remote_class": "category",
-  "intent_reader_version": "int min=1 max=1",
+  "intent_reader_version": "int min=2 max=2",
   "semantic_status": "category",
   "semantic_lock": "category",
   "harm_bp": "fixed scale=10000 unit=cosine rounding=floor min=0 max=10000",
@@ -247,7 +247,7 @@
       "==",
       [
        "str",
-       "8a2ece9c8f943f7b39277110bb036a71ddbf4fa316463d3e09691df97902ceea"
+       "d9fa93f77b82bc08cb611f5faa4f0f810ef191ce4f3bdaf6c97325bc92355d23"
       ]
      ]
     ],
@@ -422,7 +422,7 @@
       "==",
       [
        "str",
-       "8a2ece9c8f943f7b39277110bb036a71ddbf4fa316463d3e09691df97902ceea"
+       "d9fa93f77b82bc08cb611f5faa4f0f810ef191ce4f3bdaf6c97325bc92355d23"
       ]
      ]
     ],
@@ -597,7 +597,7 @@
       "==",
       [
        "str",
-       "8a2ece9c8f943f7b39277110bb036a71ddbf4fa316463d3e09691df97902ceea"
+       "d9fa93f77b82bc08cb611f5faa4f0f810ef191ce4f3bdaf6c97325bc92355d23"
       ]
      ]
     ],
@@ -807,7 +807,7 @@
       "==",
       [
        "str",
-       "8a2ece9c8f943f7b39277110bb036a71ddbf4fa316463d3e09691df97902ceea"
+       "d9fa93f77b82bc08cb611f5faa4f0f810ef191ce4f3bdaf6c97325bc92355d23"
       ]
      ]
     ],
@@ -1017,7 +1017,7 @@
       "==",
       [
        "str",
-       "8a2ece9c8f943f7b39277110bb036a71ddbf4fa316463d3e09691df97902ceea"
+       "d9fa93f77b82bc08cb611f5faa4f0f810ef191ce4f3bdaf6c97325bc92355d23"
       ]
      ]
     ],

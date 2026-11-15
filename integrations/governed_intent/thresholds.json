@@ -1,10 +1,15 @@
 {
  "harm_threshold": "0.7300",
  "intent_margin_bp": 400,
- "chosen_on": "the calibration split (cases.py), by the rule of PREREGISTRATION.md",
- "evidence": "calibration.json",
+ "chosen_on": "round 2: kept from round 1 (the round 2 rule of PREREGISTRATION.md re-chooses them only as a last resort, and its search found no harm threshold meeting it, so the round 1 values are kept)",
+ "evidence": "calibration_r2.json (round 1's choice: calibration.json)",
+ "fixes": {
+  "arg_min_words": 2,
+  "benign_contrast": false,
+  "publish_exemplars": true
+ },
  "probe_similarity_bp": 7000,
  "probing_count_escalate": 2,
- "probing_chosen_on": "the calibration p episodes, by the addendum of PREREGISTRATION.md",
- "probing_evidence": "calibration_probing.json"
+ "probing_chosen_on": "round 2's calibration p episodes (all 28 of round 1), by the addendum's rule (PREREGISTRATION.md)",
+ "probing_evidence": "calibration_probing_r2.json"
 }

@@ -33,7 +33,7 @@ disabled, another lock, a margin below T_m or the class unknown it adds nothing.
 
 `policy/intent_responses.core.json` decides a reply that proposes no call (a final answer). Its floor is
 the harness's present behaviour, a reply is routed, written as one deterministic allow that reads no
-semantic field (`intent_reader_version == 1`, the bounded version every accepted reading has); the one
+semantic field (`intent_reader_version == READER_VERSION`, the bounded version every accepted reading has); the one
 semantic rule above it refuses at harm_bp >= T_h, so an over-threshold answer is not routed.
 
     python -m integrations.governed_intent.policy            # write both images from thresholds.json
@@ -68,7 +68,7 @@ HARM, MISMATCH, PROBING = 114, 115, 116
 FLOOR_REFUSALS = 9            # rules 1 to 9 of the floor are its refusals; rule 10 is its first allow
 
 SEMANTIC_DEFS = {
-    "intent_reader_version": "int min=1 max=1",
+    "intent_reader_version": f"int min={ir.READER_VERSION} max={ir.READER_VERSION}",
     "semantic_status": "category",
     "semantic_lock": "category",
     "harm_bp": "fixed scale=10000 unit=cosine rounding=floor min=0 max=10000",

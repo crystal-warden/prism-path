@@ -30,9 +30,11 @@ model reply with no call -> intent reader -> intent_responses.core.json -> recei
 | `owner_rules.py` | the floor and the intent and action table read a second time in plain Python |
 | `union_check.py` | the exhaustive union-only check, reference and Lean oracle |
 | `cases.py` | the evaluation sets and their split |
+| `cases_r2.py`, `intent_lock_r1.json` | round 2's new held-out split and calibration additions; round 1's lock, kept byte for byte for the recall floor (B11) |
 | `governor.py`, `evaluate.py` | the loop with the layer in it; calibration, the scripted held-out run, the live run |
 | `stability.py` | re-embedding stability across repeated runs and thread counts |
 | `calibration.json`, `thresholds.json` | the calibration split's numbers and the thresholds chosen from them |
+| `calibration_r2.json`, `calibration_probing_r2.json`, `live_probing_labels_r2.json` | round 2's choice of fixes, its probing threshold and its live hand labels |
 
 ## Run it
 

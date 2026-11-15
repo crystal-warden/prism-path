@@ -68,7 +68,7 @@ def _random_reading(rng, lock, thresholds):
     harm = rng.choice([0, rng.randrange(0, 10001), thresholds["harm_bp"] - 1, thresholds["harm_bp"], 10000])
     margin = rng.choice([0, rng.randrange(0, 10001), thresholds["intent_margin_bp"] - 1,
                          thresholds["intent_margin_bp"], 10000])
-    return {**floor, "intent_reader_version": 1, "semantic_status": rng.choice([ir.VERIFIED, ir.DISABLED]),
+    return {**floor, "intent_reader_version": ir.READER_VERSION, "semantic_status": rng.choice([ir.VERIFIED, ir.DISABLED]),
             "semantic_lock": rng.choice([lock, lock, "none", "f" * 64]), "harm_bp": harm,
             "intent_class": rng.choice(union_check.INTENTS), "intent_margin_bp": margin,
             "probing_count": rng.choice([0, 1, thresholds["probing_count_escalate"], rng.randrange(0, 1001)])}
@@ -99,7 +99,7 @@ def test_a_disabled_or_foreign_reading_is_the_floor(images):
     lock = policy.lock_id()
     reading = {"classifier_version": 1, "tool": "delete_path", "path_scope": "workspace", "path_in_toolchain": False,
                "path_glob": False, "path_traversal": False, "path_symlink": False, "command_class": "none",
-               "kill_by_pattern": False, "git_op": "none", "remote_class": "none", "intent_reader_version": 1,
+               "kill_by_pattern": False, "git_op": "none", "remote_class": "none", "intent_reader_version": ir.READER_VERSION,
                "semantic_status": ir.VERIFIED, "semantic_lock": lock, "harm_bp": 9000, "intent_class": "inspect",
                "intent_margin_bp": 9000, "probing_count": 0}
     assert calls.decide(calls.reading_bytes(reading)).cause == "semantic:harm"
@@ -110,14 +110,15 @@ def test_a_disabled_or_foreign_reading_is_the_floor(images):
     assert calls.decide(calls.reading_bytes({**reading, "probing_count": 2})).cause == "semantic:probing-episode"
     assert calls.decide(calls.reading_bytes({**reading, "probing_count": 2, "semantic_status": ir.DISABLED})).kind == "allow"
     assert calls.decide(calls.reading_bytes({**reading, "intent_class": "unknown"})).kind == "allow"
-    answer = {"intent_reader_version": 1, "semantic_status": ir.VERIFIED, "semantic_lock": lock, "harm_bp": 9000}
+    answer = {"intent_reader_version": ir.READER_VERSION, "semantic_status": ir.VERIFIED, "semantic_lock": lock, "harm_bp": 9000}
     assert responses.decide(responses.reading_bytes(answer)).cause == "semantic:harm"
     assert responses.decide(responses.reading_bytes({**answer, "semantic_status": ir.DISABLED})).kind == "allow"
 
 
 @pytest.mark.parametrize("change,cause", [
     ({"harm_bp": 10001}, "route:contract-violation"), ({"harm_bp": -1}, "route:contract-violation"),
-    ({"intent_margin_bp": 10001}, "route:contract-violation"), ({"intent_reader_version": 2}, "route:contract-violation"),
+    ({"intent_margin_bp": 10001}, "route:contract-violation"), ({"intent_reader_version": 1}, "route:contract-violation"),
+    ({"intent_reader_version": 3}, "route:contract-violation"),
     ({"harm_bp": True}, "route:contract-violation"),
 ])
 def test_a_semantic_field_out_of_its_definition_is_refused(images, change, cause):
