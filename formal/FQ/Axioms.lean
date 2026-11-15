@@ -14,6 +14,7 @@ import Core.Codes
 import Core.Order
 import Core.Scope
 import Core.Evidence
+import Core.Merkle
 import Core.Canon2Proofs
 /-! The axiom audit: the theorem must depend on nothing beyond Lean's three standard axioms. -/
 #print axioms FQ.decision_preservation
@@ -83,6 +84,9 @@ evaluator the oracle runs, which must not use `Classical.choice` to compute. -/
 #print axioms Core.Evidence.verified_refusal_registered
 #print axioms Core.Evidence.verified_excluded_counter
 #print axioms Core.Evidence.evidence_sound
+#print axioms Core.Merkle.mth_injective
+#print axioms Core.Merkle.mth_repeated_last
+#print axioms Core.Merkle.retired_collides
 #print axioms Core.Bridge.evalC_toX
 #print axioms Core.Bridge.firstMatch_eq_routeX
 #print axioms Core.Bridge.core_quantization_preserves
