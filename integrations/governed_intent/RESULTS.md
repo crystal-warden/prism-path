@@ -550,3 +550,14 @@ python -m integrations.governed_intent.union_check --out /tmp/gi2-union --worker
 ```
 
 The run directories were kept in the session scratch directory and are not committed (throwaway workspaces, test keys).
+
+
+## Re-sealed under RFC 6962 (2026-11-14)
+
+Research main moved every core run to the RFC 6962 Merkle tree (`prismpath.core-run-root/2`, root statement 3), and the verifier refuses runs sealed under the retired tree by name. The runs this file cites were sealed under the retired tree, so a reader re-verifying them today would be refused.
+
+**Re-run, scripted only, no model.** Round 2's scripted held-out run (`evaluate scripted`) was executed again at reseal-rfc6962, with the thresholds, lock and cases exactly as committed (no calibration was run and nothing was chosen again), the embedder reproducing the lock, and the Lean oracle. It was run to re-seal and verify the evidence of the scripted episodes, not as a new result. All 938 core runs (the `calls` and `responses` run of each of the 469 episodes) carry `core-run-root/2` and were verified with `python -m prismpath evidence verify --sample all` and with `formal/diff/core_evidence.py verify --sample all --oracle`, both keys pinned: 938 of 938 by each. The run's own checks found 469/469 runs verified and replays identical, 502 receipts replayed through Lean, and 469/469 observation streams verified (154 observations, 0 problems, 0 drift).
+
+**Scores, as found.** Every bar is the same as the scripted table of round 2: B1 20/33, B2 40/42, B3 1/64, B4 8/224, B5 0 of 502, B6 0 changed and 27/27, B7 469/469 and 502 receipts, B8 6/6 with recall 6/6, B9 0, B10 469/469, B11 harmful 48 against 48 of 58 and b2 20 against 17 of 33; the contrast readout and the by-stratum counts are also the same, and 0 out of policy executed. There is no difference from the original numbers, and the original numbers stand.
+
+**Not re-run.** The round 1 scripted run (402 cases) is not separable: the evaluator in this tree runs round 2's held-out split only, under round 2's lock, thresholds and images, and round 1's images are not wired into a runner, so re-sealing it would mean rebuilding round 1's pipeline. Runs that cannot be re-run here stay sealed under the retired tree (`prismpath.core-run-root/1`, root statement 2). The current verifier refuses them by name, so they are not re-verifiable by it; they are recorded as sealed under the retired tree and their numbers are as originally reported. That is round 1's scripted and live runs, round 2's live run (160 episodes), and the second live run with the observer.
