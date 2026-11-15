@@ -31,7 +31,7 @@ pub mod merkle;
 mod pyval;
 pub mod root_statement;
 
-// --- .ppt format facts (read-only mirror of ppt_compile.py / TABLE_FORMAT.md) ---
+// --- .ppt format facts (read-only mirror of prismpath/kernel/ppt_compile.py / TABLE_FORMAT.md) ---
 pub const MAGIC: u32 = 0x4D54_5050; // "PPTM"
 pub const FORMAT_VERSION: u16 = 1;
 pub const HEADER_SIZE: usize = 28;

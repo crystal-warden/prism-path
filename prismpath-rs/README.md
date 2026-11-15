@@ -8,11 +8,11 @@ purpose, `DIVERGENCES.md` at the repository root lists the place, the reason and
 `prismpath/portable/prismpath.mjs`. Where Python and JS semantics are subtle this crate copies the `.mjs`
 decision, because the corpus is the judge.
 
-**What enforces agreement.** The frozen conformance corpus in `prismpath/portable/conformance/` is
+**What enforces agreement.** The frozen conformance corpus, carried in this crate under `tests/fixtures/` as a byte identical copy of the product corpus in `prismpath/portable/conformance/`, is
 the specification. The crate's only claim to correctness is passing it bit for bit:
 
 ```
-cargo run --bin conformance -- ../prismpath/portable/conformance
+cargo run --bin conformance -- tests/fixtures
 ```
 
 `CONFORMANCE.md` records the certified result (1112/1112 predicates, 107/107 flows, 8/8 locked flows) and the exact

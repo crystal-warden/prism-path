@@ -27,7 +27,7 @@ prismpath plugins --check flow.md
 prismpath ci-report             # the pull request report: validate, fixtures, before and after graph
 ```
 
-For the compiled image, `.ppt`, the compiler is `prismpath-hw/ppt_compile.py` and the format is
+For the compiled image, `.ppt`, the compiler is `prismpath/kernel/ppt_compile.py` and the format is
 `prismpath-hw/TABLE_FORMAT.md`; the C target, the kernel programs, the microcontroller firmware, and the
 fabric all execute that image. The signed pack around it is your setup, and every `swap` and `authorize`
 action and `ledger keygen` need the `signing` extra (`pip install 'prismpath[signing]'`):

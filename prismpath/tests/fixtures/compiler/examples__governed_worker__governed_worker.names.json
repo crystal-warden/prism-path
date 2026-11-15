@@ -1,0 +1,86 @@
+{
+ "format": "PPT",
+ "version": 1,
+ "max_steps": 25,
+ "fields": {
+  "gates_pass": 0,
+  "claimed_success": 1
+ },
+ "intern": {
+  "": 0
+ },
+ "atoms": [
+  {
+   "i": 0,
+   "field": "gates_pass",
+   "op": "truthy",
+   "type": "none",
+   "val": 0
+  },
+  {
+   "i": 1,
+   "field": "claimed_success",
+   "op": "truthy",
+   "type": "none",
+   "val": 0
+  }
+ ],
+ "start": 0,
+ "colors_present": false,
+ "stateful": false,
+ "migration": null,
+ "safe_node": null,
+ "wcet_cycles": 14,
+ "nodes": [
+  {
+   "i": 0,
+   "name": "verify",
+   "color": 0,
+   "edges": [
+    {
+     "target": 1,
+     "condition": "when gates_pass",
+     "program": [
+      "ATOM 0"
+     ]
+    },
+    {
+     "target": 2,
+     "condition": "when claimed_success and not gates_pass",
+     "program": [
+      "ATOM 1",
+      "ATOM 0",
+      "NOT",
+      "AND"
+     ]
+    },
+    {
+     "target": 3,
+     "condition": "else",
+     "program": [
+      "TRUE"
+     ]
+    }
+   ]
+  },
+  {
+   "i": 1,
+   "name": "accept",
+   "color": 0,
+   "edges": []
+  },
+  {
+   "i": 2,
+   "name": "reject_lie",
+   "color": 0,
+   "edges": []
+  },
+  {
+   "i": 3,
+   "name": "reject",
+   "color": 0,
+   "edges": []
+  }
+ ],
+ "host_side_edges": []
+}

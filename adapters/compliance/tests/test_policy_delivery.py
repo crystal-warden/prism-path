@@ -25,7 +25,7 @@ from prismpath.kernel.parser import parse  # noqa: E402
 from prismpath.tests._repo import repo_file
 
 sys.path.insert(0, str(repo_file("prismpath-hw")))    # the compiler lives beside the hardware targets
-import ppt_compile  # noqa: E402
+from prismpath.kernel import ppt_compile  # noqa: E402
 
 FLOW = """---
 name: delivery_fixture

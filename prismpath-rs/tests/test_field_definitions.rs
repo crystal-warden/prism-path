@@ -11,7 +11,7 @@ use prismpath_rs::field_definitions::parse_definition;
 use std::collections::HashMap;
 
 fn corpus() -> serde_json::Value {
-    let path = format!("{}/../prismpath/portable/conformance/field_definitions.json", env!("CARGO_MANIFEST_DIR"));
+    let path = format!("{}/tests/fixtures/field_definitions.json", env!("CARGO_MANIFEST_DIR"));
     serde_json::from_str(&std::fs::read_to_string(path).expect("read field_definitions.json")).expect("parse field_definitions.json")
 }
 

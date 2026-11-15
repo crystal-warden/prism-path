@@ -11,7 +11,7 @@ from pathlib import Path
 from prismpath.kernel import causes
 from prismpath.kernel.engine import run
 from prismpath.kernel.parser import parse
-from prismpath.tests.test_portable_conformance import scripted_agent
+from prismpath.portable.flow_fixtures import scripted_agent
 
 REPO = Path(__file__).resolve().parents[2]
 CORPUS = REPO / "prismpath" / "portable" / "conformance" / "flows.json"

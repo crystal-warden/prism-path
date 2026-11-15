@@ -28,8 +28,8 @@ IMAGE_PATH = Path(sys.argv[2]) if len(sys.argv) > 2 else REPO / "integrations" /
 PROBE_READING = {"rule_level": 12, "soc_action": "contain", "stability": "shaken", "dev_mg": 3000}
 # ============================================================================
 
-sys.path.insert(0, str(REPO / "prismpath-hw"))       # the compiler lives beside the hardware targets
-import ppt_compile  # noqa: E402
+sys.path.insert(0, str(REPO))                        # the compiler is prismpath.kernel.ppt_compile
+from prismpath.kernel import ppt_compile  # noqa: E402
 
 from prismpath.kernel.parser import parse_file  # noqa: E402
 

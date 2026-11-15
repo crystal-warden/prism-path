@@ -13,7 +13,7 @@ fn corpus() -> Value {
     serde_json::from_str(&text).expect("parse inputs corpus")
 }
 
-const FIXTURE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../prismpath/telemetry/conformance/inputs.json");
+const FIXTURE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/inputs.json");
 
 fn partitions(corpus: &Value) -> HashMap<String, quantizer::FieldPartition> {
     quantizer::build_partitions(&parse(corpus["flow"].as_str().unwrap())).expect("the flow partitions")

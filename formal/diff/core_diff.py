@@ -15,7 +15,7 @@ boundaries. Each case runs through the oracle and up to seven legs (spec section
   * js, go:   the second tier kernels (`formal/diff/core_diff_js.mjs`, `prismpath-go/cmd/core_diff`), composed
               the same way: their own canon/2 readers, `parse` (which checks the policy in the core's order and
               lowers decimal thresholds exactly), the system boundary, first match and the policy check;
-  * c-interp, c-hdr: the table targets: the reference as host, `prismpath-hw/ppt_compile.py`, and the
+  * c-interp, c-hdr: the table targets: the reference as host, `prismpath/kernel/ppt_compile.py`, and the
               certified C evaluators `interp.c` and `ppt_eval.h` through `formal/diff/ppt_batch.c` (D6);
   * ebpf:     the eBPF table target on its userspace path: the same host and compiler, the loader's parser
               (`prismpath-ebpf/ppt_image.c`) and the in-kernel evaluator's own text
@@ -566,17 +566,14 @@ def go_leg(cases):
 
 def _ppt_compile():
     if "ppt" not in _TOOLS:
-        import importlib.util
-        spec = importlib.util.spec_from_file_location("ppt_compile", ROOT / "prismpath-hw" / "ppt_compile.py")
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        _TOOLS["ppt"] = module
+        from prismpath.kernel import ppt_compile
+        _TOOLS["ppt"] = ppt_compile
     return _TOOLS["ppt"]
 
 
 def table_leg(cases, variant):
     """The C table targets: the host (the Python reference) checks the policy, reads each reading with
-    canon/2 and applies the system boundary, `prismpath-hw/ppt_compile.py` compiles the checked policy to a
+    canon/2 and applies the system boundary, `prismpath/kernel/ppt_compile.py` compiles the checked policy to a
     .ppt image and encodes each accepted reading's registers, and the certified C evaluator (`interp.c` or
     the embedded `ppt_eval.h`) picks the edge. The compiler's 32 bit limit (`int-out-of-i32`, SPEC.md 4.3)
     is a refusal of the compiler or of the register encoder, reported as `target-limit`, never a route."""

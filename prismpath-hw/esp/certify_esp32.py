@@ -27,7 +27,7 @@ sys.path.insert(0, str(HW))
 sys.path.insert(0, str(REPO))
 
 import serial  # noqa: E402
-import ppt_compile as pc  # noqa: E402
+from prismpath.kernel import ppt_compile as pc  # noqa: E402
 import declared_subset  # noqa: E402
 
 CONF = REPO / "prismpath" / "portable" / "conformance"

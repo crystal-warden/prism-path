@@ -9,7 +9,7 @@ checked by the port of the Lean `loadPolicy`, rendered, parsed and decided by th
 The table for the kernel is compiled from the same image the way the core differential's table leg does
 (`formal/diff/core_diff.table_leg`): the image is rendered and parsed by the reference, each rule of the
 start node gets a node of its own so the matched edge index names the rule, and the condition programs are
-compiled by `prismpath-hw/ppt_compile.py`, with the field map pinned to the protocol's register order
+compiled by `prismpath/kernel/ppt_compile.py`, with the field map pinned to the protocol's register order
 (`protocol.SCHEMA`), as `prismpath-ebpf/net_compile.py` pins the packet schema for `ppt_net.bpf.c`. The
 table is then admitted by `ebpf_table_limits.require_within_limits`, the loader's own checks.
 
@@ -46,10 +46,8 @@ NO_MATCH_CODE = causes.code("route:no-matching-edge")
 
 
 def _ppt_compile():
-    spec = importlib.util.spec_from_file_location("ppt_compile", REPO / "prismpath-hw" / "ppt_compile.py")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+    from prismpath.kernel import ppt_compile
+    return ppt_compile
 
 
 class NetPolicy(Policy):

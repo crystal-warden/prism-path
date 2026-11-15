@@ -3,6 +3,14 @@
 This page says how a release is built and checked, which repository it comes from, and what the owner has to
 decide. It separates what the files and PyPI itself show from what is only remembered or still open.
 
+## The one rule (2026-11-15)
+
+All work lands in research `main`. The product repository, `crystal-warden/prismpath`, has one line, its `main`,
+and that changes only by export: `python tools/export_clean.py --out ../prismpath` writes the whole tree from a
+clean research checkout, including `PROVENANCE.md` (the research commit) and `SHA256SUMS`. The `promote` tool, its
+lock and the `product/seed-2026-09-19` line it served are retired; that branch's accepted state is what the
+export reproduces. What follows records how the releases were built before that, and is kept as the record.
+
 ## What is known
 
 **PyPI holds one release, 0.1.0, uploaded on 2026-08-17 at 12:39 UTC (a wheel and an sdist, one second
@@ -47,7 +55,7 @@ PyPI does not know or care which repository it came from.
 |---|---|---|
 | Research repo | `crystal-warden/prism-path`, `main` | The source of truth: the package, the research, the evidence ledger, the hardware. `pyproject.toml` here is the one 0.1.0 came from. |
 | Mirror, `main` | `crystal-warden/prismpath`, `main` | A generated subset. `python tools/export_clean.py --out ../prismpath-clean` rebuilds the tree from this repository and never commits or pushes. Its last full export was 2026-08-17 (`a3de376`, `9129c27`); four documentation commits followed on 2026-11-04. Re-running the export now would change about 460 of its 540 files, so the mirror's `main` is far behind this repository. |
-| Product branch | `crystal-warden/prismpath`, `product/seed-2026-09-19` (tip `a86546c`, 2026-10-13) | Not an export. It was seeded from research commit `40a9b05` on 2026-09-19 and has been advanced by its `promote` tool (last: research `a0cccf8`). It has its own `pyproject.toml` (different description, `README.md` as the PyPI page, no `comparisons` extra, links only to the mirror and a `Research` link), `PROVENANCE.md`, `COMPATIBILITY.md`, `DIVERGENCES.md`, and a release gate (the `release_eligibility` tool and `release_policy` flow in its `tools/` directory) whose receipt says an artifact "may be offered for the owner's release decision". It intentionally differs from research: `prismpath compile` is withdrawn, the JavaScript port and playground are not carried, and it carries a few product only fixes (`DIVERGENCES.md` lists them). It has not received the 2026-11-04 cleanup commits. |
+| Product branch (retired 2026-11-15, see the one rule) | `crystal-warden/prismpath`, `product/seed-2026-09-19` (tip `a86546c`, 2026-10-13) | Not an export. It was seeded from research commit `40a9b05` on 2026-09-19 and has been advanced by its `promote` tool (last: research `a0cccf8`). It has its own `pyproject.toml` (different description, `README.md` as the PyPI page, no `comparisons` extra, links only to the mirror and a `Research` link), `PROVENANCE.md`, `COMPATIBILITY.md`, `DIVERGENCES.md`, and a release gate (the `release_eligibility` tool and `release_policy` flow in its `tools/` directory) whose receipt says an artifact "may be offered for the owner's release decision". It intentionally differs from research: `prismpath compile` is withdrawn, the JavaScript port and playground are not carried, and it carries a few product only fixes (`DIVERGENCES.md` lists them). It has not received the 2026-11-04 cleanup commits. |
 
 The export script and the product branch are two different ways of producing a "clean" repository. The
 export script is a one way copy that was used once; the product branch is a maintained fork with a
@@ -116,8 +124,9 @@ and no workflow in this change creates it.
 
 1. **Release source: the mirror's `main`, freshly exported.** Run `python tools/export_clean.py --out
    ../prismpath-clean` from this repository at the commit being released, review and commit the result in the
-   mirror, then build and upload from the mirror checkout as above. The export copies `tools/mirror_readme.md`
-   into the mirror unchanged, because `pyproject.toml` names it as the PyPI page.
+   mirror, then build and upload from the mirror checkout as above. The export writes `tools/mirror_readme.md`
+   into the mirror as `README.md`, unchanged, and the mirror's `pyproject.toml` (`tools/mirror/pyproject.toml`) names that
+   file as the PyPI page.
 2. **Version: 0.1.3,** the first upload since 0.1.0. Two tags were pushed and superseded before any upload: `v0.1.1`
    (2026-11-04), when a hand check of every documented capability found 14 bugs and the receipt signing gap, and
    `v0.1.2` (2026-11-05), when the owner chose to ship its follow-ups and the Rust verifier in the same upload rather
@@ -140,7 +149,7 @@ to leak and every file carries a PEP 740 attestation tying it to the workflow ru
 `publish.yml` in the mirror, `crystal-warden/prismpath`. The export deletes everything in the mirror but `.git`
 on each run, so the workflow cannot be kept there by hand. Its source is `tools/mirror_publish.yml` in this
 repository, and `tools/export_clean.py` writes it to `.github/workflows/publish.yml` beside the generated
-`ci.yml`. Edit the source and re-export, never the mirror's copy.
+`ci.yml`. Edit it in research and re-export, never the mirror's copy.
 
 ### One time setup (the owner, in a browser)
 

@@ -10,7 +10,7 @@ use serde_json::Value;
 
 fn fixtures() -> Value {
     let path = format!(
-        "{}/../prismpath/portable/conformance/context.json",
+        "{}/tests/fixtures/context.json",
         env!("CARGO_MANIFEST_DIR")
     );
     serde_json::from_str(&std::fs::read_to_string(path).expect("read context.json"))

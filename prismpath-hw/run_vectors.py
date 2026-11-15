@@ -26,8 +26,8 @@ BUILD = HERE / "build"
 INTERP = BUILD / "interp"                               # --interp <path> certifies another binary (interp_hdr)
 if "--interp" in sys.argv:
     INTERP = Path(sys.argv[sys.argv.index("--interp") + 1]).resolve()
-
-import ppt_compile as pc                                   # noqa: E402
+sys.path.insert(0, str(HERE.parent))    # the repository root, where the prismpath package is
+from prismpath.kernel import ppt_compile as pc                                   # noqa: E402
 import declared_subset                                      # noqa: E402
 from prismpath.kernel.parser import parse                         # noqa: E402
 

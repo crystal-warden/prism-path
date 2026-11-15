@@ -35,11 +35,11 @@ touching the decision preserving codec. Fibonacci is the only implementation for
 ## Definition of done · the gate (this is how "1-1" is proven; do not claim done until green)
 1. `cargo build` and `cargo clippy` are clean.
 2. `cargo test` includes a conformance harness loading the **same frozen corpora the Python passes**:
-   - `../prismpath/telemetry/conformance/decisions.json`: for each case, parse the flow, build partitions,
+   - `tests/fixtures/decisions.json` (a byte identical copy of `prismpath/telemetry/conformance/decisions.json`): for each case, parse the flow, build partitions,
      and assert the wire round-trip (quantize → Fibonacci-code → decode → reconstruct) routes every tagged
      reading to the **same route at every decision node** (decision preservation) and reproduces the
      tagged full-precision route (drift).
-   - `../prismpath/telemetry/conformance/spiral.json`: rebuild the layout from the frozen flow and assert
+   - `tests/fixtures/spiral.json` (a byte identical copy of `prismpath/telemetry/conformance/spiral.json`): rebuild the layout from the frozen flow and assert
      `fields`/`radices`/`size`/`bands`/`cells` match the frozen tessellation **exactly**, and each probe
      routes three ways identically (direct, via band-reconstruct, via `route_of(index)`).
 3. A **delivery-layer parity** test: for a fixed set of leaves/blocks/keys, the Rust Merkle root,

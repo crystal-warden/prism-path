@@ -64,7 +64,7 @@ mod tests {
 
     #[test]
     fn locked_route_exported_matches_the_frozen_p1_fixture() {
-        let raw = std::fs::read_to_string("../prismpath/portable/conformance/locked_flows.json")
+        let raw = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/locked_flows.json"))
             .expect("locked_flows.json");
         let doc: serde_json::Value = serde_json::from_str(&raw).unwrap();
         let cases = doc["cases"].as_array().unwrap();

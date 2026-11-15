@@ -25,7 +25,7 @@ repo_file("prismpath-ebpf", "ppt_common.h")
 _batch = repo_file("formal", "diff", "ebpf_batch.c")
 sys.path.insert(0, str(repo_file("prismpath-hw")))
 sys.path.insert(0, str(_ebpf))
-import ppt_compile as pc  # noqa: E402
+from prismpath.kernel import ppt_compile as pc  # noqa: E402
 
 
 def _load(name):

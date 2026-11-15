@@ -75,7 +75,9 @@ _RETIRED_FILES = (
 
 
 def _sources(top, suffixes, skip=()):
-    root = repo_file(top)
+    root = REPO_ROOT / top
+    if not root.is_dir():       # the product carries Python and Rust only; a tree it does not carry has nothing to sweep
+        return
     for path in sorted(root.rglob("*")):
         if path.suffix not in suffixes or not path.is_file():
             continue
@@ -134,6 +136,8 @@ def test_no_frozen_canon1_corpus_or_generator_is_left():
     for name in _RETIRED_FILES:
         assert not (REPO_ROOT / name).exists(), f"{name} was removed with canon/1"
     for rel in ("tools/run_corpora.py", "prismpath/portable/conformance/README.md"):
+        if not (REPO_ROOT / rel).exists():
+            continue
         text = repo_file(*rel.split("/")).read_text(encoding="utf-8")
         for name in ("receipts_canon1", "hotswap_canon1", "canonical.json"):
             assert name not in text, f"{rel} still names {name}"

@@ -1,0 +1,201 @@
+{
+ "format": "PPT",
+ "version": 1,
+ "max_steps": 25,
+ "fields": {
+  "data_class": 0,
+  "peer_class": 1,
+  "migration_phase": 2,
+  "hw_floor": 3
+ },
+ "intern": {
+  "": 0,
+  "cui": 1,
+  "public": 2
+ },
+ "atoms": [
+  {
+   "i": 0,
+   "field": "data_class",
+   "op": "==",
+   "type": "str",
+   "val": 1
+  },
+  {
+   "i": 1,
+   "field": "peer_class",
+   "op": "==",
+   "type": "str",
+   "val": 2
+  },
+  {
+   "i": 2,
+   "field": "migration_phase",
+   "op": ">=",
+   "type": "int",
+   "val": 2
+  },
+  {
+   "i": 3,
+   "field": "hw_floor",
+   "op": ">=",
+   "type": "int",
+   "val": 1
+  }
+ ],
+ "start": 0,
+ "colors_present": false,
+ "stateful": false,
+ "migration": null,
+ "safe_node": null,
+ "wcet_cycles": 11,
+ "nodes": [
+  {
+   "i": 0,
+   "name": "classify",
+   "color": 0,
+   "edges": [
+    {
+     "target": 1,
+     "condition": "when data_class == \"cui\"",
+     "program": [
+      "ATOM 0"
+     ]
+    },
+    {
+     "target": 2,
+     "condition": "when peer_class == \"public\"",
+     "program": [
+      "ATOM 1"
+     ]
+    },
+    {
+     "target": 3,
+     "condition": "else",
+     "program": [
+      "TRUE"
+     ]
+    }
+   ]
+  },
+  {
+   "i": 1,
+   "name": "cui-path",
+   "color": 0,
+   "edges": [
+    {
+     "target": 4,
+     "condition": "when always",
+     "program": [
+      "TRUE"
+     ]
+    }
+   ]
+  },
+  {
+   "i": 2,
+   "name": "public-path",
+   "color": 0,
+   "edges": [
+    {
+     "target": 5,
+     "condition": "when migration_phase >= 2",
+     "program": [
+      "ATOM 2"
+     ]
+    },
+    {
+     "target": 5,
+     "condition": "when hw_floor >= 1",
+     "program": [
+      "ATOM 3"
+     ]
+    },
+    {
+     "target": 6,
+     "condition": "else",
+     "program": [
+      "TRUE"
+     ]
+    }
+   ]
+  },
+  {
+   "i": 3,
+   "name": "internal-path",
+   "color": 0,
+   "edges": [
+    {
+     "target": 4,
+     "condition": "when migration_phase >= 2",
+     "program": [
+      "ATOM 2"
+     ]
+    },
+    {
+     "target": 5,
+     "condition": "when hw_floor >= 1",
+     "program": [
+      "ATOM 3"
+     ]
+    },
+    {
+     "target": 6,
+     "condition": "else",
+     "program": [
+      "TRUE"
+     ]
+    }
+   ]
+  },
+  {
+   "i": 4,
+   "name": "suite-cnsa2-hybrid-1",
+   "color": 0,
+   "edges": [
+    {
+     "target": 7,
+     "condition": "when always",
+     "program": [
+      "TRUE"
+     ]
+    }
+   ]
+  },
+  {
+   "i": 5,
+   "name": "suite-tls13-hybrid-x25519mlkem",
+   "color": 0,
+   "edges": [
+    {
+     "target": 7,
+     "condition": "when always",
+     "program": [
+      "TRUE"
+     ]
+    }
+   ]
+  },
+  {
+   "i": 6,
+   "name": "suite-tls13-aesgcm",
+   "color": 0,
+   "edges": [
+    {
+     "target": 7,
+     "condition": "when always",
+     "program": [
+      "TRUE"
+     ]
+    }
+   ]
+  },
+  {
+   "i": 7,
+   "name": "end",
+   "color": 0,
+   "edges": []
+  }
+ ],
+ "host_side_edges": []
+}

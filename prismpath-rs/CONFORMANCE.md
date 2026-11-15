@@ -1,9 +1,9 @@
 # prismpath-rs · conformance certification against the frozen kernel spec
 
-**Date:** 2026-07-29 · re verified 2026-08-12 on corpus v2, 2026-10-12 with the reading boundary cases and 2026-11-09 with the type gate, transcript bound and error tier cases · **Verdict: CONFORMANT**: 1112/1112 predicates, 107/107 flows (the 27 frozen and 80 for the engine options, the worker error kind, the guard records, the undefined node and the step shape), 8/8 locked flows · Reproduce with:
+**Date:** 2026-07-29 · re verified 2026-08-12 on corpus v2, 2026-10-12 with the reading boundary cases and 2026-11-10 with the type gate, transcript bound, error tier cases and the refused negative transcript bound · **Verdict: CONFORMANT**: 1112/1112 predicates, 107/107 flows (the 27 frozen and 80 for the engine options, the worker error kind, the guard records, the undefined node, the step shape and the refused negative bound), 8/8 locked flows · Reproduce with:
 
 ```
-cargo run --bin conformance -- ../prismpath/portable/conformance
+cargo run --bin conformance -- tests/fixtures
 ```
 
 The spec now has its **second independent implementation**: two kernels (this crate and

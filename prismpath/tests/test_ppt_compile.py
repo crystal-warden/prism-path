@@ -8,14 +8,10 @@ that emits it. That check has to survive `python -O`, which is why it is a raise
 """
 import subprocess
 import sys
-from pathlib import Path
 
 import pytest
 
-HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE))
-
-import ppt_compile as pc                                   # noqa: E402
+from prismpath.kernel import ppt_compile as pc
 
 
 def test_a_well_formed_program_reports_its_peak_depth():
@@ -36,10 +32,10 @@ def test_a_malformed_program_is_refused_by_a_raise(prog, final_depth):
 
 def test_the_refusal_survives_python_dash_oh():
     """python -O drops asserts, so the guard is checked in a real optimized interpreter, not here."""
-    program = ("import sys; sys.path.insert(0, %r); import ppt_compile as pc\n"
+    program = ("from prismpath.kernel import ppt_compile as pc\n"
                "try:\n"
                "    pc.TableImage._stack_depth([])\n"
                "except ValueError:\n"
-               "    print('refused')\n" % str(HERE))
+               "    print('refused')\n")
     done = subprocess.run([sys.executable, "-O", "-c", program], capture_output=True, text=True)
     assert done.stdout.strip() == "refused", done.stderr

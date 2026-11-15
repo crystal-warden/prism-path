@@ -128,13 +128,40 @@ jobs:
           $VENV_BIN/python -c 'import json; assert json.load(open("preflight.json"))["events"] == 2'
           $VENV_BIN/python -c 'from prismpath.mission_control import app; import importlib.resources as resources; assert (resources.files("prismpath.mission_control") / "static" / "index.html").is_file(); assert (resources.files("prismpath.mission_control") / "static" / "vendor" / "cytoscape.min.js").is_file()'
       - name: Shipped test suite against the installed package
-        run: cd /tmp && /tmp/wheel-venv/bin/python -m pytest --pyargs prismpath.tests prismpath.telemetry.tests -q -rs -p no:cacheprovider
+        run: cd /tmp && /tmp/wheel-venv/bin/python -m pytest --pyargs prismpath.tests prismpath.telemetry.tests -q -rs -p no:cacheprovider -m "not cross_language"
       - name: The sdist rebuilds and installs
         run: |
           rm -rf /tmp/sdist-work && mkdir /tmp/sdist-work && tar -xzf dist/*.tar.gz -C /tmp/sdist-work
           cd /tmp/sdist-work/prismpath-* && python -m build --outdir /tmp/dist-from-sdist . > /dev/null
           python -m venv /tmp/sdist-venv && /tmp/sdist-venv/bin/pip install /tmp/dist-from-sdist/*.whl > /dev/null
           cd /tmp && /tmp/sdist-venv/bin/prismpath --help > /dev/null
+
+  # The product repository is this repository's export and nothing else (tools/export_clean.py): the
+  # export must pass the checks the product ships, and the tools' own suite must pass here.
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: pip install numpy pytest build cryptography
+      - name: The maintenance suite, including the export
+        run: python -m pytest tools/tests -q
+      - name: Export the product tree and check it
+        run: |
+          python tools/export_clean.py --out /tmp/prismpath-tree
+          cd /tmp/prismpath-tree
+          python -m tools.check_boundary
+          python -m tools.check_compatibility
+          python -m tools.fixture_sync
+          python -m tools.provenance check
+          python -m tools.provenance check --research "$GITHUB_WORKSPACE"
+          python -m build --outdir dist .
+          python -m tools.check_boundary --wheel dist/*.whl --sdist dist/*.tar.gz
 
   # Mission Control is an optional control-plane extra (FastAPI). The main test job installs numpy-only
   # and skips its tests (pytest.importorskip); this job installs the extra so the shipped control plane

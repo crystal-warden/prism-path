@@ -9,7 +9,7 @@ BOARD=${2:?usage: deploy.sh <flow.md> <board-host>}
 HERE=$(dirname "$(readlink -f "$0")")
 T0=$(date +%s%3N)
 
-python3 "$HERE/ppt_compile.py" "$FLOW" -o /tmp/live.ppt --json /tmp/live.json
+PYTHONPATH="$HERE/..${PYTHONPATH:+:$PYTHONPATH}" python3 -m prismpath.kernel.ppt_compile "$FLOW" -o /tmp/live.ppt --json /tmp/live.json
 sha256sum /tmp/live.ppt
 
 # json first, then ppt — the board watcher keys on the .ppt mtime

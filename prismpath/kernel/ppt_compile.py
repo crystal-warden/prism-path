@@ -1,50 +1,38 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
-"""ppt_compile.py — compile PrismPath Level M conditions/flows to PPT v1 table images.
+"""Compile a PrismPath Level M flow to a PPT v1 table image.
 
-`compile --target table`, off-repo edition: uses the repo's own classifier
-(prismpath.model_check.is_level_m) as the fragment authority, so this compiler can never
-disagree with `prismpath verify --level-m` about what is compilable. See TABLE_FORMAT.md.
+The compiler uses the kernel's own classifier (prismpath.kernel.model_check) as the fragment
+authority, so it can never disagree with `prismpath verify --level-m` about what is compilable.
+The image format is TABLE_FORMAT.md in the research repository at the adopted revision recorded
+in COMPATIBILITY.md; the product carries the compiler and its regression references, not the
+substrates that execute the image.
 
-CLI:  python3 ppt_compile.py <flow.md> [-o image.bin] [--json debug.json] [--max-steps N]
+Run it as a module from the installed package:
+
+    python -m prismpath.kernel.ppt_compile <flow.md> [-o image.ppt] [--json names.json] [--max-steps N]
+
+The flags and the output bytes are unchanged from the research copy this module was taken from.
 """
 from __future__ import annotations
 
 import ast
 import json
-import os
 import re
 import struct
 import sys
 from pathlib import Path
 
-def _find_pkg() -> str:
-    """The prismpath PACKAGE directory — the pc._REPO contract this tree's consumers rely on
-    (run_vectors and tb resolve `_REPO / "portable" / "conformance"`). PRISMPATH_REPO overrides
-    (point it at the package dir); else walk ancestors for a `prismpath` package, so the compiler
-    works from the in-repo tree and a sibling checkout alike."""
-    env = os.environ.get("PRISMPATH_REPO")
-    if env:
-        return env
-    for anc in Path(__file__).resolve().parents:
-        cand = anc / "prismpath"
-        if (cand / "__init__.py").exists():
-            return str(cand)
-        nested = anc / "prismpath" / "prismpath"
-        if (nested / "__init__.py").exists():
-            return str(nested)
-    return str(Path(__file__).resolve().parent.parent / "prismpath")
-
-
-_REPO = _find_pkg()
+# The compiler lives inside the package, so its imports are ordinary. _REPO keeps its old meaning,
+# the prismpath package directory, because callers resolve `_REPO / "portable" / "conformance"`
+# through it.
+_REPO = str(Path(__file__).resolve().parent.parent)
 _ROOT = str(Path(_REPO).parent)
-if _ROOT not in sys.path:
-    sys.path.insert(0, _ROOT)
 
-from prismpath.kernel import predicates                     # noqa: E402
-from prismpath.kernel.analysis import _reachable            # noqa: E402
-from prismpath.kernel.model_check import _classify, _desugar_chains   # noqa: E402
+from prismpath.kernel import predicates
+from prismpath.kernel.analysis import _reachable
+from prismpath.kernel.model_check import _classify, _desugar_chains
 
 TY_NONE, TY_BOOL, TY_INT, TY_STR = 0, 1, 2, 3
 OP_EQ, OP_NE, OP_LT, OP_LE, OP_GT, OP_GE, OP_TRUTHY = range(7)

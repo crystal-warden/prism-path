@@ -3,7 +3,6 @@
 """PolicyHost (spec-secure-hotswap §3.3-§3.4): a swap is authorized + in-envelope + monotonic +
 atomic, every attempt is one audit event, the swap chain reconstructs from the ledger, and a
 failure at any stage leaves the previous policy active. Uses the real compiler + real Ed25519."""
-import sys
 from pathlib import Path
 
 import json
@@ -19,11 +18,7 @@ from prismpath.hotswap import policy_host as ph# noqa: E402
 from prismpath.ledgers.audit_log import AuditLog  # noqa: E402
 from prismpath.kernel.parser import parse  # noqa: E402
 
-from prismpath.tests._repo import repo_file
-
-_hw = repo_file("prismpath-hw")
-sys.path.insert(0, str(_hw))
-import ppt_compile as pc  # noqa: E402
+from prismpath.kernel import ppt_compile as pc
 
 FIELDS = {"temp": "int"}
 

@@ -16,7 +16,7 @@ use std::collections::HashMap;
 
 fn fixtures() -> Value {
     let path = format!(
-        "{}/../prismpath/portable/conformance/durable.json",
+        "{}/tests/fixtures/durable.json",
         env!("CARGO_MANIFEST_DIR")
     );
     serde_json::from_str(&std::fs::read_to_string(path).expect("read durable.json"))

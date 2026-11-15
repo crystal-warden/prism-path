@@ -18,9 +18,9 @@ from cocotb.clock import Clock
 from cocotb.triggers import RisingEdge
 
 HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE.parent))
+sys.path.insert(0, str(HERE.parent.parent))    # the repository root, where the prismpath package is
 
-import ppt_compile as pc                                    # noqa: E402
+from prismpath.kernel import ppt_compile as pc                                    # noqa: E402
 from prismpath.kernel.parser import parse                          # noqa: E402
 
 CONF = Path(pc._REPO) / "portable" / "conformance"   # pc._REPO is the package dir

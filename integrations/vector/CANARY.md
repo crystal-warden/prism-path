@@ -83,7 +83,7 @@ python3 gen_events.py 400 | vector -c canary_edge.toml > raw.ndjson
 ## Step 3: verify route parity
 
 ```
-python canary_verify.py <flow.md> --raw raw.ndjson --decoded decoded.ndjson --route-node correlate
+python -m prismpath.telemetry.canary_verify <flow.md> --raw raw.ndjson --decoded decoded.ndjson --route-node correlate
 ```
 
 The verifier replays every raw event through the reference implementation (the same one the codec

@@ -55,13 +55,8 @@ def test_classifier_compiler_gap_pinned():
     — 0 disagreements in either direction. They share one `_desugar_chains` (the compiler imports it from
     model_check) and one `_classify`, so a flow is Level M per `verify --level-m` iff it compiles to a
     table. Any gap here means the two authorities fell out of sync (e.g. a divergent desugar copy crept
-    back) — investigate, don't just re-pin. Skips if the hardware compiler isn't on the path (it lives
-    outside the package)."""
-    import sys as _sys
-    from prismpath.tests._repo import repo_file
-    _hw = repo_file("prismpath-hw")
-    _sys.path.insert(0, str(_hw))
-    import ppt_compile as pc
+    back): investigate rather than re-pin. The compiler is a package module now, so this never skips."""
+    from prismpath.kernel import ppt_compile as pc
 
     classifier = {case["cond"] for case in _cases() if mc.is_level_m(case["cond"])[0]}
     compiler, target_limited = set(), set()
@@ -98,18 +93,3 @@ def test_capability_semantic_flow():
     assert rep["tier"] != "P0"
     assert rep["targets"]["level_m_hardware"]["status"] == "no"
 
-
-def test_the_declared_hardware_subset_neither_shrinks_nor_grows_unreviewed():
-    """The selection the table compiler makes today must be exactly the frozen manifest. A subset that
-    shrank would let every certification report all of fewer vectors passing; one that grew needs the
-    manifest frozen again and the targets recertified. Both runners enforce the same check where they
-    certify; this runs it on every CI push, with no interpreter or kernel needed."""
-    import sys as _sys
-    from prismpath.tests._repo import repo_file
-    _sys.path.insert(0, str(repo_file("prismpath-hw")))
-    repo_file("prismpath-hw", "declared_subset.json")   # a wheel ships the directory without the manifest
-    import declared_subset
-    shrank, grew = declared_subset.drift(declared_subset.selected_ids(_cases()))
-    assert shrank == [], f"the declared subset shrank: {shrank}"
-    assert grew == [], f"the declared subset grew; freeze it with declared_subset.py --write: {grew}"
-    assert declared_subset.frozen()["count"] == 147 == len(declared_subset.frozen()["case_ids"])

@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 HW = Path(__file__).resolve().parent.parent; REPO = HW.parent
 sys.path.insert(0, str(HW)); sys.path.insert(0, str(REPO))
-import ppt_compile as pc
+from prismpath.kernel import ppt_compile as pc
 from prismpath.kernel.parser import parse_file
 if len(sys.argv) < 3: sys.exit("usage: gen_fusion_policy.py <fusion flow.md> <camera flow.md>   (this bench ran flows/room_fusion.md over esp-vision-node/flows/occupancy_6x8.md)")
 flow, cam = sys.argv[1], sys.argv[2]

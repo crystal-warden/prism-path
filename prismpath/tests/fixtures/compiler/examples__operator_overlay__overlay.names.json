@@ -1,0 +1,145 @@
+{
+ "format": "PPT",
+ "version": 1,
+ "max_steps": 25,
+ "fields": {
+  "visits": 0,
+  "incident_active": 1,
+  "severity": 2,
+  "source_internal": 3
+ },
+ "intern": {
+  "": 0
+ },
+ "atoms": [
+  {
+   "i": 0,
+   "field": "visits",
+   "op": ">",
+   "type": "int",
+   "val": 3
+  },
+  {
+   "i": 1,
+   "field": "incident_active",
+   "op": "truthy",
+   "type": "none",
+   "val": 0
+  },
+  {
+   "i": 2,
+   "field": "severity",
+   "op": ">=",
+   "type": "int",
+   "val": 2
+  },
+  {
+   "i": 3,
+   "field": "severity",
+   "op": ">=",
+   "type": "int",
+   "val": 4
+  },
+  {
+   "i": 4,
+   "field": "source_internal",
+   "op": "truthy",
+   "type": "none",
+   "val": 0
+  }
+ ],
+ "start": 0,
+ "colors_present": false,
+ "stateful": false,
+ "migration": null,
+ "safe_node": null,
+ "wcet_cycles": 19,
+ "nodes": [
+  {
+   "i": 0,
+   "name": "gate",
+   "color": 0,
+   "edges": [
+    {
+     "target": 2,
+     "condition": "when visits > 3",
+     "program": [
+      "ATOM 0"
+     ]
+    },
+    {
+     "target": 1,
+     "condition": "when incident_active and severity >= 2",
+     "program": [
+      "ATOM 1",
+      "ATOM 2",
+      "AND"
+     ]
+    },
+    {
+     "target": 3,
+     "condition": "when severity >= 4",
+     "program": [
+      "ATOM 3"
+     ]
+    },
+    {
+     "target": 4,
+     "condition": "when source_internal",
+     "program": [
+      "ATOM 4"
+     ]
+    },
+    {
+     "target": 5,
+     "condition": "else",
+     "program": [
+      "TRUE"
+     ]
+    }
+   ]
+  },
+  {
+   "i": 1,
+   "name": "heightened",
+   "color": 0,
+   "edges": []
+  },
+  {
+   "i": 2,
+   "name": "escalate",
+   "color": 0,
+   "edges": []
+  },
+  {
+   "i": 3,
+   "name": "deny",
+   "color": 0,
+   "edges": []
+  },
+  {
+   "i": 4,
+   "name": "allow",
+   "color": 0,
+   "edges": []
+  },
+  {
+   "i": 5,
+   "name": "observe",
+   "color": 0,
+   "edges": []
+  }
+ ],
+ "host_side_edges": [
+  {
+   "node": "heightened",
+   "target": "gate",
+   "condition": "on event stand_down"
+  },
+  {
+   "node": "heightened",
+   "target": "gate",
+   "condition": "on timeout"
+  }
+ ]
+}

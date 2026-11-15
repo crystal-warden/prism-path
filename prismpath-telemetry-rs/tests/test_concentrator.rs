@@ -7,7 +7,7 @@ use serde_json::Value;
 use std::collections::HashMap;
 
 fn corpus() -> Value {
-    let text = std::fs::read_to_string(format!("{}/../prismpath/telemetry/conformance/concentrator.json", env!("CARGO_MANIFEST_DIR"))).unwrap();
+    let text = std::fs::read_to_string(format!("{}/tests/fixtures/concentrator.json", env!("CARGO_MANIFEST_DIR"))).unwrap();
     serde_json::from_str(&text).unwrap()
 }
 

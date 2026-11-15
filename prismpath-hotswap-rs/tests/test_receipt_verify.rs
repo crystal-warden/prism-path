@@ -12,7 +12,7 @@ use prismpath_hotswap_rs::root_statement::{check_separation, verify_receipt_bund
 use serde_json::{json, Value};
 
 fn vectors_named(name: &str) -> Value {
-    let path = format!("{}/../prismpath/portable/conformance/{name}", env!("CARGO_MANIFEST_DIR"));
+    let path = format!("{}/tests/fixtures/{name}", env!("CARGO_MANIFEST_DIR"));
     serde_json::from_str(&std::fs::read_to_string(path).expect("read the vectors")).expect("parse the vectors")
 }
 

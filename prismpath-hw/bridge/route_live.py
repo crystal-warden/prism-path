@@ -22,9 +22,9 @@ import time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(HERE))
+sys.path.insert(0, str(HERE.parent))    # the repository root, where the prismpath package is
 
-import ppt_compile as pc                               # noqa: E402
+from prismpath.kernel import ppt_compile as pc                               # noqa: E402
 from prismpath.kernel.parser import parse_file                # noqa: E402
 
 DEFAULT_FLOW = (Path(pc._REPO) / "prismpath" / "gallery" / "incident_severity"

@@ -1,0 +1,350 @@
+{
+ "comment": "FROZEN. Policy forms: Level M conditions the codec must carry with the engine's own route on every probe, and forms it must refuse as a whole flow. Both implementation twins replay this file.",
+ "flow_template": "---\nname: policy_forms\nstart: s\n---\n## s\n-> hit: when {condition}\n-> miss: else\n## hit\nH\n## miss\nM\n",
+ "node": "s",
+ "carried": [
+  {
+   "field": "x",
+   "condition": "0 < x < 5",
+   "readings": [
+    {
+     "value": -1,
+     "route": "miss"
+    },
+    {
+     "value": 0,
+     "route": "miss"
+    },
+    {
+     "value": 1,
+     "route": "hit"
+    },
+    {
+     "value": 4,
+     "route": "hit"
+    },
+    {
+     "value": 5,
+     "route": "miss"
+    },
+    {
+     "value": 6,
+     "route": "miss"
+    }
+   ]
+  },
+  {
+   "field": "x",
+   "condition": "x < -3",
+   "readings": [
+    {
+     "value": -5,
+     "route": "hit"
+    },
+    {
+     "value": -4,
+     "route": "hit"
+    },
+    {
+     "value": -3,
+     "route": "miss"
+    },
+    {
+     "value": -2,
+     "route": "miss"
+    },
+    {
+     "value": 0,
+     "route": "miss"
+    }
+   ]
+  },
+  {
+   "field": "x",
+   "condition": "-3 > x",
+   "readings": [
+    {
+     "value": -5,
+     "route": "hit"
+    },
+    {
+     "value": -4,
+     "route": "hit"
+    },
+    {
+     "value": -3,
+     "route": "miss"
+    },
+    {
+     "value": -2,
+     "route": "miss"
+    },
+    {
+     "value": 0,
+     "route": "miss"
+    }
+   ]
+  },
+  {
+   "field": "x",
+   "condition": "x in [-2, 4]",
+   "readings": [
+    {
+     "value": -3,
+     "route": "miss"
+    },
+    {
+     "value": -2,
+     "route": "hit"
+    },
+    {
+     "value": -1,
+     "route": "miss"
+    },
+    {
+     "value": 0,
+     "route": "miss"
+    },
+    {
+     "value": 4,
+     "route": "hit"
+    },
+    {
+     "value": 5,
+     "route": "miss"
+    }
+   ]
+  },
+  {
+   "field": "x",
+   "condition": "x not in [-2, 4]",
+   "readings": [
+    {
+     "value": -3,
+     "route": "hit"
+    },
+    {
+     "value": -2,
+     "route": "miss"
+    },
+    {
+     "value": -1,
+     "route": "hit"
+    },
+    {
+     "value": 0,
+     "route": "hit"
+    },
+    {
+     "value": 4,
+     "route": "miss"
+    },
+    {
+     "value": 5,
+     "route": "hit"
+    }
+   ]
+  },
+  {
+   "field": "x",
+   "condition": "-10 <= x <= -5 or x == 7",
+   "readings": [
+    {
+     "value": -11,
+     "route": "miss"
+    },
+    {
+     "value": -10,
+     "route": "hit"
+    },
+    {
+     "value": -7,
+     "route": "hit"
+    },
+    {
+     "value": -5,
+     "route": "hit"
+    },
+    {
+     "value": -4,
+     "route": "miss"
+    },
+    {
+     "value": 6,
+     "route": "miss"
+    },
+    {
+     "value": 7,
+     "route": "hit"
+    },
+    {
+     "value": 8,
+     "route": "miss"
+    }
+   ]
+  },
+  {
+   "field": "x",
+   "condition": "not (0 <= x < 3)",
+   "readings": [
+    {
+     "value": -1,
+     "route": "hit"
+    },
+    {
+     "value": 0,
+     "route": "miss"
+    },
+    {
+     "value": 2,
+     "route": "miss"
+    },
+    {
+     "value": 3,
+     "route": "hit"
+    },
+    {
+     "value": 4,
+     "route": "hit"
+    }
+   ]
+  },
+  {
+   "field": "x",
+   "condition": "x == True or x > 5",
+   "readings": [
+    {
+     "value": 0,
+     "route": "miss"
+    },
+    {
+     "value": 1,
+     "route": "hit"
+    },
+    {
+     "value": 2,
+     "route": "miss"
+    },
+    {
+     "value": 5,
+     "route": "miss"
+    },
+    {
+     "value": 6,
+     "route": "hit"
+    }
+   ]
+  },
+  {
+   "field": "x",
+   "condition": "x in [True, 5]",
+   "readings": [
+    {
+     "value": 0,
+     "route": "miss"
+    },
+    {
+     "value": 1,
+     "route": "hit"
+    },
+    {
+     "value": 2,
+     "route": "miss"
+    },
+    {
+     "value": 5,
+     "route": "hit"
+    },
+    {
+     "value": 6,
+     "route": "miss"
+    }
+   ]
+  },
+  {
+   "field": "x",
+   "condition": "True == x",
+   "readings": [
+    {
+     "value": false,
+     "route": "miss"
+    },
+    {
+     "value": true,
+     "route": "hit"
+    }
+   ]
+  },
+  {
+   "field": "kind",
+   "condition": "kind == \"a\" or kind in [\"b\", \"c\"]",
+   "readings": [
+    {
+     "value": "a",
+     "route": "hit"
+    },
+    {
+     "value": "b",
+     "route": "hit"
+    },
+    {
+     "value": "c",
+     "route": "hit"
+    },
+    {
+     "value": "d",
+     "route": "miss"
+    }
+   ]
+  },
+  {
+   "field": "kind",
+   "condition": "\"a\" != kind",
+   "readings": [
+    {
+     "value": "a",
+     "route": "miss"
+    },
+    {
+     "value": "z",
+     "route": "hit"
+    }
+   ]
+  }
+ ],
+ "refused": [
+  {
+   "condition": "x == y"
+  },
+  {
+   "condition": "kind < \"m\""
+  },
+  {
+   "condition": "\"m\" > kind"
+  },
+  {
+   "condition": "x in y"
+  },
+  {
+   "condition": "kind in \"abc\""
+  },
+  {
+   "condition": "x < 2.5"
+  },
+  {
+   "condition": "x in [1, 2.5]"
+  },
+  {
+   "condition": "x == 3 or x == \"a\""
+  },
+  {
+   "condition": "x == True or x == \"a\""
+  },
+  {
+   "condition": "x == None"
+  },
+  {
+   "condition": "x != None and x > 3"
+  }
+ ]
+}

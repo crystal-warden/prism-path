@@ -13,7 +13,8 @@ import json
 import sys
 from pathlib import Path
 
-import ppt_compile as pc
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))    # the repository root, where the prismpath package is
+from prismpath.kernel import ppt_compile as pc    # noqa: E402
 from prismpath.kernel.parser import parse_file
 
 HERE = Path(__file__).resolve().parent

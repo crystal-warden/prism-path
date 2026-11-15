@@ -16,7 +16,7 @@ use std::collections::{BTreeMap, HashMap};
 
 fn fixtures() -> Value {
     let path = format!(
-        "{}/../prismpath/portable/conformance/connector.json",
+        "{}/tests/fixtures/connector.json",
         env!("CARGO_MANIFEST_DIR")
     );
     serde_json::from_str(&std::fs::read_to_string(path).expect("read connector.json"))

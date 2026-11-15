@@ -7,19 +7,15 @@ Two guarantees, enforced on every test run:
      must reproduce the committed files byte-for-byte. A semantics change in predicates.py or
      engine.py shows up here as a diff; if intentional, re-run gen_conformance.py and commit
      the new vectors (that diff IS the spec-change review).
-  2. THE PORT CONFORMS — run_vectors.mjs must pass every committed case (skipped without node).
+  2. The JavaScript port's side of this check lives in the research repository with the port.
 """
 import json
-import shutil
-import subprocess
 import warnings
 from pathlib import Path
 
-import pytest
 
 REPO = Path(__file__).resolve().parent.parent
 CONF = REPO / "portable" / "conformance"
-NODE = shutil.which("node")
 
 
 def _load_generator():
@@ -42,11 +38,3 @@ def test_no_silent_python_drift():
             f"{name}: the committed conformance vectors no longer match the live Python "
             f"reference — semantics changed. If intentional, regenerate "
             f"(python portable/gen_conformance.py) and commit the diff.")
-
-
-@pytest.mark.skipif(NODE is None, reason="node not installed — port conformance untested here")
-def test_the_port_passes_the_frozen_vectors():
-    process = subprocess.run([NODE, str(REPO / "portable" / "run_vectors.mjs"), str(CONF)],
-                       capture_output=True, text=True, timeout=120)
-    assert process.returncode == 0, f"port is NON-CONFORMANT:\n{process.stdout[-2000:]}\n{process.stderr[-1000:]}"
-    assert "CONFORMANT" in process.stdout

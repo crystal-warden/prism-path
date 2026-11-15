@@ -1,0 +1,13 @@
+{"flow": "bugfix", "node": "triage", "outcome": "I reproduced the crash; it is a null dereference in parse_config().", "label": "implement", "stratum": "intent"}
+{"flow": "bugfix", "node": "triage", "outcome": "Cannot reproduce on main; need the reporter's environment and logs.", "label": "gather_info", "stratum": "intent"}
+{"flow": "bugfix", "node": "triage", "outcome": "This is the same issue as #212, closing as a duplicate.", "label": "close", "stratum": "abstraction"}
+{"flow": "bugfix", "node": "triage", "outcome": "Reproduced with the attached config; root cause is an off by one in the parser.", "label": "implement", "stratum": "polarity"}
+{"flow": "bugfix", "node": "triage", "outcome": "The report has no steps and no version; asking for details.", "label": "gather_info", "stratum": "polarity"}
+{"flow": "bugfix", "node": "implement", "outcome": "Applied the fix and the entire test suite passes.", "label": "review", "stratum": "polarity"}
+{"flow": "bugfix", "node": "implement", "outcome": "Patched the parser, two tests still fail on the edge case.", "label": "implement", "stratum": "intent"}
+{"flow": "bugfix", "node": "implement", "outcome": "The fix needs a decision on whether to change the config schema.", "label": "triage", "stratum": "abstraction"}
+{"flow": "bugfix", "node": "implement", "outcome": "All green after the change; ready for a second pair of eyes.", "label": "review", "stratum": "intent"}
+{"flow": "bugfix", "node": "review", "outcome": "The diff is correct and side effect free; merge it.", "label": "done", "stratum": "polarity"}
+{"flow": "bugfix", "node": "review", "outcome": "The review found an unchecked return value; needs code changes.", "label": "implement", "stratum": "polarity"}
+{"flow": "bugfix", "node": "review", "outcome": "Looks right, approved.", "label": "done", "stratum": "abstraction"}
+{"flow": "bugfix", "node": "gather_info", "outcome": "The reporter sent repro steps and logs; enough to investigate.", "label": "triage", "stratum": "intent"}

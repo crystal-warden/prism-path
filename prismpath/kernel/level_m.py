@@ -89,7 +89,7 @@ def _desugar_chains(node):
     (names/constants, evaluated identically each time), every pairwise comparison is total, and BoolOp
     evaluates all operands - so the desugared form cannot diverge from Python's chain evaluation on any
     context. This is the ONE desugar both the classifier (`is_level_m`) and the PPT compiler
-    (`prismpath-hw/ppt_compile`, which imports this) use, so they can never disagree about chains."""
+    (`prismpath/kernel/ppt_compile`, which imports this) use, so they can never disagree about chains."""
     if isinstance(node, ast.BoolOp):
         return ast.BoolOp(op=node.op, values=[_desugar_chains(val) for val in node.values])
     if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):

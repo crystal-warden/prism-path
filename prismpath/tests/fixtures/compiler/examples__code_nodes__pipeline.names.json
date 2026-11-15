@@ -1,0 +1,82 @@
+{
+ "format": "PPT",
+ "version": 1,
+ "max_steps": 25,
+ "fields": {
+  "amount": 0
+ },
+ "intern": {
+  "": 0
+ },
+ "atoms": [
+  {
+   "i": 0,
+   "field": "amount",
+   "op": ">",
+   "type": "int",
+   "val": 500
+  },
+  {
+   "i": 1,
+   "field": "amount",
+   "op": ">=",
+   "type": "int",
+   "val": 0
+  }
+ ],
+ "start": 0,
+ "colors_present": false,
+ "stateful": false,
+ "migration": null,
+ "safe_node": null,
+ "wcet_cycles": 11,
+ "nodes": [
+  {
+   "i": 0,
+   "name": "extract",
+   "color": 0,
+   "edges": [
+    {
+     "target": 1,
+     "condition": "when amount > 500",
+     "program": [
+      "ATOM 0"
+     ]
+    },
+    {
+     "target": 2,
+     "condition": "when amount >= 0",
+     "program": [
+      "ATOM 1"
+     ]
+    },
+    {
+     "target": 3,
+     "condition": "else",
+     "program": [
+      "TRUE"
+     ]
+    }
+   ]
+  },
+  {
+   "i": 1,
+   "name": "high_value",
+   "color": 0,
+   "edges": []
+  },
+  {
+   "i": 2,
+   "name": "standard",
+   "color": 0,
+   "edges": []
+  },
+  {
+   "i": 3,
+   "name": "invalid",
+   "color": 0,
+   "edges": []
+  }
+ ],
+ "host_side_edges": []
+}

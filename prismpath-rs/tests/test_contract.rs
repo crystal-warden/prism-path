@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 Crystal Warden Supply Chain Labs LLC
-//! The worker output contract against `prismpath/portable/conformance/contract.json`, generated from the Python reference
+//! The worker output contract against `tests/fixtures/contract.json`, generated from the Python reference
 //! (`prismpath/portable/gen_contract_fixtures.py`): every flow's derived contract, JSON Schema and text,
 //! and every worker output's problems, in order. With `PRISMPATH_PYTHON` set the same flows are also
 //! derived by a live Python and compared.
@@ -15,7 +15,7 @@ use serde_json::{json, Value as Json};
 use std::process::Command;
 
 fn corpus() -> Json {
-    let text = std::fs::read_to_string("../prismpath/portable/conformance/contract.json").expect("read contract.json");
+    let text = std::fs::read_to_string("tests/fixtures/contract.json").expect("read contract.json");
     serde_json::from_str(&text).expect("parse contract.json")
 }
 

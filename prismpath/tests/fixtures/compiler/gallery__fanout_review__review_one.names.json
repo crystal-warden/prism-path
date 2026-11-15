@@ -1,0 +1,63 @@
+{
+ "format": "PPT",
+ "version": 1,
+ "max_steps": 25,
+ "fields": {
+  "verdict": 0
+ },
+ "intern": {
+  "": 0,
+  "pass": 1
+ },
+ "atoms": [
+  {
+   "i": 0,
+   "field": "verdict",
+   "op": "==",
+   "type": "str",
+   "val": 1
+  }
+ ],
+ "start": 0,
+ "colors_present": false,
+ "stateful": false,
+ "migration": null,
+ "safe_node": null,
+ "wcet_cycles": 8,
+ "nodes": [
+  {
+   "i": 0,
+   "name": "review",
+   "color": 0,
+   "edges": [
+    {
+     "target": 1,
+     "condition": "when verdict == \"pass\"",
+     "program": [
+      "ATOM 0"
+     ]
+    },
+    {
+     "target": 2,
+     "condition": "else",
+     "program": [
+      "TRUE"
+     ]
+    }
+   ]
+  },
+  {
+   "i": 1,
+   "name": "approve",
+   "color": 0,
+   "edges": []
+  },
+  {
+   "i": 2,
+   "name": "request_changes",
+   "color": 0,
+   "edges": []
+  }
+ ],
+ "host_side_edges": []
+}

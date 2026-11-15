@@ -30,7 +30,7 @@ fn fuzz_count() -> u64 {
 }
 
 fn corpus(name: &str) -> Json {
-    let text = std::fs::read_to_string(format!("../prismpath/portable/conformance/{name}.json")).unwrap_or_else(|error| panic!("read {name}.json: {error}"));
+    let text = std::fs::read_to_string(format!("tests/fixtures/{name}.json")).unwrap_or_else(|error| panic!("read {name}.json: {error}"));
     serde_json::from_str(&text).expect("parse corpus")
 }
 

@@ -1,0 +1,308 @@
+{
+ "format": "PPT",
+ "version": 1,
+ "max_steps": 25,
+ "fields": {
+  "no_alert": 0,
+  "cached_action": 1,
+  "rule_level": 2,
+  "recommended_action": 3,
+  "staged_ok": 4
+ },
+ "intern": {
+  "": 0,
+  "contain": 1,
+  "watch": 2,
+  "ignore": 3
+ },
+ "atoms": [
+  {
+   "i": 0,
+   "field": "no_alert",
+   "op": "truthy",
+   "type": "none",
+   "val": 0
+  },
+  {
+   "i": 1,
+   "field": "cached_action",
+   "op": "==",
+   "type": "str",
+   "val": 1
+  },
+  {
+   "i": 2,
+   "field": "cached_action",
+   "op": "==",
+   "type": "str",
+   "val": 2
+  },
+  {
+   "i": 3,
+   "field": "cached_action",
+   "op": "==",
+   "type": "str",
+   "val": 3
+  },
+  {
+   "i": 4,
+   "field": "rule_level",
+   "op": ">=",
+   "type": "int",
+   "val": 12
+  },
+  {
+   "i": 5,
+   "field": "recommended_action",
+   "op": "==",
+   "type": "str",
+   "val": 1
+  },
+  {
+   "i": 6,
+   "field": "recommended_action",
+   "op": "==",
+   "type": "str",
+   "val": 2
+  },
+  {
+   "i": 7,
+   "field": "recommended_action",
+   "op": "==",
+   "type": "str",
+   "val": 3
+  },
+  {
+   "i": 8,
+   "field": "staged_ok",
+   "op": "truthy",
+   "type": "none",
+   "val": 0
+  }
+ ],
+ "start": 0,
+ "colors_present": false,
+ "stateful": false,
+ "migration": null,
+ "safe_node": null,
+ "wcet_cycles": 17,
+ "nodes": [
+  {
+   "i": 0,
+   "name": "observe",
+   "color": 0,
+   "edges": [
+    {
+     "target": 11,
+     "condition": "when no_alert",
+     "program": [
+      "ATOM 0"
+     ]
+    },
+    {
+     "target": 1,
+     "condition": "when always",
+     "program": [
+      "TRUE"
+     ]
+    }
+   ]
+  },
+  {
+   "i": 1,
+   "name": "enrich",
+   "color": 0,
+   "edges": [
+    {
+     "target": 2,
+     "condition": "when always",
+     "program": [
+      "TRUE"
+     ]
+    }
+   ]
+  },
+  {
+   "i": 2,
+   "name": "vector_prefilter",
+   "color": 0,
+   "edges": [
+    {
+     "target": 4,
+     "condition": "when cached_action == \"contain\"",
+     "program": [
+      "ATOM 1"
+     ]
+    },
+    {
+     "target": 6,
+     "condition": "when cached_action == \"watch\"",
+     "program": [
+      "ATOM 2"
+     ]
+    },
+    {
+     "target": 7,
+     "condition": "when cached_action == \"ignore\"",
+     "program": [
+      "ATOM 3"
+     ]
+    },
+    {
+     "target": 3,
+     "condition": "when always",
+     "program": [
+      "TRUE"
+     ]
+    }
+   ]
+  },
+  {
+   "i": 3,
+   "name": "classify",
+   "color": 0,
+   "edges": [
+    {
+     "target": 4,
+     "condition": "when rule_level >= 12",
+     "program": [
+      "ATOM 4"
+     ]
+    },
+    {
+     "target": 4,
+     "condition": "when recommended_action == \"contain\"",
+     "program": [
+      "ATOM 5"
+     ]
+    },
+    {
+     "target": 6,
+     "condition": "when recommended_action == \"watch\"",
+     "program": [
+      "ATOM 6"
+     ]
+    },
+    {
+     "target": 7,
+     "condition": "when recommended_action == \"ignore\"",
+     "program": [
+      "ATOM 7"
+     ]
+    },
+    {
+     "target": 6,
+     "condition": "when always",
+     "program": [
+      "TRUE"
+     ]
+    }
+   ]
+  },
+  {
+   "i": 4,
+   "name": "stage_containment",
+   "color": 0,
+   "edges": [
+    {
+     "target": 5,
+     "condition": "when always",
+     "program": [
+      "TRUE"
+     ]
+    }
+   ]
+  },
+  {
+   "i": 5,
+   "name": "verify_staged",
+   "color": 0,
+   "edges": [
+    {
+     "target": 9,
+     "condition": "when staged_ok",
+     "program": [
+      "ATOM 8"
+     ]
+    },
+    {
+     "target": 8,
+     "condition": "when not staged_ok",
+     "program": [
+      "ATOM 8",
+      "NOT"
+     ]
+    }
+   ]
+  },
+  {
+   "i": 6,
+   "name": "watchlist",
+   "color": 0,
+   "edges": [
+    {
+     "target": 9,
+     "condition": "when always",
+     "program": [
+      "TRUE"
+     ]
+    }
+   ]
+  },
+  {
+   "i": 7,
+   "name": "benign",
+   "color": 0,
+   "edges": [
+    {
+     "target": 9,
+     "condition": "when always",
+     "program": [
+      "TRUE"
+     ]
+    }
+   ]
+  },
+  {
+   "i": 8,
+   "name": "escalate_human",
+   "color": 0,
+   "edges": [
+    {
+     "target": 9,
+     "condition": "when always",
+     "program": [
+      "TRUE"
+     ]
+    }
+   ]
+  },
+  {
+   "i": 9,
+   "name": "report",
+   "color": 0,
+   "edges": [
+    {
+     "target": 10,
+     "condition": "when always",
+     "program": [
+      "TRUE"
+     ]
+    }
+   ]
+  },
+  {
+   "i": 10,
+   "name": "end",
+   "color": 0,
+   "edges": []
+  },
+  {
+   "i": 11,
+   "name": "idle",
+   "color": 0,
+   "edges": []
+  }
+ ],
+ "host_side_edges": []
+}

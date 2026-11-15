@@ -43,7 +43,7 @@ from prismpath.comparisons.harness import HERE, TOOLCHAIN_BIN, gen_dir_for, scen
 from prismpath.kernel.parser import parse
 
 sys.path.insert(0, str(HERE.parent.parent / "prismpath-hw"))
-import ppt_compile  # noqa: E402
+from prismpath.kernel import ppt_compile  # noqa: E402
 
 POLICIES = ["network_admission", "sensor_interlock"]
 

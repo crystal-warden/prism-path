@@ -1,0 +1,569 @@
+{
+ "acceptance": "Facet acceptance rules, one rule set for both encoders of both implementations (the permissive symbol() and the checked encoders apply it alike) and for both preflight tools. numeric: integers within (-2^53, 2^53), integral floats, booleans as 0 and 1; fractional numbers, every string, and non scalar values are refused; null is missing. boolean: booleans, and numbers exactly 0 or 1; anything else is refused; null is missing. categorical: strings only; null is missing. Every conversion that remains is one the engine cannot tell apart, so an accepted value decides as the raw value does.",
+ "changes": "Version 2 (October 2026, step 3 of the reading boundary plan): a string on a numeric field is refused as wrong_type rather than parsed, because the engine never orders a string against a number, so accepting \"5\" as 5 routed it where the engine would not. Each case or reading whose expectation changed carries `changed.was`, its version 1 expectation. Parsing belongs to the adapter.",
+ "version": 2,
+ "flow": "---\nname: input_contract\nstart: assess\n---\n\n## assess\n-> page: when error_rate >= 25\n-> ticket: when error_rate >= 5\n-> watch: when user_facing\n-> hold: when region == \"eu\"\n-> done: else\n\n## page\n\n## ticket\n\n## watch\n\n## hold\n\n## done\n",
+ "cases": [
+  {
+   "expect": {
+    "symbol": 0
+   },
+   "field": "error_rate",
+   "input": 0
+  },
+  {
+   "expect": {
+    "symbol": 0
+   },
+   "field": "error_rate",
+   "input": 4
+  },
+  {
+   "expect": {
+    "symbol": 1
+   },
+   "field": "error_rate",
+   "input": 5
+  },
+  {
+   "expect": {
+    "symbol": 1
+   },
+   "field": "error_rate",
+   "input": 24
+  },
+  {
+   "expect": {
+    "symbol": 2
+   },
+   "field": "error_rate",
+   "input": 25
+  },
+  {
+   "expect": {
+    "symbol": 0
+   },
+   "field": "error_rate",
+   "input": -7
+  },
+  {
+   "expect": {
+    "refuse": "wrong_type"
+   },
+   "field": "error_rate",
+   "input": "5",
+   "changed": {
+    "version": 2,
+    "was": {
+     "symbol": 1
+    }
+   }
+  },
+  {
+   "expect": {
+    "refuse": "wrong_type"
+   },
+   "field": "error_rate",
+   "input": "+5",
+   "changed": {
+    "version": 2,
+    "was": {
+     "symbol": 1
+    }
+   }
+  },
+  {
+   "expect": {
+    "refuse": "wrong_type"
+   },
+   "field": "error_rate",
+   "input": "-3",
+   "changed": {
+    "version": 2,
+    "was": {
+     "symbol": 0
+    }
+   }
+  },
+  {
+   "expect": {
+    "refuse": "wrong_type"
+   },
+   "field": "error_rate",
+   "input": "25",
+   "changed": {
+    "version": 2,
+    "was": {
+     "symbol": 2
+    }
+   }
+  },
+  {
+   "expect": {
+    "symbol": 1
+   },
+   "field": "error_rate",
+   "input": 5.0
+  },
+  {
+   "expect": {
+    "symbol": 2
+   },
+   "field": "error_rate",
+   "input": 25.0
+  },
+  {
+   "expect": {
+    "symbol": 0
+   },
+   "field": "error_rate",
+   "input": true
+  },
+  {
+   "expect": {
+    "symbol": 0
+   },
+   "field": "error_rate",
+   "input": false
+  },
+  {
+   "expect": {
+    "symbol": 2
+   },
+   "field": "error_rate",
+   "input": 9007199254740991
+  },
+  {
+   "expect": {
+    "refuse": "fractional"
+   },
+   "field": "error_rate",
+   "input": 2.5
+  },
+  {
+   "expect": {
+    "refuse": "fractional"
+   },
+   "field": "error_rate",
+   "input": 24.9
+  },
+  {
+   "expect": {
+    "refuse": "fractional"
+   },
+   "field": "error_rate",
+   "input": -0.5
+  },
+  {
+   "expect": {
+    "refuse": "wrong_type"
+   },
+   "field": "error_rate",
+   "input": "5.0",
+   "changed": {
+    "version": 2,
+    "was": {
+     "refuse": "unparseable_string"
+    }
+   }
+  },
+  {
+   "expect": {
+    "refuse": "wrong_type"
+   },
+   "field": "error_rate",
+   "input": " 5",
+   "changed": {
+    "version": 2,
+    "was": {
+     "refuse": "unparseable_string"
+    }
+   }
+  },
+  {
+   "expect": {
+    "refuse": "wrong_type"
+   },
+   "field": "error_rate",
+   "input": "",
+   "changed": {
+    "version": 2,
+    "was": {
+     "refuse": "unparseable_string"
+    }
+   }
+  },
+  {
+   "expect": {
+    "refuse": "wrong_type"
+   },
+   "field": "error_rate",
+   "input": "abc",
+   "changed": {
+    "version": 2,
+    "was": {
+     "refuse": "unparseable_string"
+    }
+   }
+  },
+  {
+   "expect": {
+    "refuse": "wrong_type"
+   },
+   "field": "error_rate",
+   "input": "0x10",
+   "changed": {
+    "version": 2,
+    "was": {
+     "refuse": "unparseable_string"
+    }
+   }
+  },
+  {
+   "expect": {
+    "refuse": "wrong_type"
+   },
+   "field": "error_rate",
+   "input": "1e3",
+   "changed": {
+    "version": 2,
+    "was": {
+     "refuse": "unparseable_string"
+    }
+   }
+  },
+  {
+   "expect": {
+    "refuse": "missing"
+   },
+   "field": "error_rate",
+   "input": null
+  },
+  {
+   "expect": {
+    "refuse": "wrong_type"
+   },
+   "field": "error_rate",
+   "input": [
+    5
+   ]
+  },
+  {
+   "expect": {
+    "refuse": "wrong_type"
+   },
+   "field": "error_rate",
+   "input": {
+    "value": 5
+   }
+  },
+  {
+   "expect": {
+    "refuse": "out_of_range"
+   },
+   "field": "error_rate",
+   "input": 9007199254740992
+  },
+  {
+   "expect": {
+    "refuse": "out_of_range"
+   },
+   "field": "error_rate",
+   "input": -9007199254740992
+  },
+  {
+   "expect": {
+    "refuse": "out_of_range"
+   },
+   "field": "error_rate",
+   "input": 1e+300
+  },
+  {
+   "expect": {
+    "symbol": 1
+   },
+   "field": "user_facing",
+   "input": true
+  },
+  {
+   "expect": {
+    "symbol": 0
+   },
+   "field": "user_facing",
+   "input": false
+  },
+  {
+   "expect": {
+    "symbol": 1
+   },
+   "field": "user_facing",
+   "input": 1
+  },
+  {
+   "expect": {
+    "symbol": 0
+   },
+   "field": "user_facing",
+   "input": 0
+  },
+  {
+   "expect": {
+    "symbol": 1
+   },
+   "field": "user_facing",
+   "input": 1.0
+  },
+  {
+   "expect": {
+    "symbol": 0
+   },
+   "field": "user_facing",
+   "input": 0.0
+  },
+  {
+   "expect": {
+    "refuse": "wrong_type"
+   },
+   "field": "user_facing",
+   "input": 2
+  },
+  {
+   "expect": {
+    "refuse": "wrong_type"
+   },
+   "field": "user_facing",
+   "input": -1
+  },
+  {
+   "expect": {
+    "refuse": "wrong_type"
+   },
+   "field": "user_facing",
+   "input": 0.5
+  },
+  {
+   "expect": {
+    "refuse": "wrong_type"
+   },
+   "field": "user_facing",
+   "input": "true"
+  },
+  {
+   "expect": {
+    "refuse": "wrong_type"
+   },
+   "field": "user_facing",
+   "input": ""
+  },
+  {
+   "expect": {
+    "refuse": "missing"
+   },
+   "field": "user_facing",
+   "input": null
+  },
+  {
+   "expect": {
+    "refuse": "wrong_type"
+   },
+   "field": "user_facing",
+   "input": [
+    true
+   ]
+  },
+  {
+   "expect": {
+    "symbol": 0
+   },
+   "field": "region",
+   "input": "eu"
+  },
+  {
+   "expect": {
+    "symbol": 1
+   },
+   "field": "region",
+   "input": "us"
+  },
+  {
+   "expect": {
+    "symbol": 1
+   },
+   "field": "region",
+   "input": ""
+  },
+  {
+   "expect": {
+    "symbol": 1
+   },
+   "field": "region",
+   "input": "EU"
+  },
+  {
+   "expect": {
+    "refuse": "wrong_type"
+   },
+   "field": "region",
+   "input": 5
+  },
+  {
+   "expect": {
+    "refuse": "wrong_type"
+   },
+   "field": "region",
+   "input": true
+  },
+  {
+   "expect": {
+    "refuse": "missing"
+   },
+   "field": "region",
+   "input": null
+  },
+  {
+   "expect": {
+    "refuse": "wrong_type"
+   },
+   "field": "region",
+   "input": [
+    "eu"
+   ]
+  },
+  {
+   "expect": {
+    "refuse": "wrong_type"
+   },
+   "field": "region",
+   "input": {
+    "region": "eu"
+   }
+  }
+ ],
+ "readings": [
+  {
+   "expect": {
+    "refuse": {
+     "field": "error_rate",
+     "reason": "wrong_type"
+    }
+   },
+   "reading": {
+    "error_rate": "5",
+    "region": "eu",
+    "user_facing": 1
+   },
+   "changed": {
+    "version": 2,
+    "was": {
+     "symbols": {
+      "error_rate": 1,
+      "region": 0,
+      "user_facing": 1
+     }
+    }
+   }
+  },
+  {
+   "reading": {
+    "error_rate": 5,
+    "region": "eu",
+    "user_facing": 1
+   },
+   "expect": {
+    "symbols": {
+     "error_rate": 1,
+     "region": 0,
+     "user_facing": 1
+    }
+   },
+   "note": "the reading above with error_rate parsed by its adapter, the only place a number is parsed"
+  },
+  {
+   "expect": {
+    "symbols": {
+     "error_rate": 2,
+     "region": 1,
+     "user_facing": 0
+    }
+   },
+   "reading": {
+    "error_rate": 25.0,
+    "region": "other",
+    "user_facing": false
+   }
+  },
+  {
+   "expect": {
+    "refuse": {
+     "field": "error_rate",
+     "reason": "fractional"
+    }
+   },
+   "reading": {
+    "error_rate": 2.5,
+    "region": "eu",
+    "user_facing": true
+   }
+  },
+  {
+   "expect": {
+    "refuse": {
+     "field": "error_rate",
+     "reason": "wrong_type"
+    }
+   },
+   "reading": {
+    "error_rate": "abc",
+    "region": "eu",
+    "user_facing": true
+   },
+   "changed": {
+    "version": 2,
+    "was": {
+     "refuse": {
+      "field": "error_rate",
+      "reason": "unparseable_string"
+     }
+    }
+   }
+  },
+  {
+   "expect": {
+    "refuse": {
+     "field": "error_rate",
+     "reason": "missing"
+    }
+   },
+   "reading": {
+    "region": "eu",
+    "user_facing": true
+   }
+  },
+  {
+   "expect": {
+    "refuse": {
+     "field": "user_facing",
+     "reason": "wrong_type"
+    }
+   },
+   "reading": {
+    "error_rate": 7,
+    "region": "eu",
+    "user_facing": "yes"
+   }
+  },
+  {
+   "expect": {
+    "refuse": {
+     "field": "region",
+     "reason": "wrong_type"
+    }
+   },
+   "reading": {
+    "error_rate": 7,
+    "region": 3,
+    "user_facing": true
+   }
+  }
+ ]
+}

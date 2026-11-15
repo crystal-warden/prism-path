@@ -28,7 +28,7 @@ from prismpath.kernel.parser import parse
 
 REPO = HERE.parent.parent
 sys.path.insert(0, str(REPO / "prismpath-hw"))
-import ppt_compile as pc  # noqa: E402
+from prismpath.kernel import ppt_compile as pc  # noqa: E402
 
 PPT_MAGIC = 0x4D545050
 INTERP = REPO / "prismpath-ebpf" / "interp"

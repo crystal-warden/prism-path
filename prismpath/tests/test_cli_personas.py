@@ -15,7 +15,9 @@ def test_every_command_in_exactly_one_group():
     registered = _registered(parser)
     grouped = [name for _, names in cli.PERSONAS for name in names]
     assert len(grouped) == len(set(grouped)), "a command is listed under two personas"
-    assert set(grouped) == registered, {"unlisted": registered - set(grouped), "unregistered": set(grouped) - registered}
+    listed = set(grouped) | set(cli.WITHDRAWN_COMMANDS)
+    assert listed == registered, {"unlisted": registered - listed, "unregistered": listed - registered}
+    assert not set(grouped) & set(cli.WITHDRAWN_COMMANDS), "a withdrawn command is still advertised"
 
 
 def test_help_is_grouped():

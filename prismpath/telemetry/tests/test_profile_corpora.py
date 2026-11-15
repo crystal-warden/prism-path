@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """The wire profile corpora (receipt_stream, replay, refresh, concentrator) are what the Python modules do,
-frozen. Regenerating them from the live reference must reproduce the committed files,
-so a change to a profile shows up as a diff; if it is intended, run
+frozen. Regenerating them from the live reference must reproduce the committed files and the Rust crate's
+byte identical copies, so a change to a profile shows up as a diff; if it is intended, run
 telemetry/gen_profile_corpora.py and review that diff, which is the profile change. The Rust crate replays
 the same files (prismpath-telemetry-rs/tests/test_receipts.rs, test_replay.rs, test_refresh.rs,
 test_concentrator.rs). The frozen receipts.json stays as adopted."""
@@ -36,6 +36,12 @@ def test_the_committed_corpora_are_what_the_reference_does_now():
         assert json.loads(json.dumps(live[f"{name}.json"])) == committed, (
             f"{name}.json no longer matches the Python module; if the change is intended, run "
             f"telemetry/gen_profile_corpora.py and commit the diff")
+
+
+@pytest.mark.cross_language
+def test_the_crate_copies_are_byte_identical():
+    for name in NAMES + ("receipts",):
+        assert (REPO / "prismpath-telemetry-rs" / "tests" / "fixtures" / f"{name}.json").read_bytes() == (CONFORMANCE / f"{name}.json").read_bytes()
 
 
 def test_the_corpora_cover_what_the_profiles_refuse():

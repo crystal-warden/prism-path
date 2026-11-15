@@ -157,6 +157,7 @@ def _rust_functions(text):
     return out
 
 
+@pytest.mark.cross_language
 def test_no_rust_function_that_reads_or_writes_plain_json_also_hashes():
     users, violations = set(), []
     for top in ("prismpath-rs", "prismpath-hotswap-rs", "prismpath-telemetry-rs", "prismpath-preflight"):

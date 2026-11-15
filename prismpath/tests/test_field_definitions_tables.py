@@ -22,7 +22,7 @@ from prismpath.tests._repo import repo_file
 
 _hw = repo_file("prismpath-hw")
 sys.path.insert(0, str(_hw))
-import ppt_compile as pc  # noqa: E402
+from prismpath.kernel import ppt_compile as pc  # noqa: E402
 
 CORPUS = json.loads(repo_file("prismpath", "portable", "conformance", "field_definitions.json").read_text())
 ACCEPTED = [policy for policy in CORPUS["policies"] if policy["accepted"]]

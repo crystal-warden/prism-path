@@ -10,7 +10,7 @@ use prismpath_rs::canon2::{self, Doc};
 use serde_json::Value;
 
 fn corpus() -> Value {
-    let text = std::fs::read_to_string("../prismpath/portable/conformance/canon2.json").expect("read canon2.json");
+    let text = std::fs::read_to_string(format!("{}/tests/fixtures/canon2.json", env!("CARGO_MANIFEST_DIR"))).expect("read canon2.json");
     serde_json::from_str(&text).expect("parse canon2.json")
 }
 

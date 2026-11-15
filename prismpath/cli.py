@@ -8,6 +8,18 @@ import sys
 from prismpath.kernel.parser import parse_file
 from prismpath.kernel.engine import run
 from prismpath.kernel import analysis
+# `compile` bundles the standalone JavaScript engine, which only the research repository carries. The
+# module that does it is excluded from the product repository's export, so there the command is
+# registered only so an explicit call fails with a clear message.
+try:
+    from prismpath import bundle_compile
+except ImportError:
+    bundle_compile = None
+
+# Commands registered so an explicit call fails with a clear message, but withdrawn from every persona
+# group and from the grouped help because this distribution cannot perform them.
+WITHDRAWN_COMMANDS = () if bundle_compile else ("compile",)
+
 # The four people who touch a PrismPath deployment, and the commands that are theirs. The help text
 # is grouped by this table instead of one flat list; tests/test_cli_personas.py keeps every registered
 # subcommand in exactly one group.
@@ -15,8 +27,8 @@ PERSONAS = (
     ("Process owner: author and test the policy of record",
      ("init", "validate", "test", "graph", "lint", "context")),
     ("Engineer: implement the interface once, calibrate for deployment, deliver",
-     ("contract", "capability", "compile", "portable", "lock", "verify", "plugins", "ci-report", "lsp", "import",
-      "calibrate", "label", "annotate", "kappa", "centroids", "authorize", "canonicalize")),
+     ("contract", "capability") + (() if WITHDRAWN_COMMANDS else ("compile",)) + (
+      "portable", "lock", "verify", "plugins", "ci-report", "lsp", "import", "calibrate", "label", "annotate", "kappa", "centroids", "authorize", "canonicalize")),
     ("Operator: run the system day to day, swap and attest policy (Mission Control is the console; this is the scripted path)",
      ("run", "resume", "compose", "swap", "trail")),
     ("Assessor: anchor, verify, and read the evidence",
@@ -143,17 +155,27 @@ def _add_engineer_commands(subparsers) -> None:
                                  help='emit the per-node schemas as JSON (constrained-decoding grammar)')
     contract_parser.set_defaults(func=contract_cmd)
 
-    compile_parser = subparsers.add_parser(
-        'compile', help='Compile a flow and its lock into a single-file portable JS bundle')
-    compile_parser.add_argument('flow_md', type=str, help='Path to the flow markdown file')
-    compile_parser.add_argument('--tier', choices=['p0', 'p1'], required=True,
-                                help='portability tier to compile (p0: ML-free, p1: embedded locked vectors)')
-    compile_parser.add_argument('--out', default=None, help='output path for the .mjs bundle (default: <flow>.bundle.mjs)')
-    compile_parser.set_defaults(func=compile_cmd)
+    if bundle_compile:
+        compile_parser = subparsers.add_parser(
+            'compile', help='Compile a flow and its lock into a single-file portable JS bundle')
+        compile_parser.add_argument('flow_md', type=str, help='Path to the flow markdown file')
+        compile_parser.add_argument('--tier', choices=['p0', 'p1'], required=True,
+                                    help='portability tier to compile (p0: ML-free, p1: embedded locked vectors)')
+        compile_parser.add_argument('--out', default=None, help='output path for the .mjs bundle (default: <flow>.bundle.mjs)')
+        compile_parser.set_defaults(func=bundle_compile.compile_cmd)
+    else:
+        # `compile` built a single file JavaScript bundle around the standalone JS engine, which this
+        # distribution does not carry. The name stays registered, out of the grouped help, so an explicit
+        # call fails with a clear message and a nonzero exit instead of an argparse "invalid choice".
+        compile_parser = subparsers.add_parser('compile', help=argparse.SUPPRESS)
+        compile_parser.add_argument('flow_md', nargs='?', default=None)
+        compile_parser.add_argument('--tier', default=None)
+        compile_parser.add_argument('--out', default=None)
+        compile_parser.set_defaults(func=compile_unavailable_cmd)
 
     portable_parser = subparsers.add_parser(
         'portable', help='Is this flow (and its @spawn children) in the ML-free portable subset? '
-                         'Portable flows run on portable/prismpath.mjs - browser/edge/appliance')
+                         'Portable flows run on any conformant kernel, the Rust crate included')
     portable_parser.add_argument('flow_md', type=str, help='Path to the flow markdown file')
     portable_parser.add_argument('--json', action='store_true', help='machine-readable findings')
     portable_parser.set_defaults(func=portable_cmd)
@@ -1268,7 +1290,7 @@ def plugins_cmd(args) -> int:
 
 def portable_cmd(args) -> int:
     """Report the flow's portability TIER - for the whole composition tree (`@spawn` children
-    included). P0 = ML-free (runs on portable/prismpath.mjs anywhere); P1 = all reachable semantic
+    included). P0 = ML-free (runs on any conformant kernel, the Rust crate included); P1 = all reachable semantic
     edges are pinned in the lockfile, so routing needs only an outcome-side embedder (ONNX-able -
     appliance/edge); P2 = semantic edges not fully locked (full stack). Exit 0 iff P0 (unchanged
     contract: "portable" means the ML-free subset)."""
@@ -1286,7 +1308,7 @@ def portable_cmd(args) -> int:
         return 0 if tree["tier"] == "P0" else 1
     blurb = {
         "P0": "P0 ✅  - every reachable edge is decidable (when/error/event); no ML runtime needed. "
-              "Runs on portable/prismpath.mjs (browser/edge/appliance).",
+              "Runs on any conformant kernel (the Rust crate in this distribution, or an edge appliance).",
         "P1": "P1 🔒  - semantic edges present, ALL pinned in the lockfile: routing needs only an "
               "outcome-side embedder at runtime (ONNX-able). Appliance/edge-deployable with the lock.",
         "P2": "P2      - semantic edges not fully covered by a lock; needs the full engine "
@@ -1309,161 +1331,17 @@ def portable_cmd(args) -> int:
     return 0 if tree["tier"] == "P0" else 1
 
 
-def _gather_compile_inputs(flow_md_path: str, target_tier: str):
-    """Gather and validate inputs for compiling a JS bundle."""
-    from prismpath.kernel.parser import parse_file
-    from prismpath.kernel import analysis
-    from prismpath.routing import lockfile
-    import base64
+def compile_unavailable_cmd(args) -> int:
+    """Refuse the JavaScript bundle compile: the engine it bundles is not in this distribution.
 
-    parsed_graph = parse_file(flow_md_path)
-    tier_tree = analysis.portability_tier_tree(parsed_graph, flow_md_path)
-    flow_tier = tier_tree["tier"]
-
-    if target_tier == "p0" and flow_tier != "P0":
-        print(f"✗ Flow is not P0 (current tier: {flow_tier}). It has semantic edges. "
-              f"Please rewrite them as deterministic 'when' predicates to compile for P0, "
-              f"or compile for P1.")
-        return None
-
-    if target_tier == "p1" and flow_tier == "P2":
-        print(f"✗ Flow has unlocked semantic edges (current tier: P2). "
-              f"Please run `prismpath lock {flow_md_path}` first to commit routing vectors, "
-              f"or rewrite them to compile for P0.")
-        return None
-
-    embedded_lock_js = "null"
-    lock_data = {}
-    compressed_conditions = {}
-    if target_tier == "p1":
-        import numpy as numpy_module
-        lock_file_path = lockfile.lock_path(flow_md_path)
-        if not os.path.exists(lock_file_path):
-            print(f"✗ Lockfile missing: {lock_file_path}. Please run `prismpath lock {flow_md_path}` first.")
-            return None
-        try:
-            lock_data = lockfile.load_lock(lock_file_path)
-        except Exception as lock_exception:
-            print(f"✗ Failed to load lockfile {lock_file_path}: {lock_exception}")
-            return None
-
-        for condition_str, f32_b64 in lock_data.get("conditions", {}).items():
-            f32_bytes = base64.b64decode(f32_b64)
-            array_f32 = numpy_module.frombuffer(f32_bytes, dtype="<f4").astype(numpy_module.float32)
-            array_f16 = array_f32.astype(numpy_module.float16)
-            compressed_conditions[condition_str] = base64.b64encode(array_f16.tobytes()).decode("ascii")
-
-        embedded_lock_js = json.dumps({
-            "delta": lock_data.get("delta", 0.05),
-            "conditions": compressed_conditions
-        }, indent=2)
-
-    package_directory = os.path.dirname(os.path.abspath(__file__))
-    kernel_path = os.path.join(package_directory, "portable", "prismpath.mjs")
-    try:
-        with open(kernel_path, "r", encoding="utf-8") as file_handle:
-            js_kernel = file_handle.read()
-    except Exception as file_exception:
-        print(f"✗ Failed to read JS kernel from {kernel_path}: {file_exception}")
-        return None
-
-    nodes_dict = {}
-    for node_name, node_obj in parsed_graph.nodes.items():
-        nodes_dict[node_name] = {
-            "name": node_name,
-            "instruction": node_obj.instruction,
-            "terminal": node_obj.terminal,
-            "annotations": node_obj.annotations,
-            "edges": node_obj.edges
-        }
-    parsed_graph_js = json.dumps({
-        "name": parsed_graph.name,
-        "start": parsed_graph.start,
-        "nodes": nodes_dict
-    }, indent=2)
-
-    lock_info = {
-        "lock_data": lock_data,
-        "compressed_conditions": compressed_conditions
-    }
-    return js_kernel, parsed_graph_js, embedded_lock_js, lock_info
-
-
-BUNDLE_ENGINE_FILE = "bundle_engine.mjs"
-# The engine source is a real module that imports the kernel; the bundle inlines the kernel instead,
-# so the import between these markers is dropped on the way in. The markers are the whole contract
-# between the compiler here and portable/bundle_engine.mjs (test_compile asserts both sides of it).
-BUNDLE_STRIP_BEGIN = "// prismpath-bundle-strip-begin"
-BUNDLE_STRIP_END = "// prismpath-bundle-strip-end"
-
-
-def _read_bundle_engine() -> str:
-    """Read portable/bundle_engine.mjs and drop the import of the kernel the bundle inlines."""
-    engine_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "portable", BUNDLE_ENGINE_FILE)
-    with open(engine_path, "r", encoding="utf-8") as file_handle:
-        engine_source = file_handle.read()
-    begin_index = engine_source.find(BUNDLE_STRIP_BEGIN)
-    end_index = engine_source.find(BUNDLE_STRIP_END)
-    if begin_index < 0 or end_index < begin_index:
-        raise RuntimeError(f"{engine_path} is missing its bundle strip markers")
-    end_of_line = engine_source.find("\n", end_index)
-    return engine_source[:begin_index] + engine_source[end_of_line + 1:]
-
-
-def _build_compile_bundle(target_tier: str, js_kernel: str, parsed_graph_js: str, embedded_lock_js: str) -> str:
-    """Assemble the standalone JS bundle containing kernel and serialized graph."""
-    bundle_parts = []
-    bundle_parts.append(f"// Auto-generated by prismpath compile --tier {target_tier}")
-    bundle_parts.append("// Single-file portable JS bundle ready for Node/Browser.\n")
-    bundle_parts.append(js_kernel)
-    bundle_parts.append(f"\nexport const GRAPH = {parsed_graph_js};\n")
-    bundle_parts.append(f"export const EMBEDDED_LOCK = {embedded_lock_js};\n")
-
-    bundle_parts.append(_read_bundle_engine())
-    # The engine takes the graph and the lock as arguments, so the bundle binds its own to the
-    # runFlow(agent, opts) entry point that compiled bundles have always exported.
-    bundle_parts.append(
-        "\nexport function runFlow(agent, opts = {}) {\n"
-        "  return runCompiled(GRAPH, EMBEDDED_LOCK, agent, opts);\n"
-        "}\n")
-    return "\n".join(bundle_parts)
-
-
-def _b64_decoded_size(vector_b64: str) -> int:
-    """The number of bytes a base64 payload decodes to, exactly. Three quarters of the encoded
-    length counts the padding as data, which is what turned the compile report's KB figure into an
-    estimate printed as a measurement."""
-    text = vector_b64.strip()
-    return len(text) * 3 // 4 - text.count("=")
-
-
-def _write_compile_output(out_path: str, bundle_code: str, flow_md_path: str, target_tier: str, lock_info: dict) -> int:
-    """Write the compiled bundle code to disk and print status feedback."""
-    with open(out_path, "w", encoding="utf-8") as file_handle:
-        file_handle.write(bundle_code)
-
-    f32_size = 0
-    f16_size = 0
-    if target_tier == "p1":
-        lock_data = lock_info.get("lock_data", {})
-        compressed_conditions = lock_info.get("compressed_conditions", {})
-        f32_size = sum(_b64_decoded_size(vector_b64) for vector_b64 in lock_data.get("conditions", {}).values())
-        f16_size = sum(_b64_decoded_size(vector_b64) for vector_b64 in compressed_conditions.values())
-
-    saving_message = f" (lock vectors compressed f32 -> f16: {f32_size/1024:.1f}KB -> {f16_size/1024:.1f}KB)" if target_tier == "p1" else ""
-    print(f"✓ compiled {flow_md_path} to {out_path}{saving_message}")
-    return 0
-
-
-def compile_cmd(args) -> int:
-    """Compile the flow and its lock into a single-file portable JS bundle."""
-    gathered_inputs = _gather_compile_inputs(args.flow_md, args.tier)
-    if gathered_inputs is None:
-        return 1
-    js_kernel, parsed_graph_js, embedded_lock_js, lock_info = gathered_inputs
-    bundle_code = _build_compile_bundle(args.tier, js_kernel, parsed_graph_js, embedded_lock_js)
-    out_path = args.out or (os.path.splitext(args.flow_md)[0] + ".bundle.mjs")
-    return _write_compile_output(out_path, bundle_code, args.flow_md, args.tier, lock_info)
+    The research repository carries the standalone JavaScript kernel and the bundle compiler. Here the
+    portable subset is still checked by `prismpath portable`, and a Level M flow compiles to a table
+    image with `python -m prismpath.kernel.ppt_compile`."""
+    print("prismpath compile is not available in this distribution: the standalone JavaScript engine "
+          "it bundles is not shipped. Use `prismpath portable` to check the portable subset, or "
+          "`python -m prismpath.kernel.ppt_compile` for a Level M table image. The bundle compiler "
+          "lives in the research repository, crystal-warden/prism-path.", file=sys.stderr)
+    return 2
 
 
 def compose_cmd(args) -> int:

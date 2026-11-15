@@ -28,11 +28,10 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent.parent
 sys.path.insert(0, str(REPO))
-sys.path.insert(0, str(REPO / "prismpath-hw"))
 
 from prismpath import canon  # noqa: E402
 from prismpath.hotswap import policy_pack as pp  # noqa: E402
-import ppt_compile as pc                         # noqa: E402
+from prismpath.kernel import ppt_compile as pc   # noqa: E402
 
 OUT = HERE / "conformance" / "hotswap.json"
 

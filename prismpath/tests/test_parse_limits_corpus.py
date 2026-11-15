@@ -1,11 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """The parse limits corpus (conformance/parse_limits.json) is what portable/gen_parse_limits_fixtures.py writes
-from prismpath.kernel.parser now, and the committed vectors hold a document exactly at each cap and one over it, for the size, the nodes and the edges, and the default caps
+from prismpath.kernel.parser now, the Rust crate carries a byte identical copy, and the committed vectors hold
+a document exactly at each cap and one over it, for the size, the nodes and the edges, and the default caps
 as well. The crate replays every case (prismpath-rs/tests/test_parse_limits.rs)."""
 import importlib.util
 import json
 from pathlib import Path
+
+import pytest
 
 REPO = Path(__file__).resolve().parents[2]
 PORTABLE = REPO / "prismpath" / "portable"
@@ -26,6 +29,12 @@ def test_the_corpus_is_what_the_generator_writes_now():
     text = json.dumps(_generator().generate(), indent=1, sort_keys=True, ensure_ascii=False) + "\n"
     committed = (PORTABLE / "conformance" / "parse_limits.json").read_text(encoding="utf-8")
     assert committed == text, "parse_limits.json is stale; run python -m prismpath.portable.gen_parse_limits_fixtures"
+
+
+@pytest.mark.cross_language
+def test_the_corpus_is_copied_into_the_crate():
+    committed = (PORTABLE / "conformance" / "parse_limits.json").read_text(encoding="utf-8")
+    assert (REPO / "prismpath-rs" / "tests" / "fixtures" / "parse_limits.json").read_text(encoding="utf-8") == committed
 
 
 def test_each_cap_has_a_case_at_it_and_a_case_over_it():

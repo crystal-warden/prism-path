@@ -1,0 +1,97 @@
+{
+ "format": "PPT",
+ "version": 1,
+ "max_steps": 25,
+ "fields": {
+  "passed": 0,
+  "coverage": 1
+ },
+ "intern": {
+  "": 0
+ },
+ "atoms": [
+  {
+   "i": 0,
+   "field": "passed",
+   "op": "truthy",
+   "type": "none",
+   "val": 0
+  },
+  {
+   "i": 1,
+   "field": "coverage",
+   "op": ">=",
+   "type": "int",
+   "val": 80
+  }
+ ],
+ "start": 0,
+ "colors_present": false,
+ "stateful": false,
+ "migration": null,
+ "safe_node": null,
+ "wcet_cycles": 13,
+ "nodes": [
+  {
+   "i": 0,
+   "name": "gate",
+   "color": 0,
+   "edges": [
+    {
+     "target": 1,
+     "condition": "when passed and coverage >= 80",
+     "program": [
+      "ATOM 0",
+      "ATOM 1",
+      "AND"
+     ]
+    },
+    {
+     "target": 2,
+     "condition": "when passed",
+     "program": [
+      "ATOM 0"
+     ]
+    },
+    {
+     "target": 3,
+     "condition": "else",
+     "program": [
+      "TRUE"
+     ]
+    }
+   ]
+  },
+  {
+   "i": 1,
+   "name": "ship",
+   "color": 0,
+   "edges": []
+  },
+  {
+   "i": 2,
+   "name": "low_coverage",
+   "color": 0,
+   "edges": []
+  },
+  {
+   "i": 3,
+   "name": "triage",
+   "color": 0,
+   "edges": []
+  },
+  {
+   "i": 4,
+   "name": "error_hold",
+   "color": 0,
+   "edges": []
+  }
+ ],
+ "host_side_edges": [
+  {
+   "node": "gate",
+   "target": "error_hold",
+   "condition": "on error"
+  }
+ ]
+}
