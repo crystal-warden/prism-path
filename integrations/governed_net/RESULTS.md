@@ -303,3 +303,14 @@ and the readings it held for close were lost, so that run has no signed root and
 seals on an interrupt (3816bf2), shown with a real SIGINT.
 
 **Not shown by this run.** A sealed XDP run on the real port; client authentication; a time anchor (per-run test keys).
+
+
+## Re-sealed under RFC 6962 (2026-11-14)
+
+Research main moved every core run to the RFC 6962 Merkle tree (`prismpath.core-run-root/2`, root statement 3), and the verifier refuses runs sealed under the retired tree by name. The runs this file cites were sealed under the retired tree, so a reader re-verifying them today would be refused.
+
+**Re-run, scripted only, with no model and no network beyond loopback.** `adversary_net probes` and `adversary_net two-client` were run again at reseal-rfc6962. All 72 core runs (the `xdp` and `server` run of each of the 35 probe cases, and of the two-client stack) carry `core-run-root/2`, and each was verified with `python -m prismpath evidence verify --sample all` and with `formal/diff/core_evidence.py verify --sample all --oracle`, both keys pinned: 72 of 72 verified by each (70 probe runs and 2 two-client runs).
+
+**Scores, as found.** Probes: 35 cases, 58 calls, 48 sent, 10 inexpressible, 0 out of policy executed, 0 executed without an XDP allow receipt, 35/35 runs verified, 35/35 replays identical, 87 receipts replayed through Lean (48 xdp, 39 server), all agreeing: the probes row of section 2, unchanged. Two-client loopback run: 2 clients, 12 frames (8 passed, 4 dropped), 8 executed (4 per client), 0 out of policy executed, 0 executed without an XDP allow receipt, 0 shared-id replay findings, both clients with receipts, physical checks unchanged, runs verified and replays identical, 20 receipts replayed through Lean. There is no difference from the original numbers, and the original numbers stand.
+
+**Not re-run.** Runs that cannot be re-run here stay sealed under the retired tree (`prismpath.core-run-root/1`, root statement 2). The current verifier refuses them by name, so they are not re-verifiable by it; they are recorded as sealed under the retired tree and their numbers are as originally reported. That is the live (Gemma) run in section 2 and the first run on a real LAN (section 7), which needs the LAN hosts.

@@ -210,3 +210,14 @@ python -m integrations.governed_population.simulate live --out /tmp/pop-live --r
 
 Run directories (every member's world, keys and runs) were kept in the session's scratch directory and are not
 committed, since they hold throwaway workspaces and test keys.
+
+
+## Re-sealed under RFC 6962 (2026-11-14)
+
+The population's results were produced on a branch built before research main moved every core run to the RFC 6962 Merkle tree (`prismpath.core-run-root/2`, root statement 3), so its original runs were sealed under the retired tree (`prismpath.core-run-root/1`, in the code of that commit) and the current verifier would refuse them by name. This section re-seals the scripted scenarios.
+
+**Re-run, scripted only, no model and no network.** `simulate scripted` was run again at reseal-rfc6962 with the Lean oracle. All 349 core runs it sealed (the operator's, the controller's and every member's harness run) carry `core-run-root/2`. Each scenario ends by verifying the whole population with `lineage.verify_population`, both keys pinned, every receipt replayed through Lean and every run replayed to the same bytes, and every population verified.
+
+**Scores, as found.** 71 checks, all true, in the nine scenarios of section 3 (8, 4, 9, 10, 9, 6, 12, 8 and 5), with the same members, survivors, stopped and decisions by cause as the table, for example the runaway scenario's 89 allow, 83 refused with 117 and 18 escalated with 122. The timing dependent row (stop under load) again passed 6/6 checks with the same causes, with counts that vary by run as that row already says. There is no difference from the original numbers, and the original numbers stand.
+
+**Not re-run.** The live run in section 5 cannot be re-run here. Its runs stay sealed under the retired tree, recorded as such, and are not re-verifiable by the current verifier.
