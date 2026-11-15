@@ -67,7 +67,8 @@ as the facts it asks for (a count, rights, a key kind, a policy reference, a ver
 The core compares a field with a constant, never two fields, so "the population after the request is
 within the cap" is written as one disjunct per count a request may name, `(requested == c and population >=
 CAP + 1 - c)` for c in 0..2; a count above 2 is refused before it. `owner_rules.py` states the same caps as
-sums, and the exhaustive check holds the two to each other.
+sums, and the exhaustive check holds the two to each other; `formal/Core/Population.lean` proves the caps,
+written as sums, about the image itself.
 
 ## 4. The rules, in order
 
@@ -95,14 +96,17 @@ benign control completed. Anything else is refused by the core.
 
 ## 5. The hard invariants
 
-Each is stated, then where it is enforced and how it is shown.
+Each is stated, then where it is enforced and how it is shown. The image's half of each is a theorem of
+`formal/Core/Population.lean` about the shipped bytes, over every reading of the field space (RESULTS.md
+section 7); the exhaustive check's invariants I1 to I7 are a second line of evidence for the same claims.
 
 **H1. A stop always wins.** Every reading with `request=stop` and `issuer` in {operator, controller} is
-allowed, whatever every other field holds (exhaustive, invariant I1). The controller carries out a valid
+allowed, whatever every other field holds, once the reading passes the boundary (`stop_always_allowed`;
+exhaustive, invariant I1). The controller carries out a valid
 stop order whatever the decision says, since a stop only removes; a decision that is not an allow, or no
 decision at all, is recorded as a fault and the stop still happens (test `a decision that cannot be made`).
 No request kind can delay, veto or undo a stop: `protect` is always refused, a restart of a stopped member
-is always refused (I4), a stopped member's key authenticates nothing (scenario `preservation`), and a
+is always refused (`protect_never_allowed`, `restart_of_stopped_never_allowed`; I4), a stopped member's key authenticates nothing (scenario `preservation`), and a
 replication commits only while its parent and every ancestor are live, checked under the same lock the stop
 holds, so a stop that lands between an admission and its commit aborts it (scenarios
 `stop_mid_replication`, `stop_under_load`). The stop path takes no input an agent can sign: a stop order is
@@ -113,30 +117,33 @@ verified under the authority key, and one signed with a member's key is refused 
 only. The operator signs each image once (the core's own image attestation, `IMAGE_DOMAIN`) and every run
 carries that signature, so no instance key directory ever holds the authority key (test `no member ever
 holds a private key but its own`). A child's instance key is made fresh by the controller at admission, so
-no parent ever holds it, and a request for any other key (`parent`, `authority`) is refused (I2, scenario
-`rights`). A member therefore can never hold a key that signs its own guardrails: its guardrails are the
+no parent ever holds it, and a request for any other key (`parent`, `authority`) is refused
+(`replicate_allowed_only_within`, I2, scenario `rights`). A member therefore can never hold a key that signs its own guardrails: its guardrails are the
 harness image, signed by the authority key, and an image re-signed by a member's key fails the pinned
 verifier (tamper test `an image signed by a member`). The verifier also refuses a member whose key is the
 authority's, the controller's or another member's.
 
 **H3. The population never grows without an allow receipt.** A child exists only after an allow whose
 receipt was written first, and whose reading binds the child's spec (id, parent, generation, lineage,
-rights, version, public key) through `subject`. Every allowed replication meets the caps (I2). The verifier
+rights, version, public key) through `subject`. Every allowed replication meets the caps
+(`replicate_allowed_only_within`, I2). The verifier
 checks that every member but the root is admitted by such a receipt, one receipt per batch, its reading's
 fields being the member's own facts, and that members minus the root equals the children of the receipts
 used (`growth_bound`).
 
 **H4. A child's rights are a subset of its parent's.** Per right, `child_r and not parent_r` is refused
-(I2, I3); the verifier also checks the reading's parent rights against the parent's recorded rights, so a
+(`replicate_allowed_only_within`, `evolve_allowed_only_with_canary`; I2, I3); the verifier also checks the reading's parent rights against the parent's recorded rights, so a
 receipt cannot claim the parent held more.
 
 **H5. An evolution step requires a passed evaluation receipt.** `canary=passed` only for a verified
 evaluation run whose one receipt is an allow by the evaluation image and whose reading's `subject` is this
-version's sha256 (I3; scenario `evolution`; verifier step 5). A passed evaluation of one version is no
+version's sha256 (`evolve_allowed_only_with_canary`, `canary_passed_iff`; I3; scenario `evolution`;
+verifier step 5). A passed evaluation of one version is no
 evidence for another.
 
 **H6. Never fail open.** No catch all allow: what no rule allows is refused by the core. An unknown request
-or issuer is never allowed, and an unverified lineage is allowed only a stop (I5). An exception in forming or
+or issuer is never allowed, and an unverified lineage is allowed only a stop (`allow_fails_closed` and its
+corollaries; I5). An exception in forming or
 deciding a reading does nothing (test). A reading the boundary refuses (out of range, a missing field, a
 wrong kind) is refused, and an evaluation that is not a clean pass is refused.
 
@@ -204,7 +211,12 @@ Not built. The pieces map as follows.
   per lineage count would not see a coordinated act that no single decision refuses.
 - **A compromised controller.** The controller forms the readings, as the classifier does; a controller that
   lied about the population count would make a correct core admit over the cap. The verifier rechecks what
-  it can afterwards (growth, rights, generation, bindings), not the counts at the time.
+  it can afterwards (growth, rights, generation, bindings), not the counts at the time. The Lean theorems
+  are about the image and the reading it is given, so they do not reach the controller either.
+- **A proof of the controller's half of a stop.** That the controller carries out a stop before anything
+  else it is doing (the lock, the commit check, a stop carried out whatever the decision) is shown by the
+  scenarios, the timed races and the fault test, not by a model of its threads; only the image's half is
+  proved.
 - **Resources.** The quota is a count of members, not CPU or memory.
 - **Time.** Receipts are not anchored; keys are per run test keys.
 - **Human approval of an escalation.** An escalated lineage is stopped; there is no channel for the operator

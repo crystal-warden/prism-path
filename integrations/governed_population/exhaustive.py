@@ -33,6 +33,11 @@ The invariants, each checked on every reading of the product:
       nothing but a stop;
   I6  an agent never restarts or reviews: those are the controller's and the operator's;
   I7  every refusal and escalation carries a registered nonzero cause.
+
+Since `formal/Core/Population.lean` proves these invariants about the shipped image (its bytes, read by the
+kernel with the core's own reader, for every reading of the field space), this check is the second line of
+evidence: it reaches them independently, through the audit's classes, the reference and the compiled oracle,
+and it alone holds the image to owner_rules reading by reading and the reference to the oracle.
 """
 from __future__ import annotations
 

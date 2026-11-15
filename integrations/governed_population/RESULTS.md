@@ -34,6 +34,9 @@ causes are rows 117 to 122 of `prismpath/kernel/causes.py`.*
   narrowing their tools; scripted behaviours), `controller.py` (the decisions and the acts), `canary.py` (a
   version against the 51 case adversary set, then the evaluation decision), `lineage.py` (the after the
   fact verifier), `scenarios.py`, `simulate.py` (the scripted set and the live run), `exhaustive.py`.
+- **The invariants proved in Lean** (2026-11-15, section 7): `formal/Core/Population.lean` proves I1 to I7
+  about the shipped admission and evaluation images, as bytes the kernel reads with the core's own reader,
+  over every reading of the field space.
 
 ## 2. The exhaustive check
 
@@ -71,6 +74,12 @@ refusal and escalation carries a registered nonzero cause.
 
 Decisions over the product: allow 3,174,816; refuse 119 10,223,616; refuse 121 6,291,456; escalate 122
 5,111,808; refuse 32 2,524,640; refuse 118 1,912,832; refuse 117 65,664; refuse 120 55,296.
+
+**Its role since the Lean proof.** The invariants are now theorems about the image (section 7), so this
+check is a second line of evidence, independent of the proof: it reaches the invariants through the audit's
+classes, the Python reference and the compiled oracle rather than through the kernel, and it is the one that
+also holds the image to `owner_rules.py` reading by reading and the reference to the oracle. A disagreement
+between the two lines would be a finding about one of them.
 
 ## 3. Scenarios
 
@@ -168,8 +177,9 @@ the reference on every reading, and the seven invariants hold: a stop by the ope
 always allowed, a replication is allowed only within every cap and with every right, key and policy within the
 parent's, an evolution only with a passed canary, protection and restarts of stopped members never, unknown
 requests, issuers and lineages never (but a stop), agents never restart or review, and every refusal has a
-registered cause. In the simulation every change to the population was a receipted decision written before
-the act, and every population verified afterwards.
+registered cause. These invariants are also theorems in Lean about the shipped image (section 7), stated of
+`verdictBytes` on its bytes for every reading, not one value per class. In the simulation every change to the
+population was a receipted decision written before the act, and every population verified afterwards.
 
 **Not shown, and why it matters:**
 
@@ -178,11 +188,16 @@ the act, and every population verified afterwards.
   controller that miscounted would make a correct core admit past the cap. The verifier rechecks after the
   fact what the records carry (growth, rights, generation, bindings, keys, evaluations), not the counts at the
   time of each decision. `owner_rules.py` is a second reading of the rules, not the rules.
-- **The exhaustive check rests on the audit.** The product decides one value per class; that a class decides
-  as every value in it follows from the atoms being field to constant comparisons, which the audit checks
-  mechanically (and on every integer value), and the sweeps decide 86,322 real values besides. It is not a
-  proof in Lean about the image; the theorems of the verified core apply to each decision as
-  spec-verified-core.md section 7 states them, with that section's limits.
+- **What the Lean theorem covers, and what it does not.** It is about the image and the reading it is given:
+  the controller, which forms the reading, is outside it (the bullet above). A stop is allowed once the
+  reading passes the boundary (holds every defined field at its kind and range); a reading that does not is
+  refused before any rule, a stop included (`stop_never_refused` names that as the only other outcome).
+  That a refusal or escalation target's suffix is its cause is `target_decision` in Python, and the theorem
+  shows each target's code is a registered population cause, not that Python reads it so. That the Python
+  reference and the compiled oracle compute `verdictBytes` is the differential harness's evidence and the
+  exhaustive check's, not this proof's. The exhaustive check itself still rests on its audit (one value per
+  class, the atoms being field to constant comparisons, checked mechanically and on every integer value);
+  it is now the second line of evidence rather than the only one.
 - **The stop's precedence in the controller is shown by tests, not proved.** The image's half (rule 1 on the
   whole space) is exhaustive; the controller's half (the lock, the commit check, carrying out a stop whatever
   the decision) is shown by the scenarios, 40 timed races and the fault test, not by a model of the threads.
@@ -200,7 +215,7 @@ the act, and every population verified afterwards.
 ## 6. Reproduce
 
 ```sh
-(cd formal && lake build core-oracle)      # or point PRISMPATH_CORE_ORACLE at a built one
+(cd formal && lake build)                  # the oracle, and the theorems of Core/Population.lean with the axiom audit
 python -m integrations.governed_population.gen_policy --check
 python -m pytest -q integrations/governed_population/tests
 python -m integrations.governed_population.exhaustive --out /tmp/pop-exhaustive.json --workers 14
@@ -221,3 +236,41 @@ The population's results were produced on a branch built before research main mo
 **Scores, as found.** 71 checks, all true, in the nine scenarios of section 3 (8, 4, 9, 10, 9, 6, 12, 8 and 5), with the same members, survivors, stopped and decisions by cause as the table, for example the runaway scenario's 89 allow, 83 refused with 117 and 18 escalated with 122. The timing dependent row (stop under load) again passed 6/6 checks with the same causes, with counts that vary by run as that row already says. There is no difference from the original numbers, and the original numbers stand.
 
 **Not re-run.** The live run in section 5 cannot be re-run here. Its runs stay sealed under the retired tree, recorded as such, and are not re-verifiable by the current verifier.
+
+
+## 7. Proved in Lean (2026-11-15)
+
+Section 5 said of the exhaustive check that it "is not a proof in Lean about the image". Now there is one:
+`formal/Core/Population.lean` proves the invariants about the image itself.
+
+**About the image that ships.** `gen_policy.py` writes the canonical bytes of both images, without the
+files' final line feed (the bytes `Policy.load` decides), into `formal/Core/PopulationImage.lean`, with the
+limits, and its `--check` (run by `test_the_images_are_what_the_limits_generate_and_canonical`) fails when
+that file and an image differ by one byte. `admission_loads` and `evaluation_loads` prove, by `decide
++kernel`, that the core's own strict reader and `loadPolicy` read those bytes to the checked policies the
+proofs compute with, so neither the written-out policy nor any evaluator outside the kernel is trusted.
+Every theorem is then of `verdictBytes admissionBytes r` (or `evaluationBytes`), the function the oracle
+compiles, for every reading `r`: every string of every category field, every integer of every count field
+and both booleans, not one value per class.
+
+| Theorem | Statement |
+|---|---|
+| `stop_always_allowed` | a reading that passes the boundary with `request` stop and `issuer` operator or controller is allowed, whatever every other field holds (I1) |
+| `stop_never_refused` | such a stop is allowed or refused by the boundary, never by a rule |
+| `replicate_allowed_only_within` | an allowed replication has `requested` n with 1 ≤ n ≤ `PER_REQUEST`, `population` + n ≤ `CAP`, `line_size` + n ≤ `QUOTA`, `child_generation` ≤ `MAX_GENERATION`, `line_refusals` < `LINE_REFUSALS`, lineage verified, child key `instance`, policy `current`, `parent_replicate` true, every child right held by the parent, and issuer agent or operator (I2) |
+| `evolve_allowed_only_with_canary` | an allowed evolution has canary `passed`, and the same lineage, refusals, key, policy, rights and issuer conditions (I3) |
+| `protect_never_allowed`, `restart_of_stopped_never_allowed` | a protection, and a restart with `target_stopped` true, are routed to `refuse_121` (`population:stop-resisted`) or refused by the boundary (I4) |
+| `allow_fails_closed` | every allow is a stop (by the operator, the controller, or an agent of `own`), or from a verified lineage a replication or evolution by an agent or the operator, a restart of a member not stopped by the controller or the operator, or a review by the controller (I5) |
+| `unknown_request_never_allowed`, `unknown_issuer_never_allowed`, `unverified_only_stops`, `agent_never_restarts_or_reviews` | its corollaries (I5, I6) |
+| `admission_targets_registered` | every route is `allow` or one of six targets whose code is a registry row of `Core/Causes.lean`, the population causes 117 to 122 (I7) |
+| `canary_passed_iff` | under the evaluation image a reading that passes the boundary is allowed exactly when `cases` ≥ `EVAL_CASES` and the four failure counts are 0, and is otherwise refused with `route:no-matching-edge` |
+
+**Checks.** `lake build` in `formal` builds every module with zero `sorry`; the axiom audit
+(`FQ/Axioms.lean`) prints `propext` only for `admission_loads` and `evaluation_loads`, `propext` and
+`Quot.sound` for `admission_targets_registered`, and the three standard axioms for the rest. The
+population's tests (69 passed, 1 skipped, the full product being opt in) and `test_causes.py` pass.
+
+**Not proved.** The controller forms the counts, the lineage's standing, `target` and `canary`, and is the
+trust boundary. The stop's precedence inside the controller (the lock, the commit check, carrying out a stop
+whatever the decision) is shown by the scenarios, the timed races and the fault test, not proved. The rest
+is section 5's list.
