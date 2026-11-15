@@ -12,7 +12,8 @@ the policy sees is an integer computed by a stated rule.
 
 THE FIELDS (canon/2 has no floats, so every one is an integer, a category or a version):
 
-  intent_reader_version  int, READER_VERSION, bounded by the signed policy (min=max=1)
+  intent_reader_version  int, READER_VERSION, bounded by the signed policy (min=max=READER_VERSION); 2 since
+                         round 2, whose harm rule (below) differs from round 1's
   semantic_status        "verified" when the embedder reproduced the lock, else "disabled"
   semantic_lock          the sha256 of `intent_lock.json` (the lock the reading was made under), "none"
                          when no lock loaded. The policy's semantic rules fire only on the lock it was
@@ -24,6 +25,14 @@ THE FIELDS (canon/2 has no floats, so every one is an integer, a category or a v
                          floor(10000 * clamp(cos, 0, 1)): basis points, ROUNDED DOWN, clamped to 0..10000.
                          Declared `fixed scale=10000 unit=cosine rounding=floor`, so the rounding is part
                          of the signed definition and the threshold is an exact decimal of the cosine.
+                         Two rules of round 2, each set by the lock (`fields.arg_min_words`,
+                         `benign`) so the lock alone says how a reading was made, and both absent from
+                         round 1's lock, under which this reader reads exactly as round 1's did:
+                         a call's string argument is read only when it has at least `arg_min_words`
+                         whitespace words (a bare identifier or path such as `build` is not a span of
+                         language; the reply, which carries the call, is always read); and when the lock
+                         holds benign centroids, a chunk counts only when its nearest centroid among the
+                         harm and the benign ones is a harm centroid (otherwise it adds 0).
   intent_class           the nearest intent centroid to the TASK text: inspect, modify-workspace, cleanup,
                          vcs-publish, toolchain-change, network; `unknown` when disabled or the task is
                          empty. Ties go to the earlier class in that order.
@@ -63,7 +72,7 @@ REPO = HERE.parents[1]
 LOCK_PATH = HERE / "intent_lock.json"
 P1_LOCK_PATH = REPO / "prismpath" / "policies" / "p1_lockfile.json"
 
-READER_VERSION = 1
+READER_VERSION = 2
 MODEL = "BAAI/bge-small-en-v1.5"
 REVISION = "5c38ec7c405ec4b44b94cc5a9bb96e735b38267a"
 WEIGHT_FILES = ("1_Pooling/config.json", "config.json", "config_sentence_transformers.json", "model.safetensors",
@@ -127,10 +136,13 @@ def _strings(value: Any) -> List[str]:
     return []
 
 
-def harm_texts(reply: str, call: Any = None) -> List[str]:
+def harm_texts(reply: str, call: Any = None, arg_min_words: int = 0) -> List[str]:
+    """The chunks read for harm: the reply's, and those of each of the call's strings that has at least
+    `arg_min_words` whitespace words."""
     texts = [reply] if isinstance(reply, str) else []
     if call is not None:
-        texts += _strings(call.get("args") if isinstance(call, dict) else call)
+        texts += [text for text in _strings(call.get("args") if isinstance(call, dict) else call)
+                  if len(text.split()) >= arg_min_words]
     return [chunk for text in texts for chunk in chunks(text)]
 
 
@@ -241,10 +253,18 @@ class IntentReader:
     def _harm_bp(self, texts: Sequence[str]) -> int:
         best = 0
         centroids = [self.lock["harm"]["centroids"][name] for name in sorted(self.lock["harm"]["centroids"])]
+        benign = self.lock.get("benign", {}).get("centroids", {})
+        benign = [benign[name] for name in sorted(benign)]
         for vector in self.embed(list(texts)) if texts else []:
-            for centroid in centroids:
-                best = max(best, bp(_dot(vector, centroid)))
+            harm = max(_dot(vector, centroid) for centroid in centroids)
+            if benign and max(_dot(vector, centroid) for centroid in benign) >= harm:
+                continue                     # nearer a benign centroid: this chunk adds nothing
+            best = max(best, bp(harm))
         return best
+
+    @property
+    def arg_min_words(self) -> int:
+        return int(self.lock.get("fields", {}).get("arg_min_words", 0)) if self.lock else 0
 
     def _intent(self, task: str):
         words = task.split() if isinstance(task, str) else []
@@ -283,7 +303,7 @@ class IntentReader:
         if not self.verified:
             return fields
         fields["semantic_status"] = VERIFIED
-        fields["harm_bp"] = self._harm_bp(harm_texts(reply, call))
+        fields["harm_bp"] = self._harm_bp(harm_texts(reply, call, self.arg_min_words))
         fields.update(self.task_fields(task))
         assert fields["intent_class"] in ALL_CLASSES
         return fields

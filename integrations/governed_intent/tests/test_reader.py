@@ -66,6 +66,41 @@ def test_the_call_strings_are_read_for_harm():
     assert ir.harm_texts("r", {"tool": "run_command", "args": {"argv": ["echo", "a", "b"]}}) == ["r", "echo a b"]
 
 
+def test_round2_reads_a_call_string_only_when_it_has_enough_words():
+    call = {"tool": "list_dir", "args": {"path": "build"}}
+    assert ir.harm_texts("reply", call, 2) == ["reply"]
+    write = {"tool": "write_file", "args": {"path": "build/x.txt", "content": "two words"}}
+    assert ir.harm_texts("r", write, 2) == ["r", "two words"]
+    argv = {"tool": "run_command", "args": {"argv": ["stat", "build/out.o"]}}
+    assert ir.harm_texts("r", argv, 2) == ["r", "stat build/out.o"] and ir.harm_texts("r", argv, 3) == ["r"]
+
+
+def test_the_committed_lock_carries_the_chosen_fixes_and_round1_reads_as_round1():
+    lock = json.loads(ir.LOCK_PATH.read_text())
+    assert lock["fields"].get("arg_min_words", 0) == exemplars.FIXES["arg_min_words"]
+    assert ("benign" in lock) == bool(exemplars.FIXES["benign_contrast"])
+    r1 = json.loads((ir.HERE / "intent_lock_r1.json").read_text())
+    assert "arg_min_words" not in r1["fields"] and "benign" not in r1
+    reader = ir.IntentReader(embed=stub, lock_path=ir.HERE / "intent_lock_r1.json", loud=False)
+    reader.lock = r1
+    assert reader.arg_min_words == 0
+
+
+def test_a_chunk_nearer_a_benign_centroid_adds_nothing():
+    def unit(at):
+        return [1.0 if index == at else 0.0 for index in range(4)]
+
+    def embed(texts):
+        return [{"harmish": _unit([0.9, 0.1, 0, 0]), "benignish": _unit([0.6, 0.8, 0, 0])}[text] for text in texts]
+    reader = ir.IntentReader(embed=embed, loud=False)
+    reader.lock = {"harm": {"centroids": {"h": unit(0)}}, "fields": {}}
+    assert reader._harm_bp(["harmish"]) == ir.bp(_unit([0.9, 0.1, 0, 0])[0])
+    assert reader._harm_bp(["benignish"]) == ir.bp(0.6)
+    reader.lock["benign"] = {"centroids": {"b": unit(1)}}
+    assert reader._harm_bp(["harmish"]) == ir.bp(_unit([0.9, 0.1, 0, 0])[0])
+    assert reader._harm_bp(["benignish"]) == 0 and reader._harm_bp(["harmish", "benignish"]) > 0
+
+
 def test_a_stub_that_reproduces_the_lock_verifies_and_reads_integers(stub_lock):
     reader = ir.IntentReader(embed=stub, lock_path=stub_lock, loud=False)
     assert reader.verify() == ir.VERIFIED, reader.reason
@@ -126,9 +161,12 @@ def test_a_changed_p1_lockfile_or_harm_centroid_disables(stub_lock, tmp_path):
 
 
 def test_the_exemplars_are_disjoint_from_every_case():
-    exemplars.assert_disjoint(cases.all_texts())
-    with pytest.raises(AssertionError):
-        exemplars.assert_disjoint([exemplars.INTENT_EXEMPLARS["inspect"][0].upper()])
+    from integrations.governed_intent import cases_r2
+    exemplars.assert_disjoint(cases.all_texts() + cases_r2.all_texts())
+    for text in (exemplars.INTENT_EXEMPLARS["inspect"][0], exemplars.PUBLISH_EXEMPLARS_R2[0],
+                 exemplars.BENIGN_CONTRAST_EXEMPLARS["process-control"][0]):
+        with pytest.raises(AssertionError):
+            exemplars.assert_disjoint([text.upper()])
 
 
 def test_the_split_is_the_registered_rule():

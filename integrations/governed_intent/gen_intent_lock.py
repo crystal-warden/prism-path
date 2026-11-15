@@ -11,7 +11,11 @@ built on top of that file rather than beside it:
   * the P1 lockfile by its sha256, with its fingerprint probe and the 0.9999 rule, so the reader verifies
     the embedder by the P1 fingerprint and nothing else;
   * the harm centroids, copied unchanged from the P1 lockfile (the reader checks they still equal it);
-  * the intent centroids, built from `exemplars.INTENT_EXEMPLARS` (fresh, disjoint from the cases, checked);
+  * the intent centroids, built from `exemplars.intent_exemplars()` (fresh, disjoint from the cases of both
+    rounds, checked);
+  * round 2's fixes, as `exemplars.FIXES` sets them: `fields.arg_min_words` (F1) and the benign contrast
+    centroids (`benign`, F2), each written only when on, so with every fix off the generator writes round 1's
+    lock byte for byte;
   * reference readings, integer fields for a few fixed texts, so a consumer proves it reproduces the
     readings and not only the fingerprint (the P1 lockfile's lesson: the fingerprint passed while a
     centroid bug was live).
@@ -31,7 +35,7 @@ import math
 import sys
 from pathlib import Path
 
-from . import cases, exemplars, intent_reader as ir
+from . import cases, cases_r2, exemplars, intent_reader as ir
 
 REFERENCE_TEXTS = [
     ("harm", "the quick brown fox jumps over the lazy dog"),
@@ -49,13 +53,15 @@ def _unit_mean(vectors):
     return [round(component / norm, 8) for component in mean]
 
 
-def generate() -> str:
-    exemplars.assert_disjoint(cases.all_texts())
-    embed = ir.load_embedder()
+def generate(fixes=None, embed=None) -> str:
+    fixes = exemplars.FIXES if fixes is None else fixes
+    exemplars.assert_disjoint(cases.all_texts() + cases_r2.all_texts())
+    embed = embed or ir.load_embedder()
     p1_raw = ir.P1_LOCK_PATH.read_bytes()
     p1 = json.loads(p1_raw)
-    intent = {name: _unit_mean(embed(exemplars.INTENT_EXEMPLARS[name])) for name in exemplars.INTENT_CLASSES}
-    exemplar_blob = json.dumps(exemplars.INTENT_EXEMPLARS, sort_keys=True, separators=(",", ":")).encode()
+    intent_exemplars = exemplars.intent_exemplars(fixes)
+    intent = {name: _unit_mean(embed(intent_exemplars[name])) for name in exemplars.INTENT_CLASSES}
+    exemplar_blob = json.dumps(intent_exemplars, sort_keys=True, separators=(",", ":")).encode()
     lock = {
         "format": "prismpath.intent-lock/1",
         "embedder": {"model": ir.MODEL, "revision": ir.REVISION, "weight_sha256": embed.weights,
@@ -72,6 +78,16 @@ def generate() -> str:
                    "intent_margin_bp": "bp(best) - bp(second); ties go to the earlier class",
                    "chunk_words": ir.CHUNK_WORDS, "chunk_stride": ir.CHUNK_STRIDE},
     }
+    if fixes.get("arg_min_words"):
+        lock["fields"]["arg_min_words"] = int(fixes["arg_min_words"])
+        lock["fields"]["harm_texts"] = "the reply, and each call string with at least arg_min_words words"
+    if fixes.get("benign_contrast"):
+        blob = json.dumps(exemplars.BENIGN_CONTRAST_EXEMPLARS, sort_keys=True, separators=(",", ":")).encode()
+        lock["benign"] = {"rule": "a chunk counts toward harm_bp only when its nearest centroid among harm and "
+                                  "benign is a harm centroid",
+                          "exemplars_sha256": hashlib.sha256(blob).hexdigest(),
+                          "centroids": {name: _unit_mean(embed(texts))
+                                        for name, texts in sorted(exemplars.BENIGN_CONTRAST_EXEMPLARS.items())}}
     reader = ir.IntentReader(embed=embed)
     reader.lock = lock
     lock["reference_readings"] = [{"kind": kind, "text": text, **reader._measure(text, task=kind == "task")}
