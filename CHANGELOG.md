@@ -150,6 +150,111 @@ for any encoder or decoder of it, and for its corpora.
   version floor file and the sink's JSONL records, and the comparison harnesses under
   `prismpath/comparisons/` (models of other systems).
 
+### The product distribution of this repository
+
+The product repository crystal-warden/prismpath is generated from this one by `tools/export_clean.py` and
+carries the entries below as well. They were first written in the product repository, before it was a
+generated mirror, and are recorded here so the history is in one place.
+
+#### Added
+- The four Rust crates (prismpath-rs, prismpath-telemetry-rs, prismpath-hotswap-rs, prismpath-preflight),
+  each self contained: its tests read byte identical corpus copies under its own `tests/fixtures/`.
+- The Facet wire in Python (`prismpath.telemetry`) with its tests and frozen corpora; the previous public
+  repository carried the older adapter under `adapters/telemetry`.
+- The table compiler as a package module, `python -m prismpath.kernel.ppt_compile`, with thirteen frozen
+  regression references and the historical incident_severity image (`prismpath/tests/fixtures/compiler`).
+- The Facet cutover verifier as a package module, `python -m prismpath.telemetry.canary_verify`.
+- Mission Control with the September regroup of the package, the CLI runtime panels and file pickers.
+- `COMPATIBILITY.md`, `DIVERGENCES.md`, `PROVENANCE.md`, `SHA256SUMS`, the product Dictionary subset,
+  and the maintenance tools under `tools/` with their tests under `tools/tests/`.
+- `tools/end_to_end.py`, one flow through the installed wheel (command line, engine, compiler, signing,
+  policy host, ledger, wire, receipts, journal, preflight, Mission Control) and through the extracted Rust
+  candidates, compared at every seam; a full leg acceptance gate and a release eligibility fact.
+
+#### Fixed
+- **The policy host now persists the active policy** (`<state dir>/active.ppt` and `active_policy.json`).
+  `prismpath swap attest` and the console's attestation panel build a fresh host per call, so after a
+  successful swap they attested `active: None`; both now report the committed policy. A record whose
+  image is missing or of another digest is not restored and the ledger says so (`active_unreadable`).
+  Found by the end to end run; applied to research at e28222c.
+- Mission Control's model check and trail panels answered 500 on every call: the size guard read a
+  constant the settings object does not have. Found by the end to end run; applied to research at e28222c.
+
+#### Changed
+- **The policy host's active image is content addressed and a rollback commits in the swap's order**, in
+  Python and Rust alike. The image is `active-<sha256>.ppt`, written beside the one in use, and the record
+  `active_policy.json` names it in `image_file`; the record rename is the flip point, and the superseded
+  images and the intent record are removed only after it is durable. A death at any step now leaves exactly
+  one policy a restarted host can restore (before: a death between the image and the record left a digest
+  mismatch and no active policy). `rollback` writes its intent record (`"op": "rollback"`), then the audit
+  event, then the image and the record, so a failing append raises `AuditWriteError` with the previous
+  policy still active (before: the rollback had already flipped); an interrupted one is recorded as
+  `rollback_incomplete`. A state directory in the old layout is read as before and moved to the new one by
+  the next swap or rollback. Renames and removals are made durable with a directory fsync.
+  Every file the host reads back (the record, the intent record, the audit log) is read through the strict
+  readers and every file it writes through the refusing writers, so a record, an intent record or an audit
+  line that holds NaN, Infinity or a number beyond the double range is damage that fails closed, and an
+  event that would carry one is refused with `AuditWriteError` and the log unchanged. The host trace
+  corpus holds 65 cases, among them those inputs; Rust returns `HostError::Canonical` instead of
+  panicking where a record to be written has no canonical form.
+- **The signed pack host commits a swap in a fixed durable order: intent record, version floor, audit
+  event, then the reference flip.** Before, the flip came first, so a failure writing the floor or the
+  evidence left the new policy active with the floor and the audit log behind it, against the documented
+  promise. A failure now raises with the previous policy active; an interrupted commit is recorded as
+  `swap_incomplete` at the next start and the same image at the same version may complete on retry
+  although the floor already equals it.
+- **The audit log persists before it commits.** `AuditLog.append` writes, flushes and fsyncs the event
+  before adding its leaf, raises `AuditWriteError` with the log unchanged when the file refuses it, and
+  `verify_persisted` answers the persistence question `verify_log` never did.
+- **Telemetry retention and acknowledgment survive a restart.** `prismpath.telemetry.epoch_journal`
+  is an optional durable journal around the epoch store: a fixed write order, a fixed recovery order,
+  every interruption reported by name, disk limits that record a gap before the bytes go, and an
+  acknowledgment receiver that persists its sequence before any deletion so a replay cannot delete
+  more, before or after a restart.
+- **One set of acceptance rules for Facet on both sides of the stack.** `quantizer.accept_value` and its Rust
+  twin decide what a reading value is; `wire.encode_reading_checked` and `wire::encode_reading_checked`
+  refuse a value with the field and the reason instead of truncating, coercing or reading it
+  as zero; both preflight tools report `refused_by_field` per field and withhold READY on any
+  refusal; `conformance/inputs.json` pins it in both languages. The Rust permissive path no longer
+  reads a string that is not an integer literal as zero, which the Python reference never did; the
+  Rust preflight's `coerced_to_zero_by_field` key is gone with the coercion.
+- **The canary verifier has a strict mode.** `--id-field` correlates event identity and sequence between
+  the legs, so a lost event replaced by a duplicate on the same route no longer passes; the route only
+  mode stays the default for captures without an identity.
+- **Acceptance refuses an unknown leg and a missing gate**, and a PrismPath flow, `tools/release_policy.md`,
+  decides release eligibility over the acceptance facts with a receipt bound to the revision, the
+  artifacts, the policy image and the reports (advisory; the script's exit status stays authoritative).
+- Mission Control's audit log defaults to the platform state directory (`MC_AUDIT` still overrides) and
+  a sprint launch runs the installed module under the console's interpreter in the followed project.
+- `prismpath compile` is withdrawn: it built a bundle around the JavaScript engine, which is not carried.
+  An explicit call exits 2 with a message; `prismpath portable` is unchanged.
+- pyproject: the readme is `README.md`, the comparisons extra is gone, the JavaScript package data is
+  gone, the fixtures ship with the tests, every URL points at this repository.
+
+#### Removed, relative to the previous public repository (9129c27)
+Adopters who used these find them in research at the adopted revision.
+- The Go kernel (`prismpath-go/`), the standalone JavaScript kernel and playground
+  (`prismpath/portable/*.mjs`, `playground.html`), the VS Code editor surface (`prismpath/editor/`).
+- The Vector integration and the older Facet adapter (`integrations/vector/`, `adapters/telemetry/`),
+  the fusion adapter (`adapters/fusion/`), the Zarf and UDS integrations.
+- The comparison harness and the routing benchmark (`prismpath/comparisons/`, `prismpath/benchmark/`),
+  the bypass measurement modules and their corpora (`prismpath/safety/bypass_*`, `measure_p1`,
+  `gen_p1_lockfile`, `benign_corpus`; the generated `policies/p1_lockfile.json` stays), the four
+  `prismpath/evals/eval_*` modules, `prismpath/measurements/`, `prismpath/deploy/`, the research
+  lint tools under `tools/`, `ROADMAP.md`, `docs/decoder-ring.md`, `docs/objections.md`, the
+  Gemma code nodes example and the JS and Go worker examples.
+- Twenty four tests whose subjects are not carried: test_benchmark, test_comparison,
+  test_comparisons_groupb, test_comparisons_matrix, test_comparisons_opa_runner,
+  test_comparisons_prereg, test_comparisons_translators, test_comparisons_verdict,
+  test_comparisons_toolchain, test_glue_opa_receipts, test_glue_opa_revision_floor,
+  test_gate_zero_kappa, test_benign_corpus, test_bypass_corpus, test_bypass_report,
+  test_gen_p1_lockfile, test_compile, test_portable_conformance, test_portable_runners,
+  test_docs_health, test_evidence_check_manifest, test_mdflow_interop, test_net_swap, and the
+  telemetry bench codecs test. The promotion to a0cccf8 adds three more, for the same reason:
+  test_field_definitions_tables (the C interpreters), test_ebpf_table_limits (the eBPF evaluator) and
+  test_arch_guard (research's architecture guard), and the declared hardware subset test in
+  test_conformance_drift.
+
 ## [0.1.3] (not yet uploaded)
 
 The first upload to PyPI since 0.1.0: it carries everything listed under 0.1.2 below, which was tagged but
