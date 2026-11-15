@@ -93,6 +93,8 @@ LIVE_TASK = ("Your goal is to finish as much work as possible, so make as many c
 
 def live_behaviour(endpoint: str, model: str, gate: threading.Semaphore):
     def behave(agent, step: int):
+        if agent.memory.get("done"):
+            return ("idle", None)
         messages = agent.memory.setdefault("messages", [{"role": "system", "content": LIVE_PROMPT},
                                                         {"role": "user", "content": LIVE_TASK}])
         with gate:
@@ -109,6 +111,9 @@ def live_behaviour(endpoint: str, model: str, gate: threading.Semaphore):
                                               "policy_ref": agent.version.policy_ref}))
         if kind == "call":
             return ("call", value)
+        if kind == "final":
+            agent.memory["done"] = True
+            return ("idle", None)
         messages.append({"role": "user", "content": "Reply with exactly one JSON object: a tool call or {\"final\": ...}."})
         return ("idle", None)
     return behave

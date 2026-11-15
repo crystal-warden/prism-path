@@ -171,12 +171,13 @@ def stop_mid_replication(out: Path, oracle=None) -> Dict[str, Any]:
     return _finish(world, checks)
 
 
-def stop_under_load(out: Path, oracle=None, threads: int = 6, seconds: float = 2.0) -> Dict[str, Any]:
+def stop_under_load(out: Path, oracle=None, threads: int = 6, seconds: float = 2.0, stop_after: float = None
+                    ) -> Dict[str, Any]:
     """Threads keep asking for copies of random live members while the operator stops the root."""
     world = World(out, root_version=version("v1", "idle"), oracle=oracle)
     ctl, op = world.controller, world.operator
     harness = world.root.agent.version.policy_ref
-    stop_at = time.monotonic() + seconds / 2
+    stop_at = time.monotonic() + (seconds / 2 if stop_after is None else stop_after)
     done = threading.Event()
     counts = Counter()
 
@@ -206,8 +207,11 @@ def stop_under_load(out: Path, oracle=None, threads: int = 6, seconds: float = 2
     checks = {"the stop was carried out": stop.kind == "allow",
               "nothing is live after it": not ctl.live(),
               "no member was committed after the stop": all(m.state == "stopped" for m in ctl.members.values()),
-              "requests after the stop were refused": counts.get("refuse:population:lineage-unknown", 0) >= 0}
-    return _finish(world, checks, requests=dict(counts), members=len(ctl.members))
+              "no replication decided after the stop was allowed": all(
+                  o.kind != "allow" for o in ctl.outcomes
+                  if o.request.startswith("replicate") and o.receipt is not None and o.receipt > stop.receipt)}
+    aborted = sum(1 for o in ctl.outcomes if o.detail.get("aborted"))
+    return _finish(world, checks, requests=dict(counts), members=len(ctl.members), aborted=aborted)
 
 
 def preservation(out: Path, oracle=None) -> Dict[str, Any]:
