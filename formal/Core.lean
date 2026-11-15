@@ -14,3 +14,5 @@ import Core.Bridge
 import Core.Scope
 import Core.Merkle
 import Core.Evidence
+import Core.PopulationImage
+import Core.Population

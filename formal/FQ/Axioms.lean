@@ -16,6 +16,7 @@ import Core.Scope
 import Core.Evidence
 import Core.Merkle
 import Core.Canon2Proofs
+import Core.Population
 /-! The axiom audit: the theorem must depend on nothing beyond Lean's three standard axioms. -/
 #print axioms FQ.decision_preservation
 #print axioms FQ.symbolCount_eq_truthVec
@@ -131,3 +132,18 @@ reader, and the theorems that the writer and the reader are inverse on the canon
 #print axioms Core.canonicalize_canonical
 #print axioms Core.canonicalize_error_iff
 #print axioms Core.canonicalize_idem
+#print axioms Core.Population.admission_loads
+#print axioms Core.Population.evaluation_loads
+#print axioms Core.Population.stop_always_allowed
+#print axioms Core.Population.stop_never_refused
+#print axioms Core.Population.replicate_allowed_only_within
+#print axioms Core.Population.evolve_allowed_only_with_canary
+#print axioms Core.Population.protect_never_allowed
+#print axioms Core.Population.restart_of_stopped_never_allowed
+#print axioms Core.Population.allow_fails_closed
+#print axioms Core.Population.agent_never_restarts_or_reviews
+#print axioms Core.Population.unknown_request_never_allowed
+#print axioms Core.Population.unknown_issuer_never_allowed
+#print axioms Core.Population.unverified_only_stops
+#print axioms Core.Population.admission_targets_registered
+#print axioms Core.Population.canary_passed_iff
