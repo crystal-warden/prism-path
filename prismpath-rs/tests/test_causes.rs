@@ -9,7 +9,7 @@ use serde_json::Value;
 use std::process::Command;
 
 fn corpus() -> Value {
-    let text = std::fs::read_to_string("../prismpath/portable/conformance/causes.json").expect("read causes.json");
+    let text = std::fs::read_to_string("tests/fixtures/causes.json").expect("read causes.json");
     serde_json::from_str(&text).expect("parse causes.json")
 }
 

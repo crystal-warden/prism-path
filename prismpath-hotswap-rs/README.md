@@ -11,7 +11,7 @@ nothing in this crate touches the compiler or the image bytes, so the certified 
 what the FPGA and eBPF evidence rows cite.
 
 **What enforces agreement.** A cross language contract gated by `tests/test_hotswap_conformance.rs`
-against `prismpath/portable/conformance/hotswap.json`: signatures are Ed25519 over Python's exact
+against `tests/fixtures/hotswap.json`, a byte identical copy of `prismpath/portable/conformance/hotswap.json`: signatures are Ed25519 over Python's exact
 canonical JSON bytes, so a pack signed by either runtime verifies on the other, and every refusal
 uses the same stable reason strings the Python tests pin (`sig:missing`, `image:sha256-mismatch`,
 `version:not-monotonic`, and the rest). Run `cargo test` in this directory; CI runs the tests and
@@ -21,7 +21,7 @@ clippy for this crate.
 log: verify, envelope, version floor, stage, then the commit in the reference's order, intent record,
 floor, audit event, the new image `active-<sha256>.ppt`, the record naming it, clean up; a rollback commits the same way;
 a fresh host restores the active policy and records an interrupted commit; every audit event is fsynced before it has a leaf and a
-write that fails is an `AuditWriteError`). The host trace corpus `prismpath/portable/conformance/host_trace.json`
+write that fails is an `AuditWriteError`). The host trace corpus `tests/fixtures/host_trace.json`
 is generated from the Python host, `tests/test_host_trace.rs` replays it byte for byte,
 `tests/test_host_crash.rs` stops a swap and a rollback before each step, and `tests/test_host_cross_language.rs`
 has each runtime open the other's state directory.

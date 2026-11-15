@@ -125,7 +125,7 @@ fn scripted_agent<'a>(
 fn main() {
     let dir = std::env::args()
         .nth(1)
-        .unwrap_or_else(|| "../prismpath/portable/conformance".to_string());
+        .unwrap_or_else(|| "tests/fixtures".to_string());
 
     println!("=== prismpath-rs CONFORMANCE CERTIFICATION ===");
     println!("corpus: {dir}\n");

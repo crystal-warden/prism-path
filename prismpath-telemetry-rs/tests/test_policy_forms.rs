@@ -12,7 +12,7 @@ use serde_json::Value;
 use std::collections::HashMap;
 
 fn corpus() -> Value {
-    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../prismpath/telemetry/conformance/policy_forms.json");
+    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/policy_forms.json");
     serde_json::from_str(&std::fs::read_to_string(path).expect("read policy_forms.json"))
         .expect("parse policy_forms.json")
 }

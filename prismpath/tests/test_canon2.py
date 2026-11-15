@@ -105,6 +105,7 @@ def test_canonicalize_holds_every_other_rule(text, rule):
     assert raised.value.rule == rule
 
 
+@pytest.mark.cross_language
 def test_the_lean_reader_agrees_on_every_vector():
     if not ORACLE.exists():
         if os.environ.get("PRISMPATH_REQUIRE_CORE_ORACLE"):

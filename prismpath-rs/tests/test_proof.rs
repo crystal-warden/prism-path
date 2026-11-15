@@ -10,7 +10,7 @@ use std::fs;
 
 fn cases(name: &str) -> Vec<Value> {
     let path = format!(
-        "{}/../prismpath/portable/conformance/{}",
+        "{}/tests/fixtures/{}",
         env!("CARGO_MANIFEST_DIR"),
         name
     );

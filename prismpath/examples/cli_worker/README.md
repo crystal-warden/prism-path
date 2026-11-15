@@ -1,6 +1,7 @@
 # cli_worker: run any program as a worker
 
-Four language workers across three jobs, all on the same contract: **read the request on stdin, print ONE
+Four language workers across three jobs, all on the same contract (this repository carries the Python and
+Rust workers; the JavaScript and Go workers are linked to research at the adopted revision): **read the request on stdin, print ONE
 JSON object on stdout, exit 0.** A nonzero exit routes to the flow's error tier. Each worker pairs with a
 flow that routes on the fields it emits. Python and Rust run the *same* job (a CI gate) to show one job
 porting across languages with no change to the flow; the broader point is that any program, in any
@@ -10,8 +11,8 @@ language, doing any job, plugs in the same way.
 |---|---|---|---|---|
 | [`ci_gate.py`](ci_gate.py) | Python | a CI test / coverage gate | `{passed, failed, coverage}` | [`ci_gate.md`](ci_gate.md) |
 | [`ci_gate.rs`](ci_gate.rs) | Rust | the same CI gate, second language | `{passed, failed, coverage}` | [`ci_gate.md`](ci_gate.md) |
-| [`log_alert.js`](log_alert.js) | JavaScript | log-line severity + latency alerting | `{level, latency_ms}` | [`log_alert.md`](log_alert.md) |
-| [`release_gate.go`](release_gate.go) | Go | a semver release gate | `{bump, breaking}` | [`release_gate.md`](release_gate.md) |
+| [`log_alert.js`](https://github.com/crystal-warden/prism-path/blob/40a9b05b3523cb4943b583b77c6fb86f93d795ee/prismpath/examples/cli_worker/log_alert.js) | JavaScript | log-line severity + latency alerting | `{level, latency_ms}` | [`log_alert.md`](https://github.com/crystal-warden/prism-path/blob/40a9b05b3523cb4943b583b77c6fb86f93d795ee/prismpath/examples/cli_worker/log_alert.md) |
+| [`release_gate.go`](https://github.com/crystal-warden/prism-path/blob/40a9b05b3523cb4943b583b77c6fb86f93d795ee/prismpath/examples/cli_worker/release_gate.go) | Go | a semver release gate | `{bump, breaking}` | [`release_gate.md`](https://github.com/crystal-warden/prism-path/blob/40a9b05b3523cb4943b583b77c6fb86f93d795ee/prismpath/examples/cli_worker/release_gate.md) |
 
 Full walkthrough: [docs/guides/workers.md](../../../docs/guides/workers.md).
 
@@ -41,5 +42,4 @@ worker = cli_worker(["./release_gate"], pass_state=["from", "to"])
 
 The contract is proven in
 [`prismpath/tests/test_cli_worker_example.py`](../../tests/test_cli_worker_example.py): Python always, and
-Node, Go, and Rust whenever their toolchain is present (the Go worker was recertified on Go 1.26, the Rust
-worker on rustc 1.97).
+Rust whenever rustc is present (recertified on rustc 1.97). The Node and Go cases run in research.

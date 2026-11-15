@@ -6,7 +6,7 @@ use prismpath_telemetry_rs::receipts::{self as r, CauseRef, Receipt, ReceiptErro
 use serde_json::Value;
 
 fn load(name: &str) -> Value {
-    let text = std::fs::read_to_string(format!("{}/../prismpath/telemetry/conformance/{name}", env!("CARGO_MANIFEST_DIR"))).unwrap_or_else(|err| panic!("{name}: {err}"));
+    let text = std::fs::read_to_string(format!("{}/tests/fixtures/{name}", env!("CARGO_MANIFEST_DIR"))).unwrap_or_else(|err| panic!("{name}: {err}"));
     serde_json::from_str(&text).unwrap_or_else(|err| panic!("{name}: {err}"))
 }
 

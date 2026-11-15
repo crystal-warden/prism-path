@@ -31,8 +31,8 @@ The kernel knows nothing about sprints, gates, or build targets.
 ### The portable kernels: one spec, four implementations
 
 The decidable subset of the kernel is reimplemented, dependency free, in three more languages:
-JavaScript ([`portable/prismpath.mjs`](../../prismpath/portable/prismpath.mjs), browser/edge/Node), Rust
-(`prismpath-rs/`, native + WASM), and Go (`prismpath-go/`), each certified against the frozen
+Rust (`prismpath-rs/`, native + WASM, carried in this repository), JavaScript and Go ([in research at
+the adopted revision](https://github.com/crystal-warden/prism-path/blob/40a9b05b3523cb4943b583b77c6fb86f93d795ee/docs/SYSTEM_MAP.md)), each certified against the frozen
 conformance vectors ([`portable/conformance/`](../../prismpath/portable/conformance/README.md): 1,112 predicate
 cases + 107 engine fixtures, bit for bit). The Python kernel stays the reference (vectors are
 generated from it); the ports are runtime surfaces, and the tooling (validate/verify/test/lock/

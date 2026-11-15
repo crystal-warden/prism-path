@@ -1,12 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """The contract corpus (conformance/contract.json) is what portable/gen_contract_fixtures.py writes from
-prismpath.kernel.contract now, and the committed vectors
+prismpath.kernel.contract now, the Rust crate carries a byte identical copy, and the committed vectors
 cover each kind of problem and each way the contract reads an expression the sandbox refuses. The crate
 replays every case (prismpath-rs/tests/test_contract.rs)."""
 import importlib.util
 import json
 from pathlib import Path
+
+import pytest
 
 REPO = Path(__file__).resolve().parents[2]
 PORTABLE = REPO / "prismpath" / "portable"
@@ -27,6 +29,12 @@ def test_the_corpus_is_what_the_generator_writes_now():
     text = json.dumps(_generator().generate(), indent=1, sort_keys=True, ensure_ascii=False) + "\n"
     committed = (PORTABLE / "conformance" / "contract.json").read_text(encoding="utf-8")
     assert committed == text, "contract.json is stale; run python -m prismpath.portable.gen_contract_fixtures"
+
+
+@pytest.mark.cross_language
+def test_the_corpus_is_copied_into_the_crate():
+    committed = (PORTABLE / "conformance" / "contract.json").read_text(encoding="utf-8")
+    assert (REPO / "prismpath-rs" / "tests" / "fixtures" / "contract.json").read_text(encoding="utf-8") == committed
 
 
 def test_the_corpus_has_a_case_for_each_kind_of_problem_and_type():

@@ -152,6 +152,7 @@ def test_separation(case):
     assert got == case["expect"]
 
 
+@pytest.mark.cross_language
 @pytest.mark.skipif(CARGO is None, reason="cargo not installed: the Rust verifier is untested here")
 def test_the_rust_verifier_agrees_on_every_case():
     crate = repo_file("prismpath-hotswap-rs")

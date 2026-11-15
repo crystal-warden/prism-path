@@ -13,19 +13,38 @@ EDITABLE_SUFFIXES = (".js", ".mjs", ".html", ".css", ".json", ".md", ".txt", ".p
 SKIPPED_DIRS = (".git", "tools", "__pycache__", "last-good")
 
 
+def _real(path):
+    """The path with every symlink resolved, for the part of it that exists. A path that does not exist
+    yet resolves through its nearest existing ancestor, so a symlinked parent directory cannot carry a
+    new file outside the project."""
+    return os.path.realpath(path)
+
+
 def is_contained(path, base):
-    """True if `path` is `base` itself or nested inside it (the sandbox containment check)."""
-    resolved = os.path.abspath(path)
-    root = os.path.abspath(base)
+    """True if `path` is `base` itself or nested inside it, after resolving symlinks on both sides.
+
+    A lexical check is not containment: a symlink inside the project that points outside it has an
+    inside looking name and an outside target. The comparison is made on real paths, and for a path
+    that does not exist yet on the real path of its parent, so a new file cannot be written through a
+    linked directory either."""
+    root = _real(base)
+    candidate = os.path.abspath(path)
+    if os.path.lexists(candidate):
+        resolved = _real(candidate)
+    else:
+        resolved = os.path.join(_real(os.path.dirname(candidate)), os.path.basename(candidate))
     return resolved == root or resolved.startswith(root + os.sep)
 
 
 def safe_path(proj, rel):
-    """Resolve `rel` against `proj`, refusing any path that escapes the project tree."""
-    resolved = os.path.abspath(os.path.join(proj, rel))
-    if not is_contained(resolved, proj):
+    """Resolve `rel` against `proj`, refusing any path that escapes the project tree once symlinks
+    are followed. Returns the real path, so the caller reads and writes the file the check looked at."""
+    candidate = os.path.abspath(os.path.join(proj, rel))
+    if not is_contained(candidate, proj):
         raise ValueError("path escapes project")
-    return resolved
+    if os.path.lexists(candidate):
+        return _real(candidate)
+    return os.path.join(_real(os.path.dirname(candidate)), os.path.basename(candidate))
 
 
 def file_tree(proj):

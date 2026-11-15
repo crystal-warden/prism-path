@@ -16,7 +16,7 @@ fn reading_of(obj: &serde_json::Map<String, Value>) -> HashMap<String, V> {
 
 #[test]
 fn test_wire_bytes_match_python_and_decode_cross_impl() {
-    let corpus = load("../prismpath/telemetry/conformance/decisions.json");
+    let corpus = load("tests/fixtures/decisions.json");
     let fixture = load("tests/fixtures/wire_parity.json");
     let mut n = 0;
     for case in corpus["cases"].as_array().unwrap() {

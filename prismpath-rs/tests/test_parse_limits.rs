@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 Crystal Warden Supply Chain Labs LLC
-//! The parser's input bounds against `../prismpath/portable/conformance/parse_limits.json`, generated from the Python reference
+//! The parser's input bounds against `tests/fixtures/parse_limits.json`, generated from the Python reference
 //! (`prismpath/portable/gen_parse_limits_fixtures.py`): a document at each cap and one over it, where the
 //! reference counts (characters, distinct names, edge lines under a heading), which cap a document reaches
 //! first, documents built to the default caps, and the integers an environment variable may hold.
@@ -16,7 +16,7 @@ use serde_json::{json, Value as Json};
 use std::process::{Command, Stdio};
 
 fn corpus() -> Json {
-    let text = std::fs::read_to_string("../prismpath/portable/conformance/parse_limits.json").expect("read parse_limits.json");
+    let text = std::fs::read_to_string("tests/fixtures/parse_limits.json").expect("read parse_limits.json");
     serde_json::from_str(&text).expect("parse parse_limits.json")
 }
 

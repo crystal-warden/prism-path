@@ -5,7 +5,7 @@ use prismpath_telemetry_rs::replay::{TickWindow, ACCEPT, REPLAY_DUPLICATE, REPLA
 use serde_json::Value;
 
 fn corpus() -> Value {
-    let text = std::fs::read_to_string(format!("{}/../prismpath/telemetry/conformance/replay.json", env!("CARGO_MANIFEST_DIR"))).unwrap();
+    let text = std::fs::read_to_string(format!("{}/tests/fixtures/replay.json", env!("CARGO_MANIFEST_DIR"))).unwrap();
     serde_json::from_str(&text).unwrap()
 }
 

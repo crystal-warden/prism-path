@@ -2,7 +2,7 @@
 
 One flow each; pick the one shaped like your job. Every file below is a real, runnable flow
 (`prismpath validate` clean); the tier tells you what it needs at runtime (`P0` = zero ML, runs on
-the [browser/edge kernel](../portable/README.md); `P2` = uses semantic edges → the full engine,
+any conformant kernel, the Rust crate included; `P2` = uses semantic edges → the full engine,
 or `prismpath lock` for P1).
 
 | you are | the flow | what it shows | tier |
@@ -15,7 +15,7 @@ or `prismpath lock` for P1).
 | **Platform / SRE** | [`flows/fanout_review.md`](../flows/fanout_review.md) + [`flows/review_one.md`](../flows/review_one.md) | fan-out: one durable child run per changed file, deterministic child identity, `on event all_done` join | P0 |
 | **The skeptic** | [`flows/sprint_loop.md`](../flows/sprint_loop.md) | the control plane that builds this repo, as a flow: gate-green routing, 3×-same-error as an edge, `@checkpoint` proofs: the dogfood | P2 |
 
-No terminal at all? The **[playground](../portable/playground.html)** runs the P0 kernel in your
-browser; paste any of these, watch them route.
+No terminal at all? The **[hosted playground](https://www.crystalwardenlabs.com/playground)** runs the
+P0 kernel in your browser; paste any of these, watch them route.
 
 Prompts for the orchestrator, rather than flows, are in [`nudges/`](nudges/README.md).

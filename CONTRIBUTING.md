@@ -10,31 +10,33 @@ and pure (see the invariants in [docs/guides/authoring.md](docs/guides/authoring
 ## Setup
 
 ```bash
-git clone https://github.com/crystal-warden/prism-path.git && cd prism-path
-pip install -e .            # numpy only; add ".[embeddings]" for semantic-routing work
-pip install pytest
-pytest -q                   # the Python suite
-node --test prismpath/portable/prismpath.test.mjs          # the portable-kernel unit tests (Node ≥ 18)
-node prismpath/portable/run_vectors.mjs                 # the frozen conformance vectors -> CONFORMANT
-python -m prismpath.safety.fuzz_predicates -n 20000     # the sandbox gate: 0 exec / 0 crash, always
+git clone https://github.com/crystal-warden/prismpath.git && cd prismpath
+pip install -e ".[test,signing,control-plane]"      # numpy plus the extras the shipped tests exercise
+python -m pytest prismpath/tests prismpath/telemetry/tests -q -m "not cross_language"   # the product runtime suite
+python -m pytest -m cross_language prismpath/tests -q    # drives cargo and rustc; needs the Rust toolchain
+python -m pytest tools/tests -q                          # the repository maintenance suite
+cargo test --workspace                                   # the four crates, each from its own tests/fixtures
+python tools/check_compatibility.py                      # adopted hashes, registry, compiler references
+python -m prismpath.safety.fuzz_predicates -n 20000      # the sandbox gate: 0 exec / 0 crash, always
 ```
 
-All four must pass before and after your change. The repository is more than the Python package:
-`prismpath/` is grouped by concern (`kernel`, `routing`, `safety`, `hotswap`, `ledgers`, `workers`,
-`orchestration`, `evals`, `telemetry`), `prismpath-rs`, `prismpath-go`, and the other crates are the
-kernels in other languages, `prismpath-hw` holds the C target, the compiled image format, the fabric
-RTL, and the microcontroller firmware, `prismpath-ebpf` the kernel target, `adapters/` the domain
-adapters, `formal/` the Lean development, and `prismpath/comparisons/` the pre registered comparison.
-`docs/SYSTEM_MAP.md` maps every directory to the four people who touch a deployment and lists every
-implementation of the interpreter, the wire, and the signed pack with the gate that keeps it in
-agreement. Work in one of those areas needs its toolchain: `cargo` for the crates, `go` for the Go
-kernel, `cmake` and a C compiler for the C target and the C++ embed, `clang` and `libbpf` for eBPF,
-`verilator` and `cocotb` for the RTL simulation, `elan` for Lean. CI runs each in its own job
-(`.github/workflows/ci.yml`, `formal.yml`); run the job's commands locally before opening the pull
-request. If your change intentionally alters predicate
-or engine *semantics*, the conformance test will fail by design; regenerate the vectors
-(`python prismpath/portable/gen_conformance.py`), commit the diff, and say so prominently in the PR: that
-diff **is** the spec-change review, and it bumps the spec version (SPEC.md §8).
+All of these must pass before and after your change. `tools/README.md` explains which suite is which.
+
+This repository is the developer product: `prismpath/` is the Python engine grouped by concern
+(`kernel`, `routing`, `safety`, `hotswap`, `ledgers`, `workers`, `orchestration`, `evals`, `telemetry`,
+`mission_control`), `prismpath-rs`, `prismpath-telemetry-rs`, `prismpath-hotswap-rs` and
+`prismpath-preflight` are the Rust crates, `prismpath/portable/conformance` and
+`prismpath/telemetry/conformance` are the frozen corpora every implementation is judged by, and
+`tools/` is the small maintenance system that keeps the product compatible with the research
+revision it adopted. The research repository, [crystal-warden/prism-path](https://github.com/crystal-warden/prism-path),
+holds the other kernels, the hardware and kernel targets, the adapters, the Lean development, the
+comparison and the evidence ledger; [COMPATIBILITY.md](COMPATIBILITY.md) records the adopted revision.
+
+Changes to shared semantics are not a product decision. If your change alters predicate or engine
+semantics, the conformance drift test fails by design; do not regenerate the vectors here. Propose the
+change to research first, and it reaches the product through a reviewed promotion (`tools/README.md`).
+A product fix that research would also want is proposed there separately; nothing synchronizes
+automatically in either direction.
 
 ## Sign-off (DCO, not CLA)
 

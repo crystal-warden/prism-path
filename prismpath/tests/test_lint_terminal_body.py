@@ -2,12 +2,10 @@
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Tests for the terminal-with-body lint rule (warning when a terminal node has a non-trivial instruction body)."""
 import os
-import pytest
 
 from prismpath.kernel.parser import parse_file
 from prismpath.kernel import analysis
 
-from prismpath.tests._repo import repo_file
 
 HERE = os.path.dirname(__file__)
 REPO_ROOT = os.path.dirname(os.path.dirname(HERE))
@@ -34,7 +32,7 @@ def test_terminal_with_body_does_not_fire_on_wazuh_triage():
 
 
 def test_terminal_with_body_does_not_fire_on_alert_router():
-    alert_router_path = str(repo_file("prismpath", "examples", "code_nodes_gemma", "alert_router.md"))
+    alert_router_path = os.path.join(HERE, "fixtures", "alert_router.md")
     graph = parse_file(alert_router_path)
     findings = [finding for finding in analysis.analyze(graph) if finding.code == "terminal-with-body"]
     assert len(findings) == 0

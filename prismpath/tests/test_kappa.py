@@ -8,13 +8,13 @@ from prismpath.evals import annotate
 from prismpath.evals import kappa
 from prismpath.kernel.parser import parse_file
 
-from prismpath.tests._repo import repo_file
-
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def _bench():
-    return str(repo_file("prismpath", "benchmark", "routing_bench.jsonl"))
+    """A small labeled dataset in the benchmark record shape, thirteen cases over the bugfix flow,
+    every label a real edge target. The research routing benchmark it stands in for is not carried."""
+    return os.path.join(HERE, "tests", "fixtures", "kappa_dataset.jsonl")
 
 
 # --- Cohen's κ math --------------------------------------------------------------------
@@ -77,7 +77,7 @@ def test_roundtrip_through_files(tmp_path):
 # --- blind annotation ------------------------------------------------------------------
 def test_blind_cases_strip_label_and_resolve_edges():
     cases = list(annotate.blind_cases(_bench()))
-    assert len(cases) >= 300
+    assert len(cases) == 13                                                          # every record of the fixture
     case = cases[0]
     assert "label" not in case and case["edges"] and case["targets"]                  # label hidden, edges resolved
     assert all(target in case["targets"] for target, _ in case["edges"])

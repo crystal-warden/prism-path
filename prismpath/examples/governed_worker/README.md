@@ -45,5 +45,5 @@ task demands exist, so an agent that does nothing cannot pass on a green exit co
 
 The composition seam is the same one every code-node flow uses:
 `code_agent(graph, handlers, runner=SandboxRunner(), base=...)`; see
-[`code_nodes_gemma`](../code_nodes_gemma/) for mixing gated code nodes with an LLM worker in one
+[`code_nodes_gemma`](https://github.com/crystal-warden/prism-path/blob/40a9b05b3523cb4943b583b77c6fb86f93d795ee/prismpath/examples/code_nodes_gemma) for mixing gated code nodes with an LLM worker in one
 governed flow.

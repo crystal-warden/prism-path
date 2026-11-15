@@ -7,7 +7,8 @@ compiles to a small table image that decides identically from this Python engine
 interpreter on a microcontroller or an FPGA fabric; the image is signed, envelope bounded, and version
 floored before it takes effect; every decision leaves a receipt with a cause code. Prove what can happen,
 enforce what may happen, prove what happened. The public position, with what is claimed and what is not,
-is docs/POSITION.md; the map of every part is docs/SYSTEM_MAP.md; the glossary is docs/decoder-ring.md.
+is docs/POSITION.md in the research repository, crystal-warden/prism-path, at the revision named in
+COMPATIBILITY.md; the vocabulary the receipts use is docs/DICTIONARY.md here.
 
 The package is grouped by concern:
 
@@ -30,7 +31,7 @@ The package is grouped by concern:
     prismpath.extras         the optional extras, and the MissingExtra a module raises without one
     prismpath.cli            the command line, grouped by who runs it; prismpath.trail, lsp, ci_report
     prismpath.mission_control  the operator's console
-    prismpath.portable       the JavaScript kernel and the frozen conformance corpora every kernel is judged by
+    prismpath.portable       the frozen conformance corpora every kernel is judged by, and their generators
 
 Every pre regroup name (prismpath.engine, prismpath.checkpoint, ...) still imports and is the same module
 object as its grouped counterpart, with a DeprecationWarning; the aliases go away in a later release. The reading order for "a flow becomes a decision" is kernel.parser,

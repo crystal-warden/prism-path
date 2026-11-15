@@ -4,21 +4,13 @@ Long form documentation lives here, in three groups. Start at the repo root if y
 [`README.md`](../README.md) is the front door and [`GETTING_STARTED.md`](../GETTING_STARTED.md)
 is the walk from "what's this?" to a running flow.
 
-> **[POSITION.md](POSITION.md)**: the public position: one sentence, the problem, the architecture in three
-> words, capability status, what the comparison established, the vocabulary contract, the claims we make
-> and the claims we do not. The README and the site are views over it.
+> **[DICTIONARY.md](DICTIONARY.md)**: the vocabulary: one thing, one name, at one layer, every term
+> defined from the point of view of a single decision. The product subset of the research Dictionary;
+> the substrate and GRC entries stay with the code they describe.
 >
-> **[SYSTEM_MAP.md](SYSTEM_MAP.md)**: the whole system on one page: the four people who touch it,
-> where every part lives, and the conformance topology that keeps the many implementations of the
-> interpreter, the wire, and the signed pack in agreement.
->
-> **[decoder-ring.md](decoder-ring.md)**: every borrowed term (Wilson interval, selective
-> classification, match action fragment, hexagonal ports) explained in plain language, plus an
-> index of every document, module, kernel, and CLI command in the repo. Start here if a paper
-> loses you, or if you're looking for where something lives.
-
-**[objections.md](objections.md)**: the two strongest critiques ("structured output already
-solved routing", "logic as data is a rules engine"), answered with the concessions left in.
+> **[../COMPATIBILITY.md](../COMPATIBILITY.md)**: the research revision this product adopted, the
+> specifications and formats, the frozen corpora with their hashes, and what the product CI checks.
+> **[../DIVERGENCES.md](../DIVERGENCES.md)**: every intentional difference from research and why.
 
 ## guides/: how to use it
 
@@ -50,37 +42,32 @@ solved routing", "logic as data is a rules engine"), answered with the concessio
 | [spec-cause-codes.md](design/spec-cause-codes.md) | the cause code registry: one byte that says why a decision or refusal happened, the same byte in the engine, the pack verifier, the kernel, the fabric, and on the wire |
 | [spec-crypto-agility.md](design/spec-crypto-agility.md) | the signing suite registry and the proofs that a suite migration cannot strand a policy |
 
-Running `python tools/arch_guard.py` writes a hexagonal boundary scorecard to
-`docs/design/arch-scorecard.md`. It is generated, git ignored, and regenerated on every run: the
-committed artifact is [`tools/arch_scorecard.json`](../tools/arch_scorecard.json).
+## Research, at the adopted revision
 
-## research/: papers, evidence, measurement
+The papers, the evidence ledger and the measurement protocols live in the research repository. These
+links are pinned to the revision this product adopted (`COMPATIBILITY.md`), so a claim and the evidence
+behind it stay matched even as research moves on.
 
 | doc | what it covers |
 |---|---|
-| [primer-students-guide.md](research/primer-students-guide.md) | **start here for the ideas**: the papers' thesis without the vocabulary; no CS degree required |
-| [paper-routing-spectrum.md](research/paper-routing-spectrum.md) | the research paper: the routing spectrum, the N=301 evaluation, the head to head, limitations |
-| [whitepaper-engineering.md](research/whitepaper-engineering.md) | the engineering white paper: format, runtime, data plane, control plane, operational lessons |
-| [supporting-evidence.md](research/supporting-evidence.md) | the results ledger: every claim mapped to a measured result and its provenance, negative results included |
-| [paper-facet-figueroa-quantization.md](research/paper-facet-figueroa-quantization.md) | the Facet paper: Figueroa quantization, the decision sufficient wire, the measurements |
-| [bypass-measurement.md](research/bypass-measurement.md) | the pre registered protocol for measuring the safety floor's bypass rates, with its amendment trail |
-| [LEDGER_STANDARDS.md](research/LEDGER_STANDARDS.md) | the ledger's row schema, dating, versioning, and the fold procedure |
+| [the public position](https://github.com/crystal-warden/prism-path/blob/40a9b05b3523cb4943b583b77c6fb86f93d795ee/docs/POSITION.md) | one sentence, the problem, the architecture in three words, capability status, the claims made and the claims not made |
+| [the system map](https://github.com/crystal-warden/prism-path/blob/40a9b05b3523cb4943b583b77c6fb86f93d795ee/docs/SYSTEM_MAP.md) | the whole system on one page: where every part lives and the conformance topology across every implementation |
+| [primer-students-guide.md](https://github.com/crystal-warden/prism-path/blob/40a9b05b3523cb4943b583b77c6fb86f93d795ee/docs/research/primer-students-guide.md) | the papers' thesis without the vocabulary |
+| [paper-routing-spectrum.md](https://github.com/crystal-warden/prism-path/blob/40a9b05b3523cb4943b583b77c6fb86f93d795ee/docs/research/paper-routing-spectrum.md) | the routing spectrum, the N=301 evaluation, the head to head, limitations |
+| [whitepaper-engineering.md](https://github.com/crystal-warden/prism-path/blob/40a9b05b3523cb4943b583b77c6fb86f93d795ee/docs/research/whitepaper-engineering.md) | format, runtime, data plane, control plane, operational lessons |
+| [supporting-evidence.md](https://github.com/crystal-warden/prism-path/blob/40a9b05b3523cb4943b583b77c6fb86f93d795ee/docs/research/supporting-evidence.md) | the results ledger: every claim mapped to a measured result and its provenance |
+| [paper-facet-figueroa-quantization.md](https://github.com/crystal-warden/prism-path/blob/40a9b05b3523cb4943b583b77c6fb86f93d795ee/docs/research/paper-facet-figueroa-quantization.md) | Figueroa quantization, the decision sufficient wire, the measurements |
+| [the decoder ring](https://github.com/crystal-warden/prism-path/blob/40a9b05b3523cb4943b583b77c6fb86f93d795ee/docs/decoder-ring.md) | every borrowed term explained in plain language |
 
 ## What isn't here (and why)
 
-- **Normative + entry point docs stay at the repo root**: [`SPEC.md`](../SPEC.md) (the format
-  specification), [`PROTOCOL.md`](../PROTOCOL.md) (the Facet wire), [`CONVENTIONS.md`](CONVENTIONS.md) (the adopter facing script conventions), [`GETTING_STARTED.md`](../GETTING_STARTED.md), [`ROADMAP.md`](../ROADMAP.md),
-  plus the files GitHub reads there by convention (`CONTRIBUTING`, `CODE_OF_CONDUCT`, `SECURITY`,
-  `CHANGELOG`, `LICENSE`, `CITATION.cff`).
+- **Normative and entry point docs stay at the repo root**: [`SPEC.md`](../SPEC.md) (the format
+  specification), [`PROTOCOL.md`](../PROTOCOL.md) (the Facet wire), [`GETTING_STARTED.md`](../GETTING_STARTED.md),
+  [`COMPATIBILITY.md`](../COMPATIBILITY.md), [`DIVERGENCES.md`](../DIVERGENCES.md), plus the files GitHub reads
+  there by convention (`CONTRIBUTING`, `CODE_OF_CONDUCT`, `SECURITY`, `CHANGELOG`, `LICENSE`, `CITATION.cff`).
 - **A `README.md` documents the directory it sits in**, so subsystem docs stay with their code:
-  [portable kernel](../prismpath/portable/README.md) ·
-  [conformance vectors](../prismpath/portable/conformance/README.md) ·
-  [benchmark](../prismpath/benchmark/README.md) ·
-  [comparisons](../prismpath/comparisons/README.md) ·
+  [conformance vectors](../prismpath/portable/conformance/README.md) · [Facet](../prismpath/telemetry/README.md) ·
   [examples](../prismpath/examples/README.md) · [gallery](../prismpath/gallery/README.md) ·
-  [editor surfaces](../prismpath/editor/README.md) ·
-  [adapters](../adapters/ADAPTER_GUIDE.md) · [Go kernel](../prismpath-go/README.md).
-- **Some `.md` files are program data, not documentation**: the flows in `prismpath/flows/`, the
-  gallery templates, the prompt assets in `prismpath/nudges/`, the guard's
-  `prismpath/policies/statutory_floor.md`, and the deliberately broken corpus in
-  `prismpath/tests/fixtures/broken/`. Code reads these at runtime; they are not prose.
+  [the kernel crate](../prismpath-rs/README.md) · [the telemetry crate](../prismpath-telemetry-rs/README.md) ·
+  [the hot swap crate](../prismpath-hotswap-rs/README.md) · [preflight](../prismpath-preflight/README.md) ·
+  [the maintenance tools](../tools/README.md).

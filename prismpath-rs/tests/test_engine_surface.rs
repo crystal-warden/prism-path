@@ -171,7 +171,7 @@ fn python_resumes_a_rust_gated_checkpoint_and_rust_resumes_a_python_one() {
 }
 
 fn corpus(name: &str) -> Json {
-    serde_json::from_str(&std::fs::read_to_string(format!("../prismpath/portable/conformance/{name}.json")).unwrap()).unwrap()
+    serde_json::from_str(&std::fs::read_to_string(format!("tests/fixtures/{name}.json")).unwrap()).unwrap()
 }
 
 #[test]

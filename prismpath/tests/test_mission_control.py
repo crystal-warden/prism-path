@@ -8,6 +8,7 @@ actual flow and the assumption, so a hardcoded response cannot pass. (The SSE en
 against a real server, not here — TestClient's sync portal blocks on an endless stream.)
 """
 import json
+import os
 
 import pytest
 
@@ -177,6 +178,64 @@ def test_file_tree_bounded(client, proj, monkeypatch):
     for i in range(10):
         (proj / "flows" / f"f{i}.md").write_text("hi", encoding="utf-8")
     assert len(client.get(API_V1 + "/files").json()["files"]) <= 3
+
+
+# ── the inspect and policy panels resolve project relative paths through the facade ─────────
+def test_inspect_validate_resolves_a_project_relative_flow(client):
+    """The panels confine every client supplied path with core.safe_path; a panel that names a helper
+    the facade does not export returns a 500 for every request, which is what the acceptance smoke
+    caught. A project relative flow validates, and a path that escapes the project is refused."""
+    ok = client.post(API_V1 + "/inspect/validate", json={"flow_md": "flows/triage.md"})
+    assert ok.status_code == 200, ok.text
+    escaped = client.post(API_V1 + "/inspect/validate", json={"flow_md": "../../etc/passwd"})
+    assert escaped.status_code == 400
+
+
+# ── containment follows symlinks: an inside name with an outside target is refused ─────────
+def _outside(tmp_path):
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "secret.md").write_text("---\nname: secret\nstart: a\n---\n## a\nDone.\n", encoding="utf-8")
+    return outside
+
+
+def test_symlinked_file_outside_the_project_is_not_read(client, proj, tmp_path):
+    outside = _outside(tmp_path)
+    os.symlink(outside / "secret.md", proj / "flows" / "link.md")
+    response = client.get(API_V1 + "/file", params={"path": "flows/link.md"})
+    assert response.status_code == 400, response.text
+    assert "secret" not in response.text
+
+
+def test_symlinked_file_outside_the_project_is_not_written(client, proj, tmp_path):
+    outside = _outside(tmp_path)
+    os.symlink(outside / "secret.md", proj / "flows" / "link.md")
+    before = (outside / "secret.md").read_text(encoding="utf-8")
+    response = client.post(API_V1 + "/file", json={"path": "flows/link.md", "content": "overwritten"})
+    assert response.status_code == 400, response.text
+    assert (outside / "secret.md").read_text(encoding="utf-8") == before
+
+
+def test_new_file_through_a_symlinked_directory_is_refused(client, proj, tmp_path):
+    outside = _outside(tmp_path)
+    os.symlink(outside, proj / "flows" / "dirlink")
+    response = client.post(API_V1 + "/file", json={"path": "flows/dirlink/new.md", "content": "x"})
+    assert response.status_code == 400, response.text
+    assert not (outside / "new.md").exists()
+
+
+def test_symlinked_flow_is_not_inspected(client, proj, tmp_path):
+    outside = _outside(tmp_path)
+    os.symlink(outside / "secret.md", proj / "flows" / "link.md")
+    response = client.post(API_V1 + "/inspect/validate", json={"flow_md": "flows/link.md"})
+    assert response.status_code == 400, response.text
+
+
+def test_symlink_that_stays_inside_the_project_still_works(client, proj):
+    os.symlink(proj / "flows" / "triage.md", proj / "flows" / "alias.md")
+    response = client.get(API_V1 + "/file", params={"path": "flows/alias.md"})
+    assert response.status_code == 200, response.text
+
 
 
 def test_model_check_and_trail_panels_answer(client, proj):

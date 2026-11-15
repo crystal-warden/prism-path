@@ -5,7 +5,6 @@ unsigned, tampered image, tampered manifest, wrong key, revoked key — and the 
 gate rejecting each violation class with a stable reason. Compiles a real flow through the real
 `.ppt` compiler (read-only consumer); skips if `cryptography` or `prismpath-hw` are absent."""
 import json
-import sys
 from pathlib import Path
 
 import pytest
@@ -16,11 +15,7 @@ from prismpath import canon  # noqa: E402
 from prismpath.hotswap import policy_pack as pp# noqa: E402
 from prismpath.kernel.parser import parse  # noqa: E402
 
-from prismpath.tests._repo import repo_file
-
-_hw = repo_file("prismpath-hw")
-sys.path.insert(0, str(_hw))
-import ppt_compile as pc  # noqa: E402
+from prismpath.kernel import ppt_compile as pc
 
 FLOW = """# fixture
 

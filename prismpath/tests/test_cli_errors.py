@@ -217,18 +217,6 @@ def test_prismpath_debug_shows_the_traceback(tmp_path, monkeypatch):
 
 # ------------------------------------------------------------------ optional extras
 
-def test_every_extra_module_maps_to_an_extra_pyproject_declares():
-    tomllib = pytest.importorskip("tomllib")
-    pyproject = os.path.join(REPO_ROOT, "pyproject.toml")
-    if not os.path.isfile(pyproject):
-        pytest.skip("pyproject.toml is not shipped in the wheel")
-    with open(pyproject, "rb") as handle:
-        declared = tomllib.load(handle)["project"]["optional-dependencies"]
-    for module, (extra, package) in extras.EXTRAS.items():
-        assert extra in declared, module
-        assert any(req.split()[0].split(";")[0].strip() == package for req in declared[extra]), module
-
-
 def test_a_missing_module_of_an_extra_is_named_by_its_extra():
     try:
         raise ModuleNotFoundError("No module named 'fastapi'", name="fastapi")

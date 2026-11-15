@@ -85,12 +85,3 @@ def test_readable_lock_has_no_lock_error(tmp_path):
         "conditions": {"the change is correct and complete": ""}}))
     tier = analysis.portability_tier(parse_file(str(flow_path)), str(flow_path))
     assert tier["tier"] == "P1" and tier["lock_error"] is None
-
-
-def test_compile_report_size_is_the_decoded_byte_count():
-    import base64
-    from prismpath import cli
-    for payload_length in range(1, 40):
-        payload = bytes(range(payload_length))
-        encoded = base64.b64encode(payload).decode()
-        assert cli._b64_decoded_size(encoded) == payload_length

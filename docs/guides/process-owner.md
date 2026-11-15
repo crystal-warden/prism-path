@@ -56,5 +56,5 @@ record, and the trail shows when one is in force. The [assessor](assessor.md) re
 
 ## 5. Where to look next
 
-[`docs/SYSTEM_MAP.md`](../SYSTEM_MAP.md) for the whole system, [`tour.md`](tour.md) for a ten minute
+[the system map](https://github.com/crystal-warden/prism-path/blob/40a9b05b3523cb4943b583b77c6fb86f93d795ee/docs/SYSTEM_MAP.md) for the whole system, [`tour.md`](tour.md) for a ten minute
 walk through, `prismpath/examples/` for flows written for people in your position.

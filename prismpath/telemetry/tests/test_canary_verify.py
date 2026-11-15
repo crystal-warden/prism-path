@@ -9,10 +9,9 @@ import subprocess
 import sys
 from pathlib import Path
 
-_REPO = Path(__file__).resolve().parent.parent.parent.parent
-_VERIFY = _REPO / "integrations" / "vector" / "canary_verify.py"
-if not _VERIFY.exists():                      # the integration script is only in a repo checkout, not the wheel
-    pytest.skip(f"{_VERIFY} is only in a repo checkout", allow_module_level=True)
+# The verifier is a package module, so the test runs it the way an operator does, as
+# python -m prismpath.telemetry.canary_verify, from whatever installation is on sys.path.
+_VERIFIER_MODULE = "prismpath.telemetry.canary_verify"
 
 _FLOW = """---
 name: canary_guard
@@ -41,7 +40,7 @@ def _run(tmp_path, raw, decoded, *extra):
     decf = tmp_path / "decoded.ndjson"
     decf.write_text("".join(json.dumps(event) + "\n" for event in decoded))
     return subprocess.run(
-        [sys.executable, str(_VERIFY), str(flow), "--raw", str(rawf), "--decoded", str(decf),
+        [sys.executable, "-m", _VERIFIER_MODULE, str(flow), "--raw", str(rawf), "--decoded", str(decf),
          "--route-node", "classify", *extra],
         capture_output=True, text=True)
 
@@ -80,6 +79,22 @@ def test_map_applies_to_raw_leg(tmp_path):
     result = _run(tmp_path, raw, decoded, "--map", "temp=sensor.temp")
     assert result.returncode == 0, result.stdout + result.stderr
 
+
+def test_malformed_input_is_refused(tmp_path):
+    flow = tmp_path / "flow.md"
+    flow.write_text(_FLOW)
+    rawf = tmp_path / "raw.ndjson"
+    rawf.write_text('{"temp": 95, "armed": true}\nnot json at all\n')
+    decf = tmp_path / "decoded.ndjson"
+    decf.write_text('{"facet_route": "critical"}\n')
+    result = subprocess.run(
+        [sys.executable, "-m", _VERIFIER_MODULE, str(flow), "--raw", str(rawf), "--decoded", str(decf),
+         "--route-node", "classify"],
+        capture_output=True, text=True)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "PARITY." not in result.stdout.replace("NO PARITY", "")
+
+
 def test_a_duplicate_standing_in_for_a_lost_event_passes_route_parity_but_fails_strict_mode(tmp_path):
     """Three raw events with identities; the decoded leg lost the second and carries the first twice.
     Every position still routes as the raw leg does, so route parity passes; the identities do not."""
@@ -108,3 +123,4 @@ def test_strict_mode_refuses_an_event_without_identity(tmp_path):
     decoded = [{"id": "a", "facet_route": "critical"}, {"facet_route": "ok"}]
     result = _run(tmp_path, raw, decoded, "--id-field", "id")
     assert result.returncode == 1 and "2 without identity" in result.stdout
+

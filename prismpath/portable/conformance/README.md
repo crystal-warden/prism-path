@@ -95,7 +95,7 @@ The vectors also referee **declared-subset targets**: an implementation that can
 value domain (a fixed circuit, a table interpreter) declares the subset it certifies against,
 passes every vector inside it, and publishes a machine readable reason for every exclusion; it
 is never called conformant unqualified. The first example is the Level M hardware target
-([`prismpath-hw/`](../../../prismpath-hw/README.md)): the C targets certify 147/1,112 predicate + 6/105
+([`prismpath-hw/` in research at the adopted revision](https://github.com/crystal-warden/prism-path/blob/a0cccf85e92823b3ec5cc8b102c1420bdf3dfb47/prismpath-hw/README.md)): the C targets certify 147/1,112 predicate + 6/105
 engine vectors, and the eBPF target the same 147 in kernel against the frozen expectations (October 2026).
 The subset is frozen case by case in `prismpath-hw/declared_subset.json`, and both certification runners
 and the drift test refuse a selection that differs from it, so it cannot shrink unnoticed. The RTL

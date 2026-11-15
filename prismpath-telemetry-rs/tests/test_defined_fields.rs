@@ -9,7 +9,7 @@ use prismpath_telemetry_rs::{quantizer, wire};
 use std::collections::HashMap;
 
 fn corpus() -> serde_json::Value {
-    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../prismpath/portable/conformance/field_definitions.json");
+    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/field_definitions.json");
     serde_json::from_str(&std::fs::read_to_string(path).expect("read field_definitions.json")).expect("parse field_definitions.json")
 }
 
@@ -85,7 +85,7 @@ fn a_refused_policy_is_never_partitioned() {
 
 #[test]
 fn the_streams_are_byte_identical_to_the_reference() {
-    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../prismpath/telemetry/conformance/defined_wire.json");
+    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/defined_wire.json");
     let frozen: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(path).expect("read defined_wire.json")).unwrap();
     let flows: HashMap<String, String> = accepted().iter()
         .map(|policy| (policy["name"].as_str().unwrap().to_string(), policy["flow"].as_str().unwrap().to_string()))

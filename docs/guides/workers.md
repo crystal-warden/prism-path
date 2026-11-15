@@ -40,6 +40,9 @@ appended to the node's instruction on stdin, e.g. `{"node": "gate", "report": "t
 
 ## Three jobs, four languages, one contract
 
+This repository carries the Python and Rust workers under `prismpath/examples/cli_worker/`; the
+JavaScript and Go workers below are linked to research at the adopted revision and run there.
+
 Different job, different language, same seam. All four workers are live and runnable in
 [`prismpath/examples/cli_worker/`](../../prismpath/examples/cli_worker/), each with its own flow. Python
 and Rust run the *same* CI gate, to show one job porting across languages with no change to the flow.
@@ -67,9 +70,9 @@ except (KeyError, AttributeError, ValueError):
 print(json.dumps({"passed": failed == 0, "failed": failed, "coverage": coverage}))
 ```
 
-The [JavaScript alerter](../../prismpath/examples/cli_worker/log_alert.js) reads `process.stdin`, extracts
+The [JavaScript alerter](https://github.com/crystal-warden/prism-path/blob/40a9b05b3523cb4943b583b77c6fb86f93d795ee/prismpath/examples/cli_worker/log_alert.js) reads `process.stdin`, extracts
 a log line's `level` and `latency`, and `process.exit(1)` on an unparseable line. The
-[Go release gate](../../prismpath/examples/cli_worker/release_gate.go) reads `os.Stdin`, compares two
+[Go release gate](https://github.com/crystal-warden/prism-path/blob/40a9b05b3523cb4943b583b77c6fb86f93d795ee/prismpath/examples/cli_worker/release_gate.go) reads `os.Stdin`, compares two
 semver strings, and `os.Exit(1)` on a bad version. The
 [Rust gate](../../prismpath/examples/cli_worker/ci_gate.rs) is the same CI gate as the Python one,
 compiled. Same four-step contract, four languages, three jobs.
@@ -128,5 +131,5 @@ The four workers and their flows are in
 [`prismpath/examples/cli_worker/`](../../prismpath/examples/cli_worker/). The contract is gated in
 [`prismpath/tests/test_cli_worker_example.py`](../../prismpath/tests/test_cli_worker_example.py): each flow
 routes every case (including the nonzero-exit case onto the error tier). The Python gate runs always; the
-Rust gate, the Node alerter, and the Go release gate run wherever their toolchain is installed (the Go
-worker was recertified on Go 1.26 and the Rust worker on rustc 1.97; CI is Python-only).
+Rust gate runs wherever rustc is installed (recertified on rustc 1.97); the Node alerter and the Go
+release gate are certified in research.

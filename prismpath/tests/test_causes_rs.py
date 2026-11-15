@@ -8,6 +8,8 @@ import importlib.util
 import json
 from pathlib import Path
 
+import pytest
+
 from prismpath.kernel import causes
 
 REPO = Path(__file__).resolve().parents[2]
@@ -21,16 +23,11 @@ def _generator():
     return module
 
 
+@pytest.mark.cross_language
 def test_the_rust_registry_is_what_the_generator_writes_now():
     generator = _generator()
     assert (REPO / "prismpath-rs" / "src" / "causes.rs").read_text(encoding="utf-8") == generator.build_rust(), (
         "prismpath-rs/src/causes.rs is stale; run prismpath/portable/gen_causes_rs.py and commit the result")
-
-
-def test_the_lean_registry_is_what_the_generator_writes_now():
-    generator = _generator()
-    assert (REPO / "formal" / "Core" / "Causes.lean").read_text(encoding="utf-8") == generator.build_lean(), (
-        "formal/Core/Causes.lean is stale; run prismpath/portable/gen_causes_rs.py and commit the result")
 
 
 def test_the_cause_corpus_is_what_the_generator_writes_now():
@@ -39,9 +36,17 @@ def test_the_cause_corpus_is_what_the_generator_writes_now():
     assert committed == generator.corpus_text()
 
 
-def test_the_corpus_hash_is_the_registry_hash():
+@pytest.mark.cross_language
+def test_the_cause_corpus_is_copied_into_the_crate():
+    committed = (PORTABLE / "conformance" / "causes.json").read_text(encoding="utf-8")
+    assert (REPO / "prismpath-rs" / "tests" / "fixtures" / "causes.json").read_text(encoding="utf-8") == committed
+
+
+def test_the_corpus_hash_is_the_registry_hash_and_the_adopted_one():
     doc = json.loads((PORTABLE / "conformance" / "causes.json").read_text(encoding="utf-8"))
     assert doc["registry_sha256"] == causes.registry_sha256()
+    reference = json.loads((REPO / "prismpath" / "tests" / "fixtures" / "reference_hashes.json").read_text(encoding="utf-8"))
+    assert doc["registry_sha256"] == reference["cause_registry_sha256"]
 
 
 def test_the_corpus_lists_every_row_and_the_engine_stops():
@@ -84,6 +89,7 @@ def test_the_strict_decode_causes_are_registered():
     assert set(EMITTED) | set(NO_EMITTER) == set(STRICT_DECODE_CAUSES)
 
 
+@pytest.mark.cross_language
 def test_three_strict_decode_causes_have_an_emitter_in_each_language():
     """48, 49 and 51 ride beside a decoder's own refusal string (receipts, the concentrator, the reading
     decoder). Python names them from the registry, Rust by the generated constant."""
@@ -96,6 +102,7 @@ def test_three_strict_decode_causes_have_an_emitter_in_each_language():
         assert f"causes::{constants[name]}" in rust, f"no Rust decoder emits {name}"
 
 
+@pytest.mark.cross_language
 def test_symbol_overflow_still_has_no_emitter():
     """Cause 50 is a wire integer beyond the CELL range, which the kernel decode plane and the dissector
     check at u16 against a frame's own cells. No Python or Rust decoder here is handed a cell range: the

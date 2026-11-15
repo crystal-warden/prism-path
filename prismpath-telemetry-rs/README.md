@@ -8,7 +8,7 @@ window, the refresh profile and the concentrator.
 record. `PORT_SPEC.md` is the porting contract; when in doubt, match Python, and `DIVERGENCES.md` at the
 repository root lists the places where this crate answers differently on purpose.
 
-**What enforces agreement.** The frozen corpora under `prismpath/telemetry/conformance/`
+**What enforces agreement.** The frozen corpora, carried under `tests/fixtures/` as byte identical copies of `prismpath/telemetry/conformance/`,
 (`decisions.json` version 2, the boundary and spiral corpora) and the byte level parity fixtures
 under `tests/fixtures/`: `test_conformance_decisions.rs` (every reading routes identically after
 quantize, code, decode, reconstruct), `test_xwire_parity.rs` (Python wire bits reproduced bit for

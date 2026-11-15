@@ -209,7 +209,9 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args(argv)
-    outputs = [(RUST_OUT, build_rust()), (CORPUS_OUT, corpus_text()), (LEAN_OUT, build_lean())]
+    outputs = [(RUST_OUT, build_rust()), (CORPUS_OUT, corpus_text())]
+    if LEAN_OUT.parent.is_dir():       # the Lean development is research only; the product has no formal/ to keep in step
+        outputs.append((LEAN_OUT, build_lean()))
     if args.check:
         stale = [str(path.relative_to(REPO)) for path, text in outputs if not path.exists() or path.read_text(encoding="utf-8") != text]
         for path in stale:

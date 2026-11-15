@@ -17,7 +17,11 @@ MC_PROJ=/tmp/demo python -m prismpath.mission_control
 ```
 
 Environment: `MC_PROJ` (followed project), `MC_PORT` (9109), `MC_HOST` (127.0.0.1, do **not** expose),
-`MC_SCAN` (status.json glob for sprint auto discovery), `MC_AUDIT` (audit log path).
+`MC_SCAN` (status.json glob for sprint auto discovery), `MC_AUDIT` (audit log path; the default is
+`mission_audit.log` under the platform state directory, `$XDG_STATE_HOME/prismpath` or
+`~/.local/state/prismpath`, `%LOCALAPPDATA%\prismpath` on Windows). A sprint the console starts runs
+as `python -m prismpath.orchestration.run_sprint` under the console's own interpreter, with the
+followed project as its working directory.
 
 ## The contract
 

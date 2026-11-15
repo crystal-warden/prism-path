@@ -2,17 +2,31 @@
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Every path, port and cap Mission Control reads, in one place.
 
-The field defaults are the values the console has always run with, so a deployment that sets nothing
-behaves exactly as before; the environment variables are the ones documented in
-docs/guides/mission-control-api.md. One `Settings` instance is shared by the whole package and read
-through the object at call time, so a test or an embedder can change one field and every job sees it.
+A deployment that sets nothing gets defaults that work from an installed wheel: the console's own
+files go to the platform state directory, never beside the package, because the package lives in
+site-packages after a pip install and that tree is not the console's to write. The environment
+variables are the ones documented in docs/guides/mission-control-api.md. One `Settings` instance is
+shared by the whole package and read through the object at call time, so a test or an embedder can
+change one field and every job sees it.
 """
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 PACKAGE_DIR = os.path.dirname(os.path.abspath(__file__))      # prismpath/mission_control/
-PRISM_DIR = os.path.dirname(PACKAGE_DIR)                      # prismpath/  (the old "HERE")
-REPO_ROOT = os.path.dirname(PRISM_DIR)                        # repo root (run_sprint cwd)
+PRISM_DIR = os.path.dirname(PACKAGE_DIR)                      # prismpath/, where the package data lives
+
+
+def default_state_directory() -> str:
+    """Where the console keeps its own files, the audit log above all.
+
+    Linux and macOS: $XDG_STATE_HOME/prismpath, falling back to ~/.local/state/prismpath. Windows:
+    %LOCALAPPDATA%\\prismpath. The directory is created on first write by the audit log itself.
+    MC_AUDIT overrides the audit log path outright; this only supplies the default."""
+    if os.name == "nt" and os.environ.get("LOCALAPPDATA"):
+        base = os.environ["LOCALAPPDATA"]
+    else:
+        base = os.environ.get("XDG_STATE_HOME") or os.path.join(os.path.expanduser("~"), ".local", "state")
+    return os.path.join(base, "prismpath")
 
 
 @dataclass
@@ -23,7 +37,9 @@ class Settings:
     # Auto-discovery: MC follows whichever sprint is live, whoever started it (control tab / CLI / hand).
     scan: str = "/tmp/*/status.json"                          # glob(s), os.pathsep-separated
     registry: str = "~/.prismpath/sprints.json"               # sprints self-announce here on start
-    audit_path: str = os.path.join(PRISM_DIR, "mission_audit.log")
+    # A factory, not a value: the state directory depends on the environment at the time Settings is
+    # built, which is what lets a deployment or a test set XDG_STATE_HOME before the console reads it.
+    audit_path: str = field(default_factory=lambda: os.path.join(default_state_directory(), "mission_audit.log"))
     # SECURITY: loopback only. MC can start and stop the swarm and edit flow files, never LAN reachable.
     host: str = "127.0.0.1"
     port: int = 9109
@@ -38,7 +54,6 @@ class Settings:
     # rather than recomputing one from __file__. Facts, not environment configuration.
     package_dir: str = PACKAGE_DIR
     prism_dir: str = PRISM_DIR
-    repo_root: str = REPO_ROOT
 
     def __post_init__(self):
         self.proj = os.path.abspath(self.proj)

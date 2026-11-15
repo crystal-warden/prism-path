@@ -5,7 +5,7 @@ use prismpath_telemetry_rs::refresh::{KeyframeScheduler, StalenessTracker};
 use serde_json::Value;
 
 fn corpus() -> Value {
-    let text = std::fs::read_to_string(format!("{}/../prismpath/telemetry/conformance/refresh.json", env!("CARGO_MANIFEST_DIR"))).unwrap();
+    let text = std::fs::read_to_string(format!("{}/tests/fixtures/refresh.json", env!("CARGO_MANIFEST_DIR"))).unwrap();
     serde_json::from_str(&text).unwrap()
 }
 

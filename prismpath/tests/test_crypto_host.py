@@ -5,7 +5,6 @@
 A swap is Authorized + Envelope-bounded (declared suites ⊆ approved, registry_hash bound) + monotonic
 + provider-available, every attempt is one audit event, and provider absence REFUSES rather than
 downgrades. Uses the real compiler + real Ed25519."""
-import sys
 from pathlib import Path
 
 import pytest
@@ -17,11 +16,7 @@ from prismpath.hotswap import crypto_registry as cr# noqa: E402
 from prismpath.hotswap import policy_pack as pp# noqa: E402
 from prismpath.kernel.parser import parse  # noqa: E402
 
-from prismpath.tests._repo import repo_file
-
-_hw = repo_file("prismpath-hw")
-sys.path.insert(0, str(_hw))
-import ppt_compile as pc  # noqa: E402
+from prismpath.kernel import ppt_compile as pc
 
 SUITES = {
     "cnsa2-hybrid-1":           {"kem": "x25519+ml-kem-1024", "sig": "ml-dsa-87", "aead": "aes-256-gcm",     "provider": "cryptography>=44", "strength_rank": 3},

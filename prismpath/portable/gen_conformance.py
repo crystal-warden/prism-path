@@ -260,11 +260,11 @@ STEP_INFO_KEYS = ("used", "cond", "error_type", "guard_errors")
 
 
 def _flow_fixtures():
-    """The engine-level fixtures, from the conformance test (the frozen ones, so there is ONE fixture
-    source) and portable/engine_surface_fixtures.py (the type gate and the transcript bound, which carry
-    `opts`); their expected results are computed here from the Python engine."""
+    """The engine-level fixtures, from portable/flow_fixtures.py (the frozen ones) and
+    portable/engine_surface_fixtures.py (the type gate and the transcript bound, which carry `opts`);
+    their expected results are computed here from the Python engine."""
     from prismpath.portable.engine_surface_fixtures import FIXTURES as SURFACE
-    from prismpath.tests.test_portable_conformance import FIXTURES, scripted_agent
+    from prismpath.portable.flow_fixtures import FIXTURES, scripted_agent
     out = []
     for fx in list(FIXTURES) + list(SURFACE):
         graph = parse(fx["flow"])

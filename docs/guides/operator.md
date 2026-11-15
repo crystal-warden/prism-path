@@ -3,7 +3,7 @@
 The operator runs a governed system day to day: watches what it decides, judges whether the policy
 needs to change, makes short lived changes when it does, and feeds what they learn back to the
 process owner who maintains the policy of record. This guide is the operator's map. The other three
-people are described in [`SYSTEM_MAP.md`](../SYSTEM_MAP.md) section 2.
+people are described in [the system map](https://github.com/crystal-warden/prism-path/blob/40a9b05b3523cb4943b583b77c6fb86f93d795ee/docs/SYSTEM_MAP.md) section 2.
 
 ## 1. Your console is Mission Control
 
