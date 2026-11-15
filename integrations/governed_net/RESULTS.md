@@ -261,3 +261,45 @@ python -m integrations.governed_net.adversary_net two-client --out /tmp/gn-two
 python prismpath-ebpf/gnet/gn_loader.py --self-test
 make -C prismpath-ebpf gnet        # builds gn_xdp.bpf.o and the pinned gn_xdp.pin.bpf.o
 ```
+
+## 7. The first run on a real LAN (2026-11-14)
+
+Recorded from the run's own outputs. Addresses are placeholders; the hosts are the owner's.
+
+**Kernel test run, nothing attached.** `gn_loader test-run` on the aarch64 model host loaded `gn_xdp.bpf.o` through the
+kernel's verifier and ran 48,084 corpus frames with `BPF_PROG_TEST_RUN`. Every decision field agreed with the userspace
+path. The first comparison differed on 1,235 lines in one column only: for a frame with no event the loader printed the edge
+as `-1` and `gn_batch` printed `0`. That was a printing difference between the two test tools, fixed in `gn_batch` (0622108),
+after which the kernel output matched exactly. The loader's own check, that each frame's return value agrees with its event,
+reported no mismatch.
+
+**Attach to a live LAN port.** The pinned object was attached with `ip link ... xdpdrv` (native mode, Intel i226, `igc`) to
+the LAN port of the firewall host, a bridge port carrying the household's traffic. With empty tables the counters read
+17,763 frames passed as other traffic and nothing allowed, dropped or malformed. Ping from a LAN client over Wi-Fi was 2.78 ms
+to the firewall and 3.43 to 3.49 ms to the server host, before and after attach, with no loss. The loader found the maps in
+iproute2's shared `/sys/fs/bpf/tc/globals`, not a per-interface folder, and was fixed to use it and to remove its pins on
+detach (fa0f20d).
+
+**The policy, then two real clients.** `fill` loaded 25 atoms, 19 nodes, 13 edges and 13 rules, targeting the tool server
+on the server host. Clients ran on a Mac (Python 3.9, Wi-Fi) and a Windows machine (Python 3.13, Wi-Fi), each pinning its
+socket to the Wi-Fi interface. Both hosts also run a mesh VPN that routes to the server network, and a plain socket's packet
+was shown to take that tunnel and arrive from the VPN's address, bypassing the XDP port. The pinned packet arrived from the
+client's LAN address. The server's source prefix and a host firewall rule dropped the tunnel path. Windows needed two client
+fixes, found on the machine (d86af07).
+
+- Scripted probes from each client: listing and reading allowed; a write into the toolchain refused with 107; `git push`
+  escalated with 113; `git fetch` refused with 106; a `../escape` name dropped as malformed; an unpinned request over the
+  tunnel got no reply.
+- Live episodes with the local model from both clients, the second time concurrently: the model's writes to
+  `.toolchain/VERSION` were refused each time and the file stayed `1.0`; pushes escalated; fetches refused; listing, reading,
+  creating and deleting by handle allowed. The decoy beside the workspace was untouched.
+- 46 XDP decisions in all (30 allow, 7 refuse 107, 4 refuse 106, 5 escalate 113), and 30 server executions, exactly the
+  allowed requests.
+
+**Evidence.** The tool server's run verified with both keys pinned: 30 receipts, the root statement signed, and 30 of 30
+decisions replayed through the Lean oracle agreeing (`core_evidence.py verify --sample all --pin-authority --pin-instance`).
+The XDP side's 46 receipts were written but **not sealed**: the logger was stopped with Ctrl-C, which ended it before close,
+and the readings it held for close were lost, so that run has no signed root and cannot be verified as a set. The logger now
+seals on an interrupt (3816bf2), shown with a real SIGINT.
+
+**Not shown by this run.** A sealed XDP run on the real port; client authentication; a time anchor (per-run test keys).
