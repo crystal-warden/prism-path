@@ -1,169 +1,124 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
-"""PROVENANCE.md and SHA256SUMS: what this tree is made of, and a way to tell whether it changed.
+"""PROVENANCE.md and SHA256SUMS: what this tree was made from, and whether it still is that.
 
-SHA256SUMS lists the sha256 of every tracked file except itself and PROVENANCE.md, in the format
-`sha256sum -c` reads. PROVENANCE.md records the adopted research revision, every rule of the inventory
-with the paths it classifies and where they were adopted from, every relocation (a product path whose
-research source path differs), the reference hashes the compatibility check compares against, the
-executable files, and the tree digest.
+The product repository is generated from the research repository by `tools/export_clean.py`, which
+writes both records. PROVENANCE.md names the research commit and tree the export was made from.
+SHA256SUMS lists the sha256 of every other file in the tree, in the format `sha256sum -c` reads.
 
-The tree digest is sha256 over the text formed by one line per tracked file, `<mode> <sha256> <path>`
-with a newline, lines sorted bytewise by path, where mode is the git index mode (100644 or 100755)
-and sha256 is over the exact file bytes. PROVENANCE.md and SHA256SUMS are excluded from the digest so
-it does not refer to itself. A symlink (mode 120000) or a submodule (160000) is refused: the product
-tree holds regular files only. The digest is a way to compare two trees; it is not a signature and
-proves nothing about who produced the tree.
+    python -m tools.provenance check                       # every file is listed and hashes to its line
+    python -m tools.provenance check --research PATH       # and the tree is the export of the research
+                                                           # checkout at PATH, which must be at the commit
+                                                           # PROVENANCE.md names
 
-    python -m tools.provenance write    # rewrite SHA256SUMS and PROVENANCE.md from the tracked tree
-    python -m tools.provenance check    # recompute and compare; exit 1 on any difference or a dirty tree
+The second form is the one that says the tree is what research makes at that commit: it runs the
+checkout's own exporter into a temporary directory and compares every file, byte for byte and by
+executable bit, in both directions. The hashes alone say only that the tree was not edited since the
+export. Neither is a signature and neither proves who produced the tree.
 """
 from __future__ import annotations
 
 import argparse
 import hashlib
-import json
+import re
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
-from tools import product_inventory
+from tools import tree
 
-REPO_ROOT = product_inventory.REPO_ROOT
-SELF_PATHS = ("PROVENANCE.md", "SHA256SUMS")
-REFERENCE_HASHES = REPO_ROOT / "prismpath" / "tests" / "fixtures" / "reference_hashes.json"
-
-
-def index_entries(repo_root: Path) -> list[tuple[str, str]]:
-    """(mode, path) for every tracked file, refusing anything that is not a regular file."""
-    output = subprocess.check_output(["git", "-C", str(repo_root), "ls-files", "-s"], text=True)
-    entries = []
-    for line in output.splitlines():
-        meta, path = line.split("\t", 1)
-        mode = meta.split()[0]
-        if mode not in ("100644", "100755"):
-            raise ValueError(f"{path}: mode {mode} is not a regular file; the product tree refuses symlinks and submodules")
-        entries.append((mode, path))
-    return sorted(entries, key=lambda entry: entry[1].encode())
+REPO_ROOT = tree.REPO_ROOT
+SUMS = "SHA256SUMS"
+COMMIT_LINE = re.compile(r"^Research commit: `([0-9a-f]{40})`$", re.MULTILINE)
 
 
-def file_sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1 << 20), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
+def sha256_lines(files: dict[str, bytes]) -> str:
+    """The SHA256SUMS text for {path: bytes}, sorted by path."""
+    return "".join(f"{hashlib.sha256(data).hexdigest()}  {path}\n" for path, data in sorted(files.items()))
 
 
-def tree_lines(repo_root: Path) -> list[tuple[str, str, str]]:
-    """(mode, sha256, path) for every tracked file other than the two self paths."""
-    return [(mode, file_sha256(repo_root / path), path)
-            for mode, path in index_entries(repo_root) if path not in SELF_PATHS]
+def parse_sums(text: str) -> dict[str, str]:
+    sums = {}
+    for number, line in enumerate(text.splitlines(), 1):
+        digest, separator, path = line.partition("  ")
+        if not separator or not re.fullmatch(r"[0-9a-f]{64}", digest) or not path:
+            raise ValueError(f"{SUMS} line {number} is not `<sha256>  <path>`")
+        if path in sums:
+            raise ValueError(f"{SUMS} lists {path} twice")
+        sums[path] = digest
+    return sums
 
 
-def tree_digest(lines: list[tuple[str, str, str]]) -> str:
-    text = "".join(f"{mode} {digest} {path}\n" for mode, digest, path in lines)
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()
-
-
-def render_sha256sums(lines: list[tuple[str, str, str]]) -> str:
-    return "".join(f"{digest}  {path}\n" for mode, digest, path in lines)
-
-
-def render_provenance(repo_root: Path, lines: list[tuple[str, str, str]]) -> str:
-    rules = product_inventory.load_rules(repo_root / "tools" / "inventory.toml")
-    lock = product_inventory.load_lock(repo_root / "tools" / "inventory.lock")
-    revision = product_inventory.adopted_revision(repo_root / "tools" / "inventory.toml")
-    reference = json.loads((repo_root / "prismpath" / "tests" / "fixtures" / "reference_hashes.json").read_text())
-    by_rule: dict[str, list[dict[str, str]]] = {}
-    for entry in lock.values():
-        by_rule.setdefault(entry["rule"], []).append(entry)
-    out = ["# Provenance", "",
-           "What this tree is made of. Generated by `python -m tools.provenance write` from the tracked tree;",
-           "regenerate it after the payload settles, never for an unresolved promotion.", "",
-           "## Adopted research revision", "",
-           f"Research: crystal-warden/prism-path, seeded at `{revision}`. Every adopted path was copied byte for",
-           "byte from the research revision recorded for it in `tools/inventory.lock`, which holds the source path,",
-           "the git blob id and the adopted revision per path; a promotion may advance one component's paths and",
-           "leave another's, so the table below lists the distinct revisions each component carries.",
-           "Product owned paths have no source. COMPATIBILITY.md says what the product promises about the",
-           "adopted material; DIVERGENCES.md lists the intentional differences.", "",
-           "## Components", "",
-           "| Rule | Purpose | Owner | Paths | Adopted from | Adopted revisions |", "|---|---|---|---|---|---|"]
-    for rule in rules:
-        if rule.kind != "ship":
-            continue
-        entries = by_rule.get(rule.identifier, [])
-        adopted = sum(1 for entry in entries if entry["source_blob"])
-        revisions = sorted({entry["adopted_revision"] for entry in entries if entry["adopted_revision"]})
-        source = f"`{rule.source_prefix}`" if rule.source_prefix else "product authored"
-        # The revision is per path in the lock; a component that was promoted piecemeal lists more than one.
-        revision_text = ", ".join(revision[:12] for revision in revisions) if revisions else "none"
-        out.append(f"| {rule.identifier} | {rule.purpose} | {rule.owner} | {len(entries)} ({adopted} adopted) | {source} | {revision_text} |")
-    out += ["", "## Relocations and copies", "",
-            "Product paths whose research source path differs, so a promotion can follow them.", "",
-            "| Product path | Research source at the adopted revision | Source blob |", "|---|---|---|"]
-    for entry in sorted(lock.values(), key=lambda item: item["path"]):
-        if entry["source_path"] and entry["source_path"] != entry["path"]:
-            out.append(f"| `{entry['path']}` | `{entry['source_path']}` | `{entry['source_blob']}` |")
-    out += ["", "## Reference hashes", "",
-            "The immutable references the compatibility check compares against, from",
-            "`prismpath/tests/fixtures/reference_hashes.json` (adopted sha256 of research files at the adopted",
-            "revision). The product copies may be edited afterwards; their current hashes are in `SHA256SUMS`.", "",
-            f"Cause registry: `{reference['cause_registry_sha256']}`.",
-            f"Compiler reference checksum list `{reference['compiler_references']['checksum_list']}`: `{reference['compiler_references']['checksum_list_sha256']}`.", "",
-            "| Research file | Adopted sha256 | Product path |", "|---|---|---|"]
-    for path in sorted(reference["files"]):
-        item = reference["files"][path]
-        out.append(f"| `{path}` | `{item['adopted_sha256']}` | {('`' + item['product_path'] + '`') if item['product_path'] else 'not carried'} |")
-    executables = [path for mode, digest, path in lines if mode == "100755"]
-    out += ["", "## Executable files", "",
-            ("None." if not executables else "\n".join(f"- `{path}`" for path in executables)), "",
-            "## Tree digest", "",
-            "sha256 over one line per tracked file, `<mode> <sha256> <path>` plus newline, sorted bytewise by",
-            "path, mode from the git index, sha256 over the exact bytes; `PROVENANCE.md` and `SHA256SUMS` excluded.",
-            "A comparison aid, not a signature.", "",
-            f"`{tree_digest(lines)}` over {len(lines)} files.", ""]
-    return "\n".join(out)
-
-
-def read_recorded_digest(repo_root: Path) -> str | None:
+def recorded_commit(repo_root: Path) -> str | None:
     path = repo_root / "PROVENANCE.md"
-    if not path.exists():
-        return None
-    for line in path.read_text(encoding="utf-8").splitlines():
-        if line.startswith("`") and "` over " in line:
-            return line.split("`")[1]
-    return None
+    found = COMMIT_LINE.search(path.read_text(encoding="utf-8")) if path.exists() else None
+    return found.group(1) if found else None
+
+
+def check_hashes(repo_root: Path) -> list[str]:
+    if not (repo_root / SUMS).exists():
+        return [f"{SUMS} is missing"]
+    try:
+        sums = parse_sums((repo_root / SUMS).read_text(encoding="utf-8"))
+    except ValueError as error:
+        return [str(error)]
+    paths = set(tree.tracked_paths(repo_root)) - {SUMS}
+    problems = [f"{path}: in the tree but not in {SUMS}" for path in sorted(paths - set(sums))]
+    problems += [f"{path}: in {SUMS} but not in the tree" for path in sorted(set(sums) - paths)]
+    for path in sorted(paths & set(sums)):
+        if hashlib.sha256((repo_root / path).read_bytes()).hexdigest() != sums[path]:
+            problems.append(f"{path}: differs from {SUMS}")
+    if recorded_commit(repo_root) is None:
+        problems.append("PROVENANCE.md names no research commit")
+    return problems
+
+
+def executable_paths(root: Path) -> set[str]:
+    return {path for path in tree.tracked_paths(root) if (root / path).stat().st_mode & 0o111}
+
+
+def check_against_research(repo_root: Path, research: Path) -> list[str]:
+    commit = recorded_commit(repo_root)
+    head = subprocess.run(["git", "-C", str(research), "rev-parse", "HEAD"], capture_output=True, text=True)
+    if head.returncode != 0:
+        return [f"{research} is not a git checkout"]
+    if head.stdout.strip() != commit:
+        return [f"{research} is at {head.stdout.strip()[:12]}, and PROVENANCE.md names {str(commit)[:12]}: check out that commit"]
+    with tempfile.TemporaryDirectory(prefix="prismpath-export-") as scratch:
+        exported = subprocess.run([sys.executable, str(research / "tools" / "export_clean.py"), "--out", scratch],
+                                  capture_output=True, text=True)
+        if exported.returncode != 0:
+            return [f"the research exporter failed: {(exported.stderr or exported.stdout).strip()[-400:]}"]
+        scratch_root = Path(scratch)
+        mine, theirs = set(tree.tracked_paths(repo_root)), set(tree.tracked_paths(scratch_root))
+        problems = [f"{path}: in this tree, not in the export of research at {commit[:12]}" for path in sorted(mine - theirs)]
+        problems += [f"{path}: in the export of research at {commit[:12]}, not in this tree" for path in sorted(theirs - mine)]
+        for path in sorted(mine & theirs):
+            if (repo_root / path).read_bytes() != (scratch_root / path).read_bytes():
+                problems.append(f"{path}: differs from the export of research at {commit[:12]}")
+        problems += [f"{path}: executable bit differs from the export" for path in
+                     sorted(executable_paths(repo_root) ^ executable_paths(scratch_root))]
+    return problems
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("command", choices=["write", "check"])
-    parser.add_argument("--repo", default=str(REPO_ROOT))
+    parser.add_argument("command", choices=["check"])
+    parser.add_argument("--repo", default=str(REPO_ROOT), help="the tree to check (default: this one)")
+    parser.add_argument("--research", type=Path, help="a research checkout at the commit PROVENANCE.md names")
     args = parser.parse_args(argv)
     repo_root = Path(args.repo).resolve()
-    lines = tree_lines(repo_root)
-    if args.command == "write":
-        (repo_root / "SHA256SUMS").write_text(render_sha256sums(lines), encoding="utf-8")
-        (repo_root / "PROVENANCE.md").write_text(render_provenance(repo_root, lines), encoding="utf-8")
-        print(f"wrote SHA256SUMS ({len(lines)} files) and PROVENANCE.md; tree digest {tree_digest(lines)}")
-        return 0
-    failures = []
-    recorded_sums = (repo_root / "SHA256SUMS").read_text(encoding="utf-8") if (repo_root / "SHA256SUMS").exists() else None
-    if recorded_sums != render_sha256sums(lines):
-        failures.append("SHA256SUMS does not match the tree")
-    recorded = read_recorded_digest(repo_root)
-    if recorded != tree_digest(lines):
-        failures.append(f"PROVENANCE.md digest {recorded} does not match the tree digest {tree_digest(lines)}")
-    status = subprocess.check_output(["git", "-C", str(repo_root), "status", "--porcelain"], text=True)
-    if status.strip():
-        failures.append("the working tree has uncommitted changes")
-    for failure in failures:
-        print(f"provenance: {failure}")
-    if failures:
+    problems = check_hashes(repo_root)
+    if args.research and not problems:
+        problems += check_against_research(repo_root, args.research.resolve())
+    for problem in problems:
+        print(f"provenance: {problem}")
+    if problems:
         return 1
-    print(f"provenance ok: {len(lines)} files, tree digest {tree_digest(lines)}")
+    files = len(tree.tracked_paths(repo_root))
+    print(f"provenance ok: {files} files, research commit {recorded_commit(repo_root)}"
+          + (", identical to its export" if args.research else ""))
     return 0
 
 

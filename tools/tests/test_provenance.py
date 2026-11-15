@@ -1,60 +1,73 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
-"""The tree digest is over sorted paths, git modes and exact bytes, excludes the two self paths, and
-changes when a byte or a mode changes; SHA256SUMS renders in the sha256sum format; a symlink is refused."""
-import os
+"""SHA256SUMS renders in the sha256sum format and parses back; the hash check names an edited, an
+extra and a missing file; PROVENANCE.md must name a commit; and the research comparison refuses a
+checkout at another commit."""
+import hashlib
 import subprocess
-from pathlib import Path
 
 import pytest
 
 from tools import provenance
 
-
-def _repo(tmp_path):
-    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
-    subprocess.run(["git", "-C", str(tmp_path), "config", "user.email", "t@example.invalid"], check=True)
-    subprocess.run(["git", "-C", str(tmp_path), "config", "user.name", "t"], check=True)
-    (tmp_path / "a.txt").write_text("alpha\n")
-    (tmp_path / "run.sh").write_text("#!/bin/sh\n")
-    os.chmod(tmp_path / "run.sh", 0o755)
-    (tmp_path / "PROVENANCE.md").write_text("provenance")
-    (tmp_path / "SHA256SUMS").write_text("sums")
-    subprocess.run(["git", "-C", str(tmp_path), "add", "-A"], check=True)
-    subprocess.run(["git", "-C", str(tmp_path), "commit", "-q", "-m", "seed"], check=True)
-    return tmp_path
+COMMIT = "a" * 40
 
 
-def test_digest_excludes_self_paths_and_tracks_mode_and_bytes(tmp_path):
-    repo = _repo(tmp_path)
-    lines = provenance.tree_lines(repo)
-    assert [path for _, _, path in lines] == ["a.txt", "run.sh"]
-    assert dict((path, mode) for mode, _, path in lines)["run.sh"] == "100755"
-    first = provenance.tree_digest(lines)
-    (repo / "PROVENANCE.md").write_text("changed")
-    assert provenance.tree_digest(provenance.tree_lines(repo)) == first
-    (repo / "a.txt").write_text("beta\n")
-    assert provenance.tree_digest(provenance.tree_lines(repo)) != first
-    (repo / "a.txt").write_text("alpha\n")
-    subprocess.run(["git", "-C", str(repo), "update-index", "--chmod=-x", "run.sh"], check=True)
-    assert provenance.tree_digest(provenance.tree_lines(repo)) != first
+def _tree(root):
+    (root / "a.txt").write_bytes(b"alpha")
+    (root / "sub").mkdir()
+    (root / "sub" / "b.txt").write_bytes(b"beta")
+    (root / "PROVENANCE.md").write_text(f"# Provenance\n\nResearch commit: `{COMMIT}`\n")
+    files = {path: (root / path).read_bytes() for path in ("a.txt", "sub/b.txt", "PROVENANCE.md")}
+    (root / "SHA256SUMS").write_text(provenance.sha256_lines(files))
 
 
-def test_sha256sums_format(tmp_path):
-    repo = _repo(tmp_path)
-    text = provenance.render_sha256sums(provenance.tree_lines(repo))
-    for line in text.splitlines():
-        digest, path = line.split("  ", 1)
-        assert len(digest) == 64 and path in ("a.txt", "run.sh")
+def test_sums_render_in_the_sha256sum_format_and_parse_back():
+    text = provenance.sha256_lines({"b": b"2", "a": b"1"})
+    assert text == f"{hashlib.sha256(b'1').hexdigest()}  a\n{hashlib.sha256(b'2').hexdigest()}  b\n"
+    assert provenance.parse_sums(text) == {"a": hashlib.sha256(b"1").hexdigest(), "b": hashlib.sha256(b"2").hexdigest()}
 
 
-def test_symlink_is_refused(tmp_path):
-    repo = _repo(tmp_path)
-    os.symlink("a.txt", repo / "link")
-    subprocess.run(["git", "-C", str(repo), "add", "link"], check=True)
+def test_a_malformed_or_repeated_line_is_refused():
     with pytest.raises(ValueError):
-        provenance.tree_lines(repo)
+        provenance.parse_sums("not a sum\n")
+    line = f"{'0' * 64}  a\n"
+    with pytest.raises(ValueError):
+        provenance.parse_sums(line + line)
 
 
-def test_the_real_tree_has_only_regular_files():
-    provenance.index_entries(provenance.REPO_ROOT)
+def test_an_untouched_tree_passes(tmp_path):
+    _tree(tmp_path)
+    assert provenance.check_hashes(tmp_path) == []
+    assert provenance.recorded_commit(tmp_path) == COMMIT
+
+
+def test_an_edited_extra_and_missing_file_are_each_named(tmp_path):
+    _tree(tmp_path)
+    (tmp_path / "a.txt").write_bytes(b"edited")
+    (tmp_path / "extra.txt").write_bytes(b"x")
+    (tmp_path / "sub" / "b.txt").unlink()
+    problems = provenance.check_hashes(tmp_path)
+    assert "a.txt: differs from SHA256SUMS" in problems
+    assert "extra.txt: in the tree but not in SHA256SUMS" in problems
+    assert "sub/b.txt: in SHA256SUMS but not in the tree" in problems
+
+
+def test_provenance_without_a_commit_is_a_problem(tmp_path):
+    _tree(tmp_path)
+    (tmp_path / "PROVENANCE.md").write_text("# Provenance\n")
+    files = {path: (tmp_path / path).read_bytes() for path in ("a.txt", "sub/b.txt", "PROVENANCE.md")}
+    (tmp_path / "SHA256SUMS").write_text(provenance.sha256_lines(files))
+    assert provenance.check_hashes(tmp_path) == ["PROVENANCE.md names no research commit"]
+
+
+def test_a_research_checkout_at_another_commit_is_refused(tmp_path):
+    tree = tmp_path / "tree"
+    tree.mkdir()
+    _tree(tree)
+    research = tmp_path / "research"
+    research.mkdir()
+    for args in (["init", "-q"], ["-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-q", "--allow-empty", "-m", "x"]):
+        subprocess.run(["git", "-C", str(research), *args], check=True)
+    problems = provenance.check_against_research(tree, research)
+    assert len(problems) == 1 and "check out that commit" in problems[0]

@@ -1,19 +1,23 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
-"""The boundary check: nothing held is here, nothing here points at something absent.
+"""The boundary check: nothing here points at something absent, and a built package carries only the tree.
 
-Repository mode (the default) checks the tracked tree:
+Repository mode (the default) checks the tree:
 
-1. Every tracked path is classified by a ship rule and listed in the lock, and no tracked path matches
-   a hold rule (tools/product_inventory.py does the classification).
-2. Every relative markdown link resolves to a file in this tree.
-3. Every link into the research repository that names a file pins a commit: a `blob/<40 hex>/` or
+1. Every relative markdown link resolves to a file in this tree.
+2. Every link into the research repository that names a file pins a commit: a `blob/<40 hex>/` or
    `tree/<40 hex>/` path, never `main`, so a claim and the file it cites stay matched. A link to the
    repository home carries no path and is fine.
+3. The files a shipped feature needs are tracked: the corpora, the compiler references, the reference
+   hashes, the Mission Control static assets, the compiler and the canary verifier.
 
-Package mode checks a built artifact: `--wheel FILE` or `--sdist FILE`. No member may match a hold
-rule, and the members a shipped feature needs must be present: the corpora, the compiler references,
-the reference hashes, the Mission Control static assets, the compiler and the canary verifier.
+What the tree may contain is decided where it is made, by the manifest in the research repository's
+tools/export_clean.py, and `python -m tools.provenance check --research PATH` proves the tree is exactly
+what that manifest makes at the commit PROVENANCE.md names. Nothing here re-decides it.
+
+Package mode checks a built artifact: `--wheel FILE` or `--sdist FILE`. Every member must be a file of
+this tree or something the build generates (metadata, the data directory, the egg info), so a held file
+cannot ride in on a package data glob, and the members a shipped feature needs must be present.
 
     python -m tools.check_boundary
     python -m tools.check_boundary --wheel dist/prismpath-0.1.0-py3-none-any.whl
@@ -29,9 +33,9 @@ import tarfile
 import zipfile
 from pathlib import Path
 
-from tools import product_inventory
+from tools import tree
 
-REPO_ROOT = product_inventory.REPO_ROOT
+REPO_ROOT = tree.REPO_ROOT
 RESEARCH_LINK = re.compile(r"https://github\.com/crystal-warden/prism-path/(blob|tree|raw)/([^/\s)]+)/")
 MARKDOWN_LINK = re.compile(r"\]\(([^)]+)\)")
 REQUIRED_IN_WHEEL = [
@@ -84,12 +88,10 @@ def check_links(repo_root: Path, paths: list[str]) -> list[str]:
 
 
 def check_repository(repo_root: Path) -> list[str]:
-    rules = product_inventory.load_rules(repo_root / "tools" / "inventory.toml")
-    lock = product_inventory.load_lock(repo_root / "tools" / "inventory.lock")
-    paths = product_inventory.tracked_paths(repo_root)
-    problems = [f"{path}: {reason}" for path, reason in product_inventory.unclassified(paths, rules, lock)]
-    problems += [f"{path}: locked but not tracked" for path in product_inventory.stale_lock_entries(paths, lock)]
-    problems += check_links(repo_root, paths)
+    paths = tree.tracked_paths(repo_root)
+    present = set(paths)
+    problems = check_links(repo_root, paths)
+    problems += [f"required file missing: {path}" for path in REQUIRED_IN_SDIST if path not in present]
     return problems
 
 
@@ -103,15 +105,17 @@ def archive_members(artifact: Path) -> list[str]:
     return [name.split("/", 1)[1] for name in members if "/" in name]
 
 
+GENERATED_MEMBERS = re.compile(r"(^|/)([^/]+\.dist-info|[^/]+\.data|[^/]+\.egg-info)/|^(PKG-INFO|setup\.cfg)$")
+
+
 def check_package(repo_root: Path, artifact: Path, required: list[str]) -> list[str]:
-    rules = product_inventory.load_rules(repo_root / "tools" / "inventory.toml")
     members = archive_members(artifact)
     present = set(members)
+    in_tree = set(tree.tracked_paths(repo_root))
     problems = []
     for member in members:
-        rule = product_inventory.classify(member, rules)
-        if rule is not None and rule.kind == "hold":
-            problems.append(f"{artifact.name}: carries held path {member} ({rule.identifier})")
+        if member not in in_tree and not GENERATED_MEMBERS.search(member):
+            problems.append(f"{artifact.name}: carries {member}, which is not a file of this tree")
     for path in required:
         if path not in present:
             problems.append(f"{artifact.name}: required member missing: {path}")

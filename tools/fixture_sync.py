@@ -16,9 +16,9 @@ import argparse
 import sys
 from pathlib import Path
 
-from tools import product_inventory
+from tools import tree
 
-REPO_ROOT = product_inventory.REPO_ROOT
+REPO_ROOT = tree.REPO_ROOT
 KERNEL_CORPUS = "prismpath/portable/conformance"
 WIRE_CORPUS = "prismpath/telemetry/conformance"
 COPIES = {

@@ -10,7 +10,7 @@ from pathlib import Path
 from tools import release_eligibility
 
 ALL_PASS = ["export tracked tree", "build wheel and sdist", "reproducible wheel and sdist", "package boundary (wheel and sdist)",
-            "python full: skip budget", "inventory and boundary: repository", "compatibility", "provenance check",
+            "python full: skip budget", "boundary: repository", "compatibility", "provenance check",
             "end to end: Python chain from the wheel, Rust chain from the candidates, seams compared"]
 
 

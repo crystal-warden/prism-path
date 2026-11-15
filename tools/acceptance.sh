@@ -9,21 +9,27 @@
 # extraction so a crate cannot lean on the source tree. Every gate writes its exit status to the
 # report; a missing prerequisite is a reported blocker, never a pass.
 #
-#   tools/acceptance.sh --leg full|python|rust [--out DIR] [--python PYTHON]
+#   tools/acceptance.sh --leg full|python|rust [--out DIR] [--python PYTHON] [--research DIR]
 #
 # full runs everything including the cross language tests, the end to end run of one flow through the
 # installed wheel and the extracted crates, and the repository checks; python runs the Python gates on
-# a box without Rust; rust runs the crate gates on a box without Python packages.
+# a box without Rust; rust runs the crate gates on a box without Python packages. The tree under test is
+# the export of the research repository that the product repository holds; --research names a research
+# checkout at the commit PROVENANCE.md records, and the provenance gate then also proves every file is
+# what that checkout's exporter writes. Without it the gate proves only that no file changed since the
+# export.
 set -u
 
 LEG="full"
 OUT=""
+RESEARCH=""
 PYTHON="${PYTHON:-python3}"
 while [ $# -gt 0 ]; do
   case "$1" in
     --leg) LEG="$2"; shift 2 ;;
     --out) OUT="$2"; shift 2 ;;
     --python) PYTHON="$2"; shift 2 ;;
+    --research) RESEARCH="$2"; shift 2 ;;
     *) echo "unknown argument $1" >&2; exit 2 ;;
   esac
 done
@@ -325,7 +331,7 @@ PY
 fi
 
 if [ "$LEG" = "full" ]; then
-  run_gate "inventory and boundary: repository" "$OUT/boundary-repo.log" bash -c "cd '$EXPORT' && git -C '$REPO' ls-files > /dev/null && '$OUT/venv-full/bin/python' -m tools.check_boundary --repo '$REPO'"
+  run_gate "boundary: repository" "$OUT/boundary-repo.log" bash -c "cd '$EXPORT' && '$OUT/venv-full/bin/python' -m tools.check_boundary --repo '$REPO'"
   run_gate "compatibility" "$OUT/compatibility.log" bash -c "cd '$EXPORT' && '$OUT/venv-full/bin/python' -m tools.check_compatibility --repo '$EXPORT'"
   run_gate "product maintenance suite" "$OUT/tools-tests.log" bash -c "cd '$REPO' && '$OUT/venv-full/bin/python' -m pytest tools/tests -q -p no:cacheprovider"
   run_gate "cross language tests" "$OUT/cross-language.log" bash -c "cd '$EXPORT' && '$OUT/venv-full/bin/python' -m pytest prismpath/tests prismpath/telemetry/tests -q -p no:cacheprovider -m cross_language -rs"
@@ -333,14 +339,14 @@ if [ "$LEG" = "full" ]; then
   # ledger, wire, journal, preflight and console, and the same flow through the extracted Rust
   # candidates, compared at every seam. Runs from $OUT so the source tree cannot be imported.
   run_gate "end to end: Python chain from the wheel, Rust chain from the candidates, seams compared" "$OUT/end-to-end.log" bash -c "cd '$OUT' && '$OUT/venv-full/bin/python' '$EXPORT/tools/end_to_end.py' --candidates '$OUT/candidates' --out '$OUT/end-to-end'"
-  run_gate "provenance check" "$OUT/provenance.log" bash -c "cd '$REPO' && '$OUT/venv-full/bin/python' -m tools.provenance check"
+  run_gate "provenance check" "$OUT/provenance.log" bash -c "cd '$REPO' && '$OUT/venv-full/bin/python' -m tools.provenance check ${RESEARCH:+--research '$RESEARCH'}"
 fi
 
 # A leg passes only when every gate it is defined to run has recorded a status. A gate that never
 # ran leaves no row, and a report with missing rows is a failure, not a pass by omission.
 PYTHON_GATES=("build wheel and sdist" "build again for reproducibility" "reproducible wheel and sdist" "package boundary (wheel and sdist)" "python base: fresh venv install of the wheel" "python base: CLI, import and runtime asset smoke" "python base: installed package test (base extras only)" "python full: install with signing, control-plane, test extras" "python full: runtime suite against the installed package" "python full: skip budget" "python full: fuzz the predicate sandbox" "canary verifier from the installed module" "signed pack from the installed wheel: keygen, envelope, compile, pack, verify" "mission control: installed launch, defaults, assets, validate, facet, pack verify, sprint subprocess" "source archive: unpack, rebuild, install, promised tests present" "documentation: examples and quickstart commands")
 RUST_GATES=("rust: workspace tests" "rust: clippy, warnings denied" "rust: cargo package prismpath-rs" "rust: extract package prismpath-rs" "rust: cargo package prismpath-telemetry-rs" "rust: extract package prismpath-telemetry-rs" "rust: cargo package prismpath-hotswap-rs" "rust: extract package prismpath-hotswap-rs" "rust: cargo package prismpath-preflight" "rust: extract package prismpath-preflight" "rust: extracted candidates resolve one another, not the registry")
-FULL_GATES=("inventory and boundary: repository" "compatibility" "product maintenance suite" "cross language tests" "end to end: Python chain from the wheel, Rust chain from the candidates, seams compared" "provenance check")
+FULL_GATES=("boundary: repository" "compatibility" "product maintenance suite" "cross language tests" "end to end: Python chain from the wheel, Rust chain from the candidates, seams compared" "provenance check")
 EXPECTED=("export tracked tree")
 case "$LEG" in
   full) EXPECTED+=("${PYTHON_GATES[@]}" "${RUST_GATES[@]}" "${FULL_GATES[@]}") ;;

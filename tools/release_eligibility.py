@@ -37,7 +37,7 @@ POLICY = Path(__file__).resolve().parent / "release_policy.md"
 REQUIRED_GATES = {
     "compatibility": "compatibility_ok",
     "provenance check": "provenance_ok",
-    "inventory and boundary: repository": "boundary_ok",
+    "boundary: repository": "boundary_ok",
     "package boundary (wheel and sdist)": "boundary_ok",
     "python full: skip budget": "skip_budget_ok",
     "reproducible wheel and sdist": "reproducible_ok",
