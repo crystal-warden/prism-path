@@ -9,14 +9,15 @@ the implementation nor the person who ran it can check what was decided:
     attestation per case, Ed25519 over `IMAGE_DOMAIN` and the image bytes);
   * every decision has a receipt (`receipts.jsonl`, one canon/2 line each) binding the image's hash, the
     reading's hash and the decision with its registered cause; a receipt is not signed by itself;
-  * the receipts are the leaves of a Merkle tree, and one root statement signed with the instance key
-    (`receipts.roots.jsonl`, `prismpath.core-run-root/1`, log `core-run`) states their root and count,
+  * the receipts are the leaves of an RFC 6962 Merkle tree, and one root statement signed with the instance
+    key (`receipts.roots.jsonl`, `prismpath.core-run-root/2`, log `core-run`) states their root and count,
     and binds the run's manifest (`run.json`) through its `policy` member. It is a canon/2 document with
     its time an integer count of microseconds (`time_us`), signed over its own domain prefix, so the
     run's evidence is canon/2 end to end, as the root statements of audit logs and epoch chains
-    (`prismpath.ledgers.root_statement`, `prismpath-root-statement/2`) are.
+    (`prismpath.ledgers.root_statement`, `prismpath-root-statement/3`) are.
 
-The verifier re-checks the root statement, every receipt and every image attestation, and replays a
+The verifier re-checks the root statement, every receipt, every image attestation and that each case's
+stored flow is the canonical rendering of its signed image (`prismpath.kernel.core_render`), and replays a
 sample of the decisions through the Lean oracle; a case outside the core (section 1) is excluded with
 its reason, which the verifier recomputes from the image, so every receipted decision must be the
 oracle's. The Rust twin is
@@ -54,8 +55,8 @@ from prismpath.kernel import core_policy  # noqa: E402
 # The run format, the producer and the checks, from the package: one implementation for both verifiers
 from prismpath.ledgers.core_evidence import (  # noqa: E402,F401
     FILES, IMAGE_DOMAIN, IMAGE_FORMAT, LOG_CORE_RUN, RECEIPT_FORMAT, ROOT_DOMAIN, ROOT_FORMAT, ROOT_MEMBERS,
-    RUN_FORMAT, Bad, _decision, _hex_of, _lines, _norm, _why, ensure_keys, make_root_statement, outside_core,
-    produce, python_decisions, read_cases, replay_through_reference, root_signed_bytes, sha256_hex,
+    OLD_ROOT_FORMATS, RUN_FORMAT, Bad, _decision, _hex_of, _lines, _norm, ensure_keys, flow_problem,
+    make_root_statement, outside_core, produce, python_decisions, read_cases, replay_through_reference, root_signed_bytes, sha256_hex,
     verify_root_statement)
 from prismpath.ledgers import core_evidence as _package  # noqa: E402
 
@@ -65,13 +66,10 @@ ORACLE_NAME = "the oracle"   # what `replay_through_oracle` holds a receipt to, 
 # ----------------------------------------------------------------- the cases
 def write_cases(cases, out: Path) -> None:
     """The run's inputs, one canon/2 line per case: the image and the readings as hex of their bytes, and
-    the flow the image renders to (the text the reference and the ports read), or null."""
-    from prismpath.kernel import canon2
-    core_diff.prepare(cases)
-    with open(out, "wb") as handle:
-        for case in cases:
-            handle.write(canon2.dumps({"case": case["id"], "image": case["image"].hex(), "flow": case["flow"],
-                                       "readings": [raw.hex() for raw in case["readings"]]}) + b"\n")
+    the image's canonical rendering as its flow (the text the reference and the ports read), or null: the
+    package's `write_cases`, since the verifier holds every stored flow to that rendering. The differential's
+    varied spellings stay in the differential."""
+    _package.write_cases(cases, out)
 
 
 # ----------------------------------------------------------------- the core's scope

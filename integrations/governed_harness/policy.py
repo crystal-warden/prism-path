@@ -8,7 +8,8 @@ own code, nothing reimplemented here:
 
   * the image is checked by the port of the Lean oracle's `loadPolicy` (`formal/diff/core_policy.py`),
     which must accept it;
-  * it is rendered to its flow text by the differential harness's renderer (`core_diff.render`) and
+  * it is rendered to its canonical flow text (`prismpath.kernel.core_render.render`, the rendering a core
+    run stores and the evidence verifier holds every stored flow to) and
     parsed by the reference kernel (`prismpath.kernel.parser.parse`), which applies the field definitions
     and the six policy rules of SPEC.md section 4.5;
   * a reading is decided by the reference's decision path (`core_diff.python_reading`: the strict canon/2
@@ -28,7 +29,6 @@ what no rule allows is refused by the core, so the policy fails closed by the co
 """
 from __future__ import annotations
 
-import random
 import re
 import sys
 from dataclasses import dataclass
@@ -43,12 +43,11 @@ for extra in (REPO, REPO / "formal" / "diff"):
 
 import core_diff  # noqa: E402
 import core_policy  # noqa: E402
-from prismpath.kernel import canon2, causes  # noqa: E402
+from prismpath.kernel import canon2, causes, core_render  # noqa: E402
 from prismpath.kernel.parser import parse  # noqa: E402
 
 POLICY_PATH = HERE / "policy" / "agent_rules.core.json"
 SOURCE_PATH = HERE / "policy" / "agent_rules.src.json"
-RENDER_SEED = 0
 _TARGET = re.compile(r"^(allow|refuse_(\d+)|escalate_(\d+))$")
 
 
@@ -89,7 +88,7 @@ class Policy:
         if refusal is not None:
             raise ValueError(f"the core refuses the agent policy: {refusal}")
         self.doc = canon2.loads(image)
-        self.flow = core_diff.render(self.doc, random.Random(RENDER_SEED))
+        self.flow = core_render.render(self.doc)
         self.graph = parse(self.flow)
         self.fields = sorted(self.doc["fields"])
         for rule in self.doc["rules"]:

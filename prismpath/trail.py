@@ -190,6 +190,9 @@ def _finding_text(finding: dict) -> str:
         return "a key is pinned and the log has no root statements"
     if name == "interrupted_statement":
         return f"the last statement line ({finding['line']}) was cut short by a crash; ignored"
+    if name == "old_merkle_scheme":
+        return (f"{finding['format']}{where}: its root is of the retired Merkle tree, and this verifier reads only "
+                "prismpath-root-statement/3 (RFC 6962); re-sign the log under the new scheme")
     if name == "bad_format" and "log_lines" in finding:
         return f"unreadable log lines {finding['log_lines']}"
     return name.replace("_", " ") + where

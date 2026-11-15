@@ -9,21 +9,31 @@ trusts neither the implementation nor the person who ran it can check what was d
     attestation per case, Ed25519 over `IMAGE_DOMAIN` and the image bytes);
   * every decision has a receipt (`receipts.jsonl`, one canon/2 line each) binding the image's hash, the
     reading's hash and the decision with its registered cause; a receipt is not signed by itself;
-  * the receipts are the leaves of a Merkle tree, and one root statement signed with the instance key
-    (`receipts.roots.jsonl`, `prismpath.core-run-root/1`, log `core-run`) states their root and count, and
+  * the receipts are the leaves of a Merkle tree, RFC 6962's (`ledger_ots.MERKLE_SCHEME`: a leaf hashes as
+    SHA-256(0x00 || leaf), a node as SHA-256(0x01 || left || right), split at the largest power of two below
+    the count, nothing duplicated), and one root statement signed with the instance key
+    (`receipts.roots.jsonl`, `prismpath.core-run-root/2`, log `core-run`) states their root and count, and
     binds the run's manifest (`run.json`) through its `policy` member. It is a canon/2 document with its
     time an integer count of microseconds (`time_us`), signed over its own domain prefix.
 
 `verify` checks the keys against the pins and the manifest, the root statement, the Merkle root over the
-receipts, every image attestation, every receipt's image and reading hashes, and replays every decision, or
+receipts, every image attestation, that every case's stored flow is the canonical rendering of its signed
+image (`prismpath.kernel.core_render`, since the reference decides from the flow and an edited flow would have
+it decide a policy the authority never signed), every receipt's image and reading hashes, and replays every
+decision, or
 a sample, through the Python reference kernel (`prismpath.kernel.core_reference`). A case outside the core
 (section 1) is excluded with its reason, which the verifier recomputes from the image with the oracle's own
 check ported from Lean (`prismpath.kernel.core_policy`), so every receipted decision must be the core's. A
 run whose keys the reader does not pin verifies as `signed-unpinned`: its signatures hold under the keys it
 carries, which says nothing about whose keys they are.
 
+A run whose root statement is `prismpath.core-run-root/1` was written over the retired Merkle tree (no domain
+prefixes, the last node of an odd layer duplicated, so [a, b, c] and [a, b, c, c] shared a root); it is refused
+as such, never checked under the new tree, and has to be produced again.
+
 This module ships in the package and needs the standard library, the kernel and the `signing` extra
-(`cryptography`), never numpy. The research tool `formal/diff/core_evidence.py` is this module with the
+(`cryptography`, `pip install prismpath[signing]`), never numpy: producing a run signs with Ed25519 and
+verifying one checks Ed25519 signatures, and both raise `MissingExtra` without it. The research tool `formal/diff/core_evidence.py` is this module with the
 differential's case generator and a replay through the Lean oracle (`--oracle`) on top; the Rust twin is
 `prismpath-hotswap-rs/examples/core_evidence.rs`. `prismpath evidence verify RUN` is the command line.
 """
@@ -33,17 +43,19 @@ import hashlib
 import random
 from pathlib import Path
 
-from prismpath.kernel import canon2, causes, core_policy, core_reference
-from prismpath.ledgers import root_statement
+from prismpath.kernel import canon2, causes, core_policy, core_reference, core_render
+from prismpath.ledgers import ledger_ots, root_statement
 
 RUN_FORMAT = "prismpath.core-run/1"
 IMAGE_FORMAT = "prismpath.core-image/1"
 RECEIPT_FORMAT = "prismpath.core-receipt/1"
 # The run's root statement: a canon/2 document of its own format, signed over its own domain prefix, so
-# it can never be presented as an audit log's root statement (`prismpath-root-statement/2`), an image
-# attestation or a pack signature, or the reverse.
-ROOT_FORMAT = "prismpath.core-run-root/1"
-ROOT_DOMAIN = b"prismpath.core-run-root/1\x00"
+# it can never be presented as an audit log's root statement (`prismpath-root-statement/3`), an image
+# attestation or a pack signature, or the reverse. `/2` states a root of the RFC 6962 tree; `/1` stated one of
+# the retired tree and is refused by name (OLD_ROOT_FORMATS).
+ROOT_FORMAT = "prismpath.core-run-root/2"
+ROOT_DOMAIN = b"prismpath.core-run-root/2\x00"
+OLD_ROOT_FORMATS = ("prismpath.core-run-root/1",)
 ROOT_MEMBERS = ("format", "log", "root", "leaves", "time_us", "trigger", "key_id", "public_key", "policy", "sig")
 # Prefixed to the image bytes before signing, so an image attestation can never be presented as a pack
 # manifest or root statement signature, or the reverse.
@@ -73,22 +85,40 @@ def _lines(path: Path):
 # ----------------------------------------------------------------- the cases
 def read_cases(path: Path):
     """A run's inputs, one canon/2 line per case: the image and the readings as hex of their bytes, and the
-    flow the image renders to (the text the reference reads), or null."""
+    flow the image renders to (the text the reference reads), or null. `flow_why` is why the image has no
+    rendering, recomputed from the image; whether the stored flow is the image's rendering is `flow_problem`'s
+    question, which the verifier asks of every case."""
     cases = []
     for line in _lines(path):
         row = canon2.loads(line)
-        cases.append({"id": row["case"], "image": bytes.fromhex(row["image"]), "flow": row["flow"],
-                      "flow_why": None if row["flow"] is not None else _why(bytes.fromhex(row["image"])),
+        image = bytes.fromhex(row["image"])
+        cases.append({"id": row["case"], "image": image, "flow": row["flow"],
+                      "flow_why": None if row["flow"] is not None else core_render.flow_of(image)[1],
                       "readings": [bytes.fromhex(raw) for raw in row["readings"]]})
     return cases
 
 
-def _why(image: bytes) -> str:
-    try:
-        canon2.loads(image)
-    except canon2.Canon2Error as error:
-        return f"unreadable:{error.rule}"
-    return "unrenderable:image"
+def write_cases(cases, out: Path) -> None:
+    """A run's inputs from cases with an `id`, an `image` and `readings` (bytes): one canon/2 line per case,
+    the image and the readings as hex, and the image's canonical rendering as its flow (null for an image with
+    none), so the file is what `verify` holds a run's cases to."""
+    with open(out, "wb") as handle:
+        for case in cases:
+            flow, _why = core_render.flow_of(case["image"])
+            handle.write(canon2.dumps({"case": case["id"], "image": case["image"].hex(), "flow": flow,
+                                       "readings": [raw.hex() for raw in case["readings"]]}) + b"\n")
+
+
+def flow_problem(case) -> str:
+    """Why a case's stored flow is not its signed image's rendering, or None. The reference kernel decides from
+    the flow, so a flow edited away from the image would have it decide, and the run receipt, a policy the
+    authority never signed while every hash still matched the image."""
+    flow, why = core_render.flow_of(case["image"])
+    if case["flow"] == flow:
+        return None
+    if flow is None:
+        return f"case {case['id']}: the stored flow renders no image: the signed image has no rendering ({why})"
+    return f"case {case['id']}: the stored flow is not the rendering of the signed image"
 
 
 # ----------------------------------------------------------------- the core's scope
@@ -185,6 +215,10 @@ def produce(cases_path: Path, out: Path, keys: Path, decider: str = "python", ti
     cases_bytes = cases_path.read_bytes()
     (out / "cases.jsonl").write_bytes(cases_bytes)
     cases = read_cases(out / "cases.jsonl")
+    for case in cases:
+        problem = flow_problem(case)
+        if problem is not None:
+            raise RuntimeError(f"{problem}; write the cases with `write_cases`")
     decisions = python_decisions(cases)
 
     signer = policy_pack._load_private(str(authority_key))
@@ -236,8 +270,8 @@ def root_signed_bytes(statement: dict) -> bytes:
 
 
 def make_root_statement(instance, root: str, leaves: int, manifest_bytes: bytes, time_us: int = None) -> dict:
-    """The run's root statement, `prismpath.core-run-root/1`, signed with the instance key: the Merkle root
-    of the receipts' leaves and their count, the signer's clock as an integer count of microseconds since
+    """The run's root statement, `prismpath.core-run-root/2`, signed with the instance key: the RFC 6962 Merkle
+    root of the receipts' leaves and their count, the signer's clock as an integer count of microseconds since
     the epoch, and the SHA-256 of the manifest. Integers and strings only, so it is a canon/2 document."""
     import time as _time
     statement = {"format": ROOT_FORMAT, "log": LOG_CORE_RUN, "root": root, "leaves": int(leaves),
@@ -263,7 +297,7 @@ def _public_key(raw: bytes, what: str):
 
 def verify_root_statement(data: bytes, leaves, manifest_bytes: bytes, instance_raw: bytes) -> dict:
     """The run's root statement, checked in full, or Bad: one canon/2 line in its canonical spelling, exactly
-    the members of `prismpath.core-run-root/1` with their types, the run's instance key, a signature under
+    the members of `prismpath.core-run-root/2` with their types, the run's instance key, a signature under
     that key over the domain prefix and the body, the Merkle root of every receipt and their count, and the
     manifest's hash."""
     _Priv, _Pub, _ser, InvalidSignature = root_statement._ed25519()
@@ -276,9 +310,13 @@ def verify_root_statement(data: bytes, leaves, manifest_bytes: bytes, instance_r
         raise Bad(f"the root statement is not a canon/2 document ({error.rule})") from None
     if not isinstance(statement, dict) or canon2.dumps(statement) != lines[0]:
         raise Bad("the root statement is not in its canonical canon/2 spelling")
+    if statement.get("format") in OLD_ROOT_FORMATS:
+        raise Bad(f"the root statement is {statement['format']}, whose root is of the retired Merkle tree (no domain "
+                  f"prefixes, the last node of an odd layer duplicated); this verifier reads only {ROOT_FORMAT} "
+                  f"({ledger_ots.MERKLE_SCHEME}), so produce the run again")
     if set(statement) != set(ROOT_MEMBERS) or statement["format"] != ROOT_FORMAT or statement["log"] != LOG_CORE_RUN \
             or statement["trigger"] != LOG_CORE_RUN:
-        raise Bad("the root statement is not a prismpath.core-run-root/1 statement")
+        raise Bad(f"the root statement is not a {ROOT_FORMAT} statement")
     for key in ("leaves", "time_us"):
         if type(statement[key]) is not int or statement[key] < 0:
             raise Bad(f"the root statement's {key} is not a nonnegative integer")
@@ -374,6 +412,10 @@ def _check(run: Path, pin_authority, pin_instance):
     cases = read_cases(run / "cases.jsonl")
     if len(cases) != manifest["cases"]:
         raise Bad("run.json counts other cases than cases.jsonl holds")
+    for case in cases:
+        problem = flow_problem(case)
+        if problem is not None:
+            raise Bad(problem)
     _Priv, _Pub, _ser, InvalidSignature = root_statement._ed25519()
     authority = _public_key(authority_raw, "authority")
     image_lines = _lines(run / "images.jsonl")

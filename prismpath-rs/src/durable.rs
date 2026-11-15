@@ -796,22 +796,10 @@ pub struct ContextLedger {
     pub segments: Vec<ContextSegment>,
 }
 
+/// The context ledger's root: the RFC 6962 root (`crate::merkle`) over the hex leaves, None for none.
 pub fn merkle_root_hex(leaves_hex: &[String]) -> Option<String> {
-    if leaves_hex.is_empty() {
-        return None;
-    }
-    let mut layer: Vec<Vec<u8>> =
-        leaves_hex.iter().map(|str_val| hex::decode(str_val).unwrap_or_default()).collect();
-    while layer.len() > 1 {
-        if layer.len() % 2 == 1 {
-            layer.push(layer.last().expect("non-empty").clone());
-        }
-        layer = layer
-            .chunks(2)
-            .map(|pair| Sha256::digest([pair[0].as_slice(), pair[1].as_slice()].concat()).to_vec())
-            .collect();
-    }
-    Some(hex::encode(&layer[0]))
+    let leaves: Vec<Vec<u8>> = leaves_hex.iter().map(|str_val| hex::decode(str_val).unwrap_or_default()).collect();
+    crate::merkle::root_of_bytes(&leaves).map(hex::encode)
 }
 
 impl ContextLedger {

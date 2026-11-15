@@ -9,8 +9,10 @@ mod common;
 use ed25519_dalek::{Signer, SigningKey};
 use prismpath_hotswap_rs::flow_authority::{verify_flow, VersionFloor, FLOW_MANIFEST_FORMAT};
 use prismpath_hotswap_rs::root_statement::{
-    key_id_of, read_statements_text, signed_bytes, statement_hash, statements_path_for, verify_trail, INVALID, SIGNED,
+    key_id_of, read_statements_text, signed_bytes, statement_hash, statements_path_for, verify_receipt_bundle, verify_trail,
+    INVALID, SIGNED, STATEMENT_FORMAT,
 };
+use prismpath_hotswap_rs::merkle::merkle_root;
 use prismpath_hotswap_rs::{canonical_bytes, sha256_hex, verify_ed25519};
 use serde_json::{json, Value};
 
@@ -22,7 +24,7 @@ fn key(label: u8) -> SigningKey {
 fn statement(signer: &SigningKey, seq: i64, leaves: i64, root: &str, prev: &str) -> Value {
     let public = signer.verifying_key().to_bytes();
     let mut statement = json!({
-        "format": "prismpath-root-statement/2", "encoding": "canon/2", "log": "audit-log", "seq": seq, "root": root,
+        "format": STATEMENT_FORMAT, "encoding": "canon/2", "log": "audit-log", "seq": seq, "root": root,
         "leaves": leaves, "prev": prev, "time_us": 1762257600250000i64, "trigger": "run-end", "key_id": key_id_of(&public),
         "public_key": hex::encode(public), "policy": null,
     });
@@ -61,19 +63,48 @@ fn a_boolean_is_not_an_integer_in_a_statement() {
     assert_eq!(report.finding_names(), ["bad_format"]);
 }
 
+/// A `prismpath-root-statement/2` statement stated a root of the retired tree (no domain prefixes, the last
+/// node of an odd layer duplicated): it is refused by name, in a chain and in a receipt bundle, even signed
+/// by the pinned key and with the root the retired tree gives.
+#[test]
+fn an_old_scheme_statement_is_refused_by_name() {
+    let signer = key(7);
+    let pinned = vec![signer.verifying_key().to_bytes().to_vec()];
+    let event = json!({"idx": 0, "id": "0", "ts_us": 1730800000500000i64, "actor": "a", "action": "decision", "data": {}, "encoding": "canon/2"});
+    let leaf = sha256_hex(&canonical_bytes(&event).unwrap());
+    let public = signer.verifying_key().to_bytes();
+    let mut old = json!({
+        "format": "prismpath-root-statement/2", "encoding": "canon/2", "log": "audit-log", "seq": 0, "root": leaf,
+        "leaves": 1, "prev": "", "time_us": 1762257600250000i64, "trigger": "run-end", "key_id": key_id_of(&public),
+        "public_key": hex::encode(public), "policy": null,
+    });
+    let mut signed = b"prismpath-root-statement/2\x00".to_vec();
+    signed.extend(canonical_bytes(&old).unwrap());
+    old["sig"] = json!(hex::encode(signer.sign(&signed).to_bytes()));
+    let log = format!("{}\n", String::from_utf8(prismpath_rs::durable::canon2_bytes(&event).unwrap()).unwrap());
+    let report = verify_trail(&log, Some(&format!("{old}\n")), &pinned);
+    assert_eq!(report.status, INVALID);
+    assert_eq!(report.finding_names(), ["old_merkle_scheme"]);
+    let bundle = json!({"receipt": event, "index": 0, "leaf": leaf, "path": [], "statement": old});
+    let verdict = verify_receipt_bundle(&bundle, &pinned).unwrap().to_json();
+    assert_eq!(verdict["status"], json!(INVALID));
+    assert!(verdict["problem"].as_str().unwrap().contains("retired Merkle tree"), "{verdict}");
+}
+
 #[test]
 fn a_chain_signed_in_rust_test_code_verifies_like_one_signed_by_python() {
     let signer = key(7);
     let pinned = vec![signer.verifying_key().to_bytes().to_vec()];
     let events = [json!({"idx": 0, "id": "0", "ts_us": 1730800000500000i64, "actor": "a", "action": "decision", "data": {}, "encoding": "canon/2"})];
     let leaf = sha256_hex(&canonical_bytes(&events[0]).unwrap());
-    let first = statement(&signer, 0, 1, &leaf, "");
+    let root = merkle_root(std::slice::from_ref(&leaf)).unwrap();
+    let first = statement(&signer, 0, 1, &root, "");
     let log = format!("{}\n", String::from_utf8(prismpath_rs::durable::canon2_bytes(&events[0]).unwrap()).unwrap());
     let report = verify_trail(&log, Some(&format!("{first}\n")), &pinned);
     assert_eq!((report.status, report.findings.len()), (SIGNED, 0));
     assert_eq!(report.last_statement_sha256.as_deref(), statement_hash(&first).as_deref());
     // A second statement that names the first.
-    let second = statement(&signer, 1, 1, &leaf, &statement_hash(&first).unwrap());
+    let second = statement(&signer, 1, 1, &root, &statement_hash(&first).unwrap());
     assert_eq!(verify_trail(&log, Some(&format!("{first}\n{second}\n")), &pinned).status, SIGNED);
     // The same chain read without its newline at the end verifies; with Windows line endings a statement
     // is not its canonical bytes, and the chain does not verify.
