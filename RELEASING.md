@@ -148,9 +148,8 @@ From the first release after 0.1.3 (0.1.4 once 0.1.3 is uploaded), a GitHub Acti
 to leak and every file carries a PEP 740 attestation tying it to the workflow run. The workflow is
 `publish.yml` in the mirror, `crystal-warden/prismpath`. The export deletes everything in the mirror but `.git`
 on each run, so the workflow cannot be kept there by hand. Its source is `tools/mirror_publish.yml` in this
-repository, which the export does not yet carry: the product tree accepted on 2026-11-15 has no publish
-workflow. To turn it on, copy the file to `tools/mirror/.github/workflows/publish.yml` in a research commit, so that
-the export writes it beside `ci.yml`. Edit it in research and re-export, never the mirror's copy.
+repository, and `tools/export_clean.py` writes it to `.github/workflows/publish.yml` beside the generated
+`ci.yml`. Edit it in research and re-export, never the mirror's copy.
 
 ### One time setup (the owner, in a browser)
 

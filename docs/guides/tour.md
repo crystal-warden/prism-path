@@ -153,8 +153,8 @@ tables run in places no framework runtime can follow: microcontrollers, smart se
 in kernel packet paths. The first of those places is now real: a fixed FPGA interpreter circuit
 on a Zynq-7020 executes Level M flows as runtime loaded table images (136 bytes for the demo
 flow), certified against a declared subset of the same frozen vectors:
-[`prismpath-hw/` in research at the adopted revision](https://github.com/crystal-warden/prism-path/blob/40a9b05b3523cb4943b583b77c6fb86f93d795ee/prismpath-hw/README.md). The compiler
-that produces those images is carried here: `python -m prismpath.kernel.ppt_compile`.
+[`prismpath-hw/`](../../prismpath-hw/README.md). What remains (WASM, XDP/eBPF,
+P4) is listed honestly in [ROADMAP Phase 6](../../ROADMAP.md).
 
 ### Fan out and sub flow composition: parallelism without impurity
 
@@ -170,10 +170,11 @@ units across parents, and `prismpath lock` pins the whole composition tree. See
 ### The portable subset: locked flows run anywhere
 
 A flow whose reachable edges are all decidable (`when` predicates, error edges, event edges) needs
-**no ML runtime for routing**. In this repository that subset runs on the Rust kernel crate
-(`prismpath-rs/`, native or WebAssembly); in research it also ships as a dependency free JavaScript
-module and a Go kernel, and the [hosted playground](https://www.crystalwardenlabs.com/playground) runs
-the JavaScript kernel client side: paste a flow, watch it parse, tier classify, graph, and route live.
+**no ML runtime for routing**, and that subset ships as [`portable/prismpath.mjs`](../../prismpath/portable/prismpath.mjs),
+a single dependency free ES module (parser + sandboxed predicate evaluator + engine loop) that runs
+in Node, a browser, an edge function, or a network appliance. **Try it in the browser:**
+[`portable/playground.html`](../../prismpath/portable/playground.html) runs the kernel client side: paste a flow,
+watch it parse, tier classify, graph, and route live.
 
 `prismpath portable <flow>` computes the flow's **portability tier** for the whole composition tree:
 **P0** (all edges decidable: zero ML, runs on the port), **P1** (semantic edges all pinned in the
@@ -183,9 +184,10 @@ than guess. Routing fidelity is enforced by **frozen conformance vectors**
 ([`portable/conformance/`](../../prismpath/portable/conformance/README.md)): 1,112 predicate cases + 107 engine
 fixtures generated from the Python reference, checked in both directions on every test run: the
 spec is data, so a conforming kernel is provably interchangeable, and **three independent portable
-kernels already are**: Rust (`prismpath-rs/`, carried here), and JavaScript and Go
-([in research at the adopted revision](https://github.com/crystal-warden/prism-path/blob/40a9b05b3523cb4943b583b77c6fb86f93d795ee/docs/SYSTEM_MAP.md)), each passing every vector. The
-production SOC triage flow is P0: its routing is fully decidable; the LLM lives in the workers.
+kernels already are**: JavaScript (`prismpath/portable/prismpath.mjs`), Rust (`prismpath-rs/`),
+and Go (`prismpath-go/`), each passing every vector. The production SOC triage
+flow is P0: its routing is fully decidable; the LLM lives in the workers. See
+[`portable/README.md`](../../prismpath/portable/README.md).
 
 ---
 
@@ -271,7 +273,7 @@ production routing with no deploy and no engineer in the loop. **See it run:**
 
 A node's worker is whatever does the work: an LLM agent, a plain function (a
 [code node](code-nodes.md)), a shell script, or an entire tool run wrapped as a worker. The
-[mdflow interop example](https://github.com/crystal-warden/prism-path/blob/40a9b05b3523cb4943b583b77c6fb86f93d795ee/prismpath/examples/mdflow_interop/pipeline.md) drives another task
+[mdflow interop example](../../prismpath/examples/mdflow_interop/pipeline.md) drives another task
 runner's tasks as PrismPath nodes. Pair PrismPath with a tool like that and you keep its open-ended,
 agentic expression while PrismPath decides *where the run goes next* (provably) and records *what
 happened* (the git Flow-Ledger). You don't trade agentic work for governance; you wrap one inside the
@@ -281,7 +283,7 @@ other. Expression stays with the worker, control and observability stay with the
 
 The engine owns routing, attestation, and the toolchain; **domains plug in behind ports** (Ingestion,
 Retrieval, Adjudicator, Action/Sink, Attestation, Deferral) with **no domain vocabulary in the core**:
-[`tools/arch_guard.py`](https://github.com/crystal-warden/prism-path/blob/40a9b05b3523cb4943b583b77c6fb86f93d795ee/tools/arch_guard.py) fails the build if a domain noun leaks inward. The Facet
+[`tools/arch_guard.py`](../../tools/arch_guard.py) fails the build if a domain noun leaks inward. The Facet
 wire itself ships in the package (`prismpath/telemetry/`, [PROTOCOL.md](../../PROTOCOL.md)) because it is
 core infrastructure every adapter uses: it compresses a flow's telemetry to the distinctions that still
 reproduce its routing decisions, entropy coded on a self framing wire and Merkle verified end to end. Two
@@ -291,10 +293,10 @@ reference adapters ride the ports:
   decidable, provable fused decision on a self framing wire measured at about 45 times under batched JSON
   (integrity apparatus counted). The v1 worked example fuses a cyber triage verdict with a live IMU's
   physical posture through one tessellation, proven end to end on the live rig
-  ([evidence #82 to #86](https://github.com/crystal-warden/prism-path/blob/40a9b05b3523cb4943b583b77c6fb86f93d795ee/docs/research/supporting-evidence.md); the adapter is not carried here).
+  ([evidence #82 to #86](../research/supporting-evidence.md)).
 - **The GRC adjudication adapter** (`adapters/compliance/`): the class whose Adjudicator may be a model,
   machine checkable controls deciding deterministically and prose objectives resolving fail closed, with
-  evidence typed determinations ([evidence #137 to #139](https://github.com/crystal-warden/prism-path/blob/40a9b05b3523cb4943b583b77c6fb86f93d795ee/docs/research/supporting-evidence.md); the adapter is not carried here).
+  evidence typed determinations ([evidence #137 to #139](../research/supporting-evidence.md)).
 
 ## From a decision to a receipt
 

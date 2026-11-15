@@ -24,21 +24,26 @@ export refuses a working tree with uncommitted changes to tracked files, so a pr
 names a research commit that exists (`--allow-dirty` is for working on this script).
 
 What the product carries is the MANIFEST below, meant to be read and adjusted. A tracked file lands in
-the tree if an include rule matches it and no exclude rule does. Three things are not copied as they
-are:
+the tree if an include rule matches it and no exclude rule does. These are not copied as they are:
 
   * `tools/mirror/` is an overlay: each file in it is written into the tree at its path under that
     directory, replacing the research file of the same path. It holds what the product's packaging and
     CI say about a tree that carries less than research does (pyproject.toml, MANIFEST.in, the CI
-    workflow, the Dictionary subset).
+    workflow, the Dictionary subset, and the product's wording of the docs that
+    describe what the product carries: README-like pages, GETTING_STARTED, CONTRIBUTING, the guides).
   * `tools/mirror_readme.md` is the product's README.md, and the page PyPI shows.
   * PROVENANCE.md and SHA256SUMS are generated: the research commit and tree the export was made from,
     and the sha256 of every other file in it.
 
-Nothing is rewritten on the way: a file in the tree is a research file byte for byte, or an overlay file
-byte for byte, or one of the two generated records.
+  * `tools/mirror_publish.yml` is written as `.github/workflows/publish.yml` (PyPI Trusted Publishing).
+  * The overlay pyproject.toml takes its `version` from research's pyproject.toml, so the two cannot
+    diverge. That one line is the only rewrite.
+
+Otherwise nothing is rewritten on the way: a file in the tree is a research file byte for byte, or an
+overlay file byte for byte, or one of the two generated records.
 """
 import argparse
+import re
 import shutil
 import subprocess
 import sys
@@ -128,6 +133,9 @@ EXCLUDE_EXACT = {"docs_health_report.md", "interactions.jsonl"}
 
 OVERLAY_DIR = "tools/mirror"
 README_SOURCE = "tools/mirror_readme.md"
+PUBLISH_SOURCE = "tools/mirror_publish.yml"
+PUBLISH_PATH = ".github/workflows/publish.yml"
+VERSION_LINE = re.compile(r'^version = "[^"]*"', re.MULTILINE)
 GENERATED = ("PROVENANCE.md", "SHA256SUMS")
 
 ROOT = Path(__file__).resolve().parent.parent    # the source repo, wherever this is run from
@@ -163,9 +171,25 @@ def export_plan(tracked):
     for path, source in overlay_files():
         plan[path] = source
     plan["README.md"] = ROOT / README_SOURCE
+    plan[PUBLISH_PATH] = ROOT / PUBLISH_SOURCE
     for name in GENERATED:
         plan.pop(name, None)
     return plan
+
+
+def research_version():
+    found = VERSION_LINE.search((ROOT / "pyproject.toml").read_text())
+    if not found:
+        sys.exit("pyproject.toml has no version line")
+    return found.group(0)
+
+
+def render(rel, source):
+    """The bytes written for one path: the source's, except the overlay pyproject's version line."""
+    data = source.read_bytes()
+    if rel == "pyproject.toml":
+        data = VERSION_LINE.sub(research_version(), data.decode(), count=1).encode()
+    return data
 
 
 def provenance_text(commit, tree):
@@ -178,8 +202,8 @@ def provenance_text(commit, tree):
         f"Research tree: `{tree}`\n\n"
         "`SHA256SUMS` holds the sha256 of every other file in this tree. Every file is the research file\n"
         "of the same path byte for byte, except those that `tools/mirror/` and `tools/mirror_readme.md`\n"
-        "supply in research for this repository (the README, the packaging, the CI workflow and the\n"
-        "Dictionary subset), which are copied as written there. `python -m tools.provenance check`\n"
+        "supply in research for this repository (the README, the packaging, the CI workflow, the\n"
+        "Dictionary subset and the product's wording of some docs), which are copied as written there. `python -m tools.provenance check`\n"
         "verifies the hashes, and `python -m tools.provenance check --research PATH` also checks the tree\n"
         "against a research checkout at the commit named above.\n")
 
@@ -217,6 +241,7 @@ def main():
         dst = out / rel
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source, dst)
+        dst.write_bytes(render(rel, source))
         contents[rel] = dst.read_bytes()
 
     (out / "PROVENANCE.md").write_text(provenance_text(commit, tree))

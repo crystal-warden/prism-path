@@ -22,7 +22,7 @@ def exported(tmp_path_factory):
 def test_no_held_path_is_in_the_export(exported):
     held = [path for path in provenance.tree.tracked_paths(exported) if not export_clean.is_included(path)
             and path not in {"README.md", "PROVENANCE.md", "SHA256SUMS", "pyproject.toml", "MANIFEST.in",
-                             "docs/DICTIONARY.md", ".github/workflows/ci.yml"}]
+                             "docs/DICTIONARY.md", ".github/workflows/ci.yml", ".github/workflows/publish.yml"}]
     assert held == []
 
 
@@ -39,8 +39,15 @@ def test_the_export_carries_its_crate_fixtures_byte_identical(exported):
 
 
 def test_the_overlay_replaces_research_files_and_nothing_else_is_rewritten(exported):
-    overlaid = {path for path, _ in export_clean.overlay_files()} | {"README.md"}
+    overlaid = {path for path, _ in export_clean.overlay_files()} | {"README.md", ".github/workflows/publish.yml"}
     for path in provenance.tree.tracked_paths(exported):
         if path in overlaid or path in ("PROVENANCE.md", "SHA256SUMS"):
             continue
         assert (exported / path).read_bytes() == (export_clean.ROOT / path).read_bytes(), path
+
+
+def test_the_version_is_research_s_and_publish_is_carried(exported):
+    import re
+    version = re.search(r'^version = "([^"]*)"', (export_clean.ROOT / "pyproject.toml").read_text(), re.M).group(1)
+    assert f'version = "{version}"' in (exported / "pyproject.toml").read_text()
+    assert (exported / ".github" / "workflows" / "publish.yml").read_bytes() == (export_clean.ROOT / "tools" / "mirror_publish.yml").read_bytes()
