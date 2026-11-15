@@ -161,6 +161,22 @@ time); the probes take under 2 seconds.
    `Core/Codes.lean`, were **not** rebuilt with the new rows; their proofs are `decide` over the list and
    are expected to hold, but that is unchecked here.
 
+## 4a. Classifier fix: `git tag` and `git branch` listings
+
+Found by the governed intent layer's round 2 live run (`integrations/governed_intent/RESULTS.md`): the
+classifier read every `git tag` and `git branch` as a local write, so tasks that only listed tags or branches
+were escalated or refused as intent mismatches. Those false positives of the intent layer came from this
+classifier, not from the layer. The classifier now reads the two subcommands by their argv, the way it
+already reads other read only commands. A form is a listing (`local_read`) only when every argument is on an
+allowlist: no arguments, `-l`, `--list`, `-n`, `-a`, `--all`, `-r`, `-v`, `-vv`, `--show-current`, `--sort=`,
+`--format=`, `--contains`/`--merged`/`--points-at` with a value, and patterns after an explicit list flag.
+Creating, deleting, moving and anything unrecognised (`git tag NAME`, `-a`, `-d`, `-f`, `git branch NAME`,
+`-d`, `-D`, `-m`, `--set-upstream-to`, a bare `-l` on branch, any unknown flag) stays `local_write`; a branch
+copy with `-c` was already the unknown reading and still is. The enum of readings is unchanged, so the
+exhaustive policy check is unchanged and passes; the harness, governed_net and governed_intent tests pass
+(273 passed, 8 skipped) and the scripted probes score as before (51 cases, 54 calls, 0 out of policy, 0 wrong
+cause, 51/51 replay and verified, 54/54 replayed through Lean).
+
 ## 5. What is and is not shown
 
 **Shown, for these runs:** no call ran unless the signed policy allowed it, and none of the 291 decisions
