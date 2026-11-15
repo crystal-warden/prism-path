@@ -89,6 +89,38 @@ GIT_MUTATING = frozenset({"rm", "clean", "restore", "filter-branch", "filter-rep
                           "rebase", "cherry-pick", "revert", "am", "apply"})
 GIT_NETWORK = frozenset({"fetch", "pull", "clone", "ls-remote", "submodule", "send-email", "request-pull", "archive"})
 GIT_PATH_ARGS = frozenset({"add", "rm", "mv", "restore", "blame", "ls-files"})
+# `git tag` and `git branch` list or write by their argv. A form is a listing only when every argument is on these
+# allowlists; any other flag, or a bare name with no list flag, is a local write (the stricter class).
+_GIT_LIST_FLAGS = {
+    "tag": frozenset({"-l", "--list", "-n", "-i", "--ignore-case", "--column", "--no-column"}),
+    "branch": frozenset({"--list", "-a", "--all", "-r", "--remotes", "-v", "-vv", "--verbose", "--show-current",
+                         "-i", "--ignore-case", "--column", "--no-column", "--color", "--no-color", "--no-abbrev"}),
+}
+_GIT_LIST_VALUE_FLAGS = frozenset({"--contains", "--no-contains", "--merged", "--no-merged", "--points-at"})
+_GIT_LIST_PREFIXES = ("--sort=", "--format=", "--abbrev=", "--color=", "--column=")
+_GIT_LIST_SWITCH = {"tag": ("-l", "--list"), "branch": ("--list",)}
+
+
+def git_listing(subcommand: str, args: List[str]) -> bool:
+    """True when `git tag ARGS` or `git branch ARGS` only lists: no arguments at all, or every argument a listing
+    flag, a listing flag's value, or (after an explicit list flag) a pattern. Everything else is not a listing."""
+    flags, switch = _GIT_LIST_FLAGS[subcommand], _GIT_LIST_SWITCH[subcommand]
+    listing = any(arg in switch for arg in args)
+    expect_value = False
+    for arg in args:
+        if expect_value:
+            expect_value = False
+            if arg.startswith("-"):
+                return False
+        elif arg in _GIT_LIST_VALUE_FLAGS:
+            expect_value = True
+        elif arg in flags or arg.startswith(_GIT_LIST_PREFIXES) or (subcommand == "tag" and re.fullmatch(r"-n\d+", arg)):
+            continue
+        elif arg.startswith("-") or not listing:
+            return False       # an unrecognised flag, or a bare name that would create something
+    return not expect_value
+
+
 GIT_UNSAFE_OPTIONS = ("--exec", "--upload-pack", "--receive-pack", "-c", "--config", "--git-dir", "--work-tree", "-C")
 
 
@@ -290,6 +322,8 @@ def git_facts(subcommand: Any, args: Any, config: Config) -> Tuple[str, str, Lis
         return ("mutating" if "--hard" in args else "local_write"), "none", []
     paths = [path_facts(arg, config) for arg in _path_like_args(args)] if subcommand in GIT_PATH_ARGS else []
     if subcommand in GIT_LOCAL_READ:
+        return "local_read", "none", paths
+    if subcommand in ("tag", "branch") and git_listing(subcommand, args):
         return "local_read", "none", paths
     if subcommand in GIT_LOCAL_WRITE:
         return "local_write", "none", paths
