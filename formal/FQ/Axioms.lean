@@ -88,6 +88,11 @@ evaluator the oracle runs, which must not use `Classical.choice` to compute. -/
 #print axioms Core.Merkle.mth_injective
 #print axioms Core.Merkle.mth_repeated_last
 #print axioms Core.Merkle.retired_collides
+#print axioms Core.Merkle.split_pow
+#print axioms Core.Merkle.mth_append
+#print axioms Core.Merkle.acc_root_eq_mth
+#print axioms Core.Merkle.acc_root_nil
+#print axioms Core.Merkle.accPeaks_length_le
 #print axioms Core.Bridge.evalC_toX
 #print axioms Core.Bridge.firstMatch_eq_routeX
 #print axioms Core.Bridge.core_quantization_preserves
