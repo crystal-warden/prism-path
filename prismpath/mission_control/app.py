@@ -22,7 +22,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from prismpath.ledgers.audit_log import AuditWriteError
 
-from . import (attest, auditing, control, core, edit, events, inspect, observe,
+from . import (attest, auditing, authoring, control, core, edit, events, inspect, observe,
                picker, policy, prove, quality)
 from .posture import capability
 from .session import META_NAME, Session, SessionGuard
@@ -40,7 +40,7 @@ POSTURE_META_EMPTY = f'<meta name="{POSTURE_META_NAME}" content="">'
 mimetypes.add_type("text/javascript", ".mjs")
 
 ROUTERS = (prove.router, observe.router, control.router, edit.router, events.router, inspect.router,
-           quality.router, attest.router, policy.router, picker.router, auditing.router)
+           quality.router, attest.router, policy.router, picker.router, auditing.router, authoring.router)
 
 
 def _envelope(status_code: int, message: str) -> JSONResponse:

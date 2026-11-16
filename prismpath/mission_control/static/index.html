@@ -38,6 +38,9 @@
     <button type="button" class="tab active" role="tab" data-interface="authoring" data-screen="graph">Graph</button>
     <button type="button" class="tab" role="tab" data-interface="authoring" data-screen="files">Files</button>
     <button type="button" class="tab" role="tab" data-interface="authoring" data-screen="inspect">Inspect</button>
+    <button type="button" class="tab" role="tab" data-interface="authoring" data-screen="prove">Prove</button>
+    <button type="button" class="tab" role="tab" data-interface="authoring" data-screen="status">Change status</button>
+    <button type="button" class="tab" role="tab" data-interface="authoring" data-screen="new">New flow</button>
     <button type="button" class="tab hidden" role="tab" data-interface="operating" data-screen="queue">Queue</button>
     <button type="button" class="tab hidden" role="tab" data-interface="operating" data-screen="policy">Policy</button>
     <button type="button" class="tab hidden" role="tab" data-interface="operating" data-screen="monitor">Cause monitor</button>
@@ -101,7 +104,8 @@
       <div class="editor">
         <div class="editor-bar"><span id="ed-path" class="muted">no file</span>
           <button class="btn" id="ed-save" disabled>Save</button>
-          <span class="muted hidden" id="ed-note"></span></div>
+          <span class="muted hidden" id="ed-note"></span>
+          <span class="grow"></span><span class="muted" id="ed-status" title="the open flow's change status"></span></div>
         <textarea id="ed-body" spellcheck="false" placeholder="select a file"></textarea>
       </div>
     </section>
@@ -197,7 +201,58 @@
           <button class="btn" data-inspect="test">Test</button>
           <button class="btn" data-inspect="graph">Mermaid</button>
         </div>
-        <pre class="tool-out" id="ins-out">pick a check.</pre>
+        <div class="tool-out rendered" id="ins-out">pick a check.</div>
+      </div>
+    </section>
+
+    <!-- PROVE: Level M and bounded reachability over flow text, saved or not -->
+    <section class="view" id="v-prove">
+      <div class="card">
+        <h3>Prove a flow's text</h3>
+        <div class="muted">The proofs take the flow as text, so an edit can be proven before it is saved. The Graph screen proves the followed flow and paints the witness path on it.</div>
+        <div class="toolrow">
+          <button class="btn" id="pv-followed">Use the followed flow</button>
+          <button class="btn" id="pv-editor">Use the editor's text</button>
+        </div>
+        <label>flow text</label>
+        <textarea id="pv-text" class="prove-text" spellcheck="false" placeholder="paste or load a flow document"></textarea>
+        <label>reach (nodes, comma separated)</label><input id="pv-reach" placeholder="e.g. escalate">
+        <label>forbid (nodes asserted unreachable, comma separated)</label><input id="pv-forbid" placeholder="e.g. danger">
+        <label>assume (optional)</label><input id="pv-assume" placeholder="e.g. amount &lt;= 500">
+        <div class="toolrow">
+          <button class="btn prove" id="pv-levelm">Prove Level M</button>
+          <button class="btn prove" id="pv-reach-go">Prove reachability</button>
+        </div>
+        <div class="tool-out rendered" id="pv-out">pick a proof.</div>
+      </div>
+    </section>
+
+    <!-- CHANGE STATUS: the flow's hash, its signed manifest and what the deployment runs -->
+    <section class="view" id="v-status">
+      <div class="card">
+        <h3>Change status</h3>
+        <div class="muted">Where a flow stands on the signed path. The console reads; it never signs, packs, swaps or attests, and shows the commands that do.</div>
+        <label>flow path</label><input id="st-flow" list="dl-flows" placeholder="flow .md (blank = the followed flow)">
+        <label>authority public key files (comma separated, under the project or an evidence root)</label>
+        <input id="st-pins" list="dl-files" placeholder="keys/authority.pub">
+        <label>policy host state directory (optional, under the project or an evidence root)</label>
+        <input id="st-state" placeholder="state">
+        <div class="toolrow"><button class="btn" id="st-go">Read the status</button></div>
+        <div class="tool-out rendered" id="st-out">name a flow.</div>
+      </div>
+    </section>
+
+    <!-- NEW FLOW: scaffold from a bundled template, as prismpath init does -->
+    <section class="view" id="v-new">
+      <div class="card">
+        <h3>New flow from a template</h3>
+        <div class="muted">Writes the same files as <code>prismpath init</code>, into the followed project, recorded in the console's audit log.</div>
+        <label>template</label><select id="sc-template"></select>
+        <label>name</label><input id="sc-name" placeholder="letters, digits, _ and -">
+        <div id="sc-preview"></div>
+        <div class="toolrow"><button class="btn go" id="sc-go">Create</button>
+          <span class="muted hidden" id="sc-note"></span></div>
+        <div id="sc-out"></div>
       </div>
     </section>
 

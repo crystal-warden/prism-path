@@ -221,3 +221,16 @@ svg.spark polyline { fill: none; stroke: var(--accent); stroke-width: 1.2; }
 .tree ul { margin: 4px 0 4px 8px; padding-left: 14px; border-left: 1px dashed var(--border); }
 #v-monitor input, #v-monitor label { display: block; }
 #v-monitor input { width: 100%; }
+
+/* the authoring screens: each file's kind in the list, the fixture cases, the prove text, the editor's status line */
+.filelist .f .kind { font-size: 10px; padding: 0 5px; border: 1px solid var(--border); border-radius: 999px; }
+.filelist .f .kind.fixture { color: var(--accent); }
+.filelist .f .kind.other { color: var(--muted); }
+.filelist .f.kind-other { color: var(--muted); }
+table.cases { border-collapse: collapse; font-size: 12px; margin-top: 8px; }
+table.cases th, table.cases td { text-align: left; padding: 3px 8px; border-bottom: 1px solid #101a2b; }
+table.cases tr.bad td { color: var(--bad); }
+.prove-text { width: 100%; min-height: 180px; font-family: monospace; font-size: 12px; }
+#ed-status { font-family: monospace; font-size: 11px; }
+#sc-note { color: var(--warn); }
+.tool-out.rendered { white-space: normal; }

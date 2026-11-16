@@ -11,7 +11,7 @@ from fastapi import APIRouter, HTTPException
 from . import core
 from .models import ProveLevelMReq, ProveReachReq
 
-router = APIRouter(prefix="/prove", tags=["prove"])
+router = APIRouter(prefix="/prove", tags=["authoring", "prove"])
 
 
 def _graph(flow_text: str):

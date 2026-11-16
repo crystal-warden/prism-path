@@ -21,7 +21,7 @@ from . import core
 from prismpath.kernel.parser import parse_file
 from prismpath.kernel import analysis
 
-router = APIRouter(prefix="/inspect", tags=["inspect"])
+router = APIRouter(prefix="/inspect", tags=["authoring", "inspect"])
 
 
 # --------------------------------------------------------------- request models

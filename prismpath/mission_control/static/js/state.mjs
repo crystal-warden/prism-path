@@ -13,6 +13,8 @@ export const state = {
   graph: null,           // the latest /flow/graph payload: nodes, start, active_node, flow_text
   retrievals: [],
   openFilePath: null,
+  openFileKind: null,    // the open file's kind from /files: flow, fixture or other
+  templates: [],         // the scaffold's templates from /author/templates
 };
 
 export function available(method, path) {

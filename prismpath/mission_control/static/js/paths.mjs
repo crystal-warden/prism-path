@@ -39,6 +39,9 @@ export const PATHS = Object.freeze({
   inspectPortable: "/inspect/portable",
   inspectTest: "/inspect/test",
   inspectGraph: "/inspect/graph",
+  authorTemplates: "/author/templates",
+  authorScaffold: "/author/scaffold",
+  authorStatus: "/author/status",
   qualityLock: "/quality/lock",
   qualityLockCheck: "/quality/lock-check",
   qualityCalibrate: "/quality/calibrate",
@@ -65,6 +68,7 @@ export const PATHS = Object.freeze({
 // "METHOD path" for every route above whose capability is `write`.
 export const WRITE_ROUTES = Object.freeze([
   "POST /file",
+  "POST /author/scaffold",
   "POST /queue/decide",
   "POST /queue/event",
   "POST /sprint/select",
