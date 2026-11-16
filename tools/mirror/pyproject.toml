@@ -8,7 +8,8 @@ name = "prismpath"
 version = "0.1.3"
 description = "A control plane for autonomous systems: author a decision structure in Markdown, prove it before it runs, enforce it where the system runs, and get a signed receipt for every decision."
 readme = "README.md"
-license = { text = "Apache-2.0" }
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
 authors = [{ name = "Crystal Warden Labs" }]
 requires-python = ">=3.10"
 keywords = ["llm", "agents", "workflow", "orchestration", "markdown", "routing", "declarative"]
