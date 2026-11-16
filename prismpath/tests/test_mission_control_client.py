@@ -141,6 +141,7 @@ def _app():
 
 
 def test_every_path_in_paths_mjs_exists_in_the_openapi_document():
+    pytest.importorskip("fastapi")
     from prismpath.mission_control.app import API_PREFIX
     schema = _app().openapi()["paths"]
     missing = sorted(path for path in _table("paths.mjs", "PATHS").values() if API_PREFIX + path not in schema)
@@ -148,6 +149,7 @@ def test_every_path_in_paths_mjs_exists_in_the_openapi_document():
 
 
 def test_write_routes_in_paths_mjs_are_exactly_the_write_routes_the_client_uses():
+    pytest.importorskip("fastapi")
     from prismpath.mission_control.app import API_PREFIX
     from prismpath.mission_control.posture import CAPABILITY_KEY
     schema = _app().openapi()["paths"]

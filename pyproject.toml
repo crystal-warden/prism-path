@@ -81,7 +81,7 @@ prismpath = ["flows/*.md",                    # example + reference flows
           "portable/conformance/*.json"]      # the frozen kernel spec
 "prismpath.plugins.pysprint" = ["*.md"]   # ARCH.md / LESSONS.md read at runtime by the sprint plugin
 # Mission Control's browser command center — served at runtime by the FastAPI app (control-plane extra).
-"prismpath.mission_control" = ["static/*", "static/vendor/*", "static/js/*.mjs"]
+"prismpath.mission_control" = ["static/*", "static/vendor/*", "static/js/*.mjs", "static/js/tests/*.mjs"]
 
 # Prose documentation, installed beside the package (sys.prefix/share/doc/prismpath/…) so an
 # air-gapped install still carries it. Not importable — read these from the repo or GitHub normally.
