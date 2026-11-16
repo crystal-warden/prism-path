@@ -138,6 +138,8 @@ def test_env_like_and_unlisted_files_are_refused(client, proj):
     _refused(_read(client, ".env"), "secret-kind")
     _refused(_read(client, "flows/prod.env"), "secret-kind")
     _refused(_read(client, "flows/secrets.yaml"), "secret-kind")
+    (proj / "flows" / "credentials.md").write_text(FLOW, encoding="utf-8")   # a flow about credentials reads
+    assert _read(client, "flows/credentials.md").status_code == 200
     _refused(_read(client, "flows/store.p12"), "secret-kind")
     _refused(_read(client, "id_ed25519"), "secret-kind")
     (proj / "flows" / "data.csv").write_text("a,b\n", encoding="utf-8")

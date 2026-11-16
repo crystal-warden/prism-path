@@ -9,8 +9,8 @@ an innocent name is refused too. Three rules, each a refusal reason:
 
     secret-kind     a private key file by its name (`*.key`, `instance.key`, `authority.key`, PKCS12 and
                     Java keystores, PuTTY keys, `id_rsa` and its kind without `.pub`), an `.env` like file
-                    (`.env`, `.env.*`, `*.env`, `.envrc`, `.netrc`, `.pgpass`), or a file named for
-                    secrets or credentials
+                    (`.env`, `.env.*`, `*.env`, `.envrc`, `.netrc`, `.pgpass`), or a file other than
+                    a flow document named for secrets or credentials
     console-state   anything in the console's own state directory (the session token file above all)
                     but its audit log and that log's statements file, and the followed project when the
                     project is the default one inside it
@@ -63,8 +63,8 @@ def kind_refusal(path: str) -> Optional[str]:
     if name in ENV_NAMES or name.startswith(".env.") or name.endswith(".env"):
         return KIND
     stem = name.split(".", 1)[0]
-    if stem in SECRET_STEMS:
-        return KIND
+    if stem in SECRET_STEMS and not name.endswith(".md"):     # a flow may be about credentials; its bytes
+        return KIND                                           # are still judged by content_refusal
     return None
 
 
@@ -85,8 +85,9 @@ def state_refusal(real: str) -> Optional[str]:
     log_path = os.path.realpath(audit.LOG.path)
     if real in (log_path, os.path.realpath(root_statement.statements_path_for(log_path))):
         return None
-    project = os.path.realpath(current_project())
-    if project != state_dir and _inside(project, state_dir) and _inside(real, project):
+    followed = current_project()
+    project = os.path.realpath(followed) if followed else ""
+    if project and project != state_dir and _inside(project, state_dir) and _inside(real, project):
         return None
     return STATE
 
