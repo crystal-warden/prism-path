@@ -1,7 +1,9 @@
 # Governed population on Kubernetes: deploy
 
-*Research example, 2026-11-16. Written for a single node k3s cluster on aarch64 before one existed; every
-step below that touches a cluster is unverified until it runs on one (see the last section). The design is
+*Research example, 2026-11-16. Written for a single node k3s cluster on aarch64 and run on one (k3s
+v1.37.2+k3s1, 2026-11-16): sections 1 to 5 went through as written, the scripted population gave 23 of 23
+answers as expected, and its sealed run verified with both keys pinned, 23 receipts replayed and 23 agreeing.
+The last section says what that run checked and what it did not. The design is
 [`../DESIGN.md`](../DESIGN.md), section 8.*
 
 Commands run from the repository root with the research environment in `.venv`. `K` stands for
@@ -176,23 +178,22 @@ sudo k3s ctr images rm localhost/prismpath-population-webhook:0.1.0
 Deleting `prismpath-population-system` deletes the claim and with it every receipt still in the cluster;
 copy the runs out first. The local `secrets/` directory keeps the keys the copied runs verify against.
 
-## 7. What only a running cluster can check
+## 7. What the cluster run checked
 
 The tests (`tests/`) cover the classification, the decisions, the receipts, the server over TLS, the image
-context and the manifests' structure without a cluster. These remain:
+context and the manifests' structure without a cluster. The run on k3s v1.37.2+k3s1 checked these as well:
 
-- that the API server accepts the CRD's schema, the Deployment and the webhook configuration, and that
-  the `matchConditions` CEL compiles (it needs Kubernetes 1.30 or newer, or 1.28 and 1.29 with the beta on);
-- that the `system:masters` group reaches the webhook as the operator, the garbage collector's and the
-  namespace controller's usernames are the ones the `decide` entry excludes (k3s runs the controller manager
-  with per controller ServiceAccounts or as `system:kube-controller-manager`; both are excluded), and
-  impersonated ServiceAccounts arrive with the groups the script gives them;
-- that a foreground delete reaches every descendant through the ownerReferences, that the garbage
-  collector's own updates and deletes during the cascade are not sent to `decide`, and that the operator's
-  delete proceeds with the webhook scaled to zero;
-- that members can set `blockOwnerDeletion` on a child's ownerReference (with the
-  OwnerReferencesPermissionEnforcement admission plugin on, they would need update rights on the parent's
-  finalizers, which they do not have);
-- that local-path storage gives the non root user a writable directory, that the image's Python finds the
-  copied `cryptography` build, and that the webhook answers within the five second timeout under load;
-- the API server's audit annotations, and `kubectl cp` and `kill -USR1 1` inside the image.
+- the API server accepted the CRD's schema, the Deployment and the webhook configuration, and the
+  `matchConditions` CEL compiled;
+- the `system:masters` group reached the webhook as the operator, and impersonated ServiceAccounts arrived
+  with the groups the script gives them (every step of the script answered as expected);
+- the operator's stop of the root removed every member through the ownerReferences, with no member left and
+  no cascade write refused;
+- local-path storage gave the non root user a writable directory, the image's Python found the copied
+  `cryptography` build, and `kill -USR1 1` and `kubectl cp` worked inside the image;
+- with the webhook scaled to zero a member's create and the operator's create were refused (`failed calling
+  webhook`), and the operator's delete went through at once.
+
+These remain unchecked: whether members can set `blockOwnerDeletion` with the
+OwnerReferencesPermissionEnforcement admission plugin on (k3s leaves it off), the answer time under load, and
+the API server's audit annotations, since the run had no audit log enabled.
