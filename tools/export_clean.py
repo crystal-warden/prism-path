@@ -141,6 +141,7 @@ GENERATED = ("PROVENANCE.md", "SHA256SUMS")
 ROOT = Path(__file__).resolve().parent.parent    # the source repo, wherever this is run from
 sys.path.insert(0, str(ROOT))
 from tools import provenance  # noqa: E402   the one definition of SHA256SUMS
+from tools.tree import is_bytecode  # noqa: E402   the one definition of what is not part of a tree
 
 
 def git(*args):
@@ -160,9 +161,11 @@ def is_included(path):
 
 
 def overlay_files():
-    """Every file under tools/mirror/, as (path in the tree, source path in this repo)."""
+    """Every file under tools/mirror/, as (path in the tree, source path in this repo), apart from any
+    bytecode Python wrote there."""
     base = ROOT / OVERLAY_DIR
-    return sorted((str(p.relative_to(base)), p) for p in base.rglob("*") if p.is_file())
+    return sorted((p.relative_to(base).as_posix(), p) for p in base.rglob("*")
+                  if p.is_file() and not is_bytecode(p.relative_to(base).as_posix()))
 
 
 def export_plan(tracked):

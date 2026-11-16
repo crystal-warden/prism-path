@@ -51,3 +51,13 @@ def test_the_version_is_research_s_and_publish_is_carried(exported):
     version = re.search(r'^version = "([^"]*)"', (export_clean.ROOT / "pyproject.toml").read_text(), re.M).group(1)
     assert f'version = "{version}"' in (exported / "pyproject.toml").read_text()
     assert (exported / ".github" / "workflows" / "publish.yml").read_bytes() == (export_clean.ROOT / "tools" / "mirror_publish.yml").read_bytes()
+
+
+def test_bytecode_beside_an_overlay_file_is_not_exported(tmp_path, monkeypatch):
+    overlay = tmp_path / export_clean.OVERLAY_DIR / "tools"
+    (overlay / "__pycache__").mkdir(parents=True)
+    (overlay / "kept.py").write_text("# kept\n")
+    (overlay / "__pycache__" / "kept.cpython-312.pyc").write_bytes(b"bytecode")
+    (overlay / "stray.pyc").write_bytes(b"bytecode")
+    monkeypatch.setattr(export_clean, "ROOT", tmp_path)
+    assert [path for path, _ in export_clean.overlay_files()] == ["tools/kept.py"]

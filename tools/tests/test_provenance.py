@@ -2,7 +2,7 @@
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """SHA256SUMS renders in the sha256sum format and parses back; the hash check names an edited, an
 extra and a missing file; PROVENANCE.md must name a commit; and the research comparison refuses a
-checkout at another commit."""
+checkout at another commit. Bytecode Python writes while running in the tree is not part of it."""
 import hashlib
 import subprocess
 
@@ -40,6 +40,14 @@ def test_an_untouched_tree_passes(tmp_path):
     _tree(tmp_path)
     assert provenance.check_hashes(tmp_path) == []
     assert provenance.recorded_commit(tmp_path) == COMMIT
+
+
+def test_bytecode_written_by_running_python_in_the_tree_is_not_part_of_it(tmp_path):
+    _tree(tmp_path)
+    (tmp_path / "sub" / "__pycache__").mkdir()
+    (tmp_path / "sub" / "__pycache__" / "b.cpython-312.pyc").write_bytes(b"bytecode")
+    (tmp_path / "stray.pyc").write_bytes(b"bytecode")
+    assert provenance.check_hashes(tmp_path) == []
 
 
 def test_an_edited_extra_and_missing_file_are_each_named(tmp_path):
