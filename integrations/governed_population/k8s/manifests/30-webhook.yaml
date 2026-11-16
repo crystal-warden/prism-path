@@ -1,0 +1,168 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
+#
+# The webhook: one replica (it alone counts admitted creates the API server has not stored yet, and it is
+# the one writer of its receipt runs), Recreate so two never overlap. Created by DEPLOY.md's commands,
+# never committed: the Secrets population-webhook-tls (tls.crt, tls.key) and population-webhook-identity
+# (instance.key), and the ConfigMap population-operator (authority.pub, attestations.json, evaluator.pub).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: population-webhook-config
+  namespace: prismpath-population-system
+data:
+  config.json: |
+    {
+     "namespace": "prismpath-population",
+     "operator_groups": ["system:masters"],
+     "controller_users": ["system:serviceaccount:prismpath-population-system:population-controller"]
+    }
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: population-webhook-data
+  namespace: prismpath-population-system
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: population-webhook
+  namespace: prismpath-population-system
+  labels:
+    app.kubernetes.io/name: population-webhook
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: population-webhook
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: population-webhook
+    spec:
+      serviceAccountName: population-webhook
+      enableServiceLinks: false
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: webhook
+          image: localhost/prismpath-population-webhook:0.1.0
+          imagePullPolicy: Never
+          args:
+            - --data=/var/lib/prismpath-population
+            - --identity=/etc/prismpath/identity
+            - --authority=/etc/prismpath/operator/authority.pub
+            - --attestations=/etc/prismpath/operator/attestations.json
+            - --config=/etc/prismpath/config/config.json
+            - --evaluations=/var/lib/prismpath-population/evaluations
+            - --evaluators=/etc/prismpath/evaluators
+            - --tls-cert=/etc/prismpath/tls/tls.crt
+            - --tls-key=/etc/prismpath/tls/tls.key
+            - --port=8443
+          ports:
+            - name: https
+              containerPort: 8443
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: https
+              scheme: HTTPS
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: https
+              scheme: HTTPS
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 50m
+              memory: 96Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/prismpath-population
+            - name: identity
+              mountPath: /etc/prismpath/identity
+              readOnly: true
+            - name: operator
+              mountPath: /etc/prismpath/operator
+              readOnly: true
+            - name: evaluators
+              mountPath: /etc/prismpath/evaluators
+              readOnly: true
+            - name: config
+              mountPath: /etc/prismpath/config
+              readOnly: true
+            - name: tls
+              mountPath: /etc/prismpath/tls
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: population-webhook-data
+        - name: identity
+          secret:
+            secretName: population-webhook-identity
+            defaultMode: 0440
+        - name: tls
+          secret:
+            secretName: population-webhook-tls
+            defaultMode: 0440
+        - name: operator
+          configMap:
+            name: population-operator
+            items:
+              - key: authority.pub
+                path: authority.pub
+              - key: attestations.json
+                path: attestations.json
+        - name: evaluators
+          configMap:
+            name: population-operator
+            items:
+              - key: evaluator.pub
+                path: evaluator.pub
+        - name: config
+          configMap:
+            name: population-webhook-config
+        - name: tmp
+          emptyDir:
+            sizeLimit: 16Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: population-webhook
+  namespace: prismpath-population-system
+spec:
+  selector:
+    app.kubernetes.io/name: population-webhook
+  ports:
+    - name: https
+      port: 443
+      targetPort: https

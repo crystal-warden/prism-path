@@ -174,7 +174,8 @@ surely as one that probes (RESULTS, the runaway scenario).
 
 ## 8. On a real cluster, later
 
-Not built. The pieces map as follows.
+Items 1 and 3 are built in [`k8s/`](k8s/DEPLOY.md) (2026-11-16): the webhook, its manifests and image
+recipe, tested without a cluster; the controller and items 4 to 6 are not. The pieces map as follows.
 
 1. **A validating admission webhook** decides every create, scale and update of the population's custom
    resource (say `GovernedAgent`, one per member, with an ownerReference to its parent's) by forming the

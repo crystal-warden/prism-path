@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
+#
+# The population webhook's image, linux/arm64, from local files only: the context build_context.sh
+# assembles (the prismpath package, the core's reference decision path in formal/diff, the governed harness
+# and population code, and the cryptography package copied from a local Python 3.12 environment). No
+# package manager runs and nothing is fetched: build it with the network off. The one outside input is
+# the base image, which must already be in the local image store (pin it by digest with --build-arg BASE).
+ARG BASE=docker.io/library/python:3.12-slim-bookworm
+FROM ${BASE}
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/opt/prismpath:/opt/prismpath/site
+COPY app/ /opt/prismpath/
+RUN python3 -c "import integrations.governed_population.k8s.webhook, cryptography; print('imports ok')" \
+ && chmod -R a+rX,go-w /opt/prismpath
+USER 10001:10001
+WORKDIR /opt/prismpath
+EXPOSE 8443
+ENTRYPOINT ["python3", "-m", "integrations.governed_population.k8s.webhook"]
