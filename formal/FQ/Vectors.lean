@@ -5,7 +5,7 @@
 -- decisions.json   sha256 6b68a08de7f57cdd11bee07bd256587094dc353b959d1195473c6880472479c8
 -- spiral_fusion.json sha256 1d9dec55645adfe3a63ba7ee555fc45f2aae69d68c53542574876a96d844eaa4
 -- inputs.json sha256 3af3541d5107695114acbb7d19e0083e3e1e5ff53623cb8427bffbe443a4f7dc
--- field_definitions.json sha256 50c777852951a0d03d17fcbf9db01c70322af3fb1432d40a76bc47c7df67df18
+-- field_definitions.json sha256 9b7ac91eef3b596f6fbd09235cb909500fa4a45a0425a2cab0ec699987f4e02b
 -- counts: acceptance refusals checked 31, acceptances checked, value and cell 21, checked 39, conversion cases skipped: not a fixed field 25, conversion cases skipped: outside the model (parse, type, absence) 23, conversions checked 54, cross kind comparison 19, non scalar or float constant 30, not Level M 943, referenced field missing or null 80, routes checked 90, shape not carried (non literal operand) 1, spiral cells checked (index, route, band) 108, spiral gray order equals the reference 1, spiral probes checked 34, symbols checked against the reference 164, zeckendorf codes checked against the reference 300
 import FQ.Partition
 import FQ.Zeckendorf
