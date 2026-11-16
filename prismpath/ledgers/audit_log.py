@@ -78,7 +78,11 @@ def event_seconds(ev: dict) -> float:
 class AuditLog:
     def __init__(self, path: str, instance_key: Optional["_statements.InstanceKey"] = None,
                  sign_appends: bool = False, policy_of: Optional[Callable[[], Optional[dict]]] = None,
-                 statements_path: Optional[str] = None):
+                 statements_path: Optional[str] = None, source: Optional[bytes] = None,
+                 statements_source: Optional[bytes] = None):
+        """`source` and `statements_source`, when given, are the bytes of the log and of its statements file
+        as a reader already holds them (a bounded read of untrusted evidence): they are parsed instead of
+        the files, so every answer is about the one snapshot the reader took and nothing reopens the file."""
         self.path = path
         self.instance_key = instance_key
         self.sign_appends = sign_appends
@@ -91,23 +95,29 @@ class AuditLog:
         self.skipped: list = []
         self.skipped_causes: dict = {}         # line number -> why the line was refused (canon/1 lines, bad JSON)
         self._accumulator = _statements.MerkleAccumulator()      # the root as leaves arrive, for signing
-        if path and os.path.exists(path):
+        self._statements_source = statements_source
+        text = None
+        if source is not None:
+            text = bytes(source).decode("utf-8", errors="surrogateescape")
+        elif path and os.path.exists(path):
             with open(path, encoding="utf-8", newline="") as log_file:
-                # split at each line feed and nothing else: a carriage return stays in its line
-                for line_num, line in enumerate(log_file.read().split("\n"), 1):
-                    if not line.strip():
-                        continue
-                    try:
-                        # the line as written, its one line feed the terminator: a line in any spelling but
-                        # the event's canonical bytes is refused (document:not-canonical), not respelled
-                        ev = _canon.loads_document(line)
-                    except Exception as error:
-                        self.skipped.append(line_num)
-                        self.skipped_causes[line_num] = str(error)[:200]
-                        continue
-                    self.events.append(ev)
-                    self.leaves.append(_leaf_hex(ev))
-                    self._accumulator.add(self.leaves[-1])
+                text = log_file.read()
+        if text is not None:
+            # split at each line feed and nothing else: a carriage return stays in its line
+            for line_num, line in enumerate(text.split("\n"), 1):
+                if not line.strip():
+                    continue
+                try:
+                    # the line as written, its one line feed the terminator: a line in any spelling but
+                    # the event's canonical bytes is refused (document:not-canonical), not respelled
+                    ev = _canon.loads_document(line)
+                except Exception as error:
+                    self.skipped.append(line_num)
+                    self.skipped_causes[line_num] = str(error)[:200]
+                    continue
+                self.events.append(ev)
+                self.leaves.append(_leaf_hex(ev))
+                self._accumulator.add(self.leaves[-1])
 
     def append(self, actor: str, action: str, data: dict) -> dict:
         """Persist the event, then commit it to the tree. Raises AuditWriteError, with the log
@@ -165,6 +175,10 @@ class AuditLog:
         with self._lock:
             return self._sign_locked(trigger, policy)
 
+    def _read_statements(self):
+        """The statements beside the log: from the snapshot the log was built from, or from the file."""
+        return _statements.read_statements(self.statements_path, data=self._statements_source)
+
     def root_at(self, leaf_count: int) -> str:
         """The Merkle root over the first `leaf_count` leaves: what a statement of that count signed."""
         return _statements.merkle_root(self.leaves[:leaf_count])
@@ -173,7 +187,7 @@ class AuditLog:
         """Check the root statements beside the log against the log: status signed, signed-unpinned,
         unsigned or invalid, with every finding (truncation, a rewritten leaf, a wrong key, a broken
         chain, a statement whose root does not match). Checking a signature needs the signing extra."""
-        statements, read_findings = _statements.read_statements(self.statements_path)
+        statements, read_findings = self._read_statements()
         if self.skipped:
             read_findings = read_findings + [{"finding": "bad_format", "log_lines": list(self.skipped)}]
         # One pass over the leaves gives the root at every signed count, so a log signed after every event
@@ -196,7 +210,7 @@ class AuditLog:
         if self.skipped:
             first = self.skipped_causes.get(self.skipped[0], "")
             raise AnchorRefused(f"the log has unreadable lines {self.skipped}: it does not verify ({first})")
-        statements, _findings = _statements.read_statements(self.statements_path)
+        statements, _findings = self._read_statements()
         if not statements:
             root = self.current_root()
             return {"kind": "merkle-root", "hash": root, "root": root, "leaves": len(self.leaves),
@@ -217,7 +231,7 @@ class AuditLog:
         that hash in its chain, or the Merkle root over the first `leaves` events. Appending to the log
         after the anchor does not change the answer; editing or dropping what was anchored does."""
         if record.get("kind") == "root-statement":
-            statements, _findings = _statements.read_statements(self.statements_path)
+            statements, _findings = self._read_statements()
             return any(statement and _statements.statement_hash(statement) == record.get("hash") for statement in statements)
         count = record.get("leaves")
         return isinstance(count, int) and 0 < count <= len(self.leaves) and self.root_at(count) == record.get("hash")
@@ -227,7 +241,7 @@ class AuditLog:
         offline by `root_statement.verify_receipt_bundle`."""
         if not (0 <= index < len(self.events)):
             raise IndexError(f"receipt index out of range: {index} (the log holds {len(self.events)})")
-        statements, _findings = _statements.read_statements(self.statements_path)
+        statements, _findings = self._read_statements()
         return _statements.receipt_bundle(self.events[index], self.leaves, index, statements)
 
     def verify_persisted(self) -> bool:
