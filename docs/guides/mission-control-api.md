@@ -140,7 +140,9 @@ The console has two postures. The full posture is the default on loopback. `--re
 `MC_READ_ONLY=1`) mounts no route marked `write`, the sprint controls, the queue decision, the file
 write and the lockfile write, and refuses a request for one with a 403 that
 says the console is read only, so an assessor can run it over a copy of the evidence with no way to
-change it.
+change it. The page learns the posture from a `<meta name="prismpath-posture">` tag written as it is
+served (`full` or `read-only`), and shows each control whose route that posture leaves out as
+unavailable rather than sending a request the console would refuse.
 
 The project the console follows is chosen only from the discovered sprints (the registry, the scan
 globs and the launch project) or from a directory under an evidence root, and never one that holds

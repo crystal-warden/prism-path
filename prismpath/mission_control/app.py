@@ -10,6 +10,7 @@ built from the settings at import. The session guard (`session.SessionGuard`) wr
 """
 import html
 import logging
+import mimetypes
 import os
 
 from fastapi import APIRouter, FastAPI, Request
@@ -28,8 +29,15 @@ from .session import META_NAME, Session, SessionGuard
 
 API_PREFIX = "/api/v1"
 STATIC_DIR = os.path.join(core.SETTINGS.package_dir, "static")
-# The tag index.html ships with; the page route fills it with this launch's token as it serves the page.
+# The tags index.html ships with; the page route fills them with this launch's token and the console's
+# posture as it serves the page, so the client shows read-only controls as unavailable instead of
+# sending requests the guard refuses.
 SESSION_META_EMPTY = f'<meta name="{META_NAME}" content="">'
+POSTURE_META_NAME = "prismpath-posture"
+POSTURE_META_EMPTY = f'<meta name="{POSTURE_META_NAME}" content="">'
+# The client is ES modules, which a browser runs only when served with a JavaScript type, and the
+# console sends nosniff. Python before 3.12 may not know .mjs, so the type is registered here.
+mimetypes.add_type("text/javascript", ".mjs")
 
 ROUTERS = (prove.router, observe.router, control.router, edit.router, events.router, inspect.router,
            quality.router, attest.router, policy.router, picker.router)
@@ -68,13 +76,18 @@ async def _unhandled(request: Request, exc: Exception):
     return _envelope(500, "internal error")
 
 
-def _page_text(session: Session) -> str:
-    """index.html with this launch's token in its session meta tag. The file on disk never holds one."""
+def _page_text(session: Session, read_only: bool) -> str:
+    """index.html with this launch's token in its session meta tag and the posture in its posture tag.
+    The file on disk never holds either."""
     with open(os.path.join(STATIC_DIR, "index.html"), encoding="utf-8") as page_file:
         text = page_file.read()
     if SESSION_META_EMPTY not in text:
         raise RuntimeError("index.html has no session meta tag")
-    return text.replace(SESSION_META_EMPTY, f'<meta name="{META_NAME}" content="{html.escape(session.token)}">', 1)
+    if POSTURE_META_EMPTY not in text:
+        raise RuntimeError("index.html has no posture meta tag")
+    posture = "read-only" if read_only else "full"
+    text = text.replace(SESSION_META_EMPTY, f'<meta name="{META_NAME}" content="{html.escape(session.token)}">', 1)
+    return text.replace(POSTURE_META_EMPTY, f'<meta name="{POSTURE_META_NAME}" content="{posture}">', 1)
 
 
 def _in_posture(router: APIRouter, read_only: bool) -> APIRouter:
@@ -143,7 +156,7 @@ def create_app(read_only=None, session=None) -> FastAPI:
     @application.get("/", include_in_schema=False)
     @application.get("/index.html", include_in_schema=False)
     def _index():
-        return HTMLResponse(_page_text(session))
+        return HTMLResponse(_page_text(session, read_only))
 
     if os.path.isdir(STATIC_DIR):
         application.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")

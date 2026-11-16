@@ -20,7 +20,8 @@
 }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--ink);
-  font: 13px/1.5 ui-monospace, "SF Mono", Menlo, monospace; }
+  font: 13px/1.5 ui-monospace, "SF Mono", Menlo, monospace;
+  display: flex; flex-direction: column; height: 100vh; }
 b { color: var(--accent); }
 .hidden { display: none !important; }
 .muted { color: var(--muted); }
@@ -41,6 +42,8 @@ b { color: var(--accent); }
 .pill.on, .pill.run { color: var(--good); border-color: #1f5a48; }
 .pill.off, .pill.stopped { color: var(--muted); }
 .pill.ok { color: var(--good); } .pill.bad { color: var(--bad); }
+.pill.posture-full { color: var(--muted); }
+.pill.posture-ro { color: var(--warn); border-color: #5a4a1a; }
 
 /* control strip */
 .control { display: flex; align-items: center; gap: 8px; padding: 8px 16px;
@@ -58,20 +61,30 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .btn.go:hover, .btn.prove:hover { box-shadow: var(--glow); }
 .btn.danger { color: var(--bad); border-color: #5a2b22; }
 .btn:disabled { opacity: .4; cursor: default; }
+/* a control whose route the read only posture does not mount */
+.unavailable-note { color: var(--warn); font-size: 12px; }
+
+/* interfaces, and the screen tabs under the chosen one */
+.interfaces { display: flex; gap: 2px; padding: 0 12px; background: #0a1019;
+  border-bottom: 1px solid var(--border); }
+.iface { background: none; border: none; border-bottom: 2px solid transparent; color: var(--muted);
+  font: inherit; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; padding: 8px 16px; cursor: pointer; }
+.iface:hover { color: var(--ink); }
+.iface.active { color: var(--accent); border-bottom-color: var(--accent); }
 
 /* tabs */
 .tabs { display: flex; gap: 2px; padding: 0 12px; border-bottom: 1px solid var(--border);
   background: var(--panel); }
-.tab { padding: 9px 16px; cursor: pointer; color: var(--muted); border-bottom: 2px solid transparent; }
+.tab { padding: 9px 16px; cursor: pointer; color: var(--muted); border: none; border-bottom: 2px solid transparent;
+  background: none; font: inherit; }
 .tab:hover { color: var(--ink); }
 .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
 
 /* views */
-main { position: absolute; top: 0; left: 0; right: 0; bottom: 0; }
+main { flex: 1; position: relative; min-height: 0; }
 .view { display: none; }
-.view.active { display: flex; }
-#v-graph { position: fixed; top: 168px; left: 0; right: 0; bottom: 0; }
-@media (max-width: 760px) { #v-graph { top: 210px; } }
+.view.active { display: block; position: absolute; inset: 0; padding: 16px; overflow: auto; }
+#v-graph.active, #v-files.active { display: flex; padding: 0; overflow: hidden; }
 
 /* graph */
 .graph-wrap { flex: 1; display: flex; flex-direction: column; min-width: 0; }
@@ -105,9 +118,11 @@ main { position: absolute; top: 0; left: 0; right: 0; bottom: 0; }
 #nd-body .edge { font-size: 12px; padding: 3px 0; border-top: 1px dashed var(--border); }
 #nd-body .retr { font-size: 11px; color: var(--muted); padding: 2px 0; }
 #nd-body .instr { color: var(--ink); white-space: pre-wrap; margin: 4px 0 8px; }
+#nd-body .nd-title { color: #7fd1ff; font-weight: 600; }
+#nd-body .nd-label { margin-top: 8px; display: block; }
+.graph-message { padding: 20px; }
 
 /* files */
-#v-files { position: fixed; top: 168px; left: 0; right: 0; bottom: 0; }
 .filelist { width: 300px; border-right: 1px solid var(--border); overflow: auto; background: var(--panel); }
 .filelist .f { padding: 6px 12px; cursor: pointer; border-bottom: 1px solid #101a2b;
   display: flex; justify-content: space-between; }
@@ -120,8 +135,6 @@ main { position: absolute; top: 0; left: 0; right: 0; bottom: 0; }
   font-size: 12.5px; line-height: 1.6; clip-path: none; }
 
 /* audit / queue / flows */
-#v-audit, #v-queue, #v-flows { display: none; padding: 16px; overflow: auto; width: 100%; }
-#v-audit.active, #v-queue.active, #v-flows.active { display: block; }
 .table { display: flex; flex-direction: column; gap: 2px; margin-top: 8px; }
 .row { display: grid; grid-template-columns: 150px 130px 1fr; gap: 10px; padding: 5px 8px;
   border-bottom: 1px solid #101a2b; font-size: 12px; }
@@ -155,3 +168,10 @@ pre.tree { white-space: pre-wrap; font-size: 12px; color: var(--muted); }
 
 /* Cytoscape's own container rule, here rather than in the inline <style> it would insert (see index.html). */
 .__________cytoscape_container { position: relative; }
+
+/* the sprint loop controls sit in a card on the Runs screen, in one row rather than stacked */
+.card .control { background: none; border: none; padding: 8px 0 0; }
+.card .control .btn, .card .control input { width: auto; margin-top: 0; }
+#runs-unavailable, #ed-note { color: var(--warn); }
+/* a pill with nothing to say (no run buffering mode yet, say) takes no room */
+.pill:empty { display: none; }

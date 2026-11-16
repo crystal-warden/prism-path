@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="prismpath-session" content="">
+  <meta name="prismpath-posture" content="">
   <title>PrismPath Mission Control</title>
   <!-- The id tells Cytoscape its container rule is already loaded (style.css carries it), so it does not
        insert an inline <style>, which the content security policy refuses. -->
@@ -22,42 +23,28 @@
       <span class="pill" id="p-valid"></span>
       <span class="pill" id="p-buf" title="run buffering mode"></span>
       <span class="pill" id="p-audit"></span>
+      <span class="pill" id="p-posture" title="the console's posture"></span>
       <a class="pill link" href="/openapi.json" target="_blank" rel="noopener">API schema</a>
     </div>
   </header>
 
-  <div class="control">
-    <button id="c-start-toggle" class="btn">▸ Start sprint</button>
-    <form id="startform" class="startform hidden">
-      <input name="proj" placeholder="project dir (blank = followed)" size="26">
-      <input name="gate" placeholder="gate (browser)" size="10">
-      <input name="nudge_file" placeholder="nudge file (optional)" size="16">
-      <input name="model" placeholder="model" size="8">
-      <label><input type="checkbox" name="rag" checked> rag</label>
-      <label><input type="checkbox" name="lessons" checked> lessons</label>
-      <label><input type="checkbox" name="fresh"> fresh</label>
-      <label title="python -u / PYTHONUNBUFFERED — stream live vs batch">
-        <input type="checkbox" name="unbuffered" checked> unbuffered
-      </label>
-      <button type="submit" class="btn go">Launch</button>
-    </form>
-    <span class="spacer"></span>
-    <button class="btn" data-act="pause">Pause</button>
-    <button class="btn" data-act="resume">Resume</button>
-    <button class="btn danger" data-act="stop">Stop</button>
-    <span class="proj" id="c-proj"></span>
-  </div>
+  <nav class="interfaces" id="interfaces" role="tablist" aria-label="interface">
+    <button type="button" class="iface active" role="tab" data-interface="authoring">Authoring</button>
+    <button type="button" class="iface" role="tab" data-interface="operating">Operating</button>
+    <button type="button" class="iface" role="tab" data-interface="auditing">Auditing</button>
+  </nav>
 
-  <nav class="tabs" id="tabs">
-    <span class="tab active" data-v="graph">Graph</span>
-    <span class="tab" data-v="files">Files</span>
-    <span class="tab" data-v="audit">Audit</span>
-    <span class="tab" data-v="queue">Queue</span>
-    <span class="tab" data-v="flows">Flows</span>
-    <span class="tab" data-v="inspect">Inspect</span>
-    <span class="tab" data-v="quality">Quality</span>
-    <span class="tab" data-v="proof">Proof</span>
-    <span class="tab" data-v="policy">Policy</span>
+  <nav class="tabs" id="screens" role="tablist" aria-label="screen">
+    <button type="button" class="tab active" role="tab" data-interface="authoring" data-screen="graph">Graph</button>
+    <button type="button" class="tab" role="tab" data-interface="authoring" data-screen="files">Files</button>
+    <button type="button" class="tab" role="tab" data-interface="authoring" data-screen="inspect">Inspect</button>
+    <button type="button" class="tab hidden" role="tab" data-interface="operating" data-screen="queue">Queue</button>
+    <button type="button" class="tab hidden" role="tab" data-interface="operating" data-screen="policy">Policy</button>
+    <button type="button" class="tab hidden" role="tab" data-interface="operating" data-screen="runs">Runs</button>
+    <button type="button" class="tab hidden" role="tab" data-interface="operating" data-screen="quality">Quality</button>
+    <button type="button" class="tab hidden" role="tab" data-interface="operating" data-screen="flows">Flows</button>
+    <button type="button" class="tab hidden" role="tab" data-interface="auditing" data-screen="audit">Audit</button>
+    <button type="button" class="tab hidden" role="tab" data-interface="auditing" data-screen="proof">Proof</button>
   </nav>
 
   <main>
@@ -105,7 +92,8 @@
       <div class="filelist" id="filelist"></div>
       <div class="editor">
         <div class="editor-bar"><span id="ed-path" class="muted">no file</span>
-          <button class="btn" id="ed-save" disabled>Save</button></div>
+          <button class="btn" id="ed-save" disabled>Save</button>
+          <span class="muted hidden" id="ed-note"></span></div>
         <textarea id="ed-body" spellcheck="false" placeholder="select a file"></textarea>
       </div>
     </section>
@@ -129,6 +117,35 @@
     <section class="view" id="v-flows">
       <div class="card"><h3>Fan-out composition</h3>
         <div id="f-tree"></div></div>
+    </section>
+
+    <!-- RUNS: the sprint loop controls (operating), below the queue and the policy host -->
+    <section class="view" id="v-runs">
+      <div class="card">
+        <h3>Sprint loop</h3>
+        <div class="muted">Followed project <span class="proj" id="c-proj"></span></div>
+        <div class="muted hidden" id="runs-unavailable">The console runs read-only: starting, pausing, resuming and stopping the sprint loop are unavailable in this posture.</div>
+        <div class="control" id="run-controls">
+          <button id="c-start-toggle" class="btn">▸ Start sprint</button>
+          <form id="startform" class="startform hidden">
+            <input name="proj" placeholder="project dir (blank = followed)" size="26">
+            <input name="gate" placeholder="gate (browser)" size="10">
+            <input name="nudge_file" placeholder="nudge file (optional)" size="16">
+            <input name="model" placeholder="model" size="8">
+            <label><input type="checkbox" name="rag" checked> rag</label>
+            <label><input type="checkbox" name="lessons" checked> lessons</label>
+            <label><input type="checkbox" name="fresh"> fresh</label>
+            <label title="python -u / PYTHONUNBUFFERED — stream live vs batch">
+              <input type="checkbox" name="unbuffered" checked> unbuffered
+            </label>
+            <button type="submit" class="btn go">Launch</button>
+          </form>
+          <span class="spacer"></span>
+          <button class="btn" data-act="pause">Pause</button>
+          <button class="btn" data-act="resume">Resume</button>
+          <button class="btn danger" data-act="stop">Stop</button>
+        </div>
+      </div>
     </section>
 
     <!-- INSPECT: author-time analyses on a flow -->
@@ -188,18 +205,18 @@
       </div>
     </section>
 
-    <!-- POLICY: signed pack verify + attest + facet inspector (no signing) -->
+    <!-- POLICY: signed pack verify, the active policy and its swap history, facet inspector (no signing) -->
     <section class="view" id="v-policy">
       <div class="card">
         <h3>Policy and telemetry</h3>
-        <div class="muted">Verify a signed pack and read the active policy's attestation. Signing and key generation stay on the CLI by design.</div>
+        <div class="muted">Verify a signed pack and read what a deployment runs, with its swap history. Signing, attesting and key generation stay on the CLI by design.</div>
         <label>pack verify</label><input id="pol-ppt" list="dl-ppt" placeholder="the .ppt image"><input id="pol-pub" list="dl-files" placeholder="public key path(s), space separated">
-        <label>attest state dir</label><input id="pol-state" placeholder="swap state dir">
+        <label>deployment state dir</label><input id="pol-state" placeholder="the policy host state dir">
         <label>facet decode / encode</label><input id="pol-flow" list="dl-flows" placeholder="flow .md">
         <input id="pol-hex" placeholder="wire hex (decode)"><input id="pol-json" placeholder='reading JSON (encode), e.g. {"amount":500}'>
         <div class="toolrow">
           <button class="btn" data-policy="pack-verify">Pack verify</button>
-          <button class="btn" data-policy="pack-attest">Pack attest</button>
+          <button class="btn" data-policy="pack-active">Active policy</button>
           <button class="btn" data-policy="facet-decode">Facet decode</button>
           <button class="btn" data-policy="facet-encode">Facet encode</button>
         </div>
@@ -211,6 +228,6 @@
   <div id="toast" class="toast hidden"></div>
 
   <script src="/vendor/cytoscape.min.js"></script>
-  <script src="/app.js"></script>
+  <script type="module" src="/js/main.mjs"></script>
 </body>
 </html>
