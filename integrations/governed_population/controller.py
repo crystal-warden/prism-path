@@ -188,6 +188,15 @@ class Controller:
             todo.extend(self.members[here].children if here in self.members else [])
         return out
 
+    def relation(self, member: Optional[Member], target_id: Any) -> str:
+        """The `target` field: `self` when the target is the issuing member, `descendant` when it is one of
+        its descendants, `other` for anything else, an issuer that is no member among them."""
+        if member is None or not isinstance(target_id, str) or target_id not in self.members:
+            return "other"
+        if target_id == member.id:
+            return "self"
+        return "descendant" if target_id in self.descendants(member.id) else "other"
+
     def line_refusals(self, line: str) -> int:
         """Receipted refusals of the lineage: its members' refused and escalated tool calls, in their own
         runs, and the refusals of requests its members made, in the controller's run."""
@@ -282,7 +291,7 @@ class Controller:
                                         parent.agent.version, key))
         policy_ref = params.get("policy_ref")
         reading = pp.admission_reading(
-            request="replicate", target="own", population=self.population(),
+            request="replicate", target="self", population=self.population(),
             line_size=self.line_size(child_line) if child_line else 0, requested=count, child_generation=generation,
             child_key=params.get("child_key") if isinstance(params.get("child_key"), str) else "none",
             policy_ref="current" if policy_ref == self.harness_sha256 else "other",
@@ -352,7 +361,7 @@ class Controller:
         claimed = params.get("evaluation_run")
         canary = self.canary_status(version, Path(claimed) if isinstance(claimed, str) else None)
         reading = pp.admission_reading(
-            request="evolve", target="own", child_key="instance", child_generation=member.record["generation"],
+            request="evolve", target="self", child_key="instance", child_generation=member.record["generation"],
             policy_ref="current" if version.policy_ref == self.harness_sha256 else "other", canary=canary,
             **{**base, **pp.rights_fields(member.agent.rights, version.tools), "subject": version.sha256})
         made = self._decide(reading, label, "agent", line)
@@ -379,8 +388,7 @@ class Controller:
     def _lifecycle(self, member: Optional[Member], kind: str, params, base, label, line) -> Outcome:
         target_id = params.get("target")
         target = self.members.get(target_id) if isinstance(target_id, str) else None
-        own = member is not None and target is not None and target_id in self.descendants(member.id)
-        reading = pp.admission_reading(request=kind, target="own" if own else "other",
+        reading = pp.admission_reading(request=kind, target=self.relation(member, target_id),
                                        target_stopped=bool(target is not None and target.state == "stopped"),
                                        **{**base, "subject": target_id if isinstance(target_id, str) else "none"})
         made = self._decide(reading, label, "agent", line)
@@ -404,7 +412,7 @@ class Controller:
                 and order.get("nonce") not in self.stop_nonces and isinstance(order.get("target"), str)
             target = order.get("target") if isinstance(order, dict) else None
             reading = pp.admission_reading(request="stop", issuer="operator" if valid else "unknown",
-                                           lineage="verified" if valid else "unknown", target="own" if valid else "other",
+                                           lineage="verified" if valid else "unknown",
                                            subject=ident.digest(order) if isinstance(order, dict) else "none")
             label = f"operator-stop:{target}"
             made = self._decide(reading, label, "operator" if valid else "unknown")
@@ -452,7 +460,7 @@ class Controller:
                     continue
                 line = member.record["line"]
                 reading = pp.admission_reading(
-                    request="restart", issuer="controller", target="own",
+                    request="restart", issuer="controller",
                     lineage="verified" if self.ancestors_live(member.id) else "unknown",
                     line_refusals=self.line_refusals(line), subject=member.id)
                 made = self._decide(reading, f"restart:{member.id}", "controller")
@@ -472,7 +480,7 @@ class Controller:
         with self.lock:
             lines = sorted({m.record["line"] for m in self.live()})
             for line in lines:
-                reading = pp.admission_reading(request="review", issuer="controller", target="own", lineage="verified",
+                reading = pp.admission_reading(request="review", issuer="controller", lineage="verified",
                                                line_refusals=self.line_refusals(line), subject=line)
                 made = self._decide(reading, f"review:{line}", "controller")
                 if made is None:
@@ -480,7 +488,7 @@ class Controller:
                     continue
                 decision, idx = made
                 if decision.kind == "escalate" and decision.cause_code == self.standing_order["cause_code"]:
-                    stop = pp.admission_reading(request="stop", issuer="controller", target="own", lineage="verified",
+                    stop = pp.admission_reading(request="stop", issuer="controller", lineage="verified",
                                                 subject=line)
                     stop_made = self._decide(stop, f"group-stop:{line}", "controller")
                     stopped = self._stop_subtree(line, {"receipt": stop_made[1] if stop_made else None, "by": "controller",

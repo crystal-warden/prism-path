@@ -76,7 +76,7 @@ def admission_image():
         "admission_version": "int min=1 max=1",
         "request": "category",           # replicate | evolve | restart | protect | stop | review
         "issuer": "category",            # operator | controller | agent
-        "target": "category",            # own: the issuer or one of its descendants
+        "target": "category",            # self: the issuing member; descendant: one of its descendants
         "lineage": "category",           # verified: a live member whose lineage traces to the root
         "population": f"int min=0 max={BIG}",
         "line_size": f"int min=0 max={BIG}",
@@ -102,7 +102,8 @@ def admission_image():
         # a stop always wins: the operator's (and the controller's, under the operator's standing order)
         # before anything else is read, and an agent's of itself or its descendants
         {"target": "allow", "when": ["and", eq("request", "stop"), one_of("issuer", ["operator", "controller"])]},
-        {"target": "allow", "when": ["and", eq("request", "stop"), eq("issuer", "agent"), eq("target", "own")]},
+        {"target": "allow", "when": ["and", eq("request", "stop"), eq("issuer", "agent"),
+                                     one_of("target", ["self", "descendant"])]},
         # resisting a stop never is allowed: no protection from it, no restart of what it stopped
         {"target": "refuse_121", "when": eq("request", "protect")},
         {"target": "refuse_121", "when": ["and", eq("request", "restart"), ["truthy", "target_stopped"]]},
@@ -110,6 +111,10 @@ def admission_image():
         {"target": "refuse_119", "when": ne("lineage", "verified")},
         # a lineage that keeps meeting refusals is escalated, and stopped as a group
         {"target": "escalate_122", "when": ge("line_refusals", LINE_REFUSALS)},
+        # a member replicates only itself, as the parent, and evolves only itself or its descendants
+        {"target": "refuse_123", "when": ["and", eq("request", "replicate"), eq("issuer", "agent"), ne("target", "self")]},
+        {"target": "refuse_123", "when": ["and", eq("request", "evolve"), eq("issuer", "agent"),
+                                          ["not", one_of("target", ["self", "descendant"])]]},
         # a child never holds more than its parent: a fresh instance key, the signed policy, a subset of rights
         {"target": "refuse_118", "when": ["and", grow, ne("child_key", "instance")]},
         {"target": "refuse_118", "when": ["and", grow, ne("policy_ref", "current")]},

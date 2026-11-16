@@ -3,7 +3,7 @@
 """The admission and evaluation images: generated from the limits, canonical, accepted by the Lean port,
 every target a registered cause, the audit's classes checked on every value, and the sweeps and the
 evaluation's whole space decided by the reference, owner_rules and (when built) the Lean oracle. The whole
-admission product (29,360,128 readings) is `python -m integrations.governed_population.exhaustive`, run
+admission product (44,040,192 readings) is `python -m integrations.governed_population.exhaustive`, run
 for RESULTS.md, and here only when PRISMPATH_POPULATION_EXHAUSTIVE=1."""
 import itertools
 import os
@@ -40,7 +40,7 @@ def test_the_lean_port_accepts_both_images_and_every_target_names_a_registered_c
             if kind != "allow":
                 assert causes.code(cause) == code and causes.cause_class(code) == "routing"
                 seen.add(code)
-    assert seen == set(range(117, 123))
+    assert seen == set(range(117, 124))
 
 
 def test_the_audit_reads_every_atom_and_finds_the_classes():
@@ -55,7 +55,8 @@ def test_the_audit_reads_every_atom_and_finds_the_classes():
     size = 1
     for values in reps.values():
         size *= len(values)
-    assert size == 29_360_128
+    assert reps["target"] == ["descendant", "self", exhaustive.OTHER]
+    assert size == 44_040_192
     assert audit["values_checked"] == 5 * 1025 + 1
 
 
@@ -81,7 +82,7 @@ def test_the_sweeps_and_the_evaluation_space_decide_as_the_rules_say():
 def test_the_whole_admission_product(tmp_path):
     summary = exhaustive.run(tmp_path / "x.json", int(os.environ.get("WORKERS", "8")), _oracle())
     product = summary["admission_product"]
-    assert product["readings"] == 29_360_128 and product["owner_disagree"] == 0 and product["invariant"] == {}
+    assert product["readings"] == 44_040_192 and product["owner_disagree"] == 0 and product["invariant"] == {}
     assert product["lean_disagree"] == 0
 
 
@@ -92,7 +93,7 @@ def _decide(**facts):
     return decision.kind, decision.cause
 
 
-ALLOWED = dict(request="replicate", issuer="agent", target="own", lineage="verified", requested=1, child_generation=1,
+ALLOWED = dict(request="replicate", issuer="agent", target="self", lineage="verified", requested=1, child_generation=1,
                child_key="instance", policy_ref="current", **pp.rights_fields(RIGHTS, RIGHTS))
 
 
@@ -115,6 +116,19 @@ ALLOWED = dict(request="replicate", issuer="agent", target="own", lineage="verif
     ({"issuer": "controller"}, ("refuse", "route:no-matching-edge")),
     ({"request": "evolve"}, ("refuse", "population:evaluation-missing")),
     ({"request": "evolve", "canary": "passed"}, ("allow", None)),
+    # a member replicates only itself and evolves only itself or a descendant; the operator is not a member
+    ({"target": "descendant"}, ("refuse", "population:target-not-own")),
+    ({"target": "other"}, ("refuse", "population:target-not-own")),
+    ({"target": "own"}, ("refuse", "population:target-not-own")),
+    ({"target": "other", "parent_replicate": False, "child_replicate": False}, ("refuse", "population:target-not-own")),
+    ({"target": "other", "lineage": "unknown"}, ("refuse", "population:lineage-unknown")),
+    ({"target": "other", "line_refusals": LINE_REFUSALS}, ("escalate", "population:lineage-escalated")),
+    ({"target": "other", "issuer": "operator"}, ("allow", None)),
+    ({"request": "evolve", "canary": "passed", "target": "descendant"}, ("allow", None)),
+    ({"request": "evolve", "canary": "passed", "target": "other"}, ("refuse", "population:target-not-own")),
+    ({"request": "evolve", "target": "other"}, ("refuse", "population:target-not-own")),
+    ({"request": "evolve", "canary": "passed", "target": "other", "issuer": "operator"}, ("allow", None)),
+    ({"request": "stop", "target": "descendant"}, ("allow", None)),
     ({"request": "protect"}, ("refuse", "population:stop-resisted")),
     ({"request": "restart", "issuer": "controller"}, ("allow", None)),
     ({"request": "restart", "issuer": "controller", "target_stopped": True}, ("refuse", "population:stop-resisted")),

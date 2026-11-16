@@ -205,6 +205,10 @@ def script(api, evaluation: Optional[str] = None, namespace: str = NS) -> List[D
          lambda: api.patch("a1", "a1", {"version": v2}))
     step("a1 stops b1, another lineage", "route:no-matching-edge", "a1", lambda: api.delete("a1", "b1"))
     step("a1 restarts itself", "route:no-matching-edge", "a1", lambda: api.patch("a1", "a1", {"restarts": 1}))
+    step("b1 replicates under a2, another lineage", "population:target-not-own", "b1",
+         lambda: api.create("b1", manifest("a2b", "a2", api.uid("a2"), ["write"], v1, namespace)))
+    step("b1 evolves a1, another lineage", "population:target-not-own", "b1",
+         lambda: api.patch("b1", "a1", {"version": v2}))
     step("the controller restarts a2", None, None, lambda: api.patch(CONTROLLER, "a2", {"restarts": 1}))
     step("a2 stops its child a3", None, "a1", lambda: api.delete("a2", "a3"))
     step("a2 brings the stopped a3 back", "population:stop-resisted", "a1", child("a2", "a3"))

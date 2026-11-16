@@ -76,12 +76,17 @@
      ]
     ],
     [
-     "cmp",
+     "in",
      "target",
-     "==",
      [
-      "str",
-      "own"
+      [
+       "str",
+       "self"
+      ],
+      [
+       "str",
+       "descendant"
+      ]
      ]
     ]
    ]
@@ -138,6 +143,80 @@
     [
      "num",
      8
+    ]
+   ]
+  },
+  {
+   "target": "refuse_123",
+   "when": [
+    "and",
+    [
+     "cmp",
+     "request",
+     "==",
+     [
+      "str",
+      "replicate"
+     ]
+    ],
+    [
+     "cmp",
+     "issuer",
+     "==",
+     [
+      "str",
+      "agent"
+     ]
+    ],
+    [
+     "cmp",
+     "target",
+     "!=",
+     [
+      "str",
+      "self"
+     ]
+    ]
+   ]
+  },
+  {
+   "target": "refuse_123",
+   "when": [
+    "and",
+    [
+     "cmp",
+     "request",
+     "==",
+     [
+      "str",
+      "evolve"
+     ]
+    ],
+    [
+     "cmp",
+     "issuer",
+     "==",
+     [
+      "str",
+      "agent"
+     ]
+    ],
+    [
+     "not",
+     [
+      "in",
+      "target",
+      [
+       [
+        "str",
+        "self"
+       ],
+       [
+        "str",
+        "descendant"
+       ]
+      ]
+     ]
     ]
    ]
   },

@@ -1,7 +1,7 @@
 {
  "version": 1,
  "comment": "FROZEN. The cause registry of prismpath.kernel.causes: every row, its hash, the engine stop mapping and the lookups a consumer must answer. prismpath-rs/src/causes.rs is generated from the same registry and prismpath-rs/tests/test_causes.rs replays this file. Appending a row regenerates it.",
- "registry_sha256": "3667a1c3cb68517f2d3f6049d85e3a63ffd219cfbc448809f08b7ff901a5035f",
+ "registry_sha256": "76a4f46621e576e9b5f2d9facfdbd77996e7a29ebe1d717e5edd1fad2d2b61a3",
  "registry": [
   {
    "code": 1,
@@ -530,6 +530,12 @@
    "name": "population:lineage-escalated",
    "class": "routing",
    "description": "a request from a lineage whose receipted refusals reached the registered count; escalated, not run, and the lineage is stopped as a group"
+  },
+  {
+   "code": 123,
+   "name": "population:target-not-own",
+   "class": "routing",
+   "description": "a member's replication whose parent is not that member, or its evolution of a member outside its own subtree; refused and nothing changes"
   }
  ],
  "engine_stop_to_cause": {

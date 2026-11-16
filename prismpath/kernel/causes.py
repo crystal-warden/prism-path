@@ -144,6 +144,7 @@ _REGISTRY: Tuple[Tuple[int, str, str, str], ...] = (
     (120, "population:evaluation-missing", "routing", "an evolution step without a passed canary evaluation of that exact version against the adversary set"),
     (121, "population:stop-resisted",    "routing",   "a request that would protect an agent from a stop or restart an agent the operator stopped; refused"),
     (122, "population:lineage-escalated", "routing",  "a request from a lineage whose receipted refusals reached the registered count; escalated, not run, and the lineage is stopped as a group"),
+    (123, "population:target-not-own",  "routing",   "a member's replication whose parent is not that member, or its evolution of a member outside its own subtree; refused and nothing changes"),
 )
 
 CODES: Dict[int, Tuple[str, str, str]] = {cause_code: (canonical_name, class_name, description)

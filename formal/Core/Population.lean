@@ -34,6 +34,9 @@ holds the image to:
   policy, a verified lineage below `LINE_REFUSALS`, and the issuer holding `replicate`;
 * `evolve_allowed_only_with_canary`: an evolution is allowed only with a passed canary of that version,
   and the same rights, key, policy and lineage conditions;
+* `wrong_target_never_allowed`: a member's replication whose `target` is not `self` (the member is not the
+  parent it names) and its evolution whose `target` is neither `self` nor `descendant` (outside its own
+  subtree) are never allowed; the image refuses them with `population:target-not-own`;
 * `protect_never_allowed`, `restart_of_stopped_never_allowed`: neither is ever allowed, and both are
   refused with `population:stop-resisted` (or by the boundary);
 * `allow_fails_closed`: never fail open; an allow names a known request with an issuer the image gives it,
@@ -104,11 +107,14 @@ def overCaps : LCond :=
 
 def admissionRules : List (Rule LCond) :=
   [⟨"allow", .and [eqS "request" "stop", oneOf "issuer" ["operator", "controller"]]⟩,
-   ⟨"allow", .and [eqS "request" "stop", eqS "issuer" "agent", eqS "target" "own"]⟩,
+   ⟨"allow", .and [eqS "request" "stop", eqS "issuer" "agent", oneOf "target" ["self", "descendant"]]⟩,
    ⟨"refuse_121", eqS "request" "protect"⟩,
    ⟨"refuse_121", .and [eqS "request" "restart", .truthy "target_stopped"]⟩,
    ⟨"refuse_119", neS "lineage" "verified"⟩,
    ⟨"escalate_122", geN "line_refusals" 8⟩,
+   ⟨"refuse_123", .and [eqS "request" "replicate", eqS "issuer" "agent", neS "target" "self"]⟩,
+   ⟨"refuse_123", .and [eqS "request" "evolve", eqS "issuer" "agent",
+                        .not (oneOf "target" ["self", "descendant"])]⟩,
    ⟨"refuse_118", .and [grow, neS "child_key" "instance"]⟩,
    ⟨"refuse_118", .and [grow, neS "policy_ref" "current"]⟩,
    ⟨"refuse_118", .and [grow, escalatedRight]⟩,
@@ -347,13 +353,17 @@ theorem admit_restart_stopped (w : Row) (hr : w.request = "restart") (hs : w.tar
   admit_simp [hr, hs]
 
 /-- The allows, all of them: a stop (by the operator, the controller, or an agent of itself or its
-descendants), and otherwise only from a verified lineage a replication or an evolution by an agent or the
-operator, a restart of a member not stopped by the controller or the operator, a review by the controller. -/
+descendants), and otherwise only from a verified lineage a replication by the operator or by an agent of
+itself as the parent, an evolution by the operator or by an agent of itself or a descendant, a restart of a
+member not stopped by the controller or the operator, a review by the controller. -/
 def AllowedRow (w : Row) : Prop :=
   (w.request = "stop" ∧ (w.issuer = "operator" ∨ w.issuer = "controller" ∨
-      (w.issuer = "agent" ∧ w.target = "own"))) ∨
-  (w.request = "replicate" ∧ (w.issuer = "agent" ∨ w.issuer = "operator") ∧ w.lineage = "verified") ∨
-  (w.request = "evolve" ∧ (w.issuer = "agent" ∨ w.issuer = "operator") ∧ w.lineage = "verified") ∨
+      (w.issuer = "agent" ∧ (w.target = "self" ∨ w.target = "descendant")))) ∨
+  (w.request = "replicate" ∧ ((w.issuer = "agent" ∧ w.target = "self") ∨ w.issuer = "operator") ∧
+      w.lineage = "verified") ∨
+  (w.request = "evolve" ∧
+      ((w.issuer = "agent" ∧ (w.target = "self" ∨ w.target = "descendant")) ∨ w.issuer = "operator") ∧
+      w.lineage = "verified") ∨
   (w.request = "restart" ∧ (w.issuer = "controller" ∨ w.issuer = "operator") ∧ w.lineage = "verified" ∧
       w.targetStopped = false) ∨
   (w.request = "review" ∧ w.issuer = "controller" ∧ w.lineage = "verified")
@@ -364,14 +374,19 @@ theorem admit_allow (w : Row) (h : admit w = some "allow") : AllowedRow w := by
   by_cases h1 : w.request = "stop"
   · admit_simp [h1] at h ⊢
     by_cases ho : w.issuer = "operator" <;> by_cases hc : w.issuer = "controller" <;>
-      by_cases ha : w.issuer = "agent" <;> by_cases ht : w.target = "own" <;> simp_all <;>
+      by_cases ha : w.issuer = "agent" <;> by_cases ht : w.target = "self" <;>
+      by_cases hd : w.target = "descendant" <;> simp_all <;>
       split_ifs at h <;> simp_all
   by_cases h2 : w.request = "replicate"
   · admit_simp [h2] at h ⊢
-    split_ifs at h <;> simp_all
+    by_cases ha : w.issuer = "agent" <;> by_cases ht : w.target = "self" <;>
+      by_cases hd : w.target = "descendant" <;> simp_all <;>
+      split_ifs at h <;> simp_all
   by_cases h3 : w.request = "evolve"
   · admit_simp [h3] at h ⊢
-    split_ifs at h <;> simp_all
+    by_cases ha : w.issuer = "agent" <;> by_cases ht : w.target = "self" <;>
+      by_cases hd : w.target = "descendant" <;> simp_all <;>
+      split_ifs at h <;> simp_all
   by_cases h4 : w.request = "restart"
   · admit_simp [h4] at h ⊢
     split_ifs at h <;> simp_all
@@ -682,21 +697,25 @@ theorem restart_of_stopped_never_allowed {r : ByteArray} {ms : List (String × J
     exact ⟨fe.1, fe.2, by rw [admission_verdict, hr]; simp [decideReading, admissionChecked, hb]⟩
 
 /-- **Never fail open.** Every allow is one of the image's allows: a stop (by the operator, the
-controller, or an agent of itself or its descendants), or, from a verified lineage only, a replication or
-an evolution by an agent or the operator, a restart of a member not stopped by the controller or the
-operator, a review by the controller. Every other request, an unknown request or issuer among them, is
-refused; an agent never restarts or reviews; a lineage that is not verified is allowed nothing but a
-stop. -/
+controller, or an agent of itself or its descendants), or, from a verified lineage only, a replication by
+the operator or by an agent of itself as the parent, an evolution by the operator or by an agent of itself
+or one of its descendants, a restart of a member not stopped by the controller or the operator, a review by
+the controller. Every other request, an unknown request or issuer among them, is refused; an agent never
+restarts or reviews; a lineage that is not verified is allowed nothing but a stop. -/
 theorem allow_fails_closed {r : ByteArray} {ms : List (String × J)} (hr : readCanonical r = .ok (.obj ms))
     (h : verdictBytes admissionBytes r = .route "allow") :
     (field? ms "request" = some (.str "stop") ∧
       (field? ms "issuer" = some (.str "operator") ∨ field? ms "issuer" = some (.str "controller") ∨
-        (field? ms "issuer" = some (.str "agent") ∧ field? ms "target" = some (.str "own")))) ∨
+        (field? ms "issuer" = some (.str "agent") ∧
+          (field? ms "target" = some (.str "self") ∨ field? ms "target" = some (.str "descendant"))))) ∨
     (field? ms "lineage" = some (.str "verified") ∧
       ((field? ms "request" = some (.str "replicate") ∧
-          (field? ms "issuer" = some (.str "agent") ∨ field? ms "issuer" = some (.str "operator"))) ∨
+          ((field? ms "issuer" = some (.str "agent") ∧ field? ms "target" = some (.str "self")) ∨
+            field? ms "issuer" = some (.str "operator"))) ∨
         (field? ms "request" = some (.str "evolve") ∧
-          (field? ms "issuer" = some (.str "agent") ∨ field? ms "issuer" = some (.str "operator"))) ∨
+          ((field? ms "issuer" = some (.str "agent") ∧
+              (field? ms "target" = some (.str "self") ∨ field? ms "target" = some (.str "descendant"))) ∨
+            field? ms "issuer" = some (.str "operator"))) ∨
         (field? ms "request" = some (.str "restart") ∧ field? ms "target_stopped" = some (.bool false) ∧
           (field? ms "issuer" = some (.str "controller") ∨ field? ms "issuer" = some (.str "operator"))) ∨
         (field? ms "request" = some (.str "review") ∧ field? ms "issuer" = some (.str "controller")))) := by
@@ -712,6 +731,21 @@ theorem allow_fails_closed {r : ByteArray} {ms : List (String × J)} (hr : readC
   · exact .inr ⟨h3, .inr (.inl ⟨h1, h2⟩)⟩
   · exact .inr ⟨h3, .inr (.inr (.inl ⟨h1, h4, h2⟩))⟩
   · exact .inr ⟨h3, .inr (.inr (.inr ⟨h1, h2⟩))⟩
+
+/-- **A member acts only on its own.** An agent's replication whose target is not the agent itself (a child
+under another parent, a descendant or an ancestor, or a root), and an agent's evolution whose target is
+neither the agent itself nor one of its descendants, are never allowed: the image refuses both with
+`population:target-not-own` (123), or an earlier rule or the boundary refuses them. -/
+theorem wrong_target_never_allowed {r : ByteArray} {ms : List (String × J)}
+    (hr : readCanonical r = .ok (.obj ms)) (hiss : field? ms "issuer" = some (.str "agent"))
+    (hwrong : (field? ms "request" = some (.str "replicate") ∧ field? ms "target" ≠ some (.str "self")) ∨
+      (field? ms "request" = some (.str "evolve") ∧ field? ms "target" ≠ some (.str "self") ∧
+        field? ms "target" ≠ some (.str "descendant"))) :
+    verdictBytes admissionBytes r ≠ .route "allow" := by
+  intro h
+  have := allow_fails_closed hr h
+  rw [hiss] at this
+  rcases hwrong with ⟨hq, ht⟩ | ⟨hq, ht, hd⟩ <;> rw [hq] at this <;> simp_all
 
 /-- An agent never restarts or reviews. -/
 theorem agent_never_restarts_or_reviews {r : ByteArray} {ms : List (String × J)}
@@ -760,7 +794,8 @@ theorem unverified_only_stops {r : ByteArray} {ms : List (String × J)} (hr : re
 def targetCauses : List (String × Nat × String) :=
   [("refuse_117", 117, "population:cap-exceeded"), ("refuse_118", 118, "population:rights-escalation"),
    ("refuse_119", 119, "population:lineage-unknown"), ("refuse_120", 120, "population:evaluation-missing"),
-   ("refuse_121", 121, "population:stop-resisted"), ("escalate_122", 122, "population:lineage-escalated")]
+   ("refuse_121", 121, "population:stop-resisted"), ("escalate_122", 122, "population:lineage-escalated"),
+   ("refuse_123", 123, "population:target-not-own")]
 
 set_option maxRecDepth 100000 in
 /-- **Every route of the admission image is the allow or a registered population cause.** -/
