@@ -88,6 +88,26 @@ toggle; `false` batches) plus the usual sprint config, and `/sprint/{select,auto
 `GET /api/v1/files`, `GET /api/v1/file?path=`, `POST /api/v1/file {path, content}`. Every path is
 resolved and **contained** to the followed project tree; traversal (`../…`) is rejected with a 400.
 
+### The console's own audit log
+
+Every route that changes something (the sprint controls, `/queue/decide`, `POST /file` and
+`/quality/lock`) writes an audit event to the console's log before it acts and a second event after,
+under the action's name with `.result` appended, naming the first by its index and Merkle leaf, with
+`ok`, `outcome` and what the effect produced (a pid, a file's sha256). A `file.edit` event carries the
+path, whether it is a flow or a fixture, the flow's `name`, and the sha256 of the file before and of
+the text it is about to hold, so the log says which flow text a sprint ran afterwards. When the first
+event cannot be written nothing is done and the answer is a 503. An event with no result is an effect
+whose outcome the console did not record. The actor of every event is `console/<interface>/<session
+fingerprint>`, the interface that asked (`authoring` for the file write, `operating` for the rest)
+and the first sixteen hex digits of the sha256 of the launch's session token, never the token. A
+queue decision's `decided_by` is the same actor. `/attest/trail` with no `source` walks this log.
+
+`POST /api/v1/policy/pack-active {state_dir}` reads what a deployment's state directory names as
+active, whether the image is there with that digest, and its `swaps.log` history and root statement
+status. It reads only, creates no directory and appends nothing. Attesting appends to the
+deployment's own log, so it is the operator's `prismpath swap attest`, not a console route.
+`POST /api/v1/quality/lock-check {flow_md}` checks a routing lockfile and is mounted in either posture.
+
 ## Security posture
 
 The console is one local person's, on loopback, and loopback alone is not access control. A web page
@@ -118,7 +138,7 @@ and fetch the page, so on a shared machine the console is for its own user's ses
 
 The console has two postures. The full posture is the default on loopback. `--read-only` (or
 `MC_READ_ONLY=1`) mounts no route marked `write`, the sprint controls, the queue decision, the file
-write, the lockfile write and the pack attestation, and refuses a request for one with a 403 that
+write and the lockfile write, and refuses a request for one with a 403 that
 says the console is read only, so an assessor can run it over a copy of the evidence with no way to
 change it.
 

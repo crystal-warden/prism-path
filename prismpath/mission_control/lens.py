@@ -16,35 +16,34 @@ except Exception:                                             # pragma: no cover
 
 from .status import status
 
-# The build roles span two served models: engineering voices + cecli on gemma4 (:8888), two contrarian
-# product voices on qwen25 (:8889). Surfacing WHICH model answered lets the lens show the dialogue.
-QWEN_ROLES = {"product-manager", "engagement-manager"}
-QWEN_LABEL = "qwen25 (LLM)"
-GEMMA_LABEL = "gemma4 (LLM)"
-
-
-def _model_for(role):
-    return QWEN_LABEL if role in QWEN_ROLES else GEMMA_LABEL
+def _worker_label(event):
+    """Who answered a call, as the record says: its `model` field when the producer wrote one, else its
+    `worker`, else the kind of call it was. The console names no model of its own."""
+    for key in ("model", "worker"):
+        value = event.get(key)
+        if isinstance(value, str) and value:
+            return value
+    return event.get("kind") or "?"
 
 
 def _dialogue(event):
-    """Derive (sender, receiver, substage): who sent the message and who received it. Every call is a
-    role/cecli to a served LLM (or the doc index), situated in propose->accept->build->test.
+    """Derive (sender, receiver, substage): who sent the message and who received it, from the record's
+    own `role`, `kind` and `model` fields, situated in propose->accept->build->test.
 
     This is the console's own sense of a message's path, not the dictionary's `route` (choosing an edge).
     """
     kind, role, prompt = event.get("kind"), event.get("role", ""), event.get("prompt", "")
+    receiver = _worker_label(event)
     if kind == "retriever":
-        return "retriever", "doc index", "retrieve"
-
+        return role or "retriever", receiver, "retrieve"
     if kind == "cecli":
-        return f"cecli·{role}", GEMMA_LABEL, role
+        return f"cecli·{role}", receiver, role
     sub = role
     if "Vote for the SINGLE best" in prompt:
         sub = "vote"
     elif "propose THE single highest" in prompt or "\nACTION:" in prompt:
         sub = "propose"
-    return role, _model_for(role), sub
+    return role or kind or "?", receiver, sub
 
 
 def interactions(state, limit=300):
