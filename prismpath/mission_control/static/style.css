@@ -78,7 +78,7 @@ main { position: absolute; top: 0; left: 0; right: 0; bottom: 0; }
 .graph-toolbar { display: flex; align-items: center; gap: 10px; padding: 8px 12px;
   border-bottom: 1px solid var(--border); background: var(--panel); }
 .graph-toolbar .gname { color: var(--accent); font-weight: 600; }
-#cy { flex: 1; background: radial-gradient(circle at 22% 8%, #10233a 0, var(--bg) 62%); }
+#cy { position: relative; flex: 1; background: radial-gradient(circle at 22% 8%, #10233a 0, var(--bg) 62%); }
 .legend { font-size: 11px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
 .legend .lg { width: 12px; height: 3px; display: inline-block; border-radius: 2px; margin-left: 8px; }
 .lg.det { background: var(--det); } .lg.sem { background: var(--sem); }
@@ -152,3 +152,6 @@ pre.tree { white-space: pre-wrap; font-size: 12px; color: var(--muted); }
 
 /* keep the tool buttons in a tidy row, not full-width stacked */
 .toolrow .btn { width: auto; flex: 0 0 auto; }
+
+/* Cytoscape's own container rule, here rather than in the inline <style> it would insert (see index.html). */
+.__________cytoscape_container { position: relative; }

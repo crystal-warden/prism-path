@@ -44,12 +44,16 @@ async def events(request: Request):
         while True:
             if await request.is_disconnected():
                 break
-            st = core.status(core.STATE)
+            # Following the live sprint happens here, under the state lock, and nowhere a request reads;
+            # then one snapshot serves the whole tick. The disk reads run off the event loop.
+            await asyncio.to_thread(core.follow_active_sprint, core.STATE)
+            seen = core.snapshot()
+            st = await asyncio.to_thread(core.status, seen)
             sig = _sig(st)
             if sig != last_sig or beat % 8 == 0:      # on change, plus a ~12s refresh (age/elapsed)
                 last_sig = sig
                 yield _sse({"type": "status", "status": st})
-            proj = core.STATE["proj"]
+            proj = seen["proj"]
             ixm = _mtime(os.path.join(proj, "interactions.jsonl"))
             if ixm != last_ix:
                 last_ix = ixm

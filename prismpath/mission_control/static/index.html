@@ -3,8 +3,11 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="prismpath-session" content="">
   <title>PrismPath Mission Control</title>
-  <link rel="stylesheet" href="/style.css">
+  <!-- The id tells Cytoscape its container rule is already loaded (style.css carries it), so it does not
+       insert an inline <style>, which the content security policy refuses. -->
+  <link id="__________cytoscape_stylesheet" rel="stylesheet" href="/style.css">
 </head>
 <body>
   <header class="topbar">
@@ -19,7 +22,7 @@
       <span class="pill" id="p-valid"></span>
       <span class="pill" id="p-buf" title="run buffering mode"></span>
       <span class="pill" id="p-audit"></span>
-      <a class="pill link" href="/docs" target="_blank" rel="noopener">API /docs</a>
+      <a class="pill link" href="/openapi.json" target="_blank" rel="noopener">API schema</a>
     </div>
   </header>
 

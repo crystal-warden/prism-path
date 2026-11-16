@@ -14,33 +14,33 @@ router = APIRouter(tags=["observe"])
 
 @router.get("/status")
 def get_status():
-    return core.status(core.STATE)
+    return core.status(core.snapshot())
 
 
 @router.get("/interactions")
 def get_interactions():
-    return core.interactions(core.STATE)
+    return core.interactions(core.snapshot())
 
 
 @router.get("/flow")
 def get_flow():
-    return core.flow_state(core.STATE)
+    return core.flow_state(core.snapshot())
 
 
 @router.get("/flow/graph")
 def get_flow_graph(path: str = Query(None, description="Contained flow path; omitted → the live flow.")):
-    return core.serialize_flow_graph(core.STATE, path)
+    return core.serialize_flow_graph(core.snapshot(), path)
 
 
 @router.get("/balance")
 def get_balance():
-    return core.balance_state(core.STATE)
+    return core.balance_state(core.snapshot())
 
 
 @router.get("/retrievals")
 def get_retrievals():
     """Which RAG chunks the run pulled, per turn (source · path · score) — the Retrieval port, observed."""
-    return core.retrievals(core.STATE)
+    return core.retrievals(core.snapshot())
 
 
 @router.get("/queue")

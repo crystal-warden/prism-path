@@ -14,7 +14,7 @@ SAFETY: this router exposes only reading and verifying. The mutating and publish
 (anchor, upgrade, export-request, relay-stamp, import-proofs) stamp timestamp calendars or change the
 ledger, so they are deliberately absent here. There is no code path in this file that anchors, upgrades,
 relays, exports, or imports. Paths that name files are confined to the followed project the way the edit
-router confines them (core.safe_path against core.STATE["proj"]); a path that escapes fails closed with a
+router confines them (core.safe_path against the project the request captured); a path that escapes fails closed with a
 client error rather than reading anywhere on disk.
 """
 import os
@@ -72,7 +72,8 @@ def model_check_flow(req: ModelCheckReq):
     from prismpath.kernel.parser import parse_file
     from prismpath.kernel import model_check
 
-    resolved = _confine(req.flow_md)
+    proj = core.current_project()                     # one project for the whole request
+    resolved = _confine(req.flow_md, proj)
     if not os.path.isfile(resolved):
         raise HTTPException(status_code=404, detail="flow file not found in the project")
     if os.path.getsize(resolved) > core.SETTINGS.max_file_bytes:
@@ -84,7 +85,7 @@ def model_check_flow(req: ModelCheckReq):
 
     results = model_check.check_reach(graph, sorted(graph.nodes))
     lm_all, lm_bad = model_check.flow_level_m(graph)
-    return {"flow": os.path.relpath(resolved, core.STATE["proj"]),
+    return {"flow": os.path.relpath(resolved, proj),
             "start": graph.start,
             "results": {name: r.as_dict() for name, r in results.items()},
             "level_m": {"flow": lm_all, "non_member_edges": lm_bad}}
@@ -98,7 +99,7 @@ def walk_trail(req: TrailReq):
     from prismpath import trail
 
     if req.source:
-        path = _confine(req.source)
+        path = _confine(req.source, core.current_project())
         if not os.path.isfile(path):
             raise HTTPException(status_code=404, detail="audit log not found in the project")
         if os.path.getsize(path) > core.SETTINGS.max_file_bytes:
@@ -120,14 +121,15 @@ def ledger_verify(req: LedgerVerifyReq):
     exports, or imports, so it cannot publish to a timestamp calendar or mutate the ledger."""
     from prismpath.ledgers import ledger_ots, ledger_airgap
 
+    proj = core.current_project()                     # one project for the whole request
     # RFC 3161 trusted timestamp verify: needs the root file, the response, and the TSA CA cert.
     if req.tsr or req.cafile:
         if not (req.root and req.tsr and req.cafile):
             raise HTTPException(status_code=400,
                                 detail="rfc3161 verify needs root, tsr, and cafile")
-        rootfile = _confine(req.root)
-        tsr = _confine(req.tsr)
-        cafile = _confine(req.cafile)
+        rootfile = _confine(req.root, proj)
+        tsr = _confine(req.tsr, proj)
+        cafile = _confine(req.cafile, proj)
         for label, fp in (("root", rootfile), ("tsr", tsr), ("cafile", cafile)):
             if not os.path.isfile(fp):
                 raise HTTPException(status_code=404, detail=f"{label} not found in the project")
@@ -136,7 +138,7 @@ def ledger_verify(req: LedgerVerifyReq):
 
     # OTS Merkle plus Bitcoin unit verify: the leaf hash against the anchor artifacts on disk.
     if req.leaf:
-        out_dir = _confine(req.root) if req.root else core.STATE["proj"]
+        out_dir = _confine(req.root, proj) if req.root else proj
         if not os.path.isdir(out_dir):
             raise HTTPException(status_code=404, detail="anchor directory not found in the project")
         try:
@@ -151,11 +153,11 @@ def ledger_verify(req: LedgerVerifyReq):
 
 
 # --------------------------------------------------------------------------- helpers
-def _confine(rel: str) -> str:
+def _confine(rel: str, proj: str) -> str:
     """Resolve a request path against the followed project, refusing anything that escapes it. A
     traversal raises ValueError from core.safe_path, which we translate to a client error (fail closed)."""
     try:
-        return core.safe_path(core.STATE["proj"], rel)
+        return core.safe_path(proj, rel)
     except ValueError:
         raise HTTPException(status_code=400, detail="path escapes the project")
 

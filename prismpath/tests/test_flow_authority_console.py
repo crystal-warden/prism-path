@@ -15,6 +15,7 @@ from prismpath.hotswap import flow_authority as fa, policy_pack  # noqa: E402
 from prismpath.ledgers import audit_log, root_statement as rs  # noqa: E402
 from prismpath.mission_control import core, launch  # noqa: E402
 from prismpath.mission_control.app import app  # noqa: E402
+from prismpath.mission_control.session import TOKEN_HEADER  # noqa: E402
 from prismpath.orchestration import sprint_flow  # noqa: E402
 
 API_V1 = "/api/v1"
@@ -37,7 +38,9 @@ def console(tmp_path, monkeypatch):
     log = audit_log.AuditLog(str(tmp_path / "console.audit.jsonl"))
     monkeypatch.setattr(core.audit, "LOG", log)
     core.STATE.update({"proc": None, "proj": str(proj), "cfg": {}, "pinned": True})
-    return {"client": TestClient(app), "log": log, "proj": proj, "keys": keys, "tmp": tmp_path}
+    client = TestClient(app, base_url=f"http://127.0.0.1:{core.SETTINGS.port}",
+                        headers={TOKEN_HEADER: app.state.session.token})
+    return {"client": client, "log": log, "proj": proj, "keys": keys, "tmp": tmp_path}
 
 
 def _require(console, monkeypatch):

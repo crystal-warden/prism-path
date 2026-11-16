@@ -20,7 +20,7 @@ MAX_PICK_ENTRIES = 2000
 @router.get("/pick")
 def pick(exts: str = "md,jsonl,ppt,json,pem,pub"):
     """Project files whose extension is in `exts` (comma list), relative to the active project."""
-    proj = core.STATE["proj"]
+    proj = core.current_project()
     wanted = {e.strip().lower() for e in exts.split(",") if e.strip()} & ALLOWED_EXTENSIONS
     found = []
     for dirpath, dirnames, filenames in os.walk(proj):

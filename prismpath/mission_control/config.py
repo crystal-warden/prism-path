@@ -33,13 +33,25 @@ def default_state_directory() -> str:
 class Settings:
     """The console's configuration. Mutable on purpose: one shared instance, read at call time."""
 
-    proj: str = "/tmp/demo"                                   # the project the console follows at startup
+    # The console's own directory: the audit log, the session token file and the default project live
+    # here. A factory, not a value: the state directory depends on the environment at the time Settings
+    # is built, which is what lets a deployment or a test set XDG_STATE_HOME before the console reads it.
+    state_dir: str = field(default_factory=default_state_directory)
+    # The project the console follows at startup. Empty means `<state_dir>/project`, a directory of the
+    # console's own, never a shared one such as /tmp that another local user can create first.
+    proj: str = ""
     # Auto-discovery: MC follows whichever sprint is live, whoever started it (control tab / CLI / hand).
-    scan: str = "/tmp/*/status.json"                          # glob(s), os.pathsep-separated
+    # Sprints self-announce in the registry; `scan` adds status.json globs (os.pathsep-separated) and is
+    # empty unless the launch names some.
+    scan: str = ""
     registry: str = "~/.prismpath/sprints.json"               # sprints self-announce here on start
-    # A factory, not a value: the state directory depends on the environment at the time Settings is
-    # built, which is what lets a deployment or a test set XDG_STATE_HOME before the console reads it.
-    audit_path: str = field(default_factory=lambda: os.path.join(default_state_directory(), "mission_audit.log"))
+    audit_path: str = ""                                      # empty means <state_dir>/mission_audit.log
+    # Directories a project may be selected from besides the discovered sprints (MC_EVIDENCE,
+    # os.pathsep-separated). An assessor names the copy of the evidence they were handed.
+    evidence_roots: list = field(default_factory=list)
+    # The posture. Read only mounts no route that controls a sprint or writes a file (MC_READ_ONLY=1 or
+    # --read-only); the default on loopback is the full console.
+    read_only: bool = False
     # SECURITY: loopback only. MC can start and stop the swarm and edit flow files, never LAN reachable.
     host: str = "127.0.0.1"
     port: int = 9109
@@ -56,19 +68,25 @@ class Settings:
     prism_dir: str = PRISM_DIR
 
     def __post_init__(self):
-        self.proj = os.path.abspath(self.proj)
+        self.state_dir = os.path.abspath(os.path.expanduser(self.state_dir))
+        self.proj = os.path.abspath(os.path.expanduser(self.proj or os.path.join(self.state_dir, "project")))
+        self.audit_path = self.audit_path or os.path.join(self.state_dir, "mission_audit.log")
         self.registry = os.path.expanduser(self.registry)
+        self.evidence_roots = [os.path.abspath(os.path.expanduser(root)) for root in self.evidence_roots if root]
 
     @classmethod
     def from_environment(cls, environ=None):
         """The defaults above, each overridable by its MC_ environment variable."""
         environ = os.environ if environ is None else environ
-        fallback = cls()
+        fallback = cls(state_dir=environ.get("MC_STATE_DIR") or default_state_directory())
         return cls(
+            state_dir=fallback.state_dir,
             proj=environ.get("MC_PROJ", fallback.proj),
             scan=environ.get("MC_SCAN", fallback.scan),
             registry=environ.get("MC_REGISTRY", fallback.registry),
             audit_path=environ.get("MC_AUDIT", fallback.audit_path),
+            evidence_roots=environ.get("MC_EVIDENCE", "").split(os.pathsep),
+            read_only=environ.get("MC_READ_ONLY", "").strip().lower() in ("1", "true", "yes", "on"),
             host=environ.get("MC_HOST", fallback.host),
             port=int(environ.get("MC_PORT", str(fallback.port))),
             max_file_bytes=int(environ.get("MC_MAX_FILE_BYTES", str(fallback.max_file_bytes))),

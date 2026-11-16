@@ -18,8 +18,15 @@ from fastapi.testclient import TestClient
 from prismpath.ledgers import audit_log
 from prismpath.mission_control import core
 from prismpath.mission_control.app import app
+from prismpath.mission_control.session import TOKEN_HEADER
 
 API_V1 = "/api/v1"
+
+
+def console_client(**kwargs):
+    """A test client the session guard serves: the bound loopback origin and this launch's token."""
+    return TestClient(app, base_url=f"http://127.0.0.1:{core.SETTINGS.port}",
+                      headers={TOKEN_HEADER: app.state.session.token}, **kwargs)
 
 # A fully Level-M flow (every deterministic edge is field-OP-constant) -> level_m True, 0 bad.
 LM_OK = "---\nname: lm_ok\nstart: a\n---\n## a\n-> b: when score > 5\n-> c: else\n## b\nDone.\n## c\nDone.\n"
@@ -53,7 +60,7 @@ def client(proj, monkeypatch):
     monkeypatch.setattr(core.SETTINGS, "scan", str(proj / "status.json"))
     monkeypatch.setattr(core.audit, "LOG", audit_log.AuditLog(str(proj / "audit.log")))  # don't touch the repo's log
     core.STATE.update({"proc": None, "proj": str(proj), "cfg": {}, "pinned": True})
-    return TestClient(app)
+    return console_client()
 
 
 # ── proving: the un-gameable invariants ───────────────────────────────────────
@@ -129,7 +136,7 @@ def test_unhandled_error_body_carries_no_exception_text(proj, monkeypatch):
     monkeypatch.setattr(core, "file_tree", explode)
     # the handler under test is the one that turns an unexpected exception into an HTTP body, so the
     # client must let the app answer instead of re-raising the exception into the test
-    with TestClient(app, raise_server_exceptions=False) as raw_client:
+    with console_client(raise_server_exceptions=False) as raw_client:
         response = raw_client.get(API_V1 + "/files")
     assert response.status_code == 500
     assert "secret path" not in response.text

@@ -8,6 +8,29 @@ spec stable.
 
 ## [Unreleased]
 
+### Changed, breaking: Mission Control serves only its own page, over its own host, with a session token (2026-11-16)
+
+A form posted from any web page reached `/api/v1/sprint/stop` and dropped the STOP marker, a foreign
+`Host` was served, a project could be selected from anywhere on disk, and the defaults followed `/tmp`.
+
+- **Session guard** (`prismpath/mission_control/session.py`), the outermost layer: a request is refused with
+  a 403 unless its `Host` is the bound port under `127.0.0.1`, `localhost` or `[::1]`, its `Origin` (when
+  present) is that same origin, and, under `/api/v1`, it carries `X-PrismPath-Session` equal to the launch's
+  random token. The page gets the token in a meta tag written as it is served; a script reads it from
+  `mission_control-<port>.session` (mode 0600) in the state directory. Every response carries a content
+  security policy, `nosniff`, `no-referrer` and `X-Frame-Options: DENY`; the page and the API are `no-store`.
+  `/docs` is no longer served (it loaded a CDN script); the schema stays at `/openapi.json`.
+- **Postures**: `--read-only` or `MC_READ_ONLY=1` mounts no route marked `x-prismpath-capability: write`
+  and refuses each with a 403. The full posture stays the default.
+- **Project roots**: `/sprint/select` and `/sprint/start` accept only a discovered sprint, the launch project
+  or a directory under `MC_EVIDENCE`, and never one holding the console's own audit log. `MC_PROJ` defaults to
+  `project` under the state directory (`MC_STATE_DIR`) and `MC_SCAN` to nothing, in place of `/tmp/demo` and
+  `/tmp/*/status.json`.
+- **One project per request**: the followed project is guarded by a lock, each request captures it once, and
+  `/status` no longer moves it; following the live sprint is the event stream's job.
+- `MC_HOST` other than loopback is refused unless `MC_ALLOW_NON_LOOPBACK=1`. The page reads the event stream
+  with `fetch`, since `EventSource` cannot send the header.
+
 ### Added: the streaming Merkle root in every substrate, proved equal to the tree (2026-11-15)
 
 - **One streaming form per language**, beside the batch tree and giving the same root: `root_statement.MerkleAccumulator`

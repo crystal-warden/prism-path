@@ -99,7 +99,7 @@ driver, where harness concerns belong:
   (`SPRINT_AGENT=swarm`, `SPRINT_EXEC=cecli`); `swarm_runner.py` prefers the real swarm and falls
   back to `llm_local` so a run always proceeds.
 - **Mission Control is proving + observability** (`prismpath/mission_control/`, a FastAPI package):
-  a single user, loopback command center over a versioned JSON API (`/api/v1`, OpenAPI at `/docs`),
+  a single user, loopback command center over a versioned JSON API (`/api/v1`, OpenAPI at `/openapi.json`),
   the flow topology with live run state over SSE, **text in proving** (`/prove/level-m`,
   `/prove/reach`, audit self verify), RAG retrieval visibility, and the sprint controls (incl. a
   buffered/unbuffered launch toggle). It runs **no models**: PrismPath routes and proves; inference

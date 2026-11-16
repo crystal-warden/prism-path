@@ -12,7 +12,8 @@ The work is split by job into one module each, and this module re-exports them u
 routers already use:
 
     config      every path, port and cap, with the shipped values as defaults
-    state       the one operator's live state and the locks that serialize writes
+    state       the one operator's live state, the lock that guards it and the locks that serialize writes
+    session     the launch's session token and the guard that checks Host, Origin and the token
     audit       the append-only, Merkle committed log of control actions
     files       containment against the followed project, and the editable file listing
     discovery   finding sprints by their heartbeat, and following the live one
@@ -33,18 +34,18 @@ models. See docs/design/orchestration.md.
 from . import audit
 from .balance import balance_state
 from .config import SETTINGS, Settings
-from .discovery import discover_sprints, follow_active_sprint
+from .discovery import confine_project, discover_sprints, follow_active_sprint
 from .files import file_tree, is_contained, safe_path
 from .graph import serialize_flow_graph
 from .launch import sprint_running, start_sprint, touch_marker
 from .lens import interactions, retrievals
 from .stage import flow_state
-from .state import FILE_LOCK, LAUNCH_LOCK, STATE
+from .state import FILE_LOCK, LAUNCH_LOCK, STATE, STATE_LOCK, current_project, select_project, snapshot
 from .status import status
 
 __all__ = [
-    "SETTINGS", "Settings", "STATE", "FILE_LOCK", "LAUNCH_LOCK", "audit",
-    "balance_state", "discover_sprints", "file_tree", "flow_state", "follow_active_sprint",
-    "interactions", "is_contained", "retrievals", "safe_path", "serialize_flow_graph",
-    "sprint_running", "start_sprint", "status", "touch_marker",
+    "SETTINGS", "Settings", "STATE", "STATE_LOCK", "FILE_LOCK", "LAUNCH_LOCK", "audit",
+    "balance_state", "confine_project", "current_project", "discover_sprints", "file_tree", "flow_state", "follow_active_sprint",
+    "interactions", "is_contained", "retrievals", "safe_path", "select_project", "serialize_flow_graph",
+    "snapshot", "sprint_running", "start_sprint", "status", "touch_marker",
 ]

@@ -14,6 +14,11 @@
 "use strict";
 
 const API_PREFIX = "/api/v1";
+// The console writes this launch's session token into the page's meta tag as it serves the page, and
+// refuses any /api/v1 request that does not carry it in this header.
+const SESSION_HEADER = "X-PrismPath-Session";
+const SESSION_TOKEN = (document.querySelector('meta[name="prismpath-session"]') || {}).content || "";
+const STREAM_RETRY_MS = 3000;
 const TOAST_MS = 2600;
 const CONDITION_LABEL_MAX = 26;
 
@@ -27,14 +32,14 @@ function selectAll(selector, root = document) {
 }
 
 async function getJson(path) {
-  const response = await fetch(API_PREFIX + path);
+  const response = await fetch(API_PREFIX + path, { headers: { [SESSION_HEADER]: SESSION_TOKEN } });
   return response.json();
 }
 
 async function postJson(path, body) {
   const response = await fetch(API_PREFIX + path, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", [SESSION_HEADER]: SESSION_TOKEN },
     body: JSON.stringify(body || {}),
   });
   return response.json();
@@ -132,12 +137,40 @@ function paintConnectionPill(live) {
   pill.className = "pill " + (live ? "on" : "off");
 }
 
-/* ---------------- live event stream ---------------- */
-function followEventStream() {
-  const stream = new EventSource(API_PREFIX + "/events");
-  stream.onopen = () => paintConnectionPill(true);
-  stream.onerror = () => paintConnectionPill(false);   // EventSource auto-reconnects
-  stream.onmessage = message => {
+/* ---------------- live event stream ----------------
+   EventSource cannot send a header, so the stream is read with fetch, which can, and split into its
+   `data:` frames here. A dropped stream is retried after STREAM_RETRY_MS, as EventSource would. */
+async function followEventStream() {
+  for (;;) {
+    try {
+      const response = await fetch(API_PREFIX + "/events", { headers: { [SESSION_HEADER]: SESSION_TOKEN }, cache: "no-store" });
+      if (!response.ok || !response.body) throw new Error("event stream refused: " + response.status);
+      paintConnectionPill(true);
+      const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
+      let pending = "";
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        pending += value.replace(/\r\n/g, "\n");
+        let cut;
+        while ((cut = pending.indexOf("\n\n")) >= 0) {
+          const frame = pending.slice(0, cut);
+          pending = pending.slice(cut + 2);
+          const data = frame.split("\n").filter(line => line.startsWith("data:"))
+            .map(line => line.slice(5).replace(/^ /, "")).join("\n");
+          if (data) onStreamMessage({ data });
+        }
+      }
+    } catch {
+      /* fall through to the retry */
+    }
+    paintConnectionPill(false);
+    await new Promise(resolve => setTimeout(resolve, STREAM_RETRY_MS));
+  }
+}
+
+function onStreamMessage(message) {
+  {
     let event;
     try {
       event = JSON.parse(message.data);

@@ -8,6 +8,7 @@ import tempfile
 from fastapi import APIRouter, HTTPException, Query
 
 from . import core
+from .posture import WRITE
 from .models import FileWriteReq
 
 router = APIRouter(tags=["edit"])
@@ -15,13 +16,13 @@ router = APIRouter(tags=["edit"])
 
 @router.get("/files")
 def list_files():
-    return {"proj": os.path.basename(core.STATE["proj"]), "dir": core.STATE["proj"],
-            "files": core.file_tree(core.STATE["proj"])}
+    proj = core.current_project()                             # one project for the whole request
+    return {"proj": os.path.basename(proj), "dir": proj, "files": core.file_tree(proj)}
 
 
 @router.get("/file")
 def read_file(path: str = Query(...)):
-    fp = core.safe_path(core.STATE["proj"], path)      # ValueError on traversal -> 400 envelope
+    fp = core.safe_path(core.current_project(), path)      # ValueError on traversal -> 400 envelope
     fst = os.stat(fp)
     if fst.st_size > core.SETTINGS.max_file_bytes:
         raise HTTPException(413, f"file exceeds MC_MAX_FILE_BYTES ({core.SETTINGS.max_file_bytes} bytes)")
@@ -49,9 +50,9 @@ def _write_atomically(resolved: str, content: str) -> None:
         raise
 
 
-@router.post("/file")
+@router.post("/file", openapi_extra=WRITE)
 def write_file(req: FileWriteReq):
-    resolved = core.safe_path(core.STATE["proj"], req.path)   # ValueError on traversal -> 400 envelope
+    resolved = core.safe_path(core.current_project(), req.path)   # ValueError on traversal -> 400 envelope
     if len(req.content.encode("utf-8")) > core.SETTINGS.max_file_bytes:
         raise HTTPException(413, f"content exceeds MC_MAX_FILE_BYTES ({core.SETTINGS.max_file_bytes} bytes)")
     with core.FILE_LOCK:

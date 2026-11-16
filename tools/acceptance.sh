@@ -183,7 +183,7 @@ PY
       echo 'pack verified'"
     # -------------------------------------------------------------- Mission Control from the installed wheel
     run_gate "mission control: installed launch, defaults, assets, validate, facet, pack verify, sprint subprocess" "$OUT/mission-control.log" "$OUT/venv-full/bin/python" - "$OUT" <<'PY'
-import json, os, subprocess, sys, time, urllib.request, tempfile
+import json, os, subprocess, sys, time, urllib.error, urllib.request, tempfile
 from pathlib import Path
 out = Path(sys.argv[1]); project = out / "mc-project"
 flow = project / "flows" / "triage.md"
@@ -194,20 +194,41 @@ env = dict(os.environ, MC_PROJ=str(project), MC_PORT="9917", MC_SCAN=str(project
 env.pop("MC_AUDIT", None)
 state_home = Path(os.environ["XDG_STATE_HOME"]); env["XDG_STATE_HOME"] = str(state_home)
 server = subprocess.Popen([sys.executable, "-m", "prismpath.mission_control"], env=env, cwd=str(out), stdout=open(out / "mc-server.log", "w"), stderr=subprocess.STDOUT)
-def get(path):
-    with urllib.request.urlopen(f"http://127.0.0.1:9917{path}", timeout=5) as response:
+# The console writes its session token, owner only, into its state directory; a script on the same
+# machine reads it there and sends it in the session header, as the page does from its meta tag.
+def token_of(port):
+    return (state_home / "prismpath" / f"mission_control-{port}.session").read_text().strip()
+TOKEN = {}
+def get(path, headers=None):
+    request = urllib.request.Request(f"http://127.0.0.1:9917{path}", headers={"X-PrismPath-Session": TOKEN.get("t", ""), **(headers or {})})
+    with urllib.request.urlopen(request, timeout=5) as response:
         return response.status, response.read()
 def post(path, payload):
-    request = urllib.request.Request(f"http://127.0.0.1:9917{path}", data=json.dumps(payload).encode(), headers={"Content-Type": "application/json"}, method="POST")
+    request = urllib.request.Request(f"http://127.0.0.1:9917{path}", data=json.dumps(payload).encode(), headers={"Content-Type": "application/json", "X-PrismPath-Session": TOKEN.get("t", "")}, method="POST")
     with urllib.request.urlopen(request, timeout=20) as response:
         return response.status, json.loads(response.read())
+def refused(path, headers):
+    try:
+        urllib.request.urlopen(urllib.request.Request(f"http://127.0.0.1:9917{path}", headers=headers), timeout=5)
+    except urllib.error.HTTPError as error:
+        return error.code
+    return 200
 try:
     for _ in range(50):
-        try: get("/api/v1/status"); break
+        try: TOKEN["t"] = token_of(9917); get("/api/v1/status"); break
         except Exception: time.sleep(0.2)
     else: raise SystemExit("mission control did not start; see mc-server.log")
+    token_file = state_home / "prismpath" / "mission_control-9917.session"
+    assert os.name == "nt" or token_file.stat().st_mode & 0o777 == 0o600, oct(token_file.stat().st_mode)
+    assert TOKEN["t"] not in (out / "mc-server.log").read_text(), "the launch printed the session token"
+    assert refused("/api/v1/status", {}) == 403, "an API request without the session header was served"
+    assert refused("/api/v1/status", {"X-PrismPath-Session": TOKEN["t"], "Host": "evil.example:9917"}) == 403, "a foreign Host was served"
+    assert refused("/api/v1/status", {"X-PrismPath-Session": TOKEN["t"], "Origin": "http://evil.example"}) == 403, "a foreign Origin was served"
+    print("session guard: token file owner only, missing token, foreign Host and foreign Origin refused")
     for asset in ("/", "/style.css", "/app.js", "/vendor/cytoscape.min.js"):
         status, body = get(asset); assert status == 200 and body, asset
+    status, page = get("/")
+    assert f'<meta name="prismpath-session" content="{TOKEN["t"]}">'.encode() in page, "the page carries no session token"
     print("static assets served")
     status, validation = post("/api/v1/inspect/validate", {"flow_md": "flows/triage.md"}); print("validate:", status, str(validation)[:120])
     assert status == 200 and validation.get("ok") is True and validation.get("errors") == 0, validation
@@ -239,9 +260,10 @@ server = subprocess.Popen([sys.executable, "-m", "prismpath.mission_control"], e
 try:
     for _ in range(50):
         try:
-            with urllib.request.urlopen("http://127.0.0.1:9918/api/v1/status", timeout=5): break
+            second = token_of(9918)
+            with urllib.request.urlopen(urllib.request.Request("http://127.0.0.1:9918/api/v1/status", headers={"X-PrismPath-Session": second}), timeout=5): break
         except Exception: time.sleep(0.2)
-    request = urllib.request.Request("http://127.0.0.1:9918/api/v1/sprint/start", data=json.dumps({"proj": str(project), "agent": "served", "seconds": 1, "max_iters": 1}).encode(), headers={"Content-Type": "application/json"}, method="POST")
+    request = urllib.request.Request("http://127.0.0.1:9918/api/v1/sprint/start", data=json.dumps({"proj": str(project), "agent": "served", "seconds": 1, "max_iters": 1}).encode(), headers={"Content-Type": "application/json", "X-PrismPath-Session": second}, method="POST")
     with urllib.request.urlopen(request, timeout=20) as response:
         assert response.status == 200
     time.sleep(2)
