@@ -14,3 +14,6 @@ smoke_selector
 *.bpf.o
 gnet/gn_loader
 gnet/gn_batch
+# the merkle.h tests (make test-merkle)
+test_merkle
+test_merkle_ext
