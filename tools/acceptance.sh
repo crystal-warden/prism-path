@@ -18,6 +18,12 @@
 # checkout at the commit PROVENANCE.md records, and the provenance gate then also proves every file is
 # what that checkout's exporter writes. Without it the gate proves only that no file changed since the
 # export.
+#
+# Without --out the run works in a temporary directory of its own (several GB: the export, virtual
+# environments, cargo targets) and removes it on every exit, a pass, a failure or an interruption, after
+# printing the report. PRISMPATH_ACCEPTANCE_KEEP=1 keeps it for debugging. A directory named by --out is
+# the caller's and is kept. TMPDIR points inside the working directory for the run, so whatever a gate
+# creates as a temporary file (pytest's base temp, mktemp, tempfile) goes with it.
 set -u
 
 LEG="full"
@@ -41,8 +47,32 @@ esac
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 COMMIT="$(git -C "$REPO" rev-parse HEAD)"
-OUT="${OUT:-$(mktemp -d -t prismpath-acceptance-XXXXXX)}"
+OWN_OUT=0
+if [ -z "$OUT" ]; then
+  OUT="$(mktemp -d -t prismpath-acceptance-XXXXXX)" || { echo "cannot create a temporary directory" >&2; exit 2; }
+  OWN_OUT=1
+fi
+cleanup() {
+  local status=$?
+  trap - EXIT INT TERM HUP
+  if [ "$OWN_OUT" = "1" ]; then
+    if [ "${PRISMPATH_ACCEPTANCE_KEEP:-0}" = "1" ]; then
+      echo "kept $OUT (PRISMPATH_ACCEPTANCE_KEEP=1); remove it when done" >&2
+    else
+      chmod -R u+w "$OUT" 2>/dev/null   # cargo and pip leave read only files behind
+      rm -rf "$OUT"
+      [ "$status" = "0" ] || echo "removed $OUT; run again with PRISMPATH_ACCEPTANCE_KEEP=1 to keep the logs" >&2
+    fi
+  fi
+  exit "$status"
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+trap 'exit 129' HUP
 mkdir -p "$OUT"
+mkdir -p "$OUT/tmp"
+export TMPDIR="$OUT/tmp"
 REPORT="$OUT/report.md"
 EXPORT="$OUT/tree"
 unset PYTHONPATH

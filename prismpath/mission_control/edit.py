@@ -10,14 +10,16 @@ A save is the authoring interface's audit event `file.edit`, written before the 
 the sha256 of the file before and of the text it is about to hold, and the flow's name, so the console's
 log says which flow text a sprint ran afterwards. When the event cannot be written the file is left as it
 was. The result event after the rename carries the hash of the file as it then is on disk."""
+import errno
 import hashlib
 import os
 import stat
 import tempfile
 
 from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi.responses import JSONResponse
 
-from . import core, files
+from . import core, files, secret_material
 from .files import file_kind
 from .posture import WRITE
 from .models import FileWriteReq
@@ -37,14 +39,52 @@ def list_files():
     return {"proj": os.path.basename(proj), "dir": proj, "files": core.file_tree(proj)}
 
 
+READ_REFUSALS = {
+    "not-readable": "refused: the console reads only the files its listing shows (flows, fixtures, manifests, "
+                    "signatures, lockfiles, notes and public keys), never a hidden or unlisted file",
+    **secret_material.MESSAGES,
+}
+
+
+def _read_refused(path: str, reason: str) -> JSONResponse:
+    """A refused read: 403 with its reason, in the console's error envelope. Reads are not audited, so a
+    refusal records no event either."""
+    return JSONResponse(status_code=403, content={"error": {"code": 403, "message": READ_REFUSALS[reason],
+                                                            "reason": reason, "path": path}})
+
+
 @router.get("/file")
 def read_file(path: str = Query(...)):
-    fp = core.safe_path(core.current_project(), path)      # ValueError on traversal -> 400 envelope
-    fst = os.stat(fp)
-    if fst.st_size > core.SETTINGS.max_file_bytes:
+    proj = core.current_project()                          # one project for the whole request
+    fp = core.safe_path(proj, path)                        # ValueError on traversal -> 400 envelope
+    # The readable set is judged on the path asked for and on the file it resolves to, so a link with a
+    # listed name cannot serve a key, the session token or any file the listing does not show.
+    refusal = files.not_readable(path, fp)
+    if refusal is not None:
+        return _read_refused(path, refusal)
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0)
+    try:
+        fd = os.open(fp, flags)                            # a link swapped in after the check is refused
+    except FileNotFoundError:
+        raise HTTPException(404, "file not found in the project") from None
+    except OSError as error:
+        if error.errno == errno.ELOOP:
+            return _read_refused(path, "not-readable")
+        raise HTTPException(400, f"file cannot be opened: {error.strerror}") from None
+    with os.fdopen(fd, "rb") as handle:
+        fst = os.fstat(handle.fileno())
+        if not stat.S_ISREG(fst.st_mode):
+            raise HTTPException(400, "not a regular file")
+        if fst.st_size > core.SETTINGS.max_file_bytes:
+            raise HTTPException(413, f"file exceeds MC_MAX_FILE_BYTES ({core.SETTINGS.max_file_bytes} bytes)")
+        data = handle.read(core.SETTINGS.max_file_bytes + 1)
+    if len(data) > core.SETTINGS.max_file_bytes:
         raise HTTPException(413, f"file exceeds MC_MAX_FILE_BYTES ({core.SETTINGS.max_file_bytes} bytes)")
-    with open(fp, errors="ignore") as handle:
-        content = handle.read()
+    refusal = secret_material.content_refusal(data)
+    if refusal is not None:
+        return _read_refused(path, refusal)
+    # Text as the editor shows it: UTF-8, newlines universal, as the text mode read before this one gave.
+    content = data.decode("utf-8", errors="ignore").replace("\r\n", "\n").replace("\r", "\n")
     return {"path": path, "content": content, "mtime": fst.st_mtime, "size": fst.st_size}
 
 

@@ -298,9 +298,14 @@ def test_key_material_in_a_request_body_is_refused(client, root, keys):
         assert client.post(API_V1 + "/evidence/trail", json=body).status_code == 422, body
     _refused(client.post(API_V1 + "/evidence/trail", json={"path": "run.audit.jsonl", "pins": [raw_key.hex()]}),
              400, "bad-pin")
-    _refused(client.post(API_V1 + "/evidence/receipt", json={"path": "run.audit.jsonl", "index": 0,
-                                                              "pins": [base64.b64encode(raw_key).decode()]}),
-             404, "not-found")
+    # Key material in `pins` is only ever a path. Base64 starts with "/" for one key in 64, which names an
+    # absolute path outside the roots (403); without it the path is relative to a root and absent (404).
+    # Both forms are sent, so the outcome no longer depends on the key drawn.
+    encoded = base64.b64encode(raw_key).decode()
+    for pin, status, reason in (("/" + encoded.lstrip("/"), 403, "outside-roots"),
+                                (encoded.lstrip("/"), 404, "not-found")):
+        _refused(client.post(API_V1 + "/evidence/receipt", json={"path": "run.audit.jsonl", "index": 0,
+                                                                  "pins": [pin]}), status, reason)
 
 
 def test_a_pin_file_outside_the_roots_or_not_a_key_is_refused(client, root, keys):

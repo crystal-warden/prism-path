@@ -87,6 +87,14 @@ toggle; `false` batches) plus the usual sprint config, and `/sprint/{select,auto
 
 `GET /api/v1/files`, `GET /api/v1/file?path=`, `POST /api/v1/file {path, content}`. Every path is
 resolved and **contained** to the followed project tree; traversal (`../…`) is rejected with a 400.
+`GET /file` reads only what `/files` lists (flows, fixtures, manifests, signatures, lockfiles, notes and
+public keys), judged on the path asked for and on the file it resolves to, and never secret material:
+a private key by its name (`*.key`, PKCS12 and Java keystores, `id_rsa` and its kind), an `.env` like or
+credentials file, anything in the console's state directory but its audit log (the session token
+file above all), or a file whose bytes hold a PEM or DER private key. A refusal is a 403 whose
+`error.reason` is `not-readable`, `secret-kind`, `console-state` or `secret-content`; reads are not
+audited, so neither is a refused read. The `/evidence` readers refuse the same material under the
+evidence roots, with the same reasons.
 
 ### The console's own audit log
 
