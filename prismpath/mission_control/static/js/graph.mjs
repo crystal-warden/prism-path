@@ -2,10 +2,12 @@
 // Copyright 2026 Crystal Warden Supply Chain Labs LLC
 //
 // The Graph screen of the authoring interface: the followed flow drawn with its edges coloured by
-// tier, the live active node, and the two proofs (Level M and reachability) painted onto it. The
-// drawing library is the vendored Cytoscape, loaded by index.html before the modules.
+// tier, the live active node, and the two proofs (Level M and reachability) painted onto it, the
+// reachability proof with the witness path it found. The Prove screen (authoring.mjs) proves any text,
+// an unsaved edit included; this screen proves the followed flow and paints the answer on its picture.
+// The drawing library is the vendored Cytoscape, loaded by index.html before the modules.
 import { IDS } from "./ids.mjs";
-import { html } from "./markup.mjs";
+import { attr, html } from "./markup.mjs";
 import { PATHS } from "./paths.mjs";
 import { state } from "./state.mjs";
 import { byId, renderInto, showToast } from "./dom.mjs";
@@ -33,6 +35,8 @@ export const GRAPH_STYLE = [
   { selector: "edge.error", style: { "line-color": "#d9563a", "target-arrow-color": "#d9563a" } },
   { selector: "edge.event", style: { "line-color": "#9a86c9", "target-arrow-color": "#9a86c9" } },
   { selector: "edge.nonm", style: { "line-style": "dashed", "line-color": "#e07b39", "target-arrow-color": "#e07b39", width: 3 } },
+  { selector: "node.witness", style: { "background-color": "#1d3b2c" } },
+  { selector: "edge.witness", style: { width: 5, "line-color": "#a0e8e0", "target-arrow-color": "#a0e8e0" } },
 ];
 
 const VERDICTS = new Set(["yes", "may", "no"]);
@@ -77,6 +81,39 @@ function verdictClass(verdict) {
 export function renderReachVerdicts(verdicts) {
   return Object.entries(verdicts || {}).map(([name, verdict]) =>
     html`<div class="verdict"><span>${name}</span><span class="${verdictClass(verdict)}">${verdict}</span></div>`);
+}
+
+// The nodes and edges of every witness path a reachability proof returned, in path order, each once.
+export function witnessPath(results) {
+  const nodes = [];
+  const edges = [];
+  const seen = new Set();
+  Object.values(results || {}).forEach(result => {
+    (result.witness || []).forEach(step => {
+      [step.node, step.target].forEach(name => {
+        if (name && !nodes.includes(name)) {
+          nodes.push(name);
+        }
+      });
+      const key = step.node + "\u0000" + step.target;
+      if (!seen.has(key)) {
+        seen.add(key);
+        edges.push([step.node, step.target]);
+      }
+    });
+  });
+  return { nodes, edges };
+}
+
+function exampleText(example) {
+  return Object.entries(example || {}).map(([field, value]) => field + "=" + JSON.stringify(value)).join(", ");
+}
+
+// Each witness path as the steps it takes, with the example input that takes each step.
+export function renderWitness(results) {
+  return Object.entries(results || {}).filter(([, result]) => (result.witness || []).length).map(([name, result]) =>
+    html`<div class="sub-card"><h4>witness to ${name}</h4><ol class="path">${result.witness.map(step =>
+      html`<li>${step.node} → ${step.target}: ${step.condition || "(default)"} <span class="muted">${step.via || ""}${step.example && Object.keys(step.example).length ? " · " + exampleText(step.example) : ""}</span></li>`)}</ol></div>`);
 }
 
 export function renderGraphError(message) {
@@ -236,13 +273,19 @@ async function proveReachability() {
     renderInto(IDS.reachVerdicts, html`<div class="muted">${proof.error.message}</div>`);
     return;
   }
-  state.cytoscapeView.nodes().removeClass("v-yes v-may v-no");
+  state.cytoscapeView.nodes().removeClass("v-yes v-may v-no witness");
+  state.cytoscapeView.edges().removeClass("witness");
   Object.entries(proof.verdicts || {}).forEach(([name, verdict]) => {
     if (VERDICTS.has(verdict)) {
       state.cytoscapeView.getElementById(name).addClass("v-" + verdict);
     }
   });
-  renderInto(IDS.reachVerdicts, renderReachVerdicts(proof.verdicts));
+  const path = witnessPath(proof.results);
+  path.nodes.forEach(name => state.cytoscapeView.getElementById(name).addClass("witness"));
+  path.edges.forEach(([source, target]) => state.cytoscapeView.edges()
+    .filter(edge => edge.data("source") === source && edge.data("target") === target)
+    .addClass("witness"));
+  renderInto(IDS.reachVerdicts, [renderReachVerdicts(proof.verdicts), renderWitness(proof.results)]);
 }
 
 export function wireGraph() {

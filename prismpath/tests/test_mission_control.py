@@ -115,8 +115,8 @@ def test_write_rejects_traversal(client, proj):
     bad = client.post(API_V1 + "/file", json={"path": "../evil.txt", "content": "x"})
     assert bad.status_code == 400 and bad.json()["error"]["code"] == 400
     assert not (proj.parent / "evil.txt").exists()
-    ok = client.post(API_V1 + "/file", json={"path": "flows/note.txt", "content": "hi"})
-    assert ok.status_code == 200 and (proj / "flows" / "note.txt").read_text() == "hi"
+    ok = client.post(API_V1 + "/file", json={"path": "flows/note.md", "content": "hi"})
+    assert ok.status_code == 200 and (proj / "flows" / "note.md").read_text() == "hi"
 
 
 def test_write_is_atomic_and_keeps_the_file_mode(client, proj):

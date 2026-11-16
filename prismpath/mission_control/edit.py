@@ -1,6 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
-"""Edit router — list/read/write flow files, the only write surface, path-contained and fail-closed.
+"""Edit router — list/read/write flow files, path-contained and fail-closed.
+
+The authoring interface writes flow documents and their fixture tables and nothing else (`files.file_kind`
+and `files.not_editable`): any other path is refused with a 403 and one `file.edit.refused` event, so the
+console never writes a flow manifest, a signature, a lockfile or a page of its own.
 
 A save is the authoring interface's audit event `file.edit`, written before the file changes, carrying
 the sha256 of the file before and of the text it is about to hold, and the flow's name, so the console's
@@ -13,11 +17,18 @@ import tempfile
 
 from fastapi import APIRouter, HTTPException, Query, Request
 
-from . import core
+from . import core, files
+from .files import file_kind
 from .posture import WRITE
 from .models import FileWriteReq
 
-router = APIRouter(tags=["edit"])
+router = APIRouter(tags=["authoring", "edit"])
+
+REFUSALS = {
+    "not-editable": "refused: the console edits flow documents (.md) and their fixtures (.tests.md) only",
+    "hidden": "refused: the console edits only the flow documents and fixtures the editor lists, "
+              "never a hidden file or one under a skipped directory",
+}
 
 
 @router.get("/files")
@@ -66,13 +77,6 @@ def _sha256_of_file(path: str):
         return None
 
 
-def file_kind(path: str) -> str:
-    """`fixture` for a fixture table, `flow` for any other flow document, `other` for the rest."""
-    if path.endswith(".tests.md"):
-        return "fixture"
-    return "flow" if path.endswith(".md") else "other"
-
-
 def flow_name(text: str):
     """The `name:` of a flow document's front matter, or None. Read without parsing the flow, since a
     save in progress need not parse."""
@@ -91,6 +95,11 @@ def flow_name(text: str):
 @router.post("/file", openapi_extra=WRITE)
 def write_file(req: FileWriteReq, request: Request):
     resolved = core.safe_path(core.current_project(), req.path)   # ValueError on traversal -> 400 envelope
+    refusal = files.not_editable(req.path)
+    if refusal is not None:
+        core.audit.record("file.edit.refused", {"path": req.path, "kind": file_kind(req.path), "reason": refusal},
+                          core.audit.actor(request, "authoring"))
+        raise HTTPException(403, REFUSALS[refusal])
     content_bytes = req.content.encode("utf-8")
     if len(content_bytes) > core.SETTINGS.max_file_bytes:
         raise HTTPException(413, f"content exceeds MC_MAX_FILE_BYTES ({core.SETTINGS.max_file_bytes} bytes)")

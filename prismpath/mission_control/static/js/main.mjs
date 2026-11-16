@@ -12,7 +12,7 @@ import { byId } from "./dom.mjs";
 import { configureTransport, getJson } from "./transport.mjs";
 import { followEventStream } from "./events.mjs";
 import { loadGraphScreen, refreshActiveNode, wireGraph } from "./graph.mjs";
-import { loadFilesScreen, wireAuthoring } from "./authoring.mjs";
+import { loadFilesScreen, loadNewScreen, loadProveScreen, loadStatusScreen, wireAuthoring } from "./authoring.mjs";
 import { loadFlowsScreen, loadLensScreen, loadMonitorScreen, loadQueueScreen, loadRunsScreen, paintStatusPills,
          wireOperating } from "./operating.mjs";
 import { loadAuditScreen, loadCausesScreen, loadKeysScreen, loadTrailsScreen, wireAuditing } from "./auditing.mjs";
@@ -25,6 +25,9 @@ export const SCREENS = Object.freeze([
   { screen: "graph", interface: "authoring", view: IDS.viewGraph, load: () => loadGraphScreen(true) },
   { screen: "files", interface: "authoring", view: IDS.viewFiles, load: loadFilesScreen },
   { screen: "inspect", interface: "authoring", view: IDS.viewInspect, load: loadPanelScreen },
+  { screen: "prove", interface: "authoring", view: IDS.viewProve, load: loadProveScreen },
+  { screen: "status", interface: "authoring", view: IDS.viewStatus, load: loadStatusScreen },
+  { screen: "new", interface: "authoring", view: IDS.viewNew, load: loadNewScreen },
   { screen: "queue", interface: "operating", view: IDS.viewQueue, load: loadQueueScreen },
   { screen: "policy", interface: "operating", view: IDS.viewPolicy, load: loadPanelScreen },
   { screen: "monitor", interface: "operating", view: IDS.viewMonitor, load: loadMonitorScreen },

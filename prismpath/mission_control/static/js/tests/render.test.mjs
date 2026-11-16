@@ -79,9 +79,11 @@ test("the node panel shows the instruction, the edges and the retrievals that na
 });
 
 test("the file list marks the open file and carries each path in its row", () => {
-  const rows = text(renderFileList([{ path: "flows/triage.md", size: 210 }, { path: "notes.md", size: 4 }], "notes.md"));
-  assert.equal(rows, '<div class="f" data-p="flows/triage.md"><span>flows/triage.md</span><span class="sz">210</span></div>'
-    + '<div class="f sel" data-p="notes.md"><span>notes.md</span><span class="sz">4</span></div>');
+  const rows = text(renderFileList([{ path: "flows/triage.md", size: 210, kind: "flow" }, { path: "notes.json", size: 4, kind: "other" }], "notes.json"));
+  assert.equal(rows, '<div class="f kind-flow" data-p="flows/triage.md" data-kind="flow"><span>flows/triage.md</span><span class="sz"><span class="kind flow">flow</span> 210</span></div>'
+    + '<div class="f sel kind-other" data-p="notes.json" data-kind="other"><span>notes.json</span><span class="sz"><span class="kind other">read only</span> 4</span></div>');
+  // a kind the client does not know is shown as other, never as a class of its own
+  assert.ok(text(renderFileList([{ path: "x", size: 1, kind: "x\" onclick=\"1" }])).includes('data-kind="other"'));
   assert.equal(text(renderFileList(undefined)), "");
 });
 

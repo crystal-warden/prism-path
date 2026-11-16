@@ -262,8 +262,8 @@ def test_sprint_select_outside_the_roots_is_refused(client, proj, tmp_path, monk
     assert core.STATE["proj"] == str(proj)
     assert client.post(API_V1 + "/sprint/select", json={"proj": "/"}).status_code == 400
     # a write after a refused select still lands in the followed project, never under the path asked for
-    client.post(API_V1 + "/file", json={"path": "note.txt", "content": "x"})
-    assert not (elsewhere / "note.txt").exists()
+    assert client.post(API_V1 + "/file", json={"path": "note.md", "content": "x"}).status_code == 200
+    assert not (elsewhere / "note.md").exists() and (proj / "note.md").exists()
     # a discovered sprint is selectable
     beta = _project(tmp_path / "sprints", "beta", 2)
     assert client.post(API_V1 + "/sprint/select", json={"proj": str(beta)}).status_code == 200

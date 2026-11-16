@@ -50,9 +50,10 @@ test("attr() quotes the value, so a template that left the quotes out is still s
 });
 
 test("a file name with a quote cannot break out of the file row's data attribute", () => {
-  const [row] = renderFileList([{ path: HOSTILE, size: 3 }]);
+  const [row] = renderFileList([{ path: HOSTILE, size: 3, kind: HOSTILE }]);
   const attributes = attributesOf(row.text);
-  assert.deepEqual(Object.keys(attributes).sort(), ["class", "data-p"]);
+  assert.deepEqual(Object.keys(attributes).sort(), ["class", "data-kind", "data-p"]);
+  assert.equal(attributes["data-kind"], "other");
   assert.equal(decoded(attributes["data-p"]), HOSTILE);
 });
 
