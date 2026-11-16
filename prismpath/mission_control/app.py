@@ -15,7 +15,7 @@ import os
 
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.routing import APIRoute
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -29,6 +29,10 @@ from .session import META_NAME, Session, SessionGuard
 
 API_PREFIX = "/api/v1"
 STATIC_DIR = os.path.join(core.SETTINGS.package_dir, "static")
+# The page's own verifier (static/js/verify.mjs) imports canon/2 and the RFC 6962 tree from the portable
+# modules beside the kernel's corpora, so these two files, and nothing else there, are served at /portable/.
+PORTABLE_DIR = os.path.join(os.path.dirname(core.SETTINGS.package_dir), "portable")
+PORTABLE_MODULES = frozenset({"canon2.mjs", "merkle.mjs"})
 # The tags index.html ships with; the page route fills them with this launch's token and the console's
 # posture as it serves the page, so the client shows read-only controls as unavailable instead of
 # sending requests the guard refuses.
@@ -157,6 +161,12 @@ def create_app(read_only=None, session=None) -> FastAPI:
     @application.get("/index.html", include_in_schema=False)
     def _index():
         return HTMLResponse(_page_text(session, read_only))
+
+    @application.get("/portable/{name}", include_in_schema=False)
+    def _portable(name: str):
+        if name not in PORTABLE_MODULES or not os.path.isfile(os.path.join(PORTABLE_DIR, name)):
+            raise StarletteHTTPException(status_code=404)
+        return FileResponse(os.path.join(PORTABLE_DIR, name), media_type="text/javascript")
 
     if os.path.isdir(STATIC_DIR):
         application.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")

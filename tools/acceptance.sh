@@ -151,6 +151,7 @@ text = open(sys.argv[1]).read()
 allowed = {
     "test_gates_behavioral_findings.py": "could not import 'playwright'",
     "test_gates_infra_error.py": "could not import 'playwright'",
+    "test_mission_control_page_verify.py": "could not import 'playwright",   # the headless browser check of the page's verdict
     "test_llm_local.py": "could not import 'torch'",
     "test_lockfile.py": "needs the real bge embedder",
     "test_router.py": "could not import 'sentence_transformers'",
@@ -225,7 +226,7 @@ try:
     assert refused("/api/v1/status", {"X-PrismPath-Session": TOKEN["t"], "Host": "evil.example:9917"}) == 403, "a foreign Host was served"
     assert refused("/api/v1/status", {"X-PrismPath-Session": TOKEN["t"], "Origin": "http://evil.example"}) == 403, "a foreign Origin was served"
     print("session guard: token file owner only, missing token, foreign Host and foreign Origin refused")
-    for asset in ("/", "/style.css", "/js/main.mjs", "/js/markup.mjs", "/vendor/cytoscape.min.js"):
+    for asset in ("/", "/style.css", "/js/main.mjs", "/js/markup.mjs", "/js/verify.mjs", "/portable/canon2.mjs", "/portable/merkle.mjs", "/vendor/cytoscape.min.js"):
         status, body = get(asset); assert status == 200 and body, asset
     status, page = get("/")
     assert f'<meta name="prismpath-session" content="{TOKEN["t"]}">'.encode() in page, "the page carries no session token"

@@ -72,7 +72,8 @@ prismpath = ["flows/*.md",                    # example + reference flows
           "tests/fixtures/core_evidence/*.jsonl",   # the cases a core run is produced from (test_evidence_verify)
           "tests/fixtures/compiler/*", "tests/fixtures/compiler/anchored/*",   # the compiler references
           "telemetry/conformance/*.json",     # the frozen Facet corpora every other implementation is judged by
-          "portable/conformance/*.json"]      # the frozen kernel spec
+          "portable/conformance/*.json",      # the frozen kernel spec
+          "portable/canon2.mjs", "portable/merkle.mjs"]   # canon/2 and the RFC 6962 tree, for Mission Control's in page verifier
 "prismpath.plugins.pysprint" = ["*.md"]   # ARCH.md / LESSONS.md read at runtime by the sprint plugin
 # Mission Control's browser command center — served at runtime by the FastAPI app (control-plane extra).
 "prismpath.mission_control" = ["static/*", "static/vendor/*", "static/js/*.mjs", "static/js/tests/*.mjs"]
