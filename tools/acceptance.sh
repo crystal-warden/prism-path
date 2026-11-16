@@ -151,6 +151,7 @@ text = open(sys.argv[1]).read()
 allowed = {
     "test_gates_behavioral_findings.py": "could not import 'playwright'",
     "test_gates_infra_error.py": "could not import 'playwright'",
+    "test_mission_control_page_verify.py": "could not import 'playwright",   # the headless browser check of the page's verdict
     "test_llm_local.py": "could not import 'torch'",
     "test_lockfile.py": "needs the real bge embedder",
     "test_router.py": "could not import 'sentence_transformers'",
