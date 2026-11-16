@@ -286,6 +286,7 @@ def test_policy_active_for_a_missing_directory_creates_nothing(client, console):
 
 # ── the lens reads its labels from the records the producers write ────────────────────────────
 def test_the_served_chat_records_the_model_it_called(monkeypatch, tmp_path):
+    pytest.importorskip("requests")
     from prismpath.orchestration import run_sprint
     recorded = []
     monkeypatch.setattr(run_sprint, "_ix", type("Ix", (), {"record": staticmethod(
