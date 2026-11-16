@@ -20,7 +20,7 @@ from pydantic import BaseModel, Field
 
 from . import core
 
-router = APIRouter(prefix="/policy", tags=["policy"])
+router = APIRouter(prefix="/policy", tags=["auditing", "policy"])
 
 
 class PackVerifyRequest(BaseModel):

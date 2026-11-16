@@ -57,6 +57,13 @@ KEY_BYTES = 32                  # a raw Ed25519 public key
 LOG_NAMES = ("swaps.log", "mission_audit.log", "audit.jsonl")
 LOG_SUFFIXES = (".audit.jsonl",)
 SKIPPED_DIRS = (".git", "__pycache__")
+# The console's own audit log writes an action as an intent and, after the effect, `<action>.result`
+# naming the intent (`audit.RESULT_SUFFIX`); a refusal is one event, complete in itself.
+RESULT_SUFFIX = ".result"
+REFUSAL_SUFFIX = ".refused"
+CONSOLE_ACTOR = "console/"
+MAX_LISTED = 100                # unrecorded intents and orphan results a report names at most
+ANCHOR_LABEL = r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}"
 
 
 class EvidenceRefused(ValueError):
@@ -174,6 +181,23 @@ def _pin_file(path: Any, roots: Optional[Iterable[str]], what: str) -> str:
     return real
 
 
+def read_pins(paths: Optional[Iterable[Any]], roots: Optional[Iterable[str]] = None) -> Optional[List[bytes]]:
+    """The raw keys held by public key files under the roots, for a transport that takes key FILES only and
+    never key material from a request: each must be a raw 32 byte Ed25519 public key. None for no file. A
+    name that is itself the hex of a key is refused as `bad-pin`, so a page cannot post the key it pinned."""
+    if not paths:
+        return None
+    if isinstance(paths, (str, os.PathLike)):
+        paths = [paths]
+    out = []
+    for path in paths:
+        if isinstance(path, str) and len(path) == 2 * KEY_BYTES and all(c in "0123456789abcdefABCDEF" for c in path):
+            raise EvidenceRefused("bad-pin", "name a public key file under an evidence root, not the key itself")
+        real = _pin_file(path, roots, "a pinned key")
+        out.append(_read_bounded(real, KEY_BYTES + 1, "a pinned key"))
+    return out
+
+
 def _positive(value: Any, name: str, allow_zero: bool = False) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value < (0 if allow_zero else 1):
         raise EvidenceRefused("bad-request", f"{name} is a {'nonnegative' if allow_zero else 'positive'} integer")
@@ -226,6 +250,60 @@ def _cause_of(event: Any) -> Any:
 
 def _cause_key(rendered: Dict[str, Any]) -> str:
     return str(rendered["code"]) if rendered["code"] is not None else rendered["label"]
+
+
+def action_pairs(log: "audit_log.AuditLog") -> Optional[Dict[str, Any]]:
+    """The console's own actions in a log, each intent paired with its `<action>.result`: per action how many
+    intents there are, how many were done, how many failed, and how many have no result, which is an effect
+    whose outcome the console did not record. A result that names no intent of its action, or names it by a
+    leaf that is not the intent's, is an orphan. Refusals (`*.refused`) are counted apart. None for a log no
+    console actor wrote, such as a run's or a deployment's."""
+    events = [(pos, event) for pos, event in enumerate(log.events)
+              if isinstance(event, dict) and isinstance(event.get("actor"), str)
+              and event["actor"].startswith(CONSOLE_ACTOR) and isinstance(event.get("action"), str)]
+    if not events:
+        return None
+    by_idx = {event.get("idx"): (pos, event) for pos, event in events}
+    results: Dict[int, Dict[str, Any]] = {}
+    orphans: List[Dict[str, Any]] = []
+    for pos, event in events:
+        action = event["action"]
+        if not action.endswith(RESULT_SUFFIX):
+            continue
+        data = event.get("data") if isinstance(event.get("data"), dict) else {}
+        named = by_idx.get(data.get("intent")) if isinstance(data.get("intent"), int) else None
+        if named is None or named[1]["action"] != action[:-len(RESULT_SUFFIX)]:
+            why = "names no intent of its action"
+        elif data.get("intent_leaf") != log.leaves[named[0]]:
+            why = "names its intent by another leaf"
+        elif named[0] in results:
+            why = "a second result for one intent"
+        else:
+            results[named[0]] = data
+            continue
+        orphans.append({"index": pos, "action": action, "why": why})
+    by_action: Dict[str, Dict[str, int]] = {}
+    refusals: Dict[str, int] = {}
+    unrecorded: List[Dict[str, Any]] = []
+    for pos, event in events:
+        action = event["action"]
+        if action.endswith(RESULT_SUFFIX):
+            continue
+        if action.endswith(REFUSAL_SUFFIX):
+            refusals[action] = refusals.get(action, 0) + 1
+            continue
+        counts = by_action.setdefault(action, {"intents": 0, "done": 0, "failed": 0, "unrecorded": 0})
+        counts["intents"] += 1
+        result = results.get(pos)
+        if result is None:
+            counts["unrecorded"] += 1
+            unrecorded.append({"index": pos, "action": action})
+        elif result.get("ok") is True:
+            counts["done"] += 1
+        else:
+            counts["failed"] += 1
+    return {"by_action": by_action, "refusals": refusals, "unrecorded": unrecorded[:MAX_LISTED],
+            "unrecorded_total": len(unrecorded), "orphans": orphans[:MAX_LISTED], "orphans_total": len(orphans)}
 
 
 def _quote(path: str) -> str:
@@ -323,6 +401,7 @@ def trail_report(path: Any, since: Optional[str] = None, last: Optional[int] = N
         "statements_sha256": core_evidence.sha256_hex(snapshot.statements_data) if snapshot.statements_path else None,
         "skipped": snapshot.skipped(),
         "causes_decoded": sorted(seen.values(), key=lambda entry: (entry["code"] is None, entry["code"] or 0)),
+        "console_actions": action_pairs(snapshot.log),
         "command": f"prismpath trail {_quote(snapshot.path)}{pub}",
     })
     return report
@@ -528,3 +607,87 @@ def manifest_status(flow_path: Any, pins: Optional[Iterable[Any]] = None,
             "key": root_statement.fingerprint(key_id) if isinstance(key_id, str) else None,
             "manifest": manifest, "pinned": bool(pin_paths), "verdict_of": VERDICT_OF,
             "command": f"prismpath authorize verify {_quote(real)} {pub}"}
+
+
+# ----------------------------------------------------------------- policy packs
+def pack_report(ppt_path: Any, pins: Optional[Iterable[Any]] = None,
+                roots: Optional[Iterable[str]] = None) -> Dict[str, Any]:
+    """`policy_pack.verify_pack` over a signed policy image under the roots, against the pinned authority
+    public key files (under the roots too): status `signed`, `unsigned` (no manifest), `invalid` (any other
+    cause) or `unchecked` (no key to check it with). The image, its manifest and its signature must be under
+    the roots and within the bound."""
+    from prismpath.hotswap import policy_pack
+    real, root = _confine(ppt_path, roots)
+    _read_bounded(real, SETTINGS.max_evidence_bytes, "the policy image")
+    sides = (real + ".manifest.json", real + ".manifest.sig")
+    for side in sides:
+        if os.path.lexists(side):
+            confined, _root = _confine(side, roots)
+            _read_bounded(confined, SETTINGS.max_file_bytes, "the pack manifest")
+    pin_paths = [_pin_file(path, roots, "a pinned authority key") for path in (pins or [])]
+    present = all(os.path.lexists(side) for side in sides)
+    if not pin_paths:
+        ok, found, manifest = None, ([] if present else ["sig:missing"]), None
+        status = "unchecked" if present else "unsigned"
+    else:
+        ok, found, manifest = policy_pack.verify_pack(real, pin_paths)
+        status = "signed" if ok else ("unsigned" if found == ["sig:missing"] else "invalid")
+    manifest = manifest if isinstance(manifest, dict) else None
+    key_id = manifest.get("key_id") if manifest else None
+    pub = " ".join(f"--pub {_quote(path)}" for path in pin_paths) or "--pub <authority.pub>"
+    return {"ppt": real, "evidence_root": root, "status": status, "ok": ok,
+            "causes": [causes_view.render(name) for name in found], "manifest": manifest,
+            "key": root_statement.fingerprint(key_id) if isinstance(key_id, str) else None,
+            "pinned": bool(pin_paths), "verdict_of": VERDICT_OF,
+            "command": f"prismpath swap verify --ppt {_quote(real)} {pub}"}
+
+
+# ----------------------------------------------------------------- anchors
+def anchor_report(leaf: Optional[str] = None, anchor_dir: Any = None, label: str = "v1", root_file: Any = None,
+                  tsr: Any = None, cafile: Any = None, roots: Optional[Iterable[str]] = None) -> Dict[str, Any]:
+    """Verify an anchored record under the roots, reading only. With `leaf`, the OpenTimestamps unit verify
+    (`ledger_ots.verify_unit`): the leaf's Merkle path to the root the anchor in `anchor_dir` names, then
+    `ots verify` of that root's proof, which needs the `ots` program and Bitcoin block data. With
+    `root_file`, `tsr` and `cafile`, the RFC 3161 verify (`ledger_airgap.rfc3161_verify`, offline, by
+    `openssl ts`). Nothing anchors, upgrades or stamps a calendar here."""
+    import re
+    from prismpath.ledgers import ledger_airgap, ledger_ots
+    if root_file is not None or tsr is not None or cafile is not None:
+        if not (root_file and tsr and cafile) or leaf:
+            raise EvidenceRefused("bad-request", "an RFC 3161 verify names the root file, the response and the CA file")
+        paths = {}
+        for name, path in (("root", root_file), ("tsr", tsr), ("cafile", cafile)):
+            real, _root = _confine(path, roots)
+            _read_bounded(real, SETTINGS.max_file_bytes, f"the {name} file")
+            paths[name] = real
+        try:
+            result = ledger_airgap.rfc3161_verify(paths["root"], paths["tsr"], paths["cafile"])
+        except FileNotFoundError:
+            result = {"verified": None, "status": "unavailable", "detail": "openssl is not installed"}
+        return {"mode": "rfc3161", **result, **{key: paths[key] for key in paths}, "verdict_of": VERDICT_OF,
+                "command": f"prismpath ledger rfc3161 --root {_quote(paths['root'])} --tsr {_quote(paths['tsr'])} "
+                           f"--cafile {_quote(paths['cafile'])}"}
+    if not isinstance(leaf, str) or not re.fullmatch(r"[0-9a-fA-F]{64}", leaf):
+        raise EvidenceRefused("bad-request", "name the leaf hash (64 hex characters) and the anchor directory, "
+                                             "or a root file with its RFC 3161 response and CA file")
+    if not isinstance(label, str) or not re.fullmatch(ANCHOR_LABEL, label):
+        raise EvidenceRefused("bad-request", "an anchor label is letters, digits, dot, dash or underscore")
+    real, root = _confine(anchor_dir, roots)
+    if not os.path.isdir(real):
+        raise EvidenceRefused("not-a-file", "an anchor directory is a directory")
+    for name in (f"manifest_{label}.json", f"root_{label}.txt.ots"):
+        side = os.path.join(real, name)
+        if os.path.lexists(side):
+            confined, _root = _confine(side, roots)
+            _read_bounded(confined, SETTINGS.max_evidence_bytes, f"the anchor's {name}")
+        elif name.startswith("manifest_"):
+            raise EvidenceRefused("not-found", f"no anchor manifest for label {label!r} in that directory")
+    try:
+        result = ledger_ots.verify_unit(leaf.lower(), real, label)
+    except FileNotFoundError:
+        result = {"merkle_ok": None, "ots_ok": None, "status": "unavailable",
+                  "reason": "the ots program or an anchor file is missing"}
+    except (ValueError, KeyError, TypeError, AttributeError):
+        result = {"merkle_ok": False, "reason": "the anchor manifest does not read"}
+    return {"mode": "ots", "dir": real, "evidence_root": root, "label": label, **result, "verdict_of": VERDICT_OF,
+            "command": f"prismpath ledger verify --out {_quote(real)} --leaf {leaf.lower()} --label {_quote(label)}"}
