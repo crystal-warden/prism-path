@@ -94,8 +94,10 @@ def flow_name(text: str):
 
 @router.post("/file", openapi_extra=WRITE)
 def write_file(req: FileWriteReq, request: Request):
-    resolved = core.safe_path(core.current_project(), req.path)   # ValueError on traversal -> 400 envelope
-    refusal = files.not_editable(req.path)
+    proj = core.current_project()                                 # one project for the whole request
+    resolved = core.safe_path(proj, req.path)                     # ValueError on traversal -> 400 envelope
+    # The kind is the path asked for and the file it resolves to: a flow named link to a manifest is refused.
+    refusal = files.not_editable(req.path) or files.not_editable(os.path.relpath(resolved, os.path.realpath(proj)))
     if refusal is not None:
         core.audit.record("file.edit.refused", {"path": req.path, "kind": file_kind(req.path), "reason": refusal},
                           core.audit.actor(request, "authoring"))

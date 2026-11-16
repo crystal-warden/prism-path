@@ -153,6 +153,16 @@ def test_a_write_into_a_directory_the_editor_does_not_list_is_refused(client, pr
     assert [action for action, _ in _events()] == ["file.edit.refused"]
 
 
+def test_a_flow_named_link_to_a_file_of_another_kind_is_refused(client, proj):
+    manifest = proj / "flows" / "f.md.manifest.json"
+    manifest.write_text("{}\n", encoding="utf-8")
+    os.symlink(manifest, proj / "flows" / "alias.md")
+    response = client.post(API_V1 + "/file", json={"path": "flows/alias.md", "content": "{\"forged\": true}"})
+    assert response.status_code == 403, response.text
+    assert manifest.read_text() == "{}\n"
+    assert [action for action, _ in _events()] == ["file.edit.refused"]
+
+
 def test_a_flow_and_a_fixture_are_editable(client, proj):
     assert client.post(API_V1 + "/file", json={"path": "flows/f.md", "content": FLOW + "\n"}).status_code == 200
     assert client.post(API_V1 + "/file", json={"path": "flows/f.tests.md", "content": FIXTURE}).status_code == 200
