@@ -62,6 +62,17 @@ tools: $(TOOLS)
 $(TOOLS): %: %.c ppt_common.h $(LOADER_OBJS)
 	@if [ $(LIBBPF_EXISTS) -eq 1 ]; then $(CC) $(CFLAGS) $< $(LOADER_OBJS) $$(pkg-config --cflags --libs libbpf) -lelf -lz -lpthread -lcrypto -o $@; else echo "[NOTICE] libbpf not found, $@ not built"; fi
 
+# merkle.h's streaming root against the tree, the RFC 6962 known answers and the Python reference's frozen
+# vectors, built once on OpenSSL and once through the header's swappable SHA-256 seam.
+MERKLE_VECTORS ?= ../prismpath/portable/conformance/merkle_stream.json
+test_merkle: test_merkle.c merkle.h ppt_common.h
+	$(CC) $(CFLAGS) -std=gnu11 -I. test_merkle.c -lcrypto -o test_merkle
+test_merkle_ext: test_merkle.c merkle.h ppt_common.h
+	$(CC) $(CFLAGS) -std=gnu11 -I. -DTEST_EXTERNAL_SHA256 test_merkle.c -lcrypto -o test_merkle_ext
+test-merkle: test_merkle test_merkle_ext
+	./test_merkle $(MERKLE_VECTORS)
+	./test_merkle_ext $(MERKLE_VECTORS)
+
 # Reference C interpreter, built from prismpath-hw's canonical source — smoke.sh checks parity against it.
 interp: $(INTERP_SRC)
 	$(CC) $(CFLAGS) -o interp $(INTERP_SRC)
@@ -102,10 +113,10 @@ loader: loader.c ppt_image.c ppt_maps.c ppt_common.h ppt_image.h ppt_maps.h
 	fi
 
 clean:
-	rm -f ppt_xdp.bpf.o ppt_net.bpf.o facet_decode.bpf.o ppt_select.bpf.o a6/ppt_xdp.bpf.o gnet/gn_xdp.bpf.o gnet/gn_xdp.pin.bpf.o gnet/gn_loader gnet/gn_batch loader interp $(LOADER_OBJS) $(TOOLS) smoke.out scratch/regs*.bin
+	rm -f ppt_xdp.bpf.o ppt_net.bpf.o facet_decode.bpf.o ppt_select.bpf.o a6/ppt_xdp.bpf.o gnet/gn_xdp.bpf.o gnet/gn_xdp.pin.bpf.o gnet/gn_loader gnet/gn_batch loader interp $(LOADER_OBJS) $(TOOLS) test_merkle test_merkle_ext smoke.out scratch/regs*.bin
 
 # Host-parity + (as root) full kernel verify/attach/execute. Captures smoke.out; preserves exit code.
 smoke: all
 	@bash smoke.sh > smoke.out 2>&1; rc=$$?; cat smoke.out; exit $$rc
 
-.PHONY: all clean smoke tools gnet
+.PHONY: all clean smoke tools gnet test-merkle

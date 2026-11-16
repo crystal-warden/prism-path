@@ -98,6 +98,96 @@ pub fn fold(leaf: &[u8], path: &[(bool, Vec<u8>)]) -> Vec<u8> {
     current
 }
 
+/// The most peaks an [`Accumulator`] holds: one per bit of its 64-bit leaf count, so 2 KiB of state.
+pub const MAX_PEAKS: usize = 64;
+
+fn leaf_hash_into(leaf: &[u8]) -> [u8; 32] {
+    let mut hasher = Sha256::new();
+    hasher.update([0x00]);
+    hasher.update(leaf);
+    hasher.finalize().into()
+}
+
+fn node_hash_into(left: &[u8; 32], right: &[u8; 32]) -> [u8; 32] {
+    let mut hasher = Sha256::new();
+    hasher.update([0x01]);
+    hasher.update(left);
+    hasher.update(right);
+    hasher.finalize().into()
+}
+
+/// The leaf count reached 2^64 - 1, the most a 64-bit count and 64 peaks can hold; the leaf was not added.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AccumulatorFull;
+
+/// The same root as [`root_of_bytes`], kept as leaves arrive in fixed state: no heap, no recursion.
+///
+/// It holds the peaks, the roots of the perfect subtrees the leaves so far fall into, one per set bit of
+/// the count: `peaks[h]` is the root of a subtree of 2^h leaves when bit h of `count` is set, and unused
+/// otherwise. Adding a leaf is binary counter carry: the new leaf hash merges with the peak of each set
+/// low bit, the older peak as the left child, and lands at the first clear bit. The root folds the peaks
+/// from the shortest up, each taller peak the left child of what is folded so far, which is RFC 6962's
+/// split applied once per peak. `formal/Core/Merkle.lean` (`acc_root_eq_mth`) proves this equal to the
+/// tree for every nonempty list, and the Python twin is `root_statement.MerkleAccumulator`.
+#[derive(Clone)]
+pub struct Accumulator {
+    peaks: [[u8; 32]; MAX_PEAKS],
+    count: u64,
+}
+
+impl Default for Accumulator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Accumulator {
+    /// An accumulator over no leaves.
+    pub const fn new() -> Self {
+        Self { peaks: [[0u8; 32]; MAX_PEAKS], count: 0 }
+    }
+
+    /// How many leaves have been added.
+    pub fn count(&self) -> u64 {
+        self.count
+    }
+
+    /// Add a leaf given as its bytes (hashed as SHA-256(0x00 || leaf)).
+    pub fn add(&mut self, leaf: &[u8]) -> Result<(), AccumulatorFull> {
+        self.add_leaf_hash(&leaf_hash_into(leaf))
+    }
+
+    /// Add a leaf given as its leaf hash, SHA-256(0x00 || leaf), already computed.
+    pub fn add_leaf_hash(&mut self, leaf_hash: &[u8; 32]) -> Result<(), AccumulatorFull> {
+        let next = self.count.checked_add(1).ok_or(AccumulatorFull)?;
+        let mut node = *leaf_hash;
+        let mut height = 0usize;
+        while self.count & (1u64 << height) != 0 {
+            node = node_hash_into(&self.peaks[height], &node);
+            height += 1;
+        }
+        // `next` did not overflow, so some bit at or below 63 of `count` is clear and `height` < 64.
+        self.peaks[height] = node;
+        self.count = next;
+        Ok(())
+    }
+
+    /// The root over the leaves added so far, or None for none.
+    pub fn root(&self) -> Option<[u8; 32]> {
+        if self.count == 0 {
+            return None;
+        }
+        let lowest = self.count.trailing_zeros() as usize;
+        let mut node = self.peaks[lowest];
+        for height in lowest + 1..MAX_PEAKS {
+            if self.count & (1u64 << height) != 0 {
+                node = node_hash_into(&self.peaks[height], &node);
+            }
+        }
+        Some(node)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -147,6 +237,59 @@ mod tests {
                 assert_eq!(fold(leaf, &steps), root, "{count} leaves");
             }
         }
+    }
+
+    fn accumulated(leaves: &[Vec<u8>]) -> Option<Vec<u8>> {
+        let mut acc = Accumulator::new();
+        for leaf in leaves {
+            acc.add(leaf).unwrap();
+        }
+        acc.root().map(|root| root.to_vec())
+    }
+
+    #[test]
+    fn the_accumulator_gives_the_known_answer_vectors() {
+        let inputs = ["", "00", "10", "2021", "3031", "40414243", "5051525354555657", "606162636465666768696a6b6c6d6e6f"];
+        let leaves: Vec<Vec<u8>> = inputs.iter().map(|text| unhex(text)).collect();
+        for count in 1..=8 {
+            assert_eq!(accumulated(&leaves[..count]), root_of_bytes(&leaves[..count]), "{count} leaves");
+        }
+        assert_eq!(hex::encode(accumulated(&leaves).unwrap()), "5dc9da79a70659a9ad559cb701ded9a2ab9d823aad2f4960cfe370eff4604328");
+    }
+
+    #[test]
+    fn the_accumulator_equals_the_tree_for_every_count_to_a_thousand() {
+        let leaves: Vec<Vec<u8>> = (0..1000u32).map(|index| Sha256::digest(index.to_be_bytes()).to_vec()).collect();
+        let mut acc = Accumulator::new();
+        assert_eq!(acc.root(), None);
+        assert_eq!(root_of_bytes(&leaves[..0]), None);
+        for count in 1..=leaves.len() {
+            acc.add(&leaves[count - 1]).unwrap();
+            assert_eq!(acc.count(), count as u64);
+            assert_eq!(acc.root().map(|root| root.to_vec()), root_of_bytes(&leaves[..count]), "{count} leaves");
+        }
+    }
+
+    #[test]
+    fn add_leaf_hash_is_add_after_the_leaf_hash() {
+        let mut by_bytes = Accumulator::new();
+        let mut by_hash = Accumulator::new();
+        for index in 0..37u8 {
+            let leaf = vec![index; index as usize];
+            by_bytes.add(&leaf).unwrap();
+            by_hash.add_leaf_hash(&leaf_hash(&leaf).try_into().unwrap()).unwrap();
+            assert_eq!(by_bytes.root(), by_hash.root());
+        }
+    }
+
+    #[test]
+    fn a_full_count_refuses_the_next_leaf_and_keeps_its_root() {
+        let mut acc = Accumulator::new();
+        acc.count = u64::MAX;
+        let before = acc.root();
+        assert_eq!(acc.add(b"one more"), Err(AccumulatorFull));
+        assert_eq!(acc.count(), u64::MAX);
+        assert_eq!(acc.root(), before);
     }
 
     #[test]

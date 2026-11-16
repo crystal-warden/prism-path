@@ -8,6 +8,21 @@ spec stable.
 
 ## [Unreleased]
 
+### Added: the streaming Merkle root in every substrate, proved equal to the tree (2026-11-15)
+
+- **One streaming form per language**, beside the batch tree and giving the same root: `root_statement.MerkleAccumulator`
+  (Python, unchanged), `prismpath_rs::merkle::Accumulator` (Rust, `merkle` feature: `add`, `add_leaf_hash`,
+  `root`, a fixed array of 64 peaks and a 64-bit count, no heap and no recursion), and `ppt_merkle_acc` in the
+  eBPF `merkle.h` (`ppt_merkle_acc_init`, `_add`, `_add_leaf_hash`, `_root`, no `malloc`, no recursion), through
+  which the batch `merkle_root` over receipts is now computed. `merkle.h`'s SHA-256 sits behind three functions a
+  firmware port replaces with `PPT_MERKLE_SHA256_EXTERNAL`. The state is 64 peaks of 32 bytes (2 KiB) and a count.
+- **Proved**: `formal/Core/Merkle.lean` defines the accumulator (add by carry, root by fold) over the hash as a
+  parameter and proves `acc_root_eq_mth` (equal to RFC 6962's `mth` for every nonempty list) and
+  `accPeaks_length_le` (at most 64 peaks below 2^64 leaves), on the three standard axioms.
+- **Vectors**: `prismpath/portable/conformance/merkle_stream.json` (`gen_merkle_stream_fixtures.py`), the root
+  over every prefix of three leaf sets, replayed by the Python, Rust and C accumulators; each is also held to
+  its batch tree for every count from 0 to 1000 and to the RFC 6962 known answers.
+
 ### Changed, breaking: every Merkle tree is RFC 6962's, and a core run's stored flow must be its image's rendering (2026-11-14)
 
 The first consumer of the receipts and roots (the governed agents Journeyman pack) found that the shared tree
