@@ -1,0 +1,52 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
+#
+# The collector as a system service: its own account, CAP_BPF and CAP_PERFMON and nothing else, no new
+# privileges, a read only view of the file system, and its feed socket in its runtime directory.
+# README.md ("Deploying") has the one time setup this unit expects: the two groups, the account, and the
+# pin permissions that let that account open the enforcer's pins. Put the options in
+# /etc/default/prismpath-collector, for example
+#   COLLECTOR_ARGS=--source gnet --maps-dir /sys/fs/bpf/tc/globals --socket-group prismpath-feed --allow-uid 1000
+[Unit]
+Description=PrismPath collector (read only feed of the eBPF enforcer's decisions)
+Documentation=https://github.com/crystal-warden/prism-path/blob/main/prismpath-ebpf/collector/README.md
+
+[Service]
+Type=simple
+User=prismpath-collector
+Group=prismpath-collector
+SupplementaryGroups=prismpath-feed
+EnvironmentFile=/etc/default/prismpath-collector
+ExecStart=/usr/local/bin/prismpath-collector --socket /run/prismpath-collector/feed.sock $COLLECTOR_ARGS
+RuntimeDirectory=prismpath-collector
+RuntimeDirectoryMode=0711
+UMask=0077
+AmbientCapabilities=CAP_BPF CAP_PERFMON
+CapabilityBoundingSet=CAP_BPF CAP_PERFMON
+NoNewPrivileges=yes
+SecureBits=noroot noroot-locked
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service bpf capset
+SystemCallErrorNumber=EPERM
+MemoryMax=256M
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

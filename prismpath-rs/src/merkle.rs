@@ -186,6 +186,29 @@ impl Accumulator {
         }
         Some(node)
     }
+
+    /// The peaks, tallest first (the order `root_statement.MerkleAccumulator` keeps them in): one hash per
+    /// set bit of [`count`](Self::count), from the highest bit down. With the count they are the whole
+    /// state, so a reader that receives them can carry on the same tree from leaf `count` without the
+    /// leaves before it ([`from_peaks`](Self::from_peaks)).
+    pub fn peaks(&self) -> Vec<[u8; 32]> {
+        (0..MAX_PEAKS).rev().filter(|height| self.count & (1u64 << height) != 0).map(|height| self.peaks[height]).collect()
+    }
+
+    /// The accumulator whose state is `count` leaves and these peaks, tallest first, as [`peaks`](Self::peaks)
+    /// gives them; None when there is not exactly one peak per set bit of `count`.
+    pub fn from_peaks(count: u64, peaks: &[[u8; 32]]) -> Option<Self> {
+        if peaks.len() != count.count_ones() as usize {
+            return None;
+        }
+        let mut acc = Self::new();
+        let heights = (0..MAX_PEAKS).rev().filter(|height| count & (1u64 << height) != 0);
+        for (height, peak) in heights.zip(peaks) {
+            acc.peaks[height] = *peak;
+        }
+        acc.count = count;
+        Some(acc)
+    }
 }
 
 #[cfg(test)]
@@ -290,6 +313,27 @@ mod tests {
         assert_eq!(acc.add(b"one more"), Err(AccumulatorFull));
         assert_eq!(acc.count(), u64::MAX);
         assert_eq!(acc.root(), before);
+    }
+
+    #[test]
+    fn the_peaks_and_the_count_carry_the_tree_on() {
+        let leaves: Vec<Vec<u8>> = (0..300u32).map(|index| Sha256::digest(index.to_be_bytes()).to_vec()).collect();
+        for cut in 0..=leaves.len() {
+            let mut head = Accumulator::new();
+            for leaf in &leaves[..cut] {
+                head.add(leaf).unwrap();
+            }
+            let peaks = head.peaks();
+            assert_eq!(peaks.len(), cut.count_ones() as usize);
+            let mut resumed = Accumulator::from_peaks(cut as u64, &peaks).unwrap();
+            assert_eq!(resumed.root(), head.root());
+            for leaf in &leaves[cut..] {
+                resumed.add(leaf).unwrap();
+            }
+            assert_eq!(resumed.root().map(|root| root.to_vec()), root_of_bytes(&leaves), "cut at {cut}");
+        }
+        assert!(Accumulator::from_peaks(3, &[[0u8; 32]]).is_none());
+        assert!(Accumulator::from_peaks(0, &[[0u8; 32]]).is_none());
     }
 
     #[test]

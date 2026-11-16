@@ -17,3 +17,5 @@ gnet/gn_batch
 # the merkle.h tests (make test-merkle)
 test_merkle
 test_merkle_ext
+# the collector crate's build directory (cargo)
+collector/target/

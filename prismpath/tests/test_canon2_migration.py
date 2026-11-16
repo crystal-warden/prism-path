@@ -120,7 +120,7 @@ def test_no_canon1_encoder_or_decoder_in_python():
 
 def test_no_canon1_encoder_or_decoder_in_rust():
     assert _hits(_RUST, ("prismpath-rs", "prismpath-hotswap-rs", "prismpath-telemetry-rs", "prismpath-preflight",
-                         "prismpath-reflect-bindings"), {".rs"}, "//") == []
+                         "prismpath-reflect-bindings", "prismpath-ebpf/collector"), {".rs"}, "//") == []
 
 
 def test_no_canon1_encoder_or_decoder_in_javascript():
