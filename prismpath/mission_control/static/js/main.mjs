@@ -14,7 +14,7 @@ import { followEventStream } from "./events.mjs";
 import { loadGraphScreen, refreshActiveNode, wireGraph } from "./graph.mjs";
 import { loadFilesScreen, wireAuthoring } from "./authoring.mjs";
 import { loadFlowsScreen, loadQueueScreen, paintStatusPills, wireOperating } from "./operating.mjs";
-import { loadAuditScreen, wireAuditing } from "./auditing.mjs";
+import { loadAuditScreen, loadCausesScreen, loadKeysScreen, loadTrailsScreen, wireAuditing } from "./auditing.mjs";
 import { loadPanelScreen } from "./panels.mjs";
 
 // Each screen, the interface it sits under, its view and what opening it loads. The first screen of
@@ -29,6 +29,12 @@ export const SCREENS = Object.freeze([
   { screen: "runs", interface: "operating", view: IDS.viewRuns, load: () => {} },
   { screen: "quality", interface: "operating", view: IDS.viewQuality, load: loadPanelScreen },
   { screen: "flows", interface: "operating", view: IDS.viewFlows, load: loadFlowsScreen },
+  { screen: "trails", interface: "auditing", view: IDS.viewTrails, load: loadTrailsScreen },
+  { screen: "evidence", interface: "auditing", view: IDS.viewEvidence, load: () => {} },
+  { screen: "change", interface: "auditing", view: IDS.viewChange, load: () => {} },
+  { screen: "anchors", interface: "auditing", view: IDS.viewAnchors, load: () => {} },
+  { screen: "causes", interface: "auditing", view: IDS.viewCauses, load: loadCausesScreen },
+  { screen: "keys", interface: "auditing", view: IDS.viewKeys, load: loadKeysScreen },
   { screen: "audit", interface: "auditing", view: IDS.viewAudit, load: loadAuditScreen },
   { screen: "proof", interface: "auditing", view: IDS.viewProof, load: loadPanelScreen },
 ]);

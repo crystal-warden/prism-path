@@ -25,7 +25,7 @@ from typing import Optional
 
 from . import core
 
-router = APIRouter(prefix="/attest", tags=["attest"])
+router = APIRouter(prefix="/attest", tags=["auditing", "attest"])
 
 # The anchor label the CLI defaults to (`prismpath ledger ... --label v1`). Verify reads the anchor
 # artifacts written under this label; it is a read key, never a write.
