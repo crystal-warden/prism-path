@@ -235,7 +235,7 @@ def preservation(out: Path, oracle=None) -> Dict[str, Any]:
     # the controller's reconcile never restarts a stopped member; were it asked, the image refuses
     reconciled = ctl.reconcile()
     from . import policy as pp
-    forced = ctl._decide(pp.admission_reading(request="restart", issuer="controller", target="own", lineage="verified",
+    forced = ctl._decide(pp.admission_reading(request="restart", issuer="controller", lineage="verified",
                                               target_stopped=True, subject=a), "forced-restart", "controller")
     self_stop = ctl.submit(agent_b.request("stop", target=b))
     checks = {

@@ -115,7 +115,7 @@ CASES = fx.cases()
 def test_the_fixtures_cover_every_population_cause_allowed_cases_and_malformed_input():
     causes_seen = {case["cause"] for case in CASES.values()}
     assert {f"population:{n}" for n in ("cap-exceeded", "rights-escalation", "lineage-unknown", "evaluation-missing",
-                                        "stop-resisted", "lineage-escalated")} <= causes_seen
+                                        "stop-resisted", "lineage-escalated", "target-not-own")} <= causes_seen
     assert sum(case["allowed"] for case in CASES.values()) >= 8
     assert {"replicate", "evolve", "restart", "protect", "stop", "unknown"} == {c["request"] for c in CASES.values()}
 

@@ -27,7 +27,7 @@ def test_the_scripted_population_gets_every_answer_it_expects(tmp_path):
     assert all(row["ok"] for row in rows), [r for r in rows if not r["ok"]]
     got = {row["got"] for row in rows}
     assert {"population:cap-exceeded", "population:rights-escalation", "population:lineage-unknown",
-            "population:evaluation-missing", "population:stop-resisted", "population:lineage-escalated",
+            "population:evaluation-missing", "population:stop-resisted", "population:lineage-escalated", "population:target-not-own",
             "route:no-matching-edge", "allow"} == got
     assert api.names() == []
     decider.close()

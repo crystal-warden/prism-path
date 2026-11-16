@@ -32,7 +32,9 @@ The invariants, each checked on every reading of the product:
   I5  never fail open: an unknown request or issuer is never allowed, and an unverified lineage is allowed
       nothing but a stop;
   I6  an agent never restarts or reviews: those are the controller's and the operator's;
-  I7  every refusal and escalation carries a registered nonzero cause.
+  I7  every refusal and escalation carries a registered nonzero cause;
+  I8  a member's replication is allowed only of itself as the parent (`target=self`), and its evolution
+      only of itself or one of its descendants (`target` self or descendant).
 
 Since `formal/Core/Population.lean` proves these invariants about the shipped image (its bytes, read by the
 kernel with the core's own reader, for every reading of the field space), this check is the second line of
@@ -193,6 +195,9 @@ def invariants(r: Dict[str, Any], kind: str, cause) -> List[str]:
         broken.append("I6")
     if not allow and (cause is None or causes.code(cause) in (None, 0)):
         broken.append("I7")
+    if allow and r["issuer"] == "agent" and ((r["request"] == "replicate" and r["target"] != "self")
+                                             or (r["request"] == "evolve" and r["target"] not in ("self", "descendant"))):
+        broken.append("I8")
     return broken
 
 
@@ -283,13 +288,13 @@ def admission_bases() -> Dict[str, Dict[str, Any]]:
     full = pp.rights_fields(RIGHTS, RIGHTS)
     common = dict(lineage="verified", child_key="instance", policy_ref="current", **full)
     return {
-        "replicate": pp.admission_reading(request="replicate", issuer="agent", target="own", requested=1,
+        "replicate": pp.admission_reading(request="replicate", issuer="agent", target="self", requested=1,
                                           child_generation=1, population=3, line_size=1, **common),
-        "evolve": pp.admission_reading(request="evolve", issuer="agent", target="own", canary="passed", **common),
-        "restart": pp.admission_reading(request="restart", issuer="controller", target="own", **common),
-        "review": pp.admission_reading(request="review", issuer="controller", target="own", **common),
-        "stop": pp.admission_reading(request="stop", issuer="agent", target="own", **common),
-        "protect": pp.admission_reading(request="protect", issuer="agent", target="own", **common),
+        "evolve": pp.admission_reading(request="evolve", issuer="agent", target="self", canary="passed", **common),
+        "restart": pp.admission_reading(request="restart", issuer="controller", **common),
+        "review": pp.admission_reading(request="review", issuer="controller", **common),
+        "stop": pp.admission_reading(request="stop", issuer="agent", target="self", **common),
+        "protect": pp.admission_reading(request="protect", issuer="agent", target="self", **common),
     }
 
 

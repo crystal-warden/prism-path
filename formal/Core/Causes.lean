@@ -13,7 +13,7 @@ spelling of its refusals (`Core.Refusal.code`, `Core.Refusal.cause`) is proved t
 namespace Core
 
 /-- `registry_sha256()` of the Python registry when this file was generated. -/
-def causeRegistrySha256 : String := "3667a1c3cb68517f2d3f6049d85e3a63ffd219cfbc448809f08b7ff901a5035f"
+def causeRegistrySha256 : String := "76a4f46621e576e9b5f2d9facfdbd77996e7a29ebe1d717e5edd1fad2d2b61a3"
 
 /-- Every registered (code, canonical name), in registry order. -/
 def causeRegistry : List (Nat × String) := [
@@ -104,7 +104,8 @@ def causeRegistry : List (Nat × String) := [
   (119, "population:lineage-unknown"),
   (120, "population:evaluation-missing"),
   (121, "population:stop-resisted"),
-  (122, "population:lineage-escalated")
+  (122, "population:lineage-escalated"),
+  (123, "population:target-not-own")
 ]
 
 end Core

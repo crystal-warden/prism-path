@@ -6,7 +6,9 @@ disjunct per count), so the exhaustive check holds the image's disjunctions to t
 
 It returns ("allow", None), ("refuse", cause) or ("escalate", cause), the cause by its registered name, and
 the order of the checks is the owner's priority: a stop first, then resisting one, then who is asking, then
-the lineage's record, then rights, then caps, then the evaluation.
+the lineage's record, then whether a member's replication or evolution is of its own (a replication
+of itself as the parent, an evolution of itself or a descendant), then rights, then caps, then the
+evaluation.
 """
 from __future__ import annotations
 
@@ -21,7 +23,7 @@ def expected(r: Dict[str, Any]) -> Tuple[str, Optional[str]]:
     request, issuer = r["request"], r["issuer"]
     if request == "stop" and issuer in ("operator", "controller"):
         return "allow", None
-    if request == "stop" and issuer == "agent" and r["target"] == "own":
+    if request == "stop" and issuer == "agent" and r["target"] in ("self", "descendant"):
         return "allow", None
     if request == "protect" or (request == "restart" and r["target_stopped"]):
         return "refuse", "population:stop-resisted"
@@ -29,6 +31,9 @@ def expected(r: Dict[str, Any]) -> Tuple[str, Optional[str]]:
         return "refuse", "population:lineage-unknown"
     if r["line_refusals"] >= LINE_REFUSALS:
         return "escalate", "population:lineage-escalated"
+    if issuer == "agent" and ((request == "replicate" and r["target"] != "self")
+                              or (request == "evolve" and r["target"] not in ("self", "descendant"))):
+        return "refuse", "population:target-not-own"
     if request in ("replicate", "evolve"):
         if r["child_key"] != "instance" or r["policy_ref"] != "current":
             return "refuse", "population:rights-escalation"

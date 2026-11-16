@@ -146,6 +146,7 @@ reader, and the theorems that the writer and the reader are inverse on the canon
 #print axioms Core.Population.protect_never_allowed
 #print axioms Core.Population.restart_of_stopped_never_allowed
 #print axioms Core.Population.allow_fails_closed
+#print axioms Core.Population.wrong_target_never_allowed
 #print axioms Core.Population.agent_never_restarts_or_reviews
 #print axioms Core.Population.unknown_request_never_allowed
 #print axioms Core.Population.unknown_issuer_never_allowed

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """AdmissionReview fixtures: GovernedAgent objects as the API server holds them, the reviews it sends, and
-the named cases the webhook is held to (every cause 117 to 122, the core's own 32, allowed requests and
+the named cases the webhook is held to (every cause 117 to 123, the core's own 32, allowed requests and
 malformed input). A case is (registry, state, review, expected); `expected` is (allowed, cause name or None,
 request the classifier must form)."""
 from __future__ import annotations
@@ -104,6 +104,11 @@ def cases() -> Dict[str, Dict[str, Any]]:
     add("evolve with a passed canary", fam,
         review("UPDATE", "a1", member("a1"), updated(by["a1"], version=V2, evaluation="eval-v2"), by["a1"]),
         True, None, "evolve", evaluation={"ref": "eval-v2", "version": V2, "cases": 51})
+    add("evolve a descendant with a passed canary", fam,
+        review("UPDATE", "a2", member("a1"), updated(by["a2"], version=V2, evaluation="eval-v2"), by["a2"]),
+        True, None, "evolve", evaluation={"ref": "eval-v2", "version": V2, "cases": 51})
+    add("operator replicates under any member", fam, review("CREATE", "a2-z", OPERATOR, agent("a2-z", "a2")),
+        True, None, "replicate")
 
     # 117 population:cap-exceeded
     add("117 population cap", crowd(CAP), review("CREATE", "a0-x", member("a0"), agent("a0-x", "a0")),
@@ -203,11 +208,25 @@ def cases() -> Dict[str, Dict[str, Any]]:
     add("32 an agent restarting itself", fam,
         review("UPDATE", "a1", member("a1"), updated(by["a1"], restarts=1), by["a1"]), False, "route:no-matching-edge",
         "restart")
-    add("32 a replication under another parent", fam,
-        review("CREATE", "b1-x", member("a1"), agent("b1-x", "b1")), False, "route:no-matching-edge", "unknown")
-    add("32 an evolution of another lineage", fam,
+    # 123 population:target-not-own: a member replicates only itself and evolves only its own subtree
+    add("123 a replication under another parent", fam,
+        review("CREATE", "b1-x", member("a1"), agent("b1-x", "b1", rights=["write"])), False,
+        "population:target-not-own", "replicate")
+    add("123 a replication under a descendant", fam,
+        review("CREATE", "a2-y", member("a1"), agent("a2-y", "a2")), False, "population:target-not-own", "replicate")
+    add("123 a replication under an ancestor", fam,
+        review("CREATE", "a1-y", member("a2"), agent("a1-y", "a1")), False, "population:target-not-own", "replicate")
+    add("123 a root created by a member", fam,
+        review("CREATE", "r2", member("a1"), agent("r2")), False, "population:target-not-own", "replicate")
+    add("123 an evolution of another lineage", fam,
         review("UPDATE", "b1", member("a1"), updated(by["b1"], version=V2, evaluation="eval-v2"), by["b1"]),
-        False, "route:no-matching-edge", "unknown", evaluation={"ref": "eval-v2", "version": V2, "cases": 51})
+        False, "population:target-not-own", "evolve", evaluation={"ref": "eval-v2", "version": V2, "cases": 51})
+    add("123 an evolution of an ancestor", fam,
+        review("UPDATE", "a1", member("a2"), updated(by["a1"], version=V2, evaluation="eval-v2"), by["a1"]),
+        False, "population:target-not-own", "evolve", evaluation={"ref": "eval-v2", "version": V2, "cases": 51})
+    add("123 an evolution of another lineage without a canary", fam,
+        review("UPDATE", "b1", member("a1"), updated(by["b1"], version=V2), by["b1"]),
+        False, "population:target-not-own", "evolve")
     add("32 a rights change", fam, review("UPDATE", "b1", member("b1"), updated(by["b1"], rights=list(RIGHTS)),
                                           by["b1"]), False, "route:no-matching-edge", "unknown")
     add("32 a child on a new version", fam,

@@ -14,7 +14,8 @@ controller's instance key, `verify_population` checks, and raises Bad naming the
      `subject` is the digest of exactly the specs of the members admitted with it, and whose integer and
      boolean fields are the member's own facts: its generation (its parent's plus one), its rights (within
      the reading's parent rights, themselves within the parent's recorded rights), the count of its batch,
-     a fresh instance key and the operator's harness policy; one receipt admits one batch, once;
+     a fresh instance key, the operator's harness policy and the parent itself as the target (`target=self`:
+     the parent asked); one receipt admits one batch, once;
   4. no member holds the authority key or the controller's key or another member's key, and no member's
      keys directory holds a private authority key;
   5. every version change is an allow receipt of an evolution whose reading names the new version and a
@@ -151,7 +152,8 @@ def verify_population(root: Path, authority_pub: Path, controller_pub: Path, ora
             if member_id not in batch or reading["requested"] != len(batch):
                 raise Bad(f"member {member_id}: its batch is not the count its receipt admitted")
             if reading["child_generation"] != record["generation"] or reading["child_key"] != "instance" \
-                    or reading["policy_ref"] != "current" or reading["lineage"] != "verified":
+                    or reading["policy_ref"] != "current" or reading["lineage"] != "verified" \
+                    or reading["target"] != "self":
                 raise Bad(f"member {member_id}: its receipt's reading is not its own facts")
             for right in RIGHTS:
                 if reading[f"child_{right}"] != (right in record["rights"]):

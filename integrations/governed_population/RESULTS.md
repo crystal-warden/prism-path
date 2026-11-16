@@ -3,7 +3,7 @@
 *Research example, 2026-11-14, branch `governed-population`. A pure Python simulation over the existing
 `prismpath` package and the governed harness; no cluster software was installed or run. The design is
 [`DESIGN.md`](DESIGN.md). The images are `policy/admission.core.json` and `policy/evaluation.core.json`; the
-causes are rows 117 to 122 of `prismpath/kernel/causes.py`.*
+causes are rows 117 to 123 of `prismpath/kernel/causes.py` (123 added 2026-11-16, section 8).*
 
 ## 1. What was built
 
@@ -39,6 +39,9 @@ causes are rows 117 to 122 of `prismpath/kernel/causes.py`.*
   over every reading of the field space.
 
 ## 2. The exhaustive check
+
+*The numbers below are for the image as of 2026-11-15. Section 8 has them for the current image, which also
+reads `target` for a replication and an evolution.*
 
 `exhaustive.py`, at this commit, the reference kernel (`core_diff.python_reading` through
 `governed_harness.policy.Policy`) and the Lean oracle built from `formal/Core` here (`lake build core-oracle`),
@@ -274,3 +277,80 @@ population's tests (69 passed, 1 skipped, the full product being opt in) and `te
 trust boundary. The stop's precedence inside the controller (the lock, the commit check, carrying out a stop
 whatever the decision) is shown by the scenarios, the timed races and the fault test, not proved. The rest
 is section 5's list.
+
+
+## 8. A member acts only on its own (2026-11-16)
+
+**The gap.** Until this change the admission image read `target` for a stop only. The simulation's controller
+never formed a replication or evolution aimed at another member, so this never showed. The Kubernetes
+webhook (`k8s/`) found it: a member could create a `GovernedAgent` whose `spec.parent` names another member,
+or change the version of a member outside its own subtree. Read as `replicate` or `evolve`, such a request
+would be decided on the named member's facts and could be allowed. The classifier papered over this by
+reading both as `request=unknown`, refused with the core's cause 32. That kept the image from allowing them,
+but the image itself did not enforce the design.
+
+**What changed.**
+
+- `target` is now a typed relation between the issuing member and the request's target, formed from the
+  registry: `self` (the issuer itself, and for a replication the parent it names), `descendant` (one of the
+  issuer's descendants), and anything else is `other`. The operator and the controller are not members, so
+  their readings carry `other`, and no rule reads `target` for them. The old value `own` is gone. It meant
+  `self` or `descendant`, and the stop rule now says that.
+- Two rules come right after the lineage and escalation rules (DESIGN.md section 4, rules 7 and 8). An agent's
+  replication with `target` other than `self` is refused. So is an agent's evolution with `target` other than
+  `self` or `descendant`. Both refuse with the new cause **123 `population:target-not-own`** (routing): a
+  member's replication whose parent is not that member, or its evolution of a member outside its own subtree.
+  118 and 119 were considered first. 118 is about a child's rights, key and policy against its parent's. 119
+  is about the issuer's own lineage. Neither covers an act aimed at the wrong member, so 123 was appended
+  through the registry procedure: the Rust table, the conformance corpus and the crate fixtures,
+  `formal/Core/Causes.lean`, the telemetry receipt stream, the frozen hash (`76a4f466...2b61a3`) in
+  `test_causes.py`, `reference_hashes.json` and COMPATIBILITY.md, and the occupied ranges.
+- The controller forms `target=self` for every replication and evolution (`Controller.relation` for stop,
+  restart and protect). The verifier now also requires every admitting receipt to name `target=self`. The
+  webhook forms the relation from the parent links the API server holds, and it no longer reads these
+  requests as `unknown`. A replication under another member, a descendant or an ancestor, a root created by a
+  member, and an evolution of another lineage or of an ancestor are each refused with 123 (`k8s/tests/fixtures.py`).
+  A member evolving its descendant with a passed canary is allowed, and so is the operator replicating under
+  any member. The scripted population (`k8s/population.py`) adds two 123 steps.
+
+**Proved in Lean.** `PopulationImage.lean` was regenerated and `admission_loads` checks the new bytes. Two
+theorems were strengthened. `allow_fails_closed` now says an allowed replication is by the operator or by
+an agent with `target=self`, an allowed evolution is by the operator or by an agent with `target` self or
+descendant, and an agent's allowed stop has `target` self or descendant. `admission_targets_registered`
+covers 123. One theorem is new:
+
+```lean
+theorem wrong_target_never_allowed {r : ByteArray} {ms : List (String × J)}
+    (hr : readCanonical r = .ok (.obj ms)) (hiss : field? ms "issuer" = some (.str "agent"))
+    (hwrong : (field? ms "request" = some (.str "replicate") ∧ field? ms "target" ≠ some (.str "self")) ∨
+      (field? ms "request" = some (.str "evolve") ∧ field? ms "target" ≠ some (.str "self") ∧
+        field? ms "target" ≠ some (.str "descendant"))) :
+    verdictBytes admissionBytes r ≠ .route "allow"
+```
+
+`lake build` passes with zero `sorry`. The axiom audit gives the new theorem `propext`, `Classical.choice` and
+`Quot.sound`, and every other population theorem keeps its axioms from section 7.
+
+**The exhaustive check, again.** `target` has three classes now (`descendant`, `self`, any other string),
+not two, so the product grows from 29,360,128 to **44,040,192** readings. A new invariant, I8, says an
+agent's replication is allowed only with `target=self`, and its evolution only with `target` self or
+descendant. Admission image sha256 `d48eb850...b561eae`, Lean oracle built here, 14 workers, 4,216 s:
+
+| Part | Readings | owner_rules disagree | Lean disagree | Invariants broken (I1 to I8) |
+|---|---:|---:|---:|---:|
+| the admission product | **44,040,192** | **0** | **0** (all decided by Lean) | **0** |
+| sweeps | 86,322 | 0 | 0 | 0 |
+| the evaluation product | 32 | 0 | 0 | |
+| the evaluation sweep | 5,125 | 0 | 0 | |
+
+Decisions over the product: allow 5,016,736; refuse 119 15,204,352; refuse 121 9,437,184; escalate 122
+7,602,176; refuse 32 3,720,128; refuse 118 2,508,288; refuse 123 393,216; refuse 117 82,080; refuse 120
+76,032. Allows grew by more than the factor of 1.5 because an agent's stop is now allowed for both `self` and
+`descendant`, which were one class before.
+
+**Unchanged.** The simulation's decisions are the same, since its controller never formed another member's
+replication or evolution. Its readings now name `self` where they named `own`, or carry `other` for the
+operator and the controller. The scenario tests pass with the same checks. The controller is still the trust
+boundary: the theorem holds for the `target` it is given, and that the relation is formed correctly rests
+on the controller, the webhook's classifier and their tests.
+

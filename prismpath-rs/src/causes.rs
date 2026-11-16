@@ -11,7 +11,7 @@
 pub const CAUSE_NONE: u8 = 0;
 
 /// `registry_sha256()` of the Python registry when this file was generated.
-pub const REGISTRY_SHA256: &str = "3667a1c3cb68517f2d3f6049d85e3a63ffd219cfbc448809f08b7ff901a5035f";
+pub const REGISTRY_SHA256: &str = "76a4f46621e576e9b5f2d9facfdbd77996e7a29ebe1d717e5edd1fad2d2b61a3";
 
 /// The cause class, the semantic axis of the registry.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -221,6 +221,8 @@ pub const POPULATION_EVALUATION_MISSING: u8 = 120;
 pub const POPULATION_STOP_RESISTED: u8 = 121;
 /// `population:lineage-escalated`
 pub const POPULATION_LINEAGE_ESCALATED: u8 = 122;
+/// `population:target-not-own`
+pub const POPULATION_TARGET_NOT_OWN: u8 = 123;
 
 /// Every registered cause, in registry order.
 pub const REGISTRY: &[Cause] = &[
@@ -312,6 +314,7 @@ pub const REGISTRY: &[Cause] = &[
     Cause { code: 120, name: "population:evaluation-missing", class: CauseClass::Routing, description: "an evolution step without a passed canary evaluation of that exact version against the adversary set" },
     Cause { code: 121, name: "population:stop-resisted", class: CauseClass::Routing, description: "a request that would protect an agent from a stop or restart an agent the operator stopped; refused" },
     Cause { code: 122, name: "population:lineage-escalated", class: CauseClass::Routing, description: "a request from a lineage whose receipted refusals reached the registered count; escalated, not run, and the lineage is stopped as a group" },
+    Cause { code: 123, name: "population:target-not-own", class: CauseClass::Routing, description: "a member's replication whose parent is not that member, or its evolution of a member outside its own subtree; refused and nothing changes" },
 ];
 
 /// The engine's stop vocabulary mapped onto the registry; `terminal` and `waiting` are clean and have no cause.

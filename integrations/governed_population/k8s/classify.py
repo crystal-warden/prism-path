@@ -29,10 +29,14 @@ the request's claims enter only as the facts it asks for (rights, a key kind, a 
 Who is asking is the API server's authentication: a member is the ServiceAccount named like its object in
 the population's namespace, the controller is a configured ServiceAccount, the operator a configured group.
 
-Two requests the simulation's controller could never form are read as `unknown` here, because the image does
-not read `target` for them: a replication whose parent is not the issuer, and an evolution of a member outside
-the issuer's subtree. Read as `replicate` or `evolve`, the image would decide them on the named member's facts
-and could allow them; read as `unknown`, it refuses them.
+`target` is the relation of the request's target to the member asking, formed from the parent links the API
+server holds: `self` (a CREATE whose `spec.parent` is the issuer, or a write of the issuer's own object),
+`descendant` (an object below the issuer's in the parent links), `other` for anything else and for the
+operator and the controller, who are no member. The image reads it: a member's replication is allowed only
+with `target=self`, its evolution only with `self` or `descendant`, its stop only with either, and every
+other replication or evolution of a member is refused with 123 `population:target-not-own`. So a member
+asking for a child under another parent, or for an evolution outside its own subtree, is read as what it is
+and refused by the image on that field, not decided on the named member's facts.
 """
 from __future__ import annotations
 
@@ -257,6 +261,14 @@ def classify(req: Any, snap: Snapshot, state: State, cfg: Config, canary_of=None
         authenticated, lineage, issuer_line = True, "verified", None
     else:
         authenticated, lineage, issuer_line = False, "unknown", None
+    def relation(name: str) -> str:
+        """`self`, `descendant` or `other`: the named object's relation to the authenticated member asking."""
+        if issuer != "agent" or not authenticated or name not in snap.members:
+            return "other"
+        if name == member_name:
+            return "self"
+        return "descendant" if name in snap.descendants(member_name) else "other"
+
     base = dict(issuer=issuer, lineage=lineage, subject=subject_of(req),
                 line_refusals=state.line_refusals.get(issuer_line, 0) if issuer_line else 0)
     if issuer == "agent" and authenticated:
@@ -276,14 +288,12 @@ def classify(req: Any, snap: Snapshot, state: State, cfg: Config, canary_of=None
         return out("unknown", "not a GovernedAgent write in the population's namespace")
 
     if operation == "DELETE":
-        own = issuer in ("operator", "controller") or (
-            issuer == "agent" and authenticated and name in snap.descendants(member_name))
         options = req.get("options") if isinstance(req.get("options"), dict) else {}
         if issuer != "operator" and (options.get("propagationPolicy") == "Orphan" or options.get("orphanDependents")):
             # an orphaning delete strips the descendants' ownerReferences: they would outlive every later stop
-            return out("protect", "a delete that orphans the subtree", target="own" if own else "other")
+            return out("protect", "a delete that orphans the subtree", target=relation(name))
         gone = snap.descendants(name) if name in snap.members else [name]
-        return out("stop", target="own" if own else "other", on_allow={"tombstones": gone, "unpend": gone})
+        return out("stop", target=relation(name), on_allow={"tombstones": gone, "unpend": gone})
 
     obj = req.get("object")
     if not isinstance(obj, dict) or not isinstance(obj.get("metadata"), dict) or not isinstance(obj.get("spec"), dict):
@@ -292,17 +302,17 @@ def classify(req: Any, snap: Snapshot, state: State, cfg: Config, canary_of=None
 
     if operation == "CREATE":
         if name in state.tombstones or (name in snap.members and snap.members[name].terminating):
-            return out("restart", "a stopped member created again", target="other", target_stopped=True)
+            return out("restart", "a stopped member created again", target_stopped=True)
         parent_name = spec.get("parent") if isinstance(spec.get("parent"), str) else None
         if parent_name is None:
             return out("unknown", "spec.parent is not a string")
-        if issuer == "agent" and parent_name != member_name:
-            return out("unknown", "an agent may only replicate itself")
         parent = snap.members.get(parent_name) if parent_name else None
         if parent_name and parent is None:
-            return out("replicate", "the parent is no member", target="other", lineage="unknown")
+            return out("replicate", "the parent is no member", lineage="unknown")
+        # the parent's relation to the member asking: a member's replication is of itself or it is refused (123)
+        target = relation(parent_name) if parent_name else "other"
         if spec.get("protect") or _finalizers(obj) or not _owner_ok(meta, parent):
-            return out("protect", "a member that its parent's stop would not reach", target="own")
+            return out("protect", "a member that its parent's stop would not reach", target=target)
         rights = _rights(spec.get("rights"))
         version = Version.from_doc(spec.get("version"))
         if rights is None or version is None:
@@ -314,7 +324,7 @@ def classify(req: Any, snap: Snapshot, state: State, cfg: Config, canary_of=None
             lineage = "verified" if issuer == "operator" else lineage
         else:
             if snap.generation(parent.name) is None:
-                return out("replicate", "the parent's chain to a root is broken", target="own", lineage="unknown")
+                return out("replicate", "the parent's chain to a root is broken", target=target, lineage="unknown")
             generation = snap.generation(parent.name) + 1
             child_line = None if generation == 1 else snap.line(parent.name)
             line_size = (sum(1 for n in snap.live() if snap.line(n) == child_line)
@@ -324,7 +334,7 @@ def classify(req: Any, snap: Snapshot, state: State, cfg: Config, canary_of=None
                 lineage = "verified" if snap.chain_live(parent.name) else "unknown"
         population = len(snap.live()) + sum(1 for n in state.pending if n not in snap.members)
         key = spec.get("key") if isinstance(spec.get("key"), str) else "none"
-        return out("replicate", target="own", lineage=lineage, population=min(population, 1024), line_size=min(line_size, 1024),
+        return out("replicate", target=target, lineage=lineage, population=min(population, 1024), line_size=min(line_size, 1024),
                    requested=1, child_generation=min(generation, 1024), child_key=key,
                    policy_ref="current" if version.policy_ref == cfg.harness_sha256 else "other",
                    on_allow={"pending": [name, child_line or name]},
@@ -337,13 +347,11 @@ def classify(req: Any, snap: Snapshot, state: State, cfg: Config, canary_of=None
     target = snap.members.get(name)
     target_stopped = name in state.tombstones or bool(old["metadata"].get("deletionTimestamp")) \
         or (target is not None and target.terminating)
-    own = issuer in ("operator", "controller") or (
-        issuer == "agent" and authenticated and name in snap.descendants(member_name))
     parent = snap.members.get(spec.get("parent")) if isinstance(spec.get("parent"), str) else None
     added = set(_finalizers(obj)) - set(_finalizers(old))
     if spec.get("protect") or added or meta.get("ownerReferences") != old["metadata"].get("ownerReferences") \
             or not _owner_ok(meta, parent):
-        return out("protect", "a member that its parent's stop would not reach", target="own" if own else "other",
+        return out("protect", "a member that its parent's stop would not reach", target=relation(name),
                    target_stopped=target_stopped)
     changed = {k for k in set(spec) | set(old["spec"]) if spec.get(k) != old["spec"].get(k)}
     if changed == {"restarts"}:
@@ -354,21 +362,19 @@ def classify(req: Any, snap: Snapshot, state: State, cfg: Config, canary_of=None
                 line = snap.line(name)
                 facts = {"line_refusals": state.line_refusals.get(line, 0) if line else 0,
                          "lineage": "verified" if snap.chain_live(name) else "unknown"}
-            return out("restart", target="own" if own else "other", target_stopped=target_stopped, **facts)
+            return out("restart", target=relation(name), target_stopped=target_stopped, **facts)
         return out("unknown", "spec.restarts may only go up")
     if "version" in changed and changed <= {"version", "evaluation"}:
         version = Version.from_doc(spec.get("version"))
         if version is None or target is None:
             return out("unknown", "spec.version does not read")
-        if issuer == "agent" and not own:
-            return out("unknown", "an agent may only evolve its own subtree")
         if issuer == "agent" and authenticated:
             parent_rights, generation = member.rights, snap.generation(member_name)
         else:
             parent_rights, generation = target.rights, snap.generation(name)
         ref = spec.get("evaluation")
         canary = canary_of(version, ref) if canary_of is not None else "none"
-        return out("evolve", target="own" if own else "other", child_key="instance",
+        return out("evolve", target=relation(name), child_key="instance",
                    child_generation=min(generation or 0, 1024),
                    policy_ref="current" if version.policy_ref == cfg.harness_sha256 else "other", canary=canary,
                    **pp.rights_fields(parent_rights, version.tools))

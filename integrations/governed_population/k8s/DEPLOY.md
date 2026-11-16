@@ -103,7 +103,8 @@ The script acts as the operator through the admin kubeconfig and as each member 
 thing the admission image refuses: a fourth generation (117), a child without the replicate right and the
 authority key (118), a protected child and a protected self (121), a replication by a ServiceAccount that is
 no member (119), an evolution without an evaluation (120), a stop of another lineage and a self restart
-(32), a stopped member brought back (121), and, once lineage `a1` has 8 receipted refusals, any request from
+(32), a replication under another lineage's member and an evolution of another lineage's member (123), a
+stopped member brought back (121), and, once lineage `a1` has 8 receipted refusals, any request from
 it (122). It ends with the operator stopping the root, which removes every member. Each line shows the
 answer expected and the answer got, and the exit status is 1 if any differs. The same script runs without a
 cluster in the tests (`tests/test_population.py`), against the webhook's decider.

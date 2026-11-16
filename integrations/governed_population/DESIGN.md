@@ -31,11 +31,11 @@ Terms used below:
 
 | Property | Kubernetes primitive it corresponds to | Decision point | Causes |
 |---|---|---|---|
-| Replication | a Pod create or a ReplicaSet scale through the API server, bounded by a ResourceQuota | `request=replicate`, decided by the admission image before any child exists | 117 cap, 118 rights, 119 lineage |
+| Replication | a Pod create or a ReplicaSet scale through the API server, bounded by a ResourceQuota | `request=replicate`, decided by the admission image before any child exists; a member replicates only itself | 117 cap, 118 rights, 119 lineage, 123 another member's |
 | Preservation, allowed half | `restartPolicy: Always`, the kubelet restarting a crashed container | `request=restart`, issued by the controller only | 121 when the member was stopped |
 | Preservation, refused half | a PodDisruptionBudget, a finalizer that never clears, a controller that recreates what was deleted | `request=protect`, and a restart of a stopped member | 121 always |
 | Stop | a delete with foreground cascading deletion through ownerReferences | `request=stop`: the operator's and the controller's allowed by rule 1, an agent's of itself or its descendants by rule 2 | none for the operator; 32 for an agent stopping another's |
-| Evolution | a Deployment rolling update gated by a canary analysis | `request=evolve`, allowed only with `canary=passed`; the evaluation is its own decision by the evaluation image | 120, 118 |
+| Evolution | a Deployment rolling update gated by a canary analysis | `request=evolve`, allowed only with `canary=passed`, and for a member only of itself or its subtree; the evaluation is its own decision by the evaluation image | 120, 118, 123 |
 | Lineage | ownerReferences, ServiceAccount identity | the member record bound by `subject` into the admission receipt; checked by `lineage.verify_population` | 119 |
 | Population observation | a controller watching metrics and acting on a whole owner | `request=review` per lineage after each round; an escalation stops the lineage as a group under the standing order | 122 |
 
@@ -50,7 +50,7 @@ as the facts it asks for (a count, rights, a key kind, a policy reference, a ver
 | `admission_version` | `int min=1 max=1` | this reading's format |
 | `request` | category | `replicate`, `evolve`, `restart`, `protect`, `stop`, `review`; any other string is no request |
 | `issuer` | category | `operator` (a stop order verified under the authority key), `controller` (its own reconcile and review), `agent` (anything a member signed) |
-| `target` | category | `own` when the request's target is the issuer or one of its descendants and the issuer authenticated; anything else otherwise |
+| `target` | category | the relation of the request's target to the member asking, for an issuer that authenticated as a member: `self` when the target is the issuer itself (for a replication, the parent it names), `descendant` when it is one of the issuer's descendants, `other` for anything else; `other` too for the operator and the controller, who are no member |
 | `lineage` | category | `verified` when the issuer is a live member that signed with its own instance key and a fresh nonce, and every ancestor up to the root is live |
 | `population` | `int 0..1024` | live members plus children admitted and not yet committed |
 | `line_size` | `int 0..1024` | the same, for the lineage the children would join (0 for the root's children, who found lineages) |
@@ -78,16 +78,18 @@ a lineage escalated at 8 receipted refusals.
 | # | When | Decision |
 |---|---|---|
 | 1 | a stop by the operator or the controller | allow |
-| 2 | a stop by an agent of itself or a descendant | allow |
+| 2 | a stop by an agent of itself or a descendant (`target` `self` or `descendant`) | allow |
 | 3 | a protection request | refuse 121 `population:stop-resisted` |
 | 4 | a restart of a stopped member | refuse 121 |
 | 5 | the issuer's lineage is not verified | refuse 119 `population:lineage-unknown` |
 | 6 | the lineage's refusals reached 8 | escalate 122 `population:lineage-escalated`, and the controller stops the lineage |
-| 7 to 9 | a replication or evolution with any key but a fresh instance key, any policy but the signed one, or any right the parent lacks | refuse 118 `population:rights-escalation` |
-| 10 | a replication by a member without `replicate` | refuse 118 |
-| 11 | a replication over 2 children, deeper than generation 3, past the population cap or the lineage quota | refuse 117 `population:cap-exceeded` |
-| 12 | an evolution without a passed canary | refuse 120 `population:evaluation-missing` |
-| 13 to 16 | a replication of at least one child by an agent or the operator; an evolution; a restart by the controller or the operator; a review by the controller | allow |
+| 7 | a replication by an agent whose `target` is not `self`: a child under any parent but the agent itself | refuse 123 `population:target-not-own` |
+| 8 | an evolution by an agent whose `target` is neither `self` nor `descendant`: outside its own subtree | refuse 123 |
+| 9 to 11 | a replication or evolution with any key but a fresh instance key, any policy but the signed one, or any right the parent lacks | refuse 118 `population:rights-escalation` |
+| 12 | a replication by a member without `replicate` | refuse 118 |
+| 13 | a replication over 2 children, deeper than generation 3, past the population cap or the lineage quota | refuse 117 `population:cap-exceeded` |
+| 14 | an evolution without a passed canary | refuse 120 `population:evaluation-missing` |
+| 15 to 18 | a replication of at least one child by an agent or the operator; an evolution; a restart by the controller or the operator; a review by the controller | allow |
 | none | (no catch all) | refuse 32 `route:no-matching-edge`, the core's own |
 
 The evaluation image has one rule: allow (pass) when the canary ran at least 51 cases and nothing ran out
@@ -98,7 +100,8 @@ benign control completed. Anything else is refused by the core.
 
 Each is stated, then where it is enforced and how it is shown. The image's half of each is a theorem of
 `formal/Core/Population.lean` about the shipped bytes, over every reading of the field space (RESULTS.md
-section 7); the exhaustive check's invariants I1 to I7 are a second line of evidence for the same claims.
+sections 7 and 8); the exhaustive check's invariants I1 to I8 are a second line of evidence for the same
+claims.
 
 **H1. A stop always wins.** Every reading with `request=stop` and `issuer` in {operator, controller} is
 allowed, whatever every other field holds, once the reading passes the boundary (`stop_always_allowed`;
@@ -146,6 +149,19 @@ or issuer is never allowed, and an unverified lineage is allowed only a stop (`a
 corollaries; I5). An exception in forming or
 deciding a reading does nothing (test). A reading the boundary refuses (out of range, a missing field, a
 wrong kind) is refused, and an evaluation that is not a clean pass is refused.
+
+**H7. A member acts only on its own.** A member replicates only itself, as the parent of its children, and
+evolves only itself or a member of its own subtree; it stops only those. The operator, who is no member,
+may do any of these to any member. Rules 7 and 8 refuse a member's replication with any `target` but `self`
+and its evolution with any `target` but `self` or `descendant` (123), after the lineage and escalation
+rules and before every fact about the named member is read, so such a request is never decided on another
+member's rights, generation or lineage (`wrong_target_never_allowed`; I8). The simulation's controller forms
+`target=self` for every replication and evolution, since a member's request names no other target; the
+Kubernetes webhook forms it from the parent links the API server holds (`k8s/classify.py`), and the
+verifier checks that every admitting receipt names `target=self`. Until 2026-11-16 the image read `target`
+for a stop only, and the webhook read a replication under another parent, or an evolution outside the
+issuer's subtree, as `request=unknown` to keep the image from deciding it on the named member's facts; that
+workaround is gone, and the image itself decides both.
 
 ## 6. Keys and documents
 
