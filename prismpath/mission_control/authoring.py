@@ -24,6 +24,7 @@ FILES under the project or the evidence roots, never sent as key material.
 import os
 import re
 import shlex
+import tempfile
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Request
@@ -31,7 +32,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from . import core, evidence, policy
-from .edit import _sha256_of_file, _write_atomically
+from .edit import _sha256_of_file
 from .files import file_kind
 from .posture import WRITE
 
@@ -134,10 +135,14 @@ def scaffold(req: ScaffoldReq, request: Request):
                                                           "reason": "exists", "present": [req.name]}, actor)
             raise HTTPException(409, f"refused: {req.name} already exists and is not a directory")
         intent = {"template": req.template, "name": req.name, "files": files}
-        with core.audit.audited("author.scaffold", intent, actor) as outcome:
-            _write_all(planned, directory)
-            outcome["detail"] = {"files": [{"path": item["path"], "sha256": _sha256_of_file(item["real"])}
-                                           for item in planned]}
+        try:
+            with core.audit.audited("author.scaffold", intent, actor) as outcome:
+                _write_all(planned, directory)
+                outcome["detail"] = {"files": [{"path": item["path"], "sha256": _sha256_of_file(item["real"])}
+                                               for item in planned]}
+        except FileExistsError as raced:            # another writer created a file after the check
+            raise HTTPException(409, f"refused: {os.path.basename(str(raced.filename or ''))} appeared while the "
+                                     "scaffold wrote; nothing it wrote was kept") from None
     return {"ok": True, "template": req.template, "files": [item["path"] for item in planned],
             "flow": planned[0]["path"]}
 
@@ -145,6 +150,27 @@ def scaffold(req: ScaffoldReq, request: Request):
 def _sha256_of_text(text: str) -> str:
     import hashlib
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _create_atomically(resolved: str, text: str) -> None:
+    """Write a new file whole or not at all, and never over a file: the text goes to a temporary file in the
+    same directory, which is then linked to its name, a link that fails when the name exists."""
+    handle_fd, tmp_path = tempfile.mkstemp(dir=os.path.dirname(resolved), prefix=".mc-write-", suffix=".tmp")
+    try:
+        with os.fdopen(handle_fd, "wb") as handle:
+            handle.write(text.encode("utf-8"))
+        os.chmod(tmp_path, 0o644)
+        try:
+            os.link(tmp_path, resolved)
+        except FileExistsError:
+            raise FileExistsError(17, "exists", resolved) from None
+        except OSError:                                      # a filesystem without hard links
+            if os.path.lexists(resolved):
+                raise FileExistsError(17, "exists", resolved) from None
+            os.replace(tmp_path, resolved)
+    finally:
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
 
 
 def _write_all(planned, directory) -> None:
@@ -156,7 +182,7 @@ def _write_all(planned, directory) -> None:
             os.mkdir(directory, 0o755)
             made_directory = True
         for item in planned:
-            _write_atomically(item["real"], item["text"])
+            _create_atomically(item["real"], item["text"])
             written.append(item["real"])
     except BaseException:
         for path in written:

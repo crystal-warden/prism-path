@@ -214,6 +214,25 @@ def test_a_scaffold_over_an_existing_file_is_refused_whole(client, proj):
     assert [action for action, _ in _events()] == ["author.scaffold.refused"]
 
 
+def test_a_file_that_appears_after_the_check_is_never_written_over(client, proj, monkeypatch):
+    """The intent is recorded before any file is written; a file another writer makes in that moment is
+    kept, the scaffold keeps nothing it wrote, and the result says it failed."""
+    record_intent = core.audit.record_intent
+
+    def intent_then_race(action, data, actor):
+        event = record_intent(action, data, actor)
+        (proj / "demo.tests.md").write_text("theirs\n", encoding="utf-8")
+        return event
+    monkeypatch.setattr(core.audit, "record_intent", intent_then_race)
+    response = client.post(API_V1 + "/author/scaffold", json={"name": "demo"})
+    assert response.status_code == 409, response.text
+    assert (proj / "demo.tests.md").read_text() == "theirs\n" and not (proj / "demo.md").exists()
+    assert not [entry for entry in os.listdir(proj) if entry.startswith(".mc-write-")]
+    events = core.audit.LOG.events
+    assert [event["action"] for event in events] == ["author.scaffold", "author.scaffold.result"]
+    assert events[1]["data"]["ok"] is False
+
+
 @pytest.mark.parametrize("name", ["../escape", "a/b", "", ".hidden", "x" * 65, "sp ace", "flows/../x"])
 def test_a_scaffold_name_that_is_not_a_plain_name_is_refused(client, proj, name):
     before = _listing(proj)
