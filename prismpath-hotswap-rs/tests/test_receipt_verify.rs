@@ -45,6 +45,14 @@ fn run_case(case: &Value) -> Result<(), String> {
             if merkle_root(&leaves)? != case["root"].as_str().unwrap() {
                 return Err("root differs".to_string());
             }
+            // the streaming form, fed the same leaves one at a time, reaches the same root
+            let mut acc = prismpath_rs::merkle::Accumulator::new();
+            for leaf in &leaves {
+                acc.add(&hex::decode(leaf).map_err(|err| err.to_string())?).map_err(|_| "accumulator full")?;
+            }
+            if acc.root().map(hex::encode).unwrap_or_default() != case["root"].as_str().unwrap() {
+                return Err("the accumulator's root differs".to_string());
+            }
             let root = case["root"].as_str().unwrap();
             for (leaf, path) in leaves.iter().zip(case["paths"].as_array().unwrap()) {
                 let steps = path_from_json(path)?;
