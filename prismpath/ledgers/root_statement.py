@@ -315,14 +315,19 @@ def _is_json(line: str) -> bool:
     return True
 
 
-def read_statements(path: str) -> Tuple[List[dict], List[dict]]:
+def read_statements(path: str, data: Optional[bytes] = None) -> Tuple[List[dict], List[dict]]:
     """Every statement in the file, and the findings reading it produced. A final line that is not JSON
     is a write a crash cut short, reported as `interrupted_statement`; a bad line anywhere else is
-    `bad_format`, because a chain with an unreadable link proves nothing past it."""
-    if not path or not os.path.exists(path):
+    `bad_format`, because a chain with an unreadable link proves nothing past it. `data`, when given, is
+    the file's bytes as a reader already holds them, read instead of the file."""
+    if data is not None:
+        # bytes that are not UTF-8 stay in their line as lone surrogates, which canon/2 refuses: a finding
+        raw_lines = bytes(data).decode("utf-8", errors="surrogateescape").split("\n")
+    elif not path or not os.path.exists(path):
         return [], []
-    with open(path, encoding="utf-8", newline="") as handle:     # bytes as written: a CR is not dropped
-        raw_lines = handle.read().split("\n")
+    else:
+        with open(path, encoding="utf-8", newline="") as handle:     # bytes as written: a CR is not dropped
+            raw_lines = handle.read().split("\n")
     if raw_lines and raw_lines[-1] == "":
         raw_lines.pop()
     statements, findings = [], []

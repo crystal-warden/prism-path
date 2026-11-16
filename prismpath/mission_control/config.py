@@ -59,6 +59,12 @@ class Settings:
     # larger so a runaway read/write can't exhaust memory, and bound the file listing on a pathological tree.
     max_file_bytes: int = 4 * 1024 * 1024                     # 4 MiB
     max_tree_entries: int = 5000
+    # Evidence is larger than a flow file and is untrusted input: an audit log, its statements file, or all
+    # the files of one evidence run together, read whole by the evidence readers, refused above this.
+    max_evidence_bytes: int = 64 * 1024 * 1024                # 64 MiB
+    # How many receipts of an evidence run the console replays through the reference kernel at most; the
+    # CLI (`prismpath evidence verify --sample all`) is the check of every receipt.
+    evidence_sample: int = 200
     # How long a status.json heartbeat stays live. Discovery and the running check must agree on this, or
     # the sprint list and the status view disagree about the same run.
     heartbeat_stale_s: int = 120
@@ -91,6 +97,8 @@ class Settings:
             port=int(environ.get("MC_PORT", str(fallback.port))),
             max_file_bytes=int(environ.get("MC_MAX_FILE_BYTES", str(fallback.max_file_bytes))),
             max_tree_entries=int(environ.get("MC_MAX_TREE_ENTRIES", str(fallback.max_tree_entries))),
+            max_evidence_bytes=int(environ.get("MC_MAX_EVIDENCE_BYTES", str(fallback.max_evidence_bytes))),
+            evidence_sample=int(environ.get("MC_EVIDENCE_SAMPLE", str(fallback.evidence_sample))),
             heartbeat_stale_s=int(environ.get("MC_HEARTBEAT_STALE_S", str(fallback.heartbeat_stale_s))),
         )
 

@@ -93,8 +93,10 @@ def summarise(events: List[dict]) -> Dict[str, Any]:
 
 def run(path: str, since: Optional[str] = None, last: Optional[int] = None,
         pinned: Optional[List[bytes]] = None, statements_path: Optional[str] = None,
-        receipt: Optional[int] = None) -> Dict[str, Any]:
-    log = audit_log.AuditLog(path, statements_path=statements_path)
+        receipt: Optional[int] = None, log: Optional[audit_log.AuditLog] = None) -> Dict[str, Any]:
+    """The report `prismpath trail` prints. `log`, when given, is the log already read (Mission Control's
+    evidence readers build it from a bounded snapshot), and `path` only names it."""
+    log = log if log is not None else audit_log.AuditLog(path, statements_path=statements_path)
     events = list(log.events)
     t0 = _parse_since(since)
     if t0 is not None:
