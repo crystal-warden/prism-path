@@ -135,9 +135,13 @@ The console binds loopback and that is its whole access control (`docs/guides/mi
 
 ## 3. Architecture decisions
 
-### 3.1 The UI is a browser page served by the console, not a desktop shell
+### 3.1 One client served by the console, a separate privileged reader, a desktop shell only as an addition
 
-The Tauri idea in the strategy notes reuses a learning IDE's shell to host the console and decode telemetry in process. Evaluated against this repository it loses on every count that matters here. The console must ship as package data in the pip wheel (`pyproject.toml:83-84`, `.github/workflows/ci.yml:129`) and reach the product by export, and a Rust plus Node desktop build with per platform signing does neither. The one technical advantage claimed, in process telemetry decoding, is a read side function the Python server already exposes (`policy.py:103-147`) and is not a UI concern. The shell's own notes say its audience and content are different. A desktop wrapper can point any webview at the loopback page later without changing the plan. Decision. The page stays vanilla ES modules with vendored libraries and no build step, split by interface, with pure rendering functions testable under `node --test`.
+Decided by the owner on 2026-11-16. Reading enforcer state from eBPF (pinned maps and the ring buffer) needs `CAP_BPF` or root, and a host that disables unprivileged BPF refuses it to an ordinary process. A desktop shell that read the maps itself would therefore run a whole GUI and its webview with kernel privilege, and it could read only the enforcer on its own machine, while enforcers run elsewhere as often as not (the governed net edge, servers, the Kubernetes admission webhook). The privilege is therefore held by a small reader of its own, the collector, and nothing else.
+
+The collector is a Rust program built on the existing loader and telemetry code (`prismpath-ebpf`, `prismpath-telemetry-rs`). It is the only component that holds `CAP_BPF`. It reads the enforcer's maps and ring buffer, seals receipts as the existing tools do, and exposes a narrow read only feed (a Unix socket locally, loopback for the console, and the same on a remote enforcer). It accepts no writes and no policy.
+
+The client is one set of plain ES modules served by the console, so it works in any browser, headless on a server, and ships as package data in the wheel and through the export. A desktop shell (Journeyman's Tauri shell) may later host the same client against the same API and attach to the collector's socket for a live local view and the operating system's keychain. It adds no second implementation of the console's logic, and nothing in WP0 to WP8 depends on it.
 
 ### 3.2 One ASGI app, three interfaces, two postures
 
@@ -251,9 +255,13 @@ Files. `docs/guides/mission-control-api.md` regenerated from `app.openapi()` by 
 
 Depends on everything above. Can begin its guide text once WP4, WP6, WP7 routes are fixed.
 
+### WP9 The collector
+
+Goal. The privileged reader of section 3.1. A Rust binary in a new crate beside `prismpath-ebpf`'s user space tools, the only component with `CAP_BPF`, that opens the enforcer's pinned maps and ring buffer, decodes decisions with `prismpath-telemetry-rs`, seals receipts with the existing streaming RFC 6962 accumulator, and serves a read only feed (newline delimited canon/2 records) on a Unix socket and optionally loopback. It accepts no input beyond a subscription request. Tests that need no kernel run against recorded ring buffer frames; the kernel test runs in the `ebpf_kernel` CI job. The console reads the feed in WP6 (operating) and WP4 (auditing, as evidence). Depends on WP0. Can run beside WP1 to WP3.
+
 ### Order and parallelism
 
-WP0 first and alone. Then WP1, WP2 and WP3 in parallel, since they touch the client, the audit path and a new module respectively. Then WP4, WP6 and WP7 in parallel. WP5 after WP4. WP8 last. Three agents at once is the ceiling, so the two parallel waves fit.
+WP0 first and alone. Then WP1, WP2, WP3 and WP9 in parallel (no more than three agents at once), since they touch the client, the audit path and a new module respectively. Then WP4, WP6 and WP7 in parallel. WP5 after WP4. WP8 last. Three agents at once is the ceiling, so the two parallel waves fit.
 
 ### Risks
 
@@ -267,4 +275,4 @@ Answered on 2026-11-16.
 2. The default posture on loopback is `full`, and `--read-only` is an opt in. An assessor runs `--read-only`.
 3. The in page verifier (WP5) is wanted, after WP4 lands.
 4. The old paths stay under `/api/v1` and new ones join them, with no `v2`.
-5. Open. Whether Mission Control is a browser page the console serves (section 3.1) or a desktop shell (Journeyman's Tauri shell) needs more discussion, in particular reading enforcer state from eBPF directly in a native process. WP0 to WP3 do not depend on the answer, since a desktop shell would host the same client against the same API, and section 3.1 is revisited before WP4.
+5. One client served by the console, a separate privileged reader (the collector, WP9) for eBPF state, and a desktop shell only later as an addition hosting the same client (section 3.1).
