@@ -1,0 +1,20 @@
+[package]
+name = "prismpath-collector"
+version = "0.1.0"
+edition = "2021"
+description = "The privileged reader of PrismPath's eBPF enforcers: drains the pinned decision ring buffer, seals what it read in the RFC 6962 tree and serves a read only canon/2 feed."
+license = "Apache-2.0"
+repository = "https://github.com/crystal-warden/prism-path"
+publish = false
+
+# Its own workspace, like prismpath-reflect-bindings: it sits with the kernel target the export holds back,
+# so the root workspace (which the product carries byte for byte) must not name it.
+[workspace]
+
+[dependencies]
+prismpath-rs = { path = "../../prismpath-rs", default-features = false, features = ["merkle"] }
+prismpath-telemetry-rs = { path = "../../prismpath-telemetry-rs" }
+libc = "0.2.189"
+sha2 = "0.10.9"
+hex = "0.4.3"
+serde_json = "1.0.151"

@@ -217,6 +217,13 @@ sidecar parser. `loader.c` is the command line over those two. The five host too
 (`cert_selector`, `migrate_selector`, `receipts_selector`, `seal_receipts`, `smoke_selector`) link the
 two objects; they used to reach the same helpers by `#include "loader.c"`.
 
+### The collector
+
+[`collector/`](collector/README.md) is the one component meant to run beside a deployed enforcer with
+`CAP_BPF`: a Rust binary that opens the governed net edge's or the selector's pinned ring buffer (and the
+edge's counters, read only), seals every record it drains in the RFC 6962 tree, and serves them as a read
+only canon/2 feed on a Unix socket for Mission Control. It loads and changes nothing in the kernel.
+
 ---
 
 ## 7. Conformance & flow execution · the loader's `certify` / `run` / `runbatch` modes

@@ -251,6 +251,10 @@ jobs:
         run: cargo test --manifest-path prismpath-reflect-bindings/Cargo.toml -q
       - name: Reflect bindings clippy
         run: cargo clippy --manifest-path prismpath-reflect-bindings/Cargo.toml --all-targets -- -D warnings
+      - name: Collector (prismpath-ebpf/collector) — recorded kernel frames, hostile input, the read only reach (the kernel half is in ebpf_kernel)
+        run: cargo test --locked --manifest-path prismpath-ebpf/collector/Cargo.toml -q
+      - name: Collector clippy
+        run: cargo clippy --locked --manifest-path prismpath-ebpf/collector/Cargo.toml --all-targets -- -D warnings
 
   # The declared minimum supported Rust version, built rather than asserted. prismpath-rs, the telemetry
   # port and the preflight tool declare 1.82 (the newest standard library call they use is
@@ -457,6 +461,10 @@ jobs:
         run: |
           python3 prismpath-ebpf/net_cert.py /tmp/net_frames.bin
           cd prismpath-ebpf && sudo ./loader x netcert /tmp/net_frames.bin
+      - name: The collector against the governed net program on lo (pinned maps and ring buffer, CAP_BPF alone under its systemd unit, the read only feed)
+        run: |
+          cargo build --release --locked --manifest-path prismpath-ebpf/collector/Cargo.toml
+          sudo -E env "PATH=$PATH" bash prismpath-ebpf/collector/kernel_test.sh
 
   # The comparison glue against a real OPA: the receipt sink and the revision floor tests skip wherever the
   # pinned comparator toolchain is absent, which used to be every CI run. This job installs the toolchain
