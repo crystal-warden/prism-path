@@ -115,3 +115,17 @@ def test_a_missing_ledger_fails_loudly_rather_than_reporting_every_task_as_a_gap
     (base / "docs" / "research" / "supporting-evidence.md").unlink()
     with pytest.raises(docs_health.DocsHealthError, match="evidence ledger missing"):
         docs_health.coverage_gaps(str(base))
+
+
+def test_an_overlay_file_links_from_the_product_path_it_is_exported_to(tmp_path):
+    base = _tree(tmp_path, "# Guide\n")
+    overlay = base / "tools" / "mirror" / "docs" / "guides"
+    overlay.mkdir(parents=True)
+    (base / "docs" / "guides").mkdir()
+    (base / "docs" / "guides" / "authoring.md").write_text("# Authoring\n", encoding="utf-8")
+    (base / "SPEC.md").write_text("# Spec\n", encoding="utf-8")
+    (overlay / "tour.md").write_text(
+        "[a](authoring.md) [s](../../SPEC.md) [p](../../PROVENANCE.md) [gone](missing.md)\n", encoding="utf-8")
+    md_paths = docs_health.collect_markdown(str(base))
+    dead = docs_health.dead_doc_links(str(base), md_paths)
+    assert dead == [("tools/mirror/docs/guides/tour.md", "missing.md")]

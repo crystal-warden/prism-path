@@ -140,6 +140,13 @@ CONSUMERS: dict[str, dict[str, list[tuple]]] = {
                cargo("prismpath-rs", "test_engine_cross_language", "prismpath-rs/tests/test_engine_cross_language.rs")],
         "js": [("node", "run_p1_conformance.mjs", "prismpath/portable/run_p1_conformance.mjs")],
         "go": [NONE_GO], "hw": [NONE_HW]},
+    "portable/merkle_stream": {
+        # test_ebpf_merkle.py compiles and runs prismpath-ebpf/test_merkle.c, merkle.h's replay of this corpus
+        "py": [pytest("prismpath/tests/test_merkle_stream.py", "prismpath/tests/test_ebpf_merkle.py")],
+        "rs": [cargo("prismpath-rs", "test_merkle_stream", "prismpath-rs/tests/test_merkle_stream.rs")],
+        "js": [NONE_JS], "go": [NONE_GO],
+        "hw": [("none", "the C target in prismpath-hw keeps no ledger; the eBPF ledger's C merkle.h replays this "
+                        "corpus through prismpath/tests/test_ebpf_merkle.py")]},
     "portable/parse_limits": {
         "py": [pytest("prismpath/tests/test_parse_limits_corpus.py")],
         "rs": [cargo("prismpath-rs", "test_parse_limits", "prismpath-rs/tests/test_parse_limits.rs")],

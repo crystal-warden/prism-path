@@ -152,6 +152,8 @@ jobs:
       - name: The maintenance suite, including the export
         run: python -m pytest tools/tests -q
       - name: Export the product tree and check it
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"   # the tools also ignore bytecode; this keeps the tree as exported
         run: |
           python tools/export_clean.py --out /tmp/prismpath-tree
           cd /tmp/prismpath-tree
