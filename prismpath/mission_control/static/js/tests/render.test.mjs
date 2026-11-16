@@ -108,7 +108,7 @@ test("the queue offers a decision in the full posture and says why not in the re
 });
 
 test("fan-outs render as a tree or say there are none", () => {
-  assert.ok(text(renderFanouts([{ id: "f", children: [{ id: "c", stop: "done" }] }])).startsWith('<pre class="tree">'));
+  assert.ok(text(renderFanouts([{ id: "f", children: [{ item_id: "c", stopped: "terminal" }] }])).startsWith('<div class="tree">'));
   assert.ok(text(renderFanouts([])).includes("no fan-out compositions"));
 });
 

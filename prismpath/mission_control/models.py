@@ -47,3 +47,8 @@ class FileWriteReq(BaseModel):
 class QueueDecideReq(BaseModel):
     id: str = Field(..., description="Suspended-run checkpoint id (confined to the queue dir).")
     choose: str = Field(..., description="The edge/decision the human picks.")
+
+
+class QueueEventReq(BaseModel):
+    id: str = Field(..., description="Waiting-run checkpoint id (confined to the queue dir; a nested child by its relative id).")
+    event: str = Field(..., description="The event to deliver: a name the node's `on event` edges await, or '__timeout__'.")

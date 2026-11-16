@@ -13,7 +13,8 @@ import { configureTransport, getJson } from "./transport.mjs";
 import { followEventStream } from "./events.mjs";
 import { loadGraphScreen, refreshActiveNode, wireGraph } from "./graph.mjs";
 import { loadFilesScreen, wireAuthoring } from "./authoring.mjs";
-import { loadFlowsScreen, loadQueueScreen, paintStatusPills, wireOperating } from "./operating.mjs";
+import { loadFlowsScreen, loadLensScreen, loadMonitorScreen, loadQueueScreen, loadRunsScreen, paintStatusPills,
+         wireOperating } from "./operating.mjs";
 import { loadAuditScreen, loadCausesScreen, loadKeysScreen, loadTrailsScreen, wireAuditing } from "./auditing.mjs";
 import { loadPanelScreen } from "./panels.mjs";
 
@@ -26,9 +27,11 @@ export const SCREENS = Object.freeze([
   { screen: "inspect", interface: "authoring", view: IDS.viewInspect, load: loadPanelScreen },
   { screen: "queue", interface: "operating", view: IDS.viewQueue, load: loadQueueScreen },
   { screen: "policy", interface: "operating", view: IDS.viewPolicy, load: loadPanelScreen },
-  { screen: "runs", interface: "operating", view: IDS.viewRuns, load: () => {} },
-  { screen: "quality", interface: "operating", view: IDS.viewQuality, load: loadPanelScreen },
+  { screen: "monitor", interface: "operating", view: IDS.viewMonitor, load: loadMonitorScreen },
+  { screen: "lens", interface: "operating", view: IDS.viewLens, load: loadLensScreen },
   { screen: "flows", interface: "operating", view: IDS.viewFlows, load: loadFlowsScreen },
+  { screen: "quality", interface: "operating", view: IDS.viewQuality, load: loadPanelScreen },
+  { screen: "runs", interface: "operating", view: IDS.viewRuns, load: loadRunsScreen },
   { screen: "trails", interface: "auditing", view: IDS.viewTrails, load: loadTrailsScreen },
   { screen: "evidence", interface: "auditing", view: IDS.viewEvidence, load: () => {} },
   { screen: "change", interface: "auditing", view: IDS.viewChange, load: () => {} },
@@ -91,6 +94,9 @@ function onStreamEvent(event) {
     paintStatusPills(event.status);
   } else if (event.type === "interactions") {
     loadRetrievals();
+    if (state.screen === "lens") {
+      loadLensScreen();
+    }
     if (state.screen === "audit") {
       loadAuditScreen();
     }

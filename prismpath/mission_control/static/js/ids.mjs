@@ -25,6 +25,8 @@ export const IDS = Object.freeze({
   viewRuns: "v-runs",
   viewQueue: "v-queue",
   viewPolicy: "v-policy",
+  viewMonitor: "v-monitor",
+  viewLens: "v-lens",
   viewQuality: "v-quality",
   viewFlows: "v-flows",
   viewTrails: "v-trails",
@@ -41,6 +43,7 @@ export const IDS = Object.freeze({
   startToggle: "c-start-toggle",
   startForm: "startform",
   project: "c-proj",
+  sprintList: "runs-sprints",
   // graph and its two proofs
   graphName: "g-name",
   graphRefresh: "g-refresh",
@@ -140,6 +143,19 @@ export const IDS = Object.freeze({
   keyAdd: "ky-add",
   keyNote: "ky-note",
   keyList: "ky-list",
+  // the policy host
+  hostState: "ph-state",
+  hostRead: "ph-read",
+  hostOut: "ph-out",
+  // the cause monitor (operating)
+  monitorPath: "cm-path",
+  monitorBucket: "cm-bucket",
+  monitorSince: "cm-since",
+  monitorLast: "cm-last",
+  monitorGo: "cm-go",
+  monitorOut: "cm-out",
+  // the lens
+  lensEvents: "lens-events",
   // policy
   policyPack: "pol-ppt",
   policyPub: "pol-pub",

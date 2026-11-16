@@ -139,7 +139,6 @@ main { flex: 1; position: relative; min-height: 0; }
 .row { display: grid; grid-template-columns: 150px 130px 1fr; gap: 10px; padding: 5px 8px;
   border-bottom: 1px solid #101a2b; font-size: 12px; }
 .row .a { color: var(--accent); }
-pre.tree { white-space: pre-wrap; font-size: 12px; color: var(--muted); }
 .q-item { border: 1px solid var(--border); padding: 11px; margin-bottom: 10px;
   background: var(--panel2); clip-path: var(--facet); }
 .q-item .opts { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
@@ -203,3 +202,22 @@ pre.tree { white-space: pre-wrap; font-size: 12px; color: var(--muted); }
   .ev-row { grid-template-columns: 1fr; }
   .kv { grid-template-columns: 1fr; gap: 2px; }
 }
+/* operating: the discovered sprints, the queue, the policy host, the cause monitor, the lens, fan-outs */
+#v-policy .card + .card, #v-runs .card + .card { margin-top: 12px; }
+.sprint { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 6px 8px; border-bottom: 1px solid #101a2b; font-size: 12px; }
+.sprint.followed { background: #12283f; }
+.sprint .btn, .q-item .btn, #v-monitor .btn, #v-policy .toolrow .btn { width: auto; margin-top: 0; }
+.q-head { display: flex; align-items: center; gap: 8px; }
+.q-item.waiting { border-color: var(--evt); }
+.q-item .cand { display: grid; grid-template-columns: 140px 1fr 90px; gap: 10px; font-size: 12px; padding: 2px 0; }
+.recorded { color: var(--good); font-size: 12px; margin-top: 6px; }
+table.series { border-collapse: collapse; margin-top: 10px; font-size: 12px; }
+table.series th, table.series td { text-align: left; padding: 4px 10px; border-bottom: 1px solid #101a2b; }
+table.series th { color: var(--muted); font-weight: normal; }
+svg.spark polyline { fill: none; stroke: var(--accent); stroke-width: 1.2; }
+.lens-row { padding: 6px 8px; border-bottom: 1px solid #101a2b; font-size: 12px; }
+.lens-text { white-space: pre-wrap; word-break: break-word; }
+.tree .fanout { font-size: 12px; margin: 4px 0; }
+.tree ul { margin: 4px 0 4px 8px; padding-left: 14px; border-left: 1px dashed var(--border); }
+#v-monitor input, #v-monitor label { display: block; }
+#v-monitor input { width: 100%; }
