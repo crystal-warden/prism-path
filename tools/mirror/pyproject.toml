@@ -70,6 +70,7 @@ prismpath = ["flows/*.md",                    # example + reference flows
           "examples/README.md", "examples/*/*",   # the persona examples; the compiler references and two tests read them
           "tests/fixtures/*.md", "tests/fixtures/*.jsonl",   # the lint fixture and the kappa dataset
           "tests/fixtures/core_evidence/*.jsonl",   # the cases a core run is produced from (test_evidence_verify)
+          "tests/fixtures/collector_feed/*.jsonl",  # recorded collector feeds the console reads (test_mission_control_feed)
           "tests/fixtures/compiler/*", "tests/fixtures/compiler/anchored/*",   # the compiler references
           "telemetry/conformance/*.json",     # the frozen Facet corpora every other implementation is judged by
           "portable/conformance/*.json",      # the frozen kernel spec
