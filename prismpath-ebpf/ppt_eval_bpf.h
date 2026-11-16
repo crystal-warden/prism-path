@@ -60,7 +60,10 @@
 /* The whole register file is ONE per-CPU map value (not one entry per field). That means a single
  * map lookup, then a call-free fill loop clang can unroll: a per-field lookup was a helper call x N
  * that exploded the verifier's state exploration at large N. */
-struct ppt_regfile { struct ppt_reg reg[MAX_FIELDS_PER_PKT]; };
+/* The operand stack of the edge program being evaluated rides in the same per-CPU value (eval_prog and
+ * prog_word_cb, below say why it lives in a map and not in the loop's context). */
+struct ppt_opstack { __u64 st; __u32 sp; __u32 unused; };
+struct ppt_regfile { struct ppt_reg reg[MAX_FIELDS_PER_PKT]; struct ppt_opstack stack; };
 
 struct {
     __uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
@@ -137,17 +140,19 @@ static __always_inline int eval_atom(const struct ppt_atom *atom, __u32 n_fields
  * depth, touches no stack memory, and gives the verifier a scalar to track instead of 64 slots to keep
  * apart. The mask keeps every shift amount provably below 64.
  *
- * The stack pointer is never branched on. A kernel that verifies a bpf_loop callback until its states
- * converge (every kernel since the callback fix of 6.7, and the GitHub runner's) marks a scalar precise
- * when a branch on it is decided by its known value, and a precise scalar is never widened, so a guard
- * like `if (sp < STACK_MAX)` made the verifier walk the callback once for every depth from 0 to 64, with
- * the stack bits multiplying the states at each: ppt_net's banked copy ran past the 8,192 pending jump
- * limit. So the guards are arithmetic. A push writes its bit and advances sp only by a room bit that is 1
- * when sp < STACK_MAX, and NOT, AND and OR change the stack only by a bit that is 1 when sp holds the
- * operands they take; with the bit 0 each is the identity, which is what the branches did. sp stays an
- * imprecise scalar, the verifier widens it, and the callback converges in a few walks at any depth.
- * Each bit is the sign of a 64 bit difference, exact because sp is a __u32. A slot past STACK_MAX is
- * outside the declared subset: the loader refuses the table, and the room bit drops the push. */
+ * The stack pointer and the stack live in the per-CPU register file value (struct ppt_opstack), not in
+ * the loop's context on the program stack. A kernel that verifies a bpf_loop callback until its states
+ * converge (every kernel since the callback fix of 6.7, and the GitHub runner's) tracks a scalar kept on
+ * the stack exactly, so with sp in the context it walked the callback once for every depth from 0 to 64,
+ * the stack bits multiplying the states at each, and ppt_net's banked copy ran past the 8,192 pending
+ * jump limit and then the 1M instruction limit. A map value's contents are not tracked: every read of sp
+ * and st is an unknown scalar, every walk of the callback starts from the same state, and it converges
+ * at once at any depth. The guards are arithmetic as well, so one walk is one path through the word
+ * rather than one per guard: a push writes its bit and advances sp only by a room bit that is 1 when
+ * sp < STACK_MAX, and NOT, AND and OR change the stack only by a bit that is 1 when sp holds the operands
+ * they take; with the bit 0 each is the identity, which is what the branches did. Each bit is the sign
+ * of a 64 bit difference, exact because sp is a __u32. A slot past STACK_MAX is outside the declared
+ * subset: the loader refuses the table, and the room bit drops the push. */
 static __always_inline __u64 st_get(__u64 stack, __u64 index)
 {
     return (stack >> (index & (STACK_MAX - 1))) & 1u;
@@ -170,17 +175,14 @@ static __always_inline __u64 st_holds(__u64 sp, __u64 depth)
     return (difference >> 63) & 1u;
 }
 
-/* The prog machine runs as its OWN bpf_loop: prog_word_cb processes one RPN word per call, with the
- * stack-machine state (st and sp, carried in the ctx and mutated across words) in the ctx. Nested inside
- * the edge bpf_loop, this is what fits the interpreter under the 1M-insn budget, and it stays within it
- * on a kernel that walks a callback until its states converge because sp is never branched on (above). */
+/* The prog machine runs as its OWN bpf_loop: prog_word_cb processes one RPN word per call. Nested inside
+ * the edge bpf_loop, this is what fits the interpreter under the 1M-insn budget. The stack-machine state
+ * (st and sp, mutated across words) is in the per-CPU register file value, not this ctx (above). */
 struct prog_ctx {
     __u32 prog_off;
     __u32 prog_cnt;
     __u32 n_fields;
     PPT_BANK_FIELD
-    __u32 sp;
-    __u64 st;                                      /* the operand stack, one bit a slot (st_get, st_put) */
 };
 
 static long prog_word_cb(__u32 word_index, void *ctx_ptr)
@@ -194,9 +196,12 @@ static long prog_word_cb(__u32 word_index, void *ctx_ptr)
     if (!word_ptr)
         return 1;
     __u16 word = *word_ptr;
+    struct ppt_regfile *regfile = ppt_regs();
+    if (!regfile)
+        return 1;
 
-    __u64 sp = state->sp;
-    __u64 st = state->st;
+    __u64 sp = regfile->stack.sp;
+    __u64 st = regfile->stack.st;
     __u64 room = 1u - st_holds(sp, STACK_MAX);    /* a push fits: sp < STACK_MAX */
     __u64 one = st_holds(sp, 1);                   /* NOT has its operand */
     __u64 two = st_holds(sp, 2);                   /* AND and OR have theirs */
@@ -232,8 +237,8 @@ static long prog_word_cb(__u32 word_index, void *ctx_ptr)
             break;
         }
     }
-    state->sp = (__u32)sp;
-    state->st = st;
+    regfile->stack.sp = (__u32)sp;
+    regfile->stack.st = st;
     return 0;                                      /* continue */
 }
 
@@ -249,12 +254,16 @@ static __always_inline int eval_prog(const struct ppt_edge *edge, __u32 n_fields
         state.prog_cnt = MAX_PROG_PER_EDGE;
     state.n_fields = n_fields;
     PPT_BANK_SET(state, bank);
-    state.sp = 0;
+    struct ppt_regfile *regfile = ppt_regs();
+    if (!regfile)
+        return 0;
+    regfile->stack.sp = 0;
+    regfile->stack.st = 0;
 
     bpf_loop(MAX_PROG_PER_EDGE, prog_word_cb, &state, 0);
 
-    /* the bottom slot where anything was pushed, without a branch on sp (st is 0 while sp is 0) */
-    return (int)(st_get(state.st, 0) & st_holds(state.sp, 1));
+    /* the bottom slot where anything was pushed (st is 0 while sp is 0) */
+    return (int)(st_get(regfile->stack.st, 0) & st_holds(regfile->stack.sp, 1));
 }
 
 /* edge iteration via bpf_loop: the callback is verified ONCE, not per-iteration, so the nested
