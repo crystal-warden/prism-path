@@ -1,10 +1,15 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
-"""Policy router: read-only policy pack verification, attestation status, and telemetry facet encoding.
+"""Policy router: read-only policy pack verification, the active policy of a deployment, and telemetry facet encoding.
 
-Surfaces policy pack verification, active policy host attestation status, and facet wire encoding
-and decoding for Mission Control. All file path references are strictly confined to the active project
-root through the mission control core sandbox guard to prevent path traversal.
+Surfaces policy pack verification, the policy a deployment's state directory names as active with its
+swap history, and facet wire encoding and decoding for Mission Control. Every route here reads. The
+active policy is read from the state directory's files (`active_policy.json`, the image it names,
+`swaps.log`) without constructing a `PolicyHost`, whose constructor creates the directory and may append
+recovery events, and nothing is attested: attesting appends to the deployment's own log, which is the
+operator's act from the command line (`prismpath swap attest`), not the console's. All file path
+references are confined to the active project root through the mission control core sandbox guard to
+prevent path traversal.
 """
 import json
 import os
@@ -14,7 +19,6 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from . import core
-from .posture import WRITE
 
 router = APIRouter(prefix="/policy", tags=["policy"])
 
@@ -24,10 +28,9 @@ class PackVerifyRequest(BaseModel):
     pub: List[str] = Field(..., description="List of authority public key file paths.")
 
 
-class PackAttestRequest(BaseModel):
-    state_dir: str = Field(..., description="State directory for active policy host tracking.")
-    envelope: Optional[str] = Field(None, description="Optional envelope base path without file extension.")
-    pub: Optional[List[str]] = Field(None, description="Optional list of public key paths for envelope verification.")
+class PackActiveRequest(BaseModel):
+    state_dir: str = Field(..., description="Project relative state directory of the deployment's policy host.")
+    last: int = Field(50, ge=0, le=1000, description="How many of the most recent swaps.log events to return.")
 
 
 class FacetDecodeRequest(BaseModel):
@@ -62,43 +65,74 @@ def verify_pack_endpoint(request: PackVerifyRequest):
     return {"ok": is_ok, "reasons": reasons, "manifest": manifest}
 
 
-@router.post("/pack-attest", openapi_extra=WRITE)
-def pack_attest_endpoint(request: PackAttestRequest):
-    """Return the active policy attestation and status for Mission Control in read-only mode."""
-    project_dir = core.current_project()              # one project for the whole request
-    safe_state_dir = core.safe_path(project_dir, request.state_dir)
-    safe_pubkey_paths = [core.safe_path(project_dir, key_path) for key_path in (request.pub or [])]
+@router.post("/pack-active")
+def pack_active_endpoint(request: PackActiveRequest):
+    """The policy a deployment's state directory names as active, whether its image is there with the
+    digest the record names, and the swap history from `swaps.log` with whether its Merkle root holds.
+    Reads only: no directory is created and nothing is appended to the deployment's log."""
+    from prismpath import canon
+    from prismpath.hotswap import policy_host
+    from prismpath.ledgers.audit_log import AuditLog
 
+    state_dir = core.safe_path(core.current_project(), request.state_dir)
+    report = {"state_dir": request.state_dir, "active": None, "image_ok": None, "reason": None,
+              "pending": os.path.exists(os.path.join(state_dir, "pending_swap")),
+              "history": [], "log": {"present": False, "events": 0, "verifies": None, "root": None}}
+    if not os.path.isdir(state_dir):
+        report["reason"] = "state:missing"
+        return report
+
+    record_path = os.path.join(state_dir, "active_policy.json")
     try:
-        from prismpath.hotswap import policy_host, policy_pack
-    except Exception as exception:
-        raise HTTPException(status_code=500, detail=f"policy host module unavailable: {exception}")
-
-    envelope_data = {}
-    if request.envelope:
-        safe_envelope_path = core.safe_path(project_dir, request.envelope)
-        if safe_pubkey_paths:
-            envelope_dict, reasons = policy_pack.load_envelope(safe_envelope_path, safe_pubkey_paths)
-            if envelope_dict is None:
-                return {"ok": False, "reasons": reasons}
-            envelope_data = envelope_dict
+        if os.path.getsize(record_path) > core.SETTINGS.max_file_bytes:
+            raise HTTPException(status_code=413, detail="active record exceeds MC_MAX_FILE_BYTES")
+        with open(record_path, encoding="utf-8", newline="") as record_file:
+            record = canon.loads_document(record_file.read())
+    except FileNotFoundError:
+        record, report["reason"] = None, "record:missing"
+    except (OSError, ValueError) as error:
+        record, report["reason"] = None, f"record:unreadable:{type(error).__name__}"
+    if isinstance(record, dict):
+        record.pop(canon.ENCODING_KEY, None)
+        name = record.get("image_file", policy_host.LEGACY_IMAGE)
+        report.update({"active": record.get("sha256"), "version": record.get("version"),
+                       "since": record.get("since"), "unsigned": record.get("unsigned"),
+                       "envelope_id": record.get("envelope_id"), "overlay_of": record.get("overlay_of"),
+                       "image_file": name})
+        if name != policy_host.LEGACY_IMAGE and not (isinstance(name, str) and policy_host._IMAGE_FILE.fullmatch(name)):
+            report["image_ok"], report["reason"] = False, "record:image-file-invalid"
         else:
-            json_path = safe_envelope_path if safe_envelope_path.endswith(".json") else safe_envelope_path + ".json"
-            if not os.path.exists(json_path):
-                return {"ok": False, "reasons": ["envelope:missing"]}
             try:
-                with open(json_path, encoding="utf-8") as file_handle:
-                    envelope_data = json.load(file_handle)
-            except Exception as exception:
-                return {"ok": False, "reasons": [f"envelope:unreadable:{exception}"]}
+                with open(os.path.join(state_dir, name), "rb") as image_file:
+                    digest = canon.sha256_hex(image_file.read())
+                report["image_ok"] = digest == record.get("sha256")
+                if not report["image_ok"]:
+                    report["reason"] = "image:digest-mismatch"
+            except OSError:
+                report["image_ok"], report["reason"] = False, "image:unreadable"
+    elif record is not None:
+        report["reason"] = "record:not-an-object"
 
-    host = policy_host.PolicyHost(
-        state_dir=safe_state_dir,
-        pubkey_paths=safe_pubkey_paths,
-        envelope=envelope_data,
-    )
-    attestation_status = host.attest()
-    return attestation_status
+    log_path = os.path.join(state_dir, "swaps.log")
+    if os.path.isfile(log_path):
+        if os.path.getsize(log_path) > core.SETTINGS.max_file_bytes:
+            raise HTTPException(status_code=413, detail="swaps.log exceeds MC_MAX_FILE_BYTES")
+        swaps = AuditLog(log_path)                    # reads; an AuditLog writes only on append
+        report["log"] = {"present": True, "events": len(swaps.events), "verifies": swaps.verify_log(),
+                         "root": swaps.current_root(), "skipped": list(swaps.skipped)}
+        report["signing"] = _statement_status(swaps)
+        report["history"] = swaps.events[-request.last:] if request.last else []
+    return report
+
+
+def _statement_status(log) -> dict:
+    """The root statement chain beside a log, as `prismpath trail` reports it, with no key pinned."""
+    from prismpath.extras import MissingExtra
+    try:
+        status = log.verify_statements(None)
+    except MissingExtra as missing:
+        return {"status": "unchecked", "reason": str(missing)}
+    return {key: status.get(key) for key in ("status", "statements", "keys", "findings") if key in status}
 
 
 @router.post("/facet-decode")
@@ -194,5 +228,3 @@ def facet_encode_endpoint(request: FacetEncodeRequest):
         "quantized": quantized_symbols,
     }
 
-
-# app.include_router(policy.router, prefix=API_PREFIX)

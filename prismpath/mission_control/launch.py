@@ -5,6 +5,10 @@
 A run is either one we launched (we hold the process) or one somebody else started, which we detect
 by its still-fresh status.json heartbeat. Stop and pause are marker files the sprint itself polls,
 so they work for both kinds of run.
+
+Each effect here is recorded before it happens and its result after (`audit.audited`): the start's
+configuration before the process is spawned, its pid after; a marker's intent before the file is
+dropped. A refusal has no effect and is one event. `actor` is the request's `console/<interface>/<fp>`.
 """
 import json
 import os
@@ -52,8 +56,9 @@ def flow_refusal():
     return None
 
 
-def start_sprint(cfg, state):
-    """Launch a sprint. `cfg['unbuffered']` (default True) governs whether the child streams live
+def start_sprint(cfg, state, actor):
+    """Launch a sprint, recording the intent (project, configuration) before the process is spawned and
+    the pid after. `cfg['unbuffered']` (default True) governs whether the child streams live
     (`python -u` / PYTHONUNBUFFERED) or batches: the buffered/unbuffered console toggle."""
     with LAUNCH_LOCK:
         with STATE_LOCK:
@@ -63,7 +68,7 @@ def start_sprint(cfg, state):
         refusal = flow_refusal()
         if refusal is not None:
             audit.record("sprint.refused", {"proj": cfg.get("proj") or seen["proj"], "reasons": refusal["refused"],
-                                            "flow": refusal["flow"]})
+                                            "flow": refusal["flow"]}, actor)
             return refusal
         proj = os.path.abspath(cfg.get("proj") or seen["proj"])
         env = dict(os.environ)
@@ -90,24 +95,36 @@ def start_sprint(cfg, state):
         # with the selected project as its working directory. A bare "python" and a repo relative
         # script path only worked from a source checkout.
         argv = [sys.executable] + (["-u"] if unbuffered else []) + ["-m", "prismpath.orchestration.run_sprint"]
-        for marker_name in ("STOP", "PAUSE"):
-            try:
-                os.remove(os.path.join(proj, marker_name))
-            except OSError:
-                pass
-        # the child gets its own descriptor at spawn, so the parent closes its copy here rather
-        # than leaking one handle per start_sprint
-        with open(os.path.join(proj, "mc_sprint.log"), "a") as log:
-            proc = subprocess.Popen(argv, cwd=proj, env=env, stdout=log, stderr=subprocess.STDOUT)
         cfg = dict(cfg, unbuffered=unbuffered)
-        with STATE_LOCK:
-            state.update({"proc": proc, "proj": proj, "cfg": cfg, "pinned": True})   # follow the one we started
-    audit.record("sprint.start", {"proj": proj, "cfg": cfg, "pid": proc.pid, "unbuffered": unbuffered})
+        with audit.audited("sprint.start", {"proj": proj, "cfg": cfg, "argv": argv[1:]}, actor) as outcome:
+            for marker_name in ("STOP", "PAUSE"):
+                try:
+                    os.remove(os.path.join(proj, marker_name))
+                except OSError:
+                    pass
+            # the child gets its own descriptor at spawn, so the parent closes its copy here rather
+            # than leaking one handle per start_sprint
+            with open(os.path.join(proj, "mc_sprint.log"), "a") as log:
+                proc = subprocess.Popen(argv, cwd=proj, env=env, stdout=log, stderr=subprocess.STDOUT)
+            outcome["detail"] = {"pid": proc.pid}
+            with STATE_LOCK:
+                state.update({"proc": proc, "proj": proj, "cfg": cfg, "pinned": True})   # follow the one we started
     return {"ok": True, "pid": proc.pid, "proj": proj, "unbuffered": unbuffered}
 
 
-def touch_marker(proj, name, action):
-    """Drop a STOP or PAUSE marker the running sprint polls for, and record who asked."""
-    open(os.path.join(proj, name), "w").close()
-    audit.record(action, {"proj": proj})
+def touch_marker(proj, name, action, actor):
+    """Drop a STOP or PAUSE marker the running sprint polls for, recording who asked before it is dropped."""
+    with audit.audited(action, {"proj": proj, "marker": name}, actor):
+        open(os.path.join(proj, name), "w").close()
+    return {"ok": True}
+
+
+def remove_marker(proj, name, action, actor):
+    """Remove a marker (PAUSE, to resume), recording who asked before it is removed and whether one was there."""
+    with audit.audited(action, {"proj": proj, "marker": name}, actor) as outcome:
+        try:
+            os.remove(os.path.join(proj, name))
+            outcome["detail"] = {"removed": True}
+        except FileNotFoundError:
+            outcome["detail"] = {"removed": False}
     return {"ok": True}

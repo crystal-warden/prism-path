@@ -12,10 +12,18 @@ front end can render them.
 Every filesystem path a caller supplies is confined under the active project with core.safe_path the same
 way the edit router confines its writes. A path that tries to escape the project raises ValueError,
 which the application maps to a 400 response, so the router fails closed against traversal.
+
+Writing the lockfile is the one effect here. `/quality/lock` is a write route of the operating
+interface: it records its intent (the flow and its sha256, the centroid file and its sha256) before the
+lockfile is written, writes it under the console's file lock, and records the lockfile's sha256 after.
+Checking a lock writes nothing, so it is the read route `/quality/lock-check`, mounted in the read only
+posture as well.
 """
+import hashlib
+
 from pydantic import BaseModel
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Request
 
 from . import core
 from .posture import WRITE
@@ -30,6 +38,10 @@ class LockReq(BaseModel):
     check: bool = False                       # verify an existing lock instead of writing a new one
     centroids: str | None = None             # optional labeled JSONL to pin learned routing centroids
     prior: float = 4.0                        # centroid shrinkage prior weight (pseudo-count)
+
+
+class LockCheckReq(BaseModel):
+    flow_md: str                              # flow markdown path, relative to the active project
 
 
 class CalibrateReq(BaseModel):
@@ -49,54 +61,77 @@ class KappaReq(BaseModel):
     by_stratum: bool = False                  # also break the agreement down per stratum
 
 
-@router.post("/lock", openapi_extra=WRITE)
-def lock(req: LockReq):
-    """Write or check the routing lockfile.
+def _check_lock(flow_path: str) -> dict:
+    """Load the lock beside the flow and let verify_tree confirm the local embedder still reproduces the
+    pinned fingerprint. verify_tree degrades to the single-flow fingerprint check when the flow has no
+    children, matching the CLI. A missing or drifted lock is a failed check, not a 500."""
+    from prismpath.routing import lockfile
+    try:
+        lock_doc = lockfile.load_lock(lockfile.lock_path(flow_path))
+        reproduces = lockfile.verify_tree(flow_path, policy="warn")
+    except lockfile.LockError as e:
+        return {"mode": "check", "ok": False, "error": str(e)}
+    except FileNotFoundError:
+        return {"mode": "check", "ok": False, "error": "no lockfile beside the flow"}
+    return {
+        "mode": "check",
+        "ok": reproduces,
+        "probe_cosine": lockfile.probe_cosine(lock_doc),
+        "children": len(lock_doc.get("children") or {}),
+        "detail": ("embedder reproduces the fingerprint" if reproduces
+                   else "drift detected: the local embedder no longer matches the lock"),
+    }
 
-    In check mode we load the existing lock and let verify_tree confirm the local embedder still
-    reproduces the pinned fingerprint. Otherwise we build the lock for the whole composition tree,
-    optionally pinning learned per-condition centroids from a labeled benchmark, and save it. Mirrors
-    lock_flow in prismpath.cli.
+
+def _sha256_of(path: str) -> str:
+    with open(path, "rb") as handle:
+        return hashlib.sha256(handle.read()).hexdigest()
+
+
+@router.post("/lock-check")
+def lock_check(req: LockCheckReq):
+    """Check the routing lockfile beside a flow. Reads only. Mirrors `prismpath lock --check`."""
+    return _check_lock(core.safe_path(core.current_project(), req.flow_md))
+
+
+@router.post("/lock", openapi_extra=WRITE)
+def lock(req: LockReq, request: Request):
+    """Write the routing lockfile (or, with `check`, only check it, which `/quality/lock-check` does
+    in either posture).
+
+    The lock is built for the whole composition tree, optionally pinning learned per-condition
+    centroids from a labeled benchmark, and saved beside the flow. Mirrors lock_flow in prismpath.cli.
     """
     from prismpath.routing import lockfile
     proj = core.current_project()                     # one project for the whole request
     flow_path = core.safe_path(proj, req.flow_md)
-
     if req.check:
-        # verify_tree degrades to the single-flow fingerprint check when the flow has no children,
-        # matching the CLI. A missing or drifted lock is reported as a failed check, not a 500.
-        try:
-            lock_doc = lockfile.load_lock(lockfile.lock_path(flow_path))
-            reproduces = lockfile.verify_tree(flow_path, policy="warn")
-        except lockfile.LockError as e:
-            return {"mode": "check", "ok": False, "error": str(e)}
-        children = len(lock_doc.get("children") or {})
-        return {
-            "mode": "check",
-            "ok": reproduces,
-            "probe_cosine": lockfile.probe_cosine(lock_doc),
-            "children": children,
-            "detail": ("embedder reproduces the fingerprint" if reproduces
-                       else "drift detected: the local embedder no longer matches the lock"),
-        }
+        return _check_lock(flow_path)
 
-    # Write mode. When a caller asks to pin learned centroids, read the labeled records from a
-    # project-confined path and build per-condition centroids against this flow's semantic conditions.
-    centroids = counts = None
-    if req.centroids:
-        import json
-        from prismpath.routing import centroid
-        from prismpath.kernel.parser import parse_file
-        centroids_path = core.safe_path(proj, req.centroids)
-        records = [json.loads(line) for line in open(centroids_path, encoding="utf-8") if line.strip()]
-        graph = parse_file(flow_path)
-        centroids, counts = centroid.build_centroids(records, {graph.name: graph})
-
-    # lock_tree pins the whole composition tree and degrades to a single-flow lock when there are no
-    # children. save_lock writes it beside the flow, inside the confined project.
-    lock_doc = lockfile.lock_tree(flow_path, centroids=centroids, centroid_counts=counts,
-                                  prior_weight=req.prior)
-    saved_path = lockfile.save_lock(flow_path, lock_doc)
+    centroids_path = core.safe_path(proj, req.centroids) if req.centroids else None
+    with core.FILE_LOCK:                              # the flow hashed is the flow the lock is built from
+        intent = {"flow_md": req.flow_md, "sha256_flow": _sha256_of(flow_path),
+                  "centroids": req.centroids, "sha256_centroids": _sha256_of(centroids_path) if centroids_path else None,
+                  "prior": repr(req.prior)}           # a float has no canonical form; its repr is exact
+        with core.audit.audited("quality.lock", intent, core.audit.actor(request, "operating")) as outcome:
+            # When a caller asks to pin learned centroids, read the labeled records from the confined
+            # path and build per-condition centroids against this flow's semantic conditions.
+            centroids = counts = None
+            if centroids_path:
+                import json
+                from prismpath.routing import centroid
+                from prismpath.kernel.parser import parse_file
+                with open(centroids_path, encoding="utf-8") as records_file:
+                    records = [json.loads(line) for line in records_file if line.strip()]
+                graph = parse_file(flow_path)
+                centroids, counts = centroid.build_centroids(records, {graph.name: graph})
+            # lock_tree pins the whole composition tree and degrades to a single-flow lock when there
+            # are no children. save_lock writes it beside the flow, inside the confined project.
+            lock_doc = lockfile.lock_tree(flow_path, centroids=centroids, centroid_counts=counts,
+                                          prior_weight=req.prior)
+            saved_path = lockfile.save_lock(flow_path, lock_doc)
+            outcome["detail"] = {"path": lockfile.lock_path(req.flow_md),
+                                 "sha256": _sha256_of(saved_path)}
     return {
         "mode": "write",
         "path": saved_path,
@@ -152,6 +187,3 @@ def kappa(req: KappaReq):
     b = kappa_lib.load(b_path)
     return kappa_lib.report(a, b, by_stratum=req.by_stratum)
 
-
-# Register in prismpath/mission_control/app.py alongside the other routers with:
-# app.include_router(quality.router, prefix=API_PREFIX)

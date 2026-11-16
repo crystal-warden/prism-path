@@ -178,7 +178,3 @@ def inspect_graph(req: GraphReq):
     graph = _parse(flow_path)
     return {"mermaid": graph_export.to_mermaid(graph, req.direction), "direction": req.direction}
 
-
-# To register this router, add `inspect` to the mission_control import in app.py and this line
-# alongside the other app.include_router calls:
-#     app.include_router(inspect.router, prefix=API_PREFIX)

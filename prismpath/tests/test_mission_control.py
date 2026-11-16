@@ -292,6 +292,6 @@ def test_the_sprint_is_started_by_module_not_by_the_alias_script(tmp_path, monke
         seen["argv"] = argv
         return _Proc()
     monkeypatch.setattr(launch.subprocess, "Popen", fake_popen)
-    launch.start_sprint({"proj": str(proj)}, {"proc": None, "proj": str(proj)})
+    launch.start_sprint({"proj": str(proj)}, {"proc": None, "proj": str(proj)}, "console/operating/test")
     assert seen["argv"][0] == sys.executable
     assert seen["argv"][-2:] == ["-m", "prismpath.orchestration.run_sprint"]

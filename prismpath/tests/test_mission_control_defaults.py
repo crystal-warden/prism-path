@@ -57,7 +57,7 @@ def test_sprint_launch_runs_the_installed_module_in_the_project(monkeypatch, tmp
     monkeypatch.setenv("PYTHONPATH", str(stub_root))
     monkeypatch.setattr(audit, "LOG", audit_log.AuditLog(str(tmp_path / "audit.log")))
     state = {"proc": None, "proj": str(project), "cfg": {}, "pinned": True}
-    result = launch.start_sprint({"proj": str(project)}, state)
+    result = launch.start_sprint({"proj": str(project)}, state, "console/operating/test")
     assert result["ok"], result
     state["proc"].wait(timeout=30)
     launched = json.loads((project / "launched.json").read_text())

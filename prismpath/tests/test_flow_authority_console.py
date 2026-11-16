@@ -104,7 +104,7 @@ def test_prove_audit_reports_a_signed_log_and_the_key_that_signed_it(console, mo
     log = audit_log.AuditLog(console["log"].path, instance_key=key, sign_appends=True)
     monkeypatch.setattr(core.audit, "LOG", log)
     for index in range(4):
-        core.audit.record("sprint.start", {"n": index})
+        core.audit.record("sprint.start", {"n": index}, "console/operating/test")
     audit = console["client"].get(API_V1 + "/prove/audit").json()
     signing = audit["signing"]
     assert audit["valid"] is True and audit["ok"] is True

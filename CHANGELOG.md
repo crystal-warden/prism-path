@@ -8,6 +8,32 @@ spec stable.
 
 ## [Unreleased]
 
+### Changed, breaking: Mission Control writes its audit event before it acts, names the session that asked, and reads a deployment without writing to it (2026-11-16)
+
+A file save and a sprint start were recorded after the effect, so an audit log that could not be written left
+an unrecorded edit or process; a `file.edit` event named only a path and a byte count; every event's actor was
+the literal `operator`; `/quality/lock` wrote a lockfile unaudited and outside the write lock; `/policy/pack-attest`,
+documented as read only, created the state directory and appended an attestation to the deployment's own log;
+and `/attest/trail` with no source was a 500.
+
+- **Intent, then effect, then result** (`prismpath/mission_control/audit.py`): `record_intent` is written before
+  the effect and `record_result` after it, under the action's name with `.result` appended, naming the intent by
+  index and Merkle leaf. When the intent cannot be written the effect does not happen and the answer is a 503.
+  Covers the sprint controls, `/queue/decide`, `POST /file` and `/quality/lock`; `/sprint/select` and
+  `/sprint/auto` are now audited too.
+- **Actor** is `console/<interface>/<session fingerprint>` (`authoring` for the file write, `operating` for the
+  rest); a queue decision's `decided_by` is that actor. `audit.ACTOR` is gone.
+- **`file.edit`** carries `kind` (flow or fixture), the flow's `name`, `sha256_before` and `sha256_after`; the
+  result carries the sha256 read back from disk. The file is written as the exact UTF-8 bytes hashed.
+- **`/quality/lock`** records the flow's and the centroid file's sha256 and the written lock's, under the file lock.
+  Checking is the read route `/quality/lock-check`, mounted in the read only posture; a missing lock is a failed
+  check, not a 500.
+- **`/policy/pack-attest` is removed** in favour of the read route `/policy/pack-active {state_dir, last}`, which
+  reads `active_policy.json`, checks the image digest and returns the `swaps.log` history and statement status
+  without constructing a `PolicyHost`. Attesting is `prismpath swap attest`.
+- `/attest/trail` with no source walks the console's own log. The lens labels a call's receiver from the record's
+  `model` or `worker` field, else its `kind`, and names no model of its own. Dead registration comments removed.
+
 ### Changed, breaking: Mission Control serves only its own page, over its own host, with a session token (2026-11-16)
 
 A form posted from any web page reached `/api/v1/sprint/stop` and dropped the STOP marker, a foreign

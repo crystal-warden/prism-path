@@ -1,11 +1,17 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
-"""Edit router — list/read/write flow files, the only write surface, path-contained and fail-closed."""
+"""Edit router — list/read/write flow files, the only write surface, path-contained and fail-closed.
+
+A save is the authoring interface's audit event `file.edit`, written before the file changes, carrying
+the sha256 of the file before and of the text it is about to hold, and the flow's name, so the console's
+log says which flow text a sprint ran afterwards. When the event cannot be written the file is left as it
+was. The result event after the rename carries the hash of the file as it then is on disk."""
+import hashlib
 import os
 import stat
 import tempfile
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 
 from . import core
 from .posture import WRITE
@@ -26,8 +32,9 @@ def read_file(path: str = Query(...)):
     fst = os.stat(fp)
     if fst.st_size > core.SETTINGS.max_file_bytes:
         raise HTTPException(413, f"file exceeds MC_MAX_FILE_BYTES ({core.SETTINGS.max_file_bytes} bytes)")
-    return {"path": path, "content": open(fp, errors="ignore").read(),
-            "mtime": fst.st_mtime, "size": fst.st_size}
+    with open(fp, errors="ignore") as handle:
+        content = handle.read()
+    return {"path": path, "content": content, "mtime": fst.st_mtime, "size": fst.st_size}
 
 
 def _write_atomically(resolved: str, content: str) -> None:
@@ -37,8 +44,8 @@ def _write_atomically(resolved: str, content: str) -> None:
     never be visible: the rename is the only moment the content changes, and it is atomic."""
     handle_fd, tmp_path = tempfile.mkstemp(dir=os.path.dirname(resolved), prefix=".mc-write-", suffix=".tmp")
     try:
-        with os.fdopen(handle_fd, "w", encoding="utf-8") as handle:
-            handle.write(content)
+        with os.fdopen(handle_fd, "wb") as handle:       # the bytes hashed in the audit event, untranslated
+            handle.write(content.encode("utf-8"))
         if os.path.exists(resolved):
             os.chmod(tmp_path, stat.S_IMODE(os.stat(resolved).st_mode))   # an edit keeps the file's mode
         else:
@@ -50,12 +57,48 @@ def _write_atomically(resolved: str, content: str) -> None:
         raise
 
 
+def _sha256_of_file(path: str):
+    """The sha256 of the file's bytes, or None when there is no file yet."""
+    try:
+        with open(path, "rb") as handle:
+            return hashlib.sha256(handle.read()).hexdigest()
+    except FileNotFoundError:
+        return None
+
+
+def file_kind(path: str) -> str:
+    """`fixture` for a fixture table, `flow` for any other flow document, `other` for the rest."""
+    if path.endswith(".tests.md"):
+        return "fixture"
+    return "flow" if path.endswith(".md") else "other"
+
+
+def flow_name(text: str):
+    """The `name:` of a flow document's front matter, or None. Read without parsing the flow, since a
+    save in progress need not parse."""
+    lines = text.split("\n")
+    if not lines or lines[0].strip() != "---":
+        return None
+    for line in lines[1:]:
+        if line.strip() == "---":
+            return None
+        key, _, value = line.partition(":")
+        if key.strip() == "name" and value.strip():
+            return value.strip()
+    return None
+
+
 @router.post("/file", openapi_extra=WRITE)
-def write_file(req: FileWriteReq):
+def write_file(req: FileWriteReq, request: Request):
     resolved = core.safe_path(core.current_project(), req.path)   # ValueError on traversal -> 400 envelope
-    if len(req.content.encode("utf-8")) > core.SETTINGS.max_file_bytes:
+    content_bytes = req.content.encode("utf-8")
+    if len(content_bytes) > core.SETTINGS.max_file_bytes:
         raise HTTPException(413, f"content exceeds MC_MAX_FILE_BYTES ({core.SETTINGS.max_file_bytes} bytes)")
-    with core.FILE_LOCK:
-        _write_atomically(resolved, req.content)
-    core.audit.record("file.edit", {"path": req.path, "bytes": len(req.content)})
+    with core.FILE_LOCK:                                          # the hash before is the file this write replaces
+        intent = {"path": req.path, "kind": file_kind(req.path), "flow": flow_name(req.content),
+                  "bytes": len(content_bytes), "sha256_before": _sha256_of_file(resolved),
+                  "sha256_after": hashlib.sha256(content_bytes).hexdigest()}
+        with core.audit.audited("file.edit", intent, core.audit.actor(request, "authoring")) as outcome:
+            _write_atomically(resolved, req.content)
+            outcome["detail"] = {"sha256": _sha256_of_file(resolved)}
     return {"ok": True, "mtime": os.stat(resolved).st_mtime}

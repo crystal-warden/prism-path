@@ -217,7 +217,7 @@ def test_a_non_loopback_bind_host_is_refused_unless_overridden():
 # ── the read only posture ─────────────────────────────────────────────────────────────────────
 WRITE_ROUTES = {("POST", API_V1 + path) for path in (
     "/sprint/start", "/sprint/select", "/sprint/auto", "/sprint/stop", "/sprint/pause", "/sprint/resume",
-    "/queue/decide", "/file", "/quality/lock", "/policy/pack-attest")}
+    "/queue/decide", "/file", "/quality/lock")}
 
 
 def _routes(application):

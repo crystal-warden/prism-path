@@ -9,6 +9,7 @@ format requires it. Needs the `control-plane` optional extra (fastapi/uvicorn/py
 built from the settings at import. The session guard (`session.SessionGuard`) wraps everything.
 """
 import html
+import logging
 import os
 
 from fastapi import APIRouter, FastAPI, Request
@@ -17,6 +18,8 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.routing import APIRoute
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
+
+from prismpath.ledgers.audit_log import AuditWriteError
 
 from . import (attest, control, core, edit, events, inspect, observe,
                picker, policy, prove, quality)
@@ -47,6 +50,16 @@ async def _http_error(request: Request, exc: StarletteHTTPException):
 
 async def _validation_error(request: Request, exc: RequestValidationError):
     return _envelope(422, "invalid request")
+
+
+async def _audit_unwritable(request: Request, exc: AuditWriteError):
+    # The intent is written before the effect, so an intent that could not be written means nothing
+    # was done. A result that could not be written follows an effect that ran. The reason (a path, an
+    # errno) goes to the server log, not into the body.
+    logging.getLogger(__name__).error("audit write failed on %s", request.url.path, exc_info=exc)
+    if isinstance(exc, core.audit.ResultUnrecorded):
+        return _envelope(503, "the action ran, and the console's audit log could not record its result")
+    return _envelope(503, "refused: the console's audit log could not record the action, so it was not done")
 
 
 async def _unhandled(request: Request, exc: Exception):
@@ -105,6 +118,7 @@ def create_app(read_only=None, session=None) -> FastAPI:
     application.state.read_only = read_only
     application.state.write_routes = write_routes
 
+    application.add_exception_handler(AuditWriteError, _audit_unwritable)
     application.add_exception_handler(ValueError, _value_error)
     application.add_exception_handler(StarletteHTTPException, _http_error)
     application.add_exception_handler(RequestValidationError, _validation_error)

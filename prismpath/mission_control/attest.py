@@ -105,7 +105,7 @@ def walk_trail(req: TrailReq):
         if os.path.getsize(path) > core.SETTINGS.max_file_bytes:
             raise HTTPException(status_code=413, detail="audit log exceeds MC_MAX_FILE_BYTES")
     else:
-        path = core.AUDIT.path                        # the console's own mission audit log
+        path = core.audit.LOG.path                    # the console's own mission audit log
 
     try:
         return trail.run(path, since=req.since, last=req.last)
@@ -161,6 +161,3 @@ def _confine(rel: str, proj: str) -> str:
     except ValueError:
         raise HTTPException(status_code=400, detail="path escapes the project")
 
-
-# Register in app.py alongside the other routers:
-# app.include_router(attest.router, prefix=API_PREFIX)
