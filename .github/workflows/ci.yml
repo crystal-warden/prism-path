@@ -191,7 +191,7 @@ jobs:
       - name: Install (numpy + control-plane extra)
         run: pip install numpy pytest fastapi httpx
       - name: Mission Control tests
-        run: python -m pytest prismpath/tests/test_mission_control.py prismpath/tests/test_mission_control_session.py prismpath/tests/test_mission_control_audit.py prismpath/tests/test_mission_control_client.py prismpath/tests/test_mission_control_operating.py prismpath/tests/test_queue_event.py prismpath/tests/test_mission_control_authoring.py -q
+        run: python -m pytest prismpath/tests/test_mission_control.py prismpath/tests/test_mission_control_session.py prismpath/tests/test_mission_control_audit.py prismpath/tests/test_mission_control_client.py prismpath/tests/test_mission_control_operating.py prismpath/tests/test_queue_event.py prismpath/tests/test_mission_control_authoring.py prismpath/tests/test_mission_control_feed.py prismpath/tests/test_mission_control_feed_routes.py -q
 
   # The bounded adapters (adapters/*) are additive and arch-guard-isolated, each shipping its own test
   # suite. They are ordinary packages under the repository root now, imported by package path, so the

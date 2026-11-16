@@ -52,6 +52,12 @@ class Settings:
     # The posture. Read only mounts no route that controls a sprint or writes a file (MC_READ_ONLY=1 or
     # --read-only); the default on loopback is the full console.
     read_only: bool = False
+    # The collector's feed (`prismpath-ebpf/collector/`): its Unix socket, or tcp:<loopback>:<port>, and
+    # where its records are kept (a directory under an evidence root; empty means `collector-feed` in the
+    # first root). Empty means off: the console connects to nothing unless the launch names a collector
+    # (MC_COLLECTOR, MC_COLLECTOR_STORE), and never in the read only posture.
+    collector: str = ""
+    collector_store: str = ""
     # SECURITY: loopback only. MC can start and stop the swarm and edit flow files, never LAN reachable.
     host: str = "127.0.0.1"
     port: int = 9109
@@ -92,6 +98,8 @@ class Settings:
             registry=environ.get("MC_REGISTRY", fallback.registry),
             audit_path=environ.get("MC_AUDIT", fallback.audit_path),
             evidence_roots=environ.get("MC_EVIDENCE", "").split(os.pathsep),
+            collector=environ.get("MC_COLLECTOR", ""),
+            collector_store=environ.get("MC_COLLECTOR_STORE", ""),
             read_only=environ.get("MC_READ_ONLY", "").strip().lower() in ("1", "true", "yes", "on"),
             host=environ.get("MC_HOST", fallback.host),
             port=int(environ.get("MC_PORT", str(fallback.port))),

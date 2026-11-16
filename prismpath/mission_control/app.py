@@ -22,7 +22,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from prismpath.ledgers.audit_log import AuditWriteError
 
-from . import (attest, auditing, authoring, control, core, edit, events, inspect, observe,
+from . import (attest, auditing, authoring, control, core, edit, events, feed_routes, inspect, observe,
                picker, policy, prove, quality)
 from .posture import capability
 from .session import META_NAME, Session, SessionGuard
@@ -44,7 +44,8 @@ POSTURE_META_EMPTY = f'<meta name="{POSTURE_META_NAME}" content="">'
 mimetypes.add_type("text/javascript", ".mjs")
 
 ROUTERS = (prove.router, observe.router, control.router, edit.router, events.router, inspect.router,
-           quality.router, attest.router, policy.router, picker.router, auditing.router, authoring.router)
+           quality.router, attest.router, policy.router, picker.router, auditing.router, authoring.router,
+           feed_routes.router, feed_routes.evidence_router)
 
 
 def _envelope(status_code: int, message: str) -> JSONResponse:
@@ -123,6 +124,8 @@ def create_app(read_only=None, session=None) -> FastAPI:
         # and which would run on the console's origin, where the page's token is one request away.
         # The schema stays at /openapi.json.
         docs_url=None, redoc_url=None,
+        # The collector feed's client, when the launch names a collector, runs while the app does.
+        lifespan=feed_routes.lifespan,
     )
     # Read from the routers themselves, not from the app, whose route list nests included routers on
     # newer FastAPI releases.
@@ -134,6 +137,7 @@ def create_app(read_only=None, session=None) -> FastAPI:
     application.state.session = session
     application.state.read_only = read_only
     application.state.write_routes = write_routes
+    feed_routes.attach(application, core.SETTINGS, read_only)
 
     application.add_exception_handler(AuditWriteError, _audit_unwritable)
     application.add_exception_handler(ValueError, _value_error)

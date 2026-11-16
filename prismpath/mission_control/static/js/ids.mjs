@@ -29,6 +29,7 @@ export const IDS = Object.freeze({
   viewQueue: "v-queue",
   viewPolicy: "v-policy",
   viewMonitor: "v-monitor",
+  viewLive: "v-live",
   viewLens: "v-lens",
   viewQuality: "v-quality",
   viewFlows: "v-flows",
@@ -173,12 +174,21 @@ export const IDS = Object.freeze({
   hostRead: "ph-read",
   hostOut: "ph-out",
   // the cause monitor (operating)
+  monitorSource: "cm-source",
   monitorPath: "cm-path",
   monitorBucket: "cm-bucket",
   monitorSince: "cm-since",
   monitorLast: "cm-last",
   monitorGo: "cm-go",
   monitorOut: "cm-out",
+  // the collector feed: live (operating) and a kept session (auditing)
+  liveRefresh: "lv-refresh",
+  liveOut: "lv-out",
+  feedPath: "fd-path",
+  feedSegment: "fd-segment",
+  feedGo: "fd-go",
+  feedLiveSession: "fd-live",
+  feedOut: "fd-out",
   // the lens
   lensEvents: "lens-events",
   // policy

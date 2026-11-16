@@ -72,6 +72,7 @@ prismpath = ["flows/*.md",                    # example + reference flows
           "tests/fixtures/broken/*.md",       # the analyzer's broken-flow corpus (test_analysis)
           "tests/fixtures/*.md", "tests/fixtures/*.jsonl",   # the lint fixture and the kappa dataset
           "tests/fixtures/core_evidence/*.jsonl",   # the cases a core run is produced from (test_evidence_verify)
+          "tests/fixtures/collector_feed/*.jsonl",  # recorded collector feeds the console reads (test_mission_control_feed)
           "tests/fixtures/compiler/*", "tests/fixtures/compiler/anchored/*",   # the compiler references
           "telemetry/conformance/*.json",     # the frozen Facet corpora every other implementation is judged by
           "*.html",

@@ -43,6 +43,7 @@
     <button type="button" class="tab" role="tab" data-interface="authoring" data-screen="new">New flow</button>
     <button type="button" class="tab hidden" role="tab" data-interface="operating" data-screen="queue">Queue</button>
     <button type="button" class="tab hidden" role="tab" data-interface="operating" data-screen="policy">Policy</button>
+    <button type="button" class="tab hidden" role="tab" data-interface="operating" data-screen="live">Live feed</button>
     <button type="button" class="tab hidden" role="tab" data-interface="operating" data-screen="monitor">Cause monitor</button>
     <button type="button" class="tab hidden" role="tab" data-interface="operating" data-screen="lens">Lens</button>
     <button type="button" class="tab hidden" role="tab" data-interface="operating" data-screen="flows">Flows</button>
@@ -130,13 +131,24 @@
     <section class="view" id="v-monitor">
       <div class="card">
         <h3>Cause monitor</h3>
-        <div class="muted">Counts by cause and by action over an audit log, bucketed by event time, so a cause that starts climbing is visible.</div>
+        <div class="muted">Counts by cause and by action over an audit log, bucketed by event time, or over the collector's live feed, bucketed by arrival time, so a cause that starts climbing is visible.</div>
+        <label>source</label><select id="cm-source"><option value="log">audit log</option><option value="live">live feed (collector)</option></select>
         <label>audit log (under an evidence root; blank = the console's own)</label><input id="cm-path" placeholder="e.g. run/run.audit.jsonl">
         <label>bucket seconds</label><input id="cm-bucket" value="3600" inputmode="numeric">
         <label>since (optional, ISO 8601)</label><input id="cm-since" placeholder="2026-11-16T00:00:00Z">
         <label>last events (optional)</label><input id="cm-last" inputmode="numeric">
         <div class="toolrow"><button class="btn" id="cm-go">Count</button></div>
         <div id="cm-out"></div>
+      </div>
+    </section>
+
+    <!-- LIVE FEED: the collector's decisions as they arrive -->
+    <section class="view" id="v-live">
+      <div class="card">
+        <h3>Live feed</h3>
+        <div class="muted">The enforcer's decisions as the collector reads them, the enforcer's own counters, and the console's check of every leaf and seal. The collector does not sign its seals.</div>
+        <div class="toolrow"><button type="button" class="btn" id="lv-refresh">Refresh</button></div>
+        <div id="lv-out"></div>
       </div>
     </section>
 
@@ -339,6 +351,14 @@
         <label>receipts to replay (optional)</label><input id="ev-sample" inputmode="numeric">
         <div class="toolrow"><button type="button" class="btn" id="ev-go">Verify run</button></div>
         <div id="ev-out"></div>
+      </div>
+      <div class="card">
+        <h3>Collector feed</h3>
+        <div class="muted">A session of the collector's feed the console kept, checked again from its bytes: every leaf against its frame, every seal against the tree, the holes the console's copy has. The seals are the collector's and are not signed.</div>
+        <label>kept session directory under the evidence roots</label><input id="fd-path" placeholder="collector-feed/&lt;session&gt;">
+        <label>one segment alone (optional)</label><input id="fd-segment" inputmode="numeric">
+        <div class="toolrow"><button type="button" class="btn" id="fd-go">Check the session</button><button type="button" class="btn" id="fd-live">The live session</button></div>
+        <div id="fd-out"></div>
       </div>
     </section>
 

@@ -74,11 +74,8 @@ def main():
     join = record()
     assert join["kind"] == "seal" and join["trigger"] == "join", join
     print("hello", json.dumps(hello, sort_keys=True))
-    acc = MerkleAccumulator()
     # carry on from the join seal: its peaks and count are the tree so far
-    heights = [h for h in range(63, -1, -1) if join["count"] >> h & 1]
-    acc._peaks = [(h, bytes.fromhex(peak)) for h, peak in zip(heights, join["peaks"])]
-    acc.count = join["count"]
+    acc = MerkleAccumulator.from_peaks(join["count"], join["peaks"])
     assert acc.root() == join.get("root", ""), "the join seal's peaks give its root"
 
     sent = requests()

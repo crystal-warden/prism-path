@@ -19,6 +19,7 @@ import { bindAction, byId, inputValue, renderInto, showToast } from "./dom.mjs";
 import { getJson, postJson } from "./transport.mjs";
 import { runTool } from "./panels.mjs";
 import { pageVerdict } from "./verify.mjs";
+import { openFeedReport } from "./feed.mjs";
 
 // ---------------------------------------------------------------- verdicts
 const OK_STATUSES = new Set(["signed", "verified"]);
@@ -199,7 +200,11 @@ export function renderLogList(payload) {
     rows.push(html`<div class="ev-row"><button type="button" class="btn inline" data-run=${attr(run.path)}>Verify run</button>
       <span class="a">${run.rel || run.path}</span><span class="muted">evidence run · ${run.complete ? "complete" : "incomplete"}</span></div>`);
   }
-  if (roots.length && !(payload.logs || []).length && !(payload.runs || []).length) {
+  for (const kept of payload.feeds || []) {
+    rows.push(html`<div class="ev-row"><button type="button" class="btn inline" data-feed=${attr(kept.path)}>Check</button>
+      <span class="a">${kept.rel || kept.path}</span><span class="muted">collector feed session · ${kept.segments ?? 0} segments</span></div>`);
+  }
+  if (roots.length && !(payload.logs || []).length && !(payload.runs || []).length && !(payload.feeds || []).length) {
     rows.push(html`<div class="muted">No audit log or evidence run under ${roots.join(", ")}.</div>`);
   }
   if (payload.truncated) {
@@ -563,8 +568,13 @@ export async function loadTrailsScreen() {
 }
 
 function onListClick(event) {
-  const target = event.target.closest("[data-trail], [data-console], [data-run]");
+  const target = event.target.closest("[data-trail], [data-console], [data-run], [data-feed]");
   if (!target) {
+    return;
+  }
+  if (target.dataset.feed) {
+    openScreen("evidence");
+    openFeedReport(target.dataset.feed);
     return;
   }
   if (target.dataset.run) {

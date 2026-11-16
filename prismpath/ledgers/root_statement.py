@@ -238,6 +238,40 @@ class MerkleAccumulator:
         self._peaks.append((height, node))
         self.count += 1
 
+    # A peak's height is a bit of the count, and the count is a u64 in the Rust and C accumulators.
+    MAX_HEIGHT = 64
+
+    def peaks(self) -> List[str]:
+        """The peaks as lowercase hex, tallest first: one hash per set bit of `count`, from the highest
+        bit down, the order `prismpath_rs::merkle::Accumulator::peaks` gives and the collector's seals
+        carry. With the count they are the whole state (`from_peaks`)."""
+        return [node.hex() for _height, node in self._peaks]
+
+    @classmethod
+    def from_peaks(cls, count: int, peaks: Iterable[str]) -> "MerkleAccumulator":
+        """The accumulator whose state is `count` leaves and these peaks (lowercase hex, tallest first, as
+        `peaks` gives them), so a reader handed a count and its peaks partway through a stream carries the
+        same tree on from leaf `count` without the leaves before it. Rust's `Accumulator::from_peaks`.
+        Raises ValueError unless there is exactly one 32 byte peak per set bit of a count from 0 to
+        2^64 - 1."""
+        if isinstance(count, bool) or not isinstance(count, int) or not 0 <= count < 1 << cls.MAX_HEIGHT:
+            raise ValueError("a leaf count is an integer from 0 to 2^64 - 1")
+        if isinstance(peaks, (str, bytes)):
+            raise ValueError("the peaks are a list of hashes")
+        peaks = list(peaks)
+        heights = [height for height in range(cls.MAX_HEIGHT - 1, -1, -1) if count >> height & 1]
+        if len(peaks) != len(heights):
+            raise ValueError(f"{count} leaves have {len(heights)} peaks, not {len(peaks)}")
+        state = []
+        for height, peak in zip(heights, peaks):
+            if not isinstance(peak, str) or len(peak) != 64 or peak.strip("0123456789abcdef"):
+                raise ValueError("a peak is a 32 byte hash in lowercase hex")
+            state.append((height, bytes.fromhex(peak)))
+        accumulator = cls()
+        accumulator._peaks = state
+        accumulator.count = count
+        return accumulator
+
     def root(self) -> str:
         if not self._peaks:
             return ""
