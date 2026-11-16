@@ -92,7 +92,9 @@ def main():
     deadline = time.time() + 60
     while len(seen) < len(sent) or status is None or int(status.get("count", 0)) < acc.count:
         if time.time() > deadline:
-            raise SystemExit("FAIL timed out: %d of %d decisions" % (len(seen), len(sent)))
+            missing = sorted(set(expected) - set(seen))
+            raise SystemExit("FAIL timed out: %d of %d decisions; missing %s (%s); last status %s"
+                             % (len(seen), len(sent), missing, [expected[rid] for rid in missing], json.dumps(status)))
         value = record()
         if value["kind"] == "decision":
             assert value["index"] == acc.count, ("index", value["index"], acc.count)

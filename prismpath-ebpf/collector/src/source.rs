@@ -88,7 +88,7 @@ impl GnMaps {
         let mut value = vec![0u8; 8 * self.cpus];
         for (key, sum) in sums.iter_mut().enumerate() {
             self.counts.lookup(key as u32, &mut value)?;
-            *sum = value.chunks_exact(8).map(|copy| u64::from_le_bytes(copy.try_into().unwrap())).fold(0u64, u64::wrapping_add);
+            *sum = (0..self.cpus).map(|cpu| u64::from_le_bytes(value[8 * cpu..8 * cpu + 8].try_into().unwrap())).fold(0u64, u64::wrapping_add);
         }
         Ok(json!({
             "loaded": word(0), "start_node": word(4), "image_index": word(8), "n_rules": word(12),
