@@ -14,6 +14,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from . import core
+from .posture import WRITE
 
 router = APIRouter(prefix="/policy", tags=["policy"])
 
@@ -42,7 +43,7 @@ class FacetEncodeRequest(BaseModel):
 @router.post("/pack-verify")
 def verify_pack_endpoint(request: PackVerifyRequest):
     """Verify a signed policy pack against public keys without applying hot-swap changes."""
-    project_dir = core.STATE["proj"]
+    project_dir = core.current_project()              # one project for the whole request
     safe_ppt_path = core.safe_path(project_dir, request.ppt_path)
     safe_pubkey_paths = [core.safe_path(project_dir, key_path) for key_path in request.pub]
 
@@ -61,10 +62,10 @@ def verify_pack_endpoint(request: PackVerifyRequest):
     return {"ok": is_ok, "reasons": reasons, "manifest": manifest}
 
 
-@router.post("/pack-attest")
+@router.post("/pack-attest", openapi_extra=WRITE)
 def pack_attest_endpoint(request: PackAttestRequest):
     """Return the active policy attestation and status for Mission Control in read-only mode."""
-    project_dir = core.STATE["proj"]
+    project_dir = core.current_project()              # one project for the whole request
     safe_state_dir = core.safe_path(project_dir, request.state_dir)
     safe_pubkey_paths = [core.safe_path(project_dir, key_path) for key_path in (request.pub or [])]
 
@@ -103,7 +104,7 @@ def pack_attest_endpoint(request: PackAttestRequest):
 @router.post("/facet-decode")
 def facet_decode_endpoint(request: FacetDecodeRequest):
     """Decode a wire telemetry hex string into a structured reading and resolve the start node edge transition."""
-    project_dir = core.STATE["proj"]
+    project_dir = core.current_project()              # one project for the whole request
     safe_flow_path = core.safe_path(project_dir, request.flow_md)
 
     if not os.path.exists(safe_flow_path):
@@ -150,7 +151,7 @@ def facet_decode_endpoint(request: FacetDecodeRequest):
 @router.post("/facet-encode")
 def facet_encode_endpoint(request: FacetEncodeRequest):
     """Quantize and wire-encode a JSON telemetry reading against flow decision partitions."""
-    project_dir = core.STATE["proj"]
+    project_dir = core.current_project()              # one project for the whole request
     safe_flow_path = core.safe_path(project_dir, request.flow_md)
 
     if not os.path.exists(safe_flow_path):

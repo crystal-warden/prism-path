@@ -5,18 +5,21 @@ import json
 import os
 
 from . import audit
-from .discovery import discover_sprints, follow_active_sprint
+from .discovery import discover_sprints
 from .launch import sprint_running
 
 
 def status(state):
-    """The followed sprint's heartbeat, folded together with what the console knows about it."""
-    follow_active_sprint(state)                       # auto-follow the live sprint (unless pinned)
+    """The followed sprint's heartbeat, folded together with what the console knows about it.
+
+    `state` is one request's snapshot (`state.snapshot()`), so every field describes one project. This
+    reads only: following the live sprint is the event stream's job, never a read's."""
     st = {}
     sp = os.path.join(state["proj"], "status.json")
     if os.path.isfile(sp):
         try:
-            st = json.load(open(sp))
+            with open(sp, encoding="utf-8") as status_file:
+                st = json.load(status_file)
         except Exception:
             st = {}
     return {"running": sprint_running(state),

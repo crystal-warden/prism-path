@@ -44,8 +44,8 @@ class TestReq(BaseModel):
     tests_md: str | None = None
 
 
-def _resolve(flow_md: str) -> str:
-    """Confine a client-supplied flow path under the active project, failing closed.
+def _resolve(flow_md: str, proj: str) -> str:
+    """Confine a client-supplied flow path under the project the request captured, failing closed.
 
     An empty path is a client error, not a stat of the project root, so we reject it up front.
     `core.safe_path` raises ValueError on any path that would escape the project tree; we translate
@@ -54,7 +54,7 @@ def _resolve(flow_md: str) -> str:
     if not (flow_md or "").strip():
         raise HTTPException(status_code=400, detail="flow_md is empty")
     try:
-        return core.safe_path(core.STATE["proj"], flow_md)
+        return core.safe_path(proj, flow_md)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -78,7 +78,8 @@ def inspect_validate(req: FlowReq):
     """Does the flow compile? The fast, model free check: static analysis plus the cross flow
     `@spawn` composition checks, exactly what `prismpath validate` runs. `ok` is false when any
     finding is an error, matching the CLI's non-zero exit contract."""
-    flow_path = _resolve(req.flow_md)
+    proj = core.current_project()                 # one project for the whole request
+    flow_path = _resolve(req.flow_md, proj)
     graph = _parse(flow_path)
     findings = list(analysis.analyze(graph))
     findings += analysis.analyze_composition(graph, flow_path)
@@ -93,7 +94,8 @@ def inspect_lint(req: FlowReq):
     """The full lint, including the checks that need the embedder: semantic near ties and the
     polarity mirror class the static pass cannot see. This is `prismpath lint`, so it is the
     heavier call. Findings are sorted errors first, then by code, as the CLI presents them."""
-    flow_path = _resolve(req.flow_md)
+    proj = core.current_project()                 # one project for the whole request
+    flow_path = _resolve(req.flow_md, proj)
     graph = _parse(flow_path)
     findings = list(analysis.analyze(graph))
     findings += analysis.analyze_composition(graph, flow_path)
@@ -114,7 +116,8 @@ def inspect_contract(req: FlowReq):
     types, rendered as JSON Schema. `prismpath contract`. A field used two incompatible ways is a
     real authoring bug, so those conflicts are surfaced and drive `ok` false."""
     from prismpath.kernel import contract
-    flow_path = _resolve(req.flow_md)
+    proj = core.current_project()                 # one project for the whole request
+    flow_path = _resolve(req.flow_md, proj)
     graph = _parse(flow_path)
     derived = contract.derive_contract(graph)
     schemas = {n: contract.to_json_schema(fs) for n, fs in derived.items() if fs}
@@ -129,7 +132,8 @@ def inspect_portable(req: FlowReq):
     composition tree. `prismpath portable`. P0 is the ML free subset (`portable` verdict true);
     P1 means every reachable semantic edge is locked so only an outcome side embedder is needed;
     P2 needs the full engine. We return the whole tree so the console can paint the offenders."""
-    flow_path = _resolve(req.flow_md)
+    proj = core.current_project()                 # one project for the whole request
+    flow_path = _resolve(req.flow_md, proj)
     graph = _parse(flow_path)
     tree = analysis.portability_tier_tree(graph, flow_path)
     flows = {p: {"tier": d["tier"],
@@ -148,9 +152,10 @@ def inspect_test(req: TestReq):
     console can prompt the author to write one."""
     from prismpath.kernel import flow_test
     import os
-    flow_path = _resolve(req.flow_md)
+    proj = core.current_project()                 # one project for the whole request
+    flow_path = _resolve(req.flow_md, proj)
     if req.tests_md:
-        tests_path = _resolve(req.tests_md)
+        tests_path = _resolve(req.tests_md, proj)
     else:
         tests_path = flow_test.default_tests_path(flow_path)
     if not os.path.exists(tests_path):
@@ -168,7 +173,8 @@ def inspect_graph(req: GraphReq):
     from prismpath.kernel import graph_export
     if req.direction not in ("TD", "LR"):
         raise HTTPException(status_code=400, detail="direction must be TD or LR")
-    flow_path = _resolve(req.flow_md)
+    proj = core.current_project()                 # one project for the whole request
+    flow_path = _resolve(req.flow_md, proj)
     graph = _parse(flow_path)
     return {"mermaid": graph_export.to_mermaid(graph, req.direction), "direction": req.direction}
 

@@ -14,7 +14,7 @@ import time
 
 from . import audit
 from .config import SETTINGS
-from .state import LAUNCH_LOCK
+from .state import LAUNCH_LOCK, STATE_LOCK
 
 
 def sprint_running(state):
@@ -56,14 +56,16 @@ def start_sprint(cfg, state):
     """Launch a sprint. `cfg['unbuffered']` (default True) governs whether the child streams live
     (`python -u` / PYTHONUNBUFFERED) or batches: the buffered/unbuffered console toggle."""
     with LAUNCH_LOCK:
-        if sprint_running(state):
+        with STATE_LOCK:
+            seen = dict(state)                         # one view of the state for the whole launch
+        if sprint_running(seen):
             return {"ok": False, "error": "a sprint is already running"}
         refusal = flow_refusal()
         if refusal is not None:
-            audit.record("sprint.refused", {"proj": cfg.get("proj") or state["proj"], "reasons": refusal["refused"],
+            audit.record("sprint.refused", {"proj": cfg.get("proj") or seen["proj"], "reasons": refusal["refused"],
                                             "flow": refusal["flow"]})
             return refusal
-        proj = os.path.abspath(cfg.get("proj") or state["proj"])
+        proj = os.path.abspath(cfg.get("proj") or seen["proj"])
         env = dict(os.environ)
         env.update({
             "SPRINT_PROJ": proj, "SPRINT_GATE": cfg.get("gate", "browser"),
@@ -98,7 +100,8 @@ def start_sprint(cfg, state):
         with open(os.path.join(proj, "mc_sprint.log"), "a") as log:
             proc = subprocess.Popen(argv, cwd=proj, env=env, stdout=log, stderr=subprocess.STDOUT)
         cfg = dict(cfg, unbuffered=unbuffered)
-        state.update({"proc": proc, "proj": proj, "cfg": cfg, "pinned": True})   # follow the one we started
+        with STATE_LOCK:
+            state.update({"proc": proc, "proj": proj, "cfg": cfg, "pinned": True})   # follow the one we started
     audit.record("sprint.start", {"proj": proj, "cfg": cfg, "pid": proc.pid, "unbuffered": unbuffered})
     return {"ok": True, "pid": proc.pid, "proj": proj, "unbuffered": unbuffered}
 
