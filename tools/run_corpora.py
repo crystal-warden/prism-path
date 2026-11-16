@@ -61,7 +61,7 @@ def cargo(package, test, evidence):
     return ("cargo", package, test, evidence)
 
 
-NONE_JS = ("none", "no JavaScript consumer: the port covers the kernel, Level M, reach, capability, crypto agility and canon/2 only")
+NONE_JS = ("none", "no JavaScript consumer: the port covers the kernel, Level M, reach, capability, crypto agility, canon/2, the Merkle tree and receipt bundles only")
 NONE_GO = ("none", "the Go kernel covers the predicate and flow corpora, the field definitions refusal and canon/2 only")
 NONE_HW = ("none", "the C target certifies the declared subset of the predicate and flow corpora only")
 NONE_REPRO = ("none", "recorded Python bytes are the reference: the Rust test reads this corpus, Python writes it")
@@ -144,7 +144,7 @@ CONSUMERS: dict[str, dict[str, list[tuple]]] = {
         # test_ebpf_merkle.py compiles and runs prismpath-ebpf/test_merkle.c, merkle.h's replay of this corpus
         "py": [pytest("prismpath/tests/test_merkle_stream.py", "prismpath/tests/test_ebpf_merkle.py")],
         "rs": [cargo("prismpath-rs", "test_merkle_stream", "prismpath-rs/tests/test_merkle_stream.rs")],
-        "js": [NONE_JS], "go": [NONE_GO],
+        "js": [("node", "run_vectors.mjs", "prismpath/portable/run_vectors.mjs")], "go": [NONE_GO],
         "hw": [("none", "the C target in prismpath-hw keeps no ledger; the eBPF ledger's C merkle.h replays this "
                         "corpus through prismpath/tests/test_ebpf_merkle.py")]},
     "portable/parse_limits": {
@@ -166,7 +166,8 @@ CONSUMERS: dict[str, dict[str, list[tuple]]] = {
         "py": [pytest("prismpath/tests/test_receipt_vectors.py")],
         "rs": [cargo("prismpath-hotswap-rs", "test_receipt_verify", "prismpath-hotswap-rs/tests/test_receipt_verify.rs"),
                cargo("prismpath-telemetry-rs", "test_receipts", "prismpath-telemetry-rs/tests/test_receipts.rs")],
-        "js": [NONE_JS], "go": [NONE_GO], "hw": [NONE_HW]},
+        # the merkle and bundle cases, through merkle.mjs and Mission Control's verify.mjs; the rest are skipped
+        "js": [("node", "run_vectors.mjs", "prismpath/portable/run_vectors.mjs")], "go": [NONE_GO], "hw": [NONE_HW]},
     "portable/safety": {
         "py": [pytest("prismpath/tests/test_safety_vectors.py")],
         "rs": [("none", "the content guard is outside the kernel by design (prismpath-rs/CONFORMANCE.md, scope boundary)")],

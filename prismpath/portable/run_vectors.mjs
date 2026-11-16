@@ -15,6 +15,9 @@ import {
   parse, run, evalCondition, PredicateError, scriptedAgent, firstDeterministic, FieldDefinitionError,
   canon2Read, canon2Write, canon2Canonicalize, Canon2Error, parseDefinition, canonicalValue, systemBoundary, coreCauseCode,
 } from "./prismpath.mjs";
+import * as canon2Module from "./canon2.mjs";
+import { MerkleAccumulator, merkleRoot, merkleRootAndPaths, verifyLeaf } from "./merkle.mjs";
+import { JsonFloat, readJson, verifyReceiptBundle } from "../mission_control/static/js/verify.mjs";
 
 const dir = process.argv[2] || join(dirname(fileURLToPath(import.meta.url)), "conformance");
 let failures = 0;
@@ -87,36 +90,41 @@ console.log(`flows:      ${flowPass}/${flows.cases.length - flowSkipped}${flowSk
 const unhex = (hex) => Uint8Array.from(hex.match(/../g) || [], (pair) => parseInt(pair, 16));
 const hexOf = (bytes) => Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
 const canon2 = JSON.parse(readFileSync(join(dir, "canon2.json"), "utf-8"));
-let canon2Pass = 0;
-for (const vector of canon2.cases) {
-  let problem = null;
-  const bytes = unhex(vector.hex);
-  try {
-    const document = canon2Read(bytes);
-    if (vector.refuse !== undefined) problem = `read, the reference refuses it as ${vector.refuse}`;
-    else if (hexOf(canon2Write(document)) !== vector.hex) problem = "the strict reader accepted bytes that are not canonical";
-  } catch (err) {
-    if (!(err instanceof Canon2Error)) problem = `crashed: ${err}`;
-    else if (vector.refuse === undefined) problem = `refused as ${err.rule}, the reference reads it`;
-    else if (err.rule !== vector.refuse) problem = `refused as ${err.rule}, want ${vector.refuse}`;
-  }
-  if (problem === null) {
+// The kernel's canon/2 and the page's module (canon2.mjs, the same section copied out) both answer.
+for (const [label, impl] of [["canon2:    ", { canon2Read, canon2Write, canon2Canonicalize, Canon2Error }],
+                             ["canon2.mjs:", canon2Module]]) {
+  const { canon2Read, canon2Write, canon2Canonicalize, Canon2Error } = impl;
+  let canon2Pass = 0;
+  for (const vector of canon2.cases) {
+    let problem = null;
+    const bytes = unhex(vector.hex);
     try {
-      const written = canon2Canonicalize(bytes);
-      if (vector.canonical_hex === undefined) problem = `canonicalized, the reference refuses it as ${vector.refuse}`;
-      else if (hexOf(written) !== vector.canonical_hex) problem = `canonicalized to ${hexOf(written)}, want ${vector.canonical_hex}`;
-      else if (hexOf(canon2Write(canon2Read(written))) !== vector.canonical_hex) problem = "the canonical bytes are not a fixed point";
+      const document = canon2Read(bytes);
+      if (vector.refuse !== undefined) problem = `read, the reference refuses it as ${vector.refuse}`;
+      else if (hexOf(canon2Write(document)) !== vector.hex) problem = "the strict reader accepted bytes that are not canonical";
     } catch (err) {
-      if (!(err instanceof Canon2Error)) problem = `canonicalize crashed: ${err}`;
-      else if (vector.canonical_hex !== undefined) problem = `canonicalize refused as ${err.rule}, the reference canonicalizes it`;
-      else if (err.rule !== vector.refuse) problem = `canonicalize refused as ${err.rule}, want ${vector.refuse}`;
+      if (!(err instanceof Canon2Error)) problem = `crashed: ${err}`;
+      else if (vector.refuse === undefined) problem = `refused as ${err.rule}, the reference reads it`;
+      else if (err.rule !== vector.refuse) problem = `refused as ${err.rule}, want ${vector.refuse}`;
     }
+    if (problem === null) {
+      try {
+        const written = canon2Canonicalize(bytes);
+        if (vector.canonical_hex === undefined) problem = `canonicalized, the reference refuses it as ${vector.refuse}`;
+        else if (hexOf(written) !== vector.canonical_hex) problem = `canonicalized to ${hexOf(written)}, want ${vector.canonical_hex}`;
+        else if (hexOf(canon2Write(canon2Read(written))) !== vector.canonical_hex) problem = "the canonical bytes are not a fixed point";
+      } catch (err) {
+        if (!(err instanceof Canon2Error)) problem = `canonicalize crashed: ${err}`;
+        else if (vector.canonical_hex !== undefined) problem = `canonicalize refused as ${err.rule}, the reference canonicalizes it`;
+        else if (err.rule !== vector.refuse) problem = `canonicalize refused as ${err.rule}, want ${vector.refuse}`;
+      }
+    }
+    if (problem === null) { canon2Pass++; continue; }
+    failures++;
+    console.error(`CANON2 MISMATCH  ${label} ${vector.name}: ${problem}`);
   }
-  if (problem === null) { canon2Pass++; continue; }
-  failures++;
-  console.error(`CANON2 MISMATCH  ${vector.name}: ${problem}`);
+  console.log(`${label} ${canon2Pass}/${canon2.cases.length}`);
 }
-console.log(`canon2:     ${canon2Pass}/${canon2.cases.length}`);
 
 // ---- field definitions ----------------------------------------------------------------------
 // SPEC section 4.5, the frozen vectors: the shared conversion, parse time lowering to the reference's
@@ -169,6 +177,65 @@ for (const policy of fieldDefs.policies) {
   else fieldFail(policy.name, problem);
 }
 console.log(`field defs: ${fieldPass}/${fieldTotal}`);
+
+// ---- the RFC 6962 tree (merkle.mjs) ----------------------------------------------------------------
+// merkle_stream.json: the root over every prefix of three leaf sets, from the batch tree and from the
+// streaming accumulator fed one leaf at a time. receipts.json's merkle cases: the root and every inclusion
+// path, each folding to the root and a stranger leaf not.
+const stream = JSON.parse(readFileSync(join(dir, "merkle_stream.json"), "utf-8"));
+let prefixPass = 0;
+let prefixTotal = 0;
+for (const set of stream.sets) {
+  const accumulator = new MerkleAccumulator();
+  set.leaves.forEach((leaf, index) => {
+    prefixTotal++;
+    accumulator.add(leaf);
+    const want = set.roots[index + 1];
+    const batch = merkleRoot(set.leaves.slice(0, index + 1));
+    if (accumulator.root() === want && batch === want) { prefixPass++; return; }
+    failures++;
+    console.error(`MERKLE MISMATCH  ${set.name} over ${index + 1}: streaming ${accumulator.root()} batch ${batch} want ${want}`);
+  });
+}
+const receiptVectors = readJson(readFileSync(join(dir, "receipts.json"), "utf-8"));
+const treeCases = receiptVectors.cases.filter((entry) => entry.kind === "merkle");
+let treePass = 0;
+for (const entry of treeCases) {
+  const [root, paths] = merkleRootAndPaths(entry.leaves);
+  const folds = entry.leaves.every((leaf, index) => verifyLeaf(leaf, entry.paths[index], entry.root)
+    && (!entry.paths[index].length || !verifyLeaf("00".repeat(32), entry.paths[index], entry.root)));
+  if ((root ?? "") === entry.root && JSON.stringify(paths) === JSON.stringify(entry.paths) && folds) { treePass++; continue; }
+  failures++;
+  console.error(`MERKLE MISMATCH  receipts.json ${entry.name}: root ${root}, want ${entry.root}`);
+}
+console.log(`merkle:     ${prefixPass}/${prefixTotal} prefix roots (merkle_stream.json), ${treePass}/${treeCases.length} trees (receipts.json)`);
+
+// ---- receipt bundles (the page's verifier, mission_control/static/js/verify.mjs) --------------------------
+// Every bundle case of receipts.json, verdict for verdict. The trail, flow, floor and separation cases are
+// the other verifiers' (Python, Rust): the page checks one receipt bundle.
+const bundleCases = receiptVectors.cases.filter((entry) => entry.kind === "bundle");
+const unhexKey = (hex) => Uint8Array.from(hex.match(/../g) || [], (pair) => parseInt(pair, 16));
+let bundlePass = 0;
+for (const entry of bundleCases) {
+  let got;
+  try {
+    got = await verifyReceiptBundle(entry.bundle, (entry.pinned || []).map(unhexKey));
+    got = JSON.parse(JSON.stringify(got, (key, value) => (value instanceof JsonFloat ? value.value : value)));
+  } catch {
+    got = { error: true };
+  }
+  if (JSON.stringify(sortedKeys(got)) === JSON.stringify(sortedKeys(entry.expect))) { bundlePass++; continue; }
+  failures++;
+  console.error(`BUNDLE MISMATCH  ${entry.name}\n  expect=${JSON.stringify(entry.expect)}\n  got=   ${JSON.stringify(got)}`);
+}
+const otherReceipts = receiptVectors.cases.length - treeCases.length - bundleCases.length;
+console.log(`bundles:    ${bundlePass}/${bundleCases.length} (receipts.json; ${otherReceipts} trail, flow, floor and separation cases skipped: the page checks one receipt bundle)`);
+
+function sortedKeys(value) {
+  if (Array.isArray(value)) return value.map(sortedKeys);
+  if (value === null || typeof value !== "object") return value;
+  return Object.fromEntries(Object.keys(value).sort().map((key) => [key, sortedKeys(value[key])]));
+}
 
 if (failures) {
   console.error(`\nNON-CONFORMANT: ${failures} mismatch(es)`);

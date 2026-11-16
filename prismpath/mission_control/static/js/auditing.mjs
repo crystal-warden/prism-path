@@ -18,6 +18,7 @@ import { PATHS } from "./paths.mjs";
 import { bindAction, byId, inputValue, renderInto, showToast } from "./dom.mjs";
 import { getJson, postJson } from "./transport.mjs";
 import { runTool } from "./panels.mjs";
+import { pageVerdict } from "./verify.mjs";
 
 // ---------------------------------------------------------------- verdicts
 const OK_STATUSES = new Set(["signed", "verified"]);
@@ -28,6 +29,32 @@ export function verdictChip(status, whose = "console") {
   const shown = status == null || status === "" ? "no verdict" : String(status);
   const tone = OK_STATUSES.has(shown) ? "ok" : BAD_STATUSES.has(shown) ? "bad" : "warn";
   return { text: whose + ": " + shown, cls: "chip " + tone };
+}
+
+// The page's own verdict (WP5) as a chip: its status, with the reason an invalid one gives, and "checking"
+// until the page has recomputed it.
+export function pageVerdictChip(verdict) {
+  if (!verdict) {
+    return verdictChip("checking", "page");
+  }
+  if (verdict.status === "unchecked") {
+    return { text: "page: cannot check the signature", cls: "chip warn" };
+  }
+  const shownChip = verdictChip(verdict.status, "page");
+  return verdict.status === "invalid" && verdict.reason ? { ...shownChip, text: `${shownChip.text} (${verdict.reason})` } : shownChip;
+}
+
+function pageNote(verdict, view) {
+  if (!verdict) {
+    return "";
+  }
+  if (verdict.status === "unpinned") {
+    return html`<div class="muted">The page recomputed the leaf from the line's bytes and folded the path to the statement's root. Pin the instance key in the Keys screen for the page to check the signature; it never uses the key the statement carries.</div>`;
+  }
+  if (verdict.status === "unchecked") {
+    return html`<div class="muted">The leaf and the path hold, but ${verdict.reason}: it has no Ed25519 in WebCrypto. The command below is the check of record: ${view.command || ""}</div>`;
+  }
+  return "";
 }
 
 function chip({ text, cls }) {
@@ -229,14 +256,15 @@ export function renderTrailReport(report) {
 }
 
 // ---------------------------------------------------------------- U2 one receipt and the raw bytes
-export function renderReceiptView(view) {
+export function renderReceiptView(view, page = null) {
   const event = view.event || {};
   const statement = view.statement;
   const verdict = view.verdict;
   const steps = view.path_steps ?? (view.path || []).length;
   const policy = statement && statement.policy;
   const checks = verdict && verdict.checks ? Object.entries(verdict.checks).map(([name, holds]) => html`<span class="count">${name} ${holds === null ? "n/a" : holds ? "✓" : "✗"}</span>`) : "";
-  return html`<div class="verdict-line">${chip(verdict ? verdictChip(verdict.status, verdict.verdict_of || "console") : verdictChip("no bundle"))}</div>
+  return html`<div class="verdict-line">${chip(verdict ? verdictChip(verdict.status, verdict.verdict_of || "console") : verdictChip("no bundle"))}${chip(pageVerdictChip(page))}</div>
+    ${pageNote(page, view)}
     ${view.uncovered ? html`<div class="muted">${view.uncovered}</div>` : ""}
     ${kv("receipt", `#${view.index} · ${event.actor || ""} · ${event.action || ""}`)}
     ${kv("cause", view.cause ? `${view.cause.label}${view.cause.class ? " · " + view.cause.class : ""}` : "")}
@@ -485,9 +513,19 @@ async function openReceipt() {
   if (!picked()) {
     return;
   }
-  lastReceipt = await show(IDS.receiptOut, receiptRequest({ ...selected(), index: inputValue(IDS.receiptIndex),
-                                                            pins: inputValue(IDS.trailPins) }), renderReceiptView);
+  const view = await show(IDS.receiptOut, receiptRequest({ ...selected(), index: inputValue(IDS.receiptIndex),
+                                                           pins: inputValue(IDS.trailPins) }), renderReceiptView);
+  lastReceipt = view;
   byId(IDS.receiptDownload).disabled = !bundleDownload(lastReceipt);
+  if (view) {
+    // The page's own check, from the bytes the console returned and the keys pinned in this tab. A newer
+    // receipt opened meanwhile wins, so a slow check never paints over it.
+    const storage = sessionStore();
+    const page = await pageVerdict(view, storage ? pinnedKeys(storage) : []);
+    if (lastReceipt === view) {
+      renderInto(IDS.receiptOut, renderReceiptView(view, page));
+    }
+  }
 }
 
 function downloadBundle() {

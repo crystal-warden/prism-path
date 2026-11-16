@@ -43,5 +43,8 @@ def test_portable_check_still_works(tmp_path):
 
 
 def test_no_javascript_engine_in_the_package():
-    assert not list((PACKAGE / "portable").glob("*.mjs"))
+    # canon/2 and the RFC 6962 tree ship for Mission Control's in page verifier; neither parses or runs a flow
+    assert sorted(path.name for path in (PACKAGE / "portable").glob("*.mjs")) == ["canon2.mjs", "merkle.mjs"]
+    for name in ("canon2.mjs", "merkle.mjs"):
+        assert "import " not in (PACKAGE / "portable" / name).read_text(encoding="utf-8")
     assert not (PACKAGE / "portable" / "playground.html").exists()
