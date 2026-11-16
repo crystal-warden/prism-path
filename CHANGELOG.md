@@ -8,6 +8,34 @@ spec stable.
 
 ## [Unreleased]
 
+### Changed, breaking: the collector feed proves each seal extends the last, and the console's kept sessions are bounded (2026-11-16)
+
+After a `gap`, or a reconnect to the same session at a higher count, the console could not check the next
+seal and took the tree up from its peaks on the collector's word. And the kept feed sessions had no bound on
+their size or age.
+
+- **RFC 6962 consistency proofs** (section 2.1.2, verified as RFC 9162 section 2.1.4.2 says):
+  `root_statement.consistency_proof` and `verify_consistency` in Python, `merkle::consistency_proof`,
+  `verify_consistency` and the streaming `ProofWindow` in Rust, held to each other by the new corpus
+  `portable/conformance/merkle_consistency.json` (612 proofs, and the 98 consistency probes of
+  transparency-dev/merkle, vendored under Apache-2.0).
+- **The feed is `prismpath.collector/2`** (`prismpath-ebpf/collector/README.md`). Every seal after the first a
+  connection was sent carries `consistency`: the proof from the `count` of the last seal that connection was
+  sent, or `missing` with the reason (`window`, `ahead`). A client may resume a session from the count it last
+  verified, and its join seal is proved from there. The collector keeps `--proof-window` leaf hashes (default
+  65,536, 2 MiB) and one 2 KiB tree state per client. A `/1` subscription is refused, and the console reads
+  only `/2`.
+- **The console keeps two verdicts apart** (`mission_control/feed.py`): `records` (`checked`, or `unchecked`
+  after a hole) and `tree` (`proven`, or `unproven` where a seal was taken up with no proof that it extends the
+  tree before it, listed in `unproven` with why). The new status `unproven` sits between `holes` and `broken`;
+  a proof that fails is a `seal-consistency` finding. A `gap`'s hole is read from the indexes, since its count
+  is of records. The client resumes from its last verified seal on every reconnect.
+- **Retention** (`feed.retain`, `MC_COLLECTOR_KEEP_BYTES` default 1 GiB, `MC_COLLECTOR_KEEP_DAYS` default 30,
+  0 turns a bound off): whole oldest segments go first, never the one being written nor one another console
+  may be writing, nothing outside the store and nothing through a link, and each leaves
+  `feed-NNNNNN.removed.json` in its place with its size, sha256, lines, first and last seal and why it went.
+  The kept layout is `prismpath.console-feed/2`, and `/evidence/feed` reports the removed segments.
+
 ### Added: an accumulator's peaks carry its tree on (2026-11-16)
 
 `prismpath_rs::merkle::Accumulator` gains `peaks()`, the peak hashes tallest first (the order
