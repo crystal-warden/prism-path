@@ -43,6 +43,12 @@
     <button type="button" class="tab hidden" role="tab" data-interface="operating" data-screen="runs">Runs</button>
     <button type="button" class="tab hidden" role="tab" data-interface="operating" data-screen="quality">Quality</button>
     <button type="button" class="tab hidden" role="tab" data-interface="operating" data-screen="flows">Flows</button>
+    <button type="button" class="tab hidden" role="tab" data-interface="auditing" data-screen="trails">Trails</button>
+    <button type="button" class="tab hidden" role="tab" data-interface="auditing" data-screen="evidence">Evidence runs</button>
+    <button type="button" class="tab hidden" role="tab" data-interface="auditing" data-screen="change">Change control</button>
+    <button type="button" class="tab hidden" role="tab" data-interface="auditing" data-screen="anchors">Anchors</button>
+    <button type="button" class="tab hidden" role="tab" data-interface="auditing" data-screen="causes">Causes</button>
+    <button type="button" class="tab hidden" role="tab" data-interface="auditing" data-screen="keys">Keys</button>
     <button type="button" class="tab hidden" role="tab" data-interface="auditing" data-screen="audit">Audit</button>
     <button type="button" class="tab hidden" role="tab" data-interface="auditing" data-screen="proof">Proof</button>
   </nav>
@@ -202,6 +208,117 @@
           <button class="btn" data-proof="ledger-verify">Ledger verify</button>
         </div>
         <pre class="tool-out" id="pf-out">pick a task.</pre>
+      </div>
+    </section>
+
+    <!-- AUDITING: trails under the evidence roots, one receipt, its raw bytes -->
+    <section class="view stack" id="v-trails">
+      <div class="card">
+        <h3>Trails <button type="button" class="btn inline" id="tr-refresh">↻</button></h3>
+        <div class="muted">Every audit log and evidence run under the evidence roots the console was launched with (MC_EVIDENCE), and the console's own log. Every verdict on this screen is the console's.</div>
+        <div class="table" id="tr-list"></div>
+      </div>
+      <div class="card">
+        <h3>Trail</h3>
+        <div class="muted">reading <span id="tr-selected">no log yet: press Read on one above</span></div>
+        <label>since (optional, ISO 8601)</label><input id="tr-since" placeholder="2026-11-01T00:00:00Z">
+        <label>only the last N events (optional)</label><input id="tr-last" inputmode="numeric">
+        <label>public key files under the evidence roots (optional: the console's own pinned check)</label><input id="tr-pins" placeholder="pins/instance.pub">
+        <div class="toolrow"><button type="button" class="btn" id="tr-go">Read trail</button></div>
+        <div id="tr-out"></div>
+      </div>
+      <div class="card">
+        <h3>Receipt</h3>
+        <label>receipt index</label><input id="rc-index" inputmode="numeric" value="0">
+        <div class="toolrow"><button type="button" class="btn" id="rc-go">Open receipt</button>
+          <button type="button" class="btn" id="rc-download" disabled>Download bundle</button></div>
+        <div id="rc-out"></div>
+      </div>
+      <div class="card">
+        <h3>Raw bytes</h3>
+        <div class="muted">The lines as written, which a check that does not trust the console recomputes from.</div>
+        <label>first line</label><input id="rc-raw-start" inputmode="numeric" value="0">
+        <label>how many lines</label><input id="rc-raw-count" inputmode="numeric" value="20">
+        <div class="toolrow"><button type="button" class="btn" id="rc-raw-log">Raw log</button>
+          <button type="button" class="btn" id="rc-raw-statements">Raw statements</button></div>
+        <div id="rc-raw-out"></div>
+      </div>
+    </section>
+
+    <!-- AUDITING: evidence runs (differential, governed harness, intent and population runs) -->
+    <section class="view stack" id="v-evidence">
+      <div class="card">
+        <h3>Evidence run</h3>
+        <div class="muted">A run directory (run.json, cases.jsonl, images.jsonl, receipts.jsonl, receipts.roots.jsonl) verified by core_evidence. The console replays a bounded sample; the command it prints checks every receipt.</div>
+        <label>run directory under the evidence roots</label><input id="ev-run" placeholder="runs/one">
+        <label>authority public key file (optional)</label><input id="ev-authority" placeholder="pins/authority.pub">
+        <label>instance public key file (optional)</label><input id="ev-instance" placeholder="pins/instance.pub">
+        <label>receipts to replay (optional)</label><input id="ev-sample" inputmode="numeric">
+        <div class="toolrow"><button type="button" class="btn" id="ev-go">Verify run</button></div>
+        <div id="ev-out"></div>
+      </div>
+    </section>
+
+    <!-- AUDITING: change control (flow manifests) and pack verify -->
+    <section class="view stack" id="v-change">
+      <div class="card">
+        <h3>Change control</h3>
+        <div class="muted">Whether a flow's text is authorized by a manifest a pinned authority key signed, and whether a receipt's covering statement names that text.</div>
+        <label>flow document under the evidence roots</label><input id="cc-flow" placeholder="flows/f.md">
+        <label>authority public key files (optional)</label><input id="cc-pins" placeholder="pins/authority.pub">
+        <label>audit log holding the receipt (optional)</label><input id="cc-log" placeholder="run.audit.jsonl">
+        <label>receipt index</label><input id="cc-index" inputmode="numeric" value="0">
+        <div class="toolrow"><button type="button" class="btn" id="cc-go">Check the flow</button></div>
+        <div id="cc-out"></div>
+      </div>
+      <div class="card">
+        <h3>Pack verify</h3>
+        <label>signed policy image under the evidence roots</label><input id="cc-ppt" placeholder="v1.ppt">
+        <label>authority public key files</label><input id="cc-pack-pins" placeholder="pins/authority.pub">
+        <div class="toolrow"><button type="button" class="btn" id="cc-pack-go">Verify pack</button></div>
+        <div id="cc-pack-out"></div>
+        <div class="muted">A deployment's swap and attestation history is its swaps.log, read on the Trails screen.</div>
+      </div>
+    </section>
+
+    <!-- AUDITING: anchored records, read only -->
+    <section class="view stack" id="v-anchors">
+      <div class="card">
+        <h3>Anchors</h3>
+        <div class="muted">Verify an anchored record. Nothing here anchors, upgrades or stamps a calendar; that is the command line's.</div>
+        <label>leaf hash (OpenTimestamps)</label><input id="an-leaf" placeholder="64 hex characters">
+        <label>anchor directory under the evidence roots</label><input id="an-dir" placeholder="proofs">
+        <label>anchor label</label><input id="an-label" placeholder="v1">
+        <div class="toolrow"><button type="button" class="btn" id="an-go">Verify OpenTimestamps</button></div>
+        <label>root file (RFC 3161)</label><input id="an-root" placeholder="root.txt">
+        <label>timestamp response</label><input id="an-tsr" placeholder="root.tsr">
+        <label>the TSA's CA certificate</label><input id="an-ca" placeholder="ca.crt">
+        <div class="toolrow"><button type="button" class="btn" id="an-rfc-go">Verify RFC 3161</button></div>
+        <div id="an-out"></div>
+      </div>
+    </section>
+
+    <!-- AUDITING: the cause decoder, from the registry the console serves -->
+    <section class="view stack" id="v-causes">
+      <div class="card">
+        <h3>Causes</h3>
+        <label>a cause code (decimal or 0x hex) or name, or words to filter by</label><input id="cs-query" placeholder="34, 0x22 or route:human">
+        <div id="cs-out"></div>
+        <div class="table" id="cs-table"></div>
+      </div>
+    </section>
+
+    <!-- AUDITING: the assessor's pinned keys, kept in the page and never sent -->
+    <section class="view stack" id="v-keys">
+      <div class="card">
+        <h3>Pinned keys</h3>
+        <div class="drop" id="ky-drop">Drop public key files here (raw 32 byte Ed25519 keys, or their hex)
+          <input type="file" id="ky-file" multiple></div>
+        <label>or paste a key's hex</label><input id="ky-hex" placeholder="64 hex characters">
+        <label>label</label><input id="ky-label" placeholder="instance key from the deployment">
+        <div class="toolrow"><button type="button" class="btn" id="ky-add">Pin key</button></div>
+        <div class="muted" id="ky-note"></div>
+        <div class="table" id="ky-list"></div>
       </div>
     </section>
 
