@@ -497,6 +497,7 @@ def _cecli_run(message: str, focus: list, config: SprintConfig, label: str = "bu
             f"build started - focus: {', '.join(focus_files)}",
             "cecli diff-edit + auto-test in progress...",
             phase=label,
+            model=f"openai/{config.llm_model}",
         )
     output_text = ""
     return_code = None
@@ -528,6 +529,7 @@ def _cecli_run(message: str, focus: list, config: SprintConfig, label: str = "bu
             dur_ms=int((time.time() - start_time) * 1000),
             rc=return_code,
             focus=",".join(focus_files),
+            model=f"openai/{config.llm_model}",
         )
     gate_plugin = config.gate_plugin
     reloc_extensions = getattr(gate_plugin, "FILE_EXTS", ()) if gate_plugin else ()
@@ -700,6 +702,7 @@ def chat(system: str, user: str, max_new: int, temp: float, config: SprintConfig
                     user,
                     out_content,
                     dur_ms=int((time.time() - start_time) * 1000),
+                    model=config.llm_model,
                 )
             return out_content
         except Exception as exc:
@@ -1158,7 +1161,8 @@ def antigravity_unblock(errors: str, named_files: list, config: SprintConfig) ->
     output_str = proc_res.stdout or ""
     log(f"    [agy] done rc={proc_res.returncode} dur={duration_s}s; tail: {output_str[-180:].strip()}", config)
     if _ix is not None:
-        _ix.record("antigravity", "unblocker", task_text, output_str or (proc_res.stderr or ""), dur_ms=duration_s * 1000, rc=proc_res.returncode)
+        _ix.record("antigravity", "unblocker", task_text, output_str or (proc_res.stderr or ""), dur_ms=duration_s * 1000,
+                   rc=proc_res.returncode, **({"model": config.agy_model} if config.agy_model else {}))
     return proc_res.returncode == 0
 
 

@@ -11,7 +11,7 @@ each records its intent before it acts and its result after (`audit.audited`).""
 from fastapi import APIRouter, HTTPException, Request
 
 from . import core
-from .models import QueueDecideReq, SprintSelectReq, SprintStartReq
+from .models import QueueDecideReq, QueueEventReq, SprintSelectReq, SprintStartReq
 from .posture import WRITE
 
 router = APIRouter(tags=["control"])
@@ -76,6 +76,22 @@ def queue_decide(req: QueueDecideReq, request: Request):
         except _ckpt.CheckpointError as refusal:     # an unknown queue item or an edge it does not offer: the caller's mistake
             raise HTTPException(status_code=400, detail=str(refusal))
     return {"ok": True}
+
+
+@router.post("/queue/event", openapi_extra=WRITE)
+def queue_event(req: QueueEventReq, request: Request):
+    """Record the event to deliver to a run suspended `waiting` (a `stand_down`, or the timeout), the way
+    a decision is recorded, applied by the run's next resume, so the console never needs the flow's
+    worker. The checkpoint's `decided_by` is the same actor the audit event names."""
+    from prismpath.ledgers import checkpoint as _ckpt
+    actor = _actor(request)
+    with core.audit.audited("queue.event", {"id": req.id, "event": req.event}, actor):
+        try:
+            cpath = _ckpt.resolve_queue_item(req.id)
+            _ckpt.record_event(cpath, req.event, decided_by=actor)
+        except _ckpt.CheckpointError as refusal:     # an unknown item, a run not waiting, an event it does not await
+            raise HTTPException(status_code=400, detail=str(refusal))
+    return {"ok": True, "id": req.id, "event": req.event}
 
 
 def _actor(request: Request) -> str:

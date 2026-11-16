@@ -40,9 +40,11 @@
     <button type="button" class="tab" role="tab" data-interface="authoring" data-screen="inspect">Inspect</button>
     <button type="button" class="tab hidden" role="tab" data-interface="operating" data-screen="queue">Queue</button>
     <button type="button" class="tab hidden" role="tab" data-interface="operating" data-screen="policy">Policy</button>
-    <button type="button" class="tab hidden" role="tab" data-interface="operating" data-screen="runs">Runs</button>
-    <button type="button" class="tab hidden" role="tab" data-interface="operating" data-screen="quality">Quality</button>
+    <button type="button" class="tab hidden" role="tab" data-interface="operating" data-screen="monitor">Cause monitor</button>
+    <button type="button" class="tab hidden" role="tab" data-interface="operating" data-screen="lens">Lens</button>
     <button type="button" class="tab hidden" role="tab" data-interface="operating" data-screen="flows">Flows</button>
+    <button type="button" class="tab hidden" role="tab" data-interface="operating" data-screen="quality">Quality</button>
+    <button type="button" class="tab hidden" role="tab" data-interface="operating" data-screen="runs">Runs</button>
     <button type="button" class="tab hidden" role="tab" data-interface="auditing" data-screen="trails">Trails</button>
     <button type="button" class="tab hidden" role="tab" data-interface="auditing" data-screen="evidence">Evidence runs</button>
     <button type="button" class="tab hidden" role="tab" data-interface="auditing" data-screen="change">Change control</button>
@@ -115,8 +117,30 @@
 
     <!-- QUEUE (HITL) -->
     <section class="view" id="v-queue">
-      <div class="card"><h3>Suspended for a human decision</h3>
+      <div class="card"><h3>Suspended for a human decision, or waiting for an event</h3>
+        <div class="muted">A decision or an event is recorded into the run's checkpoint and applied by its next resume. Fan-out children are listed by their id under the queue.</div>
         <div id="q-items"></div></div>
+    </section>
+
+    <!-- CAUSE MONITOR (operating): counts by cause and action over an audit log, windowed by time -->
+    <section class="view" id="v-monitor">
+      <div class="card">
+        <h3>Cause monitor</h3>
+        <div class="muted">Counts by cause and by action over an audit log, bucketed by event time, so a cause that starts climbing is visible.</div>
+        <label>audit log (under an evidence root; blank = the console's own)</label><input id="cm-path" placeholder="e.g. run/run.audit.jsonl">
+        <label>bucket seconds</label><input id="cm-bucket" value="3600" inputmode="numeric">
+        <label>since (optional, ISO 8601)</label><input id="cm-since" placeholder="2026-11-16T00:00:00Z">
+        <label>last events (optional)</label><input id="cm-last" inputmode="numeric">
+        <div class="toolrow"><button class="btn" id="cm-go">Count</button></div>
+        <div id="cm-out"></div>
+      </div>
+    </section>
+
+    <!-- LENS: who said what to which worker -->
+    <section class="view" id="v-lens">
+      <div class="card"><h3>Lens</h3>
+        <div class="muted">The followed run's recorded calls, newest first, labelled from the records themselves.</div>
+        <div id="lens-events"></div></div>
     </section>
 
     <!-- FLOWS (fan-outs) -->
@@ -127,6 +151,10 @@
 
     <!-- RUNS: the sprint loop controls (operating), below the queue and the policy host -->
     <section class="view" id="v-runs">
+      <div class="card">
+        <h3>Discovered sprints</h3>
+        <div id="runs-sprints"></div>
+      </div>
       <div class="card">
         <h3>Sprint loop</h3>
         <div class="muted">Followed project <span class="proj" id="c-proj"></span></div>
@@ -324,6 +352,13 @@
 
     <!-- POLICY: signed pack verify, the active policy and its swap history, facet inspector (no signing) -->
     <section class="view" id="v-policy">
+      <div class="card">
+        <h3>Policy host</h3>
+        <div class="muted">What a deployment runs, from its state directory under an evidence root: the active record, its image check, the swap history and the root statements. Swapping, signing and attesting stay on the CLI.</div>
+        <label>deployment state dir (under an evidence root)</label><input id="ph-state" placeholder="e.g. edge/state">
+        <div class="toolrow"><button class="btn" id="ph-read">Read</button></div>
+        <div id="ph-out"></div>
+      </div>
       <div class="card">
         <h3>Policy and telemetry</h3>
         <div class="muted">Verify a signed pack and read what a deployment runs, with its swap history. Signing, attesting and key generation stay on the CLI by design.</div>

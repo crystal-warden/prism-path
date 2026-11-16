@@ -217,7 +217,7 @@ def dispatch(role: str, prompt: str, timeout: int = DISPATCH_TIMEOUT, _reflectin
     out = (proc.stdout or "").strip()
     if not _reflecting and _ix is not None:
         _ix.record("swarm", role, prompt, out, dur_ms=int((time.time() - _t0) * 1000),
-                   rc=proc.returncode)
+                   rc=proc.returncode, worker=f"hermes:{role}")
     if proc.returncode != 0 and not out:
         raise RuntimeError(f"hermes[{role}] failed rc={proc.returncode}: {(proc.stderr or '')[:300]}")
     return out

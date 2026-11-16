@@ -70,12 +70,19 @@ def pack_active_endpoint(request: PackActiveRequest):
     """The policy a deployment's state directory names as active, whether its image is there with the
     digest the record names, and the swap history from `swaps.log` with whether its Merkle root holds.
     Reads only: no directory is created and nothing is appended to the deployment's log."""
+    state_dir = core.safe_path(core.current_project(), request.state_dir)
+    return active_report(state_dir, request.state_dir, request.last)
+
+
+def active_report(state_dir: str, label: str, last: int = 50) -> dict:
+    """The report `/policy/pack-active` returns for an already confined state directory `state_dir`,
+    named `label` in the report. The operating interface's `/policy/active` reads the same report from a
+    state directory under the evidence roots."""
     from prismpath import canon
     from prismpath.hotswap import policy_host
     from prismpath.ledgers.audit_log import AuditLog
 
-    state_dir = core.safe_path(core.current_project(), request.state_dir)
-    report = {"state_dir": request.state_dir, "active": None, "image_ok": None, "reason": None,
+    report = {"state_dir": label, "active": None, "image_ok": None, "reason": None,
               "pending": os.path.exists(os.path.join(state_dir, "pending_swap")),
               "history": [], "log": {"present": False, "events": 0, "verifies": None, "root": None}}
     if not os.path.isdir(state_dir):
@@ -121,7 +128,7 @@ def pack_active_endpoint(request: PackActiveRequest):
         report["log"] = {"present": True, "events": len(swaps.events), "verifies": swaps.verify_log(),
                          "root": swaps.current_root(), "skipped": list(swaps.skipped)}
         report["signing"] = _statement_status(swaps)
-        report["history"] = swaps.events[-request.last:] if request.last else []
+        report["history"] = swaps.events[-last:] if last else []
     return report
 
 

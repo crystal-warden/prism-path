@@ -179,6 +179,9 @@ def resume(checkpoint_path, agent, router=None, choose: Optional[str] = None,
     tg = cp.get("type_gate", False) if type_gate is None else type_gate
     if choose is None and cp.get("decision"):           # a decision recorded from the queue UI
         choose = cp["decision"].get("choose")
+    recorded_event = cp.get("pending_event") or {}
+    if choose is None and event is None and recorded_event:   # an event recorded from the queue UI
+        event = recorded_event.get("event")
 
     on_step = None
     if write_back:
@@ -216,8 +219,10 @@ def resume(checkpoint_path, agent, router=None, choose: Optional[str] = None,
             avail = [predicates.event_name(condition) for _, condition in graph.nodes[wnode].edges
                      if predicates.is_event(condition)]
             raise CheckpointError(f"no edge for event {event!r} on {wnode!r}; awaiting: {avail}")
-        state.setdefault("transcript", []).append(
-            {"node": wnode, "outcome": f"[event: {event}]", "event": event})
+        delivered = {"node": wnode, "outcome": f"[event: {event}]", "event": event}
+        if recorded_event.get("event") == event and recorded_event.get("decided_by"):
+            delivered["decided_by"] = recorded_event["decided_by"]
+        state.setdefault("transcript", []).append(delivered)
         seed_steps = _prior_steps(cp) + [StepLog(wnode, f"[event: {event}]", target, {"used": "event"})]
         return run(graph, agent, router=router, start=target, state=state,
                    human_floor=human_floor, type_gate=tg, max_steps=max_steps, on_step=on_step,
@@ -263,18 +268,22 @@ def queue_dir() -> str:
     return os.path.join(base, "prismpath", "queue")
 
 
-def list_queue(qdir=None) -> list:
+def list_queue(qdir=None, include_waiting: bool = False) -> list:
     """Evidence packets for every suspended (needs_human) checkpoint in the queue dir, newest first.
-    Each item: {id, path, flow, node, reason, would_pick, candidates[], decision, ts}."""
+    Each item: {id, path, flow, node, reason, would_pick, candidates[], decision, child_of, stopped, ts}.
+
+    With `include_waiting`, runs suspended `waiting` for an event are listed too, each with the events
+    its node's edges await (`awaiting`, '__timeout__' for an `on timeout` edge), its `timeout_s`, the
+    event already recorded for it (`pending_event`) and whether it is a fan-out parent (`fanout`)."""
     qdir = qdir or queue_dir()
     out = []
     if not os.path.isdir(qdir):
         return out
     # Walk RECURSIVELY: spawned fan-out children live in `<parent>.children/` subdirs, and a child that
     # suspends `needs_human` must still be visible to an operator (else the parent fan-out blocks with no
-    # surfaced work item). Each item carries `child_of` when it is a spawned child. NOTE: Mission
-    # Control's decide endpoint currently resolves ids as a basename under the queue dir, so ACTIONING a
-    # nested child needs a follow-on there; discovery (this) is the load-bearing half.
+    # surfaced work item). Each item carries `child_of` when it is a spawned child, and its id is its
+    # path relative to the queue dir, which `resolve_queue_item` resolves, so a nested child is decided
+    # (or sent its event) by that id.
     for root, _dirs, files in os.walk(qdir):
         for name in files:
             if not name.endswith(".json"):
@@ -284,7 +293,8 @@ def list_queue(qdir=None) -> list:
                 cp = load_checkpoint(path)
             except Exception:
                 continue
-            if cp.get("stopped") != "needs_human":
+            stopped = cp.get("stopped")
+            if stopped != "needs_human" and not (include_waiting and stopped == "waiting"):
                 continue
             pend = cp.get("pending_decision") or {}
             flow = os.path.basename(cp.get("flow_path", ""))
@@ -293,7 +303,7 @@ def list_queue(qdir=None) -> list:
             rel = os.path.relpath(path, qdir)
             parent_dir = os.path.basename(os.path.dirname(path))
             child_of = parent_dir[:-len(".children")] if parent_dir.endswith(".children") else None
-            out.append({
+            item = {
                 "id": name[:-5] if child_of is None else rel[:-5],   # top-level ids unchanged
                 "path": path,
                 "flow": flow,
@@ -303,8 +313,13 @@ def list_queue(qdir=None) -> list:
                 "candidates": pend.get("candidates", []),
                 "decision": cp.get("decision"),
                 "child_of": child_of,
+                "stopped": stopped,
                 "ts": os.path.getmtime(path),
-            })
+            }
+            if stopped == "waiting":
+                item.update({"awaiting": list(pend.get("awaiting") or []), "timeout_s": pend.get("timeout_s"),
+                             "pending_event": cp.get("pending_event"), "fanout": pend.get("spawn") is not None})
+            out.append(item)
     out.sort(key=lambda entry: entry["ts"], reverse=True)
     return out
 
@@ -334,5 +349,24 @@ def record_decision(checkpoint_path, choose: str, decided_by: str = "human") -> 
     if choose not in cands:
         raise CheckpointError(f"choose {choose!r} is not a candidate edge; valid: {cands}")
     cp["decision"] = {"choose": choose, "decided_by": decided_by}
+    _atomic_write(checkpoint_path, canon.plain_dumps(cp, indent=2))
+    return cp
+
+
+TIMEOUT_EVENT = "__timeout__"       # the event an `on timeout` edge awaits (`predicates.event_name`)
+
+
+def record_event(checkpoint_path, event: str, decided_by: str = "human") -> dict:
+    """Record the event to deliver to a run suspended `waiting` (atomic), the way `record_decision`
+    records a human's edge into a `needs_human` one. A later `resume()` with neither `choose` nor
+    `event` delivers it, along the node's matching `on event <name>` edge, or its `on timeout` edge
+    for TIMEOUT_EVENT. Validates `event` against the events the node's edges await."""
+    cp = load_checkpoint(checkpoint_path)
+    if cp.get("stopped") != "waiting":
+        raise CheckpointError(f"checkpoint is not waiting for an event (stopped={cp.get('stopped')!r})")
+    awaiting = list((cp.get("pending_decision") or {}).get("awaiting") or [])
+    if event not in awaiting:
+        raise CheckpointError(f"event {event!r} is not one the waiting node awaits; awaiting: {awaiting}")
+    cp["pending_event"] = {"event": event, "decided_by": decided_by}
     _atomic_write(checkpoint_path, canon.plain_dumps(cp, indent=2))
     return cp
