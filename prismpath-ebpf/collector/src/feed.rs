@@ -8,8 +8,13 @@
 //! with the count at the place in its stream where the records went missing, so a reader always knows
 //! what it missed and can tell which leaves from the indexes. A writer whose socket accepts nothing for the write timeout is
 //! disconnected. A client that sends anything after its subscription is disconnected too.
+//!
+//! Seals are the one record that is not the same line for every client: each carries a consistency proof
+//! from the last seal that client was queued (its own copy of the tree's state then, 2 KiB), so a client
+//! that lost seals in a gap is proved from the one it has. Clients at the same place share one line.
 
-use crate::record::{self, Refusal, MAX_SUBSCRIPTION};
+use crate::record::{self, Refusal, Subscription, MAX_SUBSCRIPTION};
+use prismpath_rs::merkle::Accumulator;
 use serde_json::{json, Value};
 use std::collections::VecDeque;
 use std::io::{self, ErrorKind, Read, Write};
@@ -81,11 +86,15 @@ struct ClientState {
 struct Client {
     state: Mutex<ClientState>,
     ready: Condvar,
+    /// What the client asked for: from the start, or resuming a session at a count.
+    subscription: Subscription,
+    /// The tree's state at the last seal queued for this client: what its next seal is proved from.
+    last_seal: Mutex<Option<Accumulator>>,
 }
 
 impl Client {
-    fn new() -> Client {
-        Client { state: Mutex::new(ClientState::default()), ready: Condvar::new() }
+    fn new(subscription: Subscription) -> Client {
+        Client { state: Mutex::new(ClientState::default()), ready: Condvar::new(), subscription, last_seal: Mutex::new(None) }
     }
 
     /// Queue a record unless the queue is full; true when it was dropped.
@@ -149,23 +158,56 @@ impl Hub {
         }
     }
 
+    /// Offer a seal of the tree at `state` to every client, each the line `line_for` makes from the
+    /// state of that client's last seal, shared by the clients at the same place. A client the seal is
+    /// queued for is at `state` from then on; one whose queue is full keeps its last seal, so its next
+    /// seal is proved from the one it has. Never blocks on a client.
+    pub fn publish_seal(&self, state: &Accumulator, mut line_for: impl FnMut(Option<&Accumulator>) -> Vec<u8>) {
+        let mut clients = self.clients.lock().unwrap();
+        clients.retain(|client| !client.is_closed());
+        let mut made: Vec<(Option<u64>, Arc<Vec<u8>>)> = Vec::new();
+        for client in clients.iter() {
+            let mut last = client.last_seal.lock().unwrap();
+            let key = last.as_ref().map(Accumulator::count);
+            let line = match made.iter().find(|(made_for, _)| *made_for == key) {
+                Some((_, line)) => line.clone(),
+                None => {
+                    let line = Arc::new(line_for(last.as_ref()));
+                    made.push((key, line.clone()));
+                    line
+                }
+            };
+            if client.offer(&line, self.cfg.queue) {
+                self.stats.dropped.fetch_add(1, Ordering::Relaxed);
+            } else {
+                *last = Some(state.clone());
+            }
+        }
+    }
+
     /// Start serving the clients that subscribed since the last call: each is sent `hello` and then the
-    /// record `join` makes (the seal of the tree at this point), and from then on every record published.
-    /// The drain loop calls this between records, so a client's first seal and its first leaf agree.
-    pub fn admit(&self, join: impl FnOnce() -> Vec<u8>) {
+    /// line `join_for` makes for its resume (None for a plain subscription): the seal of the tree, at
+    /// `state`, at this point. From then on it is sent every record published. The drain loop calls this
+    /// between records, so a client's first seal and its first leaf agree.
+    pub fn admit(&self, state: &Accumulator, mut join_for: impl FnMut(Option<&(String, u64)>) -> Vec<u8>) {
         let mut pending = self.pending.lock().unwrap();
         if pending.is_empty() {
             return;
         }
-        let join = Arc::new(join());
+        let mut plain: Option<Arc<Vec<u8>>> = None;
         let mut clients = self.clients.lock().unwrap();
         for client in pending.drain(..) {
+            let join = match &client.subscription.resume {
+                None => plain.get_or_insert_with(|| Arc::new(join_for(None))).clone(),
+                Some(resume) => Arc::new(join_for(Some(resume))),
+            };
             {
-                let mut state = client.state.lock().unwrap();
-                state.queue.push_back(Item::Line(self.hello.clone()));
-                state.queue.push_back(Item::Line(join.clone()));
-                state.lines += 2;
+                let mut queued = client.state.lock().unwrap();
+                queued.queue.push_back(Item::Line(self.hello.clone()));
+                queued.queue.push_back(Item::Line(join));
+                queued.lines += 2;
             }
+            *client.last_seal.lock().unwrap() = Some(state.clone());
             client.ready.notify_one();
             clients.push(client);
         }
@@ -287,7 +329,7 @@ fn refuse<S: Conn>(hub: &Hub, mut stream: S, reason: Refusal) {
 }
 
 /// Read the subscription within the configured time, byte bounded.
-fn read_subscription<S: Conn>(hub: &Hub, stream: &mut S) -> Result<(), Option<Refusal>> {
+fn read_subscription<S: Conn>(hub: &Hub, stream: &mut S) -> Result<Subscription, Option<Refusal>> {
     let deadline = Instant::now() + hub.cfg.subscribe_timeout;
     let mut received = Vec::with_capacity(MAX_SUBSCRIPTION);
     let mut chunk = [0u8; MAX_SUBSCRIPTION];
@@ -303,7 +345,7 @@ fn read_subscription<S: Conn>(hub: &Hub, stream: &mut S) -> Result<(), Option<Re
                 received.extend_from_slice(&chunk[..count]);
                 match record::check_subscription(&received) {
                     None => continue,
-                    Some(Ok(())) => return Ok(()),
+                    Some(Ok(subscription)) => return Ok(subscription),
                     Some(Err(reason)) => return Err(Some(reason)),
                 }
             }
@@ -324,13 +366,13 @@ pub fn serve<S: Conn>(hub: Arc<Hub>, mut stream: S, peer: Option<(u32, u32)>) {
     if hub.client_count() >= hub.cfg.max_clients {
         return refuse(&hub, stream, Refusal::Busy);
     }
-    match read_subscription(&hub, &mut stream) {
-        Ok(()) => {}
+    let subscription = match read_subscription(&hub, &mut stream) {
+        Ok(subscription) => subscription,
         Err(Some(reason)) => return refuse(&hub, stream, reason),
         Err(None) => return stream.shutdown_conn(),
-    }
+    };
     hub.stats.accepted.fetch_add(1, Ordering::Relaxed);
-    let client = Arc::new(Client::new());
+    let client = Arc::new(Client::new(subscription));
     hub.pending.lock().unwrap().push(client.clone());
 
     // Anything the client sends from now on is more than a subscription: the connection ends.

@@ -227,10 +227,11 @@ fn only_the_exact_subscription_is_accepted() {
         (vec![b'{'; MAX_SUBSCRIPTION + 10], "oversized"),
         ([vec![b' '; MAX_SUBSCRIPTION], b"\n".to_vec()].concat(), "oversized"),
         ([subscription(), b"{\"op\":\"write\"}\n".to_vec()].concat(), "extra-input"),
-        (b"{\"protocol\":\"prismpath.collector/1\",\"op\":\"subscribe\"}\n".to_vec(), "not-canon2"),
-        (b"{\"op\": \"subscribe\",\"protocol\":\"prismpath.collector/1\"}\n".to_vec(), "not-canon2"),
-        (b"{\"op\":\"subscribe\",\"protocol\":\"prismpath.collector/2\"}\n".to_vec(), "not-a-subscription"),
-        (b"{\"op\":\"subscribe\",\"protocol\":\"prismpath.collector/1\",\"since\":0}\n".to_vec(), "not-a-subscription"),
+        (b"{\"protocol\":\"prismpath.collector/2\",\"op\":\"subscribe\"}\n".to_vec(), "not-canon2"),
+        (b"{\"op\": \"subscribe\",\"protocol\":\"prismpath.collector/2\"}\n".to_vec(), "not-canon2"),
+        (b"{\"op\":\"subscribe\",\"protocol\":\"prismpath.collector/1\"}\n".to_vec(), "not-a-subscription"),
+        (b"{\"op\":\"subscribe\",\"protocol\":\"prismpath.collector/3\"}\n".to_vec(), "not-a-subscription"),
+        (b"{\"op\":\"subscribe\",\"protocol\":\"prismpath.collector/2\",\"since\":0}\n".to_vec(), "not-a-subscription"),
         (b"\xff\xfe\n".to_vec(), "not-canon2"),
         (b"{\"op\":\"subscri".to_vec(), "timeout"),
         (Vec::new(), "timeout"),
@@ -405,7 +406,7 @@ fn tcp_is_loopback_only() {
         assert!(Instant::now() < deadline);
         std::thread::sleep(Duration::from_millis(5));
     }
-    hub.admit(|| record::frame(&json!({"kind": "seal", "trigger": "join"})).unwrap());
+    hub.admit(&Accumulator::new(), |_| record::frame(&json!({"kind": "seal", "trigger": "join"})).unwrap());
     stream.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
     let mut lines = std::io::BufReader::new(stream);
     let mut first = String::new();
@@ -435,7 +436,12 @@ fn a_late_client_checks_seals_from_the_join_seal_alone() {
         harness.ring.push(&event(request_id));
     }
     harness.finish();
-    for value in late.until("status") {
+    // to the status after the final seal: an interval status can come before the last decisions
+    let mut rest = Vec::new();
+    while !rest.iter().any(|value: &Value| value["trigger"] == "final") {
+        rest.extend(late.until("status"));
+    }
+    for value in rest {
         if value["kind"] == "decision" {
             assert_eq!(value["index"], acc.count());
             acc.add(&hex::decode(value["leaf"].as_str().unwrap()).unwrap()).unwrap();
