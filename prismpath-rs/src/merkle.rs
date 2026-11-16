@@ -211,6 +211,258 @@ impl Accumulator {
     }
 }
 
+// ------------------------------------------------------------------ consistency proofs (RFC 6962 2.1.2)
+
+fn subproof(old: usize, hashes: &[Vec<u8>], whole: bool, out: &mut Vec<Vec<u8>>) {
+    // RFC 6962 section 2.1.2 SUBPROOF(m, D[n], b); `whole` is b. The nodes come out in the RFC's order,
+    // the deepest first.
+    if old == hashes.len() {
+        if !whole {
+            out.push(subtree_root(hashes));
+        }
+        return;
+    }
+    let k = split_point(hashes.len());
+    if old <= k {
+        subproof(old, &hashes[..k], whole, out);
+        out.push(subtree_root(&hashes[k..]));
+    } else {
+        subproof(old - k, &hashes[k..], false, out);
+        out.push(subtree_root(&hashes[..k]));
+    }
+}
+
+/// The RFC 6962 consistency proof (section 2.1.2, PROOF(m, D[n])) that the tree over all of `leaves`
+/// (their bytes) holds the tree over the first `old` unchanged, or None when `old` is more than there
+/// are leaves. Empty when `old` is 0 or every leaf. The batch twin of `root_statement.consistency_proof`;
+/// [`ProofWindow`] gives the same proofs from a bounded window of leaves.
+pub fn consistency_proof(leaves: &[Vec<u8>], old: usize) -> Option<Vec<Vec<u8>>> {
+    if old > leaves.len() {
+        return None;
+    }
+    let mut out = Vec::new();
+    if old > 0 && old < leaves.len() {
+        let hashes: Vec<Vec<u8>> = leaves.iter().map(|leaf| leaf_hash(leaf)).collect();
+        subproof(old, &hashes, true, &mut out);
+    }
+    Some(out)
+}
+
+/// True when `proof` shows that the tree of `new` leaves with root `new_root` holds the tree of `old`
+/// leaves with root `old_root`: RFC 9162 section 2.1.4.2. Sizes are 0 < old <= new, as RFC 9162 has them
+/// (there is no proof from the empty tree, which every tree extends), and equal sizes are consistent when
+/// the proof is empty and the roots are equal. The twin of `root_statement.verify_consistency`.
+pub fn verify_consistency(old: u64, new: u64, old_root: &[u8], new_root: &[u8], proof: &[Vec<u8>]) -> bool {
+    if old == 0 || old > new {
+        return false;
+    }
+    if old == new {
+        return proof.is_empty() && !old_root.is_empty() && old_root == new_root;
+    }
+    if proof.is_empty() || old_root.len() != 32 || new_root.len() != 32 || proof.iter().any(|node| node.len() != 32) {
+        return false;
+    }
+    let mut path: Vec<&[u8]> = Vec::with_capacity(proof.len() + 1);
+    // An old tree that is a complete subtree on the new one's left edge is its own first node.
+    if old.is_power_of_two() {
+        path.push(old_root);
+    }
+    path.extend(proof.iter().map(|node| node.as_slice()));
+    let (mut fn_, mut sn) = (old - 1, new - 1);
+    while fn_ & 1 == 1 {
+        fn_ >>= 1;
+        sn >>= 1;
+    }
+    let mut fr = path[0].to_vec();
+    let mut sr = path[0].to_vec();
+    for node in &path[1..] {
+        if sn == 0 {
+            return false;
+        }
+        if fn_ & 1 == 1 || fn_ == sn {
+            fr = node_hash(node, &fr);
+            sr = node_hash(node, &sr);
+            while fn_ != 0 && fn_ & 1 == 0 {
+                fn_ >>= 1;
+                sn >>= 1;
+            }
+        } else {
+            sr = node_hash(&sr, node);
+        }
+        fn_ >>= 1;
+        sn >>= 1;
+    }
+    fr == old_root && sr == new_root && sn == 0
+}
+
+/// Why a [`ProofWindow`] gave no proof.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProofError {
+    /// The old size is past the tree's count.
+    Ahead,
+    /// The old size is before the oldest leaf the window still holds.
+    OutsideWindow,
+}
+
+/// A streaming tree that can prove itself consistent with any earlier size it still holds: the state of
+/// the tree at its `base` (an [`Accumulator`], 2 KiB) and the leaf hashes from there to its count, at most
+/// `capacity` of them (32 bytes each), the oldest dropped into the base as new ones arrive.
+///
+/// A proof from m to n leaves (RFC 6962 section 2.1.2) is made of hashes of subtrees that lie wholly
+/// within the first m leaves or wholly after them, never across m. Those after m are hashed from the
+/// window's leaves; those before m are peaks of the tree at m, given by the caller's own copy of that state
+/// ([`proof_from`](Self::proof_from), which costs O(n - m)) or rebuilt from the base
+/// ([`proof`](Self::proof), O(n - base)). So every old size from `base` to the count can be proved, and the
+/// memory is `capacity` times 32 bytes plus one accumulator, whatever the tree's size.
+#[derive(Clone)]
+pub struct ProofWindow {
+    base: Accumulator,
+    leaves: std::collections::VecDeque<[u8; 32]>,
+    capacity: usize,
+}
+
+impl ProofWindow {
+    /// A window of at most `capacity` leaf hashes (at least 1) over a tree that so far is `start`.
+    pub fn starting_at(start: Accumulator, capacity: usize) -> Self {
+        Self { base: start, leaves: std::collections::VecDeque::new(), capacity: capacity.max(1) }
+    }
+
+    /// An empty tree's window.
+    pub fn new(capacity: usize) -> Self {
+        Self::starting_at(Accumulator::new(), capacity)
+    }
+
+    /// The tree's leaf count.
+    pub fn count(&self) -> u64 {
+        self.base.count() + self.leaves.len() as u64
+    }
+
+    /// The oldest size a proof can start from.
+    pub fn base(&self) -> u64 {
+        self.base.count()
+    }
+
+    pub fn capacity(&self) -> usize {
+        self.capacity
+    }
+
+    /// Add a leaf given as its leaf hash, SHA-256(0x00 || leaf); past the capacity the oldest leaf goes
+    /// into the base.
+    pub fn add_leaf_hash(&mut self, leaf_hash: &[u8; 32]) -> Result<(), AccumulatorFull> {
+        if self.count() == u64::MAX {
+            return Err(AccumulatorFull);
+        }
+        if self.leaves.len() == self.capacity {
+            let oldest = self.leaves.pop_front().expect("a full window holds a leaf");
+            self.base.add_leaf_hash(&oldest)?;
+        }
+        self.leaves.push_back(*leaf_hash);
+        Ok(())
+    }
+
+    /// The tree's state at `count` leaves, for any count from the base to the tree's count.
+    pub fn accumulator_at(&self, count: u64) -> Option<Accumulator> {
+        if count < self.base() || count > self.count() {
+            return None;
+        }
+        let mut acc = self.base.clone();
+        for leaf in self.leaves.iter().take((count - self.base()) as usize) {
+            acc.add_leaf_hash(leaf).ok()?;
+        }
+        Some(acc)
+    }
+
+    /// The consistency proof from `old` leaves to the tree's count, the proof `consistency_proof` gives.
+    pub fn proof(&self, old: u64) -> Result<Vec<[u8; 32]>, ProofError> {
+        if old > self.count() {
+            return Err(ProofError::Ahead);
+        }
+        let state = self.accumulator_at(old).ok_or(ProofError::OutsideWindow)?;
+        self.proof_from(&state)
+    }
+
+    /// The consistency proof from `old`, the state of this tree at `old.count()` leaves, to the tree's
+    /// count. `old` is taken as this tree's own earlier state (the collector keeps one per client): its
+    /// peaks stand for the subtrees before its count.
+    pub fn proof_from(&self, old: &Accumulator) -> Result<Vec<[u8; 32]>, ProofError> {
+        let (m, n) = (old.count(), self.count());
+        if m > n {
+            return Err(ProofError::Ahead);
+        }
+        if m < self.base() {
+            return Err(ProofError::OutsideWindow);
+        }
+        let mut out = Vec::new();
+        if m > 0 && m < n {
+            self.subproof(old, m, 0, n, true, &mut out)?;
+        }
+        Ok(out)
+    }
+
+    /// SUBPROOF over the subtree of leaves [lo, hi), with `m` the old size in absolute leaves.
+    fn subproof(&self, old: &Accumulator, m: u64, lo: u64, hi: u64, whole: bool, out: &mut Vec<[u8; 32]>) -> Result<(), ProofError> {
+        if m == hi {
+            if !whole {
+                out.push(self.range_hash(old, lo, hi)?);
+            }
+            return Ok(());
+        }
+        let k = 1u64 << (63 - (hi - lo - 1).leading_zeros());
+        if m <= lo + k {
+            self.subproof(old, m, lo, lo + k, whole, out)?;
+            out.push(self.range_hash(old, lo + k, hi)?);
+        } else {
+            self.subproof(old, m, lo + k, hi, false, out)?;
+            out.push(self.range_hash(old, lo, lo + k)?);
+        }
+        Ok(())
+    }
+
+    /// MTH(D[lo:hi]) for a subtree of the tree: from the window's leaves when it starts at or after the
+    /// base, from a peak of `old` or of the base when it is one, and otherwise split as RFC 6962 splits it.
+    fn range_hash(&self, old: &Accumulator, lo: u64, hi: u64) -> Result<[u8; 32], ProofError> {
+        if lo >= self.base() {
+            let start = (lo - self.base()) as usize;
+            let hashes: Vec<[u8; 32]> = self.leaves.range(start..(hi - self.base()) as usize).copied().collect();
+            return Ok(subtree_root_fixed(&hashes));
+        }
+        if let Some(peak) = peak_of(old, lo, hi).or_else(|| peak_of(&self.base, lo, hi)) {
+            return Ok(peak);
+        }
+        if hi <= self.base() || hi - lo < 2 {
+            return Err(ProofError::OutsideWindow);
+        }
+        let k = 1u64 << (63 - (hi - lo - 1).leading_zeros());
+        Ok(node_hash_into(&self.range_hash(old, lo, lo + k)?, &self.range_hash(old, lo + k, hi)?))
+    }
+}
+
+/// The peak of `acc` that covers exactly the leaves [lo, hi), if it has one.
+fn peak_of(acc: &Accumulator, lo: u64, hi: u64) -> Option<[u8; 32]> {
+    let mut start = 0u64;
+    for height in (0..MAX_PEAKS).rev() {
+        if acc.count & (1u64 << height) != 0 {
+            let end = start + (1u64 << height);
+            if start == lo && end == hi {
+                return Some(acc.peaks[height]);
+            }
+            if start >= hi {
+                return None;
+            }
+            start = end;
+        }
+    }
+    None
+}
+
+fn subtree_root_fixed(hashes: &[[u8; 32]]) -> [u8; 32] {
+    if hashes.len() == 1 {
+        return hashes[0];
+    }
+    let k = split_point(hashes.len());
+    node_hash_into(&subtree_root_fixed(&hashes[..k]), &subtree_root_fixed(&hashes[k..]))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

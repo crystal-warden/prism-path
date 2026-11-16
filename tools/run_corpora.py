@@ -140,6 +140,12 @@ CONSUMERS: dict[str, dict[str, list[tuple]]] = {
                cargo("prismpath-rs", "test_engine_cross_language", "prismpath-rs/tests/test_engine_cross_language.rs")],
         "js": [("node", "run_p1_conformance.mjs", "prismpath/portable/run_p1_conformance.mjs")],
         "go": [NONE_GO], "hw": [NONE_HW]},
+    "portable/merkle_consistency": {
+        "py": [pytest("prismpath/tests/test_merkle_consistency.py")],
+        "rs": [cargo("prismpath-rs", "test_merkle_consistency", "prismpath-rs/tests/test_merkle_consistency.rs")],
+        "js": [("none", "no JavaScript consumer: the in page verifier checks receipt bundles, and the collector feed's "
+                        "consistency proofs are checked by the console's Python feed reader")],
+        "go": [NONE_GO], "hw": [NONE_HW]},
     "portable/merkle_stream": {
         # test_ebpf_merkle.py compiles and runs prismpath-ebpf/test_merkle.c, merkle.h's replay of this corpus
         "py": [pytest("prismpath/tests/test_merkle_stream.py", "prismpath/tests/test_ebpf_merkle.py")],

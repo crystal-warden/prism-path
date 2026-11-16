@@ -301,6 +301,89 @@ def prefix_roots(leaves: List[str], counts: Iterable[int]) -> Dict[int, str]:
     return roots
 
 
+# ----------------------------------------------------------------- consistency proofs (RFC 6962 2.1.2)
+def _subtree_hash(hashes: List[bytes]) -> bytes:
+    if len(hashes) == 1:
+        return hashes[0]
+    k = merkle.split_point(len(hashes))
+    return merkle.node_hash(_subtree_hash(hashes[:k]), _subtree_hash(hashes[k:]))
+
+
+def _subproof(old: int, hashes: List[bytes], whole: bool) -> List[bytes]:
+    # RFC 6962 section 2.1.2 SUBPROOF(m, D[n], b), over leaf hashes. `whole` is b: true while the
+    # subtree in hand is on the old tree's own root path, whose hash the verifier already holds.
+    if old == len(hashes):
+        return [] if whole else [_subtree_hash(hashes)]
+    k = merkle.split_point(len(hashes))
+    if old <= k:
+        return _subproof(old, hashes[:k], whole) + [_subtree_hash(hashes[k:])]
+    return _subproof(old - k, hashes[k:], False) + [_subtree_hash(hashes[:k])]
+
+
+def consistency_proof(leaves: List[str], old_count: int) -> List[str]:
+    """The RFC 6962 consistency proof (section 2.1.2, PROOF(m, D[n])) that the tree over all of `leaves`
+    (lowercase hex leaf bytes, as `merkle_root` takes them) holds the tree over the first `old_count`
+    unchanged: the hashes, lowercase hex, in the RFC's order. Empty when `old_count` is 0 or every leaf.
+
+    The batch reference: the collector's `prismpath_rs::merkle::ProofWindow` gives the same proofs from
+    the leaves it keeps, and `portable/conformance/merkle_consistency.json` holds the two together."""
+    if isinstance(old_count, bool) or not isinstance(old_count, int) or not 0 <= old_count <= len(leaves):
+        raise ValueError("the old size is an integer from 0 to the number of leaves")
+    if old_count in (0, len(leaves)):
+        return []
+    hashes = [merkle.leaf_hash(bytes.fromhex(leaf)) for leaf in leaves]
+    return [node.hex() for node in _subproof(old_count, hashes, True)]
+
+
+def _hash_of(text) -> Optional[bytes]:
+    if not isinstance(text, str) or len(text) != 64 or text.strip("0123456789abcdef"):
+        return None
+    return bytes.fromhex(text)
+
+
+def verify_consistency(old_count: int, new_count: int, old_root: str, new_root: str, proof) -> bool:
+    """True when `proof` (lowercase hex hashes) shows that the tree of `new_count` leaves with root
+    `new_root` holds the tree of `old_count` leaves with root `old_root`: RFC 9162 section 2.1.4.2, the
+    verification the reference implementations make. False for anything else, never an exception.
+
+    As RFC 9162 has it, sizes are 0 < old_count <= new_count < 2^64: there is no proof from the empty
+    tree (every tree extends it, so a reader has nothing to check), and two equal sizes are consistent
+    when the proof is empty and the roots are equal."""
+    for size in (old_count, new_count):
+        if isinstance(size, bool) or not isinstance(size, int) or not 0 <= size < 1 << MerkleAccumulator.MAX_HEIGHT:
+            return False
+    if not isinstance(proof, list) or old_count == 0 or old_count > new_count:
+        return False
+    if old_count == new_count:
+        return proof == [] and isinstance(old_root, str) and bool(old_root) and old_root == new_root
+    path = [_hash_of(node) for node in proof]
+    first, second = _hash_of(old_root), _hash_of(new_root)
+    if not path or any(node is None for node in path) or first is None or second is None:
+        return False
+    # An old tree that is a complete subtree on the new one's left edge is its own first node.
+    if old_count & (old_count - 1) == 0:
+        path = [first] + path
+    fn, sn = old_count - 1, new_count - 1
+    while fn & 1:
+        fn >>= 1
+        sn >>= 1
+    fr = sr = path[0]
+    for node in path[1:]:
+        if sn == 0:
+            return False
+        if fn & 1 or fn == sn:
+            fr = merkle.node_hash(node, fr)
+            sr = merkle.node_hash(node, sr)
+            while fn and not fn & 1:
+                fn >>= 1
+                sn >>= 1
+        else:
+            sr = merkle.node_hash(sr, node)
+        fn >>= 1
+        sn >>= 1
+    return fr == first and sr == second and sn == 0
+
+
 def signed_bytes(statement: dict) -> bytes:
     """The bytes the signature covers: the domain prefix, then every field but `sig` in canon/2."""
     return SIGNING_DOMAIN + canon.canon2_bytes({key: statement[key] for key in _BODY_FIELDS})

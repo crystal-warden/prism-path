@@ -25,3 +25,9 @@ below; each is used under its own terms:
     VL53L0X Arduino library.
   * pico_sdk_import.cmake (prismpath-hw/*/pico_sdk_import.cmake) -- from the
     Raspberry Pi Pico SDK.
+  * Consistency proof test data (prismpath/portable/transparency_dev_consistency.json,
+    and the probes section of prismpath/portable/conformance/merkle_consistency.json
+    and its crate copy) -- the testdata/consistency probes of transparency-dev/merkle
+    (https://github.com/transparency-dev/merkle, commit c39fbf3), Copyright 2017 Google
+    LLC and the transparency-dev authors, used under the Apache License 2.0, with base64 byte
+    strings rewritten as hex.
