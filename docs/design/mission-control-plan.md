@@ -261,8 +261,10 @@ The session token in a `<meta>` tag is readable by any script on the page, which
 
 ## 5. Questions for the owner
 
-1. Should the sprint loop controls (O1) stay in the operating interface, given that orchestration is kept as a fallback for an organisation without its own (`docs/POSITION.md:154`)? Recommendation. Keep them, below the queue and the policy host, because the console is the only place they are driven from today.
-2. Should the default posture on loopback be `full`, with `--read-only` opt in? Recommendation. Yes. An assessor runs `--read-only`, and the product guide says so in its first paragraph.
-3. Is the in page verifier (WP5) wanted now, given it adds canon/2 and the RFC 6962 tree to the portable JavaScript? Recommendation. Yes, after WP4 lands, because it is the only part of the plan that lets an assessor distrust the server from the page itself and the corpora to hold it to already exist.
-4. The old paths stay under `/api/v1` and new ones join them, with no `v2`. Recommendation. Agree, the guide and the product carry the contract.
-5. A desktop wrapper is not built. Recommendation. Agree, revisit only if a user asks for one.
+Answered on 2026-11-16.
+
+1. The sprint loop controls (O1) stay in the operating interface, placed below the human queue and the policy host.
+2. The default posture on loopback is `full`, and `--read-only` is an opt in. An assessor runs `--read-only`.
+3. The in page verifier (WP5) is wanted, after WP4 lands.
+4. The old paths stay under `/api/v1` and new ones join them, with no `v2`.
+5. Open. Whether Mission Control is a browser page the console serves (section 3.1) or a desktop shell (Journeyman's Tauri shell) needs more discussion, in particular reading enforcer state from eBPF directly in a native process. WP0 to WP3 do not depend on the answer, since a desktop shell would host the same client against the same API, and section 3.1 is revisited before WP4.
