@@ -88,6 +88,7 @@ def main():
         time.sleep(0.002)
     expected = {request_id: (outcome, cause, reason) for _raw, request_id, outcome, cause, reason in sent}
     frames = {request_id: raw for raw, request_id, *_ in sent}
+    by_reason = {reason: request_id for _raw, request_id, outcome, _cause, reason in sent if outcome == "drop_malformed"}
     seen, seals, status = {}, 0, None
     deadline = time.time() + 60
     while len(seen) < len(sent) or status is None or int(status.get("count", 0)) < acc.count:
@@ -101,6 +102,10 @@ def main():
             assert value["leaf"] == hashlib.sha256(bytes.fromhex(value["frame"])).hexdigest()
             acc.add(value["leaf"])
             request_id = int(value["request_id"])
+            if request_id not in expected and value["outcome_name"] == "drop_malformed":
+                # the strict reader stops at a bad magic before the request id, so the event carries none:
+                # it stands for the malformed request whose reason it names
+                request_id = by_reason.get(value["reason"], request_id)
             if request_id not in expected:
                 continue
             outcome, cause, reason = expected[request_id]
