@@ -60,6 +60,13 @@ jobs:
         run: node --test prismpath/portable/prismpath.test.mjs
       - name: Editor grammar tier-classification tests
         run: node --test prismpath/editor/vscode/test/grammar.test.mjs
+      # The Mission Control client: its render functions, markup escaping and transport under node --test,
+      # then its modules parsed as strict module code and its ids held to index.html (the API half of the
+      # client contract needs FastAPI and runs in the mission_control job).
+      - name: Mission Control client tests
+        run: |
+          node --test prismpath/mission_control/static/js/tests/*.test.mjs
+          python -m pytest prismpath/tests/test_mission_control_client.py -q
       - name: Frozen conformance vectors (port side)
         run: node prismpath/portable/run_vectors.mjs prismpath/portable/conformance
       - name: Crypto-agility proofs (JS twin, byte-for-byte vs the frozen fixtures)
@@ -184,7 +191,7 @@ jobs:
       - name: Install (numpy + control-plane extra)
         run: pip install numpy pytest fastapi httpx
       - name: Mission Control tests
-        run: python -m pytest prismpath/tests/test_mission_control.py prismpath/tests/test_mission_control_session.py prismpath/tests/test_mission_control_audit.py -q
+        run: python -m pytest prismpath/tests/test_mission_control.py prismpath/tests/test_mission_control_session.py prismpath/tests/test_mission_control_audit.py prismpath/tests/test_mission_control_client.py -q
 
   # The bounded adapters (adapters/*) are additive and arch-guard-isolated, each shipping its own test
   # suite. They are ordinary packages under the repository root now, imported by package path, so the

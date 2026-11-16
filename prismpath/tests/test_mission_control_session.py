@@ -106,7 +106,7 @@ def _every_route():
     operations = sorted(_operations(app_module.app))
     assert len(operations) > 30, "the route list is not the console's"
     yield from operations
-    for path in ("/", "/index.html", "/app.js", "/style.css", "/openapi.json"):
+    for path in ("/", "/index.html", "/js/main.mjs", "/style.css", "/openapi.json"):
         yield "GET", path
 
 
@@ -178,7 +178,7 @@ def test_index_html_holds_the_session_meta_tag(client):
 
 
 def test_the_csp_header_is_on_the_page_and_the_api(client):
-    for path in ("/", "/app.js", API_V1 + "/status"):
+    for path in ("/", "/js/main.mjs", API_V1 + "/status"):
         response = client.get(path)
         assert response.status_code == 200, path
         policy = response.headers.get("content-security-policy", "")
