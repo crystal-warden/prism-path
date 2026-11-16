@@ -57,9 +57,12 @@ there).
 The constants compared against a field cut its domain into cells. Two values in one cell make every
 atom of that field agree, so they route identically through the entire policy. Formally, for each
 decision relevant field `f`, let `u ~_f u'` when every atom over `f` agrees on `u` and `u'`, and let
-`q_f` send a value to its equivalence class: the coarsest partition of the field's domain on which
-every atom is constant. For a numeric field, `q_f` is a monotone step function that increments at
-each published cut, with adjacent intervals of identical atom truth merged. Three field kinds are
+`q_f` send a value to a cell of a partition that refines `~_f`. For a numeric field, `q_f` is a
+monotone step function that increments at each published cut, with adjacent intervals of identical
+atom truth merged, so every numeric cell is an interval. For a categorical field each named constant
+keeps a cell of its own. These cells are therefore at least as fine as the classes of `~_f`, and
+strictly finer when one class is not an interval (the members of an `in` list) or holds two named
+constants (two constants every atom names together); section 2.3 measures the difference. Three field kinds are
 detected automatically: numeric (integer intervals), boolean (two cells), and categorical (one cell
 per constant plus a trailing other). The **Figueroa quantization** is the product map over the
 decision relevant fields, fields the policy never tests being dropped because they cannot change a
@@ -69,9 +72,9 @@ decision:
 𝒬_F : 𝒳 → 𝒞 = 𝒞₁ × … × 𝒞_N,      𝒬_F(x) = ( q₁(x₁), …, q_N(x_N) ).
 ```
 
-The result is the minimum sufficient statistic for the policy's decisions: Fisher's classical
-notion, specialized to decision equivalence, and, crucially, derived mechanically from the policy
-rather than estimated from data. Reference: `prismpath/telemetry/quantizer.py`.
+The result is a sufficient statistic for the policy's decisions in Fisher's classical sense,
+specialized to decision equivalence, and, crucially, derived mechanically from the policy rather than
+estimated from data. It is minimal only in the restricted sense section 2.3 states. Reference: `prismpath/telemetry/quantizer.py`.
 
 ### 2.2 The guarantee
 
@@ -99,9 +102,24 @@ this bound.
 
 ### 2.3 Why the quantization stops at the atoms
 
-`𝒬_F` is sufficient for `D`, and it is the minimal *atom preserving* statistic: each `q_f` is the
-coarsest partition on which every atom is constant, so merging any two cells flips some atom and may
-flip a decision. It is deliberately not the absolute minimal sufficient statistic. A strictly
+`𝒬_F` is sufficient for `D`, and among atom preserving statistics whose numeric cells are intervals
+and whose categorical cells are single named constants it is the coarsest: merging two adjacent
+numeric cells flips some atom, and so may flip a decision. It is not the coarsest atom preserving
+statistic, which would also merge same truth cells that are not adjacent, and it is deliberately not
+the absolute minimal sufficient statistic.
+
+Both gaps were measured on 2026-11-16 over the 35 shipped policies with a deterministic decision (the
+flows, the examples, the decisions corpus and the six governed policy images; `tools/fq_redundancy.py`).
+For each policy a reduced ordered decision diagram over the FQ cells, built with the engine's own
+comparison semantics and checked against the engine on every cell of the small grids and 3,000 random
+readings of each, gives for every field the classes of cells that are interchangeable in every context.
+The 131 decision relevant fields have 367 FQ cells. Merging cells of identical atom truth would remove
+23 of them, all in non-adjacent members of one `in` list or constants named together, and decision
+equivalence would remove 4 more, in tests that earlier rules shadow. No two adjacent numeric cells are
+interchangeable in any of the policies, so every cut FQ publishes changes some decision, and every
+field changes some decision. The coarsest product statistic is still far from the decision classes
+themselves (the population admission policy has 36,700,160 cells in both and 8 decision classes),
+which is the price of a per field code, and the reason it carries which tests each field passed. A strictly
 coarser statistic exists whenever two distinct cell tuples always yield the same action, but
 collapsing them is a property of the specific decision function, not of the fields: computing it in
 general is the policy equivalence problem, and the result is brittle under change. Merge two same

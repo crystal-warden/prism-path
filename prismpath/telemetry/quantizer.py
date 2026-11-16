@@ -4,9 +4,12 @@
 
 A flow's routing over a field changes truth only at the constants that field is compared against
 (`field OP const`, the Level M fragment). Those constants partition the field's value domain into cells
-on which *every* atom has constant truth — so any two values in the same cell route identically. The
-minimum sufficient statistic for the field's decisions is therefore just **which cell** a reading falls
-in: a small symbol. Reconstructing any representative of that cell reproduces every routing decision the
+on which *every* atom has constant truth — so any two values in the same cell route identically, and
+**which cell** a reading falls in, a small symbol, is a sufficient statistic for the field's decisions.
+It is the coarsest such partition whose numeric cells are intervals and whose categorical cells are one
+named constant each, not the coarsest partition by atom truth: two members of one `in` list, or two
+constants every atom names together, keep separate cells (docs/research/paper-facet-figueroa-quantization.md
+section 2.3 gives the measured gap). Reconstructing any representative of that cell reproduces every routing decision the
 flow makes on that field.
 
 This module extracts those cells from a flow (via the same conditions `model_check`/`ppt_compile` read)
