@@ -57,8 +57,27 @@ def collect_markdown(base):
 LINK_RX = re.compile(r"\[[^\]]+\]\(([^)]+\.md)(?:#[^)]*)?\)")
 
 
+OVERLAY_DIR = "tools/mirror"              # tools/export_clean.py writes each file here at its path below it
+EXPORT_GENERATED = ("PROVENANCE.md",)     # the export writes these at the product's root
+
+
+def _overlay_candidates(base, md_path, target):
+    """Where a link in an overlay file lands in the product tree: the file is written at its path
+    under tools/mirror/, so its link resolves against that path, in research or in the overlay itself,
+    or names a file the export generates at the product's root."""
+    overlay = os.path.join(base, OVERLAY_DIR)
+    rel = os.path.relpath(md_path, overlay)
+    if rel.startswith(".."):
+        return []
+    landed = os.path.normpath(os.path.join(os.path.dirname(rel), target))
+    if landed in EXPORT_GENERATED:
+        return [md_path]
+    return [os.path.join(base, landed), os.path.join(overlay, landed)]
+
+
 def dead_doc_links(base, md_paths):
-    """Markdown links to a .md target that resolves from none of the three roots writers use."""
+    """Markdown links to a .md target that resolves from none of the three roots writers use, nor,
+    for an overlay file under tools/mirror/, from the product path the export writes it at."""
     dead = []
     for md_path in md_paths:
         doc_dir = os.path.dirname(md_path)
@@ -68,6 +87,7 @@ def dead_doc_links(base, md_paths):
                 continue
             candidates = [os.path.join(doc_dir, target), os.path.join(base, target),
                           os.path.join(os.path.dirname(doc_dir), target)]
+            candidates += _overlay_candidates(base, md_path, target)
             if not any(os.path.exists(candidate) for candidate in candidates):
                 dead.append((os.path.relpath(md_path, base), target))
     return dead
