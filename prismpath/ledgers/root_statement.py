@@ -213,7 +213,9 @@ class MerkleAccumulator:
     root is the tallest peak hashed with the root of the shorter peaks, all the way down. Folding the peaks
     from the shortest up, each hashed as the right child of the next taller one, computes exactly that,
     with nothing duplicated, so a statement signed from either verifies against the other;
-    `test_root_statement` pins the two equal for every count up to a few hundred. Writing a signed
+    `formal/Core/Merkle.lean` proves the two equal for every list (`acc_root_eq_mth`), and
+    `test_merkle_stream` holds this code to the batch tree for every count to 1000 and to the vectors the
+    Rust and C accumulators replay (`portable/conformance/merkle_stream.json`). Writing a signed
     statement after every event, and checking a chain that has one, then cost O(n) in all instead of
     O(n squared)."""
 

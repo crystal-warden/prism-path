@@ -1002,7 +1002,11 @@ RFC 6962 root, and a `prismpath.core-run-root/1` statement, a root of the retire
 verifiers by name ("whose root is of the retired Merkle tree"), never checked under the new one. Every run
 written before step 5 is refused that way and has to be produced again. The known answer vectors are RFC
 6962's own (the Certificate Transparency reference implementations' eight inputs, roots of the first one to
-eight; `prismpath/tests/test_merkle_rfc6962.py` and `prismpath-rs/src/merkle.rs`).
+eight; `prismpath/tests/test_merkle_rfc6962.py` and `prismpath-rs/src/merkle.rs`). A verifier may compute the same root in its streaming form, the peaks of the perfect subtrees added by
+binary counter carry and folded from the shortest up, in fixed state (64 peaks of 32 bytes and a 64-bit
+count, no heap, no recursion); `Core/Merkle.lean` proves it equal to the tree for every nonempty list
+(`acc_root_eq_mth`) and bounds it at 64 peaks for fewer than 2^64 leaves (`accPeaks_length_le`), and SPEC.md
+(Merkle trees) names the implementations and their vectors.
 
 **The stored flow is the image's rendering (step 5).** The authority signs the image, and the reference
 kernel decides from the flow, so a producer holding the instance key could store a flow that is not the

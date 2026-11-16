@@ -453,6 +453,19 @@ retired format (`prismpath-root-statement/2` is the finding `old_merkle_scheme`,
 is refused by name) and MUST NOT check a retired root under the new tree or mix the two. The vectors are
 RFC 6962's own known answers and `prismpath/portable/conformance/receipts.json`.
 
+An implementation that keeps a root as leaves arrive MAY hold, instead of the leaves, the peaks: the roots
+of the perfect subtrees the leaves so far fall into, one per set bit of the leaf count, the peak for bit h
+over 2^h leaves. A leaf's hash is added as a subtree of height 0 and merged with the peak of each set low
+bit in turn, the peak as the left child, until it lands at the first clear bit (binary counter carry); the
+root is the shortest peak, folded upward with each taller peak hashed as the left child of what is folded
+so far. That is the same root as the tree above for every nonempty list of leaves and every hash
+(`formal/Core/Merkle.lean`, `acc_root_eq_mth`), and no root for no leaves. Its state is fixed: fewer than
+2^64 leaves leave at most 64 peaks (`accPeaks_length_le`), so 64 peaks of 32 bytes (2 KiB) and a 64-bit
+count, with no heap and no recursion. The streaming forms are `root_statement.MerkleAccumulator`,
+`prismpath_rs::merkle::Accumulator` and `ppt_merkle_acc` in `prismpath-ebpf/merkle.h`; each gives, after
+every leaf, the root over every prefix in `prismpath/portable/conformance/merkle_stream.json`, which the
+Python batch tree wrote.
+
 A float is refused in content an implementation hashes but did not write (a connector's data, a decision
 outcome, a composer item, a proof, an operator's control data): the caller supplies an integer of a stated
 unit or a decimal string, and the implementation writes no spelling of a float of its own. JSON that is not
