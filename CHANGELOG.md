@@ -8,6 +8,15 @@ spec stable.
 
 ## [Unreleased]
 
+### Added: an accumulator's peaks carry its tree on (2026-11-16)
+
+`prismpath_rs::merkle::Accumulator` gains `peaks()`, the peak hashes tallest first (the order
+`root_statement.MerkleAccumulator` keeps them in), and `from_peaks(count, peaks)`, which rebuilds the
+accumulator from them and refuses a list that is not one peak per set bit of the count. A reader handed the
+count and the peaks partway through a stream checks every later root from the leaves after that point
+alone. A test holds `from_peaks(peaks())` followed by the remaining leaves to the batch tree for every cut
+of 300 leaves.
+
 ### Changed, breaking: Mission Control writes its audit event before it acts, names the session that asked, and reads a deployment without writing to it (2026-11-16)
 
 A file save and a sprint start were recorded after the effect, so an audit log that could not be written left
