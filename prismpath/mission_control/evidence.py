@@ -45,7 +45,7 @@ from prismpath import trail
 from prismpath.extras import MissingExtra
 from prismpath.ledgers import audit_log, core_evidence, root_statement
 
-from . import causes_view, feed
+from . import causes_view, feed, secret_material
 from .config import SETTINGS
 from .files import is_contained
 
@@ -104,8 +104,19 @@ def _confine(path: Any, roots: Optional[Iterable[str]]) -> Tuple[str, str]:
     for candidate in candidates:
         for root in real_roots:
             if is_contained(candidate, root):
-                return os.path.realpath(candidate), root
+                real = os.path.realpath(candidate)
+                _refuse_secret(candidate, real)
+                return real, root
     raise EvidenceRefused("outside-roots", "refused: the path is not under an evidence root")
+
+
+def _refuse_secret(asked: str, real: str) -> None:
+    """EvidenceRefused when the path asked for or the real path it resolves to is secret material by its
+    name (a directory is judged by its place only) or lies in the console's state directory beside its log."""
+    reason = (secret_material.state_refusal(real) if os.path.isdir(real)
+              else secret_material.path_refusal(asked, real))
+    if reason:
+        raise EvidenceRefused(reason, secret_material.MESSAGES[reason])
 
 
 def _read_bounded(real: str, limit: int, what: str = "the file") -> bytes:
@@ -138,7 +149,10 @@ def _read_bounded(real: str, limit: int, what: str = "the file") -> bytes:
             held += len(chunk)
             if held > limit:                      # it grew after the size was read
                 raise EvidenceRefused("too-large", f"{what} is over the {limit} byte bound (MC_MAX_EVIDENCE_BYTES)")
-        return b"".join(chunks)
+        data = b"".join(chunks)
+        if secret_material.content_refusal(data):       # key material under an innocent name
+            raise EvidenceRefused(secret_material.CONTENT, secret_material.MESSAGES[secret_material.CONTENT])
+        return data
     finally:
         os.close(fd)
 

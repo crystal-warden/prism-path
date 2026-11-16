@@ -12,12 +12,15 @@ never written by the console. A flow manifest beside a flow (`<flow>.md.manifest
 """
 import os
 
+from . import secret_material
 from .config import SETTINGS
 
 EDITABLE_SUFFIXES = (".md",)                 # flows, and fixtures by their name (FIXTURE_SUFFIX)
 FIXTURE_SUFFIX = ".tests.md"
-# Listed for reading beside the flows: manifests, lockfiles, routing data and notes.
-LISTED_SUFFIXES = EDITABLE_SUFFIXES + (".json", ".jsonl", ".txt", ".yaml", ".yml", ".sig")
+# Listed for reading beside the flows: manifests, lockfiles, routing data, notes, signatures and public
+# keys. The listing is the readable set: `GET /file` reads a file only when the listing would show it
+# (`not_readable`), and never one that is secret by kind or console state (`secret_material`).
+LISTED_SUFFIXES = EDITABLE_SUFFIXES + (".json", ".jsonl", ".txt", ".yaml", ".yml", ".sig", ".pub")
 SKIPPED_DIRS = (".git", "tools", "__pycache__", "last-good")
 KINDS = ("flow", "fixture", "other")
 
@@ -39,6 +42,26 @@ def not_editable(rel: str):
         return "hidden"
     if file_kind(rel) == "other":
         return "not-editable"
+    return None
+
+
+def _listed_name(name: str) -> bool:
+    return name.endswith(LISTED_SUFFIXES) and not name.startswith(".")
+
+
+def not_readable(rel: str, real: str = ""):
+    """Why the console may not serve the project relative path `rel` (resolving to the real path `real`)
+    to a reader, or None when it may: `not-readable` for a file the listing does not show (by its suffix,
+    a hidden name or a skipped directory, judged on the path asked for and on the target it resolves
+    to), `secret-kind` or `console-state` (judged first) for secret material by its name or place. The bytes are
+    judged after the read (`secret_material.content_refusal`)."""
+    parts = [part for part in os.path.normpath(rel).replace("\\", "/").split("/") if part not in ("", ".")]
+    names = [os.path.basename(rel)] + ([os.path.basename(real)] if real else [])
+    secret = secret_material.path_refusal(rel, *([real] if real else []))
+    if secret is not None:
+        return secret
+    if any(part in SKIPPED_DIRS for part in parts) or not all(_listed_name(name) for name in names):
+        return "not-readable"
     return None
 
 
@@ -85,9 +108,11 @@ def file_tree(proj):
         for filename in sorted(filenames):
             if len(out) >= SETTINGS.max_tree_entries:
                 return out                        # bound the listing on a pathological tree
-            if not filename.endswith(LISTED_SUFFIXES) or filename.startswith("."):
+            if not _listed_name(filename):
                 continue
             rel = os.path.relpath(os.path.join(dirpath, filename), proj)
+            if secret_material.path_refusal(rel, os.path.realpath(os.path.join(dirpath, filename))):
+                continue                          # never list what the read refuses by name or place
             try:
                 stat_result = os.stat(os.path.join(dirpath, filename))
             except OSError:

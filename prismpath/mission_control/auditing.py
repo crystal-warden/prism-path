@@ -40,7 +40,8 @@ from . import causes_view, core, evidence
 
 router = APIRouter(prefix="/evidence", tags=["auditing"])
 
-STATUS_OF = {"outside-roots": 403, "not-found": 404, "too-large": 413}
+STATUS_OF = {"outside-roots": 403, "not-found": 404, "too-large": 413,
+             "secret-kind": 403, "console-state": 403, "secret-content": 403}
 
 
 class _Body(BaseModel):
