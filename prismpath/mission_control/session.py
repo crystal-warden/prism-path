@@ -20,6 +20,7 @@ headers to every response, the stream's included, without buffering a body.
 """
 import hashlib
 import hmac
+import ipaddress
 import json
 import os
 import secrets
@@ -174,3 +175,42 @@ class SessionGuard:
             await send(message)
 
         await self.app(scope, receive, send_with_headers)
+
+
+# ── the launch: these need no server library, so a test can call them without uvicorn ──────────
+ALLOW_NON_LOOPBACK_ENV = "MC_ALLOW_NON_LOOPBACK"
+
+
+def is_loopback(host: str) -> bool:
+    if host.strip().lower() == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host.strip().strip("[]")).is_loopback
+    except ValueError:
+        return False
+
+
+def check_bind_host(host: str, environ=None):
+    """None for a loopback host. For any other host, exit unless MC_ALLOW_NON_LOOPBACK=1, and then
+    return the warning to print."""
+    environ = os.environ if environ is None else environ
+    if is_loopback(host):
+        return None
+    if environ.get(ALLOW_NON_LOOPBACK_ENV) != "1":
+        raise SystemExit(f"prismpath mission_control: refusing to bind {host!r}, which is not a loopback "
+                         f"address. The console starts and stops sprints and edits flow files; set "
+                         f"{ALLOW_NON_LOOPBACK_ENV}=1 as well to bind it anyway.")
+    return (f"WARNING: binding {host!r}, which is not loopback, because {ALLOW_NON_LOOPBACK_ENV}=1. The "
+            f"session guard still serves only a loopback Host header.")
+
+
+def startup_lines(settings, session, token_path, log):
+    """What the launch prints. The URL carries no token: the page served at it does."""
+    return [
+        f"mission control at http://127.0.0.1:{settings.port}/  ({'read-only' if settings.read_only else 'full'} "
+        f"posture)  proj={settings.proj}  audit_root={log.current_root()[:16]}",
+        f"session {session.fingerprint}: token in {token_path} (owner only), sent as {TOKEN_HEADER}",
+        (f"audit log signed by instance key {log.instance_key.fingerprint}, statements in {log.statements_path}"
+         if log.signing else
+         "audit log not signed: no instance key (set PRISMPATH_INSTANCE_KEY to sign root statements)"),
+    ]

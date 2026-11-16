@@ -8,7 +8,6 @@ The launch writes this session's token to a file only its user can read, prints 
 token (the page carries it) and removes the file when the console stops.
 """
 import argparse
-import ipaddress
 import os
 import signal
 import sys
@@ -26,44 +25,6 @@ except ImportError as exc:
         raise
     sys.exit(f"prismpath mission_control: {missing.install}")
 
-ALLOW_NON_LOOPBACK_ENV = "MC_ALLOW_NON_LOOPBACK"
-
-
-def is_loopback(host: str) -> bool:
-    if host.strip().lower() == "localhost":
-        return True
-    try:
-        return ipaddress.ip_address(host.strip().strip("[]")).is_loopback
-    except ValueError:
-        return False
-
-
-def check_bind_host(host: str, environ=None):
-    """None for a loopback host. For any other host, exit unless MC_ALLOW_NON_LOOPBACK=1, and then
-    return the warning to print."""
-    environ = os.environ if environ is None else environ
-    if is_loopback(host):
-        return None
-    if environ.get(ALLOW_NON_LOOPBACK_ENV) != "1":
-        raise SystemExit(f"prismpath mission_control: refusing to bind {host!r}, which is not a loopback "
-                         f"address. The console starts and stops sprints and edits flow files; set "
-                         f"{ALLOW_NON_LOOPBACK_ENV}=1 as well to bind it anyway.")
-    return (f"WARNING: binding {host!r}, which is not loopback, because {ALLOW_NON_LOOPBACK_ENV}=1. The "
-            f"session guard still serves only a loopback Host header.")
-
-
-def startup_lines(settings, session, token_path):
-    """What the launch prints. The URL carries no token: the page served at it does."""
-    log = core.audit.LOG
-    return [
-        f"mission control at http://127.0.0.1:{settings.port}/  ({'read-only' if settings.read_only else 'full'} "
-        f"posture)  proj={settings.proj}  audit_root={log.current_root()[:16]}",
-        f"session {session.fingerprint}: token in {token_path} (owner only), sent as {session_module.TOKEN_HEADER}",
-        (f"audit log signed by instance key {log.instance_key.fingerprint}, statements in {log.statements_path}"
-         if log.signing else
-         "audit log not signed: no instance key (set PRISMPATH_INSTANCE_KEY to sign root statements)"),
-    ]
-
 
 def main(argv=None):
     parser = argparse.ArgumentParser(prog="python -m prismpath.mission_control",
@@ -74,14 +35,14 @@ def main(argv=None):
     settings = core.SETTINGS
     if args.read_only:
         settings.read_only = True
-    warning = check_bind_host(settings.host)
+    warning = session_module.check_bind_host(settings.host)
     if warning:
         print(warning, file=sys.stderr, flush=True)
     session = session_module.Session.mint()
     application = create_app(read_only=settings.read_only, session=session)
     core.follow_active_sprint(core.STATE)                # the event stream keeps following from here
     token_path = session.write_token_file(settings.state_dir, settings.port)
-    for line in startup_lines(settings, session, token_path):
+    for line in session_module.startup_lines(settings, session, token_path, core.audit.LOG):
         print(line, flush=True)
     def remove_token_file():
         try:

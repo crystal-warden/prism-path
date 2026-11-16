@@ -10,9 +10,9 @@ that moves under a request, and the `/tmp` defaults are all refused or gone. The
 through fastapi.testclient only and never bound to an address."""
 import json
 import os
-import sys
 import threading
 import time
+from pathlib import Path
 
 import pytest
 
@@ -145,7 +145,7 @@ def test_the_token_file_is_owner_only(tmp_path):
     live = session.Session.mint()
     state_dir = tmp_path / "state" / "prismpath"
     path = live.write_token_file(str(state_dir), 9109)
-    assert open(path, encoding="utf-8").read().strip() == live.token
+    assert Path(path).read_text(encoding="utf-8").strip() == live.token
     if os.name != "nt":
         assert os.stat(path).st_mode & 0o777 == 0o600
         assert os.stat(state_dir).st_mode & 0o077 == 0
@@ -154,7 +154,7 @@ def test_the_token_file_is_owner_only(tmp_path):
     again = session.Session.mint()
     assert again.token != live.token
     path = again.write_token_file(str(state_dir), 9109)
-    assert open(path, encoding="utf-8").read().strip() == again.token
+    assert Path(path).read_text(encoding="utf-8").strip() == again.token
     if os.name != "nt":
         assert os.stat(path).st_mode & 0o777 == 0o600
 
@@ -194,9 +194,8 @@ def test_the_csp_header_is_on_the_page_and_the_api(client):
 
 def test_the_startup_lines_name_the_url_without_the_token(tmp_path):
     assert session is not None, "no session module"
-    from prismpath.mission_control import __main__ as entry
     live = session.Session.mint()
-    lines = entry.startup_lines(core.SETTINGS, live, str(tmp_path / "token"))
+    lines = session.startup_lines(core.SETTINGS, live, str(tmp_path / "token"), core.audit.LOG)
     text = "\n".join(lines)
     assert f"http://127.0.0.1:{core.SETTINGS.port}/" in text
     assert live.token not in text
@@ -204,8 +203,8 @@ def test_the_startup_lines_name_the_url_without_the_token(tmp_path):
 
 # ── the bind host ──────────────────────────────────────────────────────────────────────────────
 def test_a_non_loopback_bind_host_is_refused_unless_overridden():
-    from prismpath.mission_control import __main__ as entry
-    assert hasattr(entry, "check_bind_host"), "no bind host check"
+    entry = session
+    assert entry is not None and hasattr(entry, "check_bind_host"), "no bind host check"
     for host in ("127.0.0.1", "::1", "localhost", "127.0.0.2"):
         assert entry.check_bind_host(host, {}) is None
     for host in ("0.0.0.0", "::", "192.168.4.2", "example.com"):
