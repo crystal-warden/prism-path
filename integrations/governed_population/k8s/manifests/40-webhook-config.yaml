@@ -1,0 +1,71 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
+#
+# Two entries, one service. `decide` takes every GovernedAgent write but the operator's deletes and the
+# cluster's own garbage collection, and fails closed: a webhook that is down, slow or broken refuses.
+# `record-stop` takes only the operator's deletes and fails open, because a stop must not depend on the
+# webhook (DESIGN.md section 8.3): when the webhook answers it decides and receipts the stop and always
+# allows it; when it does not, the API server goes ahead after two seconds.
+# __CA_BUNDLE__ is replaced at apply time with the base64 of the CA certificate make_tls.sh writes.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: population.prismpath.dev
+webhooks:
+  - name: decide.population.prismpath.dev
+    admissionReviewVersions: [v1]
+    clientConfig:
+      service:
+        namespace: prismpath-population-system
+        name: population-webhook
+        path: /validate
+        port: 443
+      caBundle: __CA_BUNDLE__
+    rules:
+      - apiGroups: [population.prismpath.dev]
+        apiVersions: [v1alpha1]
+        operations: [CREATE, UPDATE, DELETE]
+        resources: [governedagents]
+        scope: Namespaced
+    namespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: prismpath-population
+    matchPolicy: Equivalent
+    failurePolicy: Fail
+    sideEffects: NoneOnDryRun
+    timeoutSeconds: 5
+    matchConditions:
+      - name: not-the-cluster-garbage-collector
+        expression: >-
+          !(request.userInfo.username in ['system:kube-controller-manager',
+          'system:serviceaccount:kube-system:generic-garbage-collector',
+          'system:serviceaccount:kube-system:namespace-controller'])
+      - name: not-an-operator-stop
+        expression: >-
+          !(request.operation == 'DELETE' && request.userInfo.groups.exists(g, g == 'system:masters'))
+  - name: record-stop.population.prismpath.dev
+    admissionReviewVersions: [v1]
+    clientConfig:
+      service:
+        namespace: prismpath-population-system
+        name: population-webhook
+        path: /validate
+        port: 443
+      caBundle: __CA_BUNDLE__
+    rules:
+      - apiGroups: [population.prismpath.dev]
+        apiVersions: [v1alpha1]
+        operations: [DELETE]
+        resources: [governedagents]
+        scope: Namespaced
+    namespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: prismpath-population
+    matchPolicy: Equivalent
+    failurePolicy: Ignore
+    sideEffects: NoneOnDryRun
+    timeoutSeconds: 2
+    matchConditions:
+      - name: an-operator-stop
+        expression: >-
+          request.operation == 'DELETE' && request.userInfo.groups.exists(g, g == 'system:masters')

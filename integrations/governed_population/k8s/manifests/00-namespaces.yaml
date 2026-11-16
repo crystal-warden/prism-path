@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
+#
+# Two namespaces: the population's members live in prismpath-population, which the webhook governs; the
+# webhook (and, later, the controller) live in prismpath-population-system, which no member can write.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: prismpath-population-system
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: prismpath-population
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest

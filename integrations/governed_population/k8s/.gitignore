@@ -1,0 +1,6 @@
+# keys, certificates, receipts and image contexts are made locally and never committed
+secrets/
+build/
+*.key
+*.crt
+*.pem
