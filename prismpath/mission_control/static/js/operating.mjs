@@ -395,7 +395,9 @@ function seriesTable(title, rows, withClass) {
 // Counts by cause and by action over an audit log, windowed by time: a plain table with a sparkline
 // per row. The counts are the console's, read by the same reader the auditing interface uses.
 export function renderCauseMonitor(series) {
-  const summary = html`<div class="muted">console: ${series.events ?? 0} events · ${series.bucket_s} s buckets · ${series.untimed ?? 0} untimed · ${series.path || ""}</div>`;
+  const summary = series.source === "live"
+    ? html`<div class="muted">console: ${series.events ?? 0} records of the collector's live feed · ${series.bucket_s} s buckets by arrival time · ${series.connection || ""} ${series.path || ""}${series.reason ? " · " + series.reason : ""}</div>`
+    : html`<div class="muted">console: ${series.events ?? 0} events · ${series.bucket_s} s buckets · ${series.untimed ?? 0} untimed · ${series.path || ""}</div>`;
   if (!series.events || !(series.buckets || []).length) {
     return html`${summary}<div class="muted">no events in the window.</div>`;
   }
@@ -415,10 +417,25 @@ export function causesQuery(inputs) {
   return query;
 }
 
+// The [path, query] the monitor reads: an audit log's series, or the live feed's by arrival time (which
+// takes a bucket width and a count of the latest records only).
+export function monitorRequest(inputs) {
+  const query = causesQuery(inputs);
+  if (inputs.source !== "live") {
+    return [PATHS.trailCauses, query];
+  }
+  const live = { bucket_s: query.bucket_s };
+  if (query.last) {
+    live.last = query.last;
+  }
+  return [PATHS.feedCauses, live];
+}
+
 export async function loadMonitorScreen() {
-  const query = causesQuery({ path: inputValue(IDS.monitorPath), bucket: inputValue(IDS.monitorBucket),
-                              since: inputValue(IDS.monitorSince), last: inputValue(IDS.monitorLast) });
-  const series = await getJson(PATHS.trailCauses, query);
+  const [path, query] = monitorRequest({ source: inputValue(IDS.monitorSource), path: inputValue(IDS.monitorPath),
+                                         bucket: inputValue(IDS.monitorBucket), since: inputValue(IDS.monitorSince),
+                                         last: inputValue(IDS.monitorLast) });
+  const series = await getJson(path, query);
   renderInto(IDS.monitorOut, series.error ? html`<div class="muted">${series.error.message}</div>` : renderCauseMonitor(series));
 }
 

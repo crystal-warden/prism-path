@@ -13,7 +13,7 @@ pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient  # noqa: E402
 
 from prismpath.mission_control import app as app_module  # noqa: E402
-from prismpath.mission_control import core, feed, feed_client  # noqa: E402
+from prismpath.mission_control import core, feed  # noqa: E402
 from prismpath.mission_control.posture import capability  # noqa: E402
 from prismpath.mission_control.session import TOKEN_HEADER  # noqa: E402
 from prismpath.tests.test_mission_control_feed import (SESSION, FakeCollector, _records, _wait,  # noqa: E402,F401

@@ -17,6 +17,7 @@ import { loadFlowsScreen, loadLensScreen, loadMonitorScreen, loadQueueScreen, lo
          wireOperating } from "./operating.mjs";
 import { loadAuditScreen, loadCausesScreen, loadKeysScreen, loadTrailsScreen, wireAuditing } from "./auditing.mjs";
 import { loadPanelScreen } from "./panels.mjs";
+import { loadLiveScreen, wireFeed } from "./feed.mjs";
 
 // Each screen, the interface it sits under, its view and what opening it loads. The first screen of
 // an interface is the one its tab opens. The sprint loop controls (Runs) sit below the human queue and
@@ -30,6 +31,7 @@ export const SCREENS = Object.freeze([
   { screen: "new", interface: "authoring", view: IDS.viewNew, load: loadNewScreen },
   { screen: "queue", interface: "operating", view: IDS.viewQueue, load: loadQueueScreen },
   { screen: "policy", interface: "operating", view: IDS.viewPolicy, load: loadPanelScreen },
+  { screen: "live", interface: "operating", view: IDS.viewLive, load: loadLiveScreen },
   { screen: "monitor", interface: "operating", view: IDS.viewMonitor, load: loadMonitorScreen },
   { screen: "lens", interface: "operating", view: IDS.viewLens, load: loadLensScreen },
   { screen: "flows", interface: "operating", view: IDS.viewFlows, load: loadFlowsScreen },
@@ -105,6 +107,8 @@ function onStreamEvent(event) {
     }
   } else if (event.type === "graph" && state.screen === "graph") {
     refreshActiveNode();
+  } else if (event.type === "feed" && state.screen === "live") {
+    loadLiveScreen();
   }
 }
 
@@ -139,6 +143,7 @@ function start() {
   wireAuthoring();
   wireOperating();
   wireAuditing();
+  wireFeed();
   loadRetrievals();
   followEventStream({ onEvent: onStreamEvent, onConnection: paintConnectionPill });
   showScreen("graph");

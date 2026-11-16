@@ -45,7 +45,7 @@ from prismpath import trail
 from prismpath.extras import MissingExtra
 from prismpath.ledgers import audit_log, core_evidence, root_statement
 
-from . import causes_view
+from . import causes_view, feed
 from .config import SETTINGS
 from .files import is_contained
 
@@ -325,14 +325,17 @@ def _is_log(full: str, name: str) -> bool:
 
 
 def discover_logs(roots: Optional[Iterable[str]] = None) -> Dict[str, Any]:
-    """Every audit log and evidence run under the roots: {roots, logs, runs, truncated}. A log is named by
-    its file name (`*.audit.jsonl`, `swaps.log`, `mission_audit.log`) or by a statements file beside it; a
-    run is a directory holding `run.json` and `receipts.jsonl`, whose files are not listed as logs.
+    """Every audit log, evidence run and kept collector feed session under the roots: {roots, logs, runs,
+    feeds, truncated}. A log is named by its file name (`*.audit.jsonl`, `swaps.log`, `mission_audit.log`)
+    or by a statements file beside it; a run is a directory holding `run.json` and `receipts.jsonl`, and a
+    feed session one holding `feed-NNNNNN.jsonl` segments (`feed.FEED_FORMAT`), whose files are not listed
+    as logs.
     Symlinked directories are not walked and a file whose real path leaves its root is not listed. The
     listing stops at `SETTINGS.max_tree_entries` entries, and `truncated` says so."""
     real_roots = _roots(roots)
     logs: List[Dict[str, Any]] = []
     runs: List[Dict[str, Any]] = []
+    feeds: List[Dict[str, Any]] = []
     cap = SETTINGS.max_tree_entries
     visited, truncated = 0, False
     for root in real_roots:
@@ -341,7 +344,7 @@ def discover_logs(roots: Optional[Iterable[str]] = None) -> Dict[str, Any]:
         for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
             dirnames[:] = sorted(name for name in dirnames if name not in SKIPPED_DIRS)
             visited += len(filenames) + 1
-            if visited > cap * 20 or len(logs) + len(runs) >= cap:
+            if visited > cap * 20 or len(logs) + len(runs) + len(feeds) >= cap:
                 truncated = True
                 break
             if _is_run(dirpath, filenames):
@@ -351,11 +354,18 @@ def discover_logs(roots: Optional[Iterable[str]] = None) -> Dict[str, Any]:
                                  "files": sorted(name for name in core_evidence.FILES if name in filenames),
                                  "complete": all(name in filenames for name in core_evidence.FILES)})
                 continue
+            if feed.is_feed_dir(filenames):
+                if is_contained(dirpath, root):
+                    segments = sorted(name for name in filenames if feed.SEGMENT_RE.match(name))
+                    feeds.append({"path": os.path.realpath(dirpath), "evidence_root": root,
+                                  "rel": os.path.relpath(dirpath, root), "format": feed.FEED_FORMAT,
+                                  "segments": len(segments), "session": os.path.basename(dirpath)})
+                continue
             for name in sorted(filenames):
                 full = os.path.join(dirpath, name)
                 if name.startswith(".") or not _is_log(full, name) or not is_contained(full, root):
                     continue
-                if len(logs) + len(runs) >= cap:
+                if len(logs) + len(runs) + len(feeds) >= cap:
                     truncated = True
                     break
                 try:
@@ -372,7 +382,8 @@ def discover_logs(roots: Optional[Iterable[str]] = None) -> Dict[str, Any]:
                 break
     logs.sort(key=lambda entry: entry["path"])
     runs.sort(key=lambda entry: entry["path"])
-    return {"roots": real_roots, "logs": logs, "runs": runs, "truncated": truncated}
+    feeds.sort(key=lambda entry: entry["path"])
+    return {"roots": real_roots, "logs": logs, "runs": runs, "feeds": feeds, "truncated": truncated}
 
 
 # ----------------------------------------------------------------- the trail

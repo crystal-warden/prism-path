@@ -121,7 +121,7 @@ def test_no_roots_means_nothing_is_readable(tmp_path, keys, monkeypatch):
     with pytest.raises(evidence.EvidenceRefused) as refused:
         evidence.trail_report(str(log_path))
     assert refused.value.reason == "outside-roots"
-    assert evidence.discover_logs() == {"roots": [], "logs": [], "runs": [], "truncated": False}
+    assert evidence.discover_logs() == {"roots": [], "logs": [], "runs": [], "feeds": [], "truncated": False}
 
 
 def test_a_file_larger_than_the_bound_is_refused(root, keys, monkeypatch):

@@ -39,7 +39,8 @@ def _mtime(path: str) -> float:
 @router.get("/events")
 async def events(request: Request):
     async def gen():
-        last_sig = last_ix = last_ckpt = None
+        last_sig = last_ix = last_ckpt = last_feed = None
+        feed = getattr(request.app.state, "feed", None)
         beat = 0
         while True:
             if await request.is_disconnected():
@@ -62,6 +63,10 @@ async def events(request: Request):
             if ckm != last_ckpt:
                 last_ckpt = ckm
                 yield _sse({"type": "graph"})
+            # The collector feed's copy changed: the live screen re-reads /feed/live.
+            if feed is not None and feed.version != last_feed:
+                last_feed = feed.version
+                yield _sse({"type": "feed", "connection": feed.connection})
             beat += 1
             await asyncio.sleep(1.5)
 
