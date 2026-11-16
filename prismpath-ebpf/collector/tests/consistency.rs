@@ -113,14 +113,24 @@ fn a_client_that_missed_seals_proves_from_the_last_one_it_was_sent() {
     let settings = Settings { seal_interval: Duration::from_secs(600), seal_count: 64, ..Settings::default() };
     let mut harness = Harness::start(Kind::Gnet, cfg, settings);
     let mut stalled = harness.client();
-    for request_id in 0..20_000 {
+    // the client reads up to the seal at 64 leaves, so it holds a tree to be proved from, then stops reading
+    for request_id in 0..64 {
+        harness.ring.push(&event(request_id));
+    }
+    let first = loop {
+        let value = stalled.next().unwrap();
+        if value["kind"] == "seal" && value["count"] == 64 {
+            break value;
+        }
+    };
+    let mut prior: (u64, String) = (64, first["root"].as_str().unwrap().to_string());
+    for request_id in 64..20_000 {
         harness.ring.push(&event(request_id));
     }
     wait_drained(&harness);
     assert!(harness.hub.stats.dropped.load(Ordering::Relaxed) > 0, "the stalled client's queue overflowed");
     // it reads at last: everything queued for it, then the gap, then what comes once it has room
     stalled.stream.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
-    let mut prior: (u64, String) = (0, String::new());
     let (mut proved_after_gap, mut gap) = (0, false);
     let reader = std::thread::spawn(move || until_final(&mut stalled));
     std::thread::sleep(Duration::from_millis(300));
@@ -134,8 +144,9 @@ fn a_client_that_missed_seals_proves_from_the_last_one_it_was_sent() {
             "seal" => {
                 assert!(proves(&value, (prior.0, &prior.1)), "the seal at {} proves from {}", value["count"], prior.0);
                 if gap {
+                    // proved from a seal the client holds, from before the gap or after it
                     proved_after_gap += 1;
-                    assert!(value["consistency"]["from"].as_u64().unwrap() > 0);
+                    assert!(value["consistency"]["from"].as_u64().unwrap() >= 64);
                 }
                 prior = (value["count"].as_u64().unwrap(), value["root"].as_str().unwrap().to_string());
             }
