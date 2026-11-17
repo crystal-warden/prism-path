@@ -7,7 +7,7 @@
   "docs/standards/taxonomies/evidence_items.json",
   "docs/standards/taxonomies/nist_ai_rmf.json"
  ],
- "authority": "Curated by the PrismPath maintainers against NIST AI RMF 1.0. Where an edge has via_ai_governance, its AI-GOV controls come from the existing catalog adapters/compliance/catalog/ai_governance.json and the subcategories they reach come from adapters/compliance/crosswalks/ai_governance__nist_ai_rmf.json, and the edge repeats all of them. The other subcategories are added here and have not been verified against the AI RMF Playbook. The subcategory text is NIST's and is not copied.",
+ "authority": "Curated by the PrismPath maintainers against NIST AI RMF 1.0. Where an edge has via_ai_governance, its AI-GOV controls come from the existing catalog adapters/compliance/catalog/ai_governance.json and the subcategories they reach come from adapters/compliance/crosswalks/ai_governance__nist_ai_rmf.json, and the edge repeats all of them. The other subcategories are added here and were reviewed and kept by the maintainer on 2026-11-16. The subcategory text is NIST's and is not copied.",
  "edges": [
   {
    "a": "receipt",
