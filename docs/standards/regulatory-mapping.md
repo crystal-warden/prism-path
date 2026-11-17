@@ -38,7 +38,7 @@ Articles 12, 14 and 15 are requirements on high-risk AI systems, Article 19 bind
 
 ## NIST AI RMF 1.0
 
-`prismpath_evidence__nist_ai_rmf.json` reuses the existing AI governance catalog and its crosswalk to the AI RMF. Where an edge names `via_ai_governance`, it repeats every subcategory that `adapters/compliance/crosswalks/ai_governance__nist_ai_rmf.json` reaches from those controls, and the referee checks that. The receipt edge is linked to AI-GOV MS-1 and GV-1, the escalation edge to GV-1 and MG-2, the cause edge to MG-2 and the root statement edge to MS-1. The other subcategories (MEASURE 2.4, MEASURE 2.7, MAP 3.5, MANAGE 2.4) are added here and have not been checked against the AI RMF Playbook. The AI RMF is voluntary and its subcategories describe organizational practice, so each edge says what stays with the organization.
+`prismpath_evidence__nist_ai_rmf.json` reuses the existing AI governance catalog and its crosswalk to the AI RMF. Where an edge names `via_ai_governance`, it repeats every subcategory that `adapters/compliance/crosswalks/ai_governance__nist_ai_rmf.json` reaches from those controls, and the referee checks that. The receipt edge is linked to AI-GOV MS-1 and GV-1, the escalation edge to GV-1 and MG-2, the cause edge to MG-2 and the root statement edge to MS-1. The other subcategories (MEASURE 2.4, MEASURE 2.7, MAP 3.5, MANAGE 2.4) are added here, and the maintainer reviewed and kept them on 2026-11-16. The AI RMF is voluntary and its subcategories describe organizational practice, so each edge says what stays with the organization.
 
 ## NIST AI 600-1
 
@@ -54,4 +54,4 @@ The crosswalks use the shape of `adapters/compliance/crosswalks/` (`id`, `a`, `b
 
 ## Not verified
 
-The text of Articles 12, 14, 15, 19 and 26 was read in the Regulation as published and is paraphrased, so any use that needs the words should read the Official Journal. NIST AI RMF subcategory ids come from the existing adapter source list and were not re-fetched. The AI RMF subcategories added here and the 800-53 judgments about partial support are the maintainers' reading and have had no outside review.
+The text of Articles 12, 14, 15, 19 and 26 was read in the Regulation as published and is paraphrased, so any use that needs the words should read the Official Journal. NIST AI RMF subcategory ids come from the existing adapter source list and were not re-fetched. The AI RMF subcategories added here, the nearest fit ATLAS and CWE choices the crosswalk marks as such, and the 800-53 judgments about partial support were reviewed by the maintainer on 2026-11-16 and have had no outside review.
