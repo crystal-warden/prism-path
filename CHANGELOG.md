@@ -8,6 +8,30 @@ spec stable.
 
 ## [Unreleased]
 
+### Added: Mission Control is one console with three interfaces, documented from its own schema (2026-11-16)
+
+Mission Control grew from one file of proving and observing routes into the console the guides now describe.
+This entry names the whole of it, since the entries below and above each cover one change.
+
+- **Three interfaces on one page.** Authoring (the process owner) edits flows and fixtures, draws the graph,
+  runs validate, lint, test, contract and portable, proves Level M and reachability, scaffolds a flow from a
+  template and reports a flow's change status. Operating (the operator) follows and controls the sprint loop,
+  answers the human queue and delivers events, reads the policy a deployment runs, the lens, fan outs and
+  routing quality, and reads a collector's live feed with a cause monitor. Auditing (the assessor) lists the
+  trails under the evidence roots, decodes a receipt from the cause registry, checks it again in the page
+  under a key the assessor pins, and verifies anchors, evidence runs, change control, policy packs and kept
+  feed sessions. Every control the posture leaves out is shown as unavailable.
+- **The collector** (`prismpath-ebpf/collector`) is the only privileged reader of the enforcer. The console
+  reads its feed on `MC_COLLECTOR`, keeps the sessions under `MC_COLLECTOR_STORE`, and proves each seal extends
+  the last, with the kept sessions bounded by `MC_COLLECTOR_KEEP_BYTES` and `MC_COLLECTOR_KEEP_DAYS`.
+- **`docs/guides/mission-control-api.md`** has its route tables generated from `app.openapi()` by
+  `tools/gen_mission_control_guide.py`, with a test (`prismpath/tests/test_mission_control_guide.py`) that fails
+  when they differ from the app. The posture, session, roots and audit sections are written by hand and the
+  generator leaves them alone. Sixteen routes that had no docstring have one, since the tables read it.
+- The process owner's, operator's and assessor's guides each name their interface. The Dictionary's Mission
+  Control entry names the three interfaces and the two postures, and a `session` entry is added.
+  `docs/design/architecture.md` describes the package it is, not the single file it was.
+
 ### Changed, breaking: the collector feed proves each seal extends the last, and the console's kept sessions are bounded (2026-11-16)
 
 After a `gap`, or a reconnect to the same session at a higher count, the console could not check the next

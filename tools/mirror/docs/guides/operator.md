@@ -7,12 +7,14 @@ people are described in [the system map](https://github.com/crystal-warden/prism
 
 ## 1. Your console is Mission Control
 
-`prismpath/mission_control/` is the operator's console and API
-([`mission-control-api.md`](mission-control-api.md)): observe the followed run (`/api/v1/status`,
-`/interactions`, `/flow`, `/flow/graph`), prove things about a flow without running it
-(`/prove/level-m`, `/prove/reach`), verify the console's own audit log (`/prove/audit`), and the one
-write surface, editing a flow file through the API with every path checked. The CLI is the scripted
-path to the same operations; `prismpath --help` lists your commands under "Operator".
+**In the console.** The operating interface of Mission Control ([`mission-control-api.md`](mission-control-api.md))
+is yours. It follows a sprint and lets you start, stop, pause and resume it, and answer the human queue by
+picking an edge for a suspended run or recording the event a waiting run is to receive. It reads the policy
+a deployment runs with its swap history, the live feed of a collector with a cause monitor over it, who
+said what to which worker, fan outs, and routing quality (the lockfile, calibration, centroids and kappa).
+Every action is an event in the console's own audit log before it runs, under `console/operating/` and the
+session's fingerprint. `--read-only` mounts none of the controls. The CLI is the scripted path to the same
+operations; `prismpath --help` lists your commands under "Operator".
 
 ## 2. Swap and attest
 

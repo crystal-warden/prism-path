@@ -262,7 +262,7 @@ control plane, GRC. A term with no `Also called (deprecated)` line has no losing
 
 **match action fragment**: the decidable subset of the predicate language, boolean combinations of field against constant comparisons, membership in literal lists, and bare truthiness. Compiles exactly to a match action table. Layer: kernel evaluation. Not to be confused with: a link layer fragment. Also called: Level M. Never called just "the fragment" in a document that also discusses the wire.
 
-**Mission Control**: the operator's single user, loopback console for observing runs, driving them and reading proofs. Layer: control plane. Not to be confused with: the orchestration layer it can drive.
+**Mission Control**: the one local console of PrismPath, a loopback server and page with three interfaces, one for each person it serves: authoring for the process owner, operating for the operator and auditing for the assessor. It runs in one of two postures, full, and read only, which mounts no route that changes anything and leaves the auditing interface complete. Every request carries the launch's session, and every action it takes is an event in its own audit log. Layer: control plane. Not to be confused with: the orchestration layer it can drive, the collector it reads a feed from.
 
 **node**: one step of a flow: a heading, its instruction, and its ordered edges. Layer: flow authoring. Not to be confused with: a hardware node (always "device" or "board"), a predicate AST node, a code node (which is a flow node with a code worker), a log host field.
 
@@ -296,7 +296,7 @@ control plane, GRC. A term with no `Also called (deprecated)` line has no losing
 
 **port**: an interface the core owns and the outside world implements, written in the core's own vocabulary. Six exist: Ingestion, Retrieval, Adjudicator, Action/Sink, Attestation, Deferral. Layer: control plane. Not to be confused with: a network or serial port, an RTL port, or "port" as a verb meaning reimplement. The verb is fine; the noun is reserved.
 
-**posture**: the assessed state of a boundary: a set of facts with their provenance. Layer: GRC, and nowhere else. Not to be confused with: the resident node of a stateful selector, which has its own entry; the eBPF selector says `resident_node` now, and the RTL and the frozen selector corpus keep the old spelling because they are certified and do not move for a rename.
+**posture**: the assessed state of a boundary: a set of facts with their provenance. Layer: GRC. Mission Control also says posture for its own two modes, which its entry defines. Not to be confused with: the resident node of a stateful selector, which has its own entry; the eBPF selector says `resident_node` now, and the RTL and the frozen selector corpus keep the old spelling because they are certified and do not move for a rename.
 
 **predicate**: the restricted, side effect free expression after `when`, evaluated against the ctx. Total by construction: an impossible comparison is unsatisfied, never an error. Layer: kernel evaluation. Not to be confused with: condition (the broader raw string), guard.
 
@@ -341,6 +341,8 @@ control plane, GRC. A term with no `Also called (deprecated)` line has no losing
 **selector**: a policy whose resident state persists across evaluations, so the decision depends on where the system already is. Layer: substrate execution. Not to be confused with: a CSS or DOM selector. Also called: resident FSM, stateful policy; pick one.
 
 **sensor**: a physical transducer producing field values. Layer: substrate execution. Not to be confused with: a policy named `sensor_interlock` in the comparison corpus.
+
+**session**: the random token one launch of Mission Control mints, written owner only to the state directory and into the page it serves, and carried by every request to its API. The audit log names it by its fingerprint, the first sixteen hex digits of the token's sha256, never by the token. Layer: control plane. Not to be confused with: a kept feed session (a collector connection's run of seals, which has its own id), the planner's chat session.
 
 **spawn**: fan out from one node to child runs, with a declared join policy and deterministic child identity. Layer: flow authoring. Not to be confused with: `spawn` the process primitive.
 

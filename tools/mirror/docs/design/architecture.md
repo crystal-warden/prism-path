@@ -66,8 +66,13 @@ Supporting services:
 
 - **`orchestrator.py`**: a FastAPI front for a chat UI: `planning → awaiting_approval → executing →
   done`, streaming build status over SSE; on approval it launches `run_sprint.py` as a subprocess.
-- **`mission_control.py`**: a loopback only console (`127.0.0.1`) that autodiscovers live sprints,
-  can start/stop/pause them, and records an append only **action log** (`audit_log.py`).
+- **`mission_control/`**: the one console, a loopback server (`127.0.0.1`) and a page of plain ES modules
+  with three interfaces. Authoring edits and proves a flow, operating follows and controls sprints, answers
+  the human queue and reads a collector's live feed, and auditing verifies trails, receipts, anchors and
+  evidence runs under named roots. Every request carries the launch's session token and a loopback `Host`.
+  `--read-only` mounts no route that changes anything. Each action is an event in its own Merkle committed
+  audit log (`mission_control/audit.py`), written before the action runs. See
+  [`mission-control-api.md`](../guides/mission-control-api.md).
 - **`swarm_runner.py`**: `make_swarm_agent(spec, backend="auto")` returns a PrismPath agent backed by
   the real swarm, falling back to `llm_local` when no backend is up.
 - **`retriever.py`**: dense retrieval over a turbovec docs index to ground the coder in real APIs.

@@ -19,6 +19,7 @@ router = APIRouter(tags=["control"])
 
 @router.post("/sprint/start", openapi_extra=WRITE)
 def sprint_start(req: SprintStartReq, request: Request):
+    """Start the sprint loop in the followed project, refused when the sprint flow is not authorized."""
     # exclude_none so run_sprint's own defaults apply to fields the caller didn't set
     cfg = req.model_dump(exclude_none=True)
     if cfg.get("proj"):
@@ -50,16 +51,19 @@ def sprint_auto(request: Request):
 
 @router.post("/sprint/stop", openapi_extra=WRITE)
 def sprint_stop(request: Request):
+    """Ask the followed sprint to stop, by leaving a STOP marker in its directory."""
     return core.touch_marker(core.current_project(), "STOP", "sprint.stop", _actor(request))
 
 
 @router.post("/sprint/pause", openapi_extra=WRITE)
 def sprint_pause(request: Request):
+    """Ask the followed sprint to pause, by leaving a PAUSE marker in its directory."""
     return core.touch_marker(core.current_project(), "PAUSE", "sprint.pause", _actor(request))
 
 
 @router.post("/sprint/resume", openapi_extra=WRITE)
 def sprint_resume(request: Request):
+    """Remove the PAUSE marker so the followed sprint carries on."""
     return core.remove_marker(core.current_project(), "PAUSE", "sprint.resume", _actor(request))
 
 

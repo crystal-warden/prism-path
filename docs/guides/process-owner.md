@@ -38,6 +38,14 @@ The fixture table is a Markdown table of `node`, `outcome`, `fields`, `expect` r
 change stated as a test: when you change a rule, you add the row that proves it. `prismpath test` runs
 in milliseconds and CI runs it on every pull request, rendering the before and after graph in the review.
 
+**In the console.** The authoring interface of Mission Control ([`mission-control-api.md`](mission-control-api.md))
+does this loop in a browser on your own machine. It edits a flow and its fixture table in the followed
+project, draws the graph with each edge coloured by tier, runs validate, lint, test, contract and portable
+beside the editor, proves Level M membership and bounded reachability, scaffolds a new flow from a
+template, and shows the change status: the flow's hash, whether a flow manifest signed by the authority
+key names it, and what the followed deployment runs. It never signs, packs or swaps, and every write is an
+event in the console's own audit log.
+
 ## 3. How a change reaches production
 
 1. You edit the flow and add or change fixture rows. `validate` and `test` pass locally.

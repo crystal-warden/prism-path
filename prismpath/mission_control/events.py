@@ -38,6 +38,8 @@ def _mtime(path: str) -> float:
 
 @router.get("/events")
 async def events(request: Request):
+    """Server sent events: a `status`, `interactions`, `graph` or `feed` ping when what the followed run or the
+    collector feed shows has changed."""
     async def gen():
         last_sig = last_ix = last_ckpt = last_feed = None
         feed = getattr(request.app.state, "feed", None)
