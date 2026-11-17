@@ -19,6 +19,11 @@ spec stable.
   read asks the person (new cause 124 `agent:unreadable-asked`, appended) where the owner's rules refuse it.
   Unknown paths and unknown git operations still refuse (104), and a call that also breaks another rule still
   refuses by that rule.
+- **A file-changing shell command asks.** Under `agent_default`, a command that changes files (rm, mv, mkdir, cp and the
+  like) whose paths are all inside the project asks the person (new cause 125 `agent:shell-mutation-asked`, appended)
+  instead of refusing with 112. The refusals for a toolchain path, a glob, a `..` component, a symbolic link, a path
+  outside the project, a kill by pattern and the network apply to such a command first, and a mutating git
+  operation still refuses with 112.
 
 ### Added: Mission Control is one console with three interfaces, documented from its own schema (2026-11-16)
 

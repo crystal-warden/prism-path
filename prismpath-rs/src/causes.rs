@@ -11,7 +11,7 @@
 pub const CAUSE_NONE: u8 = 0;
 
 /// `registry_sha256()` of the Python registry when this file was generated.
-pub const REGISTRY_SHA256: &str = "7d1f97f5cd528545a408aef2d880fd0089ab99304995b7a64828bdb6b70a939a";
+pub const REGISTRY_SHA256: &str = "8aa66fc8350044e75a627145655bd5237ff49887f45ec4515eca140909b2f1bd";
 
 /// The cause class, the semantic axis of the registry.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -225,6 +225,8 @@ pub const POPULATION_LINEAGE_ESCALATED: u8 = 122;
 pub const POPULATION_TARGET_NOT_OWN: u8 = 123;
 /// `agent:unreadable-asked`
 pub const AGENT_UNREADABLE_ASKED: u8 = 124;
+/// `agent:shell-mutation-asked`
+pub const AGENT_SHELL_MUTATION_ASKED: u8 = 125;
 
 /// Every registered cause, in registry order.
 pub const REGISTRY: &[Cause] = &[
@@ -318,6 +320,7 @@ pub const REGISTRY: &[Cause] = &[
     Cause { code: 122, name: "population:lineage-escalated", class: CauseClass::Routing, description: "a request from a lineage whose receipted refusals reached the registered count; escalated, not run, and the lineage is stopped as a group" },
     Cause { code: 123, name: "population:target-not-own", class: CauseClass::Routing, description: "a member's replication whose parent is not that member, or its evolution of a member outside its own subtree; refused and nothing changes" },
     Cause { code: 124, name: "agent:unreadable-asked", class: CauseClass::Routing, description: "an agent tool call whose tool or command the classifier cannot read, under the default policy that asks the person; escalated and not run" },
+    Cause { code: 125, name: "agent:shell-mutation-asked", class: CauseClass::Routing, description: "an agent shell command that changes files, with every path inside the workspace and none of the earlier refusals holding, under the default policy that asks the person; escalated and not run" },
 ];
 
 /// The engine's stop vocabulary mapped onto the registry; `terminal` and `waiting` are clean and have no cause.

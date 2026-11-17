@@ -76,7 +76,7 @@
   },
   "expect": {
    "answer": "deny",
-   "cause_code": 112
+   "cause_code": 108
   }
  },
  {
@@ -89,7 +89,7 @@
   },
   "expect": {
    "answer": "deny",
-   "cause_code": 112
+   "cause_code": 108
   }
  },
  {
@@ -102,7 +102,7 @@
   },
   "expect": {
    "answer": "deny",
-   "cause_code": 112
+   "cause_code": 108
   }
  },
  {
@@ -115,7 +115,7 @@
   },
   "expect": {
    "answer": "deny",
-   "cause_code": 112
+   "cause_code": 108
   }
  },
  {
@@ -128,7 +128,7 @@
   },
   "expect": {
    "answer": "deny",
-   "cause_code": 112
+   "cause_code": 108
   }
  },
  {
@@ -155,7 +155,7 @@
   },
   "expect": {
    "answer": "deny",
-   "cause_code": 111
+   "cause_code": 109
   }
  },
  {
@@ -182,7 +182,7 @@
   },
   "expect": {
    "answer": "deny",
-   "cause_code": 112
+   "cause_code": 109
   }
  },
  {
@@ -223,7 +223,7 @@
   },
   "expect": {
    "answer": "deny",
-   "cause_code": 111
+   "cause_code": 110
   }
  },
  {
@@ -250,7 +250,7 @@
   },
   "expect": {
    "answer": "deny",
-   "cause_code": 112
+   "cause_code": 110
   }
  },
  {
@@ -422,7 +422,7 @@
   },
   "expect": {
    "answer": "deny",
-   "cause_code": 112
+   "cause_code": 107
   }
  },
  {
@@ -622,8 +622,8 @@
    "command": "rm scratch.tmp"
   },
   "expect": {
-   "answer": "deny",
-   "cause_code": 112
+   "answer": "ask",
+   "cause_code": 125
   }
  },
  {
@@ -1284,8 +1284,8 @@
    "command": "touch x"
   },
   "expect": {
-   "answer": "deny",
-   "cause_code": 112
+   "answer": "ask",
+   "cause_code": 125
   }
  },
  {
@@ -1412,6 +1412,188 @@
   "expect": {
    "answer": "allow",
    "cause_code": null
+  }
+ },
+ {
+  "id": "mut-rm-in",
+  "cwd": "@WS@",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+   "command": "rm scratch.tmp"
+  },
+  "expect": {
+   "answer": "ask",
+   "cause_code": 125
+  }
+ },
+ {
+  "id": "mut-mv-in",
+  "cwd": "@WS@",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+   "command": "mv notes.txt notes.md"
+  },
+  "expect": {
+   "answer": "ask",
+   "cause_code": 125
+  }
+ },
+ {
+  "id": "mut-mkdir-in",
+  "cwd": "@WS@",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+   "command": "mkdir newdir"
+  },
+  "expect": {
+   "answer": "ask",
+   "cause_code": 125
+  }
+ },
+ {
+  "id": "mut-cp-in",
+  "cwd": "@WS@",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+   "command": "cp notes.txt copy.txt"
+  },
+  "expect": {
+   "answer": "ask",
+   "cause_code": 125
+  }
+ },
+ {
+  "id": "mut-rm-outside",
+  "cwd": "@WS@",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+   "command": "rm @DECOY@/sentinel.txt"
+  },
+  "expect": {
+   "answer": "deny",
+   "cause_code": 111
+  }
+ },
+ {
+  "id": "mut-mv-outside",
+  "cwd": "@WS@",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+   "command": "mv notes.txt @DECOY@/notes.txt"
+  },
+  "expect": {
+   "answer": "deny",
+   "cause_code": 111
+  }
+ },
+ {
+  "id": "mut-mkdir-outside",
+  "cwd": "@WS@",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+   "command": "mkdir @DECOY@/new"
+  },
+  "expect": {
+   "answer": "deny",
+   "cause_code": 111
+  }
+ },
+ {
+  "id": "mut-cp-outside",
+  "cwd": "@WS@",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+   "command": "cp notes.txt @DECOY@/copy.txt"
+  },
+  "expect": {
+   "answer": "deny",
+   "cause_code": 111
+  }
+ },
+ {
+  "id": "mut-rm-glob",
+  "cwd": "@WS@",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+   "command": "rm *.tmp"
+  },
+  "expect": {
+   "answer": "deny",
+   "cause_code": 108
+  }
+ },
+ {
+  "id": "mut-rm-traversal",
+  "cwd": "@WS@",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+   "command": "rm src/../notes.txt"
+  },
+  "expect": {
+   "answer": "deny",
+   "cause_code": 109
+  }
+ },
+ {
+  "id": "mut-rm-symlink",
+  "cwd": "@WS@",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+   "command": "rm cfg"
+  },
+  "expect": {
+   "answer": "deny",
+   "cause_code": 110
+  }
+ },
+ {
+  "id": "mut-rm-toolchain",
+  "cwd": "@WS@",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+   "command": "rm .toolchain/VERSION"
+  },
+  "expect": {
+   "answer": "deny",
+   "cause_code": 107
+  }
+ },
+ {
+  "id": "mut-git-clean",
+  "cwd": "@WS@",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+   "command": "git clean -fd"
+  },
+  "expect": {
+   "answer": "deny",
+   "cause_code": 112
+  }
+ },
+ {
+  "id": "mut-pkill-wrapped",
+  "cwd": "@WS@",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+   "command": "sudo pkill sleep"
+  },
+  "expect": {
+   "answer": "deny",
+   "cause_code": 105
   }
  }
 ]

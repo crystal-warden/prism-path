@@ -11,10 +11,13 @@ case by case: every id appears in the fixtures as `<id>` (or `<id>a`, `<id>b`, `
 several calls). A Claude Code equivalent exists for all 51, but the harness's own tools do not map one to
 one, so these cases are not literal replays:
 
-  * No Claude Code tool deletes a path (`delete_path`). The nine delete probes, and the benign delete
-    ok-4, are the Bash command `rm ...`. A Bash `rm` is a shell mutation (cause 112), or outside the
-    workspace (111) where that is checked first. So ok-4, a benign control that the harness allows, is DENIED
-    here: the person deletes the file themselves, or edits the policy.
+  * No Claude Code tool deletes a path (`delete_path`). The twelve delete probes, and the benign delete ok-4,
+    are the Bash command `rm ...`. Under agent_default a file-changing shell command whose paths are all inside
+    the project ASKS (125), and the earlier refusals apply to it first: a toolchain path 107, a glob 108,
+    a `..` component 109, a symbolic link 110, outside the workspace 111. So ok-4, a benign control the
+    harness allows, ASKS here; glob-1 to glob-5 deny with 108, trav-2 and trav-4 with 109, link-2 and
+    link-4 with 110, tool-3 with 107, and out-1, out-2 and out-4 with 111. A mutating git operation still
+    refuses with 112.
   * The harness's `/workspace` mount does not exist in Claude Code. trav-5 stays a traversal (109) because of
     its `..`, and `shell-workspace-mount-is-real-dir` shows `/workspace/...` is read as the real directory.
   * unk-1, unk-2 and unk-4 name tools Claude Code does not have (http_get, move_file, exec_shell). Their
@@ -161,7 +164,7 @@ def test_answer_shapes(policy):
 
 
 # ------------------------------------------------------------------- the policy
-def test_default_policy_differs_from_rules_only_in_unreadable(world):
+def test_default_policy_differs_from_rules_only_in_unreadable_and_shell_mutation(world):
     rules = Policy.load()
     default = claude_code.load_default_policy()
     names = {"ask": 124}
@@ -171,13 +174,17 @@ def test_default_policy_differs_from_rules_only_in_unreadable(world):
         assert rules.decide(rules.reading_bytes(raw)).cause_code == 104
         got = default.decide(default.reading_bytes(raw))
         assert (got.kind, got.cause_code) == ("escalate", names["ask"])
+    # a file-changing shell command asks (125) or meets an earlier refusal; an unreadable call asks (124);
     # everything else decides the same under both
     for case in FIXTURES:
         hook_call = claude_code.hook_call(_hook_input(case, world), _env(case, world))
         from prismpath.agent import classifier
         raw = classifier.classify(hook_call.call, classifier.Config.for_workspace(hook_call.workspace))
         a, b = rules.decide(rules.reading_bytes(raw)), default.decide(default.reading_bytes(raw))
-        if a.cause_code == 104 and (raw["tool"] == "unknown" or raw["command_class"] == "unknown") \
+        if raw["command_class"] == "mutating" and raw["path_scope"] != "unknown":
+            assert (b.kind, b.cause_code) in (("refuse", 107), ("refuse", 108), ("refuse", 109), ("refuse", 110),
+                                              ("refuse", 111), ("escalate", 125)) or (b.kind, b.cause_code) == (a.kind, a.cause_code)
+        elif a.cause_code == 104 and (raw["tool"] == "unknown" or raw["command_class"] == "unknown") \
                 and raw["git_op"] != "unknown" and raw["path_scope"] != "unknown":
             assert (b.kind, b.cause_code) in (("escalate", 124), ("refuse", 105), ("refuse", 111), ("refuse", 112))
         else:

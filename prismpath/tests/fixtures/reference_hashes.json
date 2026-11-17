@@ -1,6 +1,6 @@
 {
  "adopted_revision": "386539913bf721e6f7fff42f2d49ddd38212406d",
- "cause_registry_sha256": "7d1f97f5cd528545a408aef2d880fd0089ab99304995b7a64828bdb6b70a939a",
+ "cause_registry_sha256": "8aa66fc8350044e75a627145655bd5237ff49887f45ec4515eca140909b2f1bd",
  "compiler_references": {
   "checksum_list": "prismpath/tests/fixtures/compiler/SHA256SUMS",
   "checksum_list_sha256": "2b7c9d25fb90f54f6af9bd5300916dab398f8ba1b948bd4f120c42a753164045",

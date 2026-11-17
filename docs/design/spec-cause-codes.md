@@ -60,8 +60,8 @@ escalation after repeated boundary probing at 116. The governed agent population
 replication, evolution, restart, protection and review requests) followed at 117 to 122, in `routing` for
 the same reason, and its refusal of a member's replication or evolution whose target is not its own at
 123. The Claude Code adapter's default policy (`prismpath/agent/policy/agent_default`), which asks the person
-about a call it cannot read where the owner's rules refuse it, added the escalation at 124. So the occupied ranges today are `authority` 1 to 10 and 87 to 88, `envelope` 16 to 19, 69 to 86, 89
-to 98, 101 and 103, `routing` 32 to 37, 99 to 100, 102 and 104 to 124, `wire` 48 to 56, and `state` 64 to
+about a call it cannot read where the owner's rules refuse it, added the escalation at 124, and its question about a file-changing shell command inside the project (rm, mv, mkdir, cp) the escalation at 125. So the occupied ranges today are `authority` 1 to 10 and 87 to 88, `envelope` 16 to 19, 69 to 86, 89
+to 98, 101 and 103, `routing` 32 to 37, 99 to 100, 102 and 104 to 125, `wire` 48 to 56, and `state` 64 to
 68.
 `state` stops at 68; it never reached 79, and 69 upward is envelope, not state. Read a code's class
 off the `class` column in `prismpath/kernel/causes.py` and never infer it from the number: the next
