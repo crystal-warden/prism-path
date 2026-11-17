@@ -7,8 +7,10 @@ Run as an ordinary account in the feed's group while gn_xdp.pin.bpf.o is attache
 its maps filled with the network policy for 127.0.0.1, and the collector running under its systemd unit.
 It subscribes, sends agent requests over loopback (allowed, refused, escalated and malformed ones), and
 holds every decision record to the request it stands for and to the plain rules (owner_rules.expected),
-each leaf to its frame, every seal to the tree it rebuilds from the join seal's peaks, and the enforcer's
-own counters, read by the collector from the read only maps, to what it sent.
+each leaf to its frame, every seal to the tree it rebuilds from the join seal's peaks and to the
+consistency proof from the seal before it, and the enforcer's own counters, read by the collector from the
+read only maps, to what it sent. Then it reconnects, resuming the session from the last seal it verified,
+and holds the new join seal to the proof that its tree extends that one.
 """
 import argparse
 import hashlib
@@ -22,9 +24,10 @@ REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO))
 
 from integrations.governed_net import owner_rules, protocol as p  # noqa: E402
-from prismpath.ledgers.root_statement import MerkleAccumulator  # noqa: E402
+from prismpath.ledgers.root_statement import MerkleAccumulator, verify_consistency  # noqa: E402
 
-SUBSCRIPTION = b'{"op":"subscribe","protocol":"prismpath.collector/1"}\n'
+PROTOCOL = "prismpath.collector/2"
+SUBSCRIPTION = b'{"op":"subscribe","protocol":"prismpath.collector/2"}\n'
 OUTCOME = {"allow": "allow", "refuse": "drop_policy", "escalate": "drop_policy"}
 
 
@@ -70,13 +73,14 @@ def main():
         return json.loads(line)
 
     hello = record()
-    assert hello["kind"] == "hello" and hello["source"] == "gnet", hello
+    assert hello["kind"] == "hello" and hello["source"] == "gnet" and hello["protocol"] == PROTOCOL, hello
     join = record()
     assert join["kind"] == "seal" and join["trigger"] == "join", join
     print("hello", json.dumps(hello, sort_keys=True))
     # carry on from the join seal: its peaks and count are the tree so far
     acc = MerkleAccumulator.from_peaks(join["count"], join["peaks"])
     assert acc.root() == join.get("root", ""), "the join seal's peaks give its root"
+    prior = (join["count"], join.get("root", ""))
 
     sent = requests()
     sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -116,6 +120,8 @@ def main():
             seen[request_id] = value
         elif value["kind"] == "seal":
             assert value["count"] == acc.count and value["root"] == acc.root(), ("seal", value, acc.count)
+            assert proves(value, prior), ("the seal is not proved from the one before it", value, prior)
+            prior = (value["count"], value["root"])
             seals += 1
         elif value["kind"] == "status":
             status = value
@@ -127,10 +133,34 @@ def main():
     bad = sum(1 for outcome, _c, _r in expected.values() if outcome == "drop_malformed")
     assert status["enforcer"]["loaded"] == 1, status
     assert (int(counters["allow"]), int(counters["drop"]), int(counters["malformed"])) == (allows, drops, bad), (counters, allows, drops, bad)
+    feed.close()
+
+    # Reconnect, resuming the session from the last seal verified: the join seal is proved from it.
+    again = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    again.connect(args.socket)
+    again.settimeout(30)
+    again.sendall(json.dumps({"count": prior[0], "op": "subscribe", "protocol": PROTOCOL, "session": hello["session"]},
+                             sort_keys=True, separators=(",", ":")).encode() + b"\n")
+    lines = again.makefile("rb")
+    assert record()["session"] == hello["session"]
+    rejoin = record()
+    assert rejoin["trigger"] == "join" and proves(rejoin, prior), ("the resumed join seal is not proved", rejoin, prior)
+    again.close()
     print("PASS %d decisions (%d allowed, %d refused or escalated, %d malformed) fed, each leaf its frame's hash, "
-          "%d seals checked against the tree rebuilt from the join seal, counters %s"
-          % (len(seen), allows, drops, bad, seals, json.dumps(counters, sort_keys=True)))
+          "%d seals checked against the tree rebuilt from the join seal and each proved from the one before it, "
+          "a resumed join seal at %d proved from %d, counters %s"
+          % (len(seen), allows, drops, bad, seals, rejoin["count"], prior[0], json.dumps(counters, sort_keys=True)))
     return 0
+
+
+def proves(seal, prior):
+    """The seal's consistency proof shows its tree holds the tree of `prior` (count, root)."""
+    consistency = seal.get("consistency") or {}
+    if consistency.get("from") != prior[0] or not isinstance(consistency.get("proof"), list):
+        return False
+    if prior[0] == 0:
+        return consistency["proof"] == []
+    return verify_consistency(prior[0], seal["count"], prior[1], seal["root"], consistency["proof"])
 
 
 if __name__ == "__main__":

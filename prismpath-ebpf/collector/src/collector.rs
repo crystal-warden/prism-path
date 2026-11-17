@@ -7,7 +7,7 @@ use crate::decode::{self, Kind};
 use crate::feed::Hub;
 use crate::record::{self, PROTOCOL, MAX_RECORD};
 use crate::ring::Entry;
-use crate::seal::Sealer;
+use crate::seal::{self, Sealer};
 use crate::source::Source;
 use serde_json::{json, Value};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -29,11 +29,22 @@ pub struct Settings {
     pub idle: Duration,
     /// Stop when the source says no record will arrive again (a recording).
     pub exit_when_drained: bool,
+    /// The leaf hashes kept for consistency proofs (32 bytes each): the oldest count a seal can be proved
+    /// from is this many leaves back. At least `seal_count`, so a client that was sent the last seal is
+    /// always proved from it.
+    pub proof_window: usize,
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Settings { seal_interval: Duration::from_secs(1), seal_count: 1024, batch: 256, idle: Duration::from_millis(5), exit_when_drained: false }
+        Settings {
+            seal_interval: Duration::from_secs(1),
+            seal_count: 1024,
+            batch: 256,
+            idle: Duration::from_millis(5),
+            exit_when_drained: false,
+            proof_window: seal::DEFAULT_PROOF_WINDOW,
+        }
     }
 }
 
@@ -60,6 +71,7 @@ pub fn hello(kind: Kind, ring: &str, session: &str, settings: &Settings, queue: 
         "queue": queue,
         "seal_interval_ms": settings.seal_interval.as_millis() as u64,
         "seal_count": settings.seal_count,
+        "proof_window": settings.proof_window as u64,
         "leaf": "sha256(frame)",
     })
 }
@@ -73,14 +85,16 @@ pub fn session_id() -> String {
     hex::encode(bytes)
 }
 
+/// The framed record, or an `error` record saying why it could not be framed.
+fn frame_or_error(value: &Value) -> Vec<u8> {
+    record::frame(value).unwrap_or_else(|error| {
+        let fallback = json!({"kind": "error", "reason": format!("a record could not be framed: {error:?}")});
+        record::frame(&fallback).expect("the fallback is short canon/2")
+    })
+}
+
 fn emit(hub: &Hub, value: &Value) {
-    match record::frame(value) {
-        Ok(line) => hub.publish(line),
-        Err(error) => {
-            let fallback = json!({"kind": "error", "reason": format!("a record could not be framed: {error:?}")});
-            hub.publish(record::frame(&fallback).expect("the fallback is short canon/2"));
-        }
-    }
+    hub.publish(frame_or_error(value));
 }
 
 pub struct Run<'a> {
@@ -94,15 +108,20 @@ pub struct Run<'a> {
 
 impl<'a> Run<'a> {
     pub fn new(kind: Kind, session: String, hub: &'a Hub, settings: Settings) -> Run<'a> {
-        Run { kind, session, hub, settings, sealer: Sealer::new(), discarded: 0 }
+        let sealer = Sealer::from_accumulator_with_window(prismpath_rs::merkle::Accumulator::new(), settings.proof_window.max(1));
+        Run { kind, session, hub, settings, sealer, discarded: 0 }
     }
 
-    fn seal(&mut self, trigger: &str) {
-        let value = self.sealer.seal(self.kind.name(), &self.session, trigger);
-        emit(self.hub, &value);
+    /// Cut a seal (`interval`, `count` or `final`): every client is sent the tree's seal with the proof
+    /// from the last seal it was sent.
+    pub fn seal(&mut self, trigger: &str) {
+        self.sealer.mark(trigger);
+        let (kind, session, sealer) = (self.kind.name(), &self.session, &self.sealer);
+        self.hub.publish_seal(sealer.accumulator(), |prior| frame_or_error(&sealer.seal_for(prior, kind, session, trigger)));
     }
 
-    fn status(&mut self, source: &mut dyn Source) {
+    /// Publish a `status` record.
+    pub fn status(&mut self, source: &mut dyn Source) {
         let mut value = json!({
             "kind": "status",
             "source": self.kind.name(),
@@ -117,14 +136,21 @@ impl<'a> Run<'a> {
         emit(self.hub, &value);
     }
 
-    fn admit(&mut self) {
-        let (kind, session) = (self.kind.name(), self.session.clone());
-        let sealer = &mut self.sealer;
-        self.hub.admit(|| record::frame(&sealer.seal(kind, &session, "join")).expect("a seal is canon/2 and bounded"));
+    /// Admit the clients that subscribed since the last call, each with its join seal: the tree's seal,
+    /// proved from the count a resuming client names when it names this session.
+    pub fn admit(&mut self) {
+        let (kind, session, sealer) = (self.kind.name(), &self.session, &self.sealer);
+        self.hub.admit(sealer.accumulator(), |resume| {
+            let value = match resume {
+                Some((asked, count)) if asked == session => sealer.seal_resumed(*count, kind, session),
+                _ => sealer.seal_for(None, kind, session, "join"),
+            };
+            frame_or_error(&value)
+        });
     }
 
-    /// One drained entry: a leaf, then its record.
-    fn take(&mut self, entry: Entry) -> bool {
+    /// One drained entry: a leaf, then its record. False when the session is full.
+    pub fn take(&mut self, entry: Entry) -> bool {
         let leaf = entry.sha256();
         let index = self.sealer.count();
         if !self.sealer.add(&leaf) {

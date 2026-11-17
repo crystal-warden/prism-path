@@ -15,13 +15,27 @@ import { PATHS } from "./paths.mjs";
 import { bindAction, byId, inputValue, renderInto, showToast } from "./dom.mjs";
 import { getJson, postJson } from "./transport.mjs";
 
-const CHAIN_TONE = { intact: "ok", pending: "warn", holes: "warn", broken: "bad", empty: "warn" };
+const CHAIN_TONE = { intact: "ok", pending: "warn", holes: "warn", unproven: "bad", broken: "bad", empty: "warn" };
 const CHAIN_SAYS = {
   intact: "every leaf received is under a seal whose root the console recomputed",
   pending: "every seal so far holds; the newest leaves await the next seal",
-  holes: "every check held, and the console's copy misses leaves the collector sealed",
+  holes: "every check held, the console's copy misses leaves the collector sealed, and every seal after a hole is proven to extend the tree before it",
+  unproven: "every check held, and the tree was taken up after a hole from a seal not proven to extend the tree before it",
   broken: "a check failed: see the findings",
   empty: "no seal received yet",
+};
+
+const HOLE_WHY = {
+  gap: "dropped by the collector for this client (gap)",
+  disconnected: "sent while the console was not connected",
+  removed: "in a kept segment the store's bounds removed",
+};
+const UNPROVEN_WHY = {
+  "no-proof": "the seal carried no proof",
+  window: "the collector no longer held the leaves to prove it",
+  ahead: "the collector had not reached the count asked for",
+  removed: "the segment before it was removed by the store's bounds",
+  failed: "its proof failed (a finding)",
 };
 
 function chip(text, tone) {
@@ -56,11 +70,20 @@ export function renderFeedChain(chain) {
   const facts = [
     kv("session", chain.session || ""),
     kv("leaves", `${chain.received ?? 0} received of ${chain.count ?? 0} · joined at ${chain.joined_at ?? "?"}${chain.unframed ? ` · ${chain.unframed} without a frame` : ""}`),
-    kv("seals", `${seals.checked ?? 0} checked · ${seals.adopted ?? 0} taken up after a hole · last ${last.trigger || "?"} at ${last.count ?? "?"} leaves, root ${short(last.root)}`),
+    kv("seals", `${seals.checked ?? 0} checked · ${seals.proven ?? 0} proven after a hole · ${seals.adopted ?? 0} taken up unproven · last ${last.trigger || "?"} at ${last.count ?? "?"} leaves, root ${short(last.root)}`),
+    kv("verdicts", `records ${chain.records || "?"} · tree ${chain.tree || "?"}`),
   ];
   const holes = (chain.holes || []).length
     ? html`<div class="feed-holes"><div class="k">holes (${chain.holes_total} · ${chain.missing ?? 0} leaves the console does not hold)</div>
-        <ul class="findings">${chain.holes.map(hole => html`<li>leaves ${span(hole)} · ${hole.why === "gap" ? "dropped by the collector for this client (gap)" : "sent while the console was not connected"}${hole.segment != null ? " · segment " + hole.segment : ""}</li>`)}</ul></div>`
+        <ul class="findings">${chain.holes.map(hole => html`<li>leaves ${span(hole)} · ${HOLE_WHY[hole.why] || hole.why}${hole.segment != null ? " · segment " + hole.segment : ""}</li>`)}</ul></div>`
+    : "";
+  const unproven = (chain.unproven || []).length
+    ? html`<div class="k">tree unproven (taken up from a seal with no proof that it extends the tree before it)</div>
+        <ul class="findings">${chain.unproven.map(entry => html`<li>from ${entry.from ?? "the start"} to ${entry.to} leaves · ${UNPROVEN_WHY[entry.why] || entry.why}${entry.segment != null ? " · segment " + entry.segment : ""}</li>`)}</ul>`
+    : "";
+  const removed = (chain.removed || []).length
+    ? html`<div class="k">segments removed by the store's bounds</div>
+        <ul class="findings">${chain.removed.map(entry => html`<li>segment ${entry.segment} · ${entry.removed === "age" ? "older than the age bound" : entry.removed === "bytes" ? "over the size bound" : entry.removed} · seals ${entry.first_count ?? "?"} to ${entry.last_count ?? "?"} · ${entry.size ?? "?"} bytes, sha256 ${short(entry.sha256)}</li>`)}</ul>`
     : "";
   const unchecked = (chain.unchecked || []).length
     ? html`<div class="k">held but unchecked (no root over them could be computed after a hole)</div>
@@ -76,7 +99,7 @@ export function renderFeedChain(chain) {
   const ignored = Object.keys(chain.ignored || {}).length
     ? kv("ignored kinds", Object.entries(chain.ignored).map(([kind, count]) => `${kind} ${count}`).join(", "))
     : "";
-  return html`${head}${facts}${ignored}${holes}${unchecked}${findings}${errors}`;
+  return html`${head}${facts}${ignored}${holes}${unchecked}${unproven}${removed}${findings}${errors}`;
 }
 
 const CONNECTION_TONE = { connected: "ok", off: "warn", waiting: "warn", connecting: "warn", stopped: "warn", idle: "warn" };

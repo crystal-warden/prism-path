@@ -21,7 +21,7 @@ extern "C" fn on_signal(_signal: libc::c_int) {
 
 const USAGE: &str = "usage: prismpath-collector --source gnet|selector [--maps-dir DIR | --ring PIN | --recorded FILE]
        --socket PATH [--socket-group NAME|GID] [--tcp 127.0.0.1:PORT] [--allow-uid UID]... [--allow-gid GID]...
-       [--seal-interval-ms N] [--seal-count N] [--queue N] [--max-clients N] [--write-timeout-ms N] [--exit-when-drained]";
+       [--seal-interval-ms N] [--seal-count N] [--proof-window N] [--queue N] [--max-clients N] [--write-timeout-ms N] [--exit-when-drained]";
 
 #[derive(Debug)]
 struct Args {
@@ -58,6 +58,7 @@ fn parse(mut argv: impl Iterator<Item = String>) -> Result<Args, String> {
             "--allow-gid" => feed.allowed_gids.push(number(&flag, value())?),
             "--seal-interval-ms" => settings.seal_interval = Duration::from_millis(number(&flag, value())?),
             "--seal-count" => settings.seal_count = number(&flag, value())?,
+            "--proof-window" => settings.proof_window = number(&flag, value())?,
             "--queue" => feed.queue = number(&flag, value())?,
             "--max-clients" => feed.max_clients = number(&flag, value())?,
             "--write-timeout-ms" => feed.write_timeout = Duration::from_millis(number(&flag, value())?),
@@ -80,6 +81,12 @@ fn parse(mut argv: impl Iterator<Item = String>) -> Result<Args, String> {
     }
     if settings.seal_interval.is_zero() || settings.seal_count == 0 || feed.queue == 0 || feed.max_clients == 0 {
         return Err("the seal interval and count, the queue and the client limit must be positive".into());
+    }
+    if (settings.proof_window as u64) < settings.seal_count {
+        return Err("--proof-window must hold at least --seal-count leaves, so a client is always proved from the last seal it was sent".into());
+    }
+    if settings.proof_window > 1 << 24 {
+        return Err("--proof-window is at most 16777216 leaves (512 MiB)".into());
     }
     if recorded.is_none() && ring.is_none() && maps_dir.is_none() && kind == Kind::Gnet {
         maps_dir = Some(PathBuf::from("/sys/fs/bpf/tc/globals"));
@@ -214,6 +221,10 @@ mod tests {
         assert!(args("--source gnet").is_err());
         assert!(args("--source gnet --socket /tmp/s --queue 0").is_err());
         assert!(args("--source gnet --socket /tmp/s --write").is_err());
+        assert_eq!(args("--source gnet --socket /tmp/s --proof-window 4096").unwrap().settings.proof_window, 4096);
+        assert!(args("--source gnet --socket /tmp/s --proof-window 100").unwrap_err().contains("--seal-count"));
+        assert!(args("--source gnet --socket /tmp/s --proof-window 100 --seal-count 100").is_ok());
+        assert!(args("--source gnet --socket /tmp/s --proof-window 99999999").is_err());
         assert_eq!(resolve_group("1234"), Ok(1234));
     }
 }

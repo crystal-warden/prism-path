@@ -17,7 +17,7 @@ import { renderLogList } from "../auditing.mjs";
 const text = markup => markupOf(markup);
 
 const CHAIN = {
-  format: "prismpath.console-feed/1", session: "5ee55e55aa11bb22cc33dd44ee55ff66", source: "gnet", status: "intact",
+  format: "prismpath.console-feed/2", session: "5ee55e55aa11bb22cc33dd44ee55ff66", source: "gnet", status: "intact",
   verdict_of: "console", statement: "collector seal, unsigned", signed: false, joined_at: 0, count: 21, received: 21, unframed: 0,
   seals: { checked: 6, adopted: 0, last: { count: 21, root: "ab".repeat(32), trigger: "final" } },
   holes: [], holes_total: 0, missing: 0, unchecked: [], unchecked_total: 0, findings: [], findings_total: 0,
@@ -68,7 +68,15 @@ test("holes, unchecked spans and findings are shown", () => {
   assert.ok(holes.includes("console: holes") && holes.includes('class="chip warn"'));
   assert.ok(holes.includes("leaves 2 to 3 (2 leaves)") && holes.includes("(gap)") && holes.includes("not connected"));
   assert.ok(holes.includes("7 leaves the console does not hold") && holes.includes("leaves 4 to 6 (3 leaves)"));
-  assert.ok(holes.includes("until the next seal") && holes.includes("1 taken up after a hole"));
+  assert.ok(holes.includes("until the next seal") && holes.includes("1 taken up unproven"));
+  const unproven = text(renderFeedChain({ ...CHAIN, status: "unproven", tree: "unproven", records: "unchecked",
+    unproven: [{ from: 8, to: 14, why: "window", segment: 1 }, { from: null, to: 20, why: "removed", segment: 3 }],
+    removed: [{ segment: 2, removed: "bytes", first_count: 0, last_count: 8, size: 4096, sha256: "ab".repeat(32) }],
+    seals: { ...CHAIN.seals, proven: 2 } }));
+  assert.ok(unproven.includes("console: unproven") && unproven.includes('class="chip bad"'));
+  assert.ok(unproven.includes("from 8 to 14 leaves") && unproven.includes("no longer held the leaves"));
+  assert.ok(unproven.includes("from the start to 20") && unproven.includes("records unchecked · tree unproven"));
+  assert.ok(unproven.includes("segment 2 · over the size bound · seals 0 to 8") && unproven.includes("2 proven after a hole"));
   const broken = text(renderFeedChain({ ...CHAIN, status: "broken", findings_total: 1,
     findings: [{ check: "leaf", detail: "the record's leaf is not SHA-256 of its frame", index: 4, segment: 0, line: 6 }],
     collector_errors: [{ reason: "the ring <buffer> is corrupt" }], ignored: { weather: 2 } }));

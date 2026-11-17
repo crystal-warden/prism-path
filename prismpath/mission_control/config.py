@@ -58,6 +58,12 @@ class Settings:
     # (MC_COLLECTOR, MC_COLLECTOR_STORE), and never in the read only posture.
     collector: str = ""
     collector_store: str = ""
+    # The bounds on the kept feed sessions (MC_COLLECTOR_KEEP_BYTES, MC_COLLECTOR_KEEP_DAYS): the store's
+    # files together at most this many bytes, and no segment last written longer ago than this many days.
+    # The console removes whole oldest segments to hold them, never the one it is writing, and leaves a
+    # note in each one's place (`feed.retain`). 0 turns a bound off.
+    collector_keep_bytes: int = 1 << 30                       # 1 GiB
+    collector_keep_days: float = 30.0
     # SECURITY: loopback only. MC can start and stop the swarm and edit flow files, never LAN reachable.
     host: str = "127.0.0.1"
     port: int = 9109
@@ -100,6 +106,8 @@ class Settings:
             evidence_roots=environ.get("MC_EVIDENCE", "").split(os.pathsep),
             collector=environ.get("MC_COLLECTOR", ""),
             collector_store=environ.get("MC_COLLECTOR_STORE", ""),
+            collector_keep_bytes=int(environ.get("MC_COLLECTOR_KEEP_BYTES", str(fallback.collector_keep_bytes))),
+            collector_keep_days=float(environ.get("MC_COLLECTOR_KEEP_DAYS", str(fallback.collector_keep_days))),
             read_only=environ.get("MC_READ_ONLY", "").strip().lower() in ("1", "true", "yes", "on"),
             host=environ.get("MC_HOST", fallback.host),
             port=int(environ.get("MC_PORT", str(fallback.port))),

@@ -9,11 +9,14 @@ feed.sock`, or `unix:PATH`) or `tcp:127.0.0.1:PORT` / `tcp:[::1]:PORT` for a col
 again after connecting; the console never connects anywhere else, and it binds nothing. A remote
 enforcer's feed is reached as the collector's README says, by forwarding its Unix socket over SSH.
 
-The thread connects, sends the subscription line, and reads lines with a bound on each (the `hello`'s
+The thread connects, sends the subscription line (after the first connection to a session, the resume that
+asks the collector to prove its join seal from the last seal the console verified), and reads lines with a bound on each (the `hello`'s
 `max_record`, never above `feed.HARD_MAX_RECORD`), checking each one through `feed.SessionCheck` and
 keeping it through `feed.FeedStore`. The end of the stream, a read that waits too long, an oversized line
 or a refused subscription closes the connection, and it reconnects with exponential backoff. A new
-`session` in `hello` starts a new check and a new kept session. Request handlers only ever take the
+`session` in `hello` starts a new check and a new kept session. The kept store is held to its bounds
+(`MC_COLLECTOR_KEEP_BYTES`, `MC_COLLECTOR_KEEP_DAYS`) by `feed.retain` whenever a segment closes and at most
+once a minute besides, never touching the segment being written. Request handlers only ever take the
 state lock for a copy (`snapshot`, `live`, `series`), so a slow or silent collector never holds a request.
 """
 from __future__ import annotations
@@ -39,6 +42,7 @@ BACKOFF_START_S = 0.5
 BACKOFF_MAX_S = 30.0
 READ_CHUNK = 65536
 STORE_DIR_NAME = "collector-feed"
+RETAIN_EVERY_S = 60.0         # the age bound is also applied this often while a segment stays open
 
 
 class EndpointRefused(ValueError):
@@ -106,13 +110,19 @@ class FeedClient:
 
     def __init__(self, endpoint: Optional[Tuple[str, Any]], store_dir: Optional[str] = None, store_note: str = "",
                  rotate_bytes: int = 32 * 1024 * 1024, read_timeout_s: float = 30.0,
-                 backoff_max_s: float = BACKOFF_MAX_S):
+                 backoff_max_s: float = BACKOFF_MAX_S, keep_bytes: int = 1 << 30, keep_age_s: float = 30 * 86400.0):
         self.endpoint = endpoint
         self.store_dir = store_dir
         self.store_note = store_note
         self.rotate_bytes = rotate_bytes
         self.read_timeout_s = read_timeout_s
         self.backoff_max_s = backoff_max_s
+        self.keep_bytes = keep_bytes
+        self.keep_age_s = keep_age_s
+        self.removed_total = 0
+        self.removed_last: list = []                      # the latest removals, newest last, bounded
+        self.retain_error: Optional[str] = None
+        self._retained_at = 0.0
         self.lock = threading.Lock()
         self.changed = threading.Condition(self.lock)
         self.version = 0                                  # bumped on every change a screen shows
@@ -141,11 +151,14 @@ class FeedClient:
             return None
         endpoint = parse_endpoint(settings.collector)
         store_dir, note = store_dir_for(settings)
-        return cls(endpoint, store_dir, note, rotate_bytes=max(1 << 20, settings.max_evidence_bytes // 2))
+        return cls(endpoint, store_dir, note, rotate_bytes=max(1 << 20, settings.max_evidence_bytes // 2),
+                   keep_bytes=max(0, int(settings.collector_keep_bytes)),
+                   keep_age_s=max(0.0, float(settings.collector_keep_days)) * 86400)
 
     def start(self) -> None:
         if self.endpoint is None or self._thread is not None:
             return
+        self._retain()
         self._thread = threading.Thread(target=self._run, name="prismpath-feed", daemon=True)
         self._thread.start()
 
@@ -220,7 +233,9 @@ class FeedClient:
         sock = self._connect()
         self._sock = sock
         try:
-            sock.sendall(feed.SUBSCRIPTION)
+            with self.lock:
+                resume = self.check.resume_point() if self.check is not None else None
+            sock.sendall(feed.subscription_line(resume))
             with self.lock:
                 self.connects += 1
                 self.connection = "connected"
@@ -338,6 +353,9 @@ class FeedClient:
                         self.check.begin_segment(self._store.number)
                         self.check.line(self._hello_line)
                         self.check.line(raw)
+                    self._retain()
+                elif time.time() - self._retained_at >= RETAIN_EVERY_S:
+                    self._retain()
             except OSError as error:
                 self._store = None
                 with self.lock:
@@ -368,6 +386,29 @@ class FeedClient:
         except OSError as error:
             with self.lock:
                 self.store_error = f"the feed's segment could not be closed: {error.strerror or error}"
+        self._retain()
+
+    def _retain(self) -> None:
+        """Hold the store to its bounds (`feed.retain`), sparing the segment being written."""
+        if self.store_dir is None or not (self.keep_bytes or self.keep_age_s):
+            return
+        self._retained_at = time.time()
+        store = self._store
+        in_use = os.path.join(store.dir, feed.segment_name(store.number)) if store is not None and store._fd is not None else None
+        try:
+            removed = feed.retain(self.store_dir, self.keep_bytes, self.keep_age_s, in_use=in_use)
+        except OSError as error:
+            with self.lock:
+                self.retain_error = f"the store's bounds could not be applied: {error.strerror or error}"
+            return
+        if removed:
+            for entry in removed:
+                LOG.info("feed retention removed %s segment %d (%s)", entry["session"], entry["segment"], entry["removed"])
+            with self.lock:
+                self.removed_total += len(removed)
+                self.removed_last = (self.removed_last + removed)[-20:]
+                self.retain_error = None
+                self._bump()
 
     # ------------------------------------------------------------ what the screens read
     def snapshot(self) -> Dict[str, Any]:
@@ -375,6 +416,9 @@ class FeedClient:
             return {"connection": self.connection, "endpoint": describe(self.endpoint), "version": self.version,
                     "connects": self.connects, "connected_since": self.connected_since, "last_error": self.last_error,
                     "kept": self.kept, "store": self.store_note, "store_error": self.store_error,
+                    "retention": {"keep_bytes": self.keep_bytes, "keep_age_s": self.keep_age_s,
+                                  "removed_total": self.removed_total, "last": list(self.removed_last),
+                                  "error": self.retain_error},
                     "chain": self.check.summary() if self.check is not None else None,
                     "previous_session": self.previous}
 

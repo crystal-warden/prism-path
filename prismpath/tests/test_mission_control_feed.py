@@ -25,6 +25,7 @@ from pathlib import Path
 import pytest
 
 from prismpath.kernel import canon2
+from prismpath.ledgers import root_statement as rs
 from prismpath.ledgers.root_statement import MerkleAccumulator
 from prismpath.mission_control import evidence, feed, feed_client
 from prismpath.mission_control.config import Settings
@@ -160,7 +161,8 @@ def test_a_gap_is_a_hole_and_the_tree_is_taken_up_at_the_next_seal():
     first_seal = records[_index_of(SESSION, lambda record: record["kind"] == "seal" and record["trigger"] != "join")]
     # the leaves after the hole up to the next seal are held but no root over them could be computed
     assert summary["unchecked"] == [{"from": 4, "to": first_seal["count"], "leaves": first_seal["count"] - 4}]
-    assert summary["seals"]["adopted"] == 1
+    # the seal after the hole is proven to extend the join seal's tree (every tree extends the empty one)
+    assert summary["seals"]["proven"] == 1 and summary["seals"]["adopted"] == 0 and summary["tree"] == "proven"
     assert summary["seals"]["checked"] == sum(1 for r in records if r["kind"] == "seal") - 2
     assert summary["root"] == records[-2]["root"]
 
@@ -202,7 +204,7 @@ def test_an_index_that_skips_is_a_finding():
 def test_a_stream_must_open_with_hello_and_a_seal():
     assert _check(SESSION[1:]).summary()["findings"][0]["check"] == "no-hello"
     assert _check(SESSION[:1] + SESSION[2:]).summary()["findings"][0]["check"] == "no-starting-seal"
-    other = _replace(SESSION, 0, lambda record: record.update(protocol="prismpath.collector/2"))
+    other = _replace(SESSION, 0, lambda record: record.update(protocol="prismpath.collector/1"))
     assert _check(other).summary()["findings"][0]["check"] == "protocol"
 
 
@@ -224,13 +226,15 @@ def test_a_reconnect_to_the_same_session_is_a_hole_from_the_last_leaf_to_the_new
     join = MerkleAccumulator(leaves[:14])
     check.begin_segment(1)
     check.line(SESSION[0])
+    # resumed from the seal at 8, the last the console verified: the collector proves the join from it
     check.line(_dump({"kind": "seal", "source": "gnet", "session": records[0]["session"], "trigger": "join",
-                      "count": 14, "peaks": join.peaks(), "root": join.root(), "malformed": 0}))
+                      "count": 14, "peaks": join.peaks(), "root": join.root(), "malformed": 0,
+                      "consistency": {"from": 8, "proof": rs.consistency_proof(leaves[:14], 8)}}))
     for raw in SESSION[_index_of(SESSION, lambda record: record.get("index") == 14):]:
         check.line(raw)
     check.end_segment("eof")
     summary = check.summary()
-    assert summary["status"] == "holes" and summary["findings"] == []
+    assert summary["status"] == "holes" and summary["findings"] == [] and summary["tree"] == "proven"
     assert summary["holes"] == [{"from": 9, "to": 14, "leaves": 5, "why": "disconnected", "segment": 1}]
     assert summary["root"] == records[-2]["root"]
     # a join seal that goes back is a finding
@@ -385,7 +389,7 @@ def test_the_client_subscribes_checks_and_keeps_a_good_stream(short_dir, evidenc
     client = _client(("unix", fake.address), store)
     try:
         assert _wait(lambda: client.check is not None and client.check.segments and client.check.segments[0]["ended"] == "eof")
-        assert fake.received[0] == b'{"op":"subscribe","protocol":"prismpath.collector/1"}\n'
+        assert fake.received[0] == b'{"op":"subscribe","protocol":"prismpath.collector/2"}\n'
         live = client.live(limit=5)
         assert live["chain"]["status"] == "intact" and live["chain"]["received"] == 21
         assert [entry["index"] for entry in live["recent"]] == [20, 19, 18, 17, 16]
@@ -446,7 +450,8 @@ def test_a_reconnect_to_the_same_session_keeps_one_session_with_a_hole(short_dir
     leaves = [record["leaf"] for record in records if record["kind"] in feed.LEAF_KINDS]
     join = MerkleAccumulator(leaves[:14])
     second = [SESSION[0], _dump({"kind": "seal", "source": "gnet", "session": records[0]["session"], "trigger": "join",
-                                 "count": 14, "peaks": join.peaks(), "root": join.root(), "malformed": 0})]
+                                 "count": 14, "peaks": join.peaks(), "root": join.root(), "malformed": 0,
+                                 "consistency": {"from": 8, "proof": rs.consistency_proof(leaves[:14], 8)}})]
     second += SESSION[_index_of(SESSION, lambda record: record.get("index") == 14):]
     fake = FakeCollector([SESSION[:cut], second], path=os.path.join(short_dir, "f.sock"))
     store = evidence_root / "collector-feed"

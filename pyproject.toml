@@ -79,7 +79,8 @@ prismpath = ["flows/*.md",                    # example + reference flows
           "examples/*.md", "examples/*/*.md", "examples/*/*/*.md",   # the flows the shipped demos run
           "examples/*/*.sh", "examples/*/*.js", "examples/*/*.rs", "examples/*/*.go",
           "portable/*.mjs", "portable/*.html",
-          "portable/conformance/*.json"]      # the frozen kernel spec
+          "portable/conformance/*.json",      # the frozen kernel spec
+          "portable/transparency_dev_consistency.json"]   # the reference probes merkle_consistency.json is made from
 "prismpath.plugins.pysprint" = ["*.md"]   # ARCH.md / LESSONS.md read at runtime by the sprint plugin
 # Mission Control's browser command center — served at runtime by the FastAPI app (control-plane extra).
 "prismpath.mission_control" = ["static/*", "static/vendor/*", "static/js/*.mjs", "static/js/tests/*.mjs"]

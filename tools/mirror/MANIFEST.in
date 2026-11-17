@@ -15,6 +15,7 @@ recursive-include prismpath/gallery *.md
 recursive-include prismpath/examples *
 recursive-include prismpath/portable/conformance *.json
 include prismpath/portable/canon2.mjs prismpath/portable/merkle.mjs
+include prismpath/portable/transparency_dev_consistency.json
 recursive-include prismpath/telemetry/conformance *.json
 recursive-include prismpath/tests/fixtures *.md *.jsonl *.ppt *.json SHA256SUMS
 

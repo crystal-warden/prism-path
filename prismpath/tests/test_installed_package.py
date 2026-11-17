@@ -37,6 +37,7 @@ REQUIRED = [
     "policies/p1_lockfile.json",
     "policies/statutory_floor.md",
     "nudges/APP_ARCHITECTURE.md",
+    "portable/transparency_dev_consistency.json",
     "plugins/pysprint/ARCH.md",
 ]
 
