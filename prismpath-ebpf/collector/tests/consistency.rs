@@ -114,14 +114,29 @@ fn a_client_that_missed_seals_proves_from_the_last_one_it_was_sent() {
     let mut harness = Harness::start(Kind::Gnet, cfg, settings);
     let mut stalled = harness.client();
     // the client reads up to the seal at 64 leaves, so it holds a tree to be proved from, then stops reading
+    // one event at a time, each read before the next is pushed, so its queue of 8 never fills before the seal
+    let mut first = None;
     for request_id in 0..64 {
         harness.ring.push(&event(request_id));
-    }
-    let first = loop {
-        let value = stalled.next().unwrap();
-        if value["kind"] == "seal" && value["count"] == 64 {
-            break value;
+        loop {
+            let value = stalled.next().expect("the stalled client is sent each event while it still reads");
+            if value["kind"] == "seal" && value["count"] == 64 {
+                first = Some(value);
+                break;
+            }
+            if value["kind"] != "seal" && value["kind"] != "status" {
+                break;
+            }
         }
+    }
+    let first = match first {
+        Some(seal) => seal,
+        None => loop {
+            let value = stalled.next().expect("the seal at 64 leaves");
+            if value["kind"] == "seal" && value["count"] == 64 {
+                break value;
+            }
+        },
     };
     let mut prior: (u64, String) = (64, first["root"].as_str().unwrap().to_string());
     for request_id in 64..20_000 {
