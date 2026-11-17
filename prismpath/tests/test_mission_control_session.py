@@ -207,7 +207,7 @@ def test_a_non_loopback_bind_host_is_refused_unless_overridden():
     assert entry is not None and hasattr(entry, "check_bind_host"), "no bind host check"
     for host in ("127.0.0.1", "::1", "localhost", "127.0.0.2"):
         assert entry.check_bind_host(host, {}) is None
-    for host in ("0.0.0.0", "::", "192.168.4.2", "example.com"):
+    for host in ("0.0.0.0", "::", "192.0.2.1", "example.com"):
         with pytest.raises(SystemExit):
             entry.check_bind_host(host, {})
         warning = entry.check_bind_host(host, {"MC_ALLOW_NON_LOOPBACK": "1"})
