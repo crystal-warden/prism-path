@@ -35,7 +35,8 @@ the tree if an include rule matches it and no exclude rule does. These are not c
   * PROVENANCE.md and SHA256SUMS are generated: the research commit and tree the export was made from,
     and the sha256 of every other file in it.
 
-  * `tools/mirror_publish.yml` is written as `.github/workflows/publish.yml` (PyPI Trusted Publishing).
+  * `tools/mirror_publish.yml` is written as `.github/workflows/publish.yml` (PyPI Trusted Publishing) and
+    `tools/mirror_crates_publish.yml` as `.github/workflows/publish-crates.yml` (crates.io Trusted Publishing).
   * The overlay pyproject.toml takes its `version` from research's pyproject.toml, so the two cannot
     diverge. That one line is the only rewrite.
 
@@ -125,7 +126,7 @@ EXCLUDE_PREFIXES = [
     "prismpath/tests/test_ebpf_", "prismpath/tests/test_arch_guard.py",
     "prismpath/tests/test_field_definitions_tables.py", "prismpath/tests/test_mission_control_guide.py",
     # research tooling beside the product's
-    "tools/mirror/", "tools/mirror_readme.md", "tools/tests/test_export.py", "tools/mirror_publish.yml", "tools/export_clean.py",
+    "tools/mirror/", "tools/mirror_readme.md", "tools/tests/test_export.py", "tools/mirror_publish.yml", "tools/mirror_crates_publish.yml", "tools/export_clean.py",
     "tools/arch_guard.", "tools/arch_scorecard.json", "tools/arith_lint.py", "tools/docs_health.py",
     "tools/evidence_check.py", "tools/ledger_lint.py", "tools/run_corpora.py", "tools/fq_redundancy.py", "tools/gen_mission_control_guide.py",
     "tools/reproduce.sh", "docs/guides/reproduce.md",
@@ -137,6 +138,8 @@ OVERLAY_DIR = "tools/mirror"
 README_SOURCE = "tools/mirror_readme.md"
 PUBLISH_SOURCE = "tools/mirror_publish.yml"
 PUBLISH_PATH = ".github/workflows/publish.yml"
+CRATES_PUBLISH_SOURCE = "tools/mirror_crates_publish.yml"
+CRATES_PUBLISH_PATH = ".github/workflows/publish-crates.yml"
 VERSION_LINE = re.compile(r'^version = "[^"]*"', re.MULTILINE)
 GENERATED = ("PROVENANCE.md", "SHA256SUMS")
 
@@ -177,6 +180,7 @@ def export_plan(tracked):
         plan[path] = source
     plan["README.md"] = ROOT / README_SOURCE
     plan[PUBLISH_PATH] = ROOT / PUBLISH_SOURCE
+    plan[CRATES_PUBLISH_PATH] = ROOT / CRATES_PUBLISH_SOURCE
     for name in GENERATED:
         plan.pop(name, None)
     return plan

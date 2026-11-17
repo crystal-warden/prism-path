@@ -8,6 +8,36 @@ spec stable.
 
 ## [Unreleased]
 
+## [0.2.0] (2026-11-17)
+
+The first release since 0.1.0, and the first through Trusted Publishing. 0.1.1, 0.1.2 and 0.1.3 were tagged or
+staged but never uploaded, so this release carries everything listed under them below as well as the entries that
+follow. It is built from the product repository's `main`, exported from research `main`.
+
+What changed since 0.1.0, in short:
+
+- **One command puts a governed agent under a policy.** `prismpath agent init` sets up a Claude Code project with
+  keys, a starter policy and the hooks; `agent hook` decides each tool call and writes a signed receipt;
+  `agent verify`, `status` and `doctor` check the result. Three starter policies ship (`strict`, `default`,
+  `review`).
+- **Rules are readable.** A policy is written as a `*.rules.md` file and compiled to the verified core's image, with
+  `policy compile`, `render` and `skeleton`.
+- **Mission Control** is one console with three interfaces, for the process owner, the operator and the assessor,
+  and serves only its own page over its own host with a session token.
+- **Receipts leave PrismPath as in-toto statements** in DSSE envelopes, for any tool that reads those.
+- **Causes map to outside taxonomies.** The cause crosswalk relates every registered cause to OWASP Top 10 for
+  Agentic Applications, MITRE ATLAS and CWE, and the regulatory mapping relates them to the frameworks it names.
+- **OpenTelemetry decision attributes.** A proposal and a producer (`prismpath.agent.otel`) for the outcome, the cause
+  and the receipt of a governed tool call on its span.
+- **The classifier is proven.** Its reading of a call is defined in Lean and held to the Python over the recorded
+  inputs, the adversary probes and 20,000 generated calls.
+- **Every Merkle tree is RFC 6962's**, with consistency proofs, a streaming root in Python, Rust and C, and strict
+  canon/2 readers. These are breaking changes and are listed below.
+- **Native crates.** The four Rust crates (kernel, Facet telemetry wire, policy hot swap, preflight) are held to the
+  Python reference by the frozen corpora.
+
+The detailed entries follow.
+
 ### Changed: the classifier's syntactic reading is defined in Lean and held to it (2026-11-17)
 
 - **`formal/Classifier/`** defines the governed agent's classifier and its Claude Code and MCP mappings over the
@@ -471,9 +501,9 @@ Adopters who used these find them in research at the adopted revision.
   test_arch_guard (research's architecture guard), and the declared hardware subset test in
   test_conformance_drift.
 
-## [0.1.3] (not yet uploaded)
+## [0.1.3] (never uploaded; released inside 0.2.0)
 
-The first upload to PyPI since 0.1.0: it carries everything listed under 0.1.2 below, which was tagged but
+Was to be the first upload to PyPI since 0.1.0, and is now part of 0.2.0: it carries everything listed under 0.1.2 below, which was tagged but
 superseded before any upload. It closes the gaps 0.1.2 left in its signed receipts work. Nothing here changes a format: root statements,
 flow manifests, receipts and bundles read exactly as 0.1.2 wrote them, and a 0.1.2 log verifies unchanged.
 
