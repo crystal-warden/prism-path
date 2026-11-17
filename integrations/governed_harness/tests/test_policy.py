@@ -80,7 +80,7 @@ def test_every_reading_decides_as_the_owner_rules_say(agent_policy):
 
 
 def _oracle():
-    path = os.environ.get("PRISMPATH_CORE_ORACLE") or str(policy.REPO / "formal" / ".lake" / "build" / "bin" / "core-oracle")
+    path = os.environ.get("PRISMPATH_CORE_ORACLE") or str(Path(__file__).resolve().parents[3] / "formal" / ".lake" / "build" / "bin" / "core-oracle")
     if not Path(path).exists():
         pytest.skip("the Lean oracle is not built (cd formal && lake build core-oracle)")
     return path

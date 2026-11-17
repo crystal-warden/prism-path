@@ -16,12 +16,12 @@ model reply -> proposed call -> classifier (trusted, tested) -> reading (canon/2
 
 | File | What it is |
 |------|------------|
-| `policy/agent_rules.src.json` | the owner's rules as a `prismpath.core/1` image, as written |
-| `policy/agent_rules.core.json` | the same image in its canonical canon/2 bytes (`prismpath canonicalize`), the policy that is decided and signed |
-| `classifier.py` | a raw call to the eleven fields the policy routes on; trusted code outside the verified core |
+| `../../prismpath/agent/policy/agent_rules.src.json` | the owner's rules as a `prismpath.core/1` image, as written |
+| `../../prismpath/agent/policy/agent_rules.core.json` | the same image in its canonical canon/2 bytes (`prismpath canonicalize`), the policy that is decided and signed |
+| `classifier.py` | a re-export of `prismpath.agent.classifier`: a raw call to the eleven fields the policy routes on; trusted code outside the verified core |
 | `owner_rules.py` | the owner's rules read a second time in plain Python, the reference the policy and the scorer are held to |
-| `policy.py` | loads, checks and decides the image with the repository's own code (`core_policy`, `core_diff.render`, the reference kernel) |
-| `evidence.py` | each episode as a signed core run in the layout of `formal/diff/core_evidence.py`, verified and replayed by it |
+| `policy.py` | a re-export of `prismpath.agent.policy`: loads, checks and decides the image with the repository's own code (`core_policy`, `core_diff.render`, the reference kernel) |
+| `evidence.py` | `prismpath.agent.evidence` plus the Lean oracle replay: each episode as a signed core run in the layout of `formal/diff/core_evidence.py`, verified and replayed by it |
 | `sandbox.py`, `exec_tool.py` | an allowed call, run under `/usr/bin/bwrap` with no network and only the workspace writable |
 | `harness.py` | the loop: chat, parse, govern, report |
 | `adversary.py` | the 51 cases, the scripted probes, the live runs and the scores |
