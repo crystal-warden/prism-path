@@ -135,9 +135,9 @@ with its integrity apparatus counted, 66.9 times under an OpenTelemetry record o
 
 ## What is implemented, what is demonstrated, what is research
 
-The proofs cover the decision. Given what a call is, the answer always follows your rules. Working out what
-a call is, which file it touches and whether a command changes anything, is the job of a small reader that
-is tested on its own and asks you whenever it isn't sure.
+PrismPath doesn't try to understand everything an agent might type. It knows a short list of file operations
+and commands, and for those the answer follows your rules every time. That part is proven. When the agent
+does something outside that list, like a long shell pipeline, PrismPath doesn't guess. It stops and asks you.
 
 | capability | status |
 |---|---|
