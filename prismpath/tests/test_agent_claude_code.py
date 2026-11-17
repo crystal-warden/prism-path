@@ -162,7 +162,16 @@ def test_plain_word_grammar(command, argv):
     ("x https://a.invalid;", {"command_class": "network"}), ("cat /etc/passwd; ls", {"path_scope": "outside"}),
     ("cat ~/x;", {"path_scope": "outside"}), ("cat ../x;", {"path_traversal": True, "command_class": "mutating"}),
     ("rm .toolchain/a;", {"path_in_toolchain": True, "command_class": "mutating"}),
+    ("cat ~/.ssh/id_rsa;", {"path_scope": "outside", "command_class": "mutating"}),   # ssh only in a path token
+    ("ssh h; ls", {"command_class": "network"}), ("pip install x;", {"command_class": "network"}),
+    ("python -m pip -q install x;", {"command_class": "network"}), ("apt-get install x;", {"command_class": "network"}),
+    ("rm *.tmp;", {"path_glob": True, "command_class": "mutating"}), ("x " + "a" * 4097 + ";", {"path_scope": "unknown"}),
+    ("git push o;", {"git_op": "push", "remote_class": "other"}), ("git fetch;", {"git_op": "network"}),
+    ("git clean -fd;", {"git_op": "mutating"}), ("git reset --hard;", {"git_op": "mutating"}),
+    ("git -C /x status;", {"git_op": "unknown"}), ("git frob;", {"git_op": "unknown"}),
+    ("git push; git clean -f;", {"git_op": "mutating"}),
     ("ls $HOME", None), ("echo h\u00e9", None), ("cat /ws/a;", None), ("skill; killer", None),
+    ("git status; git commit -m x;", None), ("git reset;", None), ("npm run build;", None),
 ])
 def test_hazard_scan(command, fields):
     """The hazard scan of a command the grammar does not read (formal/Classifier/Scan.lean)."""
