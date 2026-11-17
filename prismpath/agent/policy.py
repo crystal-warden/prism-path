@@ -61,8 +61,8 @@ def starter_path(name: str) -> Path:
 
 
 def starter_of(image: bytes) -> Optional[str]:
-    """The starter whose shipped image is `image` (one trailing line feed ignored), or None."""
-    image = image[:-1] if image.endswith(b"\n") else image
+    """The starter whose shipped image is exactly `image` as `init` records it (the canonical bytes, without the
+    file's closing line feed), or None. Exact bytes, so the name always goes with the hash that was attested."""
     for name in STARTERS:
         shipped = starter_path(name).read_bytes()
         if (shipped[:-1] if shipped.endswith(b"\n") else shipped) == image:

@@ -84,6 +84,18 @@ def test_a_fresh_init_reports_everything_ok(setup):
     assert all(r["fix"] is None for r in report["checks"])
 
 
+@pytest.mark.parametrize("starter", ["strict", "default", "review"])
+def test_every_starter_is_current_and_the_dry_run_read_is_allowed_under_it(setup, starter):
+    done = _cli(setup["home"], "agent", "init", "--project", str(setup["project"]), "--yes", "--policy", starter)
+    assert done.returncode == 0, done.stderr
+    report = _report(setup)
+    rows = _by(report)
+    assert report["ok"] and all(r["status"] == "ok" for r in rows.values()), {c: r["status"] for c, r in rows.items()}
+    from prismpath.agent.policy import STARTERS
+    assert rows["policy"]["starter"] == starter and f"the {starter} starter ({STARTERS[starter]})" in rows["policy"]["detail"]
+    assert "answered allow" in rows["hook-dry-run"]["detail"]
+
+
 def test_doctor_changes_nothing(setup):
     def snapshot():
         out = {}
@@ -154,14 +166,15 @@ def test_an_older_shipped_image_warns_and_names_it(setup):
     (setup["agent"] / commands.POLICY_FILE).write_bytes(image)
     (setup["agent"] / commands.ATTESTATION_FILE).write_bytes(commands._attestation(setup["agent"], image))
     row = _only_problem(_report(setup), "policy", "warn")
-    assert "not the shipped agent_default" in row["detail"]
+    assert "is custom" in row["detail"] and row["starter"] == "custom"
     older = commands._sha256_hex(image)[:16]
-    d.OLDER_IMAGES[older] = "the test's older image"
+    d.OLDER_IMAGES[older] = ("review", "the test's older image")
     try:
         row = _only_problem(_report(setup), "policy", "warn")
     finally:
         del d.OLDER_IMAGES[older]
     assert "older shipped image, the test's older image" in row["detail"]
+    assert "current review starter (agent_review)" in row["detail"] and row["fix"] == "prismpath agent init --policy review"
 
 
 def test_a_missing_hook_entry_fails_naming_the_event(setup):

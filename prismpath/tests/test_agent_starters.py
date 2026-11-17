@@ -143,7 +143,8 @@ def test_each_starter_compiles_from_its_source_to_the_shipped_image_byte_for_byt
     image = STARTERS[name]
     source = (POLICY / f"{image}.rules.md").read_text(encoding="utf-8")
     assert ps.compile_source(source, f"{image}.rules.md") + b"\n" == starter_path(name).read_bytes()
-    assert starter_of(starter_path(name).read_bytes()) == name
+    assert starter_of(starter_path(name).read_bytes()[:-1]) == name       # the bytes init records
+    assert starter_of(starter_path(name).read_bytes()) is None            # exact: another spelling is custom
 
 
 def test_default_is_agent_default_unchanged():

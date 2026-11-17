@@ -16,6 +16,9 @@ spec stable.
   `agent_review`: reads run, every change inside the project asks, the hazards are refused as in the others. With no
   `--policy` a fresh setup records `default` and a second run keeps the starter already recorded. `status` names the
   starter in use (`custom` for an image that is none of them), and the attestation's `case` names its image.
+- **`prismpath agent doctor`** takes any shipped starter as current and names it in its policy check; an older
+  shipped image of a starter warns with `init --policy <that starter>` as its fix, and an attested image that is none
+  of them warns as `custom`, the name `status` gives it.
 - Each starter is a readable `*.rules.md` compiled to the shipped `*.core.json` byte for byte. They ship unsigned in
   the wheel: the signed `ppt-pack/1` format carries a `.ppt` table image, not a `prismpath.core/1` image, and no
   shipped pack is signed by a repository key, so `init` signs the chosen image as it did before.
