@@ -15,6 +15,8 @@ pytest.importorskip("fastapi")
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 TOOL = os.path.join(ROOT, "tools", "gen_mission_control_guide.py")
+if not os.path.isfile(TOOL):                      # an installed package carries the tests, not the tools
+    pytest.skip("tools/gen_mission_control_guide.py is not in this tree", allow_module_level=True)
 
 spec = importlib.util.spec_from_file_location("gen_mission_control_guide", TOOL)
 gen = importlib.util.module_from_spec(spec)
