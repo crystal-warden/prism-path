@@ -28,7 +28,7 @@ import hashlib
 from collections import defaultdict
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))   # scope: THIS public repo only
-EXC = re.compile(r"(node_modules|/\.git/|\.venv|/venv|site-packages|dist-info|__pycache__|\.pytest_cache|docs_health_report|/ET-BERT/|/_src/|/extern/|_retired_docs)")
+EXC = re.compile(r"(node_modules|/\.git/|\.venv|/venv|site-packages|dist-info|__pycache__|\.pytest_cache|docs_health_report|/ET-BERT/|/_src/|/extern/|_retired_docs|/\.lake/|/\.reproduce/)")
 EVIDENCE_REL = "docs/research/supporting-evidence.md"
 CLAIMS_REL = "docs/research/CLAIMS_detection_metrics.md"  # optional; lives in the private lab repo, absent here
 REPORT_REL = "docs_health_report.md"

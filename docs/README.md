@@ -34,6 +34,7 @@ solved routing", "logic as data is a rules engine"), answered with the concessio
 | [assessor.md](guides/assessor.md) | the assessor's guide: receipts, the trail, anchors, the evidence base |
 | [operator.md](guides/operator.md) | the operator's day: Mission Control, swap and attest, short lived policy changes that expire by construction, reading the trail |
 | [mission-control-api.md](guides/mission-control-api.md) | the Mission Control API: observe, control, events, prove |
+| [reproduce.md](guides/reproduce.md) | reproducing the formal proofs, differential harnesses, and frozen conformance suites from a fresh clone (`tools/reproduce.sh`) |
 
 ## design/: how and why it is built
 
