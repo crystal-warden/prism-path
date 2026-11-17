@@ -98,6 +98,7 @@ standard axioms at most (`Axioms.lean` enforces it at every build).
 | `hookCallIn_local` | the Claude Code mapping depends on the disk only through the facts `hookQueries` names |
 | `bashArgv_operator` | **any shell operator** (`\| ; & $` backtick `< > ( )`, CR, LF) anywhere in a Bash command makes it unreadable |
 | `splitPlain_outside`, `bashArgv_outside` | **any character outside the grammar** makes it unreadable |
+| `splitPlain_words_chars` | the grammar's words hold only characters of the command, so (with the operator check) no word the mapping reads holds an operator |
 | `bashArgv_tilde_brace` | a later word starting with `~` or holding `{` makes it unreadable |
 | `hook_bash_unknown`, `classify_unknownCall` | so such a hook input maps to the unknown call, whose reading is the unknown reading |
 | `commandClass_read_only`, `classify_read_only` | **nothing outside the read only set is read only**: a `read_only` reading comes from an argv whose program is in `READ_ONLY`, in neither `NETWORK` nor `PRIVILEGE`, not git, with no URL in any argument |

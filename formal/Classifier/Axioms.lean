@@ -35,6 +35,8 @@ elab "#assert_standard_axioms " id:ident : command => do
 #assert_standard_axioms Classifier.inGrammar_of_quoted
 #assert_standard_axioms Classifier.quoted_split
 #assert_standard_axioms Classifier.splitPlainGo_outside
+#assert_standard_axioms Classifier.splitPlainGo_chars
+#assert_standard_axioms Classifier.splitPlain_words_chars
 #assert_standard_axioms Classifier.splitPlain_outside
 #assert_standard_axioms Classifier.bashArgv_operator
 #assert_standard_axioms Classifier.bashArgv_outside

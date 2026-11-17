@@ -262,6 +262,56 @@ theorem splitPlainGo_outside : ∀ (fuel : Nat) (cur : Option Str) (s : Str),
 theorem splitPlain_outside {s : Str} (h : ∃ x ∈ s, inGrammar x = false) : splitPlain s = none :=
   splitPlainGo_outside _ _ _ h
 
+theorem splitPlainGo_chars (P : Char → Prop) : ∀ (fuel : Nat) (cur : Option Str) (s : Str) (ws : List Str),
+    splitPlainGo fuel cur s = some ws → (∀ x ∈ cur.getD [], P x) → (∀ x ∈ s, P x) → ∀ w ∈ ws, ∀ x ∈ w, P x
+  | fuel, cur, [], ws, h, hc, _ => by
+    cases fuel <;> cases cur <;> simp [splitPlainGo] at h <;> subst h <;> simp_all
+  | 0, _, _ :: _, _, h, _, _ => by simp [splitPlainGo] at h
+  | fuel + 1, cur, c :: cs, ws, h, hc, hs => by
+    have hcs : ∀ x ∈ cs, P x := fun x hx => hs x (List.mem_cons_of_mem _ hx)
+    unfold splitPlainGo at h
+    split at h
+    · cases cur with
+      | none => exact splitPlainGo_chars P fuel none cs ws h (by simp) hcs
+      | some w =>
+        simp only at h
+        cases hrec : splitPlainGo fuel none cs with
+        | none => rw [hrec] at h; cases h
+        | some ws' =>
+          rw [hrec] at h
+          simp only [Option.map_some, Option.some.injEq] at h
+          subst h
+          intro v hv x hx
+          rcases List.mem_cons.mp hv with rfl | hv
+          · exact hc x hx
+          · exact splitPlainGo_chars P fuel none cs ws' hrec (by simp) hcs v hv x hx
+    · split at h
+      · refine splitPlainGo_chars P fuel _ cs ws h ?_ hcs
+        intro x hx
+        simp only [Option.getD_some, List.mem_append, List.mem_singleton] at hx
+        rcases hx with hx | rfl
+        · exact hc x hx
+        · exact hs x (List.mem_cons_self ..)
+      · split at h
+        · split at h
+          · rename_i text rest hq
+            obtain ⟨hsplit, _⟩ := quoted_split hq
+            have hrest : ∀ x ∈ rest, P x := fun x hx => hcs x (by rw [hsplit]; simp [hx])
+            refine splitPlainGo_chars P fuel _ rest ws h ?_ hrest
+            intro x hx
+            simp only [Option.getD_some, List.mem_append] at hx
+            rcases hx with hx | hx
+            · exact hc x hx
+            · exact hcs x (by rw [hsplit]; simp [hx])
+          · cases h
+        · cases h
+
+/-- **The grammar's words are the command's own characters**: no word holds a character the command did not,
+so with the operator check (`bashArgv_operator`) no word the mapping reads holds a shell operator. -/
+theorem splitPlain_words_chars {s : Str} {ws : List Str} (h : splitPlain s = some ws) :
+    ∀ w ∈ ws, ∀ x ∈ w, x ∈ s :=
+  splitPlainGo_chars (· ∈ s) _ none s ws h (by simp) (fun _ hx => hx)
+
 /-- **A shell operator anywhere makes the command unreadable.** -/
 theorem bashArgv_operator (d : HookDisk) (s : String) (cwd ws : Str)
     (h : ∃ x ∈ s.toList, isShellOperator x = true) : bashArgv d (some (.str s)) cwd ws = none := by
