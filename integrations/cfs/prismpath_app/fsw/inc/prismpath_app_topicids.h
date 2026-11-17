@@ -1,0 +1,22 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* Copyright 2026 Crystal Warden Supply Chain Labs LLC */
+
+/** @file PRISMPATH_APP topic IDs. The defaults, 0xE0 to 0xE3, sit clear of every topic the sample app and the stock
+ *  apps of this cFS bundle use. A mission overrides them by supplying its own prismpath_app_topicid_values.h. */
+#ifndef PRISMPATH_APP_TOPICIDS_H
+#define PRISMPATH_APP_TOPICIDS_H
+
+#include "prismpath_app_topicid_values.h"
+
+#define PRISMPATH_APP_MISSION_CMD_TOPICID                 PRISMPATH_APP_MISSION_TIDVAL(CMD)
+#define DEFAULT_PRISMPATH_APP_MISSION_CMD_TOPICID         0xE0
+#define PRISMPATH_APP_MISSION_SEND_HK_TOPICID             PRISMPATH_APP_MISSION_TIDVAL(SEND_HK)
+#define DEFAULT_PRISMPATH_APP_MISSION_SEND_HK_TOPICID     0xE1
+#define PRISMPATH_APP_MISSION_PROPOSED_CMD_TOPICID        PRISMPATH_APP_MISSION_TIDVAL(PROPOSED_CMD)
+#define DEFAULT_PRISMPATH_APP_MISSION_PROPOSED_CMD_TOPICID 0xE2
+#define PRISMPATH_APP_MISSION_VEHICLE_CMD_TOPICID         PRISMPATH_APP_MISSION_TIDVAL(VEHICLE_CMD)
+#define DEFAULT_PRISMPATH_APP_MISSION_VEHICLE_CMD_TOPICID 0xE3
+#define PRISMPATH_APP_MISSION_HK_TLM_TOPICID              PRISMPATH_APP_MISSION_TIDVAL(HK_TLM)
+#define DEFAULT_PRISMPATH_APP_MISSION_HK_TLM_TOPICID      0xE1
+
+#endif

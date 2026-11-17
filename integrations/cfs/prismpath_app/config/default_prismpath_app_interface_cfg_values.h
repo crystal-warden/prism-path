@@ -1,0 +1,9 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* Copyright 2026 Crystal Warden Supply Chain Labs LLC */
+
+#ifndef DEFAULT_PRISMPATH_APP_INTERFACE_CFG_VALUES_H
+#define DEFAULT_PRISMPATH_APP_INTERFACE_CFG_VALUES_H
+
+#define PRISMPATH_APP_MISSION_CFGVAL(x) DEFAULT_PRISMPATH_APP_MISSION_##x
+
+#endif

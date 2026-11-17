@@ -62,3 +62,4 @@ prismpath/comparisons/results/**/opa_*.log
 # runtime state the connector writes beside the working directory (FileDeferralStore); never repo content
 *.deferrals/
 .hypothesis/
+.cfs-build/
