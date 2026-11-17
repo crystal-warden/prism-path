@@ -91,7 +91,7 @@ The classifier that reads a call into a class (a read, a write, a command, an un
 
 A hook allow skips Claude Code's own prompt for that call. An ask is Claude Code's prompt. The receipt records that PrismPath escalated the call to you. It does not record what you answered.
 
-The hook fails closed. Input it cannot read, a missing or broken key, a policy whose attestation does not verify, any error at all, gives a deny with cause 126, `agent:hook-error`. The written command ends in `|| exit 2` so that even a broken install blocks, because a hook that cannot start exits with a code Claude Code treats as a block.
+The hook fails closed. Input it cannot read, a missing or broken key, a policy whose attestation does not verify, any error at all, gives a deny with cause 126, `agent:hook-error`. A hook that cannot even start exits with 1, which Claude Code would let through, so the written command ends in `|| exit 2` and even a broken install blocks.
 
 Tools from MCP servers reach the hook as `unknown` and ask, since PrismPath does not read what an arbitrary server's tool does. To decide those calls, and for agents other than Claude Code, put the MCP proxy in front of the server.
 
