@@ -198,7 +198,7 @@ def run(req: RunReq):
 
 @router.post("/manifest")
 def manifest(req: ManifestReq):
-    """Change control (U6): whether a flow is authorized under the pinned authority key files, and with a
+    """Change control, whether a flow is authorized under the pinned authority key files, and with a
     receipt named, whether the root statement covering it names this flow's text."""
     def status():
         result = evidence.manifest_status(req.flow, pins=req.pins)
@@ -217,13 +217,13 @@ def manifest(req: ManifestReq):
 
 @router.post("/pack")
 def pack(req: PackReq):
-    """A signed policy pack verified against the pinned authority key files (U7)."""
+    """A signed policy pack verified against the pinned authority key files."""
     return _read(lambda: evidence.pack_report(req.ppt, pins=req.pins))
 
 
 @router.post("/anchor")
 def anchor(req: AnchorReq):
-    """An anchored record verified, read only (U4)."""
+    """An anchored record verified, read only."""
     return _read(lambda: evidence.anchor_report(leaf=req.leaf, anchor_dir=req.dir, label=req.label,
                                                 root_file=req.root, tsr=req.tsr, cafile=req.cafile))
 

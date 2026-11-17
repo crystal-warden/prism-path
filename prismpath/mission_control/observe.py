@@ -19,32 +19,37 @@ router = APIRouter(tags=["observe"])
 
 @router.get("/status")
 def get_status():
+    """The followed run's state: heartbeat, iteration, gate verdict and the console's own audit count."""
     return core.status(core.snapshot())
 
 
 @router.get("/interactions")
 def get_interactions():
+    """Who said what to which worker in the followed run."""
     return core.interactions(core.snapshot())
 
 
 @router.get("/flow")
 def get_flow():
+    """The followed run's flow and where it stands in it."""
     return core.flow_state(core.snapshot())
 
 
 @router.get("/flow/graph")
 def get_flow_graph(path: str = Query(None, description="Contained flow path; omitted → the live flow.")):
+    """The flow's topology with edges classified by tier and the live active node."""
     return core.serialize_flow_graph(core.snapshot(), path)
 
 
 @router.get("/balance")
 def get_balance():
+    """The followed run's category balance ledger: how many units each category has had."""
     return core.balance_state(core.snapshot())
 
 
 @router.get("/retrievals")
 def get_retrievals():
-    """Which RAG chunks the run pulled, per turn (source · path · score) — the Retrieval port, observed."""
+    """Which RAG chunks the run pulled, per turn (source, path, score)."""
     return core.retrievals(core.snapshot())
 
 
@@ -58,13 +63,14 @@ def get_queue():
 
 @router.get("/fanouts")
 def get_fanouts():
-    """Fan-out composition trees (read-only)."""
+    """Fan out composition trees."""
     from prismpath.workers import composer as _composer
     return {"fanouts": _composer.fanout_tree()}
 
 
 @router.get("/fanout/ckpt")
 def get_fanout_ckpt(path: str = Query(...)):
+    """One fan out checkpoint under the queue directory."""
     from prismpath.ledgers import checkpoint as _ckpt
     qroot = os.path.realpath(_ckpt.queue_dir())
     rp = os.path.realpath(path)
@@ -78,12 +84,14 @@ def get_fanout_ckpt(path: str = Query(...)):
 
 @router.get("/audit")
 def get_audit():
+    """The console's own audit log: its root, its count, whether it verifies and the newest events."""
     return {"root": core.audit.LOG.current_root(), "n": len(core.audit.LOG.events),
             "verify": core.audit.LOG.verify_log(), "events": core.audit.LOG.events[-100:]}
 
 
 @router.get("/audit/proof")
 def get_audit_proof(i: int = Query(0)):
+    """The Merkle inclusion path of the console's own audit event at index `i`."""
     log = core.audit.LOG
     if not (0 <= i < len(log.leaves)):
         raise HTTPException(status_code=400, detail="bad index")

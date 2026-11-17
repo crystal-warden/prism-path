@@ -35,6 +35,7 @@ REFUSALS = {
 
 @router.get("/files")
 def list_files():
+    """The followed project's files the console lists: flows, fixtures, manifests, signatures, lockfiles, notes and public keys."""
     proj = core.current_project()                             # one project for the whole request
     return {"proj": os.path.basename(proj), "dir": proj, "files": core.file_tree(proj)}
 
@@ -55,6 +56,7 @@ def _read_refused(path: str, reason: str) -> JSONResponse:
 
 @router.get("/file")
 def read_file(path: str = Query(...)):
+    """One listed file of the followed project, never secret material."""
     proj = core.current_project()                          # one project for the whole request
     fp = core.safe_path(proj, path)                        # ValueError on traversal -> 400 envelope
     # The readable set is judged on the path asked for and on the file it resolves to, so a link with a
@@ -134,6 +136,7 @@ def flow_name(text: str):
 
 @router.post("/file", openapi_extra=WRITE)
 def write_file(req: FileWriteReq, request: Request):
+    """Write a flow document or its fixtures into the followed project, recorded before it is written."""
     proj = core.current_project()                                 # one project for the whole request
     resolved = core.safe_path(proj, req.path)                     # ValueError on traversal -> 400 envelope
     # The kind is the path asked for and the file it resolves to: a flow named link to a manifest is refused.

@@ -93,6 +93,16 @@ aside). Compare the `manifest_sha256` it prints with the one the signed root nam
 refused for want of authorization is itself a receipt, with the cause (`sig:missing`,
 `flow:sha256-mismatch` 87, `flow:version-replay` 88 and the rest).
 
+**In the console.** The auditing interface of Mission Control ([`mission-control-api.md`](mission-control-api.md))
+reads the same evidence in a browser, and is complete under `--read-only`, so it can run over a copy of the
+evidence you were handed with `MC_EVIDENCE` naming it. It lists every audit log and evidence run under
+those roots with its root and its signed, signed-unpinned, unsigned or invalid status, decodes one receipt
+with its cause from the registry and its inclusion path and covering statement, and writes the bundle.
+The page checks the receipt again itself from the bytes the server returned, under a key you pin, and
+shows its verdict beside the server's. It also verifies anchors, evidence runs, change control and policy
+packs against pinned authority keys, and checks a kept collector feed again from its bytes. It writes
+nothing.
+
 ## 3. What the evidence base is
 
 Every public claim maps to a row in `docs/research/supporting-evidence.md`: claim, method, result, honest

@@ -62,7 +62,7 @@
   "console": [
     "mission_control/"
   ],
-  "_console_note": "Mission Control is the operator's console (observe, control, events, prove); it consumes the ledgers and the kernel and is not core.",
+  "_console_note": "Mission Control is the one console, with authoring, operating and auditing interfaces (observe, control, events, prove, evidence); it consumes the ledgers and the kernel and is not core.",
   "_triage_resolved_note": "September 2026: analysis.py is kernel/ (static analysis), chat_agent.py is workers/ (a worker backend), ledger_runner.py is ledgers/ (a flow driven per item with a git proof), mission_control/ is the console.",
   "vocabulary": "docs/vocabulary.json",
   "dictionary": "docs/DICTIONARY.md",
