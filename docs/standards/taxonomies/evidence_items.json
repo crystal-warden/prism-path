@@ -1,0 +1,55 @@
+{
+ "taxonomy": "PrismPath evidence",
+ "version": "as of repository main on 2026-11-16",
+ "checked": "2026-11-16",
+ "kind": "the artifacts PrismPath produces that a regulatory mapping can cite",
+ "ids": {
+  "receipt": "Decision receipt",
+  "root-statement": "Signed root statement",
+  "signed-policy-image": "Signed policy image",
+  "policy-attestation": "Policy attestation",
+  "rollback-refusal": "Rollback refusal",
+  "escalation-to-person": "Escalation to a person",
+  "cause-code": "Cause code",
+  "mission-control-audit-log": "Mission Control audit log",
+  "anchor": "Timestamp anchor"
+ },
+ "detail": {
+  "receipt": {
+   "what": "The per decision record. It names what decided, what it decided, the policy version in force, the time and, when the decision refused, parked or escalated, the cause byte. Each receipt is a leaf of its audit log's Merkle tree.",
+   "where": "prismpath/ledgers/audit_log.py, docs/DICTIONARY.md (receipt)"
+  },
+  "root-statement": {
+   "what": "A statement of a log's Merkle root signed with the deployment's instance key. It gives the leaf count, the previous statement's hash, the time and the policy in force. A chain of statements shows a shortened log, a rewritten receipt, a removed statement or a foreign key.",
+   "where": "prismpath/ledgers/root_statement.py"
+  },
+  "signed-policy-image": {
+   "what": "The compiled policy with its signed manifest. The loader checks signature, key, image hash, table counts, worst case execution bound, version and envelope before the image can decide anything.",
+   "where": "prismpath/hotswap/policy_pack.py"
+  },
+  "policy-attestation": {
+   "what": "The host's record that the verified policy image is the one in force, with the pack SBOM that names the image by hash. The delivery assessor runs those checks again on a copy of the deployed directory.",
+   "where": "prismpath/hotswap/policy_host.py, adapters/compliance/assess_policy_delivery.py"
+  },
+  "rollback-refusal": {
+   "what": "The refusal, with its cause and an audit event, of an older signed policy image or flow manifest below the accepted version floor (causes 9 and 88).",
+   "where": "prismpath/hotswap/policy_host.py, prismpath/kernel/causes.py"
+  },
+  "escalation-to-person": {
+   "what": "A decision that is handed to a person and not run, recorded as a receipt with its escalation cause (for example causes 34, 113, 115, 116, 122, 124 and 125). PrismPath records the escalation. The person, the channel they answer in and their training are the operator's.",
+   "where": "prismpath/kernel/causes.py, docs/design/spec-cause-codes.md"
+  },
+  "cause-code": {
+   "what": "The registered one byte reason a decision refused, parked or escalated, with a frozen name and class, identical in every substrate that carries it.",
+   "where": "prismpath/kernel/causes.py, docs/standards/cause-crosswalk.json"
+  },
+  "mission-control-audit-log": {
+   "what": "The console's own append only log. A control action is an intent event written before the effect and a result event after it, and the actor names the console interface and the session fingerprint. With an instance key each event is followed by a signed root statement.",
+   "where": "prismpath/mission_control/audit.py, prismpath/trail.py"
+  },
+  "anchor": {
+   "what": "An OpenTimestamps or RFC 3161 proof that a root statement's hash existed at a time a third party can check. Optional, and made by `ledger anchor`.",
+   "where": "prismpath/ledgers/ledger_ots.py"
+  }
+ }
+}

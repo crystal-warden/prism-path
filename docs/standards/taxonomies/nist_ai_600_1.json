@@ -1,0 +1,22 @@
+{
+ "taxonomy": "NIST AI 600-1, Generative AI Profile",
+ "version": "1.0",
+ "released": "2024-07",
+ "source": "https://nvlpubs.nist.gov/nistpubs/ai/NIST.AI.600-1.pdf",
+ "checked": "2026-11-16",
+ "kind": "the twelve risks of section 2, by section number; the suggested actions are not pinned or mapped",
+ "ids": {
+  "2.1": "CBRN Information or Capabilities",
+  "2.2": "Confabulation",
+  "2.3": "Dangerous, Violent, or Hateful Content",
+  "2.4": "Data Privacy",
+  "2.5": "Environmental Impacts",
+  "2.6": "Harmful Bias and Homogenization",
+  "2.7": "Human-AI Configuration",
+  "2.8": "Information Integrity",
+  "2.9": "Information Security",
+  "2.10": "Intellectual Property",
+  "2.11": "Obscene, Degrading, and/or Abusive Content",
+  "2.12": "Value Chain and Component Integration"
+ }
+}

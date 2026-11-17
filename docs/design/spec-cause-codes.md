@@ -76,6 +76,27 @@ triple; descriptions may be edited for clarity, nothing else may move without th
 the same commit that appends rows. A future registry that must break these rules is a new
 registry, versioned as such.
 
+## 4.1 Registration
+
+The rule the registry already follows, written down. A cause has a stable number. Numbers are only ever
+appended, after the highest number present, in whatever band that falls, and a number is never renumbered
+or reused, including when its cause is retired. A cause's canonical name and its class are fixed once it is
+registered. Its description may be edited for clarity and nothing else may move without the pinned
+hash changing in the commit that appends the row. A registry that must break these rules is a new registry.
+
+A new cause is proposed with a change that does all of the following in one commit.
+
+1. Name the refusal site. The cause comes from a refusal, park or escalation the code actually emits, and its
+   canonical name is the string the code emits, or a new colon style name for a decision that had none.
+2. Append the row to `prismpath/kernel/causes.py` with the next number, its class and a one line description.
+3. Update the frozen hash and the occupied ranges in the referee, `prismpath/tests/test_causes.py`, and the
+   ranges in section 3 above.
+4. Add the cause to `docs/standards/cause-crosswalk.json`, mapped to OWASP Top 10 for Agentic Applications,
+   MITRE ATLAS and CWE ids with a one line rationale, or marked none with the reason. A cause that is an internal
+   routing, state or integrity condition says so and is not forced onto a taxonomy. The referee
+   `prismpath/tests/test_cause_crosswalk.py` fails until this is done.
+5. Name the emitter's own refusal string beside the cause where the site keeps one, as section 6.1 does.
+
 ## 5. Mapping to the attentional-depth trigger classes
 
 The collaboration's trigger taxonomy distinguishes support-conditioned reopening (the evidence

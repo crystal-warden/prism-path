@@ -1,0 +1,30 @@
+{
+ "taxonomy": "EU AI Act, Regulation (EU) 2024/1689",
+ "version": "as amended by Regulation (EU) 2026/1744 (Digital Omnibus on AI)",
+ "released": "2026-07-08 (the amending Regulation)",
+ "source": "https://eur-lex.europa.eu/eli/reg/2024/1689/oj and https://eur-lex.europa.eu/eli/reg/2026/1744/oj",
+ "checked": "2026-11-16",
+ "kind": "provisions, by article and paragraph; the text is paraphrased, never quoted",
+ "application": {
+  "annex_iii_high_risk_chapter_iii_sections_1_to_3": "2027-12-02",
+  "annex_i_high_risk_chapter_iii_sections_1_to_3": "2028-08-02",
+  "note": "Chapter III Section 2 holds Articles 12, 14 and 15 and Section 3 holds Articles 19 and 26. Regulation (EU) 2026/1744 sets these dates in its amendment of Article 113. It was read in its Official Journal form for the dates. The wording of Articles 12, 14, 15, 19 and 26 was read in the Regulation as published and is paraphrased here."
+ },
+ "ids": {
+  "Art. 12(1)": "High-risk AI systems technically allow automatic recording of events (logs) over the lifetime of the system.",
+  "Art. 12(2)(a)": "Logging enables recording of events relevant to identifying situations that may present a risk or involve a substantial modification.",
+  "Art. 12(2)(b)": "Logging enables recording of events relevant to post-market monitoring under Article 72.",
+  "Art. 12(2)(c)": "Logging enables recording of events relevant to monitoring the operation of the system under Article 26(5).",
+  "Art. 14(1)": "High-risk AI systems are designed so natural persons can effectively oversee them while in use.",
+  "Art. 14(4)(b)": "The persons overseeing stay aware of the tendency to over-rely on the output (automation bias).",
+  "Art. 14(4)(d)": "The persons overseeing can decide not to use the system, or disregard, override or reverse its output.",
+  "Art. 14(4)(e)": "The persons overseeing can intervene in the operation or interrupt the system through a stop button or similar procedure.",
+  "Art. 15(1)": "High-risk AI systems reach an appropriate level of accuracy, robustness and cybersecurity and perform consistently over their lifecycle.",
+  "Art. 15(4)": "Systems are as resilient as possible to errors, faults and inconsistencies, and robustness may use backup or fail-safe plans.",
+  "Art. 15(5)": "Systems resist attempts by unauthorised third parties to alter their use, outputs or performance by exploiting vulnerabilities, including AI specific attacks.",
+  "Art. 19(1)": "Providers keep the automatically generated logs under their control for a period appropriate to the purpose and at least six months, unless other law says otherwise.",
+  "Art. 26(2)": "Deployers assign human oversight to natural persons with the necessary competence, training, authority and support.",
+  "Art. 26(5)": "Deployers monitor the operation of the high-risk system on the basis of the instructions for use.",
+  "Art. 26(6)": "Deployers keep the automatically generated logs under their control for a period appropriate to the purpose and at least six months, unless other law says otherwise."
+ }
+}

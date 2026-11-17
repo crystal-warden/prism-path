@@ -1,0 +1,1912 @@
+{
+ "_meta": {
+  "id": "cause_crosswalk",
+  "registry": "prismpath/kernel/causes.py",
+  "checked": "2026-11-16",
+  "reading": "A cause code is a refusal, park or escalation by a defense. Each entry names the risk, technique or weakness whose condition the refusal answers. It does not claim the cause detects that attack, only that the structural condition it refuses is the one the entry describes. Where no entry fits the entry says none and why. Internal routing, state and integrity causes are not forced onto a taxonomy.",
+  "kinds": {
+   "security-control": "the cause refuses or escalates a condition an attacker or a faulty agent would produce",
+   "routing": "an intended routing outcome or a refusal of a malformed reading, not itself a security risk",
+   "internal": "a malformed input, completeness or state transition refusal inside the stack"
+  },
+  "taxonomies": {
+   "owasp_asi": {
+    "name": "OWASP Top 10 for Agentic Applications",
+    "version": "2026",
+    "released": "2025-12-09",
+    "pinned": "docs/standards/taxonomies/owasp_agentic_top10.json"
+   },
+   "mitre_atlas": {
+    "name": "MITRE ATLAS",
+    "version": "2026.10",
+    "released": "2026-10-28",
+    "pinned": "docs/standards/taxonomies/mitre_atlas.json"
+   },
+   "cwe": {
+    "name": "CWE",
+    "version": "5.0",
+    "released": "2026-10-28",
+    "pinned": "docs/standards/taxonomies/cwe.json"
+   }
+  }
+ },
+ "entries": {
+  "1": {
+   "name": "sig:missing",
+   "class": "authority",
+   "kind": "security-control",
+   "owasp_asi": {
+    "ids": [
+     "ASI04"
+    ],
+    "rationale": "A pack or flow with no signature has no provenance, which is the supply chain gap the loader exists to close."
+   },
+   "mitre_atlas": {
+    "ids": [
+     "AML.T0010.001"
+    ],
+    "rationale": "An unsigned artifact is how a tampered software component would enter the deployment path."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-494"
+    ],
+    "rationale": "The loader declines to take policy code that carries no integrity check."
+   }
+  },
+  "2": {
+   "name": "sig:invalid",
+   "class": "authority",
+   "kind": "security-control",
+   "owasp_asi": {
+    "ids": [
+     "ASI04"
+    ],
+    "rationale": "A signature that does not verify means the artifact is not the one the publisher signed."
+   },
+   "mitre_atlas": {
+    "ids": [
+     "AML.T0010.001"
+    ],
+    "rationale": "A modified or substituted artifact is the supply chain compromise the signature check refuses."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-347"
+    ],
+    "rationale": "Direct match: the cryptographic signature fails verification."
+   }
+  },
+  "3": {
+   "name": "sig:revoked-key",
+   "class": "authority",
+   "kind": "security-control",
+   "owasp_asi": {
+    "ids": [
+     "ASI03",
+     "ASI04"
+    ],
+    "rationale": "A signature under a revoked key is a credential that should no longer carry authority."
+   },
+   "mitre_atlas": {
+    "ids": [
+     "AML.T0010.001"
+    ],
+    "rationale": "A stolen or retired signing key would be used to introduce a tampered artifact."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-324"
+    ],
+    "rationale": "The key is past the point at which the signer was entitled to use it (nearest entry; revocation is not expiry)."
+   }
+  },
+  "4": {
+   "name": "manifest:key-id-mismatch",
+   "class": "authority",
+   "kind": "security-control",
+   "owasp_asi": {
+    "ids": [
+     "ASI04"
+    ],
+    "rationale": "The manifest names a different signer than the key offered, so the artifact is not bound to the expected publisher."
+   },
+   "mitre_atlas": {
+    "ids": [
+     "AML.T0010.001"
+    ],
+    "rationale": "Substituting a manifest or key is one way to pass a tampered artifact as a trusted one."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-345"
+    ],
+    "rationale": "The authenticity of the manifest is not established against the offered key."
+   }
+  },
+  "5": {
+   "name": "manifest:bad-format",
+   "class": "authority",
+   "kind": "internal",
+   "owasp_asi": {
+    "ids": [],
+    "none": "A document that cannot be parsed is refused before any trust is placed in it; no agent behaviour is involved."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "Malformed input rejection is not an adversary technique in the ATLAS catalogue."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-1286"
+    ],
+    "rationale": "The manifest fails the syntax check."
+   }
+  },
+  "6": {
+   "name": "image:sha256-mismatch",
+   "class": "authority",
+   "kind": "security-control",
+   "owasp_asi": {
+    "ids": [
+     "ASI04"
+    ],
+    "rationale": "The image or its recomputed properties differ from what the signed manifest committed to, so the artifact changed after signing."
+   },
+   "mitre_atlas": {
+    "ids": [
+     "AML.T0010.001"
+    ],
+    "rationale": "Post signing modification of a deployed policy artifact is a supply chain compromise of that artifact."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-354"
+    ],
+    "rationale": "A hash, count or bound recorded in the signed manifest does not match the recomputed value."
+   }
+  },
+  "7": {
+   "name": "manifest:count-mismatch",
+   "class": "authority",
+   "kind": "security-control",
+   "owasp_asi": {
+    "ids": [
+     "ASI04"
+    ],
+    "rationale": "The image or its recomputed properties differ from what the signed manifest committed to, so the artifact changed after signing."
+   },
+   "mitre_atlas": {
+    "ids": [
+     "AML.T0010.001"
+    ],
+    "rationale": "Post signing modification of a deployed policy artifact is a supply chain compromise of that artifact."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-354"
+    ],
+    "rationale": "A hash, count or bound recorded in the signed manifest does not match the recomputed value."
+   }
+  },
+  "8": {
+   "name": "manifest:wcet-mismatch",
+   "class": "authority",
+   "kind": "security-control",
+   "owasp_asi": {
+    "ids": [
+     "ASI04"
+    ],
+    "rationale": "The image or its recomputed properties differ from what the signed manifest committed to, so the artifact changed after signing."
+   },
+   "mitre_atlas": {
+    "ids": [
+     "AML.T0010.001"
+    ],
+    "rationale": "Post signing modification of a deployed policy artifact is a supply chain compromise of that artifact."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-354"
+    ],
+    "rationale": "A hash, count or bound recorded in the signed manifest does not match the recomputed value."
+   }
+  },
+  "9": {
+   "name": "image:version-replay",
+   "class": "authority",
+   "kind": "security-control",
+   "owasp_asi": {
+    "ids": [
+     "ASI04"
+    ],
+    "rationale": "Replaying an older signed policy reinstates rules the publisher has since replaced."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "ATLAS has no rollback technique; T0081 concerns an agent's own configuration, not the policy that governs it."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-1328",
+     "CWE-294"
+    ],
+    "rationale": "A version floor stops an older valid artifact being accepted again (replay of a once valid input)."
+   }
+  },
+  "10": {
+   "name": "image:unsigned-refused",
+   "class": "authority",
+   "kind": "security-control",
+   "owasp_asi": {
+    "ids": [
+     "ASI04"
+    ],
+    "rationale": "An unsigned image is refused unless the operator explicitly allows it, which keeps the decision with the operator."
+   },
+   "mitre_atlas": {
+    "ids": [
+     "AML.T0010.001"
+    ],
+    "rationale": "Unsigned code is the entry path for a tampered component."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-494"
+    ],
+    "rationale": "Direct match: code accepted without an integrity check is refused."
+   }
+  },
+  "16": {
+   "name": "image:caps-exceeded",
+   "class": "envelope",
+   "kind": "internal",
+   "owasp_asi": {
+    "ids": [],
+    "none": "An oversize image is refused by an admission bound; no agent behaviour is involved."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "Capacity bounds on a policy image are not an adversary technique in the ATLAS catalogue."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-770"
+    ],
+    "rationale": "Resources are bounded by a fixed maximum instead of being allocated without limit."
+   }
+  },
+  "17": {
+   "name": "packing:unknown-profile",
+   "class": "envelope",
+   "kind": "internal",
+   "owasp_asi": {
+    "ids": [],
+    "none": "A manifest naming an unknown packing profile is a compatibility refusal."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "Not an adversary technique."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-1287"
+    ],
+    "rationale": "The declared profile is not one of the accepted values."
+   }
+  },
+  "18": {
+   "name": "spiral:sidecar-missing",
+   "class": "envelope",
+   "kind": "internal",
+   "owasp_asi": {
+    "ids": [],
+    "none": "A declared sidecar is absent; a completeness refusal."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "Not an adversary technique."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-20"
+    ],
+    "rationale": "The pack is missing an input its manifest declares."
+   }
+  },
+  "19": {
+   "name": "spiral:sidecar-hash-mismatch",
+   "class": "envelope",
+   "kind": "security-control",
+   "owasp_asi": {
+    "ids": [
+     "ASI04"
+    ],
+    "rationale": "The sidecar differs from the hash the signed manifest committed to."
+   },
+   "mitre_atlas": {
+    "ids": [
+     "AML.T0010.001"
+    ],
+    "rationale": "Post signing modification of a pack component."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-354"
+    ],
+    "rationale": "Hash of the sidecar does not match the signed value."
+   }
+  },
+  "32": {
+   "name": "route:no-matching-edge",
+   "class": "routing",
+   "kind": "routing",
+   "owasp_asi": {
+    "ids": [],
+    "none": "The fail closed default of every decision, which every refusal class can reach; it names no single risk."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "A default, not a technique."
+   },
+   "cwe": {
+    "ids": [],
+    "none": "A default refusal is the intended behaviour, not a weakness."
+   }
+  },
+  "33": {
+   "name": "route:below-human-floor",
+   "class": "routing",
+   "kind": "routing",
+   "owasp_asi": {
+    "ids": [],
+    "none": "A calibrated routing outcome that sends a case to a person; it names no risk by itself."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "Low semantic confidence may follow an adversarial input but need not, so no technique is named."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-1039"
+    ],
+    "rationale": "Nearest entry: handling of inputs a recognition mechanism cannot classify with confidence."
+   }
+  },
+  "34": {
+   "name": "route:needs-human",
+   "class": "routing",
+   "kind": "routing",
+   "owasp_asi": {
+    "ids": [],
+    "none": "A worker asked for a person; an intended routing outcome."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "Not an adversary technique."
+   },
+   "cwe": {
+    "ids": [],
+    "none": "Not a weakness."
+   }
+  },
+  "35": {
+   "name": "route:max-steps",
+   "class": "routing",
+   "kind": "security-control",
+   "owasp_asi": {
+    "ids": [
+     "ASI08"
+    ],
+    "rationale": "A step bound stops a runaway walk before one failure repeats across steps."
+   },
+   "mitre_atlas": {
+    "ids": [
+     "AML.T0034.002"
+    ],
+    "rationale": "Agentic resource consumption, bounded by the signed step limit."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-834"
+    ],
+    "rationale": "Excessive iteration, bounded by construction."
+   }
+  },
+  "36": {
+   "name": "route:stuck",
+   "class": "routing",
+   "kind": "routing",
+   "owasp_asi": {
+    "ids": [],
+    "none": "A flow with a non terminal node and no edge; an authoring defect."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "Not an adversary technique."
+   },
+   "cwe": {
+    "ids": [],
+    "none": "Not a weakness in the CWE sense; a defect in the author's flow."
+   }
+  },
+  "37": {
+   "name": "route:contract-violation",
+   "class": "routing",
+   "kind": "routing",
+   "owasp_asi": {
+    "ids": [],
+    "none": "A worker output outside its declared contract; it names no single agentic risk."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "Not an adversary technique by itself."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-20"
+    ],
+    "rationale": "Worker output is validated against its contract before it is used."
+   }
+  },
+  "48": {
+   "name": "wire:no-terminator",
+   "class": "wire",
+   "kind": "internal",
+   "owasp_asi": {
+    "ids": [],
+    "none": "A frame with no complete codeword is a decode refusal on a data stream; no agent is involved."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "Not an adversary technique."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-1286"
+    ],
+    "rationale": "The frame fails the syntax of the code."
+   }
+  },
+  "49": {
+   "name": "wire:dangling-codeword",
+   "class": "wire",
+   "kind": "internal",
+   "owasp_asi": {
+    "ids": [],
+    "none": "Trailing partial codeword; decode refusal."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "Not an adversary technique."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-1286"
+    ],
+    "rationale": "Syntax failure at the end of the frame."
+   }
+  },
+  "50": {
+   "name": "wire:symbol-overflow",
+   "class": "wire",
+   "kind": "internal",
+   "owasp_asi": {
+    "ids": [],
+    "none": "A wire integer beyond the cell range; decode refusal."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "Not an adversary technique."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-1284"
+    ],
+    "rationale": "A decoded quantity is outside the range the receiver accepts."
+   }
+  },
+  "51": {
+   "name": "wire:codebook-mismatch",
+   "class": "wire",
+   "kind": "internal",
+   "owasp_asi": {
+    "ids": [],
+    "none": "The stream is not decodable under the bound policy; a decode refusal."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "Not an adversary technique."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-20"
+    ],
+    "rationale": "Input that does not conform to the bound policy is rejected."
+   }
+  },
+  "52": {
+   "name": "replay-duplicate",
+   "class": "wire",
+   "kind": "security-control",
+   "owasp_asi": {
+    "ids": [],
+    "none": "A replayed or late tick on a telemetry stream; no agent behaviour is involved."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "Not an adversary technique in the ATLAS catalogue."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-294"
+    ],
+    "rationale": "A previously valid message is presented again, or outside its window."
+   }
+  },
+  "53": {
+   "name": "replay-stale",
+   "class": "wire",
+   "kind": "security-control",
+   "owasp_asi": {
+    "ids": [],
+    "none": "A replayed or late tick on a telemetry stream; no agent behaviour is involved."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "Not an adversary technique in the ATLAS catalogue."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-294"
+    ],
+    "rationale": "A previously valid message is presented again, or outside its window."
+   }
+  },
+  "54": {
+   "name": "concentrator-unknown-stream",
+   "class": "wire",
+   "kind": "internal",
+   "owasp_asi": {
+    "ids": [],
+    "none": "A record naming an unregistered stream; an input registration refusal."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "Not an adversary technique."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-346"
+    ],
+    "rationale": "The record's origin is not one the concentrator has registered."
+   }
+  },
+  "55": {
+   "name": "concentrator-truncated",
+   "class": "wire",
+   "kind": "internal",
+   "owasp_asi": {
+    "ids": [],
+    "none": "A record cut mid reading; a decode refusal."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "Not an adversary technique."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-1286"
+    ],
+    "rationale": "The record is syntactically incomplete."
+   }
+  },
+  "56": {
+   "name": "wire:chain-broken",
+   "class": "wire",
+   "kind": "security-control",
+   "owasp_asi": {
+    "ids": [],
+    "none": "A broken hash chain on a telemetry stream; no agent behaviour is involved."
+   },
+   "mitre_atlas": {
+    "ids": [
+     "AML.T0138"
+    ],
+    "rationale": "A spliced chain is how records are altered or removed to conceal activity (nearest entry; the cause detects the splice, not the intent)."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-345"
+    ],
+    "rationale": "The reading's previous hash does not match, so the stream's authenticity is not established."
+   }
+  },
+  "64": {
+   "name": "state:stale",
+   "class": "state",
+   "kind": "internal",
+   "owasp_asi": {
+    "ids": [],
+    "none": "A resident-state transition that the design handles safely; it records a condition, not a weakness or an attack."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "A resident-state transition that the design handles safely; it records a condition, not a weakness or an attack."
+   },
+   "cwe": {
+    "ids": [],
+    "none": "A resident-state transition that the design handles safely; it records a condition, not a weakness or an attack."
+   }
+  },
+  "65": {
+   "name": "state:recovered",
+   "class": "state",
+   "kind": "internal",
+   "owasp_asi": {
+    "ids": [],
+    "none": "A resident-state transition that the design handles safely; it records a condition, not a weakness or an attack."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "A resident-state transition that the design handles safely; it records a condition, not a weakness or an attack."
+   },
+   "cwe": {
+    "ids": [],
+    "none": "A resident-state transition that the design handles safely; it records a condition, not a weakness or an attack."
+   }
+  },
+  "66": {
+   "name": "state:migration-reset",
+   "class": "state",
+   "kind": "internal",
+   "owasp_asi": {
+    "ids": [],
+    "none": "A resident-state transition that the design handles safely; it records a condition, not a weakness or an attack."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "A resident-state transition that the design handles safely; it records a condition, not a weakness or an attack."
+   },
+   "cwe": {
+    "ids": [],
+    "none": "A resident-state transition that the design handles safely; it records a condition, not a weakness or an attack."
+   }
+  },
+  "67": {
+   "name": "state:swap-in-flight-park",
+   "class": "state",
+   "kind": "internal",
+   "owasp_asi": {
+    "ids": [],
+    "none": "A resident-state transition that the design handles safely; it records a condition, not a weakness or an attack."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "A resident-state transition that the design handles safely; it records a condition, not a weakness or an attack."
+   },
+   "cwe": {
+    "ids": [],
+    "none": "A resident-state transition that the design handles safely; it records a condition, not a weakness or an attack."
+   }
+  },
+  "68": {
+   "name": "state:normal-unheld",
+   "class": "state",
+   "kind": "internal",
+   "owasp_asi": {
+    "ids": [],
+    "none": "A resident-state transition that the design handles safely; it records a condition, not a weakness or an attack."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "A resident-state transition that the design handles safely; it records a condition, not a weakness or an attack."
+   },
+   "cwe": {
+    "ids": [],
+    "none": "A resident-state transition that the design handles safely; it records a condition, not a weakness or an attack."
+   }
+  },
+  "69": {
+   "name": "image:truncated-header",
+   "class": "envelope",
+   "kind": "internal",
+   "owasp_asi": {
+    "ids": [],
+    "none": "The pack verifier's structural check on a signed image; no agent behaviour is involved."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "Structural validation of an artifact is not an adversary technique in the ATLAS catalogue."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-130"
+    ],
+    "rationale": "Image shorter than the length its header requires."
+   }
+  },
+  "70": {
+   "name": "image:bad-magic",
+   "class": "envelope",
+   "kind": "internal",
+   "owasp_asi": {
+    "ids": [],
+    "none": "The pack verifier's structural check on a signed image; no agent behaviour is involved."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "Structural validation of an artifact is not an adversary technique in the ATLAS catalogue."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-20"
+    ],
+    "rationale": "The magic word or format version is not one the verifier accepts."
+   }
+  },
+  "71": {
+   "name": "image:bad-version",
+   "class": "envelope",
+   "kind": "internal",
+   "owasp_asi": {
+    "ids": [],
+    "none": "The pack verifier's structural check on a signed image; no agent behaviour is involved."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "Structural validation of an artifact is not an adversary technique in the ATLAS catalogue."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-20"
+    ],
+    "rationale": "The magic word or format version is not one the verifier accepts."
+   }
+  },
+  "72": {
+   "name": "image:safe-node-oob",
+   "class": "envelope",
+   "kind": "internal",
+   "owasp_asi": {
+    "ids": [],
+    "none": "The pack verifier's structural check on a signed image; no agent behaviour is involved."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "Structural validation of an artifact is not an adversary technique in the ATLAS catalogue."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-129"
+    ],
+    "rationale": "A node index names a node the image does not have."
+   }
+  },
+  "73": {
+   "name": "image:length-mismatch",
+   "class": "envelope",
+   "kind": "internal",
+   "owasp_asi": {
+    "ids": [],
+    "none": "The pack verifier's structural check on a signed image; no agent behaviour is involved."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "Structural validation of an artifact is not an adversary technique in the ATLAS catalogue."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-130"
+    ],
+    "rationale": "The image length is inconsistent with its declared section lengths."
+   }
+  },
+  "74": {
+   "name": "image:unknown-op",
+   "class": "envelope",
+   "kind": "internal",
+   "owasp_asi": {
+    "ids": [],
+    "none": "The pack verifier's structural check on a signed image; no agent behaviour is involved."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "Structural validation of an artifact is not an adversary technique in the ATLAS catalogue."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-1287"
+    ],
+    "rationale": "An operator, type or opcode outside the accepted set."
+   }
+  },
+  "75": {
+   "name": "image:unknown-type",
+   "class": "envelope",
+   "kind": "internal",
+   "owasp_asi": {
+    "ids": [],
+    "none": "The pack verifier's structural check on a signed image; no agent behaviour is involved."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "Structural validation of an artifact is not an adversary technique in the ATLAS catalogue."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-1287"
+    ],
+    "rationale": "An operator, type or opcode outside the accepted set."
+   }
+  },
+  "76": {
+   "name": "image:field-index-oob",
+   "class": "envelope",
+   "kind": "internal",
+   "owasp_asi": {
+    "ids": [],
+    "none": "The pack verifier's structural check on a signed image; no agent behaviour is involved."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "Structural validation of an artifact is not an adversary technique in the ATLAS catalogue."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-129"
+    ],
+    "rationale": "An index beyond the declared count; refused before any read."
+   }
+  },
+  "77": {
+   "name": "image:edge-target-oob",
+   "class": "envelope",
+   "kind": "internal",
+   "owasp_asi": {
+    "ids": [],
+    "none": "The pack verifier's structural check on a signed image; no agent behaviour is involved."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "Structural validation of an artifact is not an adversary technique in the ATLAS catalogue."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-129"
+    ],
+    "rationale": "An index beyond the declared count; refused before any read."
+   }
+  },
+  "78": {
+   "name": "image:edge-prog-oob",
+   "class": "envelope",
+   "kind": "internal",
+   "owasp_asi": {
+    "ids": [],
+    "none": "The pack verifier's structural check on a signed image; no agent behaviour is involved."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "Structural validation of an artifact is not an adversary technique in the ATLAS catalogue."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-125"
+    ],
+    "rationale": "A program range that would run past the program words; refused before any read."
+   }
+  },
+  "79": {
+   "name": "image:unknown-opcode",
+   "class": "envelope",
+   "kind": "internal",
+   "owasp_asi": {
+    "ids": [],
+    "none": "The pack verifier's structural check on a signed image; no agent behaviour is involved."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "Structural validation of an artifact is not an adversary technique in the ATLAS catalogue."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-1287"
+    ],
+    "rationale": "An operator, type or opcode outside the accepted set."
+   }
+  },
+  "80": {
+   "name": "image:atom-index-oob",
+   "class": "envelope",
+   "kind": "internal",
+   "owasp_asi": {
+    "ids": [],
+    "none": "The pack verifier's structural check on a signed image; no agent behaviour is involved."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "Structural validation of an artifact is not an adversary technique in the ATLAS catalogue."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-129"
+    ],
+    "rationale": "An index beyond the declared count; refused before any read."
+   }
+  },
+  "81": {
+   "name": "image:node-attr-oob",
+   "class": "envelope",
+   "kind": "internal",
+   "owasp_asi": {
+    "ids": [],
+    "none": "The pack verifier's structural check on a signed image; no agent behaviour is involved."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "Structural validation of an artifact is not an adversary technique in the ATLAS catalogue."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-1284"
+    ],
+    "rationale": "A per node attribute beyond the materialization envelope."
+   }
+  },
+  "82": {
+   "name": "envelope:missing",
+   "class": "envelope",
+   "kind": "internal",
+   "owasp_asi": {
+    "ids": [],
+    "none": "The declared envelope artifact is absent; a completeness refusal."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "Not an adversary technique."
+   },
+   "cwe": {
+    "ids": [],
+    "none": "Absence of a declared artifact has no weakness entry that fits better than a configuration refusal."
+   }
+  },
+  "83": {
+   "name": "envelope:sig-invalid",
+   "class": "envelope",
+   "kind": "security-control",
+   "owasp_asi": {
+    "ids": [
+     "ASI04"
+    ],
+    "rationale": "The envelope's signature verifies under none of the offered keys."
+   },
+   "mitre_atlas": {
+    "ids": [
+     "AML.T0010.001"
+    ],
+    "rationale": "A substituted envelope is a tampered component."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-347"
+    ],
+    "rationale": "Signature verification fails."
+   }
+  },
+  "84": {
+   "name": "envelope:id-mismatch",
+   "class": "envelope",
+   "kind": "security-control",
+   "owasp_asi": {
+    "ids": [
+     "ASI04"
+    ],
+    "rationale": "The manifest targets a different envelope than the one presented."
+   },
+   "mitre_atlas": {
+    "ids": [
+     "AML.T0010.001"
+    ],
+    "rationale": "A substituted component."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-345"
+    ],
+    "rationale": "The envelope is not the one the manifest binds."
+   }
+  },
+  "85": {
+   "name": "envelope:unknown-field",
+   "class": "envelope",
+   "kind": "internal",
+   "owasp_asi": {
+    "ids": [],
+    "none": "The pack verifier's structural check on a signed image; no agent behaviour is involved."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "Structural validation of an artifact is not an adversary technique in the ATLAS catalogue."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-20"
+    ],
+    "rationale": "The manifest declares a field the envelope does not admit."
+   }
+  },
+  "86": {
+   "name": "envelope:field-kind-mismatch",
+   "class": "envelope",
+   "kind": "internal",
+   "owasp_asi": {
+    "ids": [],
+    "none": "The pack verifier's structural check on a signed image; no agent behaviour is involved."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "Structural validation of an artifact is not an adversary technique in the ATLAS catalogue."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-1287"
+    ],
+    "rationale": "The manifest field kind differs from the envelope's."
+   }
+  },
+  "87": {
+   "name": "flow:sha256-mismatch",
+   "class": "authority",
+   "kind": "security-control",
+   "owasp_asi": {
+    "ids": [
+     "ASI04"
+    ],
+    "rationale": "The flow document differs from the one its signed manifest names, so the workflow that steers the agent is not the authorized one."
+   },
+   "mitre_atlas": {
+    "ids": [
+     "AML.T0010.001"
+    ],
+    "rationale": "Post signing modification of the flow artifact."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-354"
+    ],
+    "rationale": "The document hash does not match the signed value."
+   }
+  },
+  "88": {
+   "name": "flow:version-replay",
+   "class": "authority",
+   "kind": "security-control",
+   "owasp_asi": {
+    "ids": [
+     "ASI04"
+    ],
+    "rationale": "Replaying an older signed flow reinstates a workflow the publisher has replaced."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "ATLAS has no rollback technique."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-1328",
+     "CWE-294"
+    ],
+    "rationale": "Version floor against replay of an older valid manifest."
+   }
+  },
+  "89": {
+   "name": "policy:unreadable",
+   "class": "envelope",
+   "kind": "internal",
+   "owasp_asi": {
+    "ids": [],
+    "none": "A refusal of a policy document at the core's admission check; no agent behaviour is involved."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "Policy validation is not an adversary technique in the ATLAS catalogue."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-1286"
+    ],
+    "rationale": "The policy image fails the canon/2 syntax."
+   }
+  },
+  "90": {
+   "name": "policy:shape",
+   "class": "envelope",
+   "kind": "internal",
+   "owasp_asi": {
+    "ids": [],
+    "none": "A refusal of a policy document at the core's admission check; no agent behaviour is involved."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "Policy validation is not an adversary technique in the ATLAS catalogue."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-20"
+    ],
+    "rationale": "The policy document does not conform to the abstract syntax or definition grammar."
+   }
+  },
+  "91": {
+   "name": "policy:not-level-m",
+   "class": "envelope",
+   "kind": "internal",
+   "owasp_asi": {
+    "ids": [],
+    "none": "A refusal of a policy document at the core's admission check; no agent behaviour is involved."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "Policy validation is not an adversary technique in the ATLAS catalogue."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-674"
+    ],
+    "rationale": "The nesting bound refuses policies deep enough to exhaust the decider."
+   }
+  },
+  "92": {
+   "name": "policy:definition",
+   "class": "envelope",
+   "kind": "internal",
+   "owasp_asi": {
+    "ids": [],
+    "none": "A refusal of a policy document at the core's admission check; no agent behaviour is involved."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "Policy validation is not an adversary technique in the ATLAS catalogue."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-20"
+    ],
+    "rationale": "The policy document does not conform to the abstract syntax or definition grammar."
+   }
+  },
+  "93": {
+   "name": "policy:engine-counter",
+   "class": "envelope",
+   "kind": "internal",
+   "owasp_asi": {
+    "ids": [],
+    "none": "A refusal of a policy document at the core's admission check; no agent behaviour is involved."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "Policy validation is not an adversary technique in the ATLAS catalogue."
+   },
+   "cwe": {
+    "ids": [],
+    "none": "A policy that reads an engine counter asks the core for state it does not have; a scope refusal."
+   }
+  },
+  "94": {
+   "name": "policy:kind-mismatch",
+   "class": "envelope",
+   "kind": "internal",
+   "owasp_asi": {
+    "ids": [],
+    "none": "A refusal of a policy document at the core's admission check; no agent behaviour is involved."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "Policy validation is not an adversary technique in the ATLAS catalogue."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-1287"
+    ],
+    "rationale": "An atom's operator or constant is not one its field kind takes."
+   }
+  },
+  "95": {
+   "name": "policy:rounding",
+   "class": "envelope",
+   "kind": "internal",
+   "owasp_asi": {
+    "ids": [],
+    "none": "A refusal of a policy document at the core's admission check; no agent behaviour is involved."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "Policy validation is not an adversary technique in the ATLAS catalogue."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-682"
+    ],
+    "rationale": "A rounding mode that would make a comparison compute the wrong thing is refused."
+   }
+  },
+  "96": {
+   "name": "policy:threshold",
+   "class": "envelope",
+   "kind": "internal",
+   "owasp_asi": {
+    "ids": [],
+    "none": "A refusal of a policy document at the core's admission check; no agent behaviour is involved."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "Policy validation is not an adversary technique in the ATLAS catalogue."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-1284"
+    ],
+    "rationale": "A threshold outside its field's grid, range or exact decimal bounds."
+   }
+  },
+  "97": {
+   "name": "policy:none",
+   "class": "envelope",
+   "kind": "internal",
+   "owasp_asi": {
+    "ids": [],
+    "none": "A refusal of a policy document at the core's admission check; no agent behaviour is involved."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "Policy validation is not an adversary technique in the ATLAS catalogue."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-476"
+    ],
+    "rationale": "Absence is compared or ordered where the field refuses it; the analogue of an unchecked null."
+   }
+  },
+  "98": {
+   "name": "policy:absence-untested",
+   "class": "envelope",
+   "kind": "internal",
+   "owasp_asi": {
+    "ids": [],
+    "none": "A refusal of a policy document at the core's admission check; no agent behaviour is involved."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "Policy validation is not an adversary technique in the ATLAS catalogue."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-754"
+    ],
+    "rationale": "A field that can be absent is tested by no rule, so the exceptional case is unhandled."
+   }
+  },
+  "99": {
+   "name": "reading:unreadable",
+   "class": "routing",
+   "kind": "routing",
+   "owasp_asi": {
+    "ids": [],
+    "none": "The reading is not a document the core accepts; a decode refusal."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "Not an adversary technique."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-1286"
+    ],
+    "rationale": "The reading fails the syntax or shape check."
+   }
+  },
+  "100": {
+   "name": "reading:not-object",
+   "class": "routing",
+   "kind": "routing",
+   "owasp_asi": {
+    "ids": [],
+    "none": "The reading is not a document the core accepts; a decode refusal."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "Not an adversary technique."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-1286"
+    ],
+    "rationale": "The reading fails the syntax or shape check."
+   }
+  },
+  "101": {
+   "name": "policy:not-canonical",
+   "class": "envelope",
+   "kind": "internal",
+   "owasp_asi": {
+    "ids": [],
+    "none": "A refusal of a policy document at the core's admission check; no agent behaviour is involved."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "Policy validation is not an adversary technique in the ATLAS catalogue."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-436"
+    ],
+    "rationale": "Two spellings of one document would be read differently by a signer and a verifier; only the canonical bytes are accepted."
+   }
+  },
+  "102": {
+   "name": "reading:not-canonical",
+   "class": "routing",
+   "kind": "routing",
+   "owasp_asi": {
+    "ids": [],
+    "none": "The reading is not its canonical spelling; a decode refusal."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "Not an adversary technique."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-436"
+    ],
+    "rationale": "Two spellings of one reading would hash differently; only the canonical bytes are accepted."
+   }
+  },
+  "103": {
+   "name": "document:not-canonical",
+   "class": "envelope",
+   "kind": "internal",
+   "owasp_asi": {
+    "ids": [],
+    "none": "A refusal of a policy document at the core's admission check; no agent behaviour is involved."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "Policy validation is not an adversary technique in the ATLAS catalogue."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-436"
+    ],
+    "rationale": "Two spellings of one document would be read differently by a signer and a verifier; only the canonical bytes are accepted."
+   }
+  },
+  "104": {
+   "name": "agent:unclassifiable",
+   "class": "routing",
+   "kind": "security-control",
+   "owasp_asi": {
+    "ids": [
+     "ASI02"
+    ],
+    "rationale": "A tool call the classifier cannot read is refused instead of run, so an unrecognised action never gets authority by default."
+   },
+   "mitre_atlas": {
+    "ids": [
+     "AML.T0053"
+    ],
+    "rationale": "An agent invoking a tool outside what the policy can describe."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-20"
+    ],
+    "rationale": "Input that cannot be classified is rejected, not passed on."
+   }
+  },
+  "105": {
+   "name": "agent:kill-by-pattern",
+   "class": "routing",
+   "kind": "security-control",
+   "owasp_asi": {
+    "ids": [
+     "ASI02"
+    ],
+    "rationale": "A tool used more broadly than intended: a pattern can name processes the task never touched."
+   },
+   "mitre_atlas": {
+    "ids": [
+     "AML.T0053",
+     "AML.T0101"
+    ],
+    "rationale": "A mutative tool call with unbounded reach."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-1220"
+    ],
+    "rationale": "The authority granted is coarser than the target the task needs."
+   }
+  },
+  "106": {
+   "name": "agent:network",
+   "class": "routing",
+   "kind": "security-control",
+   "owasp_asi": {
+    "ids": [
+     "ASI02"
+    ],
+    "rationale": "A tool call that reaches beyond the workspace to the network."
+   },
+   "mitre_atlas": {
+    "ids": [
+     "AML.T0053",
+     "AML.T0086"
+    ],
+    "rationale": "Network reach is the route by which an agent tool call sends data out."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-923"
+    ],
+    "rationale": "The call would use a channel to an endpoint the policy does not allow."
+   }
+  },
+  "107": {
+   "name": "agent:toolchain-write",
+   "class": "routing",
+   "kind": "security-control",
+   "owasp_asi": {
+    "ids": [
+     "ASI02",
+     "ASI05"
+    ],
+    "rationale": "A write into a toolchain directory changes what later runs execute."
+   },
+   "mitre_atlas": {
+    "ids": [
+     "AML.T0053"
+    ],
+    "rationale": "An agent tool call that modifies the tools it will use."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-284"
+    ],
+    "rationale": "Access to a protected directory is refused."
+   }
+  },
+  "108": {
+   "name": "agent:glob-path",
+   "class": "routing",
+   "kind": "security-control",
+   "owasp_asi": {
+    "ids": [
+     "ASI02"
+    ],
+    "rationale": "A pattern path makes one tool call touch an unbounded set of files."
+   },
+   "mitre_atlas": {
+    "ids": [
+     "AML.T0053",
+     "AML.T0101"
+    ],
+    "rationale": "A mutative tool call with unbounded reach."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-155"
+    ],
+    "rationale": "Wildcard characters in the path are not neutralized by being expanded; the call is refused."
+   }
+  },
+  "109": {
+   "name": "agent:path-traversal",
+   "class": "routing",
+   "kind": "security-control",
+   "owasp_asi": {
+    "ids": [
+     "ASI02"
+    ],
+    "rationale": "A path that climbs out of its directory escapes the scope the task was given."
+   },
+   "mitre_atlas": {
+    "ids": [
+     "AML.T0053"
+    ],
+    "rationale": "An agent tool call whose target escapes its scope."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-22"
+    ],
+    "rationale": "Direct match: path traversal."
+   }
+  },
+  "110": {
+   "name": "agent:symlink-path",
+   "class": "routing",
+   "kind": "security-control",
+   "owasp_asi": {
+    "ids": [
+     "ASI02"
+    ],
+    "rationale": "A path through a symbolic link can resolve to a target outside the scope."
+   },
+   "mitre_atlas": {
+    "ids": [
+     "AML.T0053"
+    ],
+    "rationale": "An agent tool call whose target is redirected by a link."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-59",
+     "CWE-61"
+    ],
+    "rationale": "Direct match: link resolution before file access."
+   }
+  },
+  "111": {
+   "name": "agent:outside-workspace",
+   "class": "routing",
+   "kind": "security-control",
+   "owasp_asi": {
+    "ids": [
+     "ASI02"
+    ],
+    "rationale": "The resolved path lies outside the workspace the task was given."
+   },
+   "mitre_atlas": {
+    "ids": [
+     "AML.T0053"
+    ],
+    "rationale": "An agent tool call that acts outside its scope."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-668"
+    ],
+    "rationale": "A resource outside the workspace is exposed to the agent's call."
+   }
+  },
+  "112": {
+   "name": "agent:shell-mutation",
+   "class": "routing",
+   "kind": "security-control",
+   "owasp_asi": {
+    "ids": [
+     "ASI02",
+     "ASI05"
+    ],
+    "rationale": "A shell command can change files or processes beyond the exact path file tools the policy can bound."
+   },
+   "mitre_atlas": {
+    "ids": [
+     "AML.T0050",
+     "AML.T0053"
+    ],
+    "rationale": "An agent running a command through a scripting interpreter."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-78"
+    ],
+    "rationale": "Nearest entry: an OS command built from text the agent produced; the cause refuses or asks, it does not neutralize."
+   }
+  },
+  "113": {
+   "name": "agent:push-escalated",
+   "class": "routing",
+   "kind": "security-control",
+   "owasp_asi": {
+    "ids": [
+     "ASI02"
+    ],
+    "rationale": "A push to a remote class the policy does not allow sends the workspace outside it."
+   },
+   "mitre_atlas": {
+    "ids": [
+     "AML.T0053",
+     "AML.T0086"
+    ],
+    "rationale": "An agent tool call that sends data to a remote."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-668"
+    ],
+    "rationale": "Workspace content would reach a destination outside its sphere."
+   }
+  },
+  "114": {
+   "name": "semantic:harm",
+   "class": "routing",
+   "kind": "security-control",
+   "owasp_asi": {
+    "ids": [
+     "ASI01"
+    ],
+    "rationale": "Harmful text in a reply or call is the usual result of a steered or jailbroken agent."
+   },
+   "mitre_atlas": {
+    "ids": [
+     "AML.T0054"
+    ],
+    "rationale": "LLM jailbreak, as detected by similarity to pinned harm centroids; the cause fires on content, not on how it was elicited."
+   },
+   "cwe": {
+    "ids": [],
+    "none": "No CWE entry names harmful model text."
+   }
+  },
+  "115": {
+   "name": "semantic:intent-mismatch",
+   "class": "routing",
+   "kind": "security-control",
+   "owasp_asi": {
+    "ids": [
+     "ASI01"
+    ],
+    "rationale": "An action that does not fit the task's intent class is the signature of a redirected goal."
+   },
+   "mitre_atlas": {
+    "ids": [
+     "AML.T0051"
+    ],
+    "rationale": "Prompt injection is one way an agent comes to propose an off intent action; the cause detects the mismatch, not the injection."
+   },
+   "cwe": {
+    "ids": [],
+    "none": "No CWE entry names a drift between a task's intent and an action."
+   }
+  },
+  "116": {
+   "name": "semantic:probing-episode",
+   "class": "routing",
+   "kind": "security-control",
+   "owasp_asi": {
+    "ids": [
+     "ASI10"
+    ],
+    "rationale": "Repeated refused proposals labelled boundary probing mark an agent acting outside its scope, and it is stopped."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "ATLAS has no technique for probing a guard through refused calls; T0042 verifies an attack against a model, not a policy."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-799"
+    ],
+    "rationale": "Repeated attempts are limited by an episode count instead of being allowed without bound."
+   }
+  },
+  "117": {
+   "name": "population:cap-exceeded",
+   "class": "routing",
+   "kind": "security-control",
+   "owasp_asi": {
+    "ids": [
+     "ASI08",
+     "ASI10"
+    ],
+    "rationale": "Replication beyond the cap is how one failure or one rogue agent becomes many."
+   },
+   "mitre_atlas": {
+    "ids": [
+     "AML.T0103",
+     "AML.T0034.002"
+    ],
+    "rationale": "Deploying AI agents and agentic resource consumption, bounded by the population cap."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-770"
+    ],
+    "rationale": "Allocation of agents is bounded by a cap, a quota and a depth."
+   }
+  },
+  "118": {
+   "name": "population:rights-escalation",
+   "class": "routing",
+   "kind": "security-control",
+   "owasp_asi": {
+    "ids": [
+     "ASI03",
+     "ASI10"
+    ],
+    "rationale": "A child that would hold a right its parent lacks is a privilege escalation by replication."
+   },
+   "mitre_atlas": {
+    "ids": [
+     "AML.T0103"
+    ],
+    "rationale": "Deploying an agent with more authority than its parent."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-269"
+    ],
+    "rationale": "Direct match: privilege management on creation of a new principal."
+   }
+  },
+  "119": {
+   "name": "population:lineage-unknown",
+   "class": "routing",
+   "kind": "security-control",
+   "owasp_asi": {
+    "ids": [
+     "ASI03",
+     "ASI10"
+    ],
+    "rationale": "A request from an issuer that does not trace to the operator's root is an unauthenticated principal."
+   },
+   "mitre_atlas": {
+    "ids": [
+     "AML.T0073"
+    ],
+    "rationale": "Impersonation of a legitimate member."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-287"
+    ],
+    "rationale": "The issuer's identity is not established."
+   }
+  },
+  "120": {
+   "name": "population:evaluation-missing",
+   "class": "routing",
+   "kind": "security-control",
+   "owasp_asi": {
+    "ids": [
+     "ASI10"
+    ],
+    "rationale": "An evolved agent without a passed evaluation is an unvetted change to what an agent does."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "ATLAS has no technique for skipping an evaluation gate."
+   },
+   "cwe": {
+    "ids": [],
+    "none": "A missing evaluation is a process gap, not a code weakness."
+   }
+  },
+  "121": {
+   "name": "population:stop-resisted",
+   "class": "routing",
+   "kind": "security-control",
+   "owasp_asi": {
+    "ids": [
+     "ASI10"
+    ],
+    "rationale": "An agent protected from a stop, or restarted after the operator stopped it, is a rogue agent by definition."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "ATLAS has no technique for resisting an operator stop."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-863"
+    ],
+    "rationale": "The requester is not authorized to override the operator's stop."
+   }
+  },
+  "122": {
+   "name": "population:lineage-escalated",
+   "class": "routing",
+   "kind": "security-control",
+   "owasp_asi": {
+    "ids": [
+     "ASI10",
+     "ASI08"
+    ],
+    "rationale": "A lineage that keeps triggering refusals is stopped as a group so the behaviour does not spread."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "ATLAS has no technique for repeated refused requests."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-799"
+    ],
+    "rationale": "Repeated attempts are limited by a registered count."
+   }
+  },
+  "123": {
+   "name": "population:target-not-own",
+   "class": "routing",
+   "kind": "security-control",
+   "owasp_asi": {
+    "ids": [
+     "ASI03",
+     "ASI10"
+    ],
+    "rationale": "A member acting on a parent or subtree that is not its own crosses its own authority."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "ATLAS has no technique for acting on another principal's lineage."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-639"
+    ],
+    "rationale": "Authorization is checked against the target the requester names, not only its own identity."
+   }
+  },
+  "124": {
+   "name": "agent:unreadable-asked",
+   "class": "routing",
+   "kind": "security-control",
+   "owasp_asi": {
+    "ids": [
+     "ASI02"
+    ],
+    "rationale": "A call the classifier cannot read is put to a person instead of being run."
+   },
+   "mitre_atlas": {
+    "ids": [
+     "AML.T0053"
+    ],
+    "rationale": "An agent invoking a tool outside what the policy can describe."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-20"
+    ],
+    "rationale": "Input that cannot be classified is not passed on."
+   }
+  },
+  "125": {
+   "name": "agent:shell-mutation-asked",
+   "class": "routing",
+   "kind": "security-control",
+   "owasp_asi": {
+    "ids": [
+     "ASI02",
+     "ASI05"
+    ],
+    "rationale": "A shell command can change files or processes beyond the exact path file tools the policy can bound."
+   },
+   "mitre_atlas": {
+    "ids": [
+     "AML.T0050",
+     "AML.T0053"
+    ],
+    "rationale": "An agent running a command through a scripting interpreter."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-78"
+    ],
+    "rationale": "Nearest entry: an OS command built from text the agent produced; the cause refuses or asks, it does not neutralize."
+   }
+  },
+  "126": {
+   "name": "agent:hook-error",
+   "class": "routing",
+   "kind": "internal",
+   "owasp_asi": {
+    "ids": [],
+    "none": "The hook failed before a decision could be made; the call is refused because nothing was decided, not because of agent behaviour."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "A failure of the governing hook itself is not an adversary technique in the ATLAS catalogue."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-636"
+    ],
+    "rationale": "The weakness this cause prevents: on any error the hook denies instead of letting the call through."
+   }
+  }
+ }
+}
