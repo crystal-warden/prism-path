@@ -145,6 +145,12 @@ _REGISTRY: Tuple[Tuple[int, str, str, str], ...] = (
     (121, "population:stop-resisted",    "routing",   "a request that would protect an agent from a stop or restart an agent the operator stopped; refused"),
     (122, "population:lineage-escalated", "routing",  "a request from a lineage whose receipted refusals reached the registered count; escalated, not run, and the lineage is stopped as a group"),
     (123, "population:target-not-own",  "routing",   "a member's replication whose parent is not that member, or its evolution of a member outside its own subtree; refused and nothing changes"),
+    # -- the default policy of the Claude Code adapter (prismpath/agent/policy/agent_default): a call the
+    # classifier cannot read, or a program it does not know, asks the person instead of stopping the agent.
+    (124, "agent:unreadable-asked",      "routing",   "an agent tool call whose tool or command the classifier cannot read, under the default policy that asks the person; escalated and not run"),
+    # -- the same default policy asks about a file-changing shell command whose paths are all inside the project
+    # (rm, mv, mkdir, cp and the like); every earlier refusal still applies to it first.
+    (125, "agent:shell-mutation-asked",  "routing",   "an agent shell command that changes files, with every path inside the workspace and none of the earlier refusals holding, under the default policy that asks the person; escalated and not run"),
 )
 
 CODES: Dict[int, Tuple[str, str, str]] = {cause_code: (canonical_name, class_name, description)

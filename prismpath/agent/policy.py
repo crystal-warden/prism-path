@@ -41,6 +41,7 @@ from prismpath.kernel.parser import parse  # noqa: E402
 
 POLICY_PATH = HERE / "policy" / "agent_rules.core.json"
 SOURCE_PATH = HERE / "policy" / "agent_rules.src.json"
+DEFAULT_POLICY_PATH = HERE / "policy" / "agent_default.core.json"   # agent_rules, but an unreadable call asks
 _TARGET = re.compile(r"^(allow|refuse_(\d+)|escalate_(\d+))$")
 
 

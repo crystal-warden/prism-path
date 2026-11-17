@@ -1,7 +1,7 @@
 {
  "version": 1,
  "comment": "FROZEN. The cause registry of prismpath.kernel.causes: every row, its hash, the engine stop mapping and the lookups a consumer must answer. prismpath-rs/src/causes.rs is generated from the same registry and prismpath-rs/tests/test_causes.rs replays this file. Appending a row regenerates it.",
- "registry_sha256": "76a4f46621e576e9b5f2d9facfdbd77996e7a29ebe1d717e5edd1fad2d2b61a3",
+ "registry_sha256": "8aa66fc8350044e75a627145655bd5237ff49887f45ec4515eca140909b2f1bd",
  "registry": [
   {
    "code": 1,
@@ -536,6 +536,18 @@
    "name": "population:target-not-own",
    "class": "routing",
    "description": "a member's replication whose parent is not that member, or its evolution of a member outside its own subtree; refused and nothing changes"
+  },
+  {
+   "code": 124,
+   "name": "agent:unreadable-asked",
+   "class": "routing",
+   "description": "an agent tool call whose tool or command the classifier cannot read, under the default policy that asks the person; escalated and not run"
+  },
+  {
+   "code": 125,
+   "name": "agent:shell-mutation-asked",
+   "class": "routing",
+   "description": "an agent shell command that changes files, with every path inside the workspace and none of the earlier refusals holding, under the default policy that asks the person; escalated and not run"
   }
  ],
  "engine_stop_to_cause": {
