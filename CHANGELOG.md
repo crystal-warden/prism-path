@@ -8,6 +8,22 @@ spec stable.
 
 ## [Unreleased]
 
+### Added: three starter policies for the governed agent (2026-11-16)
+
+- **`prismpath agent init --policy strict|default|review`** records the chosen starter, attested by the user's own
+  authority key as `agent_default` always was. `strict` is `agent_rules` (a call it cannot read and a shell command
+  that changes files are refused), `default` is `agent_default` with its bytes unchanged, and `review` is the new
+  `agent_review`: reads run, every change inside the project asks, the hazards are refused as in the others. With no
+  `--policy` a fresh setup records `default` and a second run keeps the starter already recorded. `status` names the
+  starter in use (`custom` for an image that is none of them), and the attestation's `case` names its image.
+- Each starter is a readable `*.rules.md` compiled to the shipped `*.core.json` byte for byte. They ship unsigned in
+  the wheel: the signed `ppt-pack/1` format carries a `.ppt` table image, not a `prismpath.core/1` image, and no
+  shipped pack is signed by a repository key, so `init` signs the chosen image as it did before.
+- New cause 127 `agent:change-asked` (appended, routing), the review starter's escalation of a write, a delete, a
+  file-changing command or a local git change inside the workspace, with its crosswalk entry.
+- `prismpath/tests/test_agent_starters.py` tables each starter's answer to every Claude Code equivalent of the 51
+  case adversary set and checks over every reading the classifier can give that no starter allows a hazard.
+
 ### Added: the cause crosswalk and the regulatory mapping (2026-11-16)
 
 - **`docs/standards/cause-crosswalk.json`** maps every registered cause to OWASP Top 10 for Agentic Applications 2026, MITRE ATLAS 2026.10 and CWE 5.0, each with a one line rationale or a none with its reason. Internal routing, state and integrity causes say so and are not forced onto a taxonomy. The referee `prismpath/tests/test_cause_crosswalk.py` checks every id against a pinned list in `docs/standards/taxonomies/`, so a cause appended to the registry fails it until it is mapped.

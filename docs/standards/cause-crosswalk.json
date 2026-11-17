@@ -1907,6 +1907,29 @@
     ],
     "rationale": "The weakness this cause prevents: on any error the hook denies instead of letting the call through."
    }
+  },
+  "127": {
+   "name": "agent:change-asked",
+   "class": "routing",
+   "kind": "security-control",
+   "owasp_asi": {
+    "ids": [
+     "ASI02"
+    ],
+    "rationale": "Under the review policy no agent tool call changes the workspace without the person seeing it first."
+   },
+   "mitre_atlas": {
+    "ids": [
+     "AML.T0053"
+    ],
+    "rationale": "An agent tool call that would change files or local git state."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-862"
+    ],
+    "rationale": "Nearest entry: a change made without the person's authorization; the cause asks for that authorization, it does not check it."
+   }
   }
  }
 }

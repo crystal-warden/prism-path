@@ -15,6 +15,7 @@ field.remote_class: category
 field.tool: category
 ---
 ## core_decision
+The strict starter, `prismpath agent init --policy strict`. A call it cannot read and a shell command that changes files are refused.
 The rules are read from the top. The first one that holds decides the call.
 Compile with `prismpath policy compile agent_rules.rules.md -o agent_rules.core.json`.
 

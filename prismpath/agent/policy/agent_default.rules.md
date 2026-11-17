@@ -15,6 +15,7 @@ field.remote_class: category
 field.tool: category
 ---
 ## core_decision
+The default starter, what `prismpath agent init` records. A call it cannot read and a shell command that changes files inside the workspace ask the person.
 The rules are read from the top. The first one that holds decides the call.
 Compile with `prismpath policy compile agent_default.rules.md -o agent_default.core.json`.
 
