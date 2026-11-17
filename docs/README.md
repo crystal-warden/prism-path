@@ -67,6 +67,7 @@ committed artifact is [`tools/arch_scorecard.json`](../tools/arch_scorecard.json
 | [supporting-evidence.md](research/supporting-evidence.md) | the results ledger: every claim mapped to a measured result and its provenance, negative results included |
 | [paper-facet-figueroa-quantization.md](research/paper-facet-figueroa-quantization.md) | the Facet paper: Figueroa quantization, the decision sufficient wire, the measurements |
 | [bypass-measurement.md](research/bypass-measurement.md) | the pre registered protocol for measuring the safety floor's bypass rates, with its amendment trail |
+| [README.md](research/README.md) | **the index of research directions**: every direction that is not one of the three things on the front page, its status in the repository's own words, where it lives, and the ledger rows behind it |
 | [LEDGER_STANDARDS.md](research/LEDGER_STANDARDS.md) | the ledger's row schema, dating, versioning, and the fold procedure |
 
 ## What isn't here (and why)
