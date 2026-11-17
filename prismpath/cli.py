@@ -25,7 +25,7 @@ WITHDRAWN_COMMANDS = () if bundle_compile else ("compile",)
 # subcommand in exactly one group.
 PERSONAS = (
     ("Process owner: author and test the policy of record",
-     ("init", "validate", "test", "graph", "lint", "context")),
+     ("init", "validate", "test", "graph", "lint", "context", "policy")),
     ("Engineer: implement the interface once, calibrate for deployment, deliver",
      ("contract", "capability") + (() if WITHDRAWN_COMMANDS else ("compile",)) + (
       "portable", "lock", "verify", "plugins", "ci-report", "lsp", "import", "calibrate", "label", "annotate", "kappa", "centroids", "authorize", "canonicalize")),
@@ -102,6 +102,9 @@ def _add_owner_commands(subparsers) -> None:
     lint_parser.add_argument('flow_md', type=str, help='Path to the flow markdown file')
     lint_parser.add_argument('--json', action='store_true', help='machine-readable findings')
     lint_parser.set_defaults(func=lint_flow)
+
+    from prismpath.kernel import policy_source
+    policy_source.add_parser(subparsers)
 
 
 def _add_authorization_args(parser) -> None:

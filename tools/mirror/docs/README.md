@@ -22,6 +22,7 @@ is the walk from "what's this?" to a running flow.
 | [code-nodes.md](guides/code-nodes.md) | the Python function worker case: the `@code` capability envelope, the static gate, and the fail closed sandbox |
 | [frontier-agent-integration.md](guides/frontier-agent-integration.md) | pairing PrismPath with frontier agents and LLMs: CLI workers, API/local backends, auto unblock loops, `@spawn` swarms, human in the loop |
 | [process-owner.md](guides/process-owner.md) | the process owner's guide: the flow and its fixtures as the policy of record, how a change reaches production |
+| [writing-agent-rules.md](guides/writing-agent-rules.md) | the governed agent's rules as a readable file: fields, ordered rules with registered causes, compile, render, the classifier skeleton |
 | [engineer.md](guides/engineer.md) | the engineer's guide: the contract once, delivery, calibration, the kernels and the gates |
 | [assessor.md](guides/assessor.md) | the assessor's guide: receipts, the trail, anchors, the evidence base |
 | [operator.md](guides/operator.md) | the operator's day: Mission Control, swap and attest, short lived policy changes that expire by construction, reading the trail |

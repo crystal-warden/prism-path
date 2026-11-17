@@ -209,3 +209,22 @@ def test_d7_one_cause_per_refused_policy():
         if leg in core_diff.CODED:
             for case in cases:
                 assert results[leg][case["id"]]["cause"] == lean[case["id"]]["policy"]["cause"], (leg, case["id"])
+
+
+def test_the_generators_images_render_to_rules_that_compile_back_to_their_bytes():
+    """Every image the differential generates that has a rules source compiles from it to its exact bytes
+    (prismpath/kernel/policy_source.py; the rest of its tests are in test_policy_source.py)."""
+    import random
+    from prismpath.kernel import canon2, core_render
+    from prismpath.kernel import policy_source
+    rng, rendered = random.Random(11), 0
+    for _ in range(800):
+        doc, _fields = core_diff.gen_policy(rng)
+        try:
+            image = canon2.dumps(doc)
+            source = policy_source.render_source(doc)
+        except (canon2.Canon2Error, core_render.Unrenderable, RecursionError):
+            continue
+        assert policy_source.compile_source(source, checked=False) == image, source
+        rendered += 1
+    assert rendered > 400
