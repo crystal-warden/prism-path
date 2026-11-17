@@ -266,7 +266,7 @@ def test_the_endpoint_is_off_a_socket_path_or_loopback(text, expected):
 
 @pytest.mark.parametrize("text", ["tcp:10.0.0.5:9300", "tcp:0.0.0.0:9300", "tcp:[::]:9300", "tcp:localhost:9300",
                                   "tcp:example.org:9300", "tcp:127.0.0.1:0", "tcp:127.0.0.1:x", "feed.sock",
-                                  "unix:feed.sock", "tcp:192.168.4.2:22"])
+                                  "unix:feed.sock", "tcp:192.0.2.1:22"])
 def test_an_endpoint_off_loopback_or_by_name_is_refused(text):
     with pytest.raises(feed_client.EndpointRefused):
         feed_client.parse_endpoint(text)
