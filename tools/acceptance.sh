@@ -188,6 +188,7 @@ allowed = {
     "test_router.py": "could not import 'sentence_transformers'",
     "test_facet_init.py": "tomllib needs Python 3.11",
     "_repo.py": "docs/standards is only in a repo checkout",   # the cause and regulatory crosswalk referees, whose data is repository documentation
+    "test_governed_agent_guide.py": "is only in a repo checkout",   # the guide is not in the wheel; the repo job runs it
 }
 skips = re.findall(r"^SKIPPED \[\d+\] (.+)$", text, re.M)
 def budgeted(line):
