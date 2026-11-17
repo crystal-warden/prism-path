@@ -1,0 +1,112 @@
+{
+ "id": "prismpath_evidence__nist_ai_rmf",
+ "a": "prismpath_evidence",
+ "b": "nist_ai_rmf",
+ "complete": false,
+ "pinned": [
+  "docs/standards/taxonomies/evidence_items.json",
+  "docs/standards/taxonomies/nist_ai_rmf.json"
+ ],
+ "authority": "Curated by the PrismPath maintainers against NIST AI RMF 1.0. Where an edge has via_ai_governance, its AI-GOV controls come from the existing catalog adapters/compliance/catalog/ai_governance.json and the subcategories they reach come from adapters/compliance/crosswalks/ai_governance__nist_ai_rmf.json, and the edge repeats all of them. The other subcategories are added here and have not been verified against the AI RMF Playbook. The subcategory text is NIST's and is not copied.",
+ "edges": [
+  {
+   "a": "receipt",
+   "b": [
+    "GOVERN 1.4",
+    "MEASURE 2.8",
+    "MEASURE 1.1",
+    "MANAGE 4.1",
+    "MEASURE 2.4"
+   ],
+   "does_not_satisfy": "A receipt shows what a decision point decided. It does not show that risks were mapped, that metrics were chosen well or that anyone reviewed the receipts.",
+   "via_ai_governance": [
+    "MS-1",
+    "GV-1"
+   ],
+   "rationale": "Per decision records with a protected log back the AI-GOV evidence retention control and, through the existing crosswalk, the subcategories on documented risk controls and post-deployment monitoring. Receipts are production monitoring evidence for MEASURE 2.4."
+  },
+  {
+   "a": "root-statement",
+   "b": [
+    "MEASURE 1.1",
+    "MANAGE 4.1"
+   ],
+   "does_not_satisfy": "It says nothing about retention length, access or review.",
+   "via_ai_governance": [
+    "MS-1"
+   ],
+   "rationale": "A signed chain makes the evidence log's integrity checkable, which the AI-GOV evidence retention control asks for."
+  },
+  {
+   "a": "signed-policy-image",
+   "b": [
+    "MEASURE 2.7"
+   ],
+   "does_not_satisfy": "MEASURE 2.7 covers the whole AI system's security and resilience, and this evidence covers the policy artifact only.",
+   "rationale": "A policy that must verify before it decides is one documented security and resilience property of the system's control layer."
+  },
+  {
+   "a": "policy-attestation",
+   "b": [
+    "MEASURE 2.7",
+    "MANAGE 4.1"
+   ],
+   "does_not_satisfy": "It is one input to a monitoring plan and not the plan.",
+   "rationale": "A record of the policy in force supports change management in a post-deployment monitoring plan."
+  },
+  {
+   "a": "rollback-refusal",
+   "b": [
+    "MEASURE 2.7"
+   ],
+   "does_not_satisfy": "It covers policy replay only.",
+   "rationale": "Refusing a superseded policy is a documented resilience property of the policy loader."
+  },
+  {
+   "a": "escalation-to-person",
+   "b": [
+    "MAP 3.5",
+    "MANAGE 2.4",
+    "GOVERN 1.4",
+    "MEASURE 2.8",
+    "MANAGE 4.1",
+    "MANAGE 4.3"
+   ],
+   "does_not_satisfy": "Defining who reviews, when and with what authority is an organizational process PrismPath does not provide.",
+   "via_ai_governance": [
+    "GV-1",
+    "MG-2"
+   ],
+   "rationale": "A decision point that defers to a person and records it supports the AI-GOV human review and incident escalation controls, and gives a mechanism to disengage a system whose behavior leaves the policy."
+  },
+  {
+   "a": "cause-code",
+   "b": [
+    "MEASURE 2.4",
+    "MANAGE 4.1",
+    "MANAGE 4.3"
+   ],
+   "does_not_satisfy": "A cause code classifies an event and does not communicate it to affected parties.",
+   "via_ai_governance": [
+    "MG-2"
+   ],
+   "rationale": "A registered reason on each refusal supports tracking incidents and errors by kind."
+  },
+  {
+   "a": "mission-control-audit-log",
+   "b": [
+    "MANAGE 4.1"
+   ],
+   "does_not_satisfy": "Administrative events only, and the console has no role separation.",
+   "rationale": "A record of changes to the governing policy supports change management after deployment."
+  },
+  {
+   "a": "anchor",
+   "b": [
+    "MEASURE 1.1"
+   ],
+   "does_not_satisfy": "It is optional and does not add to any subcategory's requirements.",
+   "rationale": "An independent time on a root statement strengthens evidence that a record existed when claimed."
+  }
+ ]
+}

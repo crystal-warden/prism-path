@@ -1,0 +1,54 @@
+{
+ "id": "prismpath_evidence__nist_ai_600_1",
+ "a": "prismpath_evidence",
+ "b": "nist_ai_600_1",
+ "complete": false,
+ "pinned": [
+  "docs/standards/taxonomies/evidence_items.json",
+  "docs/standards/taxonomies/nist_ai_600_1.json"
+ ],
+ "authority": "Curated by the PrismPath maintainers. Maps to the twelve risks of NIST AI 600-1 only. The suggested actions of that profile are not mapped. Only the risks the evidence bears on are listed, and the other risks are out of scope for a decision layer.",
+ "edges": [
+  {
+   "a": "signed-policy-image",
+   "b": [
+    "2.12",
+    "2.9"
+   ],
+   "does_not_satisfy": "It covers the policy artifact and not the model, its weights or its data.",
+   "rationale": "Verifying the policy before it decides is a control over one component of the system, which bears on integrating components whose origin and integrity are otherwise untraceable, and on attacks that alter a system's behavior."
+  },
+  {
+   "a": "rollback-refusal",
+   "b": [
+    "2.9"
+   ],
+   "does_not_satisfy": "It covers policy replay only.",
+   "rationale": "Refusing a replayed older policy is a defense against altering behavior through a stale but validly signed artifact."
+  },
+  {
+   "a": "receipt",
+   "b": [
+    "2.12"
+   ],
+   "does_not_satisfy": "The receipt does not describe upstream model or data provenance.",
+   "rationale": "Records tied to a policy version make it traceable which policy and decision point shaped an output."
+  },
+  {
+   "a": "escalation-to-person",
+   "b": [
+    "2.7"
+   ],
+   "does_not_satisfy": "It does not address emotional entanglement, training of the person or how the person is shown the case.",
+   "rationale": "Sending uncertain or sensitive actions to a person is one mechanism to keep a person in the loop and to limit blind deference to the system."
+  },
+  {
+   "a": "cause-code",
+   "b": [
+    "2.9"
+   ],
+   "does_not_satisfy": "A cause fires on a structural condition and is not a detector for prompt injection or data poisoning.",
+   "rationale": "Causes for harm, intent mismatch and repeated boundary probing name information security conditions in agent tool use, such as prompt injection that redirects a tool call."
+  }
+ ]
+}

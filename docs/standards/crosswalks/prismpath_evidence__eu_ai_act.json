@@ -1,0 +1,101 @@
+{
+ "id": "prismpath_evidence__eu_ai_act",
+ "a": "prismpath_evidence",
+ "b": "eu_ai_act",
+ "complete": false,
+ "pinned": [
+  "docs/standards/taxonomies/evidence_items.json",
+  "docs/standards/taxonomies/eu_ai_act.json"
+ ],
+ "authority": "Curated by the PrismPath maintainers from Regulation (EU) 2024/1689 and Regulation (EU) 2026/1744. Not legal advice and not an assessment. The articles bind providers and deployers of high-risk AI systems, and PrismPath supplies evidence a provider or deployer may use, so every edge says what the evidence does not satisfy.",
+ "application": {
+  "annex_iii_systems": "2027-12-02",
+  "annex_i_systems": "2028-08-02",
+  "basis": "Digital Omnibus on AI, Regulation (EU) 2026/1744, amending Article 113 of Regulation (EU) 2024/1689"
+ },
+ "edges": [
+  {
+   "a": "receipt",
+   "b": [
+    "Art. 12(1)",
+    "Art. 12(2)(a)",
+    "Art. 12(2)(b)",
+    "Art. 12(2)(c)",
+    "Art. 19(1)",
+    "Art. 26(6)"
+   ],
+   "does_not_satisfy": "A receipt exists only for a decision that passed through a PrismPath policy decision point, so it does not cover the rest of an AI system's operation. PrismPath does not set or enforce a retention period and the six month minimum is the operator's to meet. Whether the receipts are enough for Article 12(2) depends on the provider's intended purpose and risk analysis. PrismPath is not itself a high-risk AI system.",
+   "rationale": "A per decision record with the cause and the policy version is the kind of automatically generated event log Article 12 asks the system to produce, and a provider or deployer can keep it for Articles 19(1) and 26(6)."
+  },
+  {
+   "a": "root-statement",
+   "b": [
+    "Art. 12(1)",
+    "Art. 19(1)",
+    "Art. 26(6)"
+   ],
+   "does_not_satisfy": "Articles 12, 19 and 26 do not themselves require tamper evidence, so this goes beyond their text and satisfies none of it alone. It attests what a deployment recorded and says nothing about whether the right events were recorded.",
+   "rationale": "A signed, chained root lets a reader check offline that logged receipts were not removed or rewritten, which gives the kept logs the integrity a later audit relies on."
+  },
+  {
+   "a": "signed-policy-image",
+   "b": [
+    "Art. 15(1)",
+    "Art. 15(5)"
+   ],
+   "does_not_satisfy": "It protects the policy artifact only. It does not address attacks on training data, the model, its inputs or its outputs, and it does not give accuracy or robustness figures for Article 15(1) or the declarations of Article 15(3).",
+   "rationale": "Refusing a policy that does not verify against its signature and manifest is one technical measure against an unauthorised party altering how a system behaves."
+  },
+  {
+   "a": "policy-attestation",
+   "b": [
+    "Art. 12(2)(a)",
+    "Art. 15(5)"
+   ],
+   "does_not_satisfy": "It names the policy in force. It does not decide whether a change is a substantial modification or hold the conformity assessment.",
+   "rationale": "A record of which verified policy was in force lets a reader tie a receipt to the exact rules that decided it and notice a change of policy, which bears on substantial modification."
+  },
+  {
+   "a": "rollback-refusal",
+   "b": [
+    "Art. 15(5)"
+   ],
+   "does_not_satisfy": "It covers policy artifacts presented to the loader. It is not a general resilience measure and does not address Article 15(4) faults or feedback loops.",
+   "rationale": "Refusing an older signed policy stops a valid but superseded artifact from being replayed to weaken the system, which is one way an unauthorised party could alter its behavior."
+  },
+  {
+   "a": "escalation-to-person",
+   "b": [
+    "Art. 14(1)",
+    "Art. 14(4)(d)",
+    "Art. 14(4)(e)"
+   ],
+   "does_not_satisfy": "PrismPath records that a case was escalated. It provides no interface for the person, no record of the person's answer beyond what the operator wires in, and nothing toward Article 14(4)(b) awareness of automation bias or Article 26(2) assignment, competence and training. It is not a stop control for a whole AI system.",
+   "rationale": "A decision point that sends a case to a person and does not run it until the person answers is a technical means to let a person decide, and the stop of an agent or a lineage after repeated refusals is a means to interrupt."
+  },
+  {
+   "a": "cause-code",
+   "b": [
+    "Art. 12(2)(a)",
+    "Art. 15(4)"
+   ],
+   "does_not_satisfy": "A cause names a structural condition, not a risk assessment. No cause code answers whether a situation presents a risk under Article 79(1).",
+   "rationale": "A frozen, machine readable reason on each refusal, park or escalation lets a reader group events by kind and see where a system is failing safe, which bears on identifying risk situations."
+  },
+  {
+   "a": "mission-control-audit-log",
+   "b": [
+    "Art. 12(2)(a)",
+    "Art. 26(5)"
+   ],
+   "does_not_satisfy": "It records administrative actions, not the AI system's own operation. The actor is a console interface and session fingerprint, not an identified person. The console is a single user loopback program, so it gives no role separation.",
+   "rationale": "Audit events for policy swaps and flow edits, and the console's trail view, give an operator a record of changes to the governing policy and a way to read decisions while monitoring operation."
+  },
+  {
+   "a": "anchor",
+   "b": [],
+   "does_not_satisfy": "An anchor adds an independent time for a root statement and is evidence beyond what these articles require.",
+   "none": "Nothing in Articles 12, 14, 15, 19 or 26 asks for a third party timestamp."
+  }
+ ]
+}

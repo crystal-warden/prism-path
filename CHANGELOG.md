@@ -8,6 +8,12 @@ spec stable.
 
 ## [Unreleased]
 
+### Added: the cause crosswalk and the regulatory mapping (2026-11-16)
+
+- **`docs/standards/cause-crosswalk.json`** maps every registered cause to OWASP Top 10 for Agentic Applications 2026, MITRE ATLAS 2026.10 and CWE 5.0, each with a one line rationale or a none with its reason. Internal routing, state and integrity causes say so and are not forced onto a taxonomy. The referee `prismpath/tests/test_cause_crosswalk.py` checks every id against a pinned list in `docs/standards/taxonomies/`, so a cause appended to the registry fails it until it is mapped.
+- **`docs/standards/crosswalks/` and `regulatory-mapping.md`** map the evidence PrismPath produces to EU AI Act Articles 12, 14, 15, 19 and 26 with the dates the Digital Omnibus set, to the NIST AI RMF (reusing the AI governance crosswalk), to NIST AI 600-1 and to SP 800-53 Rev 5 AU and SI. Each edge says what the evidence does not satisfy on its own.
+- **`docs/design/spec-cause-codes.md`** gains section 4.1, the registration rule. The export now carries `docs/standards/`.
+
 ### Added: `prismpath agent` puts a Claude Code session under the core (2026-11-16)
 
 - **`prismpath agent init`** makes the authority and instance keys in the user's configuration directory

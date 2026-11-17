@@ -1,0 +1,103 @@
+{
+ "id": "prismpath_evidence__nist_800_53_r5",
+ "a": "prismpath_evidence",
+ "b": "nist_800_53_r5",
+ "complete": false,
+ "pinned": [
+  "docs/standards/taxonomies/evidence_items.json",
+  "docs/standards/taxonomies/nist_800_53_r5.json"
+ ],
+ "authority": "Curated by the PrismPath maintainers against SP 800-53 Rev 5.2.0 and limited to the AU and SI families. Ids use the OSCAL spelling, so au-9.3 is AU-9(3). The existing adapters/compliance/crosswalks/nist_800171_r2__nist_800_53_r5.json (NIST CPRT) maps 800-171 requirements onto the same control ids and is not repeated here.",
+ "edges": [
+  {
+   "a": "receipt",
+   "b": [
+    "au-2",
+    "au-3",
+    "au-10",
+    "au-12"
+   ],
+   "does_not_satisfy": "AU-2 expects an organization defined event list and AU-3 expects the source and identity of the actor, and neither is settled by a receipt alone. AU-10 depends on the root statement and on who holds the instance key.",
+   "rationale": "Each decision is an auditable event the system generates (AU-2, AU-12). A receipt records what happened, the outcome, the time and the policy in force, which covers much of AU-3. With the signed root it supports non-repudiation (AU-10)."
+  },
+  {
+   "a": "root-statement",
+   "b": [
+    "au-9",
+    "au-9.3",
+    "au-10",
+    "si-7"
+   ],
+   "does_not_satisfy": "The instance key is on the deployment, so a party who controls the deployment controls the key. AU-9 also covers access control and backup of the log, which PrismPath does not provide.",
+   "rationale": "Signed, chained roots protect the audit information against modification and removal (AU-9, AU-9(3)), give attribution to a deployment key (AU-10) and are an integrity check over recorded information (SI-7)."
+  },
+  {
+   "a": "signed-policy-image",
+   "b": [
+    "si-7",
+    "si-7.1",
+    "si-7.15",
+    "si-10",
+    "si-17"
+   ],
+   "does_not_satisfy": "The scope is the policy artifact. SI-7 across the rest of the system, and software supply chain controls outside the AU and SI families, are not addressed.",
+   "rationale": "The loader verifies integrity before use (SI-7, SI-7(1)), authenticates code with a signature (SI-7(15)), validates the structure of the image and rejects malformed input (SI-10) and names a signed fail-safe node (SI-17)."
+  },
+  {
+   "a": "policy-attestation",
+   "b": [
+    "si-6",
+    "si-7"
+   ],
+   "does_not_satisfy": "It runs when invoked and does not meet SI-6's schedule, transition or notification parameters on its own.",
+   "rationale": "The host records which verified image is in force and the delivery assessor re-runs the checks on a copy, which is a verification of a security function after delivery (SI-6)."
+  },
+  {
+   "a": "rollback-refusal",
+   "b": [
+    "si-7.5",
+    "au-12"
+   ],
+   "does_not_satisfy": "It covers policy and flow artifacts at the loader and nothing else.",
+   "rationale": "A refusal of an older signed policy is an automated response to an integrity violation (SI-7(5)) and is written as an audit event whether it succeeds or is refused (AU-12)."
+  },
+  {
+   "a": "escalation-to-person",
+   "b": [],
+   "does_not_satisfy": "Related controls sit in other families, such as access control, and are not mapped here.",
+   "none": "AU and SI hold no control for a human decision point."
+  },
+  {
+   "a": "cause-code",
+   "b": [
+    "au-3",
+    "au-6",
+    "si-4",
+    "si-11"
+   ],
+   "does_not_satisfy": "Review, analysis and reporting are done by people or tools the operator runs. SI-4's monitoring objectives and AU-6's review frequency are the organization's.",
+   "rationale": "A frozen cause adds the reason to the audit record (AU-3), and counting by cause over the trail is an analysis input (AU-6, SI-4). A refusal names its cause without exposing internals (SI-11)."
+  },
+  {
+   "a": "mission-control-audit-log",
+   "b": [
+    "au-2",
+    "au-3",
+    "au-5",
+    "au-6",
+    "au-9",
+    "au-12"
+   ],
+   "does_not_satisfy": "The actor is the interface and a session fingerprint, not an identified person, which leaves part of AU-3 open. The console is single user and local, so access control for the log (AU-9) and non-repudiation of the human are not met.",
+   "rationale": "Control actions are written as audit events before they act, and an action does not run when its intent cannot be written (AU-5, AU-12). Events are Merkle committed and, with an instance key, signed (AU-9). The auditing interface reads trails (AU-6)."
+  },
+  {
+   "a": "anchor",
+   "b": [
+    "au-8"
+   ],
+   "does_not_satisfy": "AU-8 concerns the system's clock and time source for every record. An anchor times a root statement, not each receipt.",
+   "rationale": "An anchor gives a time for a root statement that does not depend on the deployment's own clock."
+  }
+ ]
+}

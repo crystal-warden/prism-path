@@ -60,6 +60,7 @@ INCLUDE_PREFIXES = [
     "tools/",                  # the maintenance, boundary and acceptance tools and their tests
     "docs/guides/",            # product guides
     "docs/design/",            # design specs
+    "docs/standards/",         # the cause and regulatory crosswalks and their pinned taxonomies
     ".github/ISSUE_TEMPLATE/",
 ]
 INCLUDE_FILES = [
