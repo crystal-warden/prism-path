@@ -217,6 +217,12 @@ refused with their causes. Those need OpenSSL's headers and the `cryptography` p
 end to end test skips, saying why, when no cFS build with the app is staged (set `CFS_EXE_DIR` to the staged `cpu1`
 directory if it is not under `.cfs-build`).
 
+## In a NOS3 mission (S3)
+
+[`nos3/`](nos3/README.md) runs the app in NASA's NOS3 simulator, between an autonomy app and the simulated vehicle,
+with a fault injected through NOS3's command bus bridge, and checks from the simulators' logs that nothing outside
+policy reached the wheels or the instrument. The app builds on NOS3's older cFE as it is.
+
 ## What it does not do yet
 
 - An escalation is an event, a counter and a receipt. It is not held, there is no request to the ground and no
@@ -227,6 +233,5 @@ directory if it is not under `.cfs-build`).
   storage.
 - The run is a set of files under `/cf/pprun`, not yet a CFDP transaction or a Facet encoded decision stream, and the
   cases file carries every reading in full.
-- No NOS3 scenario and no fault injection through a simulator bridge (S3).
 - No EDS flavor, no F Prime component (S4).
 - The cFE performance marker is there, but the signed cycle bound has not been compared with a measured time on a target.

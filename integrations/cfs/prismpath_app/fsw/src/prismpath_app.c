@@ -144,13 +144,17 @@ static int32 PP_IoTruncate(void *Ctx, int File, uint64 Len)
 {
     static uint8 copy[512];
     char         path[OS_MAX_PATH_LEN];
-    char         temp[OS_MAX_PATH_LEN];
+    char         temp[OS_MAX_PATH_LEN + 4]; /* room for ".cut", so no compiler sees a possible truncation */
     osal_id_t    in;
     osal_id_t    out;
     int32        rc = 0;
 
     (void)Ctx;
     PP_IoPath(File, path, sizeof(path));
+    if (strlen(path) + 4 >= OS_MAX_PATH_LEN)
+    {
+        return -1; /* the copy's name would be past OSAL's path limit */
+    }
     snprintf(temp, sizeof(temp), "%s.cut", path);
     if (OS_OpenCreate(&in, path, OS_FILE_FLAG_NONE, OS_READ_ONLY) != OS_SUCCESS)
     {

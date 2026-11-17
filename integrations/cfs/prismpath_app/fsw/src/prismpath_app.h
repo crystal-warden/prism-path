@@ -8,6 +8,11 @@
 
 #include "cfe.h"
 
+/* CFE_MSG_PTR is cFE 7's; an older cFE (NOS3's) has the same header layout without the macro. */
+#ifndef CFE_MSG_PTR
+#define CFE_MSG_PTR(shdr) (&((shdr).Msg))
+#endif
+
 #include "prismpath_app_mission_cfg.h"
 #include "prismpath_app_platform_cfg.h"
 #include "prismpath_app_perfids.h"
