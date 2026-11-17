@@ -20,7 +20,7 @@ Go to the project you want Claude Code to work in and run `init`.
 prismpath agent init
 ```
 
-It makes two keys in your configuration directory, `~/.config/prismpath/agent` on Linux and `~/Library/Application Support/prismpath/agent` on macOS. The authority key says which policy may run. The instance key signs the receipts. It records the default policy, `agent_default`, with an attestation signed by the authority key. An existing key is never replaced.
+It makes two keys in your configuration directory, `~/.config/prismpath/agent` on Linux and `~/Library/Application Support/prismpath/agent` on macOS. The authority key says which policy may run. The instance key signs the receipts. It records the default policy, `agent_default`, with an attestation, the authority key's signature over that exact policy, so the hook refuses to run under any policy you did not sign. An existing key is never replaced.
 
 Then it shows the change it wants to make to the project's `.claude/settings.json` as a diff, and asks. Nothing is written until you answer yes. The change adds a `PreToolUse` hook for every tool and a `SessionEnd` hook, and your other settings are left as they are. The command in both is the Python that ran `init` followed by `-m prismpath agent hook || exit 2`. The next section says why it ends that way. Running `init` again changes nothing. In a script, pass `--yes` to answer for yourself.
 
@@ -36,7 +36,7 @@ Start `claude` in the project and ask it for each of these. Nothing about how yo
 PrismPath refused this call: cause 111 agent:outside-workspace. It was not run. Receipt 1 of session <id>.
 ```
 
-Cause 111 is `agent:outside-workspace`. The receipt number is the position of the decision in this session's record.
+Cause 111 is `agent:outside-workspace`. The receipt number is the position of the decision in this session's record. A system path such as `/etc/hosts` is refused with cause 107, `agent:toolchain-write`, instead, because `/usr`, `/opt` and `/etc` count as toolchain directories and that rule is checked first. Either way the call does not run.
 
 **Delete a file inside the project.** Ask "delete notes.txt". The hook answers ask with cause 125, `agent:shell-mutation-asked`, and Claude Code shows you its own permission prompt with PrismPath's reason in it. Nothing runs until you choose.
 
@@ -72,7 +72,7 @@ prismpath agent status
 prismpath agent verify
 ```
 
-`verify` seals each open session, replays every receipt through the reference kernel, and checks the root statement's signature against your pinned keys. A line saying 0 disagree and root statement signed means the record is whole and every decision follows from the policy.
+`verify` first seals each session still open, so a session counts as sealed once `verify` or the end of the Claude Code session has run. It then replays every receipt through the reference kernel, the small decision code the proofs are about, which ships inside PrismPath, and checks the root statement, the instance key's signature over the whole sealed record, against your pinned keys. A line saying 0 disagree and root statement signed means the record is whole and every decision follows from the policy.
 
 <!-- guide-test: tamper -->
 ```sh
