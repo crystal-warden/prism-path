@@ -66,7 +66,10 @@ def hook_command() -> str:
         import subprocess
         return subprocess.list2cmdline(argv)
     import shlex
-    return " ".join(shlex.quote(word) for word in argv)
+    # Claude Code blocks a call only on exit 2; a hook that cannot even import prismpath exits 1, which it treats
+    # as a non-blocking error and lets the call run. `|| exit 2` turns any such failure into a block, so the
+    # hook fails closed before Python is reached as well as after.
+    return " ".join(shlex.quote(word) for word in argv) + " || exit 2"
 
 
 def _sha256_hex(data: bytes) -> str:
@@ -162,6 +165,8 @@ def _is_ours(command: Any) -> bool:
     if not isinstance(command, str):
         return False
     words = command.replace('"', " ").replace("'", " ").split()
+    if words[-3:] == ["||", "exit", "2"]:
+        words = words[:-3]
     return len(words) >= 3 and words[-2:] == ["agent", "hook"] and words[-3].endswith("prismpath")
 
 

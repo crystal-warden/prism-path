@@ -10,6 +10,7 @@ The hook inputs are the A2 recordings (`fixtures/claude_code_hooks.json`), with 
 world as tests/test_agent_claude_code.py.
 """
 import json
+import shlex
 import os
 import statistics
 import subprocess
@@ -126,7 +127,7 @@ def test_init_shows_the_change_writes_it_only_when_told_and_keeps_other_settings
     assert written["model"] == "x" and written["permissions"] == other["permissions"]
     assert written["hooks"]["PostToolUse"] == other["hooks"]["PostToolUse"]
     pre, end = written["hooks"]["PreToolUse"], written["hooks"]["SessionEnd"]
-    assert pre[0]["matcher"] == "*" and pre[0]["hooks"][0]["command"].endswith("-m prismpath agent hook")
+    assert pre[0]["matcher"] == "*" and pre[0]["hooks"][0]["command"].endswith("-m prismpath agent hook || exit 2")
     assert end[0]["hooks"][0]["command"] == pre[0]["hooks"][0]["command"]
 
     agent = _agent_dir(home)
@@ -314,3 +315,16 @@ def test_the_hook_answer_time_is_reported(world, capsys):
         times.append((time.perf_counter() - start) * 1000)
     print(f"hook wall clock: median {statistics.median(times):.0f} ms, max {max(times):.0f} ms")
     assert statistics.median(times) < 1000          # the 150 ms budget is measured on the floor host, in the PR
+
+
+@pytest.mark.skipif(os.name == "nt", reason="the written hook command is a POSIX shell line")
+def test_the_hook_command_blocks_when_prismpath_cannot_even_be_imported(tmp_path):
+    """Claude Code blocks only on exit 2, so a hook whose interpreter cannot import prismpath must exit 2, not 1."""
+    from prismpath.agent import commands
+    broken = tmp_path / "python"
+    broken.write_text("#!/bin/sh\necho 'No module named prismpath' >&2\nexit 1\n")
+    broken.chmod(0o755)
+    line = commands.hook_command().replace(shlex.quote(sys.executable), shlex.quote(str(broken)), 1)
+    done = subprocess.run(["sh", "-c", line], input=b"{}", capture_output=True)
+    assert done.returncode == 2
+    assert commands._is_ours(commands.hook_command())
