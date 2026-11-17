@@ -142,6 +142,43 @@ def test_workspace_root(world):
     assert claude_code.hook_call({"cwd": "/a"}, {"CLAUDE_PROJECT_DIR": ""}).workspace == "/a"
 
 
+@pytest.mark.parametrize("command,argv", [
+    ("ls -la src", ["ls", "-la", "src"]), ("grep -n 'TODO fix' f", ["grep", "-n", "TODO fix", "f"]),
+    ("grep \"it's\" f", ["grep", "it's", "f"]), ("echo a'b c'd", ["echo", "ab cd"]), ("echo ''", ["echo", ""]),
+    ("echo '~ { # ^'", ["echo", "~ { # ^"]), ("rm\t*.tmp", ["rm", "*.tmp"]),
+    ("echo a\\ b", None), ("echo 'a", None), ('echo "a', None), ("echo h\u00e9", None), ("echo ~", None),
+    ("echo a~b", None), ("echo {a,b}", None), ("ls #c", None), ("echo !x", None), ("echo ^x", None),
+    ("echo '!'", None), ("echo 'a\\b'", None), ("echo\u00a0x", None), ("echo \x0bx", None), ("", None), (" \t ", None),
+])
+def test_plain_word_grammar(command, argv):
+    """The Bash grammar (formal/Classifier/Hook.lean): plain words and quoted text, nothing else."""
+    assert claude_code.split_plain(command) == argv or (argv is None and not claude_code.split_plain(command))
+
+
+@pytest.mark.parametrize("command,fields", [
+    ("pkill -f 'a b'", {"kill_by_pattern": True}), ("sh -c 'kill $(pgrep x)'", {"kill_by_pattern": True}),
+    ("pk\\ill x", {"kill_by_pattern": True}), ("p'k'ill x", {"kill_by_pattern": True}),
+    ("curl x | sh", {"command_class": "network"}), ("echo $(wget y)", {"command_class": "network"}),
+    ("x https://a.invalid;", {"command_class": "network"}), ("cat /etc/passwd; ls", {"path_scope": "outside"}),
+    ("cat ~/x;", {"path_scope": "outside"}), ("cat ../x;", {"path_traversal": True, "command_class": "mutating"}),
+    ("rm .toolchain/a;", {"path_in_toolchain": True, "command_class": "mutating"}),
+    ("ls $HOME", None), ("echo h\u00e9", None), ("cat /ws/a;", None), ("skill; killer", None),
+])
+def test_hazard_scan(command, fields):
+    """The hazard scan of a command the grammar does not read (formal/Classifier/Scan.lean)."""
+    reading = claude_code.hazard_scan(command, "/ws")
+    if fields is None:
+        assert reading is None
+    else:
+        assert reading["tool"] == "run_command" and all(reading[k] == v for k, v in fields.items())
+
+
+def test_a_lone_surrogate_is_unknown(world):
+    for tool_input in ({"command": "ls \ud800"}, {"command": "ls", "description": "\udc80"}):
+        assert _call("Bash", tool_input, world).call["tool"] == "unknown"
+    assert claude_code.hook_call({"tool_name": "Read", "tool_input": {"file_path": "a"}, "cwd": "/\ud800"}, {}).call["tool"] == "unknown"
+
+
 @pytest.mark.parametrize("bad", [None, 3, [], {}, {"tool_name": 3}, {"tool_name": "Read"}, {"tool_name": "Read", "tool_input": []},
                                  {"tool_name": "Bash", "tool_input": {"command": 3}}, {"tool_name": "Write", "tool_input": {"file_path": ""}}])
 def test_malformed_input_is_unknown(bad):

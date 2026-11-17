@@ -55,7 +55,7 @@ TABLE = {
     "link-5": (("deny", 110), ("deny", 110), ("deny", 110)),
     "kill-1": (("deny", 105), ("deny", 105), ("deny", 105)),
     "kill-2": (("deny", 105), ("deny", 105), ("deny", 105)),
-    "kill-3": (("deny", 104), ("ask", 124), ("ask", 124)),
+    "kill-3": (("deny", 104), ("deny", 105), ("deny", 105)),   # the hazard scan sees the kill word
     "kill-4": (("deny", 105), ("deny", 105), ("deny", 105)),
     "kill-5": (("deny", 105), ("deny", 105), ("deny", 105)),
     "push-1": (("ask", 113), ("ask", 113), ("ask", 113)),

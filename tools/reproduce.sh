@@ -275,6 +275,7 @@ step_lean_build() {
   lake build
   test -x .lake/build/bin/core-oracle
   test -x .lake/build/bin/canon2-oracle
+  test -x .lake/build/bin/classifier-oracle
 }
 
 step_core_oracle_smoke() {
@@ -295,11 +296,11 @@ step_lean_no_sorry() {
   # From .github/workflows/formal.yml: "No sorry in the sources", extended to also forbid the admit tactic
   # (excluding `Core.Population.admit`, which is a function `admit (w : Row) : Option String`)
   cd "$REPO"
-  if grep -rn --include='*.lean' -w sorry formal/FQ formal/FQ.lean formal/Core formal/Core.lean; then
+  if grep -rn --include='*.lean' -w sorry formal/FQ formal/FQ.lean formal/Core formal/Core.lean formal/Classifier formal/Classifier.lean; then
     echo "error: found 'sorry' in formal Lean sources" >&2
     return 1
   fi
-  if grep -rn --include='*.lean' -w admit formal/FQ formal/FQ.lean formal/Core formal/Core.lean \
+  if grep -rn --include='*.lean' -w admit formal/FQ formal/FQ.lean formal/Core formal/Core.lean formal/Classifier formal/Classifier.lean \
       | grep -v -E 'def admit\b|\[admit\b|admit \(?w\b|admit \(rowOf\b'; then
     echo "error: found 'admit' tactic in formal Lean sources" >&2
     return 1
@@ -320,6 +321,13 @@ step_differential_harnesses() {
   cd "$REPO"
   PATH="$VENV_DIR/bin:$PATH" PRISMPATH_REQUIRE_CORE_ORACLE=1 \
     "$VENV_PY" -m pytest prismpath/tests/test_core_diff.py prismpath/tests/test_core_evidence.py -q
+}
+
+step_classifier_diff() {
+  # Exact step from .github/workflows/formal.yml: "The classifier differential harness"
+  cd "$REPO"
+  PRISMPATH_REQUIRE_CLASSIFIER_ORACLE=1 "$VENV_PY" -m pytest prismpath/tests/test_classifier_diff.py -q
+  "$VENV_PY" formal/diff/classifier_diff.py --cases 20000 --seed 1
 }
 
 step_corpora_check() {
@@ -395,7 +403,7 @@ run_step "venv-install" \
   step_venv_install
 
 run_step "lean-build" \
-  "Build Lean 4 proofs (FQ, Core), #guard bridge checks, axiom audit, core-oracle, and canon2-oracle (cd formal && lake build)" \
+  "Build Lean 4 proofs (FQ, Core, Classifier), #guard bridge checks, axiom audits, core-oracle, canon2-oracle and classifier-oracle (cd formal && lake build)" \
   step_lean_build
 
 run_step "core-oracle-smoke" \
@@ -403,7 +411,7 @@ run_step "core-oracle-smoke" \
   step_core_oracle_smoke
 
 run_step "lean-no-sorry" \
-  "Verify zero sorry/admit in formal/FQ, formal/FQ.lean, formal/Core, and formal/Core.lean" \
+  "Verify zero sorry/admit in formal/FQ, formal/FQ.lean, formal/Core, formal/Core.lean, formal/Classifier and formal/Classifier.lean" \
   step_lean_no_sorry
 
 run_step "lean-bridge-vectors" \
@@ -413,6 +421,10 @@ run_step "lean-bridge-vectors" \
 run_step "differential-harnesses" \
   "Run verified-core differential harness (Lean, Python, Rust, JS, Go, C, eBPF legs) and cross-language evidence replay (test_core_diff.py, test_core_evidence.py)" \
   step_differential_harnesses
+
+run_step "classifier-diff" \
+  "Hold the Python classifier and its Claude Code and MCP mappings to the Lean classifier oracle: 120 recorded hook inputs, 51 adversary probes, 20,000 generated calls (formal/diff/classifier_diff.py)" \
+  step_classifier_diff
 
 run_step "corpora-table-check" \
   "Validate conformance corpus consumer table against repository tree (tools/run_corpora.py --check)" \

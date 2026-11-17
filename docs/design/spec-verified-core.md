@@ -43,6 +43,10 @@ settle, not behaviours to prove around.
   (`int-out-of-i32`, SPEC.md section 4.3) is a target limit, not a rule of the core. The evidence a
   differential run writes (section 11) signs and receipts the core's decisions; it changes none of them.
 - Floats of any kind. The core has none, in the image, in readings, or in its arithmetic.
+- The classifier that forms a governed agent's reading. Its syntactic half has its own definition, theorems
+  and differential harness ([spec-verified-classifier.md](spec-verified-classifier.md)); its disk facts are
+  observations bounded by the sandbox. One of its theorems joins the two: the core's boundary accepts every
+  reading the classifier makes, for every policy whose field definitions fit.
 
 ## 2. Abstract syntax
 

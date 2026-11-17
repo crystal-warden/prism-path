@@ -8,10 +8,14 @@ on:
   push:
     branches: [main]
     paths: ["formal/**", "prismpath/telemetry/conformance/**", "prismpath/portable/conformance/**",
-            "prismpath/telemetry/quantizer.py", "prismpath/kernel/**", ".github/workflows/formal.yml"]
+            "prismpath/telemetry/quantizer.py", "prismpath/kernel/**", "prismpath/agent/**",
+            "integrations/governed_harness/**", "prismpath/tests/fixtures/claude_code_hooks.json",
+            ".github/workflows/formal.yml"]
   pull_request:
     paths: ["formal/**", "prismpath/telemetry/conformance/**", "prismpath/portable/conformance/**",
-            "prismpath/telemetry/quantizer.py", "prismpath/kernel/**", ".github/workflows/formal.yml"]
+            "prismpath/telemetry/quantizer.py", "prismpath/kernel/**", "prismpath/agent/**",
+            "integrations/governed_harness/**", "prismpath/tests/fixtures/claude_code_hooks.json",
+            ".github/workflows/formal.yml"]
   workflow_dispatch:
 
 permissions:
@@ -48,8 +52,12 @@ jobs:
         run: |
           pip install pytest cryptography
           PRISMPATH_REQUIRE_CORE_ORACLE=1 python -m pytest prismpath/tests/test_core_diff.py prismpath/tests/test_core_evidence.py -q
+      - name: The classifier differential harness (docs/design/spec-verified-classifier.md), CI size and the full 20,000 call run
+        run: |
+          PRISMPATH_REQUIRE_CLASSIFIER_ORACLE=1 python -m pytest prismpath/tests/test_classifier_diff.py -q
+          python formal/diff/classifier_diff.py --cases 20000 --seed 1
       - name: No sorry in the sources
-        run: "! grep -rn --include=*.lean -w sorry formal/FQ formal/FQ.lean formal/Core formal/Core.lean"
+        run: "! grep -rn --include=*.lean -w sorry formal/FQ formal/FQ.lean formal/Core formal/Core.lean formal/Classifier formal/Classifier.lean"
       - name: Bridge vectors are byte identical to a fresh generation from the frozen corpora
         run: |
           pip install numpy

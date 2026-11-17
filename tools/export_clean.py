@@ -121,7 +121,7 @@ EXCLUDE_PREFIXES = [
     "prismpath/tests/test_compile.py", "prismpath/tests/test_portable_", "prismpath/tests/test_docs_health.py",
     "prismpath/tests/test_evidence_check_manifest.py", "prismpath/tests/test_mdflow_interop.py",
     "prismpath/tests/test_net_swap.py", "prismpath/telemetry/tests/test_bench_codecs.py",
-    "prismpath/tests/test_core_diff.py", "prismpath/tests/test_core_evidence.py",
+    "prismpath/tests/test_core_diff.py", "prismpath/tests/test_core_evidence.py", "prismpath/tests/test_classifier_diff.py",
     "prismpath/tests/test_ebpf_", "prismpath/tests/test_arch_guard.py",
     "prismpath/tests/test_field_definitions_tables.py", "prismpath/tests/test_mission_control_guide.py",
     # research tooling beside the product's
