@@ -36,7 +36,7 @@ link. They are read off the workspace as it is when the call is classified (`os.
 `os.path.islink`). Between that and the execution the workspace could change; the sandbox (sandbox.py) is
 what bounds the effect of such a race, not this module, and nothing about them is proved.
 
-A call holding a string that is not Unicode scalar values (a lone surrogate, which JSON's `\ud800` escape can
+A call holding a string that is not Unicode scalar values (a lone surrogate, which JSON's `\\ud800` escape can
 spell) is outside the model's domain and reads unknown (`scalar`).
 """
 from __future__ import annotations
