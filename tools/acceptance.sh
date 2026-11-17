@@ -187,6 +187,7 @@ allowed = {
     "test_lockfile.py": "needs the real bge embedder",
     "test_router.py": "could not import 'sentence_transformers'",
     "test_facet_init.py": "tomllib needs Python 3.11",
+    "_repo.py": "docs/standards is only in a repo checkout",   # the cause and regulatory crosswalk referees, whose data is repository documentation
 }
 skips = re.findall(r"^SKIPPED \[\d+\] (.+)$", text, re.M)
 def budgeted(line):
