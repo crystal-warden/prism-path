@@ -382,7 +382,7 @@ jobs:
           python-version: "3.12"
       - name: Install (editable kernel pkg + sim/build toolchain)
         run: |
-          pip install -e . cocotb==1.9.2 pytest
+          pip install -e . cocotb==1.9.2 pytest cryptography
           sudo apt-get update
           sudo apt-get install -y verilator clang llvm libbpf-dev
       - name: C target — certify against the frozen corpus (declared subset)

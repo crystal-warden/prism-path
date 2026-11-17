@@ -329,12 +329,39 @@ const char *PP_Kernel_FieldName(int16_t Field)
     return (Field >= 0 && Field < PRISMPATH_APP_FIELD_COUNT) ? k_Fields[Field].Name : "-";
 }
 
-static void Refuse(PP_Verdict_t *V, uint16_t Cause, int16_t Field)
+static void Refuse(PP_Verdict_t *V, uint16_t Cause, int16_t Field, uint8_t Reason)
 {
-    V->Kind  = PP_KIND_REFUSE;
-    V->Cause = Cause;
-    V->Rule  = -1;
-    V->Field = Field;
+    V->Kind   = PP_KIND_REFUSE;
+    V->Reason = Reason;
+    V->Cause  = Cause;
+    V->Rule   = -1;
+    V->Field  = Field;
+}
+
+int PP_Kernel_FieldValue(const uint8_t *Payload, size_t PayloadLen, int Field, int32_t *Value, int *IsBool)
+{
+    const FieldDef_t *def;
+
+    if (Field < 0 || Field >= PRISMPATH_APP_FIELD_COUNT)
+    {
+        return 0;
+    }
+    def = &k_Fields[Field];
+    if ((size_t)def->Offset + def->Width > PayloadLen)
+    {
+        return 0;
+    }
+    if (def->Width == 1u)
+    {
+        *Value = Payload[def->Offset];
+    }
+    else
+    {
+        /* the payload is little endian, as the layout header says */
+        *Value = (int32_t)(uint16_t)(Payload[def->Offset] | ((uint16_t)Payload[def->Offset + 1u] << 8));
+    }
+    *IsBool = (def->Kind == LK_BOOL);
+    return 1;
 }
 
 void PP_Kernel_Decide(const uint8_t *Payload, size_t PayloadLen, PP_Verdict_t *Verdict)
@@ -346,43 +373,38 @@ void PP_Kernel_Decide(const uint8_t *Payload, size_t PayloadLen, PP_Verdict_t *V
 
     if (!Active_Valid)
     {
-        Refuse(Verdict, PP_NO_IMAGE_CAUSE, -1);
+        Refuse(Verdict, PP_NO_IMAGE_CAUSE, -1, PP_REASON_NONE);
         return;
     }
-    if (PayloadLen < PRISMPATH_APP_PAYLOAD_LEN)
-    {
-        Refuse(Verdict, Active_ContractCause, -1);
-        return;
-    }
+    /* the boundary, field by field in register order: the first field missing, of the wrong type or out of
+     * range is the refusal, before any rule is read */
     for (i = 0; i < PRISMPATH_APP_FIELD_COUNT; i++)
     {
         const FieldDef_t *def = &k_Fields[i];
         int32_t           value;
+        int               is_bool;
 
-        if (def->Width == 1u)
+        if (!PP_Kernel_FieldValue(Payload, PayloadLen, i, &value, &is_bool))
         {
-            value = Payload[def->Offset];
-        }
-        else
-        {
-            value = (int32_t)(uint16_t)(Payload[def->Offset] | ((uint16_t)Payload[def->Offset + 1u] << 8));
-            /* the payload is little endian, as the layout header says */
+            Refuse(Verdict, Active_ContractCause, (int16_t)i, PP_REASON_MISSING);
+            return;
         }
         if (value < def->Min || value > def->Max)
         {
-            Refuse(Verdict, Active_ContractCause, (int16_t)i);
+            Refuse(Verdict, Active_ContractCause, (int16_t)i, is_bool ? PP_REASON_WRONG_TYPE : PP_REASON_OUT_OF_RANGE);
             return;
         }
-        set_reg_typed((uint16_t)i, (def->Kind == LK_BOOL) ? TY_BOOL : TY_INT, value);
+        set_reg_typed((uint16_t)i, is_bool ? TY_BOOL : TY_INT, value);
     }
     edge = evaluate(start_node, &target, &err);
     if (err != 0u || edge < 0 || (uint16_t)edge >= Active_RuleCount)
     {
-        Refuse(Verdict, Active_NoMatchCause, -1);
+        Refuse(Verdict, Active_NoMatchCause, -1, PP_REASON_NONE);
         return;
     }
-    Verdict->Kind  = Active_Rules[edge].Kind;
-    Verdict->Cause = Active_Rules[edge].Cause;
-    Verdict->Rule  = edge;
-    Verdict->Field = -1;
+    Verdict->Kind   = Active_Rules[edge].Kind;
+    Verdict->Reason = PP_REASON_NONE;
+    Verdict->Cause  = Active_Rules[edge].Cause;
+    Verdict->Rule   = edge;
+    Verdict->Field  = -1;
 }

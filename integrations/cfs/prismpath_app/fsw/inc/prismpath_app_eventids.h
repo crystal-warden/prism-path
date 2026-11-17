@@ -23,5 +23,11 @@
 #define PRISMPATH_APP_POLICY_LOADED_EID   24 /* a policy image passed the kernel's checks and is active */
 #define PRISMPATH_APP_POLICY_REJECTED_EID 25 /* a policy image failed the kernel's checks and was not activated */
 #define PRISMPATH_APP_HK_INF_EID          26 /* the counters, at each housekeeping request */
+#define PRISMPATH_APP_RECORD_ERR_EID      27 /* a decision could not be receipted; an allowed command is withheld */
+#define PRISMPATH_APP_SEALED_EID          28 /* a root statement was signed and the run written for downlink */
+#define PRISMPATH_APP_SEAL_ERR_EID        29 /* a seal failed (no key, or a file error) */
+#define PRISMPATH_APP_STATE_INF_EID       30 /* the run state at startup: restored from the CDS or begun fresh */
+#define PRISMPATH_APP_STATE_ERR_EID       31 /* the CDS or the run files could not be used as recorded */
+#define PRISMPATH_APP_KEY_ERR_EID         32 /* a key file is missing or unreadable */
 
 #endif

@@ -18,13 +18,29 @@ if (NOT EXISTS "${PRISMPATH_HW_DIR}/ppt_eval.h")
                       "Set PRISMPATH_HW_DIR to the prismpath-hw directory of a PrismPath checkout.")
 endif()
 
+# The receipts' Merkle accumulator is prismpath-ebpf/merkle.h, and the onboard Ed25519 is Monocypher 4.0.2 as
+# prismpath-hw/mesh/main vendors it (BSD-2-Clause OR CC0-1.0). Both are compiled from the checkout, never copied.
+# merkle.h's SHA-256 is OpenSSL's by default (its seam, PPT_MERKLE_SHA256_EXTERNAL, is where a flight target
+# without OpenSSL supplies its own), so the app links libcrypto.
+set(PRISMPATH_EBPF_DIR "${PRISMPATH_HW_DIR}/../prismpath-ebpf")
+set(PRISMPATH_MONOCYPHER_DIR "${PRISMPATH_HW_DIR}/mesh/main")
+foreach(_need "${PRISMPATH_EBPF_DIR}/merkle.h" "${PRISMPATH_MONOCYPHER_DIR}/monocypher-ed25519.c")
+  if (NOT EXISTS "${_need}")
+    message(FATAL_ERROR "prismpath_app: ${_need} not found; PRISMPATH_HW_DIR must be the prismpath-hw of a PrismPath checkout")
+  endif()
+endforeach()
+
 add_cfe_app(prismpath_app
   fsw/src/prismpath_app.c
   fsw/src/prismpath_app_kernel.c
+  fsw/src/prismpath_app_run.c
+  "${PRISMPATH_MONOCYPHER_DIR}/monocypher.c"
+  "${PRISMPATH_MONOCYPHER_DIR}/monocypher-ed25519.c"
 )
 
-target_include_directories(prismpath_app PUBLIC fsw/inc)
+target_include_directories(prismpath_app PUBLIC fsw/inc "${PRISMPATH_EBPF_DIR}" "${PRISMPATH_MONOCYPHER_DIR}")
 target_include_directories(prismpath_app PRIVATE "${PRISMPATH_HW_DIR}")
+target_link_libraries(prismpath_app crypto)
 
 # the policy image as a cFE table, loaded at startup and replaceable from the ground
 add_cfe_tables(prismpath_app fsw/tables/prismpath_app_policy_tbl.c)

@@ -13,6 +13,7 @@
 #include "prismpath_app_perfids.h"
 #include "prismpath_app_msgids.h"
 #include "prismpath_app_msg.h"
+#include "prismpath_app_run.h"
 
 typedef struct
 {
@@ -25,6 +26,12 @@ typedef struct
     CFE_SB_MsgId_t              SendHkMid;
     CFE_SB_MsgId_t              ProposedMid;
     CFE_SB_MsgId_t              VehicleMid;
+    CFE_ES_CDSHandle_t          CdsHandle;
+    bool                        HaveCds;
+    PP_RunState_t               Run;          /**< the receipts and the version floor; the CDS's copy */
+    PP_RunKeys_t                Keys;
+    PP_PolicyTable_t            Active;       /**< the active table, as it was checked and activated */
+    uint8                       ActiveDigest[32];
 } PRISMPATH_APP_Data_t;
 
 extern PRISMPATH_APP_Data_t PRISMPATH_APP_Data;

@@ -16,5 +16,17 @@
 /** How long the app waits for a message before it checks its table for a ground update, in milliseconds. */
 #define PRISMPATH_APP_PLATFORM_TABLE_POLL_MS         PRISMPATH_APP_PLATFORM_CFGVAL(TABLE_POLL_MS)
 #define DEFAULT_PRISMPATH_APP_PLATFORM_TABLE_POLL_MS 1000
+/** Where the run (receipts, cases, root statements) is written for downlink. */
+#define PRISMPATH_APP_PLATFORM_RUN_DIR         PRISMPATH_APP_PLATFORM_CFGVAL(RUN_DIR)
+#define DEFAULT_PRISMPATH_APP_PLATFORM_RUN_DIR "/cf/pprun"
+/** The authority's raw 32 byte Ed25519 public key: which images may run. A mission builds it into its boot image. */
+#define PRISMPATH_APP_PLATFORM_AUTHORITY_FILE         PRISMPATH_APP_PLATFORM_CFGVAL(AUTHORITY_FILE)
+#define DEFAULT_PRISMPATH_APP_PLATFORM_AUTHORITY_FILE "/cf/pp_authority.pub"
+/** The instance key's raw 32 byte Ed25519 seed: what signs the root statements. Provisioned per vehicle. */
+#define PRISMPATH_APP_PLATFORM_INSTANCE_FILE         PRISMPATH_APP_PLATFORM_CFGVAL(INSTANCE_FILE)
+#define DEFAULT_PRISMPATH_APP_PLATFORM_INSTANCE_FILE "/cf/pp_instance.key"
+/** The Critical Data Store block that holds the run state across a processor reset. */
+#define PRISMPATH_APP_PLATFORM_CDS_NAME         PRISMPATH_APP_PLATFORM_CFGVAL(CDS_NAME)
+#define DEFAULT_PRISMPATH_APP_PLATFORM_CDS_NAME "PPRunState"
 
 #endif
