@@ -368,7 +368,13 @@ def _add_operator_commands(subparsers) -> None:
                        'its receipt count, open or sealed')
     agent_status.add_argument('--project', default=None,
                               help='the project whose .claude/settings.json is read (default as for init)')
-    for sub in (agent_init, agent_hook, agent_verify, agent_status):
+    agent_doctor = agent_sub.add_parser(
+        'doctor', help='check the whole setup (key modes and pairs, the policy, the hook entries and their '
+                       'interpreter, a timed dry run, the runs, free disk) and print ok, warn or fail with the '
+                       'fixing command for each; it changes nothing')
+    agent_doctor.add_argument('--project', default=None,
+                              help='the project whose .claude/settings.json is checked (default as for init)')
+    for sub in (agent_init, agent_hook, agent_verify, agent_status, agent_doctor):
         sub.add_argument('--json', action='store_true', help='machine readable output')
     agent_parser.set_defaults(func=agent_cmd)
 
@@ -517,6 +523,9 @@ def agent_cmd(args) -> int:
             return commands.init(project, args.yes, args.json)
         if args.agent_action == 'verify':
             return commands.verify(args.json, args.tamper_demo)
+        if args.agent_action == 'doctor':
+            from prismpath.agent import doctor
+            return doctor.doctor(project, args.json)
         return commands.status(project, args.json)
     except commands.AgentError as exc:
         raise CliError(str(exc))
