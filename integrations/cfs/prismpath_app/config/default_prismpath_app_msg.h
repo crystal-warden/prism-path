@@ -22,6 +22,7 @@ typedef struct
 typedef PRISMPATH_APP_NoArgsCmd_t PRISMPATH_APP_NoopCmd_t;
 typedef PRISMPATH_APP_NoArgsCmd_t PRISMPATH_APP_ResetCountersCmd_t;
 typedef PRISMPATH_APP_NoArgsCmd_t PRISMPATH_APP_SendHkCmd_t;
+typedef PRISMPATH_APP_NoArgsCmd_t PRISMPATH_APP_SealCmd_t;
 
 /**
  * A proposed command, and the allowed command republished on the vehicle message id: the same payload. The
@@ -53,6 +54,12 @@ typedef struct
     uint32 PoliciesLoaded;     /**< images activated, the first load included */
     uint32 PoliciesRejected;   /**< images the kernel's checks refused */
     uint32 LastRefusalCause;   /**< registered cause of the latest refusal or escalation, 0 if none */
+    uint32 ReceiptCount;       /**< receipts in the run: the Merkle tree's leaf count, continued across resets */
+    uint32 Unreceipted;        /**< decisions with no image active, refused and not receipted (no image to bind) */
+    uint32 RecordErrors;       /**< decisions that could not be receipted (an allowed one was withheld) */
+    uint32 PolicyVersion;      /**< the version floor: the highest image version accepted */
+    uint32 Seals;              /**< root statements signed onboard */
+    uint8  Root[16];           /**< the first 16 bytes of the current Merkle root (the full root is in the run's files) */
 } PRISMPATH_APP_HkTlm_Payload_t;
 
 typedef struct

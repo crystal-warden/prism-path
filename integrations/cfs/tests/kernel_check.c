@@ -10,8 +10,8 @@
  * (kind 0 allow, 1 refuse, 2 escalate), the Python reference decision path's answer for that reading, and the
  * kernel must give the same kind and cause. A reading is sent as the payload bytes the layout defines.
  * Then the image is corrupted every way a byte can be corrupted. The checks are structural, so a flip that
- * leaves the image well formed (a different threshold, say) is accepted, and a signature is what catches that
- * (a later work package); every other flip must be refused, and a refused candidate must leave the active
+ * leaves the image well formed (a different threshold, say) is accepted here, and the authority's table signature
+ * is what catches that (prismpath_app_run.c, tests/run_check.c); every other flip must be refused, and a refused candidate must leave the active
  * image deciding exactly as before. Build with -fsanitize=undefined. */
 #include <stdio.h>
 #include <stdlib.h>
@@ -126,9 +126,27 @@ int main(int argc, char **argv)
     printf("%d vectors compared with the reference\n", n);
     CHECK(n > 1000, "too few vectors (%d)", n);
 
-    /* a payload shorter than the layout is the core's boundary refusal */
-    PP_Kernel_Decide(p, PRISMPATH_APP_PAYLOAD_LEN - 1, &v);
-    CHECK(v.Kind == PP_KIND_REFUSE && v.Cause == PRISMPATH_APP_EXAMPLE_CONTRACT_CAUSE, "short payload must refuse");
+    /* a payload that ends before a field is the core's boundary refusal, naming the first field it lacks */
+    Payload(p, 3, 0, 0, 0);
+    for (i = 0; i < 6; i++)
+    {
+        static const int16_t lacks[6] = {0, 1, 2, 2, 3, 3};
+        PP_Kernel_Decide(p, (size_t)i, &v);
+        CHECK(v.Kind == PP_KIND_REFUSE && v.Cause == PRISMPATH_APP_EXAMPLE_CONTRACT_CAUSE && v.Rule == -1 &&
+                  v.Field == lacks[i] && v.Reason == PP_REASON_MISSING,
+              "a %d byte payload must refuse as field %d missing (got kind %d field %d reason %d)", i, lacks[i], v.Kind,
+              v.Field, v.Reason);
+    }
+    /* six bytes hold every field: the spare bytes are not part of the reading */
+    PP_Kernel_Decide(p, 6, &v);
+    CHECK(v.Kind == PP_KIND_ALLOW, "a payload holding every field must be decided by the rules");
+    /* a bool that is neither 0 nor 1 is the wrong type, an int past its maximum out of range */
+    Payload(p, 3, 2, 0, 0);
+    PP_Kernel_Decide(p, sizeof(p), &v);
+    CHECK(v.Field == 1 && v.Reason == PP_REASON_WRONG_TYPE, "ground_contact 2 must refuse as the wrong type");
+    Payload(p, 11, 0, 0, 0);
+    PP_Kernel_Decide(p, sizeof(p), &v);
+    CHECK(v.Field == 0 && v.Reason == PP_REASON_OUT_OF_RANGE, "cmd_class 11 must refuse as out of range");
 
     base = Digest();
 

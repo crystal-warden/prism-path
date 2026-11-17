@@ -8,14 +8,21 @@
  * subscriber. Each proposal is read into the policy's fields as prismpath_app_layout.h defines them, decided
  * by PrismPath's C kernel against the active policy image, and then
  *
- *   allow     republished on the VEHICLE_CMD message id, and an event sent
- *   refuse    an event with the registered cause code, nothing republished
- *   escalate  an event with the registered cause code, nothing republished (S1 holds nothing; see the README)
+ *   allow     receipted, then republished on the VEHICLE_CMD message id, and an event sent
+ *   refuse    receipted, an event with the registered cause code, nothing republished
+ *   escalate  receipted, an event with the registered cause code, nothing republished (nothing is held yet)
  *
- * The policy image comes from the cFE table "PolicyTable". Its validation callback runs the kernel's checks,
- * and the app runs the same checks again when it activates the image, so an image that fails never decides.
- * All storage is static; nothing is allocated after initialization.
+ * Every decision under an active image is a core receipt and a leaf of the run's Merkle tree
+ * (prismpath_app_run.h), written before an allowed command is republished: a decision that cannot be receipted
+ * is never acted on. The receipts' accumulator and the image version floor live in the Critical Data Store, so a
+ * processor reset continues the run and cannot reopen an older image. A SEAL ground command signs a root
+ * statement onboard and writes the run, in the layout `prismpath evidence verify` reads, under RUN_DIR.
+ *
+ * The policy image comes from the cFE table "PolicyTable". Its validation callback runs the kernel's checks, the
+ * authority's two signatures and the version floor, and the app runs the same checks again when it activates the
+ * image, so an image that fails never decides. All storage is static; nothing is allocated after initialization.
  */
+#include <stdio.h>
 #include <string.h>
 
 #include "prismpath_app.h"
@@ -33,10 +40,282 @@ _Static_assert(sizeof(PRISMPATH_APP_ProposedCmd_t) - sizeof(CFE_MSG_CommandHeade
 
 PRISMPATH_APP_Data_t PRISMPATH_APP_Data;
 
+/* ----------------------------------------------------------------- the run's files, through OSAL */
+#define PP_IO_SLOTS 4
+static osal_id_t PP_IoFd[PP_IO_SLOTS];
+static bool      PP_IoUsed[PP_IO_SLOTS];
+
+static void PP_IoPath(int File, char *Path, size_t Cap)
+{
+    snprintf(Path, Cap, "%s/%s", PRISMPATH_APP_PLATFORM_RUN_DIR, PP_RunFileNames[File]);
+}
+
+static int32 PP_IoOpen(void *Ctx, int File, int Mode)
+{
+    char    path[OS_MAX_PATH_LEN];
+    int32   slot;
+    int32   rc;
+    int32   flags  = OS_FILE_FLAG_NONE;
+    int32   access = OS_READ_ONLY;
+
+    (void)Ctx;
+    for (slot = 0; slot < PP_IO_SLOTS && PP_IoUsed[slot]; slot++)
+    {
+    }
+    if (slot == PP_IO_SLOTS || File < 0 || File >= PP_FILE_COUNT)
+    {
+        return -1;
+    }
+    PP_IoPath(File, path, sizeof(path));
+    if (Mode == PP_IO_APPEND)
+    {
+        flags  = OS_FILE_FLAG_CREATE;
+        access = OS_WRITE_ONLY;
+    }
+    else if (Mode == PP_IO_CREATE)
+    {
+        flags  = OS_FILE_FLAG_CREATE | OS_FILE_FLAG_TRUNCATE;
+        access = OS_WRITE_ONLY;
+    }
+    rc = OS_OpenCreate(&PP_IoFd[slot], path, flags, access);
+    if (rc != OS_SUCCESS)
+    {
+        return -1;
+    }
+    if (Mode == PP_IO_APPEND && OS_lseek(PP_IoFd[slot], 0, OS_SEEK_END) < 0)
+    {
+        OS_close(PP_IoFd[slot]);
+        return -1;
+    }
+    PP_IoUsed[slot] = true;
+    return slot;
+}
+
+static int32 PP_IoWrite(void *Ctx, int32 Handle, const void *Buf, size_t Len)
+{
+    const uint8 *at = (const uint8 *)Buf;
+
+    (void)Ctx;
+    while (Len > 0)
+    {
+        int32 n = OS_write(PP_IoFd[Handle], at, Len);
+        if (n <= 0)
+        {
+            return -1;
+        }
+        at += n;
+        Len -= (size_t)n;
+    }
+    return 0;
+}
+
+static int32 PP_IoRead(void *Ctx, int32 Handle, void *Buf, size_t Len)
+{
+    int32 n;
+
+    (void)Ctx;
+    n = OS_read(PP_IoFd[Handle], Buf, Len);
+    return (n < 0) ? -1 : n;
+}
+
+static void PP_IoClose(void *Ctx, int32 Handle)
+{
+    (void)Ctx;
+    OS_close(PP_IoFd[Handle]);
+    PP_IoUsed[Handle] = false;
+}
+
+static int64 PP_IoSize(void *Ctx, int File)
+{
+    char       path[OS_MAX_PATH_LEN];
+    os_fstat_t st;
+
+    (void)Ctx;
+    PP_IoPath(File, path, sizeof(path));
+    if (OS_stat(path, &st) != OS_SUCCESS)
+    {
+        return -1;
+    }
+    return (int64)OS_FILESTAT_SIZE(st);
+}
+
+/* OSAL has no truncate: copy the first Len bytes beside the file and rename the copy over it */
+static int32 PP_IoTruncate(void *Ctx, int File, uint64 Len)
+{
+    static uint8 copy[512];
+    char         path[OS_MAX_PATH_LEN];
+    char         temp[OS_MAX_PATH_LEN];
+    osal_id_t    in;
+    osal_id_t    out;
+    int32        rc = 0;
+
+    (void)Ctx;
+    PP_IoPath(File, path, sizeof(path));
+    snprintf(temp, sizeof(temp), "%s.cut", path);
+    if (OS_OpenCreate(&in, path, OS_FILE_FLAG_NONE, OS_READ_ONLY) != OS_SUCCESS)
+    {
+        return -1;
+    }
+    if (OS_OpenCreate(&out, temp, OS_FILE_FLAG_CREATE | OS_FILE_FLAG_TRUNCATE, OS_WRITE_ONLY) != OS_SUCCESS)
+    {
+        OS_close(in);
+        return -1;
+    }
+    while (Len > 0 && rc == 0)
+    {
+        size_t want = (Len < sizeof(copy)) ? (size_t)Len : sizeof(copy);
+        int32  n    = OS_read(in, copy, want);
+        if (n <= 0 || OS_write(out, copy, (size_t)n) != n)
+        {
+            rc = -1;
+        }
+        else
+        {
+            Len -= (uint64)n;
+        }
+    }
+    OS_close(in);
+    OS_close(out);
+    if (rc == 0 && OS_rename(temp, path) != OS_SUCCESS)
+    {
+        rc = -1;
+    }
+    return rc;
+}
+
+static const PP_RunIo_t PP_Io = {NULL, PP_IoOpen, PP_IoWrite, PP_IoRead, PP_IoClose, PP_IoSize, PP_IoTruncate};
+
+static void PRISMPATH_APP_SaveState(void)
+{
+    if (PRISMPATH_APP_Data.HaveCds)
+    {
+        int32 Status = CFE_ES_CopyToCDS(PRISMPATH_APP_Data.CdsHandle, &PRISMPATH_APP_Data.Run);
+        if (Status != CFE_SUCCESS)
+        {
+            CFE_EVS_SendEvent(PRISMPATH_APP_STATE_ERR_EID, CFE_EVS_EventType_ERROR,
+                              "PRISMPATH_APP could not save the run state to the CDS, rc=0x%08X",
+                              (unsigned int)Status);
+        }
+    }
+}
+
+/* The run state: restored from the Critical Data Store after a processor reset, else begun fresh. A restored
+ * state holds the run's files to the lengths it recorded. */
+static void PRISMPATH_APP_InitState(void)
+{
+    int32 Status;
+    bool  Restored = false;
+
+    (void)OS_mkdir(PRISMPATH_APP_PLATFORM_RUN_DIR, 0);
+    Status = CFE_ES_RegisterCDS(&PRISMPATH_APP_Data.CdsHandle, sizeof(PP_RunState_t), PRISMPATH_APP_PLATFORM_CDS_NAME);
+    if (Status == CFE_ES_CDS_ALREADY_EXISTS)
+    {
+        PRISMPATH_APP_Data.HaveCds = true;
+        if (CFE_ES_RestoreFromCDS(&PRISMPATH_APP_Data.Run, PRISMPATH_APP_Data.CdsHandle) == CFE_SUCCESS &&
+            PP_Run_StateValid(&PRISMPATH_APP_Data.Run))
+        {
+            Restored = true;
+        }
+        else
+        {
+            CFE_EVS_SendEvent(PRISMPATH_APP_STATE_ERR_EID, CFE_EVS_EventType_ERROR,
+                              "PRISMPATH_APP the CDS run state does not read; a new run begins");
+        }
+    }
+    else if (Status == CFE_SUCCESS)
+    {
+        PRISMPATH_APP_Data.HaveCds = true;
+    }
+    else
+    {
+        CFE_EVS_SendEvent(PRISMPATH_APP_STATE_ERR_EID, CFE_EVS_EventType_ERROR,
+                          "PRISMPATH_APP no CDS (rc=0x%08X): the run and the version floor will not survive a reset",
+                          (unsigned int)Status);
+    }
+
+    if (Restored)
+    {
+        if (PP_Run_Recover(&PRISMPATH_APP_Data.Run, &PP_Io) != 0)
+        {
+            CFE_EVS_SendEvent(PRISMPATH_APP_STATE_ERR_EID, CFE_EVS_EventType_ERROR,
+                              "PRISMPATH_APP a run file is shorter than the CDS records; the run will not verify");
+        }
+        CFE_EVS_SendEvent(PRISMPATH_APP_STATE_INF_EID, CFE_EVS_EventType_INFORMATION,
+                          "PRISMPATH_APP RUN RESTORED from CDS receipts=%u floor=v%u cases=%u",
+                          (unsigned int)PRISMPATH_APP_Data.Run.Acc.count,
+                          (unsigned int)PRISMPATH_APP_Data.Run.FloorVersion, (unsigned int)PRISMPATH_APP_Data.Run.CaseCount);
+    }
+    else
+    {
+        PP_Run_Init(&PRISMPATH_APP_Data.Run);
+        if (PP_Run_Begin(&PP_Io) != 0)
+        {
+            CFE_EVS_SendEvent(PRISMPATH_APP_STATE_ERR_EID, CFE_EVS_EventType_ERROR,
+                              "PRISMPATH_APP could not create the run files under %s", PRISMPATH_APP_PLATFORM_RUN_DIR);
+        }
+        PRISMPATH_APP_SaveState();
+        CFE_EVS_SendEvent(PRISMPATH_APP_STATE_INF_EID, CFE_EVS_EventType_INFORMATION,
+                          "PRISMPATH_APP RUN BEGUN receipts=0 floor=v0");
+    }
+}
+
+static bool PRISMPATH_APP_ReadKey(const char *Path, uint8 *Out, size_t Len)
+{
+    osal_id_t fd;
+    int32     n;
+
+    if (OS_OpenCreate(&fd, Path, OS_FILE_FLAG_NONE, OS_READ_ONLY) != OS_SUCCESS)
+    {
+        return false;
+    }
+    n = OS_read(fd, Out, Len);
+    OS_close(fd);
+    return n == (int32)Len;
+}
+
+static void PRISMPATH_APP_LoadKeys(void)
+{
+    uint8 seed[32];
+
+    PRISMPATH_APP_Data.Keys.HaveAuthority =
+        PRISMPATH_APP_ReadKey(PRISMPATH_APP_PLATFORM_AUTHORITY_FILE, PRISMPATH_APP_Data.Keys.AuthorityPub, 32);
+    if (!PRISMPATH_APP_Data.Keys.HaveAuthority)
+    {
+        CFE_EVS_SendEvent(PRISMPATH_APP_KEY_ERR_EID, CFE_EVS_EventType_ERROR,
+                          "PRISMPATH_APP no authority key at %s: every image is refused (sig:missing)",
+                          PRISMPATH_APP_PLATFORM_AUTHORITY_FILE);
+    }
+    if (PRISMPATH_APP_ReadKey(PRISMPATH_APP_PLATFORM_INSTANCE_FILE, seed, sizeof(seed)))
+    {
+        PP_Run_SetInstanceSeed(&PRISMPATH_APP_Data.Keys, seed);
+    }
+    else
+    {
+        CFE_EVS_SendEvent(PRISMPATH_APP_KEY_ERR_EID, CFE_EVS_EventType_ERROR,
+                          "PRISMPATH_APP no instance key at %s: decisions are receipted but no root can be signed",
+                          PRISMPATH_APP_PLATFORM_INSTANCE_FILE);
+    }
+    memset(seed, 0, sizeof(seed));
+}
+
+/* Every check a table must pass before it decides: the kernel's structural checks, then the authority's
+ * signatures and the version floor. Returns 0 or the registered cause; Digest is the table's. */
+static int PRISMPATH_APP_Gate(const PP_PolicyTable_t *Table, uint8 Digest[32])
+{
+    int rc = PP_Kernel_Check(Table);
+
+    if (rc == 0)
+    {
+        rc = PP_Run_CheckTable(&PRISMPATH_APP_Data.Run, &PRISMPATH_APP_Data.Keys, Table, Digest);
+    }
+    return rc;
+}
+
 /* ----------------------------------------------------------------- the policy table */
 int32 PRISMPATH_APP_TblValidationFunc(void *TblData)
 {
-    int rc = PP_Kernel_Check((const PP_PolicyTable_t *)TblData);
+    uint8 Digest[32];
+    int   rc = PRISMPATH_APP_Gate((const PP_PolicyTable_t *)TblData, Digest);
 
     if (rc != 0)
     {
@@ -54,21 +333,35 @@ static void PRISMPATH_APP_ActivateFromTable(void)
 {
     PP_PolicyTable_t *Table = NULL;
     int               rc;
-    unsigned int      Rules;
+    unsigned int      Rules   = 0;
+    unsigned int      Version = 0;
+    uint8             Digest[32];
 
     if (CFE_TBL_GetAddress((void **)&Table, PRISMPATH_APP_Data.TblHandle) < CFE_SUCCESS)
     {
         return;
     }
-    rc    = PP_Kernel_Activate(Table);
-    Rules = Table->RuleCount;
+    rc = PRISMPATH_APP_Gate(Table, Digest);
+    if (rc == 0)
+    {
+        rc = PP_Kernel_Activate(Table);
+    }
+    if (rc == 0)
+    {
+        PRISMPATH_APP_Data.Active = *Table;
+        memcpy(PRISMPATH_APP_Data.ActiveDigest, Digest, sizeof(Digest));
+        PP_Run_Accept(&PRISMPATH_APP_Data.Run, Table->Version, Digest);
+        PRISMPATH_APP_SaveState();
+        Rules   = Table->RuleCount;
+        Version = Table->Version;
+    }
     CFE_TBL_ReleaseAddress(PRISMPATH_APP_Data.TblHandle);
     if (rc == 0)
     {
         PRISMPATH_APP_Data.HkTlm.Payload.PoliciesLoaded++;
         CFE_EVS_SendEvent(PRISMPATH_APP_POLICY_LOADED_EID, CFE_EVS_EventType_INFORMATION,
-                          "PRISMPATH_APP POLICY LOADED layout=0x%08X rules=%u", (unsigned int)PP_Kernel_LayoutHash(),
-                          Rules);
+                          "PRISMPATH_APP POLICY LOADED v%u layout=0x%08X rules=%u", Version,
+                          (unsigned int)PP_Kernel_LayoutHash(), Rules);
     }
     else
     {
@@ -126,26 +419,60 @@ static void PRISMPATH_APP_Proposal(const CFE_SB_Buffer_t *SBBufPtr)
     memset(&Proposed, 0, sizeof(Proposed));
     memcpy(&Proposed, SBBufPtr, (Size < sizeof(Proposed)) ? Size : sizeof(Proposed));
 
+    const uint8                *Payload = &((const uint8 *)&Proposed)[sizeof(CFE_MSG_CommandHeader_t)];
+    uint64                      Receipt = 0;
+    char                        Rcpt[24];
+
     Seq = ++PRISMPATH_APP_Data.HkTlm.Payload.Proposed;
+    if (PayloadLen > PRISMPATH_APP_PAYLOAD_LEN)
+    {
+        PayloadLen = PRISMPATH_APP_PAYLOAD_LEN;
+    }
     CFE_ES_PerfLogEntry(PRISMPATH_APP_DECIDE_PERF_ID);
-    PP_Kernel_Decide(&((const uint8 *)&Proposed)[sizeof(CFE_MSG_CommandHeader_t)],
-                     (PayloadLen < PRISMPATH_APP_PAYLOAD_LEN) ? PayloadLen : PRISMPATH_APP_PAYLOAD_LEN, &Verdict);
+    PP_Kernel_Decide(Payload, PayloadLen, &Verdict);
     CFE_ES_PerfLogExit(PRISMPATH_APP_DECIDE_PERF_ID);
+
+    /* the receipt, before anything is acted on; with no image there is nothing to bind it to */
+    if (!PP_Kernel_Active())
+    {
+        PRISMPATH_APP_Data.HkTlm.Payload.Unreceipted++;
+        snprintf(Rcpt, sizeof(Rcpt), "none");
+    }
+    else if (PP_Run_Record(&PRISMPATH_APP_Data.Run, &PP_Io, &PRISMPATH_APP_Data.Keys, &PRISMPATH_APP_Data.Active,
+                           PRISMPATH_APP_Data.ActiveDigest, Payload, PayloadLen, &Verdict, &Receipt) == 0)
+    {
+        PRISMPATH_APP_SaveState();
+        snprintf(Rcpt, sizeof(Rcpt), "%u", (unsigned int)Receipt);
+    }
+    else
+    {
+        PRISMPATH_APP_Data.HkTlm.Payload.RecordErrors++;
+        CFE_EVS_SendEvent(PRISMPATH_APP_RECORD_ERR_EID, CFE_EVS_EventType_ERROR,
+                          "PRISMPATH_APP RECORD ERROR seq=%u: the decision could not be receipted and is not acted on",
+                          (unsigned int)Seq);
+        if (Verdict.Kind == PP_KIND_ALLOW)
+        {
+            PRISMPATH_APP_Data.HkTlm.Payload.Refused++;
+            return; /* an allow nobody can audit is not carried out */
+        }
+        snprintf(Rcpt, sizeof(Rcpt), "none");
+    }
 
     switch (Verdict.Kind)
     {
         case PP_KIND_ALLOW:
             PRISMPATH_APP_Data.HkTlm.Payload.Allowed++;
             CFE_EVS_SendEvent(PRISMPATH_APP_ALLOW_EID, CFE_EVS_EventType_INFORMATION,
-                              "PRISMPATH_APP ALLOW seq=%u rule=%d", (unsigned int)Seq, (int)Verdict.Rule);
+                              "PRISMPATH_APP ALLOW seq=%u rule=%d receipt=%s", (unsigned int)Seq, (int)Verdict.Rule,
+                              Rcpt);
             PRISMPATH_APP_Forward(&Proposed, Seq);
             break;
         case PP_KIND_ESCALATE:
             PRISMPATH_APP_Data.HkTlm.Payload.Escalated++;
             PRISMPATH_APP_Data.HkTlm.Payload.LastRefusalCause = Verdict.Cause;
             CFE_EVS_SendEvent(PRISMPATH_APP_ESCALATE_EID, CFE_EVS_EventType_CRITICAL,
-                              "PRISMPATH_APP ESCALATE seq=%u rule=%d cause=%u", (unsigned int)Seq,
-                              (int)Verdict.Rule, (unsigned int)Verdict.Cause);
+                              "PRISMPATH_APP ESCALATE seq=%u rule=%d cause=%u receipt=%s", (unsigned int)Seq,
+                              (int)Verdict.Rule, (unsigned int)Verdict.Cause, Rcpt);
             break;
         default:
             PRISMPATH_APP_Data.HkTlm.Payload.Refused++;
@@ -153,14 +480,14 @@ static void PRISMPATH_APP_Proposal(const CFE_SB_Buffer_t *SBBufPtr)
             if (Verdict.Rule >= 0)
             {
                 CFE_EVS_SendEvent(PRISMPATH_APP_REFUSE_EID, CFE_EVS_EventType_ERROR,
-                                  "PRISMPATH_APP REFUSE seq=%u rule=%d cause=%u", (unsigned int)Seq,
-                                  (int)Verdict.Rule, (unsigned int)Verdict.Cause);
+                                  "PRISMPATH_APP REFUSE seq=%u rule=%d cause=%u receipt=%s", (unsigned int)Seq,
+                                  (int)Verdict.Rule, (unsigned int)Verdict.Cause, Rcpt);
             }
             else
             {
                 CFE_EVS_SendEvent(PRISMPATH_APP_REFUSE_EID, CFE_EVS_EventType_ERROR,
-                                  "PRISMPATH_APP REFUSE seq=%u core cause=%u field=%s", (unsigned int)Seq,
-                                  (unsigned int)Verdict.Cause, PP_Kernel_FieldName(Verdict.Field));
+                                  "PRISMPATH_APP REFUSE seq=%u core cause=%u field=%s receipt=%s", (unsigned int)Seq,
+                                  (unsigned int)Verdict.Cause, PP_Kernel_FieldName(Verdict.Field), Rcpt);
             }
             break;
     }
@@ -171,14 +498,22 @@ static void PRISMPATH_APP_SendHk(void)
 {
     PRISMPATH_APP_HkTlm_Payload_t *Hk = &PRISMPATH_APP_Data.HkTlm.Payload;
 
+    uint8                          Root[32];
+
     Hk->PolicyActive     = (uint8)PP_Kernel_Active();
     Hk->PolicyLayoutHash = PP_Kernel_LayoutHash();
+    Hk->ReceiptCount     = (uint32)PP_Run_Root(&PRISMPATH_APP_Data.Run, Root);
+    Hk->PolicyVersion    = PRISMPATH_APP_Data.Run.FloorVersion;
+    Hk->Seals            = (uint32)PRISMPATH_APP_Data.Run.Seals;
+    memcpy(Hk->Root, Root, sizeof(Hk->Root));
     CFE_SB_TimeStampMsg(CFE_MSG_PTR(PRISMPATH_APP_Data.HkTlm.TelemetryHeader));
     CFE_SB_TransmitMsg(CFE_MSG_PTR(PRISMPATH_APP_Data.HkTlm.TelemetryHeader), true);
     CFE_EVS_SendEvent(PRISMPATH_APP_HK_INF_EID, CFE_EVS_EventType_INFORMATION,
-                      "PRISMPATH_APP HK proposed=%u allowed=%u refused=%u escalated=%u forwarded=%u active=%u",
+                      "PRISMPATH_APP HK proposed=%u allowed=%u refused=%u escalated=%u forwarded=%u active=%u "
+                      "receipts=%u floor=v%u",
                       (unsigned int)Hk->Proposed, (unsigned int)Hk->Allowed, (unsigned int)Hk->Refused,
-                      (unsigned int)Hk->Escalated, (unsigned int)Hk->Forwarded, (unsigned int)Hk->PolicyActive);
+                      (unsigned int)Hk->Escalated, (unsigned int)Hk->Forwarded, (unsigned int)Hk->PolicyActive,
+                      (unsigned int)Hk->ReceiptCount, (unsigned int)Hk->PolicyVersion);
 }
 
 static bool PRISMPATH_APP_VerifyLength(const CFE_MSG_Message_t *MsgPtr, size_t Expected)
@@ -195,6 +530,48 @@ static bool PRISMPATH_APP_VerifyLength(const CFE_MSG_Message_t *MsgPtr, size_t E
         return false;
     }
     return true;
+}
+
+
+/* Sign a root statement over every receipt and write the run for downlink. */
+static void PRISMPATH_APP_Seal(void)
+{
+    CFE_TIME_SysTime_t Now = CFE_TIME_GetTime();
+    uint64             TimeUs;
+    uint8              Root[32];
+    char               Hex[65];
+    uint32             Leaves;
+    int                rc;
+    int                i;
+
+    /* the spacecraft clock (cFE time, TAI since the mission epoch) in microseconds */
+    TimeUs = (uint64)Now.Seconds * 1000000u + CFE_TIME_Sub2MicroSecs(Now.Subseconds);
+    rc     = PP_Run_Seal(&PRISMPATH_APP_Data.Run, &PP_Io, &PRISMPATH_APP_Data.Keys, TimeUs);
+    if (rc != 0)
+    {
+        PRISMPATH_APP_Data.HkTlm.Payload.CommandErrorCounter++;
+        if (rc <= PP_SEAL_FILE_ERR(0) && rc > PP_SEAL_FILE_ERR(PP_FILE_COUNT))
+        {
+            CFE_EVS_SendEvent(PRISMPATH_APP_SEAL_ERR_EID, CFE_EVS_EventType_ERROR,
+                              "PRISMPATH_APP SEAL FAILED: %s/%s could not be read or written",
+                              PRISMPATH_APP_PLATFORM_RUN_DIR, PP_RunFileNames[PP_SEAL_FILE_ERR(0) - rc]);
+        }
+        else
+        {
+            CFE_EVS_SendEvent(PRISMPATH_APP_SEAL_ERR_EID, CFE_EVS_EventType_ERROR, "PRISMPATH_APP SEAL FAILED: %s",
+                              rc == -2 ? "no instance or authority key is loaded" : "a document did not fit its buffer");
+        }
+        return;
+    }
+    PRISMPATH_APP_SaveState();
+    PRISMPATH_APP_Data.HkTlm.Payload.CommandCounter++;
+    Leaves = (uint32)PP_Run_Root(&PRISMPATH_APP_Data.Run, Root);
+    for (i = 0; i < 32; i++)
+    {
+        snprintf(&Hex[2 * i], 3, "%02x", Root[i]);
+    }
+    CFE_EVS_SendEvent(PRISMPATH_APP_SEALED_EID, CFE_EVS_EventType_INFORMATION, "PRISMPATH_APP SEALED receipts=%u root=%s",
+                      (unsigned int)Leaves, Leaves ? Hex : "-");
 }
 
 static void PRISMPATH_APP_GroundCommand(const CFE_SB_Buffer_t *SBBufPtr)
@@ -221,6 +598,12 @@ static void PRISMPATH_APP_GroundCommand(const CFE_SB_Buffer_t *SBBufPtr)
                 Hk->Forwarded = Hk->ForwardErrors = Hk->LastRefusalCause = 0;
                 CFE_EVS_SendEvent(PRISMPATH_APP_RESET_INF_EID, CFE_EVS_EventType_INFORMATION,
                                   "PRISMPATH_APP counters reset");
+            }
+            break;
+        case PRISMPATH_APP_SEAL_CC:
+            if (PRISMPATH_APP_VerifyLength(&SBBufPtr->Msg, sizeof(PRISMPATH_APP_SealCmd_t)))
+            {
+                PRISMPATH_APP_Seal();
             }
             break;
         default:
@@ -350,6 +733,10 @@ CFE_Status_t PRISMPATH_APP_Init(void)
         return CFE_SB_BAD_ARGUMENT;
     }
 
+    /* the run state and the keys come first: the initial table load is checked against the floor they hold */
+    PRISMPATH_APP_InitState();
+    PRISMPATH_APP_LoadKeys();
+
     Status = CFE_TBL_Register(&PRISMPATH_APP_Data.TblHandle, "PolicyTable", sizeof(PRISMPATH_APP_PolicyTable_t),
                               CFE_TBL_OPT_DEFAULT, PRISMPATH_APP_TblValidationFunc);
     if (Status != CFE_SUCCESS)
@@ -374,6 +761,8 @@ CFE_Status_t PRISMPATH_APP_Init(void)
     }
 
     CFE_EVS_SendEvent(PRISMPATH_APP_INIT_INF_EID, CFE_EVS_EventType_INFORMATION,
-                      "PRISMPATH_APP initialized, policy %s", PP_Kernel_Active() ? "active" : "NOT active");
+                      "PRISMPATH_APP initialized, policy %s, %s reset, receipts=%u", PP_Kernel_Active() ? "active" : "NOT active",
+                      CFE_ES_GetResetType(NULL) == CFE_PSP_RST_TYPE_PROCESSOR ? "processor" : "power on",
+                      (unsigned int)PRISMPATH_APP_Data.Run.Acc.count);
     return CFE_SUCCESS;
 }

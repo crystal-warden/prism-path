@@ -18,7 +18,10 @@ What the C table carries beside the image (prismpath_app_policy_image.inc):
   the image bytes, the rule actions (allow, refuse or escalate, and the registered cause code), the two
   causes the core itself refuses with (route:contract-violation for a reading outside its field definitions,
   route:no-matching-edge for a reading no rule holds), and a hash of the field layout so an image for another
-  reading is refused at validation.
+  reading is refused at validation; and for the receipts (work package S2) the image's version, the signed core
+  image's canon/2 bytes and its canonical flow rendering spelled as a canon/2 string, which a core run's
+  receipts and cases file carry. The two authority signatures are not in the include: they are made on the
+  ground with the authority key, over the built table file (integrations/cfs/ground/table.py).
 """
 from __future__ import annotations
 
@@ -32,14 +35,19 @@ if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 
 from prismpath.agent.policy import Policy, target_decision  # noqa: E402
-from prismpath.kernel import causes, ppt_compile  # noqa: E402
+from prismpath.kernel import canon2, causes, ppt_compile  # noqa: E402
 from prismpath.kernel.parser import Node, parse  # noqa: E402
 
 CORE = HERE / "example.core.json"
 INC = HERE.parent / "fsw" / "tables" / "prismpath_app_policy_image.inc"
 IMAGE_MAX = 1024          # PRISMPATH_APP_IMAGE_MAX
 RULES_MAX = 16            # PRISMPATH_APP_MAX_RULES
+CORE_MAX = 2048          # PRISMPATH_APP_CORE_MAX
+FLOW_MAX = 1536          # PRISMPATH_APP_FLOW_MAX
 KIND = {"allow": 0, "refuse": 1, "escalate": 2}
+# The example image's version. The Critical Data Store holds the highest version accepted, and a table below it,
+# or equal to it with other bytes, is refused (image:version-replay). A new image ships with a higher version.
+VERSION = 2
 
 
 def field_defs(doc: dict) -> List[Tuple[str, str, int, int]]:
@@ -101,12 +109,21 @@ def build(core: bytes) -> Dict:
         rules.append((KIND[kind], code or 0))
     if len(blob) > IMAGE_MAX or len(rules) > RULES_MAX:
         raise ValueError(f"the image ({len(blob)} bytes, {len(rules)} rules) is over the table's {IMAGE_MAX} and {RULES_MAX}")
+    flow_json = canon2.dumps(policy.flow)
+    if len(policy.image) > CORE_MAX or len(flow_json) > FLOW_MAX:
+        raise ValueError(f"the core image ({len(policy.image)} bytes) or its flow ({len(flow_json)}) is over the table's "
+                         f"{CORE_MAX} and {FLOW_MAX}")
     return {
-        "image": blob, "rules": rules, "defs": defs,
+        "image": blob, "rules": rules, "defs": defs, "version": VERSION, "core": policy.image, "flow_json": flow_json,
         "layout_hash": fnv1a32(layout_signature(defs)),
         "contract_cause": causes.code("route:contract-violation"),
         "nomatch_cause": causes.code("route:no-matching-edge"),
     }
+
+
+def _c_bytes(data: bytes) -> str:
+    rows = [", ".join(f"0x{b:02X}" for b in data[i:i + 12]) for i in range(0, len(data), 12)]
+    return "{" + ", \\\n     ".join(rows) + "}"
 
 
 def render_inc(built: Dict) -> str:
@@ -122,6 +139,13 @@ def render_inc(built: Dict) -> str:
         f"#define PRISMPATH_APP_EXAMPLE_RULE_COUNT      {len(built['rules'])}\n"
         f"#define PRISMPATH_APP_EXAMPLE_RULES           {{{rules}}}\n"
         "#define PRISMPATH_APP_EXAMPLE_IMAGE \\\n    {" + ", \\\n     ".join(rows) + "}\n"
+        f"#define PRISMPATH_APP_EXAMPLE_VERSION         {built['version']}u\n"
+        f"#define PRISMPATH_APP_EXAMPLE_CORE_LEN        {len(built['core'])}\n"
+        f"#define PRISMPATH_APP_EXAMPLE_FLOW_JSON_LEN   {len(built['flow_json'])}\n"
+        "/* the signed core image, canon/2 */\n"
+        "#define PRISMPATH_APP_EXAMPLE_CORE \\\n    " + _c_bytes(built["core"]) + "\n"
+        "/* its canonical flow rendering, spelled as a canon/2 string */\n"
+        "#define PRISMPATH_APP_EXAMPLE_FLOW_JSON \\\n    " + _c_bytes(built["flow_json"]) + "\n"
     )
 
 
