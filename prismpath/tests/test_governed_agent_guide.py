@@ -21,9 +21,11 @@ import pytest
 pytest.importorskip("cryptography")
 pytest.importorskip("fcntl")
 
-from prismpath.tests._repo import REPO_ROOT, repo_file  # noqa: E402
+from prismpath.tests._repo import REPO_ROOT  # noqa: E402
 
-GUIDE = repo_file("docs", "guides", "governed-agent.md")
+GUIDE = REPO_ROOT / "docs" / "guides" / "governed-agent.md"
+if not GUIDE.exists():   # skipped here, not in _repo.py, so the acceptance skip budget can name this file
+    pytest.skip(f"{GUIDE} is only in a repo checkout", allow_module_level=True)
 BLOCK = re.compile(r"<!-- guide-test: (\w+) -->\n```sh\n(.*?)\n```", re.S)
 
 
