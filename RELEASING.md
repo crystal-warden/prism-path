@@ -138,13 +138,26 @@ and no workflow in this change creates it.
    SHA-256 of the exact wheel and sdist that are uploaded to a `SHA256SUMS` file, and stamp it with `ots stamp`.
    Upload those same files, because a rebuild is not byte identical and the proof would not match it.
 
+## Decided (2026-11-17): 0.2.0, the first Trusted Publishing release
+
+1. **Version 0.2.0.** 0.1.3 was never uploaded and its tag is superseded, as `v0.1.1` and `v0.1.2` were. The release is
+   the current product `main` as 0.2.0 on PyPI, and its changelog entry includes everything 0.1.3 listed. PyPI holds
+   0.1.0 only until then.
+2. **It is the first release through Trusted Publishing,** so item 3 of the 2026-11-04 decisions (hand uploads up to
+   0.1.3) never applies. 0.2.0 is uploaded by `publish.yml` and no API token is used for it.
+3. **The four Rust crates go to crates.io from a second gated workflow,** `publish-crates.yml`, in the same release.
+4. **One tag names the release.** The tag is `v0.2.0`, the version in `pyproject.toml`, and both workflows refuse to
+   run on any other ref. The crates keep their own versions (they are not tied to the Python number), and the crates
+   workflow refuses to run if any crate's version is already on crates.io. One tag for both registries means one
+   commit is what is on both, and the tag rule is checked in one way.
+
 ## Trusted Publishing, from the release after 0.1.3
 
 **Tag only when you publish.** Versions 0.1.1 and 0.1.2 were tagged publicly and their files timestamped while they
 were only staged; both were then dropped before upload, so their numbers were spent although PyPI never saw them. From
 now on a version is tagged, built and published in one step, so a release dropped before that step keeps its number.
 
-From the first release after 0.1.3 (0.1.4 once 0.1.3 is uploaded), a GitHub Actions workflow uploads to PyPI with a short lived OIDC credential, so no API token exists
+From the first release after 0.1.3 (0.2.0, since 0.1.3 was never uploaded), a GitHub Actions workflow uploads to PyPI with a short lived OIDC credential, so no API token exists
 to leak and every file carries a PEP 740 attestation tying it to the workflow run. The workflow is
 `publish.yml` in the mirror, `crystal-warden/prismpath`. The export deletes everything in the mirror but `.git`
 on each run, so the workflow cannot be kept there by hand. Its source is `tools/mirror_publish.yml` in this
@@ -178,6 +191,51 @@ repository, and `tools/export_clean.py` writes it to `.github/workflows/publish.
 
 The workflow has no tag push trigger on purpose. A tag push would build before the owner has looked at anything,
 and a manual run on the tag keeps one deliberate click in front of both the build and the upload.
+
+### Publishing the Rust crates (crates.io)
+
+The workflow is `publish-crates.yml` in the mirror. Its source is `tools/mirror_crates_publish.yml` here, written
+by `tools/export_clean.py` beside `publish.yml`; edit it in research and re-export. It is run by hand on the tag
+(`workflow_dispatch` only), and has two jobs.
+
+- `build` checks that the tag is `v` plus the version in `pyproject.toml`, that none of the four crate versions is
+  already in the crates.io index, lists what each crate packages, and runs `cargo publish --workspace --dry-run
+  --locked`. The workspace form is used because a crate whose dependency is not on crates.io yet (every one but
+  `prismpath-rs` on a first release) cannot be dry run alone; the workspace form packages the four in dependency
+  order and verifies each against the ones before it. It needs cargo 1.90 or later, which the runner has.
+- `publish` waits for the reviewer on the `crates-io` environment, gets a short lived token from
+  `rust-lang/crates-io-auth-action` (crates.io Trusted Publishing, with `id-token: write`), and runs `cargo publish`
+  for `prismpath-rs`, `prismpath-telemetry-rs`, `prismpath-hotswap-rs` and `prismpath-preflight` in that order,
+  waiting for each to appear in the index before the next.
+
+A published crate version can be yanked but never replaced, so check the dry run and the versions first.
+
+**One time setup (the owner).**
+
+1. On GitHub, in `crystal-warden/prismpath`: **Settings, Environments, New environment**, name it `crates-io`,
+   tick **Required reviewers**, add yourself and save. Optionally restrict deployment tags to `v*`.
+2. On crates.io, for each crate that already exists: its **Settings, Trusted Publishing, Add**, choose GitHub, with
+   owner `crystal-warden`, repository `prismpath`, workflow `publish-crates.yml`, environment `crates-io`.
+3. A crate that does not exist yet cannot have a trusted publisher attached. Publish it once by hand first
+   (`cargo publish -p <crate>` with a crates.io API token) and then add the trusted publisher. If you do that for a
+   crate, publish exactly the version in the tag's tree, and the workflow's check will then stop on that crate, so
+   set the next crate version (below) or leave that crate out of the run. Delete the token afterwards.
+4. Check each crate's state on crates.io before tagging. For each of the four crates, note whether it exists and its
+   latest version. If the version in its `Cargo.toml` is already published, set the next minor in the crate's
+   `Cargo.toml`, and in the `version =` of every path dependency on it, before you tag. `Cargo.lock` follows.
+
+### The release steps, for both registries
+
+1. Research `main` has the version (`pyproject.toml`, crate versions), the changelog entry and green gates. Export
+   into the mirror (`python tools/export_clean.py --out ../prismpath-clean`), review, commit and push the mirror
+   `main`, and wait for its CI to pass.
+2. Tag the mirror commit `v<version>` (annotated) and push the tag.
+3. **PyPI:** Actions, `publish`, Run workflow on the tag; check the hashes in the summary; approve the `pypi`
+   deployment.
+4. **crates.io:** Actions, `publish-crates`, Run workflow on the same tag; check the dry run's output; approve the
+   `crates-io` deployment. Check the four crates' pages afterwards.
+5. Stamp the PyPI artifact's `SHA256SUMS` as described above, and delete the old PyPI API token after the first
+   successful Trusted Publishing upload.
 
 ### What this replaces
 
