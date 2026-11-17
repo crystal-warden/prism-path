@@ -80,6 +80,8 @@ struct ClientState {
     queue: VecDeque<Item>,
     /// Lines in the queue; gaps do not count against the bound (consecutive drops share one).
     lines: usize,
+    /// True while the writer thread is writing the last item popped from `queue`.
+    writing: bool,
     closed: bool,
 }
 
@@ -219,12 +221,12 @@ impl Hub {
         pending + self.clients.lock().unwrap().iter().filter(|client| !client.is_closed()).count()
     }
 
-    /// Wait until every client's queue is empty, or `deadline`.
+    /// Wait until every client's queue is empty and written out, or `deadline`.
     pub fn flush(&self, deadline: Instant) {
         while Instant::now() < deadline {
             let busy = self.clients.lock().unwrap().iter().any(|client| {
                 let state = client.state.lock().unwrap();
-                !state.closed && !state.queue.is_empty()
+                !state.closed && (!state.queue.is_empty() || state.writing)
             });
             if !busy {
                 return;
@@ -407,6 +409,7 @@ pub fn serve<S: Conn>(hub: Arc<Hub>, mut stream: S, peer: Option<(u32, u32)>) {
     loop {
         let item = {
             let mut state = client.state.lock().unwrap();
+            state.writing = false;
             while state.queue.is_empty() && !state.closed {
                 state = client.ready.wait(state).unwrap();
             }
@@ -417,6 +420,7 @@ pub fn serve<S: Conn>(hub: Arc<Hub>, mut stream: S, peer: Option<(u32, u32)>) {
             if matches!(item, Item::Line(_)) {
                 state.lines -= 1;
             }
+            state.writing = true;
             item
         };
         let line = match item {
