@@ -46,8 +46,11 @@
 #include "merkle.h"
 #include "prismpath_app_kernel.h"
 
-/** Who decided, in every receipt and the manifest. */
+/** Who decided, in every receipt and the manifest. Another framework's build names itself by defining this
+ *  (integrations/fprime does), and nothing else in a receipt then differs. */
+#ifndef PP_RUN_DECIDER
 #define PP_RUN_DECIDER "cfs:prismpath_app"
+#endif
 
 /** The state the Critical Data Store keeps. Plain data: it is copied in and out of the store whole. */
 typedef struct
