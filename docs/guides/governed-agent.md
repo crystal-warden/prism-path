@@ -81,6 +81,10 @@ prismpath agent verify --tamper-demo
 
 The demo copies a session, flips one byte of its receipts, and verifies the copy. The copy is refused and then deleted. Your own session is not touched.
 
+## Check your setup
+
+If a call you expected to be governed is not, or a hook feels slow, run `prismpath agent doctor --project .`. It checks the key files, the recorded policy, the hook entries and the interpreter they name, a timed dry run of the hook, your runs and free disk space. Each check says ok, warn or fail with one line and the command that fixes it, and the doctor changes nothing itself.
+
 ## What this does and does not protect you from
 
 The hook decides. Claude Code runs an allowed call itself, outside any PrismPath sandbox. PrismPath does not wrap the process, so a call it allows has the access Claude Code has.
