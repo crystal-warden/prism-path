@@ -209,7 +209,7 @@ def test_concurrent_requests_with_interleaved_ids_keep_their_ids(tmp_path):
         ident = n if n % 2 else f"req-{n}"
         requests.append(ident)
         c.send({"jsonrpc": "2.0", "id": ident, "method": "tools/call",
-                "params": {"name": "slow_echo", "arguments": {"token": f"t{n}", "delay": (8 - n) * 0.05}}})
+                "params": {"name": "slow_echo", "arguments": {"token": f"t{n}", "delay": (8 - n) * 0.25}}})
         if n == 3:
             c.send({"jsonrpc": "2.0", "id": "refused", "method": "tools/call",
                     "params": {"name": "read_file", "arguments": {"path": "/etc/passwd"}}})
@@ -222,7 +222,8 @@ def test_concurrent_requests_with_interleaved_ids_keep_their_ids(tmp_path):
         assert _text(by_id[ident]) == f"echo t{n}"
     assert "agent:outside-workspace (111)" in _text(by_id["refused"])
     order = [a["id"] for a in answers]
-    # the proxy's own answer and the passthrough come back before the slow calls, which return out of order
+    # the proxy's own answer and the passthrough come back before the slow calls, which return out of order;
+    # the delays leave over a second between them, so a slow runner's receipt appends (each fsynced) cannot reorder them
     assert order.index("refused") < order.index("req-0") and order.index(7) < order.index("req-0")
     assert sorted(map(str, (x["id"] for x in c.calls()))) == sorted(map(str, requests))
 
