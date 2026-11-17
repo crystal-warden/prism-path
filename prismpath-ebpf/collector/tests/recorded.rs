@@ -9,10 +9,11 @@ use common::{kinds, quick, Harness};
 use prismpath_collector::decode::{self, GnEvent, Kind, PptReceipt};
 use prismpath_collector::ring::Recording;
 use prismpath_rs::merkle;
+use serde_json::Value;
 use sha2::{Digest, Sha256};
+use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::time::{Duration, Instant};
 
 fn ebpf_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap().to_path_buf()
@@ -63,6 +64,19 @@ fn tree_root(frames: &[Vec<u8>]) -> String {
     hex::encode(merkle::root_of_bytes(&leaves).unwrap())
 }
 
+/// Every record to the status after the final seal.
+fn until_final(client: &mut common::Client) -> Vec<Value> {
+    let mut out: Vec<Value> = Vec::new();
+    while let Some(value) = client.next() {
+        let last = value["kind"] == "status" && out.iter().any(|seen| seen["trigger"] == "final");
+        out.push(value);
+        if last {
+            break;
+        }
+    }
+    out
+}
+
 #[test]
 fn the_recorded_frames_are_the_kernels() {
     let (receipts, logged_root) = kernel_receipts();
@@ -106,7 +120,7 @@ fn the_kernels_receipts_are_fed_and_sealed() {
     }
     let (_, count) = harness.finish();
     assert_eq!(count, 9);
-    let rest = client.until("status");
+    let rest = until_final(&mut client);
     let last = kinds(&rest, "seal").pop().expect("a final seal");
     assert_eq!(last["trigger"], "final");
     assert_eq!(last["count"], 9);
@@ -259,28 +273,35 @@ fn the_binary_serves_a_recording() {
     let mut child = Command::new(env!("CARGO_BIN_EXE_prismpath-collector"))
         .args(["--source", "selector", "--recorded"]).arg(&file).arg("--socket").arg(&socket)
         .stderr(Stdio::piped()).spawn().unwrap();
-    let deadline = Instant::now() + Duration::from_secs(20);
-    while !socket.exists() {
-        assert!(Instant::now() < deadline, "the socket appears");
-        std::thread::sleep(Duration::from_millis(20));
-    }
+    // Wait for the collector to finish binding and setting 0660 on the socket before inspecting it.
+    let mut stderr = BufReader::new(child.stderr.take().unwrap());
+    let mut started = String::new();
+    stderr.read_line(&mut started).unwrap();
+    assert!(started.contains("feed on"), "{started}");
     use std::os::unix::fs::{FileTypeExt, PermissionsExt};
     let meta = std::fs::metadata(&socket).unwrap();
     assert!(meta.file_type().is_socket());
     assert_eq!(meta.permissions().mode() & 0o777, 0o660);
-    std::thread::sleep(Duration::from_millis(200));
-    let mut client = common::Client::connect(&socket);
-    client.send(&[prismpath_collector::record::subscription_bytes(), b"\n".to_vec()].concat());
-    let hello = client.next().unwrap();
+    // If the first client is admitted before the first drain pass, read through the ninth receipt so the
+    // sealer holds all nine leaves, then reconnect as a client joining after the recording was drained.
+    let (mut client, hello, join) = loop {
+        let mut client = common::Client::connect(&socket);
+        client.send(&[prismpath_collector::record::subscription_bytes(), b"\n".to_vec()].concat());
+        let hello = client.next().unwrap();
+        let join = client.next().unwrap();
+        if join["count"] == 9 {
+            break (client, hello, join);
+        }
+        while client.next().unwrap()["index"] != 8 {}
+    };
     assert_eq!(hello["source"], "selector");
     assert_eq!(hello["session"].as_str().unwrap().len(), 32);
-    let join = client.next().unwrap();
     assert_eq!(join["trigger"], "join");
     assert_eq!(join["count"], 9);
     assert_eq!(join["root"], tree_root(&frames));
     // SAFETY: kill with the child's own pid.
     unsafe { libc::kill(child.id() as i32, libc::SIGTERM) };
-    let rest = client.until("status");
+    let rest = until_final(&mut client);
     assert_eq!(kinds(&rest, "seal").last().unwrap()["trigger"], "final");
     let status = child.wait().unwrap();
     assert!(status.success());
