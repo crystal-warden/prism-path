@@ -135,10 +135,10 @@ with its integrity apparatus counted, 66.9 times under an OpenTelemetry record o
 
 ## What is implemented, what is demonstrated, what is research
 
-PrismPath doesn't try to understand everything an agent might type. It knows a short list of file operations
-and commands, and for those the answer follows your rules every time. The decision is proven, and proving
-the list itself is under way. When the agent
-does something outside that list, like a long shell pipeline, PrismPath doesn't guess. It stops and asks you.
+PrismPath doesn't watch how an agent thinks. It looks at what the agent is about to do. It knows a short
+list of file operations and commands, and it checks each one against the rules you wrote before it runs.
+When the agent tries something that isn't on that list, PrismPath doesn't guess what it means. It stops and
+asks you, or refuses outright. Your rules decide which.
 
 | capability | status |
 |---|---|
