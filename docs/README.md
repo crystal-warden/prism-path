@@ -33,6 +33,7 @@ solved routing", "logic as data is a rules engine"), answered with the concessio
 | [engineer.md](guides/engineer.md) | the engineer's guide: the contract once, delivery, calibration, the kernels and the gates |
 | [assessor.md](guides/assessor.md) | the assessor's guide: receipts, the trail, anchors, the evidence base |
 | [operator.md](guides/operator.md) | the operator's day: Mission Control, swap and attest, short lived policy changes that expire by construction, reading the trail |
+| [governed-agent.md](guides/governed-agent.md) | govern Claude Code in ten minutes: `prismpath agent init`, four decisions with their causes and receipts, `status`, `verify` and the tamper demo, and what it does and does not protect |
 | [mission-control-api.md](guides/mission-control-api.md) | the Mission Control API: observe, control, events, prove |
 | [reproduce.md](guides/reproduce.md) | reproducing the formal proofs, differential harnesses, and frozen conformance suites from a fresh clone (`tools/reproduce.sh`) |
 

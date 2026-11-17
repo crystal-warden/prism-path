@@ -175,6 +175,8 @@ prismpath test prismpath/examples/pr_demo/triage.md       # fixture asserted rou
 prismpath --help                                          # commands grouped by who runs them
 ```
 
+To put PrismPath in front of Claude Code, follow [the ten minute walkthrough](docs/guides/governed-agent.md).
+
 The base install is numpy only, and a feature that needs more says which extra it needs. Add one with
 `pip install -e ".[embeddings]"` from the clone, or `pip install 'prismpath[embeddings]'` from PyPI:
 
