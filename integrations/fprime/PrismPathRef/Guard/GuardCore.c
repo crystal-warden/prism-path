@@ -216,16 +216,19 @@ int GC_Load(GC *Core, const char *PolicyFile, const char *KeysDir, const char *R
 }
 
 /* ----------------------------------------------------------------- a proposal */
-#define ROW(Reg, Name, Kind, Off, Width, Lo, Hi) {Off, Width},
+/* a MONITOR row is the runtime monitor's verdict, which an app supplies and no command carries ("MONITOR" is the
+ * only kind name 8 bytes long once stringized) */
+#define ROW(Reg, Name, Kind, Off, Width, Lo, Hi) {Off, Width, sizeof(#Kind) == sizeof("MONITOR")},
 static const struct
 {
     uint8_t Off;
     uint8_t Width;
+    uint8_t App;
 } Layout[PRISMPATH_APP_FIELD_COUNT] = {PRISMPATH_APP_FIELDS(ROW)};
 #undef ROW
 
 /* F Prime serializes a command's arguments big endian, one after another in the order they are declared, which
- * is the layout's register order. The policy reads little endian at the layout's offsets (the cFS payload), so
+ * is the layout's register order less the fields an app supplies (the monitor's verdict). The policy reads little endian at the layout's offsets (the cFS payload), so
  * each field the arguments hold completely is put at its offset, byte reversed. The payload ends where the last
  * complete field ends, so a packet cut short is the core's "missing" refusal, as a short cFS payload is. */
 static size_t Adapt(const uint8_t *Args, size_t Len, uint8_t Out[PRISMPATH_APP_PAYLOAD_LEN])
@@ -238,6 +241,10 @@ static size_t Adapt(const uint8_t *Args, size_t Len, uint8_t Out[PRISMPATH_APP_P
     memset(Out, 0, PRISMPATH_APP_PAYLOAD_LEN);
     for (I = 0; I < PRISMPATH_APP_FIELD_COUNT; I++)
     {
+        if (Layout[I].App)
+        {
+            continue;
+        }
         if (Used + Layout[I].Width > Len)
         {
             break;

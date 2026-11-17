@@ -32,7 +32,7 @@ and `cryptography`). It never runs anything as root and edits only the NOS3 chec
 2. **Build.** NOS3's flight software and simulators with NOS3's own make targets inside NOS3's own image
    (`ivvitc/nos3-64:20261021`, pulled if absent), and NASA's 42 dynamics (cloned beside the NOS3 checkout from the
    branch NOS3's `make prep` uses, and built in the same image).
-3. **Provision** the flight file system with fresh test keys and the signed version 2 policy table
+3. **Provision** the flight file system with fresh test keys and the signed version 3 policy table
    ([`../ground/provision.py`](../ground/provision.py)), and start a new run (power on reset).
 4. **Launch** nine containers on one private Docker network, each with a memory cap: the NOS Engine server, 42 with
    no graphics, the payload simulator (NOS3's sample instrument), the three reaction wheel simulators, the command
@@ -64,7 +64,9 @@ ground's keys; `--leave-running` and `--teardown` are for debugging.
   back to `generate_config_includefile` where `generate_configfile_set` is absent, `CFE_MSG_PTR` is defined when
   cFE does not, and libcrypto is linked as `-lcrypto` because NOS3 has a CMake target of its own called `crypto`.
   NOS3's cFE has no topic ids, so [`mission/`](mission) gives the app message ids 0x18C0 to 0x18C3 (telemetry
-  0x08C1), clear of every message id NOS3 defines; the autonomy app's command is 0x18C4.
+  0x08C1), clear of every message id NOS3 defines; the autonomy app's command is 0x18C4. The runtime monitor scenario
+  (S5, [`../monitor`](../monitor/README.md)) adds the monitor's verdict, 0x08C5, and its command, 0x18C6; this scenario
+  has no monitor, so there the app's `monitor_ok` field is always true.
 
 `plan.py` is the source of the plan: `python -m integrations.cfs.nos3.plan` writes the C include the autonomy app
 compiles, and `EXPECTED` is the outcome table, written by hand from

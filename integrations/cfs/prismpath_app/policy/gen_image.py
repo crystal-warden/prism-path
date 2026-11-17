@@ -47,7 +47,7 @@ FLOW_MAX = 1536          # PRISMPATH_APP_FLOW_MAX
 KIND = {"allow": 0, "refuse": 1, "escalate": 2}
 # The example image's version. The Critical Data Store holds the highest version accepted, and a table below it,
 # or equal to it with other bytes, is refused (image:version-replay). A new image ships with a higher version.
-VERSION = 2
+VERSION = 3
 
 
 def field_defs(doc: dict) -> List[Tuple[str, str, int, int]]:

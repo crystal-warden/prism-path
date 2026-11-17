@@ -1,0 +1,416 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
+"""Run a runtime monitor beside the PrismPath app in a NOS3 mission, with the monitor's verdict a field the policy
+routes on, and check that the two compose.
+
+    python integrations/cfs/monitor/run_monitor_scenario.py [--nos3 .cfs-build/nos3-monitor] [--r2u2 .cfs-build/r2u2]
+
+The monitor is NASA's R2U2 (C version, github.com/R2U2/r2u2, Apache-2.0 or MIT), used as a tool and a build input:
+this script clones it into the gitignored `.cfs-build/` when absent, compiles the property in
+`spec/payload_quiet.c2po` with R2U2's own compiler (C2PO), and the monitor app (`pp_monitor`) compiles R2U2's
+library sources from that checkout inside NOS3's build. Nothing of R2U2 or NOS3 is copied into this repository.
+
+The mission is S3's (`integrations/cfs/nos3`): NOS3's flight software and simulators, the autonomy app, the vehicle
+app and the PrismPath app, plus `pp_monitor`. The scenario:
+
+  1. The ground starts the autonomy app. It proposes a steady stream of allowed commands, one a second.
+  2. The ground silences the monitor (a command to `pp_monitor`, standing in for it hanging). Its verdicts stop,
+     the last one ages past the PrismPath app's staleness bound, and the app reads monitor_ok as false.
+  3. The ground restarts the monitor, and proposals are allowed again.
+  4. The ground injects a payload fault through NOS3's command bus bridge. The monitor's property is violated, it
+     publishes that, monitor_ok turns false, and the proposals that follow escalate.
+  5. Seal the run, downlink it, verify it on the ground with both keys pinned.
+
+Checks (all printed): each decision is the one the policy gives for the reading the app made (monitor_ok included)
+and the Python reference agrees; the monitor's verdict and the app's reading move together; what reached the
+reaction wheel and the payload simulator is exactly what was allowed; the downlinked run verifies, and the
+escalated receipts carry `monitor_ok: false` in the reading they were decided on.
+
+Exit status 0 when every check holds, 2 when NOS3, Docker or the R2U2 download is not available.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import shutil
+import socket
+import subprocess
+import sys
+import tempfile
+import time
+from pathlib import Path
+from typing import Dict, List, Optional
+
+HERE = Path(__file__).resolve().parent
+REPO = HERE.parents[2]
+sys.path.insert(0, str(REPO))
+
+from prismpath.agent.policy import Policy  # noqa: E402
+from integrations.cfs.ground import downlink, provision, reference  # noqa: E402
+from integrations.cfs.monitor import plan  # noqa: E402
+from integrations.cfs.nos3 import run_nos3_scenario as base  # noqa: E402
+from integrations.cfs.prismpath_app.policy import gen_image  # noqa: E402
+from integrations.cfs.tests.run_scenario import Check, packet, reading_payload  # noqa: E402
+
+R2U2_URL = "https://github.com/R2U2/r2u2.git"
+R2U2_COMMIT = "2875a1dfc0b8cb27c4c4f14bece6b95c3afff91a"   # the commit this was written and run against
+STAGE = REPO / ".cfs-build" / "monitor-apps"
+NOS3_NAMES = ("prismpath_app", "pp_autonomy", "pp_vehicle", "pp_monitor")
+STARTUP = base.STARTUP.replace(
+    "CFE_APP, pp_autonomy,", "CFE_APP, pp_monitor,    PP_MONITOR_Main,    PP_MONITOR,    58, 16384, 0x0, 0;\n"
+    "CFE_APP, pp_autonomy,", 1)
+assert "pp_monitor" in STARTUP
+
+DECIDE = re.compile(r"PRISMPATH_APP \d+: PRISMPATH_APP (ALLOW|REFUSE|ESCALATE) seq=(\d+)(.*)$")
+MON_VERDICT = re.compile(r"PP_MONITOR VERDICT payload_quiet=(holds|VIOLATED) step=(\d+) status=(\d+)")
+
+
+# ----------------------------------------------------------------- R2U2: the checkout and the compiled property
+def r2u2_checkout(path: Path, log) -> None:
+    if (path / "monitors" / "c" / "src" / "r2u2.h").exists():
+        return
+    log(f"cloning R2U2 ({R2U2_URL}) into {path}")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    for cmd in (["git", "clone", "--filter=blob:none", R2U2_URL, str(path)],
+                ["git", "-C", str(path), "checkout", "--quiet", R2U2_COMMIT]):
+        res = base.sh(cmd)
+        if res.returncode != 0:
+            raise RuntimeError(f"{' '.join(cmd[:3])}: {res.stderr.strip()}")
+
+
+def compile_spec(r2u2: Path, out: Path) -> bytes:
+    """The property compiled by R2U2's own compiler, C2PO: the monitor's configuration binary."""
+    cmd = [sys.executable, str(r2u2 / "compiler" / "c2po.py"), "--booleanizer", "--spec",
+           str(HERE / "spec" / "payload_quiet.c2po"), "--map", str(HERE / "spec" / "payload_quiet.map"),
+           "--output", str(out)]
+    res = base.sh(cmd, cwd=r2u2 / "compiler")
+    if res.returncode != 0 or not out.exists():
+        raise RuntimeError(f"C2PO failed:\n{res.stdout[-1500:]}{res.stderr[-1500:]}")
+    return out.read_bytes()
+
+
+def spec_include(spec: bytes) -> str:
+    rows = ", ".join(f"0x{b:02X}" for b in spec)
+    return ("/* Generated by integrations/cfs/monitor/run_monitor_scenario.py: spec/payload_quiet.c2po compiled by\n"
+            " * R2U2's C2PO. Not committed. */\n"
+            f"static uint8_t PP_MONITOR_Spec[{len(spec)}] = {{{rows}}};\n")
+
+
+def stage_apps(r2u2: Path, log) -> Dict[str, Path]:
+    """The scenario's apps. The S3 apps are used in place; the autonomy and monitor apps are staged under
+    `.cfs-build/monitor-apps` with their generated includes beside the sources (the plan, the compiled property)."""
+    shutil.rmtree(STAGE, ignore_errors=True)
+    nos3_dir = REPO / "integrations" / "cfs" / "nos3"
+    apps = {"prismpath_app": REPO / "integrations" / "cfs" / "prismpath_app", "pp_vehicle": nos3_dir / "pp_vehicle"}
+    auto = STAGE / "pp_autonomy" / "fsw" / "src"
+    auto.mkdir(parents=True)
+    for rel in ("CMakeLists.txt",):
+        shutil.copy(nos3_dir / "pp_autonomy" / rel, STAGE / "pp_autonomy" / rel)
+    for name in ("pp_autonomy.c", "pp_autonomy.h"):
+        shutil.copy(nos3_dir / "pp_autonomy" / "fsw" / "src" / name, auto / name)
+    (auto / "pp_autonomy_plan.inc").write_text(plan.render())
+    mon = STAGE / "pp_monitor" / "fsw" / "src"
+    mon.mkdir(parents=True)
+    shutil.copy(HERE / "pp_monitor" / "CMakeLists.txt", STAGE / "pp_monitor" / "CMakeLists.txt")
+    for name in ("pp_monitor.c", "pp_monitor.h"):
+        shutil.copy(HERE / "pp_monitor" / "fsw" / "src" / name, mon / name)
+    spec = compile_spec(r2u2, STAGE / "payload_quiet.bin")
+    (mon / "pp_monitor_spec.inc").write_text(spec_include(spec))
+    apps["pp_autonomy"], apps["pp_monitor"] = STAGE / "pp_autonomy", STAGE / "pp_monitor"
+    log(f"compiled the property with R2U2's C2PO ({len(spec)} bytes) and staged the autonomy and monitor apps")
+    return {name: apps[name] for name in NOS3_NAMES}
+
+
+# ----------------------------------------------------------------- the scenario
+def line_of(lines: List[str], pattern: str, start: int = 0) -> Optional[int]:
+    rx = re.compile(pattern)
+    return next((i for i in range(start, len(lines)) if rx.search(lines[i])), None)
+
+
+def scenario(mission: base.Mission, keys: Path, downlinked: Path, check: Check, log) -> Dict:
+    policy = Policy.load(gen_image.CORE)
+    ids = base.mids()
+    fsw = "sc01_nos_fsw"
+    base.wait_for(mission, fsw, r"PRISMPATH_APP initialized, policy active", timeout=120)
+    base.wait_for(mission, fsw, r"PP_AUTONOMY initialized")
+    base.wait_for(mission, fsw, r"PP_VEHICLE initialized")
+    base.wait_for(mission, fsw, r"PP_MONITOR initialized")
+    check.ok(True, "NOS3 flight software is up with the PrismPath app active on the signed version "
+                   f"{gen_image.VERSION} table and the R2U2 monitor running")
+    tx = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    target = (mission.ip(fsw), base.CI_LAB_PORT)
+
+    def send(mid: int, fc: int, payload: bytes = b"") -> None:
+        tx.sendto(packet(mid, fc, payload), target)
+        time.sleep(0.2)
+
+    def decided(n: int) -> int:
+        return len(base.wait_for(mission, fsw, r"PRISMPATH_APP (ALLOW|REFUSE|ESCALATE) seq=", count=n, timeout=60))
+
+    base.wait_for(mission, fsw, r"PP_MONITOR VERDICT payload_quiet=holds", timeout=30)
+    send(base.SAMPLE_CMD_MID, base.SAMPLE_ENABLE_CC)
+    send(base.RW_CMD_MID, base.RW_ENABLE_CC, base.struct.pack("<Bh", 0, 0))
+    base.wait_for(mission, fsw, r"SAMPLE: Device enabled|SAMPLE.*[Ee]nable", timeout=20)
+    time.sleep(3)
+    send(base.AUTONOMY_CMD_MID, base.AUTONOMY_START_CC)
+    base.wait_for(mission, fsw, r"PP_AUTONOMY START")
+
+    # 1 -> 2: let a few proposals through, then silence the monitor and wait for the app to read it as not ok
+    decided(6)
+    send(plan.MONITOR_CMD_MID, plan.MONITOR_HALT_CC)
+    log("ground: PP_MONITOR HALT (the monitor stops publishing verdicts)")
+    base.wait_for(mission, fsw, r"PRISMPATH_APP ESCALATE seq=\d+ .*monitor_ok=0", count=2, timeout=60)
+    # 3: bring it back and wait for a proposal allowed again on a fresh verdict
+    send(plan.MONITOR_CMD_MID, plan.MONITOR_RESUME_CC)
+    log("ground: PP_MONITOR RESUME")
+    base.wait_for(mission, fsw, r"PP_MONITOR RESUME", timeout=10)
+    now = len([line for line in mission.logs(fsw) if DECIDE.search(line)])
+    decided(now + 2)
+    # 4: the fault, through NOS3's command bus bridge into the payload simulator's command node
+    with socket.create_connection((mission.ip("nos-sim-bridge"), base.BRIDGE_PORT), timeout=10) as bridge:
+        bridge.sendall((json.dumps({"node": plan.FAULT_NODE, "cmd": plan.FAULT_COMMAND}) + "\n").encode())
+        time.sleep(1)
+    log(f"ground: fault injected, {{\"node\": \"{plan.FAULT_NODE}\", \"cmd\": \"{plan.FAULT_COMMAND}\"}} "
+        f"to the command bus bridge (TCP {base.BRIDGE_PORT})")
+    total = len(plan.proposals())
+    base.wait_for(mission, fsw, r"PP_AUTONOMY PLAN DONE", timeout=90)
+    decided(total)
+    time.sleep(3)
+    send(ids["cmd"], base.SEAL_CC)
+    sealed = base.wait_for(mission, fsw, r"PRISMPATH_APP SEALED receipts=", timeout=20)[-1]
+    tx.close()
+
+    fsw_lines = mission.logs(fsw)
+    log("\nflight software console, the monitor, the PrismPath app and the vehicle:")
+    for line in fsw_lines:
+        if re.search(r"PP_AUTONOMY (START|FAULT|PAYLOAD STATUS|PLAN DONE)|PP_MONITOR (VERDICT|HALT|RESUME)|"
+                     r"PRISMPATH_APP (ALLOW|REFUSE|ESCALATE|SEALED)|PP_VEHICLE (ATTITUDE|PAYLOAD)", line):
+            log("    " + (line.split(": ", 1)[-1] if ": " in line else line))
+
+    # ------------------------------------------------ decisions, in the order the app made them
+    table = plan.by_tag()
+    proposals = [m.groups() for m in map(base.PROPOSE.search, fsw_lines) if m]
+    decisions = [(m.group(1).lower(), int(m.group(2)), m.group(3)) for m in map(DECIDE.search, fsw_lines) if m]
+    check.ok(len(proposals) == total and len(decisions) == total,
+             f"{total} proposals ({len(plan.PLAN)} plan, {len(plan.FAULT_RESPONSE)} playbook), one decision each")
+    rows = []   # (tag, kind, cause, monitor_ok or None for a refusal, receipt)
+    for (n, tag, *_), (kind, seq, rest) in zip(proposals, decisions):
+        mon = re.search(r"monitor_ok=(\d)", rest)
+        cause = re.search(r"cause=(\d+)", rest)
+        rows.append((int(tag), kind, int(cause.group(1)) if cause else 0, mon and int(mon.group(1)) == 1,
+                     int(re.search(r"receipt=(\d+)", rest).group(1)), seq == int(n)))
+    order = [r[0] for r in rows]
+
+    # the monitor's verdicts, the ground's two commands and the fault, as positions in the one console log
+    halt_at = line_of(fsw_lines, r"PP_MONITOR HALT")
+    resume_at = line_of(fsw_lines, r"PP_MONITOR RESUME")
+    violated_at = line_of(fsw_lines, r"PP_MONITOR VERDICT payload_quiet=VIOLATED")
+    fault_at = line_of(fsw_lines, r"PP_AUTONOMY FAULT payload status=")
+    check.ok(None not in (halt_at, resume_at, violated_at, fault_at) and halt_at < resume_at < violated_at,
+             "the console shows, in order, the monitor silenced, restarted, and its property violated")
+    check.ok(violated_at is not None and fault_at is not None and
+             int(MON_VERDICT.search(fsw_lines[violated_at]).group(3)) == plan.FAULT_STATUS,
+             f"the monitor's verdict turned to VIOLATED when the payload's status word was {plan.FAULT_STATUS}, "
+             "the injected fault")
+
+    def position(i: int) -> int:
+        """Where in the console log decision i was made."""
+        return [j for j, line in enumerate(fsw_lines) if DECIDE.search(line)][i]
+
+    # each decision is the policy's for the reading the app made, and the reference agrees
+    good, problems = 0, []
+    for (tag, kind, cause, mon_ok, receipt, seq_ok), i in zip(rows, range(total)):
+        p = table[tag]
+        want_mon = True if mon_ok is None else mon_ok       # a refusal prints no monitor_ok: the rules never read it
+        want_kind, want_cause = plan.decide(p, want_mon)
+        ref = policy.decide(reference.reading_bytes(reading_payload(plan.reading(p, want_mon))))
+        if (kind, cause) == (want_kind, want_cause) and (ref.kind, ref.cause_code or 0) == (want_kind, want_cause) and \
+                receipt == i and seq_ok:
+            good += 1
+        else:
+            problems.append(f"tag {tag}: got {kind} {cause}, policy {want_kind} {want_cause}, reference {ref.kind}")
+    check.ok(good == total, f"all {total} decisions are the policy's for the reading the app made (monitor_ok included) "
+                            f"and the Python reference's, each with its receipt number {'; '.join(problems[:3])}")
+
+    # before anything is wrong: the monitor holds, the app reads it as ok, steady commands pass
+    first_halt = next(i for i in range(total) if position(i) > halt_at)
+    before = rows[:first_halt]
+    check.ok(len(before) >= 6 and all(r[3] in (True, None) for r in before) and
+             all(r[1] in ("allow", "refuse") for r in before),
+             f"before the monitor is silenced ({len(before)} proposals), monitor_ok is true and the nominal commands "
+             "are allowed (the 120 deg slew is refused by its own rule)")
+
+    # silent monitor: no violation, no fault, yet the app reads not ok and escalates a command it would allow
+    quiet = [r for i, r in enumerate(rows) if halt_at < position(i) < resume_at and r[0] >= 5]
+    stale = [r for r in quiet if r[3] is False]
+    check.ok(len(stale) >= 2 and all(r[1] == "escalate" and r[2] == 34 for r in stale),
+             f"with the monitor silent (no verdict for more than {plan.STALE_SECS} s, no fault) {len(stale)} steady "
+             "proposals read monitor_ok as false and escalate (route:needs-human, 34): a stale verdict is not ok")
+    after_resume = [r for i, r in enumerate(rows) if resume_at < position(i) < violated_at and r[0] >= 5 and r[3]]
+    check.ok(len(after_resume) >= 1 and all(r[1] == "allow" for r in after_resume),
+             f"once the monitor publishes again, {len(after_resume)} proposals read monitor_ok true and are allowed again")
+
+    # the fault: the verdict is VIOLATED. The one proposal in flight when it is published (the playbook's first
+    # command is proposed on the same second's tick) can still be decided on the last verdict, which was ok; from
+    # the next one on, nothing that is not already refused passes
+    later = [r for i, r in enumerate(rows) if position(i) > violated_at]
+    check.ok(len(later) >= 6 and all(r[1] == "refuse" or (r[1] == "escalate" and r[2] == 34 and r[3] is False)
+                                     for r in later[1:]),
+             f"after the monitor flags the fault, each of the next {len(later) - 1} proposals (after the one in flight) "
+             "escalates with monitor_ok false (route:needs-human, 34)")
+    playbook = [r for r in rows if r[0] in (101, 102)]
+    check.ok(len(playbook) == 2 and playbook[1][1] == "escalate" and playbook[1][3] is False,
+             "the fault playbook's 75 deg slew escalates on monitor_ok as well as on the missing ground contact")
+    if later and later[0][1] == "allow":
+        log(f"note: proposal tag {later[0][0]} was decided on the last ok verdict, one step before the violation reached "
+            "the app: the monitor's verdict lags the telemetry it watches by a step")
+
+    # ------------------------------------------------ the vehicle side, from the simulators' own logs
+    allowed = [r[0] for r in rows if r[1] == "allow"]
+    want_torques = [plan.torque(table[t]) for t in allowed if table[t].cmd_class == plan.ATTITUDE]
+    want_configs = [t for t in allowed if table[t].cmd_class == plan.PAYLOAD]
+    sample_lines = mission.logs("sc01_sample-sim")
+    torques = [round(float(m.group(1)) * 10000) for m in
+               map(base.TORQUE.search, mission.logs("sc01_generic-reactionwheel-sim0")) if m]
+    configs = base.sample_configs(sample_lines)
+    others = [line for w in (1, 2) for line in mission.logs(f"sc01_generic-reactionwheel-sim{w}")
+              if base.TORQUE.search(line)]
+    log(f"\nreaction wheel 0 simulator, SET_TORQUE requests (x 10^-4 N m), {len(torques)}: {torques}")
+    log(f"payload simulator, configuration commands: {configs}")
+    check.ok(torques == want_torques and configs == want_configs and not others,
+             f"the reaction wheel saw exactly the {len(want_torques)} allowed attitude commands' torques, in order, "
+             "and the payload simulator the allowed payload command: nothing escalated or refused reached a simulator")
+    check.ok(any(f"Received command: {plan.FAULT_COMMAND}" in line for line in sample_lines),
+             f"the payload simulator received {plan.FAULT_COMMAND} on its command bus node")
+
+    # ------------------------------------------------ the downlink, verified on the ground
+    run_dir = mission.exe / "cf" / "pprun"
+    check.ok(f"receipts={total} " in sealed, f"the seal signs a root over {total} receipts: {sealed.split(': ')[-1]}")
+    if downlinked.exists():
+        shutil.rmtree(downlinked)
+    downlink.fetch(run_dir, downlinked)
+    cli = subprocess.run([sys.executable, "-m", "prismpath", "evidence", "verify", str(downlinked), "--sample", "all",
+                          "--pin-authority", str(keys / "authority.pub"), "--pin-instance", str(keys / "instance.pub")],
+                         capture_output=True, text=True, cwd=REPO)
+    log(f"\n$ prismpath evidence verify <downlink> --sample all --pin-authority <ground>/authority.pub "
+        f"--pin-instance <ground>/instance.pub\n"
+        f"{(cli.stdout.strip() + cli.stderr.strip()).replace(str(downlinked), '<downlink>')}")
+    check.ok(cli.returncode == 0 and "verified" in cli.stdout,
+             "prismpath evidence verify accepts the downlinked run, both keys pinned, every receipt replayed")
+    try:
+        summary = downlink.verify(downlinked, keys)
+        check.ok(summary["replayed"] == total and summary["agree"] == total and summary["root_statement"] == "signed",
+                 f"all {total} receipts replayed through the reference kernel agree; the root statement is signed with "
+                 "the pinned instance key")
+    except downlink.Bad as bad:
+        check.ok(False, f"the ground verifies the downlinked run: {bad}")
+    # the receipts name the field: the reading each escalation was decided on holds monitor_ok false
+    readings = receipt_readings(downlinked)
+    esc = [(i, r) for i, r in enumerate(rows) if r[1] == "escalate"]
+    named = [i for i, r in esc if readings.get(i, {}).get("monitor_ok") is False]
+    check.ok(esc and len(named) == len([e for e in esc if e[1][3] is False]) and
+             all(readings[i].get("monitor_ok") is True for i, r in enumerate(rows) if r[1] == "allow"),
+             f"the {len(named)} receipts of escalations on the monitor carry monitor_ok false in the reading they were "
+             "decided on, and every allowed command's receipt carries monitor_ok true")
+    for i in named[:2]:
+        log(f"receipt {i} reading: {json.dumps(readings[i], sort_keys=True)}")
+    return {"order": order}
+
+
+def receipt_readings(run: Path) -> Dict[int, Dict]:
+    """The reading each receipt was decided on, by receipt number, from the downlinked run's cases file (the
+    readings are held as hex of their canon/2 bytes, in receipt order)."""
+    out: Dict[int, Dict] = {}
+    cases = run / "cases.jsonl"
+    if not cases.exists():
+        return out
+    for line in cases.read_text().splitlines():
+        for hexed in json.loads(line).get("readings", []):
+            out[len(out)] = json.loads(bytes.fromhex(hexed))
+    return out
+
+
+def main(argv: Optional[List[str]] = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    parser.add_argument("--nos3", type=Path, default=REPO / ".cfs-build" / "nos3-monitor", help="the NOS3 checkout")
+    parser.add_argument("--fortytwo", type=Path, default=None, help="NASA 42 (default: beside the NOS3 checkout)")
+    parser.add_argument("--r2u2", type=Path, default=REPO / ".cfs-build" / "r2u2", help="a checkout of R2U2")
+    parser.add_argument("--skip-build", action="store_true", help="use the staged build as it is")
+    parser.add_argument("--keep-run", type=Path, default=None, help="keep the downlinked run and keys here")
+    parser.add_argument("--teardown", action="store_true", help="remove the containers and network a run left up")
+    args = parser.parse_args(argv)
+    nos3 = args.nos3.resolve()
+    fortytwo = (args.fortytwo or nos3.parent / "42").resolve()
+    if not (nos3 / "fsw" / "cfe").is_dir() or not (nos3 / "scripts" / "env.sh").exists():
+        print(f"no NOS3 checkout with submodules at {nos3} (see integrations/cfs/monitor/README.md)", file=sys.stderr)
+        return 2
+    if base.sh(["docker", "version"]).returncode != 0:
+        print("docker is not available", file=sys.stderr)
+        return 2
+    if args.teardown:
+        for name in ["sc01_nos_fsw", "nos-time-driver", "nos-sim-bridge", *[f"sc01_{s}" for s in base.SIMS],
+                     "sc01-fortytwo", "sc01-nos-engine-server"]:
+            base.sh(["docker", "rm", "-f", name])
+        base.sh(["docker", "network", "rm", base.NETWORK])
+        return 0
+    started = time.time()
+
+    def log(line: str) -> None:
+        print(line, flush=True)
+
+    before = base.docker_state()
+    if base.sh(["docker", "image", "inspect", base.IMAGE]).returncode != 0:
+        log(f"pulling {base.IMAGE}")
+        if base.sh(["docker", "pull", base.IMAGE]).returncode != 0:
+            print(f"could not pull {base.IMAGE}", file=sys.stderr)
+            return 2
+    check = Check()
+    work = Path(tempfile.mkdtemp(prefix="pp-monitor-"))
+    keys = (args.keep_run or work) / "keys"
+    downlinked = (args.keep_run or work) / "downlink"
+    mission = base.Mission(nos3, fortytwo, log)
+    tbl = mission.exe / "cf" / "pp_app_policy.tbl"
+    original: Optional[bytes] = None
+    try:
+        r2u2 = args.r2u2.resolve()
+        if not args.skip_build:
+            r2u2_checkout(r2u2, log)
+            apps = stage_apps(r2u2, log)
+            base.stage(nos3, log, apps, STARTUP)
+            base.build(nos3, fortytwo, log, env={"PP_R2U2_DIR": str(r2u2), "PP_MONITOR_STALE_SECS": str(plan.STALE_SECS)},
+                       what="the four apps")
+        original = tbl.read_bytes()
+        shutil.rmtree(mission.exe / "cf" / "pprun", ignore_errors=True)    # a new run on a power on reset
+        provision.provision(mission.exe, keys)
+        log("provisioned the flight file system: test authority and instance keys, the signed policy table")
+        t = time.time()
+        mission.launch()
+        log(f"launched {len(mission.names)} containers on {base.NETWORK}: {', '.join(mission.names)}")
+        scenario(mission, keys, downlinked, check, log)
+        log(f"\nmemory in use per container: {mission.stats()}")
+        log(f"scenario time {time.time() - t:.0f} s")
+    except (RuntimeError, TimeoutError, OSError) as err:
+        check.ok(False, f"the scenario ran to the end: {err}")
+    finally:
+        mission.close()
+        if original is not None:
+            tbl.write_bytes(original)
+        for name in ("pp_authority.pub", "pp_instance.key"):
+            (mission.exe / "cf" / name).unlink(missing_ok=True)
+        if not args.keep_run:
+            shutil.rmtree(work, ignore_errors=True)
+    check.ok(base.same_state(before, base.docker_state()),
+             "every container and network the run made is removed; Docker is as it was before the run")
+    print("\n" + "\n".join(check.report))
+    log(f"\ntotal time {time.time() - started:.0f} s")
+    if check.failures:
+        print(f"\nFAILED: {len(check.failures)} check(s)")
+        return 1
+    print(f"\nall {len(check.report)} checks passed")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

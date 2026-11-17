@@ -6,7 +6,7 @@
  *   kernel_check <vectors.txt>
  *
  * The table is built from the same generated include the cFE table uses. Each vector line is
- *   cmd_class ground_contact slew_deg thrust_pct kind cause
+ *   cmd_class ground_contact slew_deg thrust_pct monitor_ok kind cause
  * (kind 0 allow, 1 refuse, 2 escalate), the Python reference decision path's answer for that reading, and the
  * kernel must give the same kind and cause. A reading is sent as the payload bytes the layout defines.
  * Then the image is corrupted every way a byte can be corrupted. The checks are structural, so a flip that
@@ -83,7 +83,7 @@ static unsigned Digest(void)
 int main(int argc, char **argv)
 {
     FILE        *f;
-    int          cls, gc, slew, thrust, kind, cause, n = 0, accepted = 0, refused = 0, i, rc;
+    int          cls, gc, slew, thrust, mon, kind, cause, n = 0, accepted = 0, refused = 0, i, rc;
     uint8_t      p[PRISMPATH_APP_PAYLOAD_LEN];
     PP_Verdict_t v;
     unsigned     base;
@@ -114,14 +114,17 @@ int main(int argc, char **argv)
         perror("vectors");
         return 2;
     }
-    while (fscanf(f, "%d %d %d %d %d %d", &cls, &gc, &slew, &thrust, &kind, &cause) == 6)
+    while (fscanf(f, "%d %d %d %d %d %d %d", &cls, &gc, &slew, &thrust, &mon, &kind, &cause) == 7)
     {
         Payload(p, cls, gc, slew, thrust);
+        PP_Kernel_SetMonitorOk(mon);
         PP_Kernel_Decide(p, sizeof(p), &v);
-        CHECK(v.Kind == kind && v.Cause == cause, "reading %d %d %d %d: reference kind %d cause %d, kernel kind %d cause %d",
-              cls, gc, slew, thrust, kind, cause, v.Kind, v.Cause);
+        CHECK(v.Kind == kind && v.Cause == cause,
+              "reading %d %d %d %d monitor_ok %d: reference kind %d cause %d, kernel kind %d cause %d", cls, gc, slew,
+              thrust, mon, kind, cause, v.Kind, v.Cause);
         n++;
     }
+    PP_Kernel_SetMonitorOk(1);
     fclose(f);
     printf("%d vectors compared with the reference\n", n);
     CHECK(n > 1000, "too few vectors (%d)", n);
@@ -130,7 +133,7 @@ int main(int argc, char **argv)
     Payload(p, 3, 0, 0, 0);
     for (i = 0; i < 6; i++)
     {
-        static const int16_t lacks[6] = {0, 1, 2, 2, 3, 3};
+        static const int16_t lacks[6] = {0, 1, 3, 3, 4, 4}; /* monitor_ok (register 2) is the app's, never missing */
         PP_Kernel_Decide(p, (size_t)i, &v);
         CHECK(v.Kind == PP_KIND_REFUSE && v.Cause == PRISMPATH_APP_EXAMPLE_CONTRACT_CAUSE && v.Rule == -1 &&
                   v.Field == lacks[i] && v.Reason == PP_REASON_MISSING,
@@ -140,6 +143,21 @@ int main(int argc, char **argv)
     /* six bytes hold every field: the spare bytes are not part of the reading */
     PP_Kernel_Decide(p, 6, &v);
     CHECK(v.Kind == PP_KIND_ALLOW, "a payload holding every field must be decided by the rules");
+    /* the monitor's verdict is the app's: not ok escalates a command the rules would allow, and a refusal still wins */
+    Payload(p, 1, 1, 30, 0);
+    PP_Kernel_SetMonitorOk(0);
+    PP_Kernel_Decide(p, sizeof(p), &v);
+    CHECK(v.Kind == PP_KIND_ESCALATE && v.Cause == 34 && v.Rule >= 0, "monitor_ok false must escalate (cause 34)");
+    Payload(p, 1, 1, 120, 0);
+    PP_Kernel_Decide(p, sizeof(p), &v);
+    CHECK(v.Kind == PP_KIND_REFUSE && v.Cause == 37, "a refusal must still win when monitor_ok is false");
+    Payload(p, 1, 1, 30, 0);
+    p[6] = 1; /* what a proposer writes in the monitor byte changes nothing */
+    PP_Kernel_Decide(p, sizeof(p), &v);
+    CHECK(v.Kind == PP_KIND_ESCALATE, "the proposer's byte must not make monitor_ok true");
+    PP_Kernel_SetMonitorOk(1);
+    PP_Kernel_Decide(p, sizeof(p), &v);
+    CHECK(v.Kind == PP_KIND_ALLOW, "monitor_ok true must allow a nominal command");
     /* a bool that is neither 0 nor 1 is the wrong type, an int past its maximum out of range */
     Payload(p, 3, 2, 0, 0);
     PP_Kernel_Decide(p, sizeof(p), &v);
@@ -197,7 +215,7 @@ int main(int argc, char **argv)
     Bad.Rules[0].Kind = 3;
     CHECK(PP_Kernel_Check(&Bad) != 0, "an unknown rule kind must be refused");
     Bad            = Good;
-    Bad.Rules[5].Cause = 7;
+    Bad.Rules[Good.RuleCount - 1].Cause = 7;
     CHECK(PP_Kernel_Check(&Bad) != 0, "an allow rule that carries a cause must be refused");
     CHECK(Digest() == base, "the active image changed");
     printf("%d corruptions refused, %d well formed ones accepted and run, none escaped\n", refused, accepted);

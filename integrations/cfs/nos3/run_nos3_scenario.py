@@ -193,8 +193,11 @@ def spacecraft_config(nos3: Path) -> None:
     (nos3 / "cfg" / SC_CONFIG).write_text(text)
 
 
-def stage(nos3: Path, log) -> None:
-    for name, src in APPS.items():
+def stage(nos3: Path, log, apps: Optional[Dict[str, Path]] = None, startup_lines: Optional[str] = None) -> None:
+    """Stage the apps (default: the S3 three) into NOS3; another scenario passes its own apps and startup lines."""
+    apps = APPS if apps is None else apps
+    startup_lines = STARTUP if startup_lines is None else startup_lines
+    for name, src in apps.items():
         link = nos3 / "components" / name
         if link.is_symlink() or link.exists():
             link.unlink()
@@ -208,29 +211,31 @@ def stage(nos3: Path, log) -> None:
     text = targets.read_text()
     mark = "# Create Application Platform Include List"
     assert mark in text, "NOS3's targets.cmake changed: no include list marker"
-    targets.write_text(text.replace(mark, f"list(APPEND MISSION_GLOBAL_APPLIST {' '.join(APPS)})\n\n{mark}", 1))
+    targets.write_text(text.replace(mark, f"list(APPEND MISSION_GLOBAL_APPLIST {' '.join(apps)})\n\n{mark}", 1))
     startup = defs / "cpu1_cfe_es_startup.scr"
     text = startup.read_text()
-    startup.write_text(text[:text.index("!")] + STARTUP + text[text.index("!"):])
+    startup.write_text(text[:text.index("!")] + startup_lines + text[text.index("!"):])
     for header in (HERE / "mission").glob("*.h"):
         shutil.copy(header, defs / header.name)
-    log(f"staged {', '.join(APPS)} into NOS3 ({SC_CONFIG}, make config)")
+    log(f"staged {', '.join(apps)} into NOS3 ({SC_CONFIG}, make config)")
 
 
-def container_make(nos3: Path, target: str, logfile: Path) -> None:
+def container_make(nos3: Path, target: str, logfile: Path, env: Optional[Dict[str, str]] = None) -> None:
+    envs = [arg for k, v in (env or {}).items() for arg in ("-e", f"{k}={v}")]
     cmd = ["docker", "run", "--rm", "--name", f"pp_nos3_build_{target}", "--memory", MEMORY["build"], "--cpus", "12",
-           *user(), "-v", f"{REPO}:{REPO}", "-w", str(nos3), IMAGE, "make", "-j12", "-e", "FLIGHT_SOFTWARE=cfs", target]
+           *user(), *envs, "-v", f"{REPO}:{REPO}", "-w", str(nos3), IMAGE, "make", "-j12", "-e", "FLIGHT_SOFTWARE=cfs",
+           target]
     with logfile.open("w") as out:
         rc = subprocess.run(cmd, stdout=out, stderr=subprocess.STDOUT).returncode
     if rc != 0:
         raise RuntimeError(f"NOS3 {target} failed; see {logfile}")
 
 
-def build(nos3: Path, fortytwo: Path, log) -> None:
+def build(nos3: Path, fortytwo: Path, log, env: Optional[Dict[str, str]] = None, what: str = "the three apps") -> None:
     t = time.time()
     (nos3 / "fsw" / "build").mkdir(parents=True, exist_ok=True)
-    container_make(nos3, "build-fsw", nos3 / "pp_build_fsw.log")
-    log(f"built NOS3 flight software with the three apps ({time.time() - t:.0f} s)")
+    container_make(nos3, "build-fsw", nos3 / "pp_build_fsw.log", env)
+    log(f"built NOS3 flight software with {what} ({time.time() - t:.0f} s)")
     if not (nos3 / "sims" / "build" / "lib" / "libsample_sim.so").exists():
         t = time.time()
         (nos3 / "sims" / "build").mkdir(parents=True, exist_ok=True)
@@ -288,7 +293,7 @@ def scenario(mission: Mission, keys: Path, downlinked: Path, check: Check, log) 
     wait_for(mission, fsw, r"PRISMPATH_APP initialized, policy active", timeout=120)
     wait_for(mission, fsw, r"PP_AUTONOMY initialized")
     wait_for(mission, fsw, r"PP_VEHICLE initialized")
-    check.ok(True, "NOS3 flight software is up with the PrismPath app active on the signed version 2 table")
+    check.ok(True, "NOS3 flight software is up with the PrismPath app active on the signed version 3 table")
     target = (mission.ip(fsw), CI_LAB_PORT)
     tx = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
@@ -460,7 +465,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         original = tbl.read_bytes()
         shutil.rmtree(mission.exe / "cf" / "pprun", ignore_errors=True)    # a new run on a power on reset
         provision.provision(mission.exe, keys)
-        log("provisioned the flight file system: test authority and instance keys, the signed version 2 table")
+        log("provisioned the flight file system: test authority and instance keys, the signed version 3 table")
         t = time.time()
         mission.launch()
         log(f"launched {len(mission.names)} containers on {NETWORK}: {', '.join(mission.names)}")

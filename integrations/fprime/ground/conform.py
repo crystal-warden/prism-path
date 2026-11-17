@@ -46,9 +46,11 @@ def as_cfs(line: bytes) -> bytes:
 def payload_of_args(args: bytes) -> bytes:
     """The cFS payload (little endian, at the layout's offsets) for the big endian argument bytes of a proposed
     command, as the guard reads it: every field the arguments hold completely, none past the first that is cut."""
-    out, used = bytearray(8), 0
+    out, used = bytearray(10), 0
     end = 0
-    for _name, _kind, off, width in reference.layout():
+    for _name, kind, off, width in reference.layout():
+        if kind == "MONITOR":                    # the app's field: no command argument carries it
+            continue
         if used + width > len(args):
             break
         out[off:off + width] = args[used:used + width][::-1]

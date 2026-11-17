@@ -38,6 +38,11 @@ add_cfe_app(prismpath_app
   "${PRISMPATH_MONOCYPHER_DIR}/monocypher-ed25519.c"
 )
 
+# a mission with a runtime monitor sets the staleness bound of its verdict (seconds) when it builds
+if (DEFINED ENV{PP_MONITOR_STALE_SECS})
+  target_compile_definitions(prismpath_app PRIVATE PRISMPATH_APP_MONITOR_STALE_SECS=$ENV{PP_MONITOR_STALE_SECS})
+endif()
+
 target_include_directories(prismpath_app PUBLIC fsw/inc "${PRISMPATH_EBPF_DIR}" "${PRISMPATH_MONOCYPHER_DIR}")
 target_include_directories(prismpath_app PRIVATE "${PRISMPATH_HW_DIR}")
 # as a link flag, not a bare name: a mission may define a CMake target called crypto of its own (NOS3 does)

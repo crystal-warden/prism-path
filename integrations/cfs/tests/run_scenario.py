@@ -21,8 +21,8 @@ software bus and not only on what the app says about itself.
      Store: the receipt count and root continue, and the same image is accepted against the version floor.
   3. More proposals, receipted after the ones before the reset. Then two table loads through cFE Table Services
      (load, validate, activate): the same policy signed by the authority as version 1, below the floor, which is
-     refused as image:version-replay (9), and the version 2 table with one threshold changed and not signed
-     again, refused as sig:invalid (2). A proposal after them is still decided by version 2. A second SEAL.
+     refused as image:version-replay (9), and the version 3 table with one threshold changed and not signed
+     again, refused as sig:invalid (2). A proposal after them is still decided by version 3. A second SEAL.
   4. The run directory is copied off the vehicle's file system (the downlink) and verified on the ground with
      the repository's own verifier, both keys pinned to the ground's copies and every receipt replayed through
      the reference kernel (`prismpath evidence verify RUN --sample all --pin-authority --pin-instance`), and the
@@ -100,9 +100,9 @@ def packet(mid: int, fcn: int, payload: bytes) -> bytes:
 
 
 def reading_payload(reading: Dict[str, int]) -> bytes:
-    out = bytearray(8)
+    out = bytearray(10)
     for name, off, width in layout():
-        out[off:off + width] = int(reading[name]).to_bytes(width, "little")
+        out[off:off + width] = int(reading.get(name, 1 if name == "monitor_ok" else 0)).to_bytes(width, "little")
     return bytes(out)
 
 
@@ -331,8 +331,8 @@ def run_good(exe_dir: Path, keys: Path, downlinked: Path, check: Check, log) -> 
     core = Core(exe_dir)
     try:
         core.wait_for(r"PRISMPATH_APP initialized, policy active")
-        check.ok(any(e == 24 and "v2" in t for e, t in app_events(core)),
-                 "the signed version 2 table is loaded at startup (event 24)")
+        check.ok(any(e == 24 and "v3" in t for e, t in app_events(core)),
+                 "the signed version 3 table is loaded at startup (event 24)")
         check.ok(any("RUN BEGUN receipts=0 floor=v0" in t for _e, t in app_events(core)),
                  "a power on reset begins a new run (no receipts, no floor)")
         ground.connect()
@@ -358,8 +358,8 @@ def run_good(exe_dir: Path, keys: Path, downlinked: Path, check: Check, log) -> 
                      (len(SEQUENCE), want["allow"], want["refuse"], want["escalate"], want["allow"], 1),
                      "housekeeping counters match the sequence")
             check.ok(hk["layout"] == built["layout_hash"], "housekeeping reports the policy layout hash")
-            check.ok((hk["receipts"], hk["version"], hk["unreceipted"], hk["record_errors"]) == (len(SEQUENCE), 2, 0, 0),
-                     f"housekeeping reports {len(SEQUENCE)} receipts and the version floor 2")
+            check.ok((hk["receipts"], hk["version"], hk["unreceipted"], hk["record_errors"]) == (len(SEQUENCE), gen_image.VERSION, 0, 0),
+                     f"housekeeping reports {len(SEQUENCE)} receipts and the version floor {gen_image.VERSION}")
             check.ok(hk["root16"].hex() == root_of(run_dir, len(SEQUENCE))[:32],
                      "housekeeping's root is the Merkle root of the receipts in the run file")
         else:
@@ -384,10 +384,10 @@ def run_good(exe_dir: Path, keys: Path, downlinked: Path, check: Check, log) -> 
                  "the next boot is a processor reset, from the PSP's boot record")
         events = app_events(core)
         log("after the reset: " + " | ".join(t for e, t in events if e in (24, 25, 30, 31, 32, 1)))
-        check.ok(any(e == 30 and f"RUN RESTORED from CDS receipts={seen} floor=v2" in t for e, t in events),
-                 f"the run is restored from the Critical Data Store: {seen} receipts, floor version 2")
+        check.ok(any(e == 30 and f"RUN RESTORED from CDS receipts={seen} floor=v3" in t for e, t in events),
+                 f"the run is restored from the Critical Data Store: {seen} receipts, floor version 3")
         check.ok(any(e == 1 and "policy active, processor reset" in t for e, t in events),
-                 "the same signed version 2 table is accepted against the restored floor")
+                 "the same signed version 3 table is accepted against the restored floor")
 
         # ------------------------------------------------ 3. more proposals, then an older and a tampered table
         ground.connect()
@@ -418,7 +418,7 @@ def run_good(exe_dir: Path, keys: Path, downlinked: Path, check: Check, log) -> 
         check.ok(any("cause=9" in t for t in rejected[:1]),
                  "the authority's version 1 table, below the floor, is refused as image:version-replay (9)")
         check.ok(any("cause=2" in t for t in rejected[1:2]),
-                 "the version 2 table with a threshold changed and not signed again is refused as sig:invalid (2)")
+                 "the version 3 table with a threshold changed and not signed again is refused as sig:invalid (2)")
         check.ok(len(loaded) == 1, "no refused table was activated (one POLICY LOADED event, at startup)")
 
         before = len([1 for e, _t in app_events(core) if e in (20, 21, 22)])
@@ -430,7 +430,7 @@ def run_good(exe_dir: Path, keys: Path, downlinked: Path, check: Check, log) -> 
         for (name, case), (eid, text) in zip(AFTER_LOADS, events):
             kind, cause = expected(policy, case)
             check.ok(eid == {"allow": 20, "refuse": 21, "escalate": 22}[kind] and f"receipt={seen}" in text,
-                     f"{name}: still decided by version 2 ({kind}), receipt {seen}: {text.split(' ', 1)[1]}")
+                     f"{name}: still decided by version 3 ({kind}), receipt {seen}: {text.split(' ', 1)[1]}")
             seen += 1
         sealed = ground.seal(core, 1)
         log(f"seal after the reset: {sealed.split(': ', 1)[-1]}")
@@ -448,8 +448,8 @@ def run_good(exe_dir: Path, keys: Path, downlinked: Path, check: Check, log) -> 
     receipts = [core_evidence.canon2.loads(line) for line in core_evidence._lines(downlinked / "receipts.jsonl")]
     check.ok(len(receipts) == seen and [r["idx"] for r in receipts] == list(range(seen)),
              f"the downlinked run holds {seen} receipts, numbered without a gap across the reset")
-    check.ok({r["case"] for r in receipts} == {"v2"} and [r["reading"] for r in receipts] == list(range(seen)),
-             "every receipt is of the one version 2 case, its readings continuing across the reset")
+    check.ok({r["case"] for r in receipts} == {"v3"} and [r["reading"] for r in receipts] == list(range(seen)),
+             "every receipt is of the one version 3 case, its readings continuing across the reset")
     cli = subprocess.run([sys.executable, "-m", "prismpath", "evidence", "verify", str(downlinked), "--sample", "all",
                           "--pin-authority", str(keys / "authority.pub"), "--pin-instance", str(keys / "instance.pub")],
                          capture_output=True, text=True, cwd=REPO)

@@ -21,21 +21,25 @@ DECIDER = "cfs:prismpath_app"
 
 
 def layout() -> List[Tuple[str, str, int, int]]:
-    """(name, INT|BOOL, offset, width) per field in register order, from the C layout header."""
+    """(name, INT|BOOL|MONITOR, offset, width) per field in register order, from the C layout header."""
     text = (APP / "fsw" / "inc" / "prismpath_app_layout.h").read_text()
-    rows = re.findall(r'X\(\s*\d+,\s*"(\w+)",\s*(INT|BOOL),\s*(\d+),\s*(\d+),', text)
+    rows = re.findall(r'X\(\s*\d+,\s*"(\w+)",\s*(INT|BOOL|MONITOR),\s*(\d+),\s*(\d+),', text)
     return [(name, kind, int(off), int(width)) for name, kind, off, width in rows]
 
 
 def reading_of(payload: bytes) -> Dict:
     """The reading the reference decides for a payload: every field the payload holds, a bool as False or True when
-    its byte is 0 or 1 and as its number otherwise (which the boundary then refuses as the wrong type)."""
+    its byte is 0 or 1 and as its number otherwise (which the boundary then refuses as the wrong type). The MONITOR
+    field is the app's, not the proposer's: the app writes its value into the byte it hands the receipt, and a
+    payload that ends before it still reads as monitor_ok true (the app's value with no monitor in the mission)."""
     out = {}
     for name, kind, off, width in layout():
         if off + width > len(payload):
+            if kind == "MONITOR":
+                out[name] = True
             continue
         value = int.from_bytes(payload[off:off + width], "little")
-        out[name] = bool(value) if kind == "BOOL" and value in (0, 1) else value
+        out[name] = bool(value) if kind in ("BOOL", "MONITOR") and value in (0, 1) else value
     return out
 
 

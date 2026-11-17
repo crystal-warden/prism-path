@@ -116,6 +116,13 @@ int PP_Kernel_Activate(const PP_PolicyTable_t *Table);
 int PP_Kernel_Active(void);
 
 /**
+ * Set the runtime monitor's verdict, the value of the layout's MONITOR field (monitor_ok) for the decisions and
+ * receipts that follow. The app sets it from the monitor's latest message before each proposal; it is 1 until
+ * set. A proposer cannot supply it: the field is not read from the payload.
+ */
+void PP_Kernel_SetMonitorOk(int Ok);
+
+/**
  * Decide one proposed command. Payload is the bytes after the command header. A field the payload ends before
  * (missing), a bool field that is not 0 or 1 (wrong type) or an int field outside its bounds (out of range) is
  * the core's boundary refusal, for the first such field in register order, as the reference refuses the same

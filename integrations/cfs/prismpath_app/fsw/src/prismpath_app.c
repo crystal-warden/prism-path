@@ -35,6 +35,7 @@ _Static_assert(PAYLOAD_OFFSET(CmdClass) == 0, "cmd_class offset");
 _Static_assert(PAYLOAD_OFFSET(GroundContact) == 1, "ground_contact offset");
 _Static_assert(PAYLOAD_OFFSET(SlewDeg) == 2, "slew_deg offset");
 _Static_assert(PAYLOAD_OFFSET(ThrustPct) == 4, "thrust_pct offset");
+_Static_assert(PAYLOAD_OFFSET(MonitorOk) == 6, "monitor_ok offset");
 _Static_assert(sizeof(PRISMPATH_APP_ProposedCmd_t) - sizeof(CFE_MSG_CommandHeader_t) == PRISMPATH_APP_PAYLOAD_LEN,
                "payload length");
 
@@ -410,6 +411,38 @@ static void PRISMPATH_APP_Forward(PRISMPATH_APP_ProposedCmd_t *Proposed, uint32 
     }
 }
 
+/* the runtime monitor's verdict, kept with the time it arrived */
+static void PRISMPATH_APP_MonitorVerdict(const CFE_SB_Buffer_t *SBBufPtr)
+{
+    CFE_MSG_Size_t Size = 0;
+
+    (void)CFE_MSG_GetSize(&SBBufPtr->Msg, &Size);
+    if (Size < sizeof(PRISMPATH_APP_MonitorVerdict_t))
+    {
+        return;
+    }
+    PRISMPATH_APP_Data.MonitorVerdict = ((const PRISMPATH_APP_MonitorVerdict_t *)SBBufPtr)->Ok ? 1 : 0;
+    PRISMPATH_APP_Data.MonitorAt      = (uint32)CFE_TIME_GetMETseconds();
+    PRISMPATH_APP_Data.MonitorSeen    = true;
+}
+
+/* monitor_ok for the proposal being decided: no monitor in this mission (bound 0) reads true; with one, true only
+ * for an ok verdict received within the staleness bound, so no verdict yet, a violation and a silent monitor all
+ * read false */
+static uint8 PRISMPATH_APP_MonitorOk(void)
+{
+#if PRISMPATH_APP_MONITOR_STALE_SECS > 0
+    uint32 Now = (uint32)CFE_TIME_GetMETseconds();
+
+    return (PRISMPATH_APP_Data.MonitorSeen && PRISMPATH_APP_Data.MonitorVerdict != 0 &&
+            (uint32)(Now - PRISMPATH_APP_Data.MonitorAt) <= (uint32)PRISMPATH_APP_MONITOR_STALE_SECS)
+               ? 1u
+               : 0u;
+#else
+    return 1u;
+#endif
+}
+
 static void PRISMPATH_APP_Proposal(const CFE_SB_Buffer_t *SBBufPtr)
 {
     PRISMPATH_APP_ProposedCmd_t Proposed;
@@ -428,6 +461,9 @@ static void PRISMPATH_APP_Proposal(const CFE_SB_Buffer_t *SBBufPtr)
     char                        Rcpt[24];
 
     Seq = ++PRISMPATH_APP_Data.HkTlm.Payload.Proposed;
+    /* the app's own reading of the monitor, never the proposer's: the byte in the command is overwritten */
+    Proposed.MonitorOk = PRISMPATH_APP_MonitorOk();
+    PP_Kernel_SetMonitorOk(Proposed.MonitorOk);
     if (PayloadLen > PRISMPATH_APP_PAYLOAD_LEN)
     {
         PayloadLen = PRISMPATH_APP_PAYLOAD_LEN;
@@ -467,16 +503,17 @@ static void PRISMPATH_APP_Proposal(const CFE_SB_Buffer_t *SBBufPtr)
         case PP_KIND_ALLOW:
             PRISMPATH_APP_Data.HkTlm.Payload.Allowed++;
             CFE_EVS_SendEvent(PRISMPATH_APP_ALLOW_EID, CFE_EVS_EventType_INFORMATION,
-                              "PRISMPATH_APP ALLOW seq=%u rule=%d receipt=%s", (unsigned int)Seq, (int)Verdict.Rule,
-                              Rcpt);
+                              "PRISMPATH_APP ALLOW seq=%u rule=%d receipt=%s monitor_ok=%u", (unsigned int)Seq,
+                              (int)Verdict.Rule, Rcpt, (unsigned int)Proposed.MonitorOk);
             PRISMPATH_APP_Forward(&Proposed, Seq);
             break;
         case PP_KIND_ESCALATE:
             PRISMPATH_APP_Data.HkTlm.Payload.Escalated++;
             PRISMPATH_APP_Data.HkTlm.Payload.LastRefusalCause = Verdict.Cause;
             CFE_EVS_SendEvent(PRISMPATH_APP_ESCALATE_EID, CFE_EVS_EventType_CRITICAL,
-                              "PRISMPATH_APP ESCALATE seq=%u rule=%d cause=%u receipt=%s", (unsigned int)Seq,
-                              (int)Verdict.Rule, (unsigned int)Verdict.Cause, Rcpt);
+                              "PRISMPATH_APP ESCALATE seq=%u rule=%d cause=%u receipt=%s monitor_ok=%u",
+                              (unsigned int)Seq, (int)Verdict.Rule, (unsigned int)Verdict.Cause, Rcpt,
+                              (unsigned int)Proposed.MonitorOk);
             break;
         default:
             PRISMPATH_APP_Data.HkTlm.Payload.Refused++;
@@ -627,6 +664,10 @@ static void PRISMPATH_APP_TaskPipe(const CFE_SB_Buffer_t *SBBufPtr)
     {
         PRISMPATH_APP_Proposal(SBBufPtr);
     }
+    else if (CFE_SB_MsgId_Equal(MsgId, PRISMPATH_APP_Data.MonitorMid))
+    {
+        PRISMPATH_APP_MonitorVerdict(SBBufPtr);
+    }
     else if (CFE_SB_MsgId_Equal(MsgId, PRISMPATH_APP_Data.SendHkMid))
     {
         PRISMPATH_APP_SendHk();
@@ -707,6 +748,7 @@ CFE_Status_t PRISMPATH_APP_Init(void)
     PRISMPATH_APP_Data.SendHkMid   = CFE_SB_ValueToMsgId(PRISMPATH_APP_SEND_HK_MID);
     PRISMPATH_APP_Data.ProposedMid = CFE_SB_ValueToMsgId(PRISMPATH_APP_PROPOSED_CMD_MID);
     PRISMPATH_APP_Data.VehicleMid  = CFE_SB_ValueToMsgId(PRISMPATH_APP_VEHICLE_CMD_MID);
+    PRISMPATH_APP_Data.MonitorMid  = CFE_SB_ValueToMsgId(PRISMPATH_APP_MONITOR_VERDICT_MID);
 
     Status = CFE_EVS_Register(NULL, 0, CFE_EVS_EventFilter_BINARY);
     if (Status != CFE_SUCCESS)
@@ -736,6 +778,12 @@ CFE_Status_t PRISMPATH_APP_Init(void)
     {
         return CFE_SB_BAD_ARGUMENT;
     }
+#if PRISMPATH_APP_MONITOR_STALE_SECS > 0
+    if (PRISMPATH_APP_Subscribe(PRISMPATH_APP_Data.MonitorMid) != CFE_SUCCESS)
+    {
+        return CFE_SB_BAD_ARGUMENT;
+    }
+#endif
 
     /* the run state and the keys come first: the initial table load is checked against the floor they hold */
     PRISMPATH_APP_InitState();

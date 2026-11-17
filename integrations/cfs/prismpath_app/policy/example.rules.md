@@ -6,6 +6,7 @@ field.cmd_class: int min=0 max=10
 field.thrust_pct: int min=0 max=200
 field.slew_deg: int min=0 max=180
 field.ground_contact: bool
+field.monitor_ok: bool
 ---
 ## core_decision
 The rules are read from the top. The first rule that holds decides the proposed command.
@@ -17,6 +18,10 @@ A command class outside the known set (1=attitude, 2=thruster, 3=payload) is ref
 A thruster command above 100 percent or attitude slew above 90 degrees is refused.
 -> refuse route:contract-violation: when cmd_class == 2 and thrust_pct > 100
 -> refuse route:contract-violation: when cmd_class == 1 and slew_deg > 90
+
+A proposal while the runtime monitor's verdict is not ok is escalated. The app reads the verdict from the monitor's message,
+and reads it as not ok when it reports a violation or is older than the staleness bound.
+-> escalate route:needs-human: when not monitor_ok
 
 A high-power thruster burn (> 50 percent) without ground contact or large slew (> 45 degrees) is escalated.
 -> escalate route:needs-human: when cmd_class == 2 and thrust_pct > 50 and not ground_contact

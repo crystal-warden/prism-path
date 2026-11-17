@@ -1,0 +1,8 @@
+INPUT
+  status: int;
+
+DEFINE
+  fault := status != 0;
+
+PTSPEC
+  payload_quiet: H[0,5] (!fault);

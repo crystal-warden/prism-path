@@ -45,7 +45,9 @@ KINDS = {"allow": 0, "refuse": 1, "escalate": 2}
 def args_of_payload(payload: bytes) -> bytes:
     """The serialized arguments (big endian, declaration order) of the proposal whose cFS payload is this."""
     out = b""
-    for _name, _kind, off, width in reference.layout():
+    for _name, kind, off, width in reference.layout():
+        if kind == "MONITOR":                    # the app's field: no command argument carries it
+            continue
         if off + width > len(payload):
             break
         out += payload[off:off + width][::-1]
