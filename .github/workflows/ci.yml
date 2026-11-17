@@ -411,6 +411,8 @@ jobs:
           cmake -S integrations/cpp -B integrations/cpp/build -DCMAKE_BUILD_TYPE=Release
           cmake --build integrations/cpp/build -j
           cd integrations/cpp && python gen_fixture.py && ./build/ppt_replay ../../prismpath-hw/demo/flows/hyst_band.ppt hyst_fixture.bin
+      - name: cFS app (integrations/cfs), the policy, drift and kernel checks; the end to end run skips without a staged cFS build
+        run: python -m pytest integrations/cfs -q
       - name: Evidence integrity — every artifact manifest in the tree still matches (snapshot manifests reported)
         run: python tools/evidence_check.py
       - name: eBPF — build every program and tool (xdp, net, decode plane, selector, a6 rewrite, host tools) + host-side interp cross-check (the frozen declared subset, 147/147 vs the reference, no kernel needed)
