@@ -151,6 +151,10 @@ _REGISTRY: Tuple[Tuple[int, str, str, str], ...] = (
     # -- the same default policy asks about a file-changing shell command whose paths are all inside the project
     # (rm, mv, mkdir, cp and the like); every earlier refusal still applies to it first.
     (125, "agent:shell-mutation-asked",  "routing",   "an agent shell command that changes files, with every path inside the workspace and none of the earlier refusals holding, under the default policy that asks the person; escalated and not run"),
+    # -- the governed agent hook (`prismpath agent hook`, prismpath/agent/commands.py) fails closed: a hook input
+    # that does not read, a missing or broken key, a policy whose attestation does not verify, or any error of
+    # the hook's own is a refusal of the call, never an allow.
+    (126, "agent:hook-error",            "routing",   "the governed agent hook could not decide a tool call (input that does not read, a missing or broken key, a recorded policy that does not verify, or an error of its own); refused and not run, never allowed"),
 )
 
 CODES: Dict[int, Tuple[str, str, str]] = {cause_code: (canonical_name, class_name, description)

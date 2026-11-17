@@ -8,6 +8,28 @@ spec stable.
 
 ## [Unreleased]
 
+### Added: `prismpath agent` puts a Claude Code session under the core (2026-11-16)
+
+- **`prismpath agent init`** makes the authority and instance keys in the user's configuration directory
+  (`prismpath/agent` under XDG_CONFIG_HOME or ~/.config, ~/Library/Application Support, %APPDATA%; files 0600,
+  directory 0700, an existing key never replaced), records `agent_default` with its image attestation signed by the
+  authority key, and writes a `PreToolUse` and a `SessionEnd` hook into the project's `.claude/settings.json`. The
+  change is printed as a diff and written only with `--yes` or a y at the prompt; other settings are kept, and a
+  second run changes nothing.
+- **`prismpath agent hook`** is what Claude Code runs: it classifies the call, decides it, appends the receipt to the
+  session's run and answers allow, deny or ask, the receipt's number in the reason. `SessionEnd` seals the run. It
+  fails closed: input that does not read, a missing or broken key, a policy whose attestation does not verify or any
+  error of its own is a deny with the new cause 126 `agent:hook-error` (appended), never an allow. It answers in
+  65 to 85 ms (median) including interpreter start on the aarch64 GB10 host, under the 150 ms budget, and its
+  import path loads no numpy.
+- **`prismpath agent verify`** seals the open runs and verifies every run with both keys pinned, every receipt
+  replayed through the reference kernel; `--tamper-demo` flips one byte of a copy and shows it refused.
+  **`prismpath agent status`** names the keys, the policy hash, the project's hook entries and every run with its
+  receipt count, open or sealed. Each command takes `--json`.
+- **An append no longer re-reads the run.** `RunStore` keeps a validated-prefix record (`journal.prefix`) and
+  validates only the journal bytes after it, so an append to a 5000 receipt run costs about 0.5 ms instead of
+  about 700 ms; a record that does not match the journal validates the whole journal, and seal and verify always do.
+
 ### Added: the Claude Code adapter and the default agent policy (2026-11-16)
 
 - **`prismpath.agent.claude_code`** reads a Claude Code `PreToolUse` hook input into the classifier's call (Read as

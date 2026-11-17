@@ -289,6 +289,24 @@ class Run:
             return n
 
     # ------------------------------------------------------------------ seal
+    def summary(self) -> Dict[str, Any]:
+        """The receipt count, whether the run is open, and how its seal stands against the journal, every
+        journal line validated: `unsealed` (no seal file yet), `partial` (some seal files and not all, a first
+        seal interrupted), `sealed` (the sealed receipts are the journal's), `behind` (they are a prefix of the
+        journal's: receipts were appended after the seal) or `diverged` (they are not: a sealed file was changed,
+        or a reseal was interrupted)."""
+        with _locked(self.dir / LOCK):
+            entries = self._entries()
+            present = [(self.dir / name).exists() for name in core_evidence.FILES]
+            if not any(present):
+                seal = "unsealed"
+            elif not all(present):
+                seal = "partial"
+            else:
+                sealed, journal = (self.dir / "receipts.jsonl").read_bytes(), self._receipt_bytes(entries)
+                seal = "sealed" if sealed == journal else "behind" if journal.startswith(sealed) else "diverged"
+            return {"receipts": len(entries), "open": seal != "sealed", "seal": seal}
+
     def is_open(self) -> bool:
         """True when the sealed files do not hold exactly the journal's receipts (never sealed, a crash
         before the seal, or receipts appended since)."""
@@ -350,10 +368,11 @@ class Run:
             _fsync_dir(self.dir)
             return manifest
 
-    def verify(self, keys: Path, oracle=None, replay=None) -> Dict[str, Any]:
+    def verify(self, keys: Path, oracle=None, replay=None, seal: bool = True) -> Dict[str, Any]:
         """Seal if the run is open or stale (recovery), then verify it with `core_evidence.verify`: every
-        receipt replayed, both keys pinned."""
-        self.seal(keys)
+        receipt replayed, both keys pinned. With `seal=False` the run is verified as it stands."""
+        if seal:
+            self.seal(keys)
         with _locked(self.dir / LOCK):
             return core_evidence.verify(self.dir, sample=None, pin_authority=Path(keys) / "authority.pub",
                                         pin_instance=Path(keys) / "instance.pub", replay=replay)
@@ -370,6 +389,24 @@ class RunStore:
 
     def get(self, session: str) -> Run:
         return Run.existing(self.root, session)
+
+    def runs(self) -> List[Run]:
+        """Every run under the root, each with its session id: the directory's name, or for a session id that
+        is not a safe file name the `case` its receipts name (a digest-named run without receipts keeps the
+        directory name, and has nothing to verify)."""
+        out = []
+        for name in self.sessions():
+            session = name
+            if name.startswith("x-"):
+                try:
+                    with open(self.root / name / JOURNAL, "rb") as handle:
+                        session = canon2.loads(handle.readline().rstrip(b"\n"))["receipt"]["case"]
+                except Exception:   # noqa: BLE001 - no journal yet, or one the full validation will refuse
+                    session = name
+                if run_dir_name(session) != name:
+                    session = name
+            out.append(Run(self.root / name, session))
+        return out
 
     def sessions(self) -> List[str]:
         return sorted(p.name for p in self.root.iterdir() if (p / IMAGE).exists()) if self.root.exists() else []
