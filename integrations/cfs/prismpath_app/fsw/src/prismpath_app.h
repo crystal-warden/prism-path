@@ -31,6 +31,10 @@ typedef struct
     CFE_SB_MsgId_t              SendHkMid;
     CFE_SB_MsgId_t              ProposedMid;
     CFE_SB_MsgId_t              VehicleMid;
+    CFE_SB_MsgId_t              MonitorMid;
+    bool                        MonitorSeen;  /**< a verdict has arrived */
+    uint8                       MonitorVerdict; /**< the latest verdict: 1 ok */
+    uint32                      MonitorAt;    /**< mission elapsed seconds when it arrived */
     CFE_ES_CDSHandle_t          CdsHandle;
     bool                        HaveCds;
     PP_RunState_t               Run;          /**< the receipts and the version floor; the CDS's copy */

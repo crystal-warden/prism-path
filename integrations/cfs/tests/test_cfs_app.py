@@ -66,7 +66,7 @@ def test_every_rule_names_a_registered_cause():
 # ----------------------------------------------------------------- the reading layout the C code assumes
 def _layout_rows():
     text = LAYOUT_H.read_text()
-    rows = re.findall(r'X\(\s*(\d+),\s*"(\w+)",\s*(INT|BOOL),\s*(\d+),\s*(\d+),\s*(-?\d+),\s*(-?\d+)\s*\)', text)
+    rows = re.findall(r'X\(\s*(\d+),\s*"(\w+)",\s*(INT|BOOL|MONITOR),\s*(\d+),\s*(\d+),\s*(-?\d+),\s*(-?\d+)\s*\)', text)
     return [(int(reg), name, kind, int(off), int(width), int(lo), int(hi)) for reg, name, kind, off, width, lo, hi in rows]
 
 
@@ -75,7 +75,7 @@ def test_the_layout_lists_the_policys_fields_in_register_order_with_their_bounds
     rows = _layout_rows()
     assert [r[1] for r in rows] == [d[0] for d in defs] == sorted(Policy(_core()).doc["fields"])
     for (reg, name, kind, _off, _width, lo, hi), (dname, dkind, dlo, dhi), index in zip(rows, defs, range(len(defs))):
-        assert (reg, name, kind.lower(), lo, hi) == (index, dname, dkind, dlo, dhi), name
+        assert (reg, name, "bool" if kind == "MONITOR" else kind.lower(), lo, hi) == (index, dname, dkind, dlo, dhi), name
     text = LAYOUT_H.read_text()
     assert int(re.search(r"PRISMPATH_APP_FIELD_COUNT\s+(\d+)", text).group(1)) == len(defs)
 
@@ -140,13 +140,15 @@ def _vectors():
         for gc in range(3):
             for slew in (0, 45, 46, 90, 91, 180, 181):
                 for thrust in (0, 50, 51, 100, 101, 200, 201):
-                    if cls <= 10 and gc <= 1 and slew <= 180 and thrust <= 200:
-                        decision = policy.decide(policy.reading_bytes(
-                            dict(cmd_class=cls, ground_contact=bool(gc), slew_deg=slew, thrust_pct=thrust)))
-                        kind, cause = kinds[decision.kind], decision.cause_code or 0
-                    else:                                     # outside a field's definition: the core's boundary
-                        kind, cause = 1, contract
-                    rows.append(f"{cls} {gc} {slew} {thrust} {kind} {cause}")
+                    for mon in (0, 1):
+                        if cls <= 10 and gc <= 1 and slew <= 180 and thrust <= 200:
+                            decision = policy.decide(policy.reading_bytes(
+                                dict(cmd_class=cls, ground_contact=bool(gc), monitor_ok=bool(mon), slew_deg=slew,
+                                     thrust_pct=thrust)))
+                            kind, cause = kinds[decision.kind], decision.cause_code or 0
+                        else:                                 # outside a field's definition: the core's boundary
+                            kind, cause = 1, contract
+                        rows.append(f"{cls} {gc} {slew} {thrust} {mon} {kind} {cause}")
     return rows
 
 

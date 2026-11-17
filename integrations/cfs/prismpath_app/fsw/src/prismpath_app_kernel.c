@@ -21,8 +21,12 @@
 enum
 {
     LK_INT  = 0,
-    LK_BOOL = 1
+    LK_BOOL = 1,
+    LK_MONITOR = 2 /* a bool the app supplies (PP_Kernel_SetMonitorOk), not read from the payload */
 };
+
+/* the runtime monitor's verdict as the app last set it; true until an app with a monitor says otherwise */
+static int Monitor_Ok = 1;
 
 typedef struct
 {
@@ -82,7 +86,7 @@ uint32_t PP_Kernel_LayoutHash(void)
     for (i = 0; i < PRISMPATH_APP_FIELD_COUNT; i++)
     {
         h = Hash_Str(h, k_Fields[i].Name);
-        if (k_Fields[i].Kind == LK_BOOL)
+        if (k_Fields[i].Kind != LK_INT)
         {
             h = Hash_Str(h, ":bool;");
         }
@@ -338,6 +342,11 @@ static void Refuse(PP_Verdict_t *V, uint16_t Cause, int16_t Field, uint8_t Reaso
     V->Field  = Field;
 }
 
+void PP_Kernel_SetMonitorOk(int Ok)
+{
+    Monitor_Ok = (Ok != 0);
+}
+
 int PP_Kernel_FieldValue(const uint8_t *Payload, size_t PayloadLen, int Field, int32_t *Value, int *IsBool)
 {
     const FieldDef_t *def;
@@ -347,6 +356,12 @@ int PP_Kernel_FieldValue(const uint8_t *Payload, size_t PayloadLen, int Field, i
         return 0;
     }
     def = &k_Fields[Field];
+    if (def->Kind == LK_MONITOR)
+    {
+        *Value  = Monitor_Ok;
+        *IsBool = 1;
+        return 1;
+    }
     if ((size_t)def->Offset + def->Width > PayloadLen)
     {
         return 0;

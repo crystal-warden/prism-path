@@ -35,8 +35,24 @@ typedef struct
     uint8                   GroundContact; /**< 1 when a ground contact is open, else 0 */
     uint16                  SlewDeg;       /**< attitude slew, degrees */
     uint16                  ThrustPct;     /**< thruster burn, percent */
+    uint8                   MonitorOk;     /**< the monitor's verdict: written by the PrismPath app, never read from a proposer */
+    uint8                   Pad;
     uint16                  Spare;
 } PRISMPATH_APP_ProposedCmd_t;
+
+/**
+ * The runtime monitor's verdict, published by the monitor once a second on PRISMPATH_APP_MONITOR_VERDICT_MID. Ok is
+ * 1 while the monitored property holds. The PrismPath app keeps the latest one and the time it arrived, and reads
+ * it as the policy's monitor_ok field only while it is ok and no older than the staleness bound.
+ */
+typedef struct
+{
+    CFE_MSG_TelemetryHeader_t TelemetryHeader;
+    uint8                     Ok;
+    uint8                     Spare8;
+    uint16                    Spare16;
+    uint32                    Step;        /**< the monitor's step count, for the ground's logs */
+} PRISMPATH_APP_MonitorVerdict_t;
 
 typedef struct
 {

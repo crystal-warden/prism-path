@@ -23,6 +23,11 @@ What it does:
   policy's fields as [`fsw/inc/prismpath_app_layout.h`](prismpath_app/fsw/inc/prismpath_app_layout.h) defines them. A
   field outside its definition's bounds, or a payload too short, is the core's own refusal (`route:contract-violation`),
   made before any rule is read.
+- One field of the reading is the app's own and no proposer supplies it: `monitor_ok`, a runtime monitor's verdict (S5,
+  [`monitor/`](monitor/README.md)). The app overwrites that byte of every proposal. In a mission with no monitor
+  (`PRISMPATH_APP_MONITOR_STALE_SECS` is 0, the default) it is always true. With a monitor it is true only while the
+  latest verdict on `MONITOR_VERDICT` is ok and was received within the staleness bound, so no verdict yet, a
+  violation and a silent monitor all read false, and the example policy escalates a proposal then.
 - Decides the reading with the embedded evaluator `prismpath-hw/ppt_eval.h`, the one copy every firmware includes. It is
   included from this checkout and never copied.
 - Republishes an allowed command on `VEHICLE_CMD` with a fresh checksum, and sends an event for each decision: `ALLOW`,
@@ -141,7 +146,7 @@ prismpath policy compile integrations/cfs/prismpath_app/policy/example.rules.md 
 python -m integrations.cfs.prismpath_app.policy.gen_image            # the PPT v1 table, as the cFE table's include
 ```
 
-The include also carries the table's `Version` (`gen_image.VERSION`, 2 for the example), the core image's canon/2
+The include also carries the table's `Version` (`gen_image.VERSION`, 3 for the example), the core image's canon/2
 bytes and its canonical flow rendering spelled as a canon/2 string, which the cases file holds.
 
 `gen_image.py` checks the core image with the port of the Lean oracle's `loadPolicy`, compiles it to a PPT v1 table
@@ -184,7 +189,7 @@ cd build-native_std/exe/cpu1 && ./core-cpu1
 ```
 
 Provision it first (above), or the app refuses the unsigned table. The console then shows `PRISMPATH_APP POLICY
-LOADED v2` and `initialized, policy active`. To send proposals and watch the decisions, use the test driver, which
+LOADED v3` and `initialized, policy active`. To send proposals and watch the decisions, use the test driver, which
 provisions and boots the staged build itself:
 
 ```
@@ -198,8 +203,8 @@ reference decision (`prismpath.agent.policy`) for that reading, that exactly the
 `VEHICLE_CMD` with their payload, and the counters, receipt count and root. It seals, sends the cFE ES restart
 command for a processor reset, boots again (a processor reset from the PSP's boot record) and checks the run was
 restored from the CDS. It sends four more proposals, then loads through cFE Table Services the same policy signed
-as version 1 (refused, cause 9) and the version 2 table with one threshold changed and not signed again (refused,
-cause 2), and two more proposals still decided by version 2. It seals again, copies `/cf/pprun` off, and verifies it
+as version 1 (refused, cause 9) and the version 3 table with one threshold changed and not signed again (refused,
+cause 2), and two more proposals still decided by version 3. It seals again, copies `/cf/pprun` off, and verifies it
 with `prismpath evidence verify --sample all` and both keys pinned (19 receipts, all replayed, all agree) and the
 root history (13 then 19 leaves). It then boots on a table whose image has one byte corrupted and checks that the
 image is rejected and nothing is allowed. The build's own table file is put back and the key files removed after.
@@ -216,6 +221,12 @@ writes the same bytes as a run without one, and that an older, a tampered, a for
 refused with their causes. Those need OpenSSL's headers and the `cryptography` package, and skip without them. The
 end to end test skips, saying why, when no cFS build with the app is staged (set `CFS_EXE_DIR` to the staged `cpu1`
 directory if it is not under `.cfs-build`).
+
+## Beside a runtime monitor (S5)
+
+[`monitor/`](monitor/README.md) runs NASA's R2U2 beside the app in the NOS3 mission: a temporal property over the
+payload's housekeeping, whose verdict the app reads as the policy's `monitor_ok` field, so a violation, or a monitor
+gone quiet, escalates every proposal until it clears.
 
 ## In a NOS3 mission (S3)
 

@@ -29,4 +29,15 @@
 #define PRISMPATH_APP_PLATFORM_CDS_NAME         PRISMPATH_APP_PLATFORM_CFGVAL(CDS_NAME)
 #define DEFAULT_PRISMPATH_APP_PLATFORM_CDS_NAME "PPRunState"
 
+/**
+ * The runtime monitor's staleness bound in seconds of mission elapsed time, or 0 when this mission has no monitor.
+ * With a bound, the monitor_ok field of the reading is true only while the latest verdict on
+ * PRISMPATH_APP_MONITOR_VERDICT_MID is ok and was received within the bound: no verdict yet, a violation and an
+ * old verdict all read as not ok. With 0, the field is always true. The build takes the bound from the environment
+ * variable PP_MONITOR_STALE_SECS (CMakeLists.txt), so a mission turns the monitor on at build time.
+ */
+#ifndef PRISMPATH_APP_MONITOR_STALE_SECS
+#define PRISMPATH_APP_MONITOR_STALE_SECS 0
+#endif
+
 #endif

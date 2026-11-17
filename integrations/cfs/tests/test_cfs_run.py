@@ -189,7 +189,7 @@ def test_an_older_tampered_or_unsigned_table_is_refused_with_its_cause(run_check
     core_evidence.ensure_keys(other)
     older = _signed(keys, version=gen_image.VERSION - 1)
     same_version_other_bytes = _signed(keys)
-    same_version_other_bytes[table.OFF["Image"] + 56] ^= 0x01        # thrust > 100 becomes > 101, then signed: another table at v2
+    same_version_other_bytes[table.OFF["Image"] + 56] ^= 0x01        # thrust > 100 becomes > 101, then signed: another table at v3
     table.sign(same_version_other_bytes, keys / "authority.key")
     tampered = _signed(keys)
     tampered[table.OFF["Image"] + 56] ^= 0x01                         # the same threshold, not signed again
