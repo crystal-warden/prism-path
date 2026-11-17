@@ -9,8 +9,10 @@ reuse its AI governance controls must repeat everything its AI RMF crosswalk rea
 import json
 from pathlib import Path
 
+from prismpath.tests._repo import repo_file
+
 REPO = Path(__file__).resolve().parents[2]
-STANDARDS = REPO / "docs" / "standards"
+STANDARDS = repo_file("docs", "standards")
 TARGETS = {"eu_ai_act": "eu_ai_act", "nist_ai_rmf": "nist_ai_rmf", "nist_ai_600_1": "nist_ai_600_1", "nist_800_53_r5": "nist_800_53_r5"}
 
 

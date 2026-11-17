@@ -11,12 +11,11 @@ and reviewing the entries, in one commit."""
 import json
 from pathlib import Path
 
-import pytest
-
 from prismpath.kernel import causes
+from prismpath.tests._repo import repo_file
 
 REPO = Path(__file__).resolve().parents[2]
-STANDARDS = REPO / "docs" / "standards"
+STANDARDS = repo_file("docs", "standards")
 TAXONOMIES = ("owasp_asi", "mitre_atlas", "cwe")
 KINDS = ("security-control", "routing", "internal")
 
