@@ -122,11 +122,11 @@ EXCLUDE_PREFIXES = [
     "prismpath/tests/test_net_swap.py", "prismpath/telemetry/tests/test_bench_codecs.py",
     "prismpath/tests/test_core_diff.py", "prismpath/tests/test_core_evidence.py",
     "prismpath/tests/test_ebpf_", "prismpath/tests/test_arch_guard.py",
-    "prismpath/tests/test_field_definitions_tables.py",
+    "prismpath/tests/test_field_definitions_tables.py", "prismpath/tests/test_mission_control_guide.py",
     # research tooling beside the product's
     "tools/mirror/", "tools/mirror_readme.md", "tools/tests/test_export.py", "tools/mirror_publish.yml", "tools/export_clean.py",
     "tools/arch_guard.", "tools/arch_scorecard.json", "tools/arith_lint.py", "tools/docs_health.py",
-    "tools/evidence_check.py", "tools/ledger_lint.py", "tools/run_corpora.py", "tools/fq_redundancy.py",
+    "tools/evidence_check.py", "tools/ledger_lint.py", "tools/run_corpora.py", "tools/fq_redundancy.py", "tools/gen_mission_control_guide.py",
 ]
 EXCLUDE_SUFFIXES = [".deferrals"]           # empty top-level scratch files
 EXCLUDE_EXACT = {"docs_health_report.md", "interactions.jsonl"}
