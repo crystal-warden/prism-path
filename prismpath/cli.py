@@ -30,7 +30,7 @@ PERSONAS = (
      ("contract", "capability") + (() if WITHDRAWN_COMMANDS else ("compile",)) + (
       "portable", "lock", "verify", "plugins", "ci-report", "lsp", "import", "calibrate", "label", "annotate", "kappa", "centroids", "authorize", "canonicalize")),
     ("Operator: run the system day to day, swap and attest policy (Mission Control is the console; this is the scripted path)",
-     ("run", "resume", "compose", "swap", "trail")),
+     ("run", "resume", "compose", "swap", "trail", "agent")),
     ("Assessor: anchor, verify, and read the evidence",
      ("ledger", "evidence", "facet")),
 )
@@ -340,6 +340,35 @@ def _add_operator_commands(subparsers) -> None:
     from prismpath import trail as _trail
     _trail.add_parser(subparsers)
 
+    agent_parser = subparsers.add_parser(
+        'agent', help='Govern a Claude Code session: keys and the signed default policy (init), the PreToolUse '
+                      'hook (hook), the sealed and verified runs of receipts (verify), what is set up (status)')
+    agent_sub = agent_parser.add_subparsers(dest='agent_action', metavar='<action>', required=True)
+    agent_init = agent_sub.add_parser(
+        'init', help='make the authority and instance keys in the user config directory, record the signed '
+                     'agent_default policy, and write the hook entries into the project\'s .claude/settings.json '
+                     '(shown first; written with --yes or a y at the prompt)')
+    agent_init.add_argument('--project', default=None,
+                            help='the project directory (default $CLAUDE_PROJECT_DIR, else the current directory)')
+    agent_init.add_argument('--yes', action='store_true', help='write the settings change without asking')
+    agent_hook = agent_sub.add_parser(
+        'hook', help='what Claude Code runs: the hook JSON on stdin, the answer on stdout; any failure is a deny '
+                     'with cause agent:hook-error, never an allow')
+    agent_verify = agent_sub.add_parser(
+        'verify', help='seal the open runs and verify every run with both keys pinned, every receipt replayed '
+                       'through the reference kernel')
+    agent_verify.add_argument('--tamper-demo', dest='tamper_demo', action='store_true',
+                              help='also copy a run to a temporary directory, flip one byte, show the verify '
+                                   'refuse it, and delete the copy')
+    agent_status = agent_sub.add_parser(
+        'status', help='the keys and their ids, the policy hash, the project\'s hook entries and every run with '
+                       'its receipt count, open or sealed')
+    agent_status.add_argument('--project', default=None,
+                              help='the project whose .claude/settings.json is read (default as for init)')
+    for sub in (agent_init, agent_hook, agent_verify, agent_status):
+        sub.add_argument('--json', action='store_true', help='machine readable output')
+    agent_parser.set_defaults(func=agent_cmd)
+
 
 def _add_assessor_commands(subparsers) -> None:
     # Adding assessor commands for ledger timestamp anchoring and telemetry processing.
@@ -475,7 +504,27 @@ def _user_error(exc: BaseException):
     return None
 
 
+def agent_cmd(args) -> int:
+    from prismpath.agent import commands
+    if args.agent_action == 'hook':
+        return commands.hook_main()
+    project = args.project if getattr(args, 'project', None) else (os.environ.get('CLAUDE_PROJECT_DIR') or os.getcwd())
+    try:
+        if args.agent_action == 'init':
+            return commands.init(project, args.yes, args.json)
+        if args.agent_action == 'verify':
+            return commands.verify(args.json, args.tamper_demo)
+        return commands.status(project, args.json)
+    except commands.AgentError as exc:
+        raise CliError(str(exc))
+
+
 def main(argv=None) -> int:
+    words = sys.argv[1:] if argv is None else list(argv)
+    if words[:2] == ['agent', 'hook'] and len(words) <= 3 and set(words[2:]) <= {'--json'}:
+        # the hook is a new process per tool call: answer before the whole parser is built
+        from prismpath.agent import commands
+        return commands.hook_main()
     parser = build_parser()
     args = parser.parse_args(argv)
     if not args.command:

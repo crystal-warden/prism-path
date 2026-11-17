@@ -163,3 +163,63 @@ def test_the_append_cost_is_reported(tmp_path, capsys):
     ms = (time.perf_counter() - start) / 200 * 1000
     print(f"append: {ms:.2f} ms")
     assert ms < 500
+
+
+def _big_run(tmp_path, count):
+    """A run of `count` valid receipts, its journal written directly (an append per receipt would spend the
+    test's time in fsync), and no validated-prefix record yet."""
+    from prismpath.kernel import canon2
+    run = runmod.RunStore(tmp_path).open("big", POL.image)
+    raw = _reading(0)
+    run.append(raw, POL.decide(raw).verdict)
+    entry = canon2.loads((run.dir / runmod.JOURNAL).read_bytes().rstrip(b"\n"))
+    out = bytearray()
+    for n in range(count):
+        entry["i"] = entry["receipt"]["idx"] = entry["receipt"]["reading"] = n
+        out += canon2.dumps(entry) + b"\n"
+    (run.dir / runmod.JOURNAL).write_bytes(bytes(out))
+    (run.dir / runmod.PREFIX).unlink()
+    return run, raw, POL.decide(raw).verdict
+
+
+def test_an_append_to_a_5000_receipt_run_costs_what_an_append_to_a_new_run_costs(tmp_path, capsys):
+    run, raw, verdict = _big_run(tmp_path, 5000)
+    assert run.append(raw, verdict) == 5000          # no record: the whole journal is validated once
+    start = time.perf_counter()
+    for k in range(50):
+        assert run.append(raw, verdict) == 5001 + k
+    ms = (time.perf_counter() - start) / 50 * 1000
+    print(f"append at 5000 receipts: {ms:.2f} ms")
+    assert ms < 25                                   # a full validation of 5000 lines took about 700 ms
+
+
+def test_a_tampered_prefix_the_append_did_not_read_is_refused_at_the_seal(tmp_path):
+    run, raw, verdict = _big_run(tmp_path, 5000)
+    run.append(raw, verdict)
+    path = run.dir / runmod.JOURNAL
+    data = bytearray(path.read_bytes())
+    at = data.index(b'"reading":"', 1000) + len(b'"reading":"')
+    data[at] = ord("0") if data[at] != ord("0") else ord("1")
+    path.write_bytes(bytes(data))
+    assert run.append(raw, verdict) == 5001          # the append trusts the prefix it validated before
+    with pytest.raises(runmod.RunCorrupt):
+        run.seal(tmp_path / "keys")
+    with pytest.raises(runmod.RunCorrupt):
+        run.verify(tmp_path / "keys")
+
+
+def test_a_record_that_does_not_match_the_journal_falls_back_to_full_validation(tmp_path):
+    run, raw, verdict = _big_run(tmp_path, 300)
+    run.append(raw, verdict)
+    path = run.dir / runmod.JOURNAL
+    lines = path.read_bytes().split(b"\n")[:-1]
+    path.write_bytes(b"\n".join(lines[:100]) + b"\n")                   # the journal is shorter than the record
+    assert run.append(raw, verdict) == 100
+    lines = path.read_bytes().split(b"\n")[:-1]
+    lines[-1] = lines[-1].replace(b'"reading":"', b'"reading":"0', 1)   # the recorded last line differs
+    path.write_bytes(b"\n".join(lines) + b"\n")
+    with pytest.raises(runmod.RunCorrupt):
+        run.append(raw, verdict)
+    (run.dir / runmod.PREFIX).write_bytes(b"not a record")
+    with pytest.raises(runmod.RunCorrupt):
+        run.append(raw, verdict)

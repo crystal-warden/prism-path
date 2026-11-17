@@ -11,7 +11,7 @@
 pub const CAUSE_NONE: u8 = 0;
 
 /// `registry_sha256()` of the Python registry when this file was generated.
-pub const REGISTRY_SHA256: &str = "8aa66fc8350044e75a627145655bd5237ff49887f45ec4515eca140909b2f1bd";
+pub const REGISTRY_SHA256: &str = "8a606f6d9c920fe6be9f1014f991acd9b6256f7850a91b0ab660eca916d029e8";
 
 /// The cause class, the semantic axis of the registry.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -227,6 +227,8 @@ pub const POPULATION_TARGET_NOT_OWN: u8 = 123;
 pub const AGENT_UNREADABLE_ASKED: u8 = 124;
 /// `agent:shell-mutation-asked`
 pub const AGENT_SHELL_MUTATION_ASKED: u8 = 125;
+/// `agent:hook-error`
+pub const AGENT_HOOK_ERROR: u8 = 126;
 
 /// Every registered cause, in registry order.
 pub const REGISTRY: &[Cause] = &[
@@ -321,6 +323,7 @@ pub const REGISTRY: &[Cause] = &[
     Cause { code: 123, name: "population:target-not-own", class: CauseClass::Routing, description: "a member's replication whose parent is not that member, or its evolution of a member outside its own subtree; refused and nothing changes" },
     Cause { code: 124, name: "agent:unreadable-asked", class: CauseClass::Routing, description: "an agent tool call whose tool or command the classifier cannot read, under the default policy that asks the person; escalated and not run" },
     Cause { code: 125, name: "agent:shell-mutation-asked", class: CauseClass::Routing, description: "an agent shell command that changes files, with every path inside the workspace and none of the earlier refusals holding, under the default policy that asks the person; escalated and not run" },
+    Cause { code: 126, name: "agent:hook-error", class: CauseClass::Routing, description: "the governed agent hook could not decide a tool call (input that does not read, a missing or broken key, a recorded policy that does not verify, or an error of its own); refused and not run, never allowed" },
 ];
 
 /// The engine's stop vocabulary mapped onto the registry; `terminal` and `waiting` are clean and have no cause.

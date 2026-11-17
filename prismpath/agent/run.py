@@ -9,6 +9,7 @@ a run directory, one per session id under a root the caller names (`RunStore`). 
   * `journal.jsonl`: the open part. One canon/2 line per decided reading, `{"i", "reading" (hex), "receipt"}`,
     where `receipt` is exactly the `prismpath.core-receipt/1` that `evidence.EpisodeRun.record` writes;
   * `lock`: the lock file every operation takes exclusively (`fcntl.flock`);
+  * `journal.prefix`: the validated-prefix record that keeps an append's cost independent of the run's length;
   * after a seal, the files `core_evidence.verify` reads, in the layout of `prismpath.agent.evidence`:
     `run.json`, `cases.jsonl`, `images.jsonl`, `receipts.jsonl`, `receipts.roots.jsonl`, `authority.pub`,
     `instance.pub`. No second format is defined: sealing builds them from the journal with the same
@@ -17,6 +18,15 @@ a run directory, one per session id under a root the caller names (`RunStore`). 
 `append` takes the lock, writes the one line with a single `write` on an append-mode descriptor, `fsync`s the
 file (and the directory when the journal is new), and releases. It returns the receipt's index only after
 the bytes are durable, so a receipt a caller was told about survives a crash, a kill and a power cut.
+
+An append does not re-read the journal. `journal.prefix` records how many bytes and lines of the journal
+were already validated and the digest of the last of those lines; an append under the lock checks that the
+journal is at least that long and still holds that last line there, validates only the bytes after it, and
+rewrites the record after its own line. So an append costs the same at the thousandth receipt as at the
+first. The record is a shortcut and never evidence: it is not fsynced, and when it is absent, does not
+read, or does not match the file (a shorter journal, another last line), the whole journal is validated as
+before. `seal`, `is_open` and `verify` always validate every line, so a change to the trusted prefix that
+an append did not look at is still refused (`RunCorrupt`) at the seal.
 
 `seal` writes the signed root over every receipt so far. It is a function of the journal: when the sealed
 files already hold exactly the journal's receipts it does nothing (sealing twice is idempotent and keeps
@@ -70,6 +80,7 @@ except ImportError:                     # Windows
 DECIDER = "python"
 JOURNAL = "journal.jsonl"
 TORN = "journal.torn"
+PREFIX = "journal.prefix"
 IMAGE = "image.bin"
 LOCK = "lock"
 _SAFE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
@@ -166,12 +177,51 @@ class Run:
         return run
 
     # ------------------------------------------------------------ the journal
-    def _entries(self) -> List[Dict[str, Any]]:
-        """The complete journal lines, parsed, after dropping a torn tail. Call with the lock held."""
+    def _prefix(self) -> Optional[Dict[str, Any]]:
+        """The validated-prefix record, or None when it is absent or does not read."""
+        try:
+            record = canon2.loads((self.dir / PREFIX).read_bytes())
+            if (set(record) == {"bytes", "count", "last", "last_len"} and all(
+                    isinstance(record[k], int) and not isinstance(record[k], bool) for k in ("bytes", "count", "last_len"))
+                    and isinstance(record["last"], str) and 0 < record["last_len"] <= record["bytes"]
+                    and record["count"] > 0):
+                return record
+        except Exception:   # noqa: BLE001 - a record that does not read is only a missed shortcut
+            pass
+        return None
+
+    def _write_prefix(self, length: int, count: int, last: bytes) -> None:
+        """Record that the first `length` bytes of the journal, `count` lines ending with `last`, were
+        validated. Not fsynced: the record is a shortcut, and a lost or stale one only means more is validated."""
+        tmp = self.dir / (PREFIX + ".tmp")
+        tmp.write_bytes(canon2.dumps({"bytes": length, "count": count, "last": core_evidence.sha256_hex(last),
+                                      "last_len": len(last)}))
+        os.replace(tmp, self.dir / PREFIX)
+
+    def _scan(self, full: bool):
+        """(count, entries) of the journal after dropping a torn tail. Call with the lock held.
+
+        With `full`, every line is validated and `entries` holds them all. Without it, the lines the
+        validated-prefix record covers are trusted when the record still matches the file (the journal is
+        at least that long and its last recorded line is the same bytes, on a line boundary), only the bytes
+        after it are validated, and `entries` holds only those. Any mismatch validates the whole journal."""
         path = self.dir / JOURNAL
         if not path.exists():
-            return []
-        data = path.read_bytes()
+            return 0, []
+        image_sha = core_evidence.sha256_hex((self.dir / IMAGE).read_bytes())
+        start, count, last = 0, 0, b""
+        with open(path, "rb") as handle:
+            record = None if full else self._prefix()
+            if record is not None and record["bytes"] <= os.fstat(handle.fileno()).st_size:
+                at = record["bytes"] - record["last_len"]
+                handle.seek(at - 1 if at else 0)
+                chunk = handle.read(record["last_len"] + (1 if at else 0))
+                line = chunk[1:] if at else chunk
+                if ((not at or chunk[:1] == b"\n") and line.endswith(b"\n")
+                        and core_evidence.sha256_hex(line) == record["last"]):
+                    start, count, last = record["bytes"], record["count"], line
+            handle.seek(start)
+            data = handle.read()
         end = data.rfind(b"\n") + 1
         if end != len(data):            # a final line its writer never finished
             with open(self.dir / TORN, "ab") as torn:
@@ -179,13 +229,14 @@ class Run:
                 torn.flush()
                 os.fsync(torn.fileno())
             with open(path, "r+b") as handle:
-                handle.truncate(end)
+                handle.truncate(start + end)
                 handle.flush()
                 os.fsync(handle.fileno())
             data = data[:end]
-        image = (self.dir / IMAGE).read_bytes()
         entries = []
-        for n, line in enumerate(data.split(b"\n")[:-1]):
+        lines = data.split(b"\n")[:-1]
+        for k, line in enumerate(lines):
+            n = count + k
             try:
                 entry = canon2.loads(line)
                 reading = bytes.fromhex(entry["reading"])
@@ -193,19 +244,28 @@ class Run:
                 ok = (canon2.dumps(entry) == line and entry["i"] == n and receipt["idx"] == n
                       and receipt["case"] == self.session and receipt["reading"] == n
                       and receipt["reading_sha256"] == core_evidence.sha256_hex(reading)
-                      and receipt["image_sha256"] == core_evidence.sha256_hex(image)
+                      and receipt["image_sha256"] == image_sha
                       and set(entry) == {"i", "reading", "receipt"})
             except Exception:
                 ok = False
             if not ok:
                 raise RunCorrupt(f"session {self.session}: journal line {n} is damaged")
             entries.append(entry)
-        return entries
+        total = count + len(lines)
+        if lines:
+            last = lines[-1] + b"\n"
+        if total and (lines or full):
+            self._write_prefix(start + end, total, last)
+        return total, entries
+
+    def _entries(self) -> List[Dict[str, Any]]:
+        """Every complete journal line, parsed and validated, after dropping a torn tail. Call with the lock held."""
+        return self._scan(full=True)[1]
 
     def append(self, reading: bytes, verdict: Dict[str, Any], decider: str = DECIDER) -> int:
         """Record one decided reading as the next receipt, durably, and return its index."""
         with _locked(self.dir / LOCK):
-            n = len(self._entries())
+            n = self._scan(full=False)[0]
             image = (self.dir / IMAGE).read_bytes()
             receipt = {"format": core_evidence.RECEIPT_FORMAT, "idx": n, "case": self.session, "reading": n,
                        "image_sha256": core_evidence.sha256_hex(image),
@@ -220,13 +280,33 @@ class Run:
                 while view:
                     view = view[os.write(fd, view):]
                 os.fsync(fd)
+                length = os.fstat(fd).st_size
             finally:
                 os.close(fd)
             if new:
                 _fsync_dir(self.dir)
+            self._write_prefix(length, n + 1, line)
             return n
 
     # ------------------------------------------------------------------ seal
+    def summary(self) -> Dict[str, Any]:
+        """The receipt count, whether the run is open, and how its seal stands against the journal, every
+        journal line validated: `unsealed` (no seal file yet), `partial` (some seal files and not all, a first
+        seal interrupted), `sealed` (the sealed receipts are the journal's), `behind` (they are a prefix of the
+        journal's: receipts were appended after the seal) or `diverged` (they are not: a sealed file was changed,
+        or a reseal was interrupted)."""
+        with _locked(self.dir / LOCK):
+            entries = self._entries()
+            present = [(self.dir / name).exists() for name in core_evidence.FILES]
+            if not any(present):
+                seal = "unsealed"
+            elif not all(present):
+                seal = "partial"
+            else:
+                sealed, journal = (self.dir / "receipts.jsonl").read_bytes(), self._receipt_bytes(entries)
+                seal = "sealed" if sealed == journal else "behind" if journal.startswith(sealed) else "diverged"
+            return {"receipts": len(entries), "open": seal != "sealed", "seal": seal}
+
     def is_open(self) -> bool:
         """True when the sealed files do not hold exactly the journal's receipts (never sealed, a crash
         before the seal, or receipts appended since)."""
@@ -288,10 +368,11 @@ class Run:
             _fsync_dir(self.dir)
             return manifest
 
-    def verify(self, keys: Path, oracle=None, replay=None) -> Dict[str, Any]:
+    def verify(self, keys: Path, oracle=None, replay=None, seal: bool = True) -> Dict[str, Any]:
         """Seal if the run is open or stale (recovery), then verify it with `core_evidence.verify`: every
-        receipt replayed, both keys pinned."""
-        self.seal(keys)
+        receipt replayed, both keys pinned. With `seal=False` the run is verified as it stands."""
+        if seal:
+            self.seal(keys)
         with _locked(self.dir / LOCK):
             return core_evidence.verify(self.dir, sample=None, pin_authority=Path(keys) / "authority.pub",
                                         pin_instance=Path(keys) / "instance.pub", replay=replay)
@@ -308,6 +389,24 @@ class RunStore:
 
     def get(self, session: str) -> Run:
         return Run.existing(self.root, session)
+
+    def runs(self) -> List[Run]:
+        """Every run under the root, each with its session id: the directory's name, or for a session id that
+        is not a safe file name the `case` its receipts name (a digest-named run without receipts keeps the
+        directory name, and has nothing to verify)."""
+        out = []
+        for name in self.sessions():
+            session = name
+            if name.startswith("x-"):
+                try:
+                    with open(self.root / name / JOURNAL, "rb") as handle:
+                        session = canon2.loads(handle.readline().rstrip(b"\n"))["receipt"]["case"]
+                except Exception:   # noqa: BLE001 - no journal yet, or one the full validation will refuse
+                    session = name
+                if run_dir_name(session) != name:
+                    session = name
+            out.append(Run(self.root / name, session))
+        return out
 
     def sessions(self) -> List[str]:
         return sorted(p.name for p in self.root.iterdir() if (p / IMAGE).exists()) if self.root.exists() else []
