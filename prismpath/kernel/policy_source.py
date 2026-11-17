@@ -559,15 +559,17 @@ def skeleton(text: str, module: str, source_ref: str, path: str = "<source>") ->
     defs = core_policy.parse_defs(list(compiled.doc["fields"].items()))
     compared = _compared(compiled.doc)
     title = compiled.name or module
+    source_name = source_ref.replace("\\", "/").rsplit("/", 1)[-1]
     width = max([len(d["name"]) for d in defs] + [4]) + 2
-    listing, values = [], []
+    listing, values, todo = [], [], []
     for d in defs:
         about = compiled.doc["fields"][d["name"]]
         used = compared.get(d["name"], [])
         if d["kind"] == "category" and used:
-            about += ": " + " | ".join(str(value) for value in used if value is not None)
+            about += ": " + " | ".join(sorted(str(value) for value in used if value is not None))
         listing.append(f"  {d['name']:<{width}}{about}")
         values.append(f"        {d['name']!r}: {_conservative(d)!r},")
+        todo.append(f"    # reading[{d['name']!r}] = ...")
     doc_listing = "\n".join(listing) if listing else "  (the source declares no fields)"
     module_text = f'''"""The classifier for the `{title}` policy: one raw call read into the typed fields the policy routes on.
 
@@ -583,9 +585,9 @@ Every reading holds every field the policy defines, with no float and only the k
 
 {doc_listing}
 
-Written by `prismpath policy skeleton` from {source_ref}. It is a starting point, not a classifier: until
-`_classify` sets the fields from the call, every call is the unknown reading, every field at its most
-conservative value.
+Written by `prismpath policy skeleton` from {source_name}. It is a starting point, not a classifier:
+until `_classify` sets the fields from the call, every call is the unknown reading, every field at its
+most conservative value.
 """
 from __future__ import annotations
 
@@ -611,10 +613,11 @@ def classify(call: Any, config: Any) -> Dict[str, Any]:
 def _classify(call: Any, config: Any) -> Dict[str, Any]:
     reading = unknown_reading()
     # Set each field from the call, and leave a field at its unknown value whenever the call does not say.
+{chr(10).join(todo)}
     return reading
 '''
-    test_text = f'''"""The first tests of the `{module}` classifier, written by `prismpath policy skeleton` from {source_ref}.
-Add a case for every kind of call the classifier reads, with the reading it must give."""
+    test_text = f'''"""The first tests of the `{module}` classifier, written by `prismpath policy skeleton` from
+{source_name}. Add a case for every kind of call the classifier reads, with the reading it must give."""
 import importlib.util
 from pathlib import Path
 
@@ -736,6 +739,8 @@ def policy_cmd(args) -> int:
             if existing and not args.force:
                 return refuse([f"{p} exists; pass --force to overwrite it" for p in existing])
             source_ref = os.path.relpath(os.path.abspath(args.source), os.path.dirname(os.path.abspath(test_path)))
+            if source_ref.startswith(os.pardir + os.sep + os.pardir):
+                source_ref = os.path.abspath(args.source)      # far away: the test names it outright
             module_text, test_text = skeleton(text, module, source_ref.replace(os.sep, "/"), args.source)
             _write(args.out, module_text.encode("utf-8"))
             _write(test_path, test_text.encode("utf-8"))

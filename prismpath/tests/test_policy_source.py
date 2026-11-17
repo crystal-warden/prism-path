@@ -8,6 +8,7 @@ cause on the line it is about; every error names its line; cause names resolve t
 order of the rules is part of the image; and random valid images render and recompile identically.
 """
 import json
+import os
 import random
 import subprocess
 import sys
@@ -378,9 +379,16 @@ def test_the_skeleton_sets_every_field_to_its_conservative_value(tmp_path):
     compile(test, "test_mine.py", "exec")
 
 
+def _package_env():
+    """The environment of a child that must import this package, wherever the child runs."""
+    env = dict(os.environ)
+    env["PYTHONPATH"] = os.pathsep.join([str(ROOT)] + [p for p in [env.get("PYTHONPATH")] if p])
+    return env
+
+
 def _cli(*args, cwd=None):
     return subprocess.run([sys.executable, "-m", "prismpath", "policy", *args], capture_output=True, text=True,
-                          cwd=cwd, timeout=120)
+                          cwd=cwd, timeout=120, env=_package_env())
 
 
 def test_the_command_line_compiles_renders_and_starts_a_classifier(tmp_path):
@@ -391,7 +399,7 @@ def test_the_command_line_compiles_renders_and_starts_a_classifier(tmp_path):
     assert done.returncode == 0, done.stderr
     assert out.read_bytes() == (POLICY / "agent_rules.core.json").read_bytes()
     printed = subprocess.run([sys.executable, "-m", "prismpath", "policy", "compile", str(source)],
-                             capture_output=True, timeout=120)
+                             capture_output=True, timeout=120, env=_package_env())
     assert printed.stdout == out.read_bytes()
 
     for image in (POLICY / "agent_rules.core.json", POLICY / "agent_rules.src.json"):
@@ -405,7 +413,7 @@ def test_the_command_line_compiles_renders_and_starts_a_classifier(tmp_path):
     assert _cli("skeleton", str(source), "-o", str(module)).returncode == 2       # never overwrites unasked
     tests = subprocess.run([sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider",
                             str(tmp_path / "test_rules_classifier.py")], capture_output=True, text=True,
-                           cwd=tmp_path, timeout=300)
+                           cwd=tmp_path, timeout=300, env=_package_env())
     assert tests.returncode == 0, tests.stdout + tests.stderr
     assert "4 passed" in tests.stdout
 

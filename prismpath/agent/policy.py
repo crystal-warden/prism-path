@@ -2,8 +2,10 @@
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """The owner's agent rules as a signed core policy, and the one decision per proposed tool call.
 
-The policy is `policy/agent_rules.core.json`, a `prismpath.core/1` image in its canonical canon/2 bytes
-(written from `agent_rules.src.json` through `prismpath canonicalize`). It is decided by the repository's
+The policy is `policy/agent_rules.core.json`, a `prismpath.core/1` image in its canonical canon/2 bytes,
+compiled from the readable rules `agent_rules.rules.md` by `prismpath policy compile`
+(`prismpath.kernel.policy_source`); `agent_rules.src.json` is the same image as written JSON, and both
+compile to these bytes exactly (tests/test_policy_source.py). It is decided by the repository's
 own code, nothing reimplemented here:
 
   * the image is checked by the port of the Lean oracle's `loadPolicy` (`prismpath.kernel.core_policy`),
