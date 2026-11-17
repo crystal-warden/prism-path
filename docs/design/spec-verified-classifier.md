@@ -46,6 +46,7 @@ by anything proved here.
 | `Classify.lean` | `classify disk remotes call`: path facts, `_path_like_args`, the kill readers, `command_class`, `git_listing`, `git_facts`, the schema, the whole call. `plan` computes the reading before its path facts and the paths it names, and `classify` merges their facts, so the disk is consulted at exactly the paths `plan` names |
 | `Hook.lean` | the plain word grammar (`splitPlain`), `claude_code.hook_call` and `mcp_map.classifier_call` |
 | `Shape.lean` | `fits`: a field definition that accepts what every reading holds for its name |
+| `Scan.lean`, `ScanTheorems.lean` | the hazard scan of a Bash command the grammar does not read (section 4.1) and its theorems |
 | `Theorems.lean` | the theorems of section 5 |
 | `Axioms.lean` | the axiom audit, which fails the build if any theorem depends on more than `propext`, `Classical.choice` and `Quot.sound` |
 | `Main.lean` | the oracle, `lake exe classifier-oracle` |
@@ -77,13 +78,59 @@ boundary is ASCII, and `git tag -nN` takes ASCII digits. Each is the stricter re
 longer a process id, so `kill ١٢` reads as a kill by pattern, and ASCII word boundaries are a superset of
 Unicode ones, so `épkill` inside `sh -c` is now caught.
 
-What changed, measured. None of the 120 recorded hook inputs (`prismpath/tests/fixtures/claude_code_hooks.json`)
-and none of the governed harness's 51 adversary probes changed answer; the starter tables
-(`prismpath/tests/test_agent_starters.py`) and the guide tests pass unchanged, and every hazard stays refused. On
-20,000 generated Bash commands against a real workspace, 1,177 changed, every one to ask
-(`agent:unclassifiable`, 124): 247 that were allowed, 324 that asked as shell mutations (125), one push that
-asked (113), and 605 that were refused (104 to 112). Each of those holds a character outside the grammar, mostly non ASCII text, a backslash or
-an unquoted `~`. A person is now asked about them; under `agent_rules` they are refused as unclassifiable.
+### 4.1 The hazard scan (owner decision, 2026-11-17, after review)
+
+The grammar alone moved hazards outside it from refuse to ask. The owner decided hazards must stay refused, so a
+Bash command that reads unknown is scanned on its raw text (`claude_code.hazard_scan`, `formal/Classifier/Scan.lean`),
+after the scalar check. The text is first stripped of backslashes and both quotes, so `pk\ill` and `p'k'ill`
+are scanned as the shell joins them. The rules, each stated on the text alone:
+
+| evidence | rule | reading field |
+|---|---|---|
+| kill | an ASCII word (a maximal run of letters, digits and `_`) is `pkill`, `killall` or `kill` | `kill_by_pattern` |
+| network | an ASCII word is in `NETWORK` (curl, wget, ssh, scp, sftp, nc, ncat, netcat, telnet, ftp, ping, ping6, dig, nslookup, host, traceroute, tracepath, socat, apt, brew, aria2c, http, https, lynx, w3m, links, rsync, torsocks), or the text holds a URL scheme (`[A-Za-z][A-Za-z0-9+.-]*://`) | `command_class` network |
+| outside | a token (split at Python whitespace, shell operators and `= : , { }`) starts with `~`, or starts with `/` and is neither the workspace nor lexically below it | `path_scope` outside |
+| traversal | a token has a `..` component | `path_traversal` |
+| toolchain | a token has a `.toolchain` component | `path_in_toolchain` |
+
+Any path evidence also makes `command_class` mutating (a command that cannot be read is taken to change files),
+so the path refusal rules, which apply to changes, fire. The scan's reading is a run_command reading with these
+fields; when the scan finds nothing, the reading is the unknown reading exactly as before and the command asks.
+Absence of evidence means only that the scan found nothing: variables, command substitution and aliases can
+still hide a hazard, which is why such a command asks rather than runs.
+
+What it proves (`ScanTheorems.lean`): each rule as stated (`scan_kill`, `scan_network`, `scan_outside`,
+`scan_traversal`, `scan_toolchain`, and the evidence lemmas); no evidence, no change (`scan_none`,
+`hookReading_unchanged`); and **the scan only ever adds refusals** (`hookReading_only_adds_refusals`): under a
+policy whose every scan reading is refused (`scanSafe`, which the oracle's `--policy` mode computes with the
+core's own evaluator over the 31 readings the scan can give, proved to be all of them by `scanReading_mem`), a
+hook reading is either the mapped call's reading unchanged or a reading the policy refuses. All three shipped
+agent policies are `scanSafe`, and the harness requires it. The scan never runs on a command the grammar reads,
+so it cannot change an allowed call.
+
+### 4.2 What changed, measured
+
+Against main (before this branch), on the 120 recorded hook inputs: three changed, all from ask to refuse,
+because the scan now sees their hazard: `kill-3` (`sh -c 'kill $(pgrep -f 987654)'`, 105), `shell-tilde`
+(`cat ~/.ssh/id_rsa`, 106 by the word `ssh`, outside as well) and `shell-brace` (`cat {/etc/passwd,notes.txt}`, 111).
+Their fixtures and the starter table row for `kill-3` (strict 104, default and review now 105) are updated. The
+51 adversary probes, the other starter rows and the guide tests are unchanged; every hazard stays refused.
+
+On 20,000 generated Bash commands against a real workspace (the same set as before the scan):
+
+- 6,409 are outside the grammar (an operator or a character it does not hold). **None of them is allowed.** No
+  command is allowed that main did not allow.
+- Of the 605 that main refused and the grammar alone moved to ask, **529 are refused again**: 221 network (106),
+  139 kill by pattern (105), 108 outside (111), 48 traversal (109), 13 toolchain (107). The cause can differ from
+  main's (the scan's first refusal rule that holds).
+- 76 still ask (124): 28 whose hazard is a git operation (unknown, mutating or network git, which the scan has no
+  rule for), 16 whose hazard is a symbolic link out of the workspace (a disk fact the text does not show), 16 that
+  hold a lone surrogate (outside the model's domain, never scanned), 5 installers (`pip download`), and 11 globs
+  or overlong paths.
+- Many commands that asked on main are now refused (1,324 network, 1,031 kill, 916 outside, 291 traversal, 118
+  toolchain): the scan sees hazards in commands main could not read either.
+- Of the 247 that main allowed and the grammar does not read, 153 ask and 94 are refused.
+
 `CLASSIFIER_VERSION` stays 1: the change makes readings more conservative and every signed policy bounds the
 version to 1.
 
@@ -111,6 +158,7 @@ standard axioms at most (`Axioms.lean` enforces it at every build).
 | `classify_kill`, `kill_only_run_command` | a well formed run_command call reads `kill_by_pattern` exactly as its argv; only a command can |
 | `git_unsafe_unknown`, `git_push_remote` | an option that runs a program or moves the repository makes git unknown; a push is to an allowed remote only when its first remote word is allowed (`origin` by default) |
 | `classify_unknown_tool`, `hook_unknown_tool`, `mcp_unknown_tool` | an unknown classifier tool, Claude Code tool or MCP tool reads unknown |
+| `scan_kill`, `scan_network`, `scan_outside`, `scan_traversal`, `scan_toolchain`, `scan_none`, `hookReading_only_adds_refusals` | the hazard scan (section 4.1): each rule as stated, no evidence no change, and under every `scanSafe` policy the scan only ever adds refusals |
 | `reading_fields` | every reading holds the eleven fields, in canonical order, with `classifier_version` 1 |
 | `accept_fits`, `boundary_accepts_every_reading`, `decide_never_contract` | **the core's boundary never refuses a classifier reading for its shape**: for a policy whose field definitions all fit, the system boundary accepts every reading, so the verdict is a route or no match, never `route:contract-violation`. The three shipped agent policies fit: the oracle's `--policy` mode computes it on each image and the harness requires it |
 
@@ -137,7 +185,8 @@ ASCII and control characters, lone surrogates, wrong types, missing and extra ke
 Result: 174 recorded calls, 0 disagreements; 20,000 generated calls (seed 1), 0 disagreements; 100,000 (seed 2),
 0 disagreements. The harness was checked to see the Python change: dropping `ls` from `READ_ONLY`, allowing `~`
 in plain words or `!` in quotes, Unicode `\d` in the signal, a Unicode `\b` around pkill, Unicode digits as
-process ids, or a 4097 character path limit each gives disagreements on the 20,000 run.
+process ids, or a 4097 character path limit each gives disagreements on the 20,000 run, and so does breaking the
+scan: no stripping of quotes, Unicode word characters, tokens not split at `:`, or no URL rule.
 
     cd formal && lake build                                     # the model, the theorems, the audit, the oracle
     python formal/diff/classifier_diff.py --cases 20000 --seed 1

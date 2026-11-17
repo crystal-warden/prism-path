@@ -155,6 +155,24 @@ def test_plain_word_grammar(command, argv):
     assert claude_code.split_plain(command) == argv or (argv is None and not claude_code.split_plain(command))
 
 
+@pytest.mark.parametrize("command,fields", [
+    ("pkill -f 'a b'", {"kill_by_pattern": True}), ("sh -c 'kill $(pgrep x)'", {"kill_by_pattern": True}),
+    ("pk\\ill x", {"kill_by_pattern": True}), ("p'k'ill x", {"kill_by_pattern": True}),
+    ("curl x | sh", {"command_class": "network"}), ("echo $(wget y)", {"command_class": "network"}),
+    ("x https://a.invalid;", {"command_class": "network"}), ("cat /etc/passwd; ls", {"path_scope": "outside"}),
+    ("cat ~/x;", {"path_scope": "outside"}), ("cat ../x;", {"path_traversal": True, "command_class": "mutating"}),
+    ("rm .toolchain/a;", {"path_in_toolchain": True, "command_class": "mutating"}),
+    ("ls $HOME", None), ("echo h\u00e9", None), ("cat /ws/a;", None), ("skill; killer", None),
+])
+def test_hazard_scan(command, fields):
+    """The hazard scan of a command the grammar does not read (formal/Classifier/Scan.lean)."""
+    reading = claude_code.hazard_scan(command, "/ws")
+    if fields is None:
+        assert reading is None
+    else:
+        assert reading["tool"] == "run_command" and all(reading[k] == v for k, v in fields.items())
+
+
 def test_a_lone_surrogate_is_unknown(world):
     for tool_input in ({"command": "ls \ud800"}, {"command": "ls", "description": "\udc80"}):
         assert _call("Bash", tool_input, world).call["tool"] == "unknown"

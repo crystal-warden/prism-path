@@ -1,6 +1,6 @@
 -- SPDX-License-Identifier: Apache-2.0
 -- Copyright 2026 Crystal Warden Supply Chain Labs LLC
-import Classifier.Hook
+import Classifier.Scan
 import Classifier.Shape
 /-!
 # The classifier oracle
@@ -23,7 +23,9 @@ model's domain: it reads unknown.
 
 `lake exe classifier-oracle --policy IMAGE` reads a policy image (canon/2) and prints whether its field
 definitions are ones every reading fits (`fits`), which `Theorems.boundary_accepts_every_reading` turns
-into: the system boundary of that policy accepts every reading the classifier makes.
+into: the system boundary of that policy accepts every reading the classifier makes, and whether every reading
+the hazard scan can give is refused (`scanSafe`), which `Theorems.scan_refuses` turns into: under that policy
+the scan only ever adds refusals.
 
 Only this file does input and output; everything it prints is computed by the model's functions.
 -/
@@ -142,7 +144,7 @@ def answer (line : String) : String :=
         let (call, ws') := hookCall hd input pd pc
         match missingDisk call with
         | [] => head ++ ",\"call\":" ++ writeJ call ++ ",\"workspace\":" ++ esc (String.ofList ws') ++
-            ",\"reading\":" ++ readingJson (classify disk [] call) ++ "}"
+            ",\"reading\":" ++ readingJson (hookReading hd disk input pd pc) ++ "}"
         | m => head ++ ",\"missing\":" ++ missingJson m [] [] [] ++ "}"
     else head ++ ",\"error\":\"kind\"}"
   | .ok _ => "{\"error\":\"case\"}"
@@ -170,7 +172,8 @@ def main (args : List String) : IO UInt32 := do
     -- a file may end with one line feed (SPEC.md section 8)
     let img := if raw.size > 0 && raw.get! (raw.size - 1) == 10 then raw.extract 0 (raw.size - 1) else raw
     match Core.loadPolicy (Core.readCanonical img) with
-    | .ok c => IO.println ("{\"policy\":\"accepted\",\"fits\":" ++ (if fitsAll c.defs then "true" else "false") ++ "}")
+    | .ok c => IO.println ("{\"policy\":\"accepted\",\"fits\":" ++ (if fitsAll c.defs then "true" else "false") ++
+        ",\"scan_refused\":" ++ (if scanSafe c then "true" else "false") ++ "}")
     | .error _ => IO.println "{\"policy\":\"refused\"}"
     return 0
   | _ =>

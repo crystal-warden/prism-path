@@ -41,6 +41,24 @@ the first that starts with `~` or holds `{`, a `cwd` outside the workspace, or n
 replaced shlex on 2026-11-17 (owner decision): what it does not read is `unknown`, which agent_default asks
 the person about.
 
+**The hazard scan.** A Bash command that reads unknown is not left at that: `hazard_scan` looks at its raw text
+for evidence of a hazard, by rules simple enough to state and prove (formal/Classifier/Scan.lean), and when it
+finds any the reading carries it, so the refusal rules fire before the unclassifiable escalation. The text is
+first stripped of backslashes and quotes, so `pk\\ill` and `p'k'ill` are seen as the shell would join them.
+
+  kill        an ASCII word (a maximal run of letters, digits and `_`) that is `pkill`, `killall` or `kill`
+  network     an ASCII word in `classifier.NETWORK`, or a URL scheme (`classifier._URL`)
+  outside     a token (split at whitespace, shell operators and `= : , { }`) that starts with `~`, or starts
+              with `/` and is neither the workspace nor below it
+  traversal   a token with a `..` component
+  toolchain   a token with a `.toolchain` component
+
+Evidence makes the reading a run_command reading with `kill_by_pattern`, `command_class` network (network) or
+mutating (any path evidence), `path_scope` outside, `path_traversal` and `path_in_toolchain` as found; under every
+shipped policy that reading is refused (`Theorems.scan_refuses`, checked per image by the oracle). No evidence
+leaves the unknown reading exactly as it was: the command still asks. The scan never reads a command the
+grammar reads, so it never changes an allowed call.
+
 Three facts are read off the disk, not the text: whether `cwd` is inside the workspace (`_inside`), whether it
 is the workspace (`_same_dir`) and whether a bare word names something in `cwd` (`_exists`). They are
 observations, like the classifier's `disk_facts`, and are not proved.
@@ -48,6 +66,7 @@ observations, like the classifier's `disk_facts`, and are not proved.
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional
@@ -264,6 +283,64 @@ def _list_call(name: str, tool_input: Dict[str, Any], cwd: str) -> Dict[str, Any
     return {"tool": "list_dir", "args": {"path": base_abs}}
 
 
+# ----------------------------------------------------------------- the hazard scan
+_STRIP = frozenset("\\'\"")
+_NOT_WORD = re.compile(r"[^A-Za-z0-9_]")
+_TOKEN_SEPS = frozenset("=:,{}") | SHELL_OPERATORS
+
+
+def _tokens(text: str) -> List[str]:
+    out, cur = [], []
+    for char in text:
+        if char.isspace() or char in _TOKEN_SEPS:
+            if cur:
+                out.append("".join(cur))
+            cur = []
+        else:
+            cur.append(char)
+    if cur:
+        out.append("".join(cur))
+    return out
+
+
+def hazard_scan(command: str, workspace: str) -> Optional[Dict[str, Any]]:
+    """The reading of a Bash command the grammar does not read, when its text shows a hazard; None when the
+    scan finds nothing (the command then keeps the unknown reading and asks)."""
+    text = "".join(char for char in command if char not in _STRIP)
+    words = [word for word in _NOT_WORD.split(text) if word]
+    tokens = _tokens(text)
+    kill = any(word in ("pkill", "killall", "kill") for word in words)
+    network = any(word in classifier.NETWORK for word in words) or classifier._URL.search(text) is not None
+    outside = any(token.startswith("~") or (token.startswith("/") and not (token == workspace or
+                                                                           token.startswith(workspace + "/")))
+                  for token in tokens)
+    traversal = any(".." in token.split("/") for token in tokens)
+    toolchain = any(".toolchain" in token.split("/") for token in tokens)
+    paths = outside or traversal or toolchain
+    if not (kill or network or paths):
+        return None
+    reading = classifier.base_reading()
+    reading.update({"tool": "run_command", "kill_by_pattern": kill,
+                    "command_class": "network" if network else "mutating" if paths else "unknown",
+                    "path_scope": "outside" if outside else "none", "path_traversal": traversal,
+                    "path_in_toolchain": toolchain})
+    return reading
+
+
+def hook_reading(hook_input: Any, hc: HookCall, config: classifier.Config) -> Dict[str, Any]:
+    """The reading of a hook input: its call classified, or, for a Bash command that reads unknown, the hazard
+    scan's reading when it finds evidence."""
+    reading = classifier.classify(hc.call, config)
+    if hc.call.get("tool") == "unknown" and isinstance(hook_input, dict) and classifier.scalar(hook_input) \
+            and classifier.scalar(hc.workspace) and hook_input.get("tool_name") == "Bash" \
+            and isinstance(hook_input.get("tool_input"), dict) \
+            and isinstance(hook_input["tool_input"].get("command"), str):
+        scanned = hazard_scan(hook_input["tool_input"]["command"], hc.workspace)
+        if scanned is not None:
+            return scanned
+    return reading
+
+
 def load_default_policy() -> Policy:
     return Policy.load(DEFAULT_POLICY_PATH)
 
@@ -281,7 +358,7 @@ def evaluate(hook_input: Any, env: Optional[Mapping[str, str]] = None, policy: O
     """Classify one hook input, decide it under `policy` (agent_default when None) and write the hook answer."""
     policy = policy or load_default_policy()
     hc = hook_call(hook_input, env)
-    reading = classifier.classify(hc.call, classifier.Config.for_workspace(hc.workspace))
+    reading = hook_reading(hook_input, hc, classifier.Config.for_workspace(hc.workspace))
     decision = policy.decide(policy.reading_bytes(reading))
     return HookResult(decision, reading, hc.call, hc.workspace, hook_answer(decision))
 

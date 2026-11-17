@@ -192,7 +192,8 @@ class Case:
                 config = self.config if isinstance(self.provider, SyntheticDisk) else \
                     classifier.Config.for_workspace(hc.workspace)
                 self.rec.config = config
-                self.python = {"call": hc.call, "workspace": hc.workspace, "reading": classifier.classify(hc.call, config)}
+                self.python = {"call": hc.call, "workspace": hc.workspace,
+                               "reading": claude_code.hook_reading(self.value, hc, config)}
 
     def nonscalar(self) -> bool:
         values = [self.value, self.server_cwd, self.project_dir or "", self.proc_cwd]
@@ -259,7 +260,7 @@ def check_policies() -> List[str]:
     bad = []
     for image in POLICIES:
         out = subprocess.run([str(ORACLE), "--policy", str(image)], capture_output=True, check=True, text=True)
-        if json.loads(out.stdout) != {"policy": "accepted", "fits": True}:
+        if json.loads(out.stdout) != {"policy": "accepted", "fits": True, "scan_refused": True}:
             bad.append(f"{image.name}: {out.stdout.strip()}")
     return bad
 

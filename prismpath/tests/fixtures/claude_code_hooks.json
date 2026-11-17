@@ -302,8 +302,8 @@
    "command": "sh -c 'kill $(pgrep -f 987654)'"
   },
   "expect": {
-   "answer": "ask",
-   "cause_code": 124
+   "answer": "deny",
+   "cause_code": 105
   }
  },
  {
@@ -1180,8 +1180,8 @@
    "command": "cat ~/.ssh/id_rsa"
   },
   "expect": {
-   "answer": "ask",
-   "cause_code": 124
+   "answer": "deny",
+   "cause_code": 106
   }
  },
  {
@@ -1193,8 +1193,8 @@
    "command": "cat {/etc/passwd,notes.txt}"
   },
   "expect": {
-   "answer": "ask",
-   "cause_code": 124
+   "answer": "deny",
+   "cause_code": 111
   }
  },
  {

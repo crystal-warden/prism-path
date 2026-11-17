@@ -27,6 +27,13 @@ spec stable.
   unknown. No recorded hook input or adversary probe changed answer; on 20,000 generated commands 1,177 moved to
   ask (124). The classifier's disk reads are now one function (`classifier.disk_facts`), the mapping's three
   (`claude_code._inside`, `_same_dir`, `_exists`).
+- **Hazards outside the grammar stay refused (owner decision).** A Bash command that reads unknown is scanned on its
+  raw text (`claude_code.hazard_scan`, `formal/Classifier/Scan.lean`): a `pkill`/`killall`/`kill` word, a network
+  word or a URL scheme, a token outside the workspace, a `..` or a `.toolchain` component sets the reading fields
+  the refusal rules fire on; nothing found leaves it asking. Proved: each rule as stated, and under every shipped
+  agent policy the scan only ever adds refusals. Of the 605 generated commands the grammar alone moved from refuse
+  to ask, 529 are refused again; no command outside the grammar is allowed. Recorded inputs `kill-3`,
+  `shell-tilde` and `shell-brace` now refuse (105, 106, 111) where they asked.
 
 ### Added: three starter policies for the governed agent (2026-11-16)
 

@@ -2,10 +2,11 @@
 -- Copyright 2026 Crystal Warden Supply Chain Labs LLC
 import Lean
 import Classifier.Theorems
+import Classifier.ScanTheorems
 /-!
 # The classifier's axiom audit
 
-Every theorem of `Classifier.Theorems` must depend on Lean's three standard axioms at most (`propext`,
+Every theorem of `Classifier.Theorems` and `Classifier.ScanTheorems` must depend on Lean's three standard axioms at most (`propext`,
 `Classical.choice`, `Quot.sound`): `#assert_standard_axioms` prints each theorem's axioms and fails the build when
 one depends on anything else (`sorryAx` included, so an unfinished proof cannot build).
 -/
@@ -85,3 +86,25 @@ elab "#assert_standard_axioms " id:ident : command => do
 #assert_standard_axioms Classifier.firstRefused_fits
 #assert_standard_axioms Classifier.boundary_accepts_every_reading
 #assert_standard_axioms Classifier.decide_never_contract
+#assert_standard_axioms Classifier.scanReading_eq
+#assert_standard_axioms Classifier.scan_fires
+#assert_standard_axioms Classifier.scan_none
+#assert_standard_axioms Classifier.killEvidence_of_word
+#assert_standard_axioms Classifier.networkEvidence_of_word
+#assert_standard_axioms Classifier.networkEvidence_of_url
+#assert_standard_axioms Classifier.outsideEvidence_of_token
+#assert_standard_axioms Classifier.outsideToken_abs
+#assert_standard_axioms Classifier.outsideToken_home
+#assert_standard_axioms Classifier.traversalEvidence_of_token
+#assert_standard_axioms Classifier.toolchainEvidence_of_token
+#assert_standard_axioms Classifier.scan_kill
+#assert_standard_axioms Classifier.scan_network
+#assert_standard_axioms Classifier.scan_outside
+#assert_standard_axioms Classifier.scan_traversal
+#assert_standard_axioms Classifier.scan_toolchain
+#assert_standard_axioms Classifier.strip_clean
+#assert_standard_axioms Classifier.scanOf_mem
+#assert_standard_axioms Classifier.scanReading_mem
+#assert_standard_axioms Classifier.scan_refuses
+#assert_standard_axioms Classifier.hookReading_unchanged
+#assert_standard_axioms Classifier.hookReading_only_adds_refusals

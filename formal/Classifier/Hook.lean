@@ -241,11 +241,6 @@ def hookCall (d : HookDisk) (hook : J) (projectDir : Option Str) (procCwd : Str)
   let ws := workspaceFor hook projectDir procCwd
   (hookCallIn d hook ws, ws)
 
-/-- The reading of a hook input (`claude_code.evaluate` up to the decision): the mapped call classified
-against the workspace's disk, with no allowed remote (`Config.for_workspace`). -/
-def hookReading (d : HookDisk) (disk : Str → Disk) (hook : J) (projectDir : Option Str) (procCwd : Str) : Reading :=
-  classify disk [] (hookCall d hook projectDir procCwd).1
-
 /-! ## The MCP mapping -/
 
 /-- `mcp_map._FS`: a filesystem tool's classifier tool, required keys and optional keys. -/

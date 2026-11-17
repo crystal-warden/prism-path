@@ -3,6 +3,8 @@
 import Classifier.Basic
 import Classifier.Classify
 import Classifier.Hook
+import Classifier.Scan
 import Classifier.Shape
 import Classifier.Theorems
 import Classifier.Axioms
+import Classifier.ScanTheorems
