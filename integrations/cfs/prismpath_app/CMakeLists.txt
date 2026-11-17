@@ -40,7 +40,8 @@ add_cfe_app(prismpath_app
 
 target_include_directories(prismpath_app PUBLIC fsw/inc "${PRISMPATH_EBPF_DIR}" "${PRISMPATH_MONOCYPHER_DIR}")
 target_include_directories(prismpath_app PRIVATE "${PRISMPATH_HW_DIR}")
-target_link_libraries(prismpath_app crypto)
+# as a link flag, not a bare name: a mission may define a CMake target called crypto of its own (NOS3 does)
+target_link_libraries(prismpath_app -lcrypto)
 
 # the policy image as a cFE table, loaded at startup and replaceable from the ground
 add_cfe_tables(prismpath_app fsw/tables/prismpath_app_policy_tbl.c)
