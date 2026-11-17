@@ -4,7 +4,8 @@
 
 The shipped agent policies compile from their sources byte for byte; every image in the repository's corpora
 renders to a source that compiles back to its exact bytes, and a refused one is refused for the oracle's own
-cause on the line it is about; every error names its line; cause names resolve through the registry; the
+cause on the line it is about (the differential generator's images too, in test_core_diff.py, which
+research alone carries); every error names its line; cause names resolve through the registry; the
 order of the rules is part of the image; and random valid images render and recompile identically.
 """
 import json
@@ -79,28 +80,6 @@ def test_every_corpus_image_round_trips_and_a_refused_one_is_refused_for_the_ora
         assert where > 0 and f"({refusal[0]}" in message, (case["case"], refusal, message)
         refused += 1
     assert accepted >= 10 and refused >= 25
-
-
-def test_the_differential_generator_round_trips_when_research_carries_it():
-    diff = ROOT / "formal" / "diff" / "core_diff.py"
-    if not diff.exists():
-        pytest.skip("formal/diff is not beside this package")
-    sys.path.insert(0, str(diff.parent))
-    try:
-        import core_diff
-    finally:
-        sys.path.remove(str(diff.parent))
-    rng, rendered = random.Random(11), 0
-    for _ in range(800):
-        doc, _fields = core_diff.gen_policy(rng)
-        try:
-            image = canon2.dumps(doc)
-            source = ps.render_source(doc)
-        except (canon2.Canon2Error, core_render.Unrenderable, RecursionError):
-            continue
-        assert ps.compile_source(source, checked=False) == image, source
-        rendered += 1
-    assert rendered > 400
 
 
 # ----------------------------------------------------------------- causes and order
