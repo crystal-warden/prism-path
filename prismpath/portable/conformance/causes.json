@@ -1,7 +1,7 @@
 {
  "version": 1,
  "comment": "FROZEN. The cause registry of prismpath.kernel.causes: every row, its hash, the engine stop mapping and the lookups a consumer must answer. prismpath-rs/src/causes.rs is generated from the same registry and prismpath-rs/tests/test_causes.rs replays this file. Appending a row regenerates it.",
- "registry_sha256": "8a606f6d9c920fe6be9f1014f991acd9b6256f7850a91b0ab660eca916d029e8",
+ "registry_sha256": "45c465f0b3d4700c949a5c5bbfcf0126e98c9651dd1ecdda6742bd659e3090a8",
  "registry": [
   {
    "code": 1,
@@ -554,6 +554,12 @@
    "name": "agent:hook-error",
    "class": "routing",
    "description": "the governed agent hook could not decide a tool call (input that does not read, a missing or broken key, a recorded policy that does not verify, or an error of its own); refused and not run, never allowed"
+  },
+  {
+   "code": 127,
+   "name": "agent:change-asked",
+   "class": "routing",
+   "description": "an agent call that would change files or local git state inside the workspace, with none of the earlier refusals holding, under the review policy that asks the person about every change; escalated and not run"
   }
  ],
  "engine_stop_to_cause": {

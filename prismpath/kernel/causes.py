@@ -155,6 +155,9 @@ _REGISTRY: Tuple[Tuple[int, str, str, str], ...] = (
     # that does not read, a missing or broken key, a policy whose attestation does not verify, or any error of
     # the hook's own is a refusal of the call, never an allow.
     (126, "agent:hook-error",            "routing",   "the governed agent hook could not decide a tool call (input that does not read, a missing or broken key, a recorded policy that does not verify, or an error of its own); refused and not run, never allowed"),
+    # -- the review starter policy (prismpath/agent/policy/agent_review, `prismpath agent init --policy review`):
+    # every call that would change something inside the project asks the person, after the refusals apply.
+    (127, "agent:change-asked",          "routing",   "an agent call that would change files or local git state inside the workspace, with none of the earlier refusals holding, under the review policy that asks the person about every change; escalated and not run"),
 )
 
 CODES: Dict[int, Tuple[str, str, str]] = {cause_code: (canonical_name, class_name, description)

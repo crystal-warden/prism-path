@@ -81,6 +81,18 @@ prismpath agent verify --tamper-demo
 
 The demo copies a session, flips one byte of its receipts, and verifies the copy. The copy is refused and then deleted. Your own session is not touched.
 
+## Pick a policy
+
+`init` records `default` unless you name another starter with `--policy`, as in `prismpath agent init --policy review`. Running `init` again without `--policy` keeps the one you picked. A session already running stays on the policy it began with, so start a new Claude Code session after you switch.
+
+| starter | allows | asks | refuses |
+|---|---|---|---|
+| `strict` | reads, listings and read only commands in the project, file writes in the project, local git | a push | a call it cannot read, a shell command that changes files, and the hazards |
+| `default` | the same as `strict` | a push, a call it cannot read (124), a shell command that changes files in the project (125) | a git operation or path it cannot read, a git change it cannot undo, and the hazards |
+| `review` | reads, listings and read only commands in the project, git reads | every change in the project (127), every push, a call it cannot read | the same as `default` |
+
+The hazards are refused by all three. They are a path outside the project, a `..` in a path, a path through a symbolic link, a path that is a pattern, a write into a toolchain, a kill by name pattern and the network. `status` names the starter in use. To write your own rules instead, see [writing-agent-rules.md](writing-agent-rules.md).
+
 ## Check your setup
 
 If a call you expected to be governed is not, or a hook feels slow, run `prismpath agent doctor --project .`. It checks the key files, the recorded policy, the hook entries and the interpreter they name, a timed dry run of the hook, your runs and free disk space. Each check says ok, warn or fail with one line and the command that fixes it, and the doctor changes nothing itself.

@@ -11,7 +11,8 @@ Checks, in the order they are reported:
   config-dir, key-files     the directory is mode 0700 and each key file 0600 (not applicable on Windows)
   authority-key, instance-key   the private key matches its public key (a nonce is signed and verified)
   policy                    the recorded policy's attestation verifies under the authority key, and its
-                            hash is the shipped agent_default (an older shipped image is a warning)
+                            hash is one of the shipped starters, strict, default or review (an older
+                            shipped image of one, or an attested custom image, is a warning)
   hook-PreToolUse, hook-SessionEnd   the project's .claude/settings.json has our entry, the command ends in
                             `|| exit 2`, and the interpreter it names exists and can `import prismpath`
   hook-dry-run              a recorded Read of a file in the project answers allow within the budget
@@ -38,10 +39,10 @@ from prismpath.agent.commands import (ATTESTATION_FILE, KEY_ROLES, POLICY_FILE, 
 BUDGET_MS = 150
 OPEN_RUN_DAYS = 1
 LOW_DISK_BYTES = 1 << 30
-# shipped agent_default images that are older than the current one: sha256 -> what it was
+# shipped starter images that are older than the current ones: sha256 prefix -> (its starter, what it was)
 OLDER_IMAGES = {
-    "ca48f48ddc5e5eb0": "the first agent_default (before cause 125, which asks about a file-changing shell "
-                        "command inside the project)",
+    "ca48f48ddc5e5eb0": ("default", "the first agent_default (before cause 125, which asks about a file-changing "
+                                    "shell command inside the project)"),
 }
 EVENTS = ("PreToolUse", "SessionEnd")
 
@@ -131,23 +132,26 @@ def _check_key_pair(home: Path, role: str) -> Dict[str, Any]:
 
 # ------------------------------------------------------------------------------------------ policy
 def _check_policy(home: Path) -> Dict[str, Any]:
-    from prismpath.agent.policy import DEFAULT_POLICY_PATH, Policy
+    from prismpath.agent.policy import STARTERS, starter_of
     fix = "prismpath agent init"
     try:
         commands.load_checked(home)
     except Exception as exc:  # noqa: BLE001
         return _check("policy", "fail", f"the recorded policy is not usable: {_detail(exc)}", fix)
-    recorded = _sha256_hex((home / POLICY_FILE).read_bytes())
-    shipped = _sha256_hex(Policy.load(DEFAULT_POLICY_PATH).image)
-    if recorded == shipped:
-        return _check("policy", "ok", f"agent_default {recorded[:16]} is attested by the authority key and is the shipped image",
-                      sha256=recorded)
-    older = OLDER_IMAGES.get(recorded[:16])
-    if older:
+    image = (home / POLICY_FILE).read_bytes()
+    recorded = _sha256_hex(image)
+    starter = starter_of(image)
+    if starter is not None:
+        return _check("policy", "ok", f"the {starter} starter ({STARTERS[starter]}) {recorded[:16]} is attested by the "
+                      f"authority key and is the shipped image", sha256=recorded, starter=starter)
+    if recorded[:16] in OLDER_IMAGES:
+        was, older = OLDER_IMAGES[recorded[:16]]
         return _check("policy", "warn", f"the recorded policy is an older shipped image, {older}; attested, but not the "
-                      f"current agent_default {shipped[:16]}", fix, sha256=recorded)
-    return _check("policy", "warn", f"the recorded policy {recorded[:16]} is attested but is not the shipped agent_default "
-                  f"{shipped[:16]}, nor a known older image of it", fix, sha256=recorded)
+                      f"current {was} starter ({STARTERS[was]})", f"prismpath agent init --policy {was}",
+                      sha256=recorded, starter=was)
+    return _check("policy", "warn", f"the recorded policy {recorded[:16]} is custom: attested, but not one of the shipped "
+                  f"starters (strict, default or review) nor a known older image of one", fix, sha256=recorded,
+                  starter="custom")
 
 
 # ------------------------------------------------------------------------------------------- hooks

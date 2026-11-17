@@ -35,7 +35,7 @@ execute it are not carried.
 
 | Item | Value | Where it is checked |
 |---|---|---|
-| Cause registry | sha256 `8a606f6d9c920fe6be9f1014f991acd9b6256f7850a91b0ab660eca916d029e8` over the registry, every identifier and meaning frozen | `prismpath/tests/test_causes.py` |
+| Cause registry | sha256 `45c465f0b3d4700c949a5c5bbfcf0126e98c9651dd1ecdda6742bd659e3090a8` over the registry, every identifier and meaning frozen | `prismpath/tests/test_causes.py` |
 | Pack format | `ppt-pack/1` | `prismpath/tests/test_policy_pack.py` |
 | Signing suites | the crypto agility registry | `prismpath/tests/test_crypto_registry.py`, `test_crypto_agility.py` |
 | Wire framing | Facet/1 packed records, epochs, receipts | `prismpath/telemetry/tests` and `prismpath-telemetry-rs/tests` |

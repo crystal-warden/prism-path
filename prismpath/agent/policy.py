@@ -44,6 +44,30 @@ from prismpath.kernel.parser import parse  # noqa: E402
 POLICY_PATH = HERE / "policy" / "agent_rules.core.json"
 SOURCE_PATH = HERE / "policy" / "agent_rules.src.json"
 DEFAULT_POLICY_PATH = HERE / "policy" / "agent_default.core.json"   # agent_rules, but an unreadable call asks
+
+# The starter policies `prismpath agent init --policy` offers, each a readable source `<image>.rules.md` beside
+# the canonical image `<image>.core.json` it compiles to byte for byte. They ship unsigned in the wheel; `init`
+# attests the chosen image with the user's own authority key, as it always has for agent_default.
+#   strict   agent_rules: a call it cannot read and a shell command that changes files are refused
+#   default  agent_default: those two ask the person instead
+#   review   agent_review: agent_default, but every change inside the workspace asks (cause 127)
+STARTERS = {"strict": "agent_rules", "default": "agent_default", "review": "agent_review"}
+DEFAULT_STARTER = "default"
+
+
+def starter_path(name: str) -> Path:
+    """The canonical image of the starter `name`; KeyError for a name that is not a starter."""
+    return HERE / "policy" / f"{STARTERS[name]}.core.json"
+
+
+def starter_of(image: bytes) -> Optional[str]:
+    """The starter whose shipped image is exactly `image` as `init` records it (the canonical bytes, without the
+    file's closing line feed), or None. Exact bytes, so the name always goes with the hash that was attested."""
+    for name in STARTERS:
+        shipped = starter_path(name).read_bytes()
+        if (shipped[:-1] if shipped.endswith(b"\n") else shipped) == image:
+            return name
+    return None
 _TARGET = re.compile(r"^(allow|refuse_(\d+)|escalate_(\d+))$")
 
 

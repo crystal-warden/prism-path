@@ -8,7 +8,8 @@ Where things live. Everything the commands keep is in one directory of the user'
 
   authority.key, authority.pub   the authority key, which says which policy may run (mode 0600)
   instance.key, instance.pub     the instance key, which signs the root statement over a run (mode 0600)
-  policy.core.json               the policy image every hook call decides under: `agent_default`
+  policy.core.json               the policy image every hook call decides under: the starter `init --policy`
+                                 chose (`strict`, `default` or `review`), `default` (agent_default) unless told
   policy.attestation.json        its `prismpath.core-image/1` attestation, signed with the authority key
   runs/<session>                 one run per Claude Code session (`prismpath.agent.run`)
 
@@ -116,12 +117,12 @@ def _ensure_key(home: Path, role: str) -> str:
     return "created"
 
 
-def _attestation(home: Path, image: bytes) -> bytes:
+def _attestation(home: Path, image: bytes, case: str = POLICY_CASE) -> bytes:
     from prismpath.hotswap import policy_pack
     from prismpath.kernel import canon2
     from prismpath.ledgers import core_evidence
     signer = policy_pack._load_private(str(_key_paths(home, "authority")[0]))
-    return canon2.dumps({"format": core_evidence.IMAGE_FORMAT, "case": POLICY_CASE,
+    return canon2.dumps({"format": core_evidence.IMAGE_FORMAT, "case": case,
                          "image_sha256": _sha256_hex(image), "key_id": _key_id(home, "authority"),
                          "sig": signer.sign(core_evidence.IMAGE_DOMAIN + image).hex()}) + b"\n"
 
@@ -200,28 +201,33 @@ def _settings_text(settings: Dict[str, Any]) -> str:
 
 
 # ------------------------------------------------------------------------------------------------- init
-def init(project: Path, yes: bool, as_json: bool, confirm=None, out=None) -> int:
+def init(project: Path, yes: bool, as_json: bool, confirm=None, out=None, policy: Optional[str] = None) -> int:
     """Keys, policy and the project's hook entries. `confirm(prompt) -> bool` asks the person; None means
-    ask on a terminal and otherwise take no for an answer."""
+    ask on a terminal and otherwise take no for an answer. `policy` names the starter to record (`strict`,
+    `default`, `review`); None keeps the starter already recorded, and records `default` where there is none."""
     import difflib
     out = out or sys.stdout
     home = config_dir()
     _make_dir(home)
     keys = {role: _ensure_key(home, role) for role in KEY_ROLES}
-    from prismpath.agent.policy import DEFAULT_POLICY_PATH, Policy
+    from prismpath.agent.policy import DEFAULT_STARTER, STARTERS, Policy, starter_of, starter_path
     from prismpath.ledgers import root_statement
     root_statement.check_separation(root_statement.InstanceKey.load(str(_key_paths(home, "instance")[0])),
                                     [_key_id(home, "authority")])
-    image = Policy.load(DEFAULT_POLICY_PATH).image
-    policy_state = "kept"
+    if policy is not None and policy not in STARTERS:
+        raise AgentError(f"no starter policy named {policy!r}; the starters are {', '.join(STARTERS)}")
     try:
-        load_checked(home)
-        if (home / POLICY_FILE).read_bytes() != image:
-            policy_state = "updated"
+        recorded: Optional[bytes] = load_checked(home)[0].image
     except Exception:  # noqa: BLE001 - absent or not verifying: record it again
+        recorded = None
+    starter = policy or (recorded is not None and starter_of(recorded)) or DEFAULT_STARTER
+    image = Policy.load(starter_path(starter)).image
+    if recorded is None:
         policy_state = "recorded"
+    else:
+        policy_state = "kept" if recorded == image else "updated"
     if policy_state != "kept":
-        for name, data in ((POLICY_FILE, image), (ATTESTATION_FILE, _attestation(home, image))):
+        for name, data in ((POLICY_FILE, image), (ATTESTATION_FILE, _attestation(home, image, STARTERS[starter]))):
             tmp = home / (name + ".tmp")
             fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
             with os.fdopen(fd, "wb") as handle:
@@ -265,15 +271,16 @@ def init(project: Path, yes: bool, as_json: bool, confirm=None, out=None) -> int
             settings_state = "not written"
     report = {"config_dir": str(home),
               "keys": {role: {"id": _key_id(home, role), "state": keys[role]} for role in KEY_ROLES},
-              "policy": {"name": POLICY_CASE, "sha256": _sha256_hex(image), "state": policy_state},
+              "policy": {"name": starter, "image": STARTERS[starter], "sha256": _sha256_hex(image),
+                         "state": policy_state},
               "settings": {"path": str(path), "state": settings_state, "diff": diff, "command": hook_command()}}
     if as_json:
         print(json.dumps(report, indent=2), file=out)
     else:
         for role in KEY_ROLES:
             print(f"{role} key {report['keys'][role]['id']} ({keys[role]}) in {home}", file=out)
-        print(f"policy {POLICY_CASE} sha256 {report['policy']['sha256']} ({policy_state}), attested by the authority key",
-              file=out)
+        print(f"policy {starter} ({STARTERS[starter]}) sha256 {report['policy']['sha256']} ({policy_state}), "
+              f"attested by the authority key", file=out)
         if settings_state == "not written":
             print(f"{path} was not changed; run again with --yes to write the hook entries", file=out)
         else:
@@ -452,6 +459,7 @@ def _tamper_demo(home: Path, verified_rows) -> Dict[str, Any]:
 
 
 def status(project: Path, as_json: bool, out=None) -> int:
+    from prismpath.agent.policy import STARTERS, starter_of
     from prismpath.agent.run import RunStore
     out = out or sys.stdout
     home = config_dir()
@@ -460,6 +468,8 @@ def status(project: Path, as_json: bool, out=None) -> int:
     policy: Dict[str, Any] = {"path": str(home / POLICY_FILE)}
     if (home / POLICY_FILE).is_file():
         policy["sha256"] = _sha256_hex((home / POLICY_FILE).read_bytes())
+        policy["name"] = starter_of((home / POLICY_FILE).read_bytes()) or "custom"
+        policy["image"] = STARTERS.get(policy["name"])
     try:
         load_checked(home)
         policy["attested"] = True
@@ -491,8 +501,9 @@ def status(project: Path, as_json: bool, out=None) -> int:
         for role in KEY_ROLES:
             k = keys[role]
             print(f"{role} key: {k['id'] if k['present'] else 'missing'}", file=out)
-        print(f"policy: {policy.get('sha256', 'missing')} "
-              f"({'attested' if policy['attested'] else 'not usable: ' + policy['problem']})", file=out)
+        named = f"{policy['name']} {policy['sha256']}" if "sha256" in policy else "missing"
+        print(f"policy: {named} ({'attested' if policy['attested'] else 'not usable: ' + policy['problem']})",
+              file=out)
         print(f"hooks in {settings_path}: " + ", ".join(f"{e} {'yes' if v else 'no'}" for e, v in installed.items()),
               file=out)
         if not runs:

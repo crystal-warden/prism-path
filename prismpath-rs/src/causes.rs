@@ -11,7 +11,7 @@
 pub const CAUSE_NONE: u8 = 0;
 
 /// `registry_sha256()` of the Python registry when this file was generated.
-pub const REGISTRY_SHA256: &str = "8a606f6d9c920fe6be9f1014f991acd9b6256f7850a91b0ab660eca916d029e8";
+pub const REGISTRY_SHA256: &str = "45c465f0b3d4700c949a5c5bbfcf0126e98c9651dd1ecdda6742bd659e3090a8";
 
 /// The cause class, the semantic axis of the registry.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -229,6 +229,8 @@ pub const AGENT_UNREADABLE_ASKED: u8 = 124;
 pub const AGENT_SHELL_MUTATION_ASKED: u8 = 125;
 /// `agent:hook-error`
 pub const AGENT_HOOK_ERROR: u8 = 126;
+/// `agent:change-asked`
+pub const AGENT_CHANGE_ASKED: u8 = 127;
 
 /// Every registered cause, in registry order.
 pub const REGISTRY: &[Cause] = &[
@@ -324,6 +326,7 @@ pub const REGISTRY: &[Cause] = &[
     Cause { code: 124, name: "agent:unreadable-asked", class: CauseClass::Routing, description: "an agent tool call whose tool or command the classifier cannot read, under the default policy that asks the person; escalated and not run" },
     Cause { code: 125, name: "agent:shell-mutation-asked", class: CauseClass::Routing, description: "an agent shell command that changes files, with every path inside the workspace and none of the earlier refusals holding, under the default policy that asks the person; escalated and not run" },
     Cause { code: 126, name: "agent:hook-error", class: CauseClass::Routing, description: "the governed agent hook could not decide a tool call (input that does not read, a missing or broken key, a recorded policy that does not verify, or an error of its own); refused and not run, never allowed" },
+    Cause { code: 127, name: "agent:change-asked", class: CauseClass::Routing, description: "an agent call that would change files or local git state inside the workspace, with none of the earlier refusals holding, under the review policy that asks the person about every change; escalated and not run" },
 ];
 
 /// The engine's stop vocabulary mapped onto the registry; `terminal` and `waiting` are clean and have no cause.
