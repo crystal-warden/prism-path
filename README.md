@@ -4,9 +4,11 @@
 &nbsp;[![license: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 &nbsp;[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21816125.svg)](https://doi.org/10.5281/zenodo.21816125)
 
-**PrismPath decides what an autonomous system may do, from a policy a person can read, before the action
-runs. Every decision gets a signed receipt that anyone can check offline. The same compiled policy decides
-identically from a Python process down to a microcontroller or an FPGA.**
+**An AI agent told it can't delete a file will often try another way, and then another. PrismPath sits
+between the agent and what it does. Every action the agent proposes is checked against rules you wrote,
+before it happens. If the rules say no, it doesn't happen. Each check leaves a record of what was tried, what
+was decided and why, and anyone can verify that record later without taking your word or ours for it. The
+same rules give the same answers on a laptop, inside the Linux kernel, or on a small chip.**
 
 PrismPath is a control plane for autonomous systems, one of many. What is unusual is the approach. The
 decision structure a person authors is restricted to a decidable, tabular fragment. That fragment produces
@@ -133,9 +135,9 @@ with its integrity apparatus counted, 66.9 times under an OpenTelemetry record o
 
 ## What is implemented, what is demonstrated, what is research
 
-One part is trusted rather than proven: the classifier that reads a raw call or measurement into the
-policy's typed fields. The proofs cover the decision on the reading it is given, so each classifier is
-kept small and tested on its own.
+The proofs cover the decision. Given what a call is, the answer always follows your rules. Working out what
+a call is, which file it touches and whether a command changes anything, is the job of a small reader that
+is tested on its own and asks you whenever it isn't sure.
 
 | capability | status |
 |---|---|
