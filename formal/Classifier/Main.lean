@@ -23,9 +23,10 @@ model's domain: it reads unknown.
 
 `lake exe classifier-oracle --policy IMAGE` reads a policy image (canon/2) and prints whether its field
 definitions are ones every reading fits (`fits`), which `Theorems.boundary_accepts_every_reading` turns
-into: the system boundary of that policy accepts every reading the classifier makes, and whether every reading
-the hazard scan can give is refused (`scanSafe`), which `Theorems.scan_refuses` turns into: under that policy
-the scan only ever adds refusals.
+into: the system boundary of that policy accepts every reading the classifier makes, and whether no reading
+the hazard scan can give is allowed and every one but a push alone is refused (`scanSafe`, printed as
+`scan_refused`), which `ScanTheorems.hookReading_only_adds_refusals` turns into: under that policy the scan only
+ever adds refusals.
 
 Only this file does input and output; everything it prints is computed by the model's functions.
 -/

@@ -30,13 +30,25 @@ What changed since 0.1.0, in short:
 - **OpenTelemetry decision attributes.** A proposal and a producer (`prismpath.agent.otel`) for the outcome, the cause
   and the receipt of a governed tool call on its span.
 - **The classifier is proven.** Its reading of a call is defined in Lean and held to the Python over the recorded
-  inputs, the adversary probes and 20,000 generated calls.
+  inputs, the adversary probes and 20,000 generated calls, and a proven hazard scan keeps hazards refused when a
+  command falls outside its grammar.
 - **Every Merkle tree is RFC 6962's**, with consistency proofs, a streaming root in Python, Rust and C, and strict
   canon/2 readers. These are breaking changes and are listed below.
 - **Native crates.** The four Rust crates (kernel, Facet telemetry wire, policy hot swap, preflight) are held to the
   Python reference by the frozen corpora.
 
 The detailed entries follow.
+
+### Changed: the hazard scan reads git, installers, globs and long paths (2026-11-17)
+
+- The scan of a Bash command the grammar does not read gains rules for git (an unsafe option or unknown
+  subcommand reads unknown, a network subcommand network, a mutating one or `reset --hard` mutating, a push a push
+  to a remote that is not allowed), installers followed by a fetch word (`pip install`, `npm i`, `apt-get install`
+  and the like, read as network), glob characters (`path_glob`) and tokens past the path length limit or holding a
+  NUL (path scope unknown). A network word inside a path token no longer counts, so `cat ~/.ssh/id_rsa` refuses as
+  outside the workspace (111), not network (106). Each rule is proved in `formal/Classifier/ScanTheorems.lean`, and
+  under every shipped agent policy the scan never allows and only adds refusals (a push alone asks, as before). Of
+  the 76 generated commands that still asked after the first scan, 43 refuse now; none outside the grammar is allowed.
 
 ### Changed: the classifier's syntactic reading is defined in Lean and held to it (2026-11-17)
 

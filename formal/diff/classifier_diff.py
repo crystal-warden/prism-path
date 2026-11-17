@@ -521,7 +521,25 @@ def _quote(rng: random.Random, word: str) -> str:
     return word + rng.choice(ODD)
 
 
+def _git_compound(rng: random.Random) -> str:
+    """Several git invocations joined by shell operators: the hazard scan's git rule, its severity order included."""
+    parts = []
+    for _ in range(rng.randint(1, 3)):
+        if rng.random() < 0.35:     # an installer and maybe one of its fetch words, the scan's installer rule
+            name = rng.choice(sorted(claude_code.SCAN_INSTALLERS) + ["python -m pip", "/usr/bin/pip", "pipx2"])
+            fetch = rng.choice([w for subs in claude_code.SCAN_INSTALLERS.values() for w in subs] + ["run", "list", "-q"])
+            parts.append(f"{name} {rng.choice(['', '-q ', '--user '])}{fetch} pkg")
+            continue
+        words = [rng.choice(["git", "/usr/bin/git", "./git", "git2"]), rng.choice(SUBCOMMANDS + ["reset", "reset", "remote"])]
+        words += [rng.choice(["--hard", "-v", "--verbose", "-f", "x", "origin", "--exec=x", "-c", "-C", "add"])
+                  for _ in range(rng.randint(0, 3))]
+        parts.append(" ".join(words))
+    return rng.choice([" ; ", " && ", " | ", "\n", " & "]).join(parts) + rng.choice(["", ";", " \\"])
+
+
 def gen_command(rng: random.Random) -> str:
+    if rng.random() < 0.08:
+        return _git_compound(rng)
     argv = [a for a in _argv(rng) if isinstance(a, str)] or ["ls"]
     if rng.random() < 0.5:         # a command in the grammar, quoted where a word needs it
         argv = [a for a in argv if all(c in claude_code.QUOTED or c in "'\"" for c in a)] or ["ls", "-la"]

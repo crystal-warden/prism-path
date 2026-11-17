@@ -47,15 +47,23 @@ finds any the reading carries it, so the refusal rules fire before the unclassif
 first stripped of backslashes and quotes, so `pk\\ill` and `p'k'ill` are seen as the shell would join them.
 
   kill        an ASCII word (a maximal run of letters, digits and `_`) that is `pkill`, `killall` or `kill`
-  network     an ASCII word in `classifier.NETWORK`, or a URL scheme (`classifier._URL`)
+  network     an ASCII word in `classifier.NETWORK` inside a token that gives no path evidence (so `ssh` in
+              `~/.ssh/id_rsa` is a path, not a network word), a URL scheme (`classifier._URL`), or an installer
+              token (`SCAN_INSTALLERS`, by base name) followed by one of its fetch words (`pip install`)
   outside     a token (split at whitespace, shell operators and `= : , { }`) that starts with `~`, or starts
               with `/` and is neither the workspace nor below it
   traversal   a token with a `..` component
   toolchain   a token with a `.toolchain` component
+  glob        a token with `* ? [ ]`
+  long        a token longer than `classifier.MAX_PATH` or holding a NUL (path scope unknown)
+  git         after a token whose base name is `git`: an unsafe option or a subcommand the classifier does not
+              know (unknown), a network subcommand (network), a mutating one or `reset --hard` (mutating), `push`
+              (a push to a remote that is not allowed); the most severe of every git token wins
 
 Evidence makes the reading a run_command reading with `kill_by_pattern`, `command_class` network (network) or
-mutating (any path evidence), `path_scope` outside, `path_traversal` and `path_in_toolchain` as found; under every
-shipped policy that reading is refused (`Theorems.scan_refuses`, checked per image by the oracle). No evidence
+mutating (any path evidence), `path_scope` unknown (long) or outside, the path flags and `git_op` as found; under
+every shipped policy that reading is never allowed and, but for a push alone (which asks as before), refused
+(`ScanTheorems.scan_safe_reading`, checked per image by the oracle). No evidence
 leaves the unknown reading exactly as it was: the command still asks. The scan never reads a command the
 grammar reads, so it never changes an allowed call.
 
@@ -303,6 +311,52 @@ def _tokens(text: str) -> List[str]:
     return out
 
 
+_SCAN_GLOB = frozenset("*?[]")
+SCAN_INSTALLERS = {**{name: tuple(subs) for name, subs in classifier.INSTALLERS.items()},
+                   "apt": ("install",), "apt-get": ("install",), "brew": ("install",), "dnf": ("install",),
+                   "yum": ("install",), "apk": ("add",), "pipx": ("install",), "conda": ("install",), "port": ("install",)}
+_GIT_RANK = {"none": 0, "push": 1, "mutating": 2, "network": 3, "unknown": 4}
+
+
+def _path_token(token: str, workspace: str) -> bool:
+    parts = token.split("/")
+    return (token.startswith("~") or (token.startswith("/") and not (token == workspace or token.startswith(workspace + "/")))
+            or ".." in parts or ".toolchain" in parts or any(c in _SCAN_GLOB for c in token)
+            or len(token) > classifier.MAX_PATH or "\x00" in token)
+
+
+def _git_op_of(rest: List[str]) -> str:
+    """What the tokens after a `git` token say it does (formal/Classifier/Scan.lean, gitOpOf)."""
+    if any(arg == option or arg.startswith(option + "=") for arg in rest for option in classifier.GIT_UNSAFE_OPTIONS):
+        return "unknown"
+    sub = next((arg for arg in rest if not arg.startswith("-")), None)
+    if sub is None:
+        return "none"
+    if sub == "push":
+        return "push"
+    if sub in classifier.GIT_NETWORK:
+        return "network"
+    if sub in classifier.GIT_MUTATING:
+        return "mutating"
+    if sub == "reset":
+        return "mutating" if "--hard" in rest else "none"
+    if sub == "remote":
+        after = rest[rest.index(sub) + 1:]
+        return "none" if all(arg in ("-v", "--verbose") for arg in after) else "unknown"
+    if sub in classifier.GIT_LOCAL_READ or sub in classifier.GIT_LOCAL_WRITE:
+        return "none"
+    return "unknown"
+
+
+def _git_scan(tokens: List[str]) -> str:
+    op = "none"
+    for at, token in enumerate(tokens):
+        here = _git_op_of(tokens[at + 1:]) if os.path.basename(token) == "git" else "none"
+        if _GIT_RANK[here] >= _GIT_RANK[op]:
+            op = here
+    return op
+
+
 def hazard_scan(command: str, workspace: str) -> Optional[Dict[str, Any]]:
     """The reading of a Bash command the grammar does not read, when its text shows a hazard; None when the
     scan finds nothing (the command then keeps the unknown reading and asks)."""
@@ -310,20 +364,29 @@ def hazard_scan(command: str, workspace: str) -> Optional[Dict[str, Any]]:
     words = [word for word in _NOT_WORD.split(text) if word]
     tokens = _tokens(text)
     kill = any(word in ("pkill", "killall", "kill") for word in words)
-    network = any(word in classifier.NETWORK for word in words) or classifier._URL.search(text) is not None
+    network_word = any(not _path_token(token, workspace) and
+                       any(word in classifier.NETWORK for word in _NOT_WORD.split(token) if word) for token in tokens)
+    installer = any(os.path.basename(token) in SCAN_INSTALLERS and
+                    any(arg in SCAN_INSTALLERS[os.path.basename(token)] for arg in tokens[at + 1:])
+                    for at, token in enumerate(tokens))
+    network = network_word or classifier._URL.search(text) is not None or installer
     outside = any(token.startswith("~") or (token.startswith("/") and not (token == workspace or
                                                                            token.startswith(workspace + "/")))
                   for token in tokens)
     traversal = any(".." in token.split("/") for token in tokens)
     toolchain = any(".toolchain" in token.split("/") for token in tokens)
-    paths = outside or traversal or toolchain
-    if not (kill or network or paths):
+    glob = any(any(c in _SCAN_GLOB for c in token) for token in tokens)
+    long = any(len(token) > classifier.MAX_PATH or "\x00" in token for token in tokens)
+    git = _git_scan(tokens)
+    paths = outside or traversal or toolchain or glob or long
+    if not (kill or network or paths or git != "none"):
         return None
     reading = classifier.base_reading()
     reading.update({"tool": "run_command", "kill_by_pattern": kill,
                     "command_class": "network" if network else "mutating" if paths else "unknown",
-                    "path_scope": "outside" if outside else "none", "path_traversal": traversal,
-                    "path_in_toolchain": toolchain})
+                    "path_scope": "unknown" if long else "outside" if outside else "none",
+                    "path_traversal": traversal, "path_in_toolchain": toolchain, "path_glob": glob,
+                    "git_op": git, "remote_class": "other" if git == "push" else "none"})
     return reading
 
 
