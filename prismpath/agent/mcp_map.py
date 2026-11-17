@@ -73,6 +73,8 @@ def host_path(raw: Any, server_cwd: str) -> Optional[str]:
 def classifier_call(params: Any, server_cwd: str) -> Dict[str, Any]:
     """The classifier call of one `tools/call` request's params. Never raises."""
     try:
+        if not classifier.scalar(params) or not classifier.scalar(server_cwd):
+            return _unknown()
         return _call(params, server_cwd)
     except Exception:   # noqa: BLE001 - a mapping failure must fail to unknown, never to a guess
         return _unknown()

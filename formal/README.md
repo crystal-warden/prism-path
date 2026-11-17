@@ -140,6 +140,20 @@ per reading (spec section 8); `--batch` serves the differential harness.
 `ok <c> <hex>` (the canonical bytes, and 1 when the input already is them) or `refuse <rule>` per document;
 `--batch` serves `diff/canon2_diff.py`.
 
+## The governed agent's classifier (formal/Classifier)
+
+`formal/Classifier` is the syntactic half of the governed agent's classifier (`prismpath/agent/classifier.py`)
+and of its Claude Code and MCP mappings, defined over the call as the Python sees it, with the disk's
+observations of each named path given as inputs (docs/design/spec-verified-classifier.md). It imports the core's
+evaluator, not Mathlib. The theorems (`Theorems.lean`) say that a reading depends on the disk only at the paths
+the call names, that a Bash command with a shell operator or a character outside the plain word grammar reads
+unknown, that nothing outside the read only set is read only, that a `..` component gives `path_traversal` and a
+glob character `path_glob`, that every listed form of a kill by pattern is detected, and that the core's boundary
+accepts every reading for every policy whose definitions fit (the three agent policies do). `Axioms.lean` fails
+the build if any of them depends on more than the standard three axioms. `classifier-oracle` is the model
+compiled: `--batch` serves `diff/classifier_diff.py`, which holds the Python to it, and `--policy IMAGE` says
+whether a policy's definitions fit every reading.
+
 ## Validation, and how to reproduce it
 
 ```bash
@@ -147,7 +161,7 @@ per reading (spec section 8); `--batch` serves the differential harness.
 curl -sSf https://elan.lean-lang.org/elan-init.sh | sh -s -- -y --default-toolchain leanprover/lean4:v4.33.1
 cd formal && lake exe cache get
 lake build                         # compiles every module, evaluates every #guard, prints the axiom audit
-grep -rn sorry FQ/ FQ.lean Core/ Core.lean   # expect no output
+grep -rn sorry FQ/ FQ.lean Core/ Core.lean Classifier/ Classifier.lean   # expect no output
 for m in FQ.Syntax FQ.Partition FQ.I1 FQ.Reconstruct FQ.AlgEq FQ.Zeckendorf FQ.Spiral FQ.Bridge FQ.Vectors; do
   lake env leanchecker $m          # independent kernel re-check of the stored proofs
 done

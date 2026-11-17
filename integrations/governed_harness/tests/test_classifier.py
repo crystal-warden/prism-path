@@ -126,6 +126,10 @@ def test_an_argv_it_cannot_read_is_unknown(world, argv):
     (["kill", "-s", "TERM", "42"], False), (["kill"], True), (["bash", "-c", "pkill sleep"], True),
     (["sh", "-c", "kill $(pgrep sleep)"], True), (["sh", "-c", "ls; kill 12"], False), (["xargs", "kill"], True),
     (["grep", "kill", "notes.txt"], False), (["echo", "pkill"], False), (["pgrep", "sleep"], False),
+    # ASCII only (formal/Classifier): a signal, a process id and a word boundary are read in ASCII, so a
+    # non ASCII digit is not a process id and a non ASCII letter beside pkill does not hide it
+    (["kill", "-\u0669", "12"], True), (["kill", "\u0661\u0662"], True), (["kill", "\xb2"], True),
+    (["kill", "-9\n", "12"], True), (["sh", "-c", "\xe9pkill x"], True), (["sh", "-c", "kill\xa012"], False),
 ])
 def test_kill_by_pattern(world, argv, pattern):
     assert classify({"tool": "run_command", "args": {"argv": argv}}, world[0])["kill_by_pattern"] is pattern

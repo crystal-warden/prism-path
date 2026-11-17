@@ -142,6 +142,25 @@ def test_workspace_root(world):
     assert claude_code.hook_call({"cwd": "/a"}, {"CLAUDE_PROJECT_DIR": ""}).workspace == "/a"
 
 
+@pytest.mark.parametrize("command,argv", [
+    ("ls -la src", ["ls", "-la", "src"]), ("grep -n 'TODO fix' f", ["grep", "-n", "TODO fix", "f"]),
+    ("grep \"it's\" f", ["grep", "it's", "f"]), ("echo a'b c'd", ["echo", "ab cd"]), ("echo ''", ["echo", ""]),
+    ("echo '~ { # ^'", ["echo", "~ { # ^"]), ("rm\t*.tmp", ["rm", "*.tmp"]),
+    ("echo a\\ b", None), ("echo 'a", None), ('echo "a', None), ("echo h\u00e9", None), ("echo ~", None),
+    ("echo a~b", None), ("echo {a,b}", None), ("ls #c", None), ("echo !x", None), ("echo ^x", None),
+    ("echo '!'", None), ("echo 'a\\b'", None), ("echo\u00a0x", None), ("echo \x0bx", None), ("", None), (" \t ", None),
+])
+def test_plain_word_grammar(command, argv):
+    """The Bash grammar (formal/Classifier/Hook.lean): plain words and quoted text, nothing else."""
+    assert claude_code.split_plain(command) == argv or (argv is None and not claude_code.split_plain(command))
+
+
+def test_a_lone_surrogate_is_unknown(world):
+    for tool_input in ({"command": "ls \ud800"}, {"command": "ls", "description": "\udc80"}):
+        assert _call("Bash", tool_input, world).call["tool"] == "unknown"
+    assert claude_code.hook_call({"tool_name": "Read", "tool_input": {"file_path": "a"}, "cwd": "/\ud800"}, {}).call["tool"] == "unknown"
+
+
 @pytest.mark.parametrize("bad", [None, 3, [], {}, {"tool_name": 3}, {"tool_name": "Read"}, {"tool_name": "Read", "tool_input": []},
                                  {"tool_name": "Bash", "tool_input": {"command": 3}}, {"tool_name": "Write", "tool_input": {"file_path": ""}}])
 def test_malformed_input_is_unknown(bad):

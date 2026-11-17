@@ -8,6 +8,26 @@ spec stable.
 
 ## [Unreleased]
 
+### Changed: the classifier's syntactic reading is defined in Lean and held to it (2026-11-17)
+
+- **`formal/Classifier/`** defines the governed agent's classifier and its Claude Code and MCP mappings over the
+  call's text, with the disk's observations of each named path as inputs, and proves: the reading depends on the
+  disk only at the paths the call names; a Bash command with a shell operator or a character outside the plain
+  word grammar reads unknown; nothing outside the read only set is read only; a `..` component gives
+  `path_traversal` and a glob character `path_glob`; every listed form of a kill by pattern is detected; and the
+  core's boundary accepts every reading under the three agent policies. No unfinished proof, standard axioms
+  only, enforced at build (docs/design/spec-verified-classifier.md).
+- **`lake exe classifier-oracle`** and **`formal/diff/classifier_diff.py`** hold the Python to the model over the
+  120 recorded hook inputs, the 51 adversary probes and 20,000 generated calls: no disagreement. The formal
+  workflow runs it, and `tools/reproduce.sh` has the step `classifier-diff`.
+- **Behaviour change (owner decision).** A Bash command is split by a plain word grammar instead of `shlex`:
+  plain words and quoted text, nothing else, so a backslash, an unquoted `~ { # ! ^`, any control or non ASCII
+  character reads unknown and is asked about under `agent_default`. Signals, process ids, the pkill word
+  boundary and `git tag -nN` are read in ASCII, the stricter reading. A call holding a lone surrogate reads
+  unknown. No recorded hook input or adversary probe changed answer; on 20,000 generated commands 1,177 moved to
+  ask (124). The classifier's disk reads are now one function (`classifier.disk_facts`), the mapping's three
+  (`claude_code._inside`, `_same_dir`, `_exists`).
+
 ### Added: three starter policies for the governed agent (2026-11-16)
 
 - **`prismpath agent init --policy strict|default|review`** records the chosen starter, attested by the user's own

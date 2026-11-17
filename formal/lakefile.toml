@@ -1,5 +1,5 @@
 name = "fq"
-defaultTargets = ["FQ", "Core", "core-oracle", "canon2-oracle"]
+defaultTargets = ["FQ", "Core", "core-oracle", "canon2-oracle", "Classifier", "classifier-oracle"]
 
 [[require]]
 name = "mathlib"
@@ -25,3 +25,14 @@ root = "Core.Main"
 [[lean_exe]]
 name = "canon2-oracle"
 root = "Core.Canon2Main"
+
+# The governed agent's classifier, its syntactic half (docs/design/spec-verified-classifier.md): the reading of
+# a call, the Claude Code and MCP mappings, and their theorems. It imports the core's evaluator, not Mathlib.
+[[lean_lib]]
+name = "Classifier"
+
+# The classifier oracle: the model compiled to a program that classifies framed calls given their disk facts
+# (formal/diff/classifier_diff.py).
+[[lean_exe]]
+name = "classifier-oracle"
+root = "Classifier.Main"

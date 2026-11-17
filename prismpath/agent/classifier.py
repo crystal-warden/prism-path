@@ -26,9 +26,18 @@ declares:
   git_op              none | local_read | local_write | mutating | push | network | unknown
   remote_class        none | allowed | other                    (a push's remote)
 
-Path facts are read off the workspace as it is when the call is classified (`os.path.realpath`,
-`os.path.islink`). Between that and the execution the workspace could change; the sandbox (sandbox.py)
-is what bounds the effect of such a race, not this module.
+The reading has two halves (docs/design/spec-verified-classifier.md). The SYNTACTIC half is everything read
+off the call's text: the tool and its argument schema, the command class of an argv, a kill by pattern, the
+git operation and remote, a glob or a `..` component in a path. It is defined in Lean (formal/Classifier/),
+proved there, and this module is held to that definition by a differential harness
+(formal/diff/classifier_diff.py). The DISK half is three observations per named path, made by `disk_facts`
+alone: whether the path resolves inside the workspace, into a toolchain directory, and through a symbolic
+link. They are read off the workspace as it is when the call is classified (`os.path.realpath`,
+`os.path.islink`). Between that and the execution the workspace could change; the sandbox (sandbox.py) is
+what bounds the effect of such a race, not this module, and nothing about them is proved.
+
+A call holding a string that is not Unicode scalar values (a lone surrogate, which JSON's `\ud800` escape can
+spell) is outside the model's domain and reads unknown (`scalar`).
 """
 from __future__ import annotations
 
@@ -77,9 +86,11 @@ _FIND_EFFECTS = ("-delete", "-exec", "-execdir", "-ok", "-okdir", "-fprint", "-f
 _URL = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*://")
 WRAPPERS = frozenset({"sh", "bash", "zsh", "dash", "env", "timeout", "nohup", "nice", "xargs", "python", "python3",
                       "perl", "ruby", "node", "sudo", "doas", "su", "watch", "setsid", "stdbuf", "chroot"})
-_KILL_WORD = re.compile(r"\b(pkill|killall)\b")
+# ASCII word boundaries: every boundary Unicode \b finds, ASCII \b finds too, so this flags at least as much
+_KILL_WORD = re.compile(r"\b(pkill|killall)\b", re.ASCII)
 _SHELL_SEPARATORS = re.compile(r"[;&|()`\n]")
-_SIGNAL = re.compile(r"^-(\d+|[A-Z][A-Z0-9]*|SIG[A-Z0-9]+)$")
+_SIGNAL = re.compile(r"-(\d+|[A-Z][A-Z0-9]*|SIG[A-Z0-9]+)", re.ASCII)     # used with fullmatch
+_DIGITS = frozenset("0123456789")
 
 # git: the subcommands, by what they do.
 GIT_LOCAL_READ = frozenset({"status", "log", "diff", "show", "rev-parse", "ls-files", "blame", "shortlog", "describe",
@@ -114,7 +125,7 @@ def git_listing(subcommand: str, args: List[str]) -> bool:
                 return False
         elif arg in _GIT_LIST_VALUE_FLAGS:
             expect_value = True
-        elif arg in flags or arg.startswith(_GIT_LIST_PREFIXES) or (subcommand == "tag" and re.fullmatch(r"-n\d+", arg)):
+        elif arg in flags or arg.startswith(_GIT_LIST_PREFIXES) or (subcommand == "tag" and re.fullmatch(r"-n\d+", arg, re.ASCII)):
             continue
         elif arg.startswith("-") or not listing:
             return False       # an unrecognised flag, or a bare name that would create something
@@ -157,6 +168,22 @@ def unknown_reading() -> Dict[str, Any]:
     return base_reading()
 
 
+def scalar(value: Any) -> bool:
+    """True when every string in a JSON value, keys included, is Unicode scalar values (no lone surrogate).
+    The model's strings are Lean strings, which hold scalar values only; anything else reads unknown."""
+    if isinstance(value, str):
+        try:
+            value.encode("utf-8")
+        except UnicodeEncodeError:
+            return False
+        return True
+    if isinstance(value, dict):
+        return all(scalar(key) and scalar(item) for key, item in value.items())
+    if isinstance(value, (list, tuple)):
+        return all(scalar(item) for item in value)
+    return True
+
+
 # ----------------------------------------------------------------- paths
 @dataclass
 class PathFacts:
@@ -182,11 +209,27 @@ def host_path(raw: str, config: Config) -> str:
     return str(config.workspace) + "/" + raw
 
 
+@dataclass(frozen=True)
+class DiskFacts:
+    """The three observations of one path on the disk: not proved, bounded by the sandbox."""
+    inside: bool               # resolves (and normalizes) inside the workspace
+    toolchain: bool            # resolves (or normalizes) into a toolchain directory
+    symlink: bool              # some prefix below the workspace root (or /) is a symbolic link
+
+
 def path_facts(raw: Any, config: Config) -> PathFacts:
+    """The facts of one named path: the syntactic ones read here off the text, the rest observed on the disk."""
     if not isinstance(raw, str) or not raw or "\x00" in raw or len(raw) > MAX_PATH:
         return PathFacts("unknown")
     glob = any(char in GLOB_CHARS for char in raw) or raw.startswith("~")
     traversal = ".." in raw.split("/")
+    disk = disk_facts(raw, config)
+    return PathFacts("workspace" if disk.inside else "outside", disk.toolchain, glob, traversal, disk.symlink)
+
+
+def disk_facts(raw: str, config: Config) -> DiskFacts:
+    """What the disk says about a path the syntactic checks passed (the only part of a reading that is an
+    observation, not a function of the call's text)."""
     lexical = host_path(raw, config)
     resolved = os.path.realpath(lexical)
     # every prefix of the lexical path below the workspace root (or below / for a path outside it)
@@ -202,7 +245,7 @@ def path_facts(raw: Any, config: Config) -> PathFacts:
     normal = os.path.normpath(lexical)
     toolchain = any(_under(resolved, root) or _under(normal, root) for root in config.toolchain_dirs)
     inside = _under(resolved, config.workspace) and _under(normal, config.workspace)
-    return PathFacts("workspace" if inside else "outside", toolchain, glob, traversal, symlink)
+    return DiskFacts(inside, toolchain, symlink)
 
 
 _SCOPE_RANK = {"none": 0, "workspace": 1, "outside": 2, "unknown": 3}
@@ -241,9 +284,9 @@ def _kill_args_by_pid(args: List[str]) -> bool:
     rest = list(args)
     if rest[:1] == ["-s"] and len(rest) >= 2:
         rest = rest[2:]
-    elif rest and _SIGNAL.match(rest[0]):
+    elif rest and _SIGNAL.fullmatch(rest[0]):
         rest = rest[1:]
-    return bool(rest) and all(arg.isdigit() and arg != "0" for arg in rest)
+    return bool(rest) and all(arg and set(arg) <= _DIGITS and arg != "0" for arg in rest)
 
 
 def kill_by_pattern(argv: List[str]) -> bool:
@@ -346,6 +389,8 @@ def classify(call: Any, config: Config) -> Dict[str, Any]:
     """The reading of one proposed call `{"tool": name, "args": {...}}`. Never raises: any call it cannot
     read in full is the unknown reading."""
     try:
+        if not scalar(call):
+            return unknown_reading()
         return _classify(call, config)
     except Exception:   # noqa: BLE001 - a classifier failure must fail closed, never open
         return unknown_reading()
