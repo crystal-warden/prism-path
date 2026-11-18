@@ -4,11 +4,8 @@
 &nbsp;[![license: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 &nbsp;[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21816125.svg)](https://doi.org/10.5281/zenodo.21816125)
 
-**An AI agent told it can't delete a file will often try another way, and then another. PrismPath sits
-between the agent and what it does. Every action the agent proposes is checked against rules you wrote,
-before it happens. If the rules say no, it doesn't happen. Each check leaves a record of what was tried, what
-was decided and why, and anyone can verify that record later without taking your word or ours for it. The
-same rules give the same answers on a laptop, inside the Linux kernel, or on a small chip.**
+**PrismPath puts gates around agents. You write the rules, and PrismPath allows the action, refuses it, or stops
+and asks you. From AI agents to the Linux kernel's network stack and IoT sensors, every decision gets a receipt.**
 
 PrismPath is a control plane for autonomous systems, one of many. What is unusual is the approach. The
 decision structure a person authors is restricted to a decidable, tabular fragment. That fragment produces
