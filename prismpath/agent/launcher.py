@@ -18,6 +18,9 @@ Linux only, non interactive. The launcher stays outside, trusted. It
      the workspace's control paths read only on top of the writable workspace: `.claude/`, `.mcp.json`,
      `.git/config`, `.git/hooks/` and every CLAUDE.md, CLAUDE.local.md and AGENTS.md. A control file that does
      not exist yet is created empty so that it can be bound, and removed again at exit if it is still empty;
+  4b. with `local_model` (http://HOST:PORT), also starts a fixed route to that one server (local_route.py): a
+     unix socket in the staged directory forwarding to HOST:PORT only, and a relay inside at 127.0.0.1:PORT.
+     It is not an exception in the proxy's private address rule, and each use is a line in the egress log;
   5. starts the egress proxy on the staged socket with the policy gate (egress_policy.py): each CONNECT is read into
      a connect reading, decided by the active image and written as a receipt in a run of its own
      (`egress-<time>-<pid>`, sealed at exit), and a refusal is cause 130. A caller that passes `decider` (a test or
@@ -43,7 +46,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Callable, List, Optional, Sequence, Tuple
 
-from prismpath.agent import classifier, commands, egress, egress_policy, sandbox_exec
+from prismpath.agent import classifier, commands, egress, egress_policy, local_route, sandbox_exec
 from prismpath.agent.profile import Profile, ProfileError, compile_profile
 
 STAGE_BASE = "/var/tmp"
@@ -196,7 +199,8 @@ def launch(command: Sequence[str], workspace: str, credential: Optional[str] = N
            decider: Optional[Callable] = None, home: Optional[str] = None, allowed_hosts: Sequence[str] = (),
            session: Optional[str] = None, resolver: Callable = egress.system_resolver,
            connect: Callable = egress.system_connect, hook: Optional[str] = None,
-           env: Sequence[Tuple[str, str]] = (), on_start: Optional[Callable[[int], None]] = None) -> int:
+           env: Sequence[Tuple[str, str]] = (), local_model: Optional[str] = None,
+           extra_ro: Sequence[str] = (), on_start: Optional[Callable[[int], None]] = None) -> int:
     """Run `command` as the agent and return its exit status. `on_start(pid)` is for tests. Raises
     LaunchError, before anything runs, when the run cannot start."""
     require_linux_tools()
@@ -205,6 +209,17 @@ def launch(command: Sequence[str], workspace: str, credential: Optional[str] = N
     root = Path(os.path.realpath(workspace))
     if not root.is_dir():
         raise LaunchError(f"the workspace {workspace} is not a directory, so nothing was run")
+    model_target = None
+    if local_model:
+        try:
+            model_target = local_route.parse_target(local_model)
+        except local_route.RouteError as exc:
+            raise LaunchError(f"{exc}, so nothing was run") from exc
+        if model_target[1] == sandbox_exec.PROXY_PORT:
+            raise LaunchError(f"the local model port {sandbox_exec.PROXY_PORT} is the egress relay's port, so nothing was run")
+    for path in extra_ro:
+        if not os.path.exists(path):
+            raise LaunchError(f"the read only path {path} does not exist, so nothing was run")
     gate = None
     home_dir = Path(home) if home else commands.config_dir()
     if decider is None:
@@ -220,18 +235,27 @@ def launch(command: Sequence[str], workspace: str, credential: Optional[str] = N
     staged = stage(settings, credential, stage_base)
     controls = Controls()
     proxy = None
+    model_route = None
     proc = None
     try:
         prepare_controls(root, controls)
         proxy = egress.EgressProxy(staged.socket, staged.log, decider=decider, gate=gate, resolver=resolver, connect=connect).start()
+        if model_target is not None:
+            model_route = local_route.LocalModelRoute(staged.root / "model.sock", staged.log, *model_target).start()
         extra_args = ["--tmpfs", HOME_IN, "--tmpfs", CONFIG_IN]
         binds = list(program_binds)
         binds += [(path, path) for path in controls.binds]
+        binds += [(os.path.realpath(path), os.path.realpath(path)) for path in extra_ro]
+        if model_route is not None:
+            binds.append((model_route.socket_path, sandbox_exec.MODEL_SOCKET_IN))
         binds.append((str(staged.settings), CONFIG_IN + "/settings.json"))
         if staged.credential is not None:
             binds.append((str(staged.credential), f"{CONFIG_IN}/{CREDENTIAL_NAME}"))
-        environment = [("HOME", HOME_IN), ("CLAUDE_CONFIG_DIR", CONFIG_IN), *AGENT_ENV, *env]
-        inner = sandbox_exec.limited(sandbox_exec.with_relay([inside, *command[1:]]), profile.max_processes)
+        environment = [("HOME", HOME_IN), ("CLAUDE_CONFIG_DIR", CONFIG_IN), *AGENT_ENV]
+        if model_target is not None:    # a client that honours HTTP_PROXY would send the model route's traffic to the proxy
+            environment += [("NO_PROXY", "127.0.0.1,localhost"), ("no_proxy", "127.0.0.1,localhost")]
+        environment += list(env)
+        inner = sandbox_exec.limited(sandbox_exec.with_relay([inside, *command[1:]], model_target[1] if model_target else 0), profile.max_processes)
         argv = sandbox_exec.bwrap_argv(root, profile, inner, extra_ro_binds=binds, mount=str(root),
                                        proxy_socket=str(staged.socket), extra_args=extra_args, env=environment)
         read_fd, write_fd = os.pipe()
@@ -258,7 +282,7 @@ def launch(command: Sequence[str], workspace: str, credential: Optional[str] = N
             raise LaunchError("bwrap did not start the sandbox, so the program was not run (see its message above)")
         return status
     finally:
-        _teardown(proc, proxy, staged, controls, egress_log)
+        _teardown(proc, (proxy, model_route), staged, controls, egress_log)
         _seal(gate.run if gate is not None else None, home_dir)
 
 
@@ -309,7 +333,7 @@ def _wait(proc: subprocess.Popen) -> int:
     return code if code >= 0 else 128 - code
 
 
-def _teardown(proc, proxy, staged: Staged, controls: Controls, egress_log: Optional[str]) -> None:
+def _teardown(proc, routes, staged: Staged, controls: Controls, egress_log: Optional[str]) -> None:
     if proc is not None:
         try:
             os.killpg(proc.pid, signal.SIGKILL)     # whatever the program left running; the group is ours alone
@@ -319,8 +343,9 @@ def _teardown(proc, proxy, staged: Staged, controls: Controls, egress_log: Optio
             proc.wait(timeout=10)
         except Exception:   # noqa: BLE001
             pass
-    if proxy is not None:
-        proxy.close()
+    for route in routes:
+        if route is not None:
+            route.close()
     if egress_log and staged.log.exists():
         try:
             target = Path(egress_log)

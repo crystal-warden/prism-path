@@ -50,6 +50,7 @@ from prismpath.agent.profile import Profile, ProfileError      # noqa: E402
 BWRAP = "/usr/bin/bwrap"
 MOUNT = "/workspace"
 PROXY_PORT = 3128                       # the relay's loopback port inside the sandbox (its own network namespace, so it cannot clash)
+MODEL_SOCKET_IN = "/tmp/.pp-model.sock"     # the fixed local model route's socket (prismpath/agent/local_route.py)
 PROXY_SOCKET_IN = "/tmp/.pp-egress.sock"    # where the proxy's unix socket appears inside; a bind mount cannot be unlinked from inside
 RELAY = "/usr/bin/socat"
 SHELL = "/usr/bin/bash"
@@ -131,14 +132,19 @@ def limited(command: Sequence[str], max_processes: int) -> List[str]:
     return [SHELL, "-c", f'ulimit -u {int(max_processes)} && exec "$@"', "bash", *command]
 
 
-def with_relay(command: Sequence[str]) -> List[str]:
+def with_relay(command: Sequence[str], model_port: int = 0) -> List[str]:
     """`command` run after a `socat` relay from 127.0.0.1:PROXY_PORT to the bound proxy socket is listening.
-    The relay lives in the sandbox's process namespace and dies with it. A relay that does not come up
-    within about five seconds stops the command, so nothing runs with a proxy it cannot reach."""
-    script = (f'{RELAY} TCP-LISTEN:{PROXY_PORT},bind=127.0.0.1,fork,reuseaddr UNIX-CONNECT:{PROXY_SOCKET_IN} & '
-              f'for i in $(seq 50); do grep -q ":{PROXY_PORT:04X} .* 0A " /proc/net/tcp && break; sleep 0.1; done; '
-              f'grep -q ":{PROXY_PORT:04X} .* 0A " /proc/net/tcp || {{ echo "the egress relay did not start" >&2; exit 125; }}; '
-              f'exec "$@"')
+    With `model_port`, a second relay from 127.0.0.1:model_port to the bound local model socket as well.
+    The relays live in the sandbox's process namespace and die with it. One that does not come up
+    within about five seconds stops the command, so nothing runs with a route it cannot reach."""
+    ports = [(PROXY_PORT, PROXY_SOCKET_IN)] + ([(model_port, MODEL_SOCKET_IN)] if model_port else [])
+    script = ""
+    for port, sock in ports:
+        script += f'{RELAY} TCP-LISTEN:{port},bind=127.0.0.1,fork,reuseaddr UNIX-CONNECT:{sock} & '
+    for port, _sock in ports:
+        script += (f'for i in $(seq 50); do grep -q ":{port:04X} .* 0A " /proc/net/tcp && break; sleep 0.1; done; '
+                   f'grep -q ":{port:04X} .* 0A " /proc/net/tcp || {{ echo "the relay on port {port} did not start" >&2; exit 125; }}; ')
+    script += 'exec "$@"'
     return [SHELL, "-c", script, "bash", *command]
 
 
