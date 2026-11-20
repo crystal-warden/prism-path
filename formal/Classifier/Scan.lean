@@ -189,7 +189,7 @@ def scanOf (kill net out trav tool glob long : Bool) (git : GitOp) (ctrl : Bool)
     commandClass := if net then .network else if out || trav || tool || glob || long || ctrl then .mutating else .unknown,
     pathScope := if long then .unknown else if out then .outside else .none,
     pathTraversal := trav, pathInToolchain := tool, pathGlob := glob, pathControl := ctrl,
-    gitOp := git, remoteClass := if git == .push then .other else .none }
+    gitOp := git, remoteClass := if git == .push then .other else .none, procClass := .unknown }
 
 def fires (kill net out trav tool glob long : Bool) (git : GitOp) (ctrl : Bool) : Bool :=
   kill || net || out || trav || tool || glob || long || git != .none || ctrl
