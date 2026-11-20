@@ -81,6 +81,12 @@ prismpath agent verify --tamper-demo
 
 The demo copies a session, flips one byte of its receipts, and verifies the copy. The copy is refused and then deleted. Your own session is not touched.
 
+### Sandbox observations
+
+When a shell command that ran in the sandbox shows on its standard error that an access was stopped, such as a permission error or a network that is unreachable, the runner adds an observation to the session. It is bound to the receipt of the allowed call and carries the hash of the policy and of the sandbox profile. `verify` checks each one against its receipt and counts it. An observation is what the command said, read from its exit status and its error text, so it can miss a refusal the command hid and it cannot tell a path the sandbox hid from a path that does not exist. It is kept in its own file in the run, outside the signed root, so a line removed from the end would not be noticed.
+
+An observation never changes what is allowed. It does not edit the policy or the profile, it is not a rule hit in `prismpath agent rules`, and nothing that decides reads it. Only a policy you sign widens what runs.
+
 ## See which rules fire
 
 ```sh
@@ -123,7 +129,7 @@ If a call you expected to be governed is not, or a hook feels slow, run `prismpa
 
 ## What this does and does not protect you from
 
-The hook decides. Claude Code runs an allowed call itself, outside any PrismPath sandbox. PrismPath does not wrap the process, so a call it allows has the access Claude Code has.
+The hook decides. On Linux an allowed Bash call is rewritten to run inside a sandbox built from the same policy, so the programs it starts can reach the workspace and the system files they need and nothing else. Claude Code's own Read, Write and Edit tools, and every call on macOS and Windows, run outside any PrismPath sandbox and have the access Claude Code has. A question you approve in Claude Code's prompt also runs as the model wrote it, without the sandbox.
 
 Nothing PrismPath refuses runs. Every decision, allow, refuse or ask, has a receipt you can verify later.
 
