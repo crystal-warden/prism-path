@@ -67,6 +67,8 @@ prismpath agent status
 
 `status` lists the two keys, the policy with its hash and whether its attestation holds, the hooks found in the project and each session with its receipt count and whether it is open or sealed. It exits 1 if the setup would not run.
 
+If the recorded policy would let the agent change its own control files (`.claude/settings.json`, the hook scripts, `.mcp.json`), `status` prints a warning line saying so and the command that fixes it. That happens for a policy you recorded with `prismpath agent init` before 2026-11-19, when the starters began to refuse such a change, and for a custom policy without that rule. The check reads the policy alone, so it does not depend on the project. The fix is `prismpath agent init --policy strict`, `default` or `review`, which records that starter again and attests it with your key. Runs you already sealed keep their own policy and still verify, and a Claude Code session that is open when you do it has its next call denied, because its run began under the old policy, so end that session and start another. With `--json`, `policy.control.refuses_control_changes` is `true` when the policy refuses every such change and `false` when it does not (then with `reason`, `policy`, `fix` and `message`), and `null` when the policy could not be checked.
+
 <!-- guide-test: verify -->
 ```sh
 prismpath agent verify
@@ -97,7 +99,7 @@ The hazards are refused by all three. They are a path outside the project, a `..
 
 ## Check your setup
 
-If a call you expected to be governed is not, or a hook feels slow, run `prismpath agent doctor --project .`. It checks the key files, the recorded policy, the hook entries and the interpreter they name, a timed dry run of the hook, your runs and free disk space. Each check says ok, warn or fail with one line and the command that fixes it, and the doctor changes nothing itself.
+If a call you expected to be governed is not, or a hook feels slow, run `prismpath agent doctor --project .`. It checks the key files, the recorded policy, the hook entries and the interpreter they name, a timed dry run of the hook, your runs and free disk space. Each check says ok, warn or fail with one line and the command that fixes it, and the doctor changes nothing itself. The `policy-control` check warns when the recorded policy would let the agent change its own control files, as described under `status`; in `--json` its row carries `refuses_control_changes`.
 
 ## What this does and does not protect you from
 

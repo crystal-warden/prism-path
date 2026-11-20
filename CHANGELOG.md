@@ -8,6 +8,12 @@ spec stable.
 
 ## [Unreleased]
 
+### Added: a warning for a policy recorded before the control-file rule (2026-11-20)
+
+- **`prismpath agent status` and `prismpath agent doctor` warn when the recorded policy allows a change to the agent's own control files.** The check is the oracle's `control_refused` property (`controlSafe` in `formal/Classifier/Control.lean`) evaluated through the reference decision path over every reading with `path_control` that is a change; a policy without the field fails outright. The four shipped images from before 2026-11-19 are recognised by hash, so the message says "the default starter from before 2026-11-19" rather than `custom`, and names the fix, `prismpath agent init --policy <starter>`. Runs already sealed keep verifying, and a session still open is denied its next call. The hook decides exactly as before. `status --json` carries `policy.control.refuses_control_changes`, and the `doctor` row `policy-control` carries `refuses_control_changes`.
+- `prismpath agent init` without `--policy` now keeps an older shipped starter's name (an older strict stays strict) instead of recording `default`.
+- `core_reference.python_decision` is the reference's decision on a reading without the policy check beside it, which `python_reading` now calls.
+
 ### Added: the governed agent no longer changes its own controls (2026-11-19)
 
 - **A change to the agent's own control files is refused under every starter** (`strict`, `default`, `review`), with
