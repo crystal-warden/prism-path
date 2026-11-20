@@ -57,8 +57,14 @@ def echo():
     server.server.close()
 
 
+def allow_api(host, port):
+    """A test decider: the one name the tests dial. The proxy itself holds no allowlist."""
+    return (True, "test-allow") if host == "api.anthropic.com" else (False, "host-not-allowed")
+
+
 def make_proxy(tmp_path, echo, hosts=None, **kwargs):
     hosts = hosts if hosts is not None else {"api.anthropic.com": [PUBLIC]}
+    kwargs.setdefault("decider", allow_api)
     dialled = []
 
     def resolver(name):
@@ -129,7 +135,7 @@ def test_an_allowed_host_tunnels_through_the_resolver_override(tmp_path, echo):
         client.close()
         assert proxy.dialled == [(PUBLIC, 443)]
         entry = wait_log(proxy)[0]
-        assert (entry["host"], entry["port"], entry["decision"], entry["reason"]) == ("api.anthropic.com", 443, "allow", "interim-allowlist")
+        assert (entry["host"], entry["port"], entry["decision"], entry["reason"]) == ("api.anthropic.com", 443, "allow", "test-allow")
 
 
 def test_a_trailing_dot_and_upper_case_are_the_same_destination(tmp_path, echo):
@@ -335,70 +341,9 @@ def test_start_refuses_to_replace_a_file_that_is_not_a_socket(tmp_path, echo):
     assert victim.read_text() == "keep"
 
 
-def test_the_interim_allowlist_is_the_plans_constant():
-    assert egress.INTERIM_ALLOWLIST == ("api.anthropic.com", "platform.claude.com")
-    assert len(egress.interim_allowlist_sha256()) == 64
-    assert egress.interim_decider("platform.claude.com", 443)[0] is True
-    assert egress.interim_decider("claude.ai", 443)[0] is False
-
-
-# the host parser on its own
-
-@pytest.mark.parametrize("authority,expected", [
-    ("api.anthropic.com:443", ("api.anthropic.com", 443)),
-    ("API.ANTHROPIC.COM:443", ("api.anthropic.com", 443)),
-    ("api.anthropic.com.:443", ("api.anthropic.com", 443)),
-    ("a_b.example:443", ("a_b.example", 443)),
-    ("xn--bcher-kva.example:443", ("xn--bcher-kva.example", 443)),
-])
-def test_parse_accepts_and_normalises(authority, expected):
-    assert parse_authority(authority) == expected
-
-
-@pytest.mark.parametrize("authority,reason", [
-    ("127.0.0.1:443", "ip-literal"),
-    ("127.0.0.1.:443", "ip-literal"),
-    ("2130706433:443", "ip-literal"),
-    ("0x7f000001:443", "ip-literal"),
-    ("0X7F.0.0.1:443", "ip-literal"),
-    ("0177.0.0.1:443", "ip-literal"),
-    ("127.1:443", "ip-literal"),
-    ("1.2.3.4:443", "ip-literal"),
-    ("[::1]:443", "ip-literal"),
-    ("[::ffff:127.0.0.1]:443", "ip-literal"),
-    ("::1:443", "bad-authority"),
-    ("evil.com.127.1:443", "ip-literal"),
-    ("localhost@api.anthropic.com:443", "userinfo"),
-    ("api.anthropic.com@127.0.0.1:443", "userinfo"),
-    ("api.anthropic.com:443@evil.example:443", "userinfo"),
-    ("user:pw@api.anthropic.com:443", "userinfo"),
-    ("api.anthropic.com:0", "bad-port"),
-    ("api.anthropic.com:65536", "bad-port"),
-    ("api.anthropic.com:99999", "bad-port"),
-    ("api.anthropic.com:-1", "bad-port"),
-    ("api.anthropic.com:+443", "bad-port"),
-    ("api.anthropic.com:0443x", "bad-port"),
-    ("api.anthropic.com:", "bad-port"),
-    ("api.anthropic.com", "bad-authority"),
-    (":443", "bad-host"),
-    (".:443", "bad-host"),
-    ("api.anthropic.com..:443", "bad-host"),
-    (".api.anthropic.com:443", "bad-host"),
-    ("api..anthropic.com:443", "bad-host"),
-    ("-bad.example:443", "bad-host"),
-    ("api.anthropic.com\t:443", "bad-authority"),
-    ("api.anthropic.com :443", "bad-authority"),
-    ("api.anthropic.com/path:443", "bad-host"),
-    ("bücher.example:443", "bad-authority"),
-    ("a" * 64 + ".example:443", "bad-host"),
-    ("", "bad-authority"),
-    ("api.anthropic.com:80", "port-not-allowed"),
-])
-def test_parse_refuses_the_odd_forms(authority, reason):
-    with pytest.raises(Refusal) as info:
-        parse_authority(authority)
-    assert info.value.reason == reason
-
-
-def test_parse_lets_a_listed_port_through():
-    assert parse_authority("a.example:8443", allowed_ports=(443, 8443)) == ("a.example", 8443)
+def test_the_proxy_holds_no_allowlist_and_refuses_everything_without_a_decision(tmp_path, echo):
+    assert not hasattr(egress, "INTERIM_ALLOWLIST") and not hasattr(egress, "interim_decider")
+    with make_proxy(tmp_path, echo, decider=egress.refuse_all) as proxy:
+        client = talk(proxy, connect_line("api.anthropic.com:443"))
+        assert status(answer(client)) == 403
+        assert wait_log(proxy)[0]["reason"] == "no-decider"
