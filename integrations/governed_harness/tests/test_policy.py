@@ -19,7 +19,7 @@ ENUMS = {"tool": ["list_dir", "read_file", "write_file", "delete_path", "run_com
          "command_class": ["none", "read_only", "mutating", "network", "git", "unknown"],
          "git_op": ["none", "local_read", "local_write", "mutating", "push", "network", "unknown"],
          "remote_class": ["none", "allowed", "other"]}
-BOOLS = ["path_in_toolchain", "path_glob", "path_traversal", "path_symlink", "kill_by_pattern"]
+BOOLS = ["path_in_toolchain", "path_control", "path_glob", "path_traversal", "path_symlink", "kill_by_pattern"]
 
 
 def field_space():
@@ -48,7 +48,7 @@ def test_the_lean_port_accepts_the_image_and_every_target_names_a_registered_cau
         if kind != "allow":
             assert causes.code(cause) == code and causes.cause_class(code) == "routing"
             seen.add(cause)
-    assert seen == {name for code, name, _k, _d in causes._REGISTRY if 104 <= code <= 113}
+    assert seen == {name for code, name, _k, _d in causes._REGISTRY if 104 <= code <= 113 or code == 128}
 
 
 def test_the_reading_fields_are_the_policy_fields(agent_policy):
@@ -68,14 +68,14 @@ def _want(reading):
 
 
 def test_every_reading_decides_as_the_owner_rules_say(agent_policy):
-    """The whole field space, 112,896 readings, through the reference: the image and the rules agree."""
+    """The whole field space, 225,792 readings, through the reference: the image and the rules agree."""
     disagree, count = [], 0
     for reading in field_space():
         count += 1
         decision = agent_policy.decide(agent_policy.reading_bytes(reading))
         if (decision.kind, decision.cause) != _want(reading):
             disagree.append((reading, decision))
-    assert count == 7 * 4 * 6 * 7 * 3 * 2 ** 5
+    assert count == 7 * 4 * 6 * 7 * 3 * 2 ** 6
     assert disagree == []
 
 

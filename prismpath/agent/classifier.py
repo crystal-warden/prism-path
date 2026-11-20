@@ -18,6 +18,7 @@ declares:
   tool                list_dir | read_file | write_file | delete_path | run_command | git | unknown
   path_scope          none | workspace | outside | unknown      (the worst path the call names)
   path_in_toolchain   a named path resolves into a toolchain directory
+  path_control        a named path is one of the agent's own controls (CONTROL_FILES, CONTROL_DIRS, the hook it runs)
   path_glob           a named path is a pattern (* ? [ ] { } or a leading ~), not one exact path
   path_traversal      a named path has a .. component
   path_symlink        a named path passes through, or ends at, a symbolic link
@@ -31,8 +32,8 @@ off the call's text: the tool and its argument schema, the command class of an a
 git operation and remote, a glob or a `..` component in a path. It is defined in Lean (formal/Classifier/),
 proved there, and this module is held to that definition by a differential harness
 (formal/diff/classifier_diff.py). The DISK half is three observations per named path, made by `disk_facts`
-alone: whether the path resolves inside the workspace, into a toolchain directory, and through a symbolic
-link. They are read off the workspace as it is when the call is classified (`os.path.realpath`,
+alone: whether the path resolves inside the workspace, into a toolchain directory, through a symbolic
+link, and onto one of the agent's control files. They are read off the workspace as it is when the call is classified (`os.path.realpath`,
 `os.path.islink`). Between that and the execution the workspace could change; the sandbox (sandbox.py) is
 what bounds the effect of such a race, not this module, and nothing about them is proved.
 
@@ -51,6 +52,12 @@ CLASSIFIER_VERSION = 1
 MOUNT = "/workspace"          # where the sandbox mounts the workspace, and the path the model is told
 TOOLS = ("list_dir", "read_file", "write_file", "delete_path", "run_command", "git")
 GLOB_CHARS = set("*?[]{}")
+# The agent's management plane: the files inside the workspace that hold its own controls (the hook that governs it,
+# its settings, its MCP servers). A change to one of them, made by a path that resolves onto it, is refused under
+# every shipped policy (cause 128). `.claude` itself is named too, since removing or renaming it removes them all.
+CONTROL_FILES = (".claude/settings.json", ".claude/settings.local.json", ".mcp.json")
+CONTROL_DIRS = (".claude/hooks",)         # the directory and everything below it
+CONTROL_EXACT = (".claude",)              # the directory itself only
 MAX_PATH = 4096
 MAX_ARGV = 64
 
@@ -159,7 +166,7 @@ class Config:
 
 def base_reading() -> Dict[str, Any]:
     return {"classifier_version": CLASSIFIER_VERSION, "tool": "unknown", "path_scope": "none",
-            "path_in_toolchain": False, "path_glob": False, "path_traversal": False, "path_symlink": False,
+            "path_in_toolchain": False, "path_control": False, "path_glob": False, "path_traversal": False, "path_symlink": False,
             "command_class": "none", "kill_by_pattern": False, "git_op": "none", "remote_class": "none"}
 
 
@@ -192,6 +199,7 @@ class PathFacts:
     glob: bool = False
     traversal: bool = False
     symlink: bool = False
+    control: bool = False
 
 
 def _under(path: str, root: Path) -> bool:
@@ -215,6 +223,7 @@ class DiskFacts:
     inside: bool               # resolves (and normalizes) inside the workspace
     toolchain: bool            # resolves (or normalizes) into a toolchain directory
     symlink: bool              # some prefix below the workspace root (or /) is a symbolic link
+    control: bool = False      # resolves (or normalizes) onto one of the agent's control files
 
 
 def path_facts(raw: Any, config: Config) -> PathFacts:
@@ -224,7 +233,8 @@ def path_facts(raw: Any, config: Config) -> PathFacts:
     glob = any(char in GLOB_CHARS for char in raw) or raw.startswith("~")
     traversal = ".." in raw.split("/")
     disk = disk_facts(raw, config)
-    return PathFacts("workspace" if disk.inside else "outside", disk.toolchain, glob, traversal, disk.symlink)
+    return PathFacts("workspace" if disk.inside else "outside", disk.toolchain, glob, traversal, disk.symlink,
+                     disk.control)
 
 
 def disk_facts(raw: str, config: Config) -> DiskFacts:
@@ -245,7 +255,40 @@ def disk_facts(raw: str, config: Config) -> DiskFacts:
     normal = os.path.normpath(lexical)
     toolchain = any(_under(resolved, root) or _under(normal, root) for root in config.toolchain_dirs)
     inside = _under(resolved, config.workspace) and _under(normal, config.workspace)
-    return DiskFacts(inside, toolchain, symlink)
+    control = _is_control(resolved, normal, config)
+    return DiskFacts(inside, toolchain, symlink, control)
+
+
+def hook_programs(config: Config) -> List[str]:
+    """The program each PrismPath hook command in the workspace's `.claude/settings.json` runs (its first word),
+    when it is a path inside the workspace: the interpreter the installed hook starts. Read off the disk at the
+    moment of the call; an unreadable or unusual settings file names none."""
+    out: List[str] = []
+    try:
+        import json
+        import shlex
+        text = (config.workspace / ".claude" / "settings.json").read_text(encoding="utf-8")
+        for groups in json.loads(text).get("hooks", {}).values():
+            for group in groups:
+                for hook in group.get("hooks", []):
+                    words = shlex.split(hook["command"].replace("$CLAUDE_PROJECT_DIR", str(config.workspace)))
+                    if words and "agent" in words and "hook" in words and any("prismpath" in w for w in words) \
+                            and words[0].startswith("/") and _under(os.path.normpath(words[0]), config.workspace):
+                        out.append(words[0])
+    except Exception:   # noqa: BLE001 - a settings file that does not read names no program
+        return out
+    return out
+
+
+def _is_control(resolved: str, normal: str, config: Config) -> bool:
+    """True when the resolved or the normalized path is a control file, is below a control directory, is `.claude`
+    itself, or is the program an installed PrismPath hook runs."""
+    workspace = config.workspace
+    files = [workspace / name for name in CONTROL_FILES + CONTROL_EXACT] + [Path(p) for p in hook_programs(config)]
+    dirs = [workspace / name for name in CONTROL_DIRS]
+    targets = {os.path.realpath(f) for f in files} | {os.path.normpath(f) for f in files}
+    roots = {os.path.realpath(d) for d in dirs} | {os.path.normpath(d) for d in dirs}
+    return any(path in targets or any(_under(path, Path(root)) for root in roots) for path in (resolved, normal))
 
 
 _SCOPE_RANK = {"none": 0, "workspace": 1, "outside": 2, "unknown": 3}
@@ -259,6 +302,7 @@ def _merge_paths(reading: Dict[str, Any], facts: List[PathFacts]) -> None:
         reading["path_glob"] |= fact.glob
         reading["path_traversal"] |= fact.traversal
         reading["path_symlink"] |= fact.symlink
+        reading["path_control"] |= fact.control
 
 
 def _path_like_args(args: List[str]) -> List[str]:
