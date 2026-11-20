@@ -79,7 +79,8 @@ def _hook_command(data, event="PreToolUse"):
 def test_a_fresh_init_reports_everything_ok(setup):
     report = _report(setup)
     assert report["ok"] and report["counts"] == {"ok": len(report["checks"]), "warn": 0, "fail": 0}
-    assert set(_by(report)) == {"config-dir", "key-files", "authority-key", "instance-key", "policy", "hook-PreToolUse",
+    assert set(_by(report)) == {"config-dir", "key-files", "authority-key", "instance-key", "policy", "policy-control",
+                                "hook-PreToolUse",
                                 "hook-SessionEnd", "hook-dry-run", "runs", "disk"}
     assert all(r["fix"] is None for r in report["checks"])
 
@@ -113,7 +114,7 @@ def test_the_cli_exits_0_when_nothing_fails_and_prints_a_line_per_check(setup):
     text = done.stdout.decode()
     # the budget is the real 150 ms here, so the dry run may warn on a slow machine, which still exits 0
     assert done.returncode == 0, text + done.stderr.decode()
-    assert text.count("\n") == 11 and "0 fail" in text
+    assert text.count("\n") == 12 and "0 fail" in text
     assert "budget" in text and "150 ms" in text
 
 
@@ -170,7 +171,10 @@ def test_an_older_shipped_image_warns_and_names_it(setup):
     older = commands._sha256_hex(image)[:16]
     d.OLDER_IMAGES[older] = ("review", "the test's older image")
     try:
-        row = _only_problem(_report(setup), "policy", "warn")
+        report = _report(setup)
+        row = _by(report)["policy"]
+        assert row["status"] == "warn"
+        assert _by(report)["policy-control"]["status"] == "warn"      # an older image also lacks the control rule
     finally:
         del d.OLDER_IMAGES[older]
     assert "older shipped image, the test's older image" in row["detail"]
