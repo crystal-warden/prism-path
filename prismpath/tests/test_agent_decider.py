@@ -3,7 +3,7 @@
 """The decider and the thin hook client (agent-sandbox-plan, WP5).
 
 Host side: every recorded hook input goes through the client and a decider and gets the answer and the receipt
-that `prismpath agent hook` gives, except what the stated direct-Bash choice changes. The client fails closed, and the
+that `prismpath agent hook` gives, The client fails closed, and the
 decider survives bad requests. Sandbox side: under the launcher a stand-in program runs the client command from
 the staged settings.json and gets decisions, and cannot read the keys, the policy or the journal.
 Nothing reads a real login or key; the keys here are made fresh in a throwaway HOME. Paths the sandbox must see
@@ -81,9 +81,6 @@ def _comparable(answer, from_cli):
     reason = out.get("permissionDecisionReason")
     if reason is not None:
         reason = reason.replace(" If you approve it, it runs inside the PrismPath sandbox.", "")
-        reason = reason.replace(" " + commands.DIRECT_ASK_NOTE, "")       # the decider's note on a direct question
-        if out["permissionDecision"] == "allow":      # the direct-Bash note replaces nothing the CLI said
-            reason = None
         out["permissionDecisionReason"] = reason
     out = {k: v for k, v in out.items() if not (k == "permissionDecisionReason" and v is None)}
     return out
@@ -109,34 +106,12 @@ def test_every_recorded_hook_input_gets_the_cli_answer_and_receipt_through_the_c
             assert out["permissionDecision"] == case["expect"]["answer"], case["id"]
             if case["expect"]["answer"] == "deny":
                 assert f"Receipt {n} of session s1." in out["permissionDecisionReason"], case["id"]
-            assert "updatedInput" not in out                    # the direct choice: never a host interpreter path
     finally:
         decider.close()
     a, b = _entries(world["home"]), _entries(world["home_b"])
     assert len(a) == len(b) == len(cli_tests.FIXTURES) and a == b      # same readings, same verdicts, same receipts
     assert not sock.exists()
 
-
-def test_an_allowed_shell_call_runs_directly_and_the_answer_says_so(world):
-    cli_tests._init(world)
-    payload = {"session_id": "s9", "cwd": world["ws"], "hook_event_name": "PreToolUse", "tool_name": "Bash",
-               "tool_input": {"command": "ls src", "description": "list"}}
-    answer = commands.hook(json.dumps(payload).encode(), {"HOME": str(world["home"])}, direct=True)
-    out = answer["hookSpecificOutput"]
-    assert out["permissionDecision"] == "allow" and "updatedInput" not in out
-    assert commands.DIRECT_NOTE in out["permissionDecisionReason"] and "Receipt 0 of session s9" in out["permissionDecisionReason"]
-    run = run_module.Run.existing(commands.config_dir({"HOME": str(world["home"])}) / commands.RUNS_DIR, "s9")
-    assert "sandbox" not in run._entries()[0]
-
-
-def test_a_shell_question_under_the_decider_says_it_would_run_directly(world):
-    cli_tests._init(world)
-    payload = {"session_id": "s8", "cwd": world["ws"], "hook_event_name": "PreToolUse", "tool_name": "Bash",
-               "tool_input": {"command": "rm -rf build", "description": "clean"}}
-    answer = commands.hook(json.dumps(payload).encode(), {"HOME": str(world["home"])}, direct=True)
-    out = answer["hookSpecificOutput"]
-    assert out["permissionDecision"] == "ask" and "updatedInput" not in out
-    assert out["permissionDecisionReason"].endswith(commands.DIRECT_ASK_NOTE)
 
 
 def test_agent_run_without_init_says_so_and_runs_nothing(tmp_path, monkeypatch):
@@ -358,9 +333,15 @@ def test_under_the_launcher_the_client_gets_decisions_the_sandbox_cannot_read_th
         return json.loads(text)["hookSpecificOutput"] if text.strip() != "{}" else {}
     assert answer(0)["permissionDecision"] == "allow"
     shell = answer(1)
-    assert shell["permissionDecision"] == "allow" and "updatedInput" not in shell and commands.DIRECT_NOTE in shell["permissionDecisionReason"]
-    assert answer(2)["permissionDecision"] == "deny" and "Receipt 2 of session ls1" in answer(2)["permissionDecisionReason"]
-    assert answer(3)["permissionDecision"] == "deny" and "Receipt 3 of session ls1" in answer(3)["permissionDecisionReason"]
+    from prismpath.tests.test_agent_nested import NESTING
+    if NESTING:
+        assert shell["permissionDecision"] == "allow" and shell["updatedInput"]["command"].startswith(
+            f"{launcher.HOOK_PYTHON} -I {launcher.RUNNER_IN} ")
+    else:   # a host that forbids the nested sandbox: every shell command is refused, never run under the outer one
+        assert shell["permissionDecision"] == "deny" and "129" in shell["permissionDecisionReason"]
+    shift = 0 if NESTING else 1     # the 129 refusal writes no receipt, so later receipts are numbered one lower
+    assert answer(2)["permissionDecision"] == "deny" and f"Receipt {2 - shift} of session ls1" in answer(2)["permissionDecisionReason"]
+    assert answer(3)["permissionDecision"] == "deny" and f"Receipt {3 - shift} of session ls1" in answer(3)["permissionDecisionReason"]
     assert json.loads(out["decisions"][4][1]) == {}                                    # SessionEnd sealed the run
     rc, text = out["missing_socket"]
     assert rc == 0 and _is_hook_error(json.loads(text))                                 # no socket: deny, exit 0
@@ -371,4 +352,4 @@ def test_under_the_launcher_the_client_gets_decisions_the_sandbox_cannot_read_th
     verified = cli_tests._cli(home, "agent", "verify", "--json")
     report = json.loads(verified.stdout)
     assert verified.returncode == 0 and report["verified"] is True
-    assert [r["receipts"] for r in report["runs"]] == [4]
+    assert [r["receipts"] for r in report["runs"]] == [4 - shift]
