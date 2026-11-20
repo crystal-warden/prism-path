@@ -8,6 +8,11 @@ spec stable.
 
 ## [Unreleased]
 
+### Added: sandbox observations, and approved questions run sandboxed (2026-11-20)
+
+- **An escalated Bash call on Linux is answered ask with the sandboxed command** (`updatedInput`), so a call the person approves runs under the same bwrap profile as an allowed one. A refusal is unchanged, and a missing bwrap or a profile that does not compile is a deny with cause 129. Off Linux the call is asked unchanged.
+- **Sandbox observations.** When a sandboxed command's standard error shows a stopped access, the run records an observation in `observations.jsonl`, bound to the receipt, image hash and profile hash. `prismpath agent verify` checks it. It is not a rule hit and changes no decision. `core-receipt/1` is unchanged.
+
 ### Changed: the control-file refusal closes the gaps it left open (2026-11-20)
 
 - **A shell command outside the plain grammar that redirects onto a control file is refused with 128.** The hazard
@@ -47,6 +52,14 @@ spec stable.
   that names one is refused (`control_refused` in the oracle's `--policy` output). The differential harness and the
   recorded hook inputs (now 132) cover it, and the refusals are receipted like any other, so they are observations a
   later policy proposal may read; they never change the policy on their own.
+
+### Added: a rule table for the installed policy (2026-11-19)
+
+- **`prismpath agent rules` shows each rule of the installed policy with its hits.** Like `iptables -L -v`, it lists
+  the rules in order with their readable conditions, targets, hit counts and last hit time counted from the
+  receipts that verify, the core's own refusals as rows of their own, the rules never matched, and the rules no
+  reading can reach (decided from the policy alone over every combination of field values). It takes `--json` and
+  `--since`, and writes nothing.
 
 ## [0.2.0] (2026-11-17)
 

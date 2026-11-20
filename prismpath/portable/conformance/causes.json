@@ -1,7 +1,7 @@
 {
  "version": 1,
  "comment": "FROZEN. The cause registry of prismpath.kernel.causes: every row, its hash, the engine stop mapping and the lookups a consumer must answer. prismpath-rs/src/causes.rs is generated from the same registry and prismpath-rs/tests/test_causes.rs replays this file. Appending a row regenerates it.",
- "registry_sha256": "62b93d698a525a83fe2830335ede31cdcdf83c45c8e858f581e8757e91282977",
+ "registry_sha256": "5e2a612eba2ed9273361770b5e24d5ade3f9fdd433bb09e423a16ac6cb944aa3",
  "registry": [
   {
    "code": 1,
@@ -566,6 +566,12 @@
    "name": "agent:control-write",
    "class": "routing",
    "description": "an agent call that would change one of the governed agent's own control files inside the workspace (its settings, its hook scripts, its MCP configuration, or the program its installed hook runs), by a path that resolves onto it; refused and not run, under every starter policy"
+  },
+  {
+   "code": 129,
+   "name": "agent:sandbox-unavailable",
+   "class": "routing",
+   "description": "an allowed agent shell command that could not be run inside the sandbox compiled from the signed policy (the profile did not compile, or the sandbox program is missing); refused and not run, never run without the sandbox"
   }
  ],
  "engine_stop_to_cause": {

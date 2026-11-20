@@ -82,6 +82,7 @@ JOURNAL = "journal.jsonl"
 TORN = "journal.torn"
 PREFIX = "journal.prefix"
 IMAGE = "image.bin"
+OBSERVATIONS = "observations.jsonl"
 LOCK = "lock"
 _SAFE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 
@@ -92,6 +93,11 @@ class RunError(Exception):
 
 class RunCorrupt(RunError):
     """The journal is damaged somewhere a killed writer cannot have damaged it."""
+
+
+def observe_format() -> str:
+    from prismpath.agent import observe
+    return observe.FORMAT
 
 
 def run_dir_name(session: str) -> str:
@@ -245,7 +251,10 @@ class Run:
                       and receipt["case"] == self.session and receipt["reading"] == n
                       and receipt["reading_sha256"] == core_evidence.sha256_hex(reading)
                       and receipt["image_sha256"] == image_sha
-                      and set(entry) == {"i", "reading", "receipt"})
+                      and set(entry) in ({"i", "reading", "receipt"}, {"i", "reading", "receipt", "sandbox"})
+                      and ("sandbox" not in entry or (isinstance(entry["sandbox"], dict)
+                                                      and set(entry["sandbox"]) == {"profile_sha256"}
+                                                      and re.fullmatch(r"[0-9a-f]{64}", str(entry["sandbox"]["profile_sha256"])))))
             except Exception:
                 ok = False
             if not ok:
@@ -262,8 +271,12 @@ class Run:
         """Every complete journal line, parsed and validated, after dropping a torn tail. Call with the lock held."""
         return self._scan(full=True)[1]
 
-    def append(self, reading: bytes, verdict: Dict[str, Any], decider: str = DECIDER) -> int:
-        """Record one decided reading as the next receipt, durably, and return its index."""
+    def append(self, reading: bytes, verdict: Dict[str, Any], decider: str = DECIDER,
+               sandbox_profile: Optional[str] = None) -> int:
+        """Record one decided reading as the next receipt, durably, and return its index. `sandbox_profile` is the
+        SHA-256 of the sandbox profile the allowed call was rewritten to run under; it is kept on the journal
+        line beside the receipt (the receipt is exactly `prismpath.core-receipt/1`, which has no such field),
+        so it is bound to the line by the journal's own check and is not part of the sealed root."""
         with _locked(self.dir / LOCK):
             n = self._scan(full=False)[0]
             image = (self.dir / IMAGE).read_bytes()
@@ -271,7 +284,10 @@ class Run:
                        "image_sha256": core_evidence.sha256_hex(image),
                        "reading_sha256": core_evidence.sha256_hex(reading), "decider": decider,
                        **core_evidence._decision(verdict)}
-            line = canon2.dumps({"i": n, "reading": reading.hex(), "receipt": receipt}) + b"\n"
+            entry = {"i": n, "reading": reading.hex(), "receipt": receipt}
+            if sandbox_profile is not None:
+                entry["sandbox"] = {"profile_sha256": sandbox_profile}
+            line = canon2.dumps(entry) + b"\n"
             path = self.dir / JOURNAL
             new = not path.exists()
             fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
@@ -287,6 +303,102 @@ class Run:
                 _fsync_dir(self.dir)
             self._write_prefix(length, n + 1, line)
             return n
+
+    # ------------------------------------------------------------------ observations
+    def observe(self, receipt: int, image_sha256: str, profile_sha256: str, observed: Dict[str, Any]) -> int:
+        """Append one observation, bound to the receipt of the allowed call it is about, and return its sequence
+        number. An observation is a record of what a sandboxed command showed. It never changes a decision, a
+        policy or a profile, and it is not read by anything that decides (prismpath/agent/observe.py). It is kept
+        in its own file with its own hashes, not in the journal and not in the signed root, so `core-receipt/1`
+        and the root statement are unchanged. Refused when the receipt does not exist, or the image or profile hash
+        is not the one that receipt and its journal line record."""
+        with _locked(self.dir / LOCK):
+            entries = self._entries()
+            if not isinstance(receipt, int) or isinstance(receipt, bool) or not 0 <= receipt < len(entries):
+                raise RunError(f"session {self.session}: there is no receipt {receipt} to bind an observation to")
+            self._check_binding(entries[receipt], image_sha256, profile_sha256)
+            lines = self._observation_lines()
+            prev = lines[-1]["sha256"] if lines else ""
+            entry = {"format": observe_format(), "i": len(lines), "receipt": receipt,
+                     "receipt_sha256": core_evidence.sha256_hex(canon2.dumps(entries[receipt]["receipt"])),
+                     "image_sha256": image_sha256, "profile_sha256": profile_sha256, "observed": observed, "prev": prev}
+            entry["sha256"] = core_evidence.sha256_hex(canon2.dumps(entry))
+            data = canon2.dumps(entry) + b"\n"
+            path = self.dir / OBSERVATIONS
+            new = not path.exists()
+            fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+            try:
+                view = memoryview(data)
+                while view:
+                    view = view[os.write(fd, view):]
+                os.fsync(fd)
+            finally:
+                os.close(fd)
+            if new:
+                _fsync_dir(self.dir)
+            return entry["i"]
+
+    @staticmethod
+    def _check_binding(journal_entry: Dict[str, Any], image_sha256: str, profile_sha256: str) -> None:
+        if journal_entry["receipt"]["image_sha256"] != image_sha256:
+            raise RunError("the observation's image hash is not the receipt's")
+        if journal_entry.get("sandbox", {}).get("profile_sha256") != profile_sha256:
+            raise RunError("the observation's profile hash is not the one the receipt's call was sandboxed under")
+
+    def _observation_lines(self) -> List[Dict[str, Any]]:
+        """The observation lines, each checked for its own hash, its place in the chain and its format. Call with
+        the lock held. Raises RunCorrupt."""
+        path = self.dir / OBSERVATIONS
+        if not path.exists():
+            return []
+        data = path.read_bytes()
+        if data and not data.endswith(b"\n"):
+            raise RunCorrupt(f"session {self.session}: the observations file ends in a line that was not finished")
+        out: List[Dict[str, Any]] = []
+        prev = ""
+        for n, line in enumerate(data.split(b"\n")[:-1]):
+            try:
+                entry = canon2.loads(line)
+                body = {k: v for k, v in entry.items() if k != "sha256"}
+                ok = (canon2.dumps(entry) == line and entry["format"] == observe_format() and entry["i"] == n
+                      and entry["prev"] == prev and entry["sha256"] == core_evidence.sha256_hex(canon2.dumps(body))
+                      and set(entry) == {"format", "i", "receipt", "receipt_sha256", "image_sha256", "profile_sha256",
+                                         "observed", "prev", "sha256"})
+            except Exception:
+                ok = False
+            if not ok:
+                raise RunCorrupt(f"session {self.session}: observation {n} is damaged")
+            prev = entry["sha256"]
+            out.append(entry)
+        return out
+
+    def observations(self) -> List[Dict[str, Any]]:
+        """Every observation of the run, as written."""
+        with _locked(self.dir / LOCK):
+            return self._observation_lines()
+
+    def verify_observations(self) -> int:
+        """Check every observation against the journal and return how many there are: each hashes to itself, the
+        chain holds, and each names a receipt that exists, whose canonical bytes hash to the recorded value, whose
+        image hash it carries and whose journal line holds its profile hash. Raises RunCorrupt otherwise. An
+        observation file that was cut short cannot be told from one that never had more lines (it is not under
+        the signed root)."""
+        with _locked(self.dir / LOCK):
+            lines = self._observation_lines()
+            if not lines:
+                return 0
+            entries = self._entries()
+            for line in lines:
+                n = line["receipt"]
+                if not isinstance(n, int) or isinstance(n, bool) or not 0 <= n < len(entries):
+                    raise RunCorrupt(f"session {self.session}: observation {line['i']} names receipt {n}, which does not exist")
+                try:
+                    self._check_binding(entries[n], line["image_sha256"], line["profile_sha256"])
+                except RunError as exc:
+                    raise RunCorrupt(f"session {self.session}: observation {line['i']}: {exc}") from exc
+                if line["receipt_sha256"] != core_evidence.sha256_hex(canon2.dumps(entries[n]["receipt"])):
+                    raise RunCorrupt(f"session {self.session}: observation {line['i']} is not about the receipt it names")
+            return len(lines)
 
     # ------------------------------------------------------------------ seal
     def summary(self) -> Dict[str, Any]:
@@ -374,8 +486,10 @@ class Run:
         if seal:
             self.seal(keys)
         with _locked(self.dir / LOCK):
-            return core_evidence.verify(self.dir, sample=None, pin_authority=Path(keys) / "authority.pub",
-                                        pin_instance=Path(keys) / "instance.pub", replay=replay)
+            result = core_evidence.verify(self.dir, sample=None, pin_authority=Path(keys) / "authority.pub",
+                                          pin_instance=Path(keys) / "instance.pub", replay=replay)
+        result["observations"] = self.verify_observations()      # raises RunCorrupt on a damaged or unbound one
+        return result
 
 
 class RunStore:

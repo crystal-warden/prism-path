@@ -1954,6 +1954,25 @@
     ],
     "rationale": "Nearest entry: a critical resource, the agent's own controls, kept from the principal they govern; the cause refuses the write, it does not set permissions."
    }
+  },
+  "129": {
+   "name": "agent:sandbox-unavailable",
+   "class": "routing",
+   "kind": "internal",
+   "owasp_asi": {
+    "ids": [],
+    "none": "The sandbox around an allowed shell call could not be set up, so the call is refused because it cannot be confined, not because of agent behaviour."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "A missing or failing sandbox on the host is not an adversary technique in the ATLAS catalogue."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-636"
+    ],
+    "rationale": "The weakness this cause prevents: when the confinement cannot be applied the call is denied instead of being run without it."
+   }
   }
  }
 }
