@@ -299,7 +299,8 @@ def test_the_walk_below_a_directory_is_bounded(ws, monkeypatch):
 @pytest.mark.skipif(os.name == "nt", reason="the written hook command is a POSIX shell line")
 def test_a_package_planted_in_the_workspace_does_not_shadow_the_hook(tmp_path):
     """`python -m prismpath` run from the workspace would import a planted `prismpath/` first; the written command
-    does not put the working directory on sys.path (-P, or -I before Python 3.11)."""
+    does not put the working directory on sys.path (-P, or the -c launcher before Python 3.11), and it still finds
+    PrismPath through PYTHONPATH, which -I would have dropped."""
     import subprocess
     import sys
     from prismpath.agent import commands
@@ -311,13 +312,15 @@ def test_a_package_planted_in_the_workspace_does_not_shadow_the_hook(tmp_path):
     (work / "x.pth").write_text("import os\n")
     root = str(Path(__file__).resolve().parents[2])
     env = {**os.environ, "PYTHONPATH": root}
-    line = commands.hook_command()
-    assert " -P -m prismpath " in line or " -I -m prismpath " in line
-    unsafe = subprocess.run(["sh", "-c", line.replace(" -P -m", " -m").replace(" -I -m", " -m")], input=b"{}",
+    unsafe = subprocess.run([sys.executable, "-m", "prismpath", "agent", "hook"], input=b"{}",
                             capture_output=True, cwd=work, env=env)
-    assert marker.exists(), "the premise: without the flag the planted package runs"
-    marker.unlink()
-    done = subprocess.run(["sh", "-c", line], input=b"{}", capture_output=True, cwd=work, env=env)
-    assert not marker.exists()
-    assert json.loads(done.stdout)["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
+    assert marker.exists(), "the premise: without the guard the planted package runs"
     assert unsafe.returncode in (0, 1, 2)
+    import shlex
+    launcher = " ".join(shlex.quote(w) for w in
+                        [sys.executable, "-c", commands.LAUNCHER_310, "prismpath", "agent", "hook"]) + " || exit 2"
+    for line in (commands.hook_command(), launcher):           # the written line, and the 3.10 form on this Python
+        marker.unlink(missing_ok=True)
+        done = subprocess.run(["sh", "-c", line], input=b"{}", capture_output=True, cwd=work, env=env)
+        assert not marker.exists(), line
+        assert json.loads(done.stdout)["hookSpecificOutput"]["hookEventName"] == "PreToolUse", done.stderr
