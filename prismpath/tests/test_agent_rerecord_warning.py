@@ -186,6 +186,8 @@ def test_the_hook_denies_every_call_under_an_image_from_before_classifier_versio
             answer = commands.hook(json.dumps(hook).encode(),
                                    {"HOME": str(setup["home"]), "CLAUDE_PROJECT_DIR": str(setup["project"])})
             assert answer["hookSpecificOutput"]["permissionDecision"] == "deny"
+            reason = answer["hookSpecificOutput"]["permissionDecisionReason"]
+            assert "classifier version 1" in reason and "prismpath agent init" in reason, reason
 
 
 def test_re_recording_keeps_the_old_runs_verifying_and_the_open_session_on_its_old_image(setup):
@@ -206,7 +208,9 @@ def test_re_recording_keeps_the_old_runs_verifying_and_the_open_session_on_its_o
     assert call("open")["hookSpecificOutput"]["permissionDecision"] == "deny"
     done = _cli(setup["home"], "agent", "init", "--policy", "default", "--project", str(setup["project"]), "--yes")
     assert done.returncode == 0, done.stderr
-    assert call("open")["hookSpecificOutput"]["permissionDecision"] == "deny"
+    # under an image the classifier cannot use, the hook refused before opening a run, so neither session left a
+    # run behind and both go on under the current starter
+    assert call("open")["hookSpecificOutput"]["permissionDecision"] == "allow"
     assert call("fresh")["hookSpecificOutput"]["permissionDecision"] == "allow"
     verified = _cli(setup["home"], "agent", "verify", "--json")
     rows = {r["session"]: r for r in json.loads(verified.stdout)["runs"]} if verified.stdout.strip().startswith(b"{") else {}

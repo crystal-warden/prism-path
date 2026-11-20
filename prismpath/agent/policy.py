@@ -156,6 +156,22 @@ def control_gap(policy: "Policy") -> Optional[str]:
     return None
 
 
+def classifier_mismatch(policy: "Policy") -> Optional[str]:
+    """Why this policy cannot decide any reading the installed classifier makes, or None. An image recorded for an
+    older classifier bounds `classifier_version` below the current one, so the core would refuse every call as a
+    contract violation; this says so in words, with the fix, instead."""
+    from prismpath.agent import classifier
+    bound = policy.doc["fields"].get("classifier_version", "")
+    low, high = re.search(r"min=(-?\d+)", bound), re.search(r"max=(-?\d+)", bound)
+    version = classifier.CLASSIFIER_VERSION
+    if (low and version < int(low.group(1))) or (high and version > int(high.group(1))):
+        made_for = high.group(1) if high else low.group(1)
+        return (f"the recorded policy was made for classifier version {made_for} and this PrismPath reads calls as "
+                f"version {version}, so it can decide none of them; run `prismpath agent init` to record a current "
+                f"starter")
+    return None
+
+
 def _base_reading(policy: "Policy") -> Dict[str, Any]:
     """The fields of a reading the policy defines, at their values for a call that reads nothing: the classifier
     version at the top of the policy's own bound (so an older image is asked about the readings it was made for)."""
