@@ -97,3 +97,12 @@ Order: WP1, WP2, then WP3 and WP4 together, then WP5, WP6, WP7.
 4. **Should a refused access in the sandbox ever escalate to a person while the command runs?** Recommended: no. It stays a refusal and a receipt, and the proposal path of section 3 is how the policy grows. A prompt in the middle of a build is the pattern the owner is trying to leave.
 5. **Protect the hook's own settings file by policy?** Recommended: yes, add a rule that refuses writes to `.claude/settings.json` and the policy and key directories, and check in WP1 whether it is already covered. Without it the hook can be removed by the agent it governs.
 6. **Which device target is the first honest one?** Recommended: the cFS app on the NOS3 scenario (`docs/design/cfs-app-plan.md` S3), with the plan stating the software bus gap, before any ESP32 claim. The ESP32 has a certified evaluator but no governed actuator here, so a real guarantee there needs a small board with a relay behind the pod's output pin. That is worth building only after the Linux tracer shows the compile and differential pattern works.
+
+## 6. Owner decisions, 2026-11-19
+
+1. Network and process limits become reading fields in the one signed policy, so the proof covers them. They come with the XDP compile, not the tracer.
+2. The whole agent runs under the sandbox as the next step after WP7, through a launcher, with the model's API as an allowlist entry.
+3. bubblewrap is the first backend. Landlock, seccomp and cgroups follow behind the same profile type.
+4. A refused access in the sandbox stays a refusal and a receipt. It never prompts the person mid run. Refusals feed proposals under section 3.
+5. Writes to the agent's own control files are refused (cause 128, PR #60).
+6. The first device target is the cFS app on NOS3, with the software bus gap stated plainly. The ESP32 waits for the Linux tracer.
