@@ -11,7 +11,7 @@
 pub const CAUSE_NONE: u8 = 0;
 
 /// `registry_sha256()` of the Python registry when this file was generated.
-pub const REGISTRY_SHA256: &str = "62b93d698a525a83fe2830335ede31cdcdf83c45c8e858f581e8757e91282977";
+pub const REGISTRY_SHA256: &str = "5e2a612eba2ed9273361770b5e24d5ade3f9fdd433bb09e423a16ac6cb944aa3";
 
 /// The cause class, the semantic axis of the registry.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -233,6 +233,8 @@ pub const AGENT_HOOK_ERROR: u8 = 126;
 pub const AGENT_CHANGE_ASKED: u8 = 127;
 /// `agent:control-write`
 pub const AGENT_CONTROL_WRITE: u8 = 128;
+/// `agent:sandbox-unavailable`
+pub const AGENT_SANDBOX_UNAVAILABLE: u8 = 129;
 
 /// Every registered cause, in registry order.
 pub const REGISTRY: &[Cause] = &[
@@ -330,6 +332,7 @@ pub const REGISTRY: &[Cause] = &[
     Cause { code: 126, name: "agent:hook-error", class: CauseClass::Routing, description: "the governed agent hook could not decide a tool call (input that does not read, a missing or broken key, a recorded policy that does not verify, or an error of its own); refused and not run, never allowed" },
     Cause { code: 127, name: "agent:change-asked", class: CauseClass::Routing, description: "an agent call that would change files or local git state inside the workspace, with none of the earlier refusals holding, under the review policy that asks the person about every change; escalated and not run" },
     Cause { code: 128, name: "agent:control-write", class: CauseClass::Routing, description: "an agent call that would change one of the governed agent's own control files inside the workspace (its settings, its hook scripts, its MCP configuration, or the program its installed hook runs), by a path that resolves onto it; refused and not run, under every starter policy" },
+    Cause { code: 129, name: "agent:sandbox-unavailable", class: CauseClass::Routing, description: "an allowed agent shell command that could not be run inside the sandbox compiled from the signed policy (the profile did not compile, or the sandbox program is missing); refused and not run, never run without the sandbox" },
 ];
 
 /// The engine's stop vocabulary mapped onto the registry; `terminal` and `waiting` are clean and have no cause.
