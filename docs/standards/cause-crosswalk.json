@@ -1930,6 +1930,30 @@
     ],
     "rationale": "Nearest entry: a change made without the person's authorization; the cause asks for that authorization, it does not check it."
    }
+  },
+  "128": {
+   "name": "agent:control-write",
+   "class": "routing",
+   "kind": "security-control",
+   "owasp_asi": {
+    "ids": [
+     "ASI03",
+     "ASI10"
+    ],
+    "rationale": "The agent cannot rewrite the hook, settings or MCP configuration that govern it, so it cannot widen its own permissions or leave its governor."
+   },
+   "mitre_atlas": {
+    "ids": [
+     "AML.T0081"
+    ],
+    "rationale": "A change to an AI agent's configuration is the technique this cause refuses."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-732"
+    ],
+    "rationale": "Nearest entry: a critical resource, the agent's own controls, kept from the principal they govern; the cause refuses the write, it does not set permissions."
+   }
   }
  }
 }

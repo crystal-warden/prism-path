@@ -1,6 +1,7 @@
 -- SPDX-License-Identifier: Apache-2.0
 -- Copyright 2026 Crystal Warden Supply Chain Labs LLC
 import Classifier.Scan
+import Classifier.Control
 import Classifier.Shape
 /-!
 # The classifier oracle
@@ -10,7 +11,7 @@ differential harness (formal/diff/classifier_diff.py), and prints one JSON line 
 
     {"id": ID, "kind": "call" | "hook" | "mcp", "nonscalar": BOOL, "input": CALL | HOOK_INPUT | PARAMS,
      "remotes": [NAME...], "project_dir": DIR | null, "proc_cwd": DIR, "server_cwd": DIR,
-     "disk": [[PATH, INSIDE, TOOLCHAIN, SYMLINK]...], "inside": [[PATH, ROOT, BOOL]...],
+     "disk": [[PATH, INSIDE, TOOLCHAIN, SYMLINK, CONTROL]...], "inside": [[PATH, ROOT, BOOL]...],
      "same": [[PATH, ROOT, BOOL]...], "exists": [[PATH, BOOL]...]}
 
 is answered with `{"id": ID, "call": CALL, "workspace": DIR, "reading": READING}` (`call` and `workspace` for
@@ -26,7 +27,9 @@ definitions are ones every reading fits (`fits`), which `Theorems.boundary_accep
 into: the system boundary of that policy accepts every reading the classifier makes, and whether no reading
 the hazard scan can give is allowed and every one but a push alone is refused (`scanSafe`, printed as
 `scan_refused`), which `ScanTheorems.hookReading_only_adds_refusals` turns into: under that policy the scan only
-ever adds refusals.
+ever adds refusals. It also prints whether every change that reads `path_control` is refused (`controlSafe`, printed
+as `control_refused`), which `Control.control_refused` and `Control.change_on_control_refused` turn into: under that
+policy a change that names a control file of the agent is refused.
 
 Only this file does input and output; everything it prints is computed by the model's functions.
 -/
@@ -68,7 +71,8 @@ def rows (ms : List (String × J)) (k : String) : List (List J) :=
 
 def diskTable (ms : List (String × J)) : List (Str × Disk) :=
   (rows ms "disk").filterMap (fun r => match r with
-    | [p, i, t, s] => do pure (← jStr p, { inside := ← jBool i, toolchain := ← jBool t, symlink := ← jBool s })
+    | [p, i, t, s, c] => do pure (← jStr p, { inside := ← jBool i, toolchain := ← jBool t, symlink := ← jBool s,
+                                                control := ← jBool c })
     | _ => none)
 
 def pairTable (ms : List (String × J)) (k : String) : List ((Str × Str) × Bool) :=
@@ -174,7 +178,8 @@ def main (args : List String) : IO UInt32 := do
     let img := if raw.size > 0 && raw.get! (raw.size - 1) == 10 then raw.extract 0 (raw.size - 1) else raw
     match Core.loadPolicy (Core.readCanonical img) with
     | .ok c => IO.println ("{\"policy\":\"accepted\",\"fits\":" ++ (if fitsAll c.defs then "true" else "false") ++
-        ",\"scan_refused\":" ++ (if scanSafe c then "true" else "false") ++ "}")
+        ",\"scan_refused\":" ++ (if scanSafe c then "true" else "false") ++
+        ",\"control_refused\":" ++ (if controlSafe c then "true" else "false") ++ "}")
     | .error _ => IO.println "{\"policy\":\"refused\"}"
     return 0
   | _ =>

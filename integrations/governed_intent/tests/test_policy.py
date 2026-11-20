@@ -35,7 +35,7 @@ def test_the_floor_is_copied_verbatim(images):
     floor = json.loads(harness_policy.SOURCE_PATH.read_text())
     rules = calls.doc["rules"]
     floor_rules = canon2.loads(canon2.canonicalize(json.dumps(floor).encode()))["rules"]
-    assert rules[:9] == floor_rules[:9] and rules[14:] == floor_rules[9:]
+    assert rules[:10] == floor_rules[:10] and rules[15:] == floor_rules[10:]
     assert all(calls.doc["fields"][name] == definition
                for name, definition in canon2.loads(canon2.canonicalize(json.dumps(floor).encode()))["fields"].items())
 
@@ -98,7 +98,7 @@ def test_a_disabled_or_foreign_reading_is_the_floor(images):
     calls, responses = images
     lock = policy.lock_id()
     reading = {"classifier_version": 1, "tool": "delete_path", "path_scope": "workspace", "path_in_toolchain": False,
-               "path_glob": False, "path_traversal": False, "path_symlink": False, "command_class": "none",
+               "path_control": False, "path_glob": False, "path_traversal": False, "path_symlink": False, "command_class": "none",
                "kill_by_pattern": False, "git_op": "none", "remote_class": "none", "intent_reader_version": ir.READER_VERSION,
                "semantic_status": ir.VERIFIED, "semantic_lock": lock, "harm_bp": 9000, "intent_class": "inspect",
                "intent_margin_bp": 9000, "probing_count": 0}
@@ -124,7 +124,7 @@ def test_a_disabled_or_foreign_reading_is_the_floor(images):
 def test_a_semantic_field_out_of_its_definition_is_refused(images, change, cause):
     calls, _responses = images
     reading = {"classifier_version": 1, "tool": "list_dir", "path_scope": "workspace", "path_in_toolchain": False,
-               "path_glob": False, "path_traversal": False, "path_symlink": False, "command_class": "none",
+               "path_control": False, "path_glob": False, "path_traversal": False, "path_symlink": False, "command_class": "none",
                "kill_by_pattern": False, "git_op": "none", "remote_class": "none", **ir.zero_fields(), **change}
     assert calls.decide(canon2.dumps(reading)).cause == cause
 
@@ -132,7 +132,7 @@ def test_a_semantic_field_out_of_its_definition_is_refused(images, change, cause
 def test_a_float_harm_value_is_unreadable(images):
     calls, _responses = images
     reading = {"classifier_version": 1, "tool": "list_dir", "path_scope": "workspace", "path_in_toolchain": False,
-               "path_glob": False, "path_traversal": False, "path_symlink": False, "command_class": "none",
+               "path_control": False, "path_glob": False, "path_traversal": False, "path_symlink": False, "command_class": "none",
                "kill_by_pattern": False, "git_op": "none", "remote_class": "none", **ir.zero_fields()}
     raw = canon2.dumps(reading).replace(b'"harm_bp":0', b'"harm_bp":0.5')
     assert calls.decide(raw).kind == "refuse"

@@ -6,6 +6,7 @@ field.classifier_version: int min=1 max=1
 field.command_class: category
 field.git_op: category
 field.kill_by_pattern: bool
+field.path_control: bool
 field.path_glob: bool
 field.path_in_toolchain: bool
 field.path_scope: category
@@ -23,8 +24,11 @@ A git operation or a path the classifier cannot read is refused before anything 
 -> refuse agent:unclassifiable: when git_op == "unknown" or path_scope == "unknown"
 
 Calls that are never allowed, whatever else holds.
+The agent's own controls (its settings, hook scripts and MCP configuration) are never changed by the agent. These refusals
+are observations a later policy proposal may read; they never change the policy on their own.
 -> refuse agent:kill-by-pattern: when kill_by_pattern
 -> refuse agent:network: when command_class == "network" or git_op == "network"
+-> refuse agent:control-write: when (tool in ["write_file", "delete_path"] or command_class == "mutating" or git_op in ["local_write", "mutating"]) and path_control
 -> refuse agent:toolchain-write: when (tool in ["write_file", "delete_path"] or command_class == "mutating") and path_in_toolchain
 -> refuse agent:glob-path: when (tool in ["write_file", "delete_path"] or command_class == "mutating") and path_glob
 -> refuse agent:path-traversal: when (tool in ["write_file", "delete_path"] or command_class == "mutating") and path_traversal

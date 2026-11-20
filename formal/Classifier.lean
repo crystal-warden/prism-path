@@ -8,3 +8,4 @@ import Classifier.Shape
 import Classifier.Theorems
 import Classifier.Axioms
 import Classifier.ScanTheorems
+import Classifier.Control
