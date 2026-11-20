@@ -3,15 +3,15 @@
 """The intent layer's two signed policies, generated from the harness's floor and the chosen thresholds.
 
 `policy/intent_calls.core.json` decides a proposed call. It is the governed harness's own image
-(`governed_harness/policy/agent_rules.src.json`) with its rules copied VERBATIM and in order, its eleven
+(`governed_harness/policy/agent_rules.src.json`) with its rules copied VERBATIM and in order, its twelve
 field definitions unchanged, seven semantic fields added, and five semantic rules inserted after the floor's
-last refusal (rule 9, `agent:shell-mutation`) and before its first allow. Every semantic rule is the
+last refusal (rule 10, `agent:shell-mutation`) and before its first allow. Every semantic rule is the
 conjunction of:
 
   V  the reading is verified under the lock this image was signed with
      (semantic_status == "verified" and semantic_lock == <sha256 of intent_lock.json>);
-  G  the floor would allow this reading: the disjunction of the floor's own allow conditions (rules 10,
-     12, 13 and 14, copied from the floor text), with the push escalation of rule 11 excluded. Rules 1 to 9
+  G  the floor would allow this reading: the disjunction of the floor's own allow conditions (rules 11,
+     13, 14 and 15, copied from the floor text), with the push escalation of rule 12 excluded. Rules 1 to 10
      have not fired when a semantic rule is reached, so G holds exactly where the floor's decision is allow;
   and its own semantic condition:
 
@@ -65,7 +65,7 @@ RESPONSES_SRC = HERE / "policy" / "intent_responses.src.json"
 RESPONSES_CORE = HERE / "policy" / "intent_responses.core.json"
 
 HARM, MISMATCH, PROBING = 114, 115, 116
-FLOOR_REFUSALS = 9            # rules 1 to 9 of the floor are its refusals; rule 10 is its first allow
+FLOOR_REFUSALS = 10           # rules 1 to 10 of the floor are its refusals; rule 11 is its first allow
 
 SEMANTIC_DEFS = {
     "intent_reader_version": f"int min={ir.READER_VERSION} max={ir.READER_VERSION}",
@@ -171,7 +171,7 @@ def load_responses() -> Policy:
     return Policy.load(RESPONSES_CORE)
 
 
-FLOOR_FIELDS = ("classifier_version", "tool", "path_scope", "path_in_toolchain", "path_glob", "path_traversal",
+FLOOR_FIELDS = ("classifier_version", "tool", "path_scope", "path_in_toolchain", "path_control", "path_glob", "path_traversal",
                 "path_symlink", "command_class", "kill_by_pattern", "git_op", "remote_class")
 
 
