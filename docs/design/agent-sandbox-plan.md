@@ -236,6 +236,12 @@ Each has a recommended answer. Each is safe and reversible, so the lead can take
 10. **First `max_processes` for the agent role?** Recommended: four times the peak the spike measures, not a guess, and the number goes into the results note. A limit that is too low looks like a hang, so WP10 includes a test that a fork refusal is reported with its cause.
 11. **Native install only in the first build?** Recommended: yes. An npm install adds a Node runtime and modules to expose. Add it after WP10 if anyone needs it.
 
+## 6a. Decisions taken, 2026-11-20
+
+The lead took the recommended answer to questions 2 to 11 under the owner's standing rule (take the safe, reversible choice and list it). The owner may overturn any of them.
+
+Question 1 waits for the owner. WP1 needs a real credential inside the sandbox, either a copy of the owner's OAuth login or an API key, and credentials stay with the owner. WP1 and the live parts of WP4 and WP10 wait for that answer. WP2, WP3 and WP6 need no credential and start now.
+
 ## 7. What this does not change
 
 - The hook still fails closed, and the old behaviour (hook only, no sandbox) stays available as `prismpath agent hook` alone for macOS and Windows, which are decided and not confined (`sandbox-tracer-results.md`).
