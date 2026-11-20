@@ -100,6 +100,14 @@ def _make_ca(directory: Path):
     return cert, key
 
 
+@pytest.fixture(autouse=True)
+def _no_real_config_dir(monkeypatch):
+    """The config directory comes from HOME only: GitHub's runners set XDG_CONFIG_HOME, which config_dir prefers, so
+    a copy of os.environ with HOME swapped would still find the runner's own (empty) config directory."""
+    for name in ("XDG_CONFIG_HOME", "APPDATA"):
+        monkeypatch.delenv(name, raising=False)
+
+
 @pytest.fixture
 def world():
     root = Path(tempfile.mkdtemp(dir="/var/tmp", prefix="pp-launch-"))

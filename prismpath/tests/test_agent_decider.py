@@ -36,6 +36,14 @@ HOOK_ERROR_CODE = causes.code("agent:hook-error")
 REPO = Path(__file__).resolve().parents[2]
 
 
+@pytest.fixture(autouse=True)
+def _no_real_config_dir(monkeypatch):
+    """The config directory comes from HOME only: GitHub's runners set XDG_CONFIG_HOME, which config_dir prefers, so
+    a copy of os.environ with HOME swapped would still find the runner's own (empty) config directory."""
+    for name in ("XDG_CONFIG_HOME", "APPDATA"):
+        monkeypatch.delenv(name, raising=False)
+
+
 @pytest.fixture()
 def world(tmp_path):
     root = Path(tempfile.mkdtemp(dir="/var/tmp", prefix="pp-decider-"))
