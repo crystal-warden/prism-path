@@ -34,6 +34,30 @@ from prismpath.tests.test_agent_launcher import needs_socat  # noqa: E402
 from prismpath.tests.test_sandbox_adversary import RUN_SCRIPT, _install  # noqa: E402
 from prismpath.tests.test_sandbox_exec import needs_bwrap  # noqa: E402
 
+
+def _nesting_works():
+    """Whether this host lets a bwrap sandbox start a second one inside it. Ubuntu 24.04's AppArmor setting (GitHub's
+    runners among them) forbids the nested user namespace, and there the launcher denies every shell command with
+    cause 129 by design; the tests that need a nested sandbox to run skip, and the deny is asserted instead."""
+    import subprocess
+    from prismpath.agent import sandbox_exec as _se
+    if not os.access(_se.BWRAP, os.X_OK):
+        return False
+    m = ["--ro-bind", "/usr", "/usr", "--symlink", "usr/bin", "/bin", "--symlink", "usr/lib", "/lib"]
+    if os.path.isdir("/usr/lib64"):
+        m += ["--symlink", "usr/lib64", "/lib64"]
+    m += ["--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp", "--unshare-all", "--die-with-parent"]
+    try:
+        return subprocess.run([_se.BWRAP, *m, "--", _se.BWRAP, *m, "--", "/usr/bin/true"],
+                              capture_output=True, timeout=20).returncode == 0
+    except Exception:  # noqa: BLE001
+        return False
+
+
+NESTING = _nesting_works()
+needs_nesting = pytest.mark.skipif(not NESTING, reason="this host forbids a sandbox inside a sandbox (nested user "
+                                                     "namespaces); the launcher denies shell commands there with cause 129")
+
 SANDBOX_CODE = causes.code("agent:sandbox-unavailable")
 CREDENTIAL_TEXT = "FAKE-CREDENTIAL-NOT-A-KEY"
 CREDENTIAL_IN = f"{launcher.CONFIG_IN}/{launcher.CREDENTIAL_NAME}"
@@ -146,6 +170,7 @@ def _file(arena, tool, path, session, **extra):
 # ------------------------------------------------------------------------- the nested per call sandbox
 @needs_bwrap
 @needs_socat
+@needs_nesting
 def test_a_rewritten_call_runs_nested_and_the_inner_layer_stops_and_records_what_the_outer_one_allows(arena):
     sess = "nest1"
     steps = _launch(arena, [
@@ -185,6 +210,7 @@ def test_a_rewritten_call_runs_nested_and_the_inner_layer_stops_and_records_what
 
 @needs_bwrap
 @needs_socat
+@needs_nesting
 def test_the_rewrite_cannot_be_walked_around_a_forged_observation_is_refused_and_a_clean_call_records_none(arena):
     sess = "nest2"
     steps = _launch(arena, [{"name": "ls", "input": _bash(arena, "ls src", sess)}], arena["credential"])
@@ -236,6 +262,7 @@ def test_where_nesting_is_unavailable_every_shell_command_is_denied_with_cause_1
 
 @needs_bwrap
 @needs_socat
+@needs_nesting
 def test_the_real_probe_finds_nesting_available_here_and_a_broken_runner_makes_it_unavailable(arena, monkeypatch):
     seen = {}
     real = launcher.probe_nested
