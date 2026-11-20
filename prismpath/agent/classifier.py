@@ -18,7 +18,7 @@ declares:
   tool                list_dir | read_file | write_file | delete_path | run_command | git | unknown
   path_scope          none | workspace | outside | unknown      (the worst path the call names)
   path_in_toolchain   a named path resolves into a toolchain directory
-  path_control        a named path is one of the agent's own controls (CONTROL_FILES, CONTROL_DIRS, the hook it runs)
+  path_control        a named path is one of the agent's own controls (CONTROL_TREES, CONTROL_FILES, CONTROL_NAMES, the hook it runs, the root and what holds one)
   path_glob           a named path is a pattern (* ? [ ] { } or a leading ~), not one exact path
   path_traversal      a named path has a .. component
   path_symlink        a named path passes through, or ends at, a symbolic link
@@ -52,12 +52,17 @@ CLASSIFIER_VERSION = 1
 MOUNT = "/workspace"          # where the sandbox mounts the workspace, and the path the model is told
 TOOLS = ("list_dir", "read_file", "write_file", "delete_path", "run_command", "git")
 GLOB_CHARS = set("*?[]{}")
-# The agent's management plane: the files inside the workspace that hold its own controls (the hook that governs it,
-# its settings, its MCP servers). A change to one of them, made by a path that resolves onto it, is refused under
-# every shipped policy (cause 128). `.claude` itself is named too, since removing or renaming it removes them all.
-CONTROL_FILES = (".claude/settings.json", ".claude/settings.local.json", ".mcp.json")
-CONTROL_DIRS = (".claude/hooks",)         # the directory and everything below it
-CONTROL_EXACT = (".claude",)              # the directory itself only
+# The agent's management plane: what it is governed by and what shapes how it behaves. A change to one of these,
+# made by a path that resolves onto it, is refused under every shipped policy (cause 128). Matching is case
+# insensitive on every platform (macOS and Windows name one file by several spellings, and folding is conservative
+# where the filesystem is case sensitive), compares the resolved and the normalized path, and also catches a hard
+# link to one of them (same device and inode) and a directory that holds one.
+CONTROL_TREES = (".claude", ".git/hooks")     # the directory and everything below it
+CONTROL_FILES = (".mcp.json", ".git/config")  # at the workspace root
+CONTROL_ANCESTORS = (".git",)                 # the directory itself only, since removing it removes the hooks and config
+CONTROL_NAMES = ("claude.md", "claude.local.md", "agents.md")   # at any depth, compared folded
+WALK_LIMIT = 20000                            # entries examined below a directory for a control file
+WALK_SKIP = frozenset({".git", "node_modules", "target", ".venv", "venv", "__pycache__"})
 MAX_PATH = 4096
 MAX_ARGV = 64
 
@@ -280,15 +285,91 @@ def hook_programs(config: Config) -> List[str]:
     return out
 
 
+def _fold(path: str) -> str:
+    import unicodedata
+    return unicodedata.normalize("NFC", path).casefold()
+
+
+def _walk_names(top: str) -> List[str]:
+    """Every file or directory below `top` whose name is one of CONTROL_NAMES, examining at most WALK_LIMIT
+    entries and not entering WALK_SKIP directories met on the way. Past the limit it stops."""
+    found: List[str] = []
+    seen = 0
+    try:
+        for here, dirs, files in os.walk(top):
+            dirs[:] = [d for d in dirs if d not in WALK_SKIP]
+            for name in dirs + files:
+                seen += 1
+                if _fold(name) in CONTROL_NAMES:
+                    found.append(os.path.join(here, name))
+            if seen > WALK_LIMIT:
+                break
+    except OSError:
+        pass
+    return found
+
+
+def _control_tests(workspace: Path, programs: List[str]):
+    """(pattern test on a folded path, folded hook programs): the path-name part of what is control."""
+    ws = _fold(str(workspace))
+    hooks = [_fold(os.path.normpath(p)) for p in programs]
+
+    def by_name(path: str) -> bool:
+        folded = _fold(path)
+        if folded == ws:
+            return True                                    # the workspace root holds every control path
+        if not folded.startswith(ws.rstrip("/") + "/"):
+            return folded in hooks or any(h.startswith(folded.rstrip("/") + "/") for h in hooks)
+        rel = folded[len(ws.rstrip("/")) + 1:]
+        parts = rel.split("/")
+        if parts[-1] in CONTROL_NAMES:
+            return True
+        for tree in CONTROL_TREES:
+            head = tree.split("/")
+            if parts[:len(head)] == head or (len(parts) < len(head) and parts == head[:len(parts)]):
+                return True
+        if rel in CONTROL_FILES or rel in CONTROL_ANCESTORS:
+            return True
+        return folded in hooks or any(h.startswith(folded + "/") for h in hooks)
+
+    return by_name
+
+
+def _control_inodes(config: Config, programs: List[str]) -> set:
+    """(device, inode) of every control file that exists: the fixed ones, what is below the control trees and the
+    CONTROL_NAMES files of the workspace."""
+    files: List[str] = [str(config.workspace / name) for name in CONTROL_FILES] + list(programs)
+    for tree in CONTROL_TREES:
+        for here, _dirs, names in os.walk(str(config.workspace / tree)):
+            files.extend(os.path.join(here, name) for name in names)
+    files.extend(_walk_names(str(config.workspace)))
+    out = set()
+    for name in files:
+        try:
+            st = os.stat(name)
+        except OSError:
+            continue
+        out.add((st.st_dev, st.st_ino))
+    return out
+
+
 def _is_control(resolved: str, normal: str, config: Config) -> bool:
-    """True when the resolved or the normalized path is a control file, is below a control directory, is `.claude`
-    itself, or is the program an installed PrismPath hook runs."""
-    workspace = config.workspace
-    files = [workspace / name for name in CONTROL_FILES + CONTROL_EXACT] + [Path(p) for p in hook_programs(config)]
-    dirs = [workspace / name for name in CONTROL_DIRS]
-    targets = {os.path.realpath(f) for f in files} | {os.path.normpath(f) for f in files}
-    roots = {os.path.realpath(d) for d in dirs} | {os.path.normpath(d) for d in dirs}
-    return any(path in targets or any(_under(path, Path(root)) for root in roots) for path in (resolved, normal))
+    """True when the resolved or the normalized path, compared case insensitively, is the workspace root, a control
+    file, a control directory or anything below one, a CLAUDE.md, CLAUDE.local.md or AGENTS.md at any depth, the
+    program an installed PrismPath hook runs or a directory that holds one of these, or when it is a hard link to
+    a control file. Reads the disk at the moment of the call."""
+    programs = hook_programs(config)
+    by_name = _control_tests(config.workspace, programs)
+    if by_name(resolved) or by_name(normal):
+        return True
+    try:
+        st = os.stat(resolved)
+    except OSError:
+        return False
+    import stat as _stat
+    if _stat.S_ISDIR(st.st_mode):
+        return _under(resolved, config.workspace) and bool(_walk_names(resolved))
+    return st.st_nlink > 1 and (st.st_dev, st.st_ino) in _control_inodes(config, programs)
 
 
 _SCOPE_RANK = {"none": 0, "workspace": 1, "outside": 2, "unknown": 3}
