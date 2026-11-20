@@ -63,7 +63,7 @@ def test_the_atoms_on_the_class_fields_are_only_the_thresholds(images):
 
 
 def _random_reading(rng, lock, thresholds):
-    floor = {"classifier_version": 1, **{name: rng.choice(values) for name, values in union_check.ENUMS.items()},
+    floor = {"classifier_version": 2, **{name: rng.choice(values) for name, values in union_check.ENUMS.items()},
              **{name: rng.random() < 0.5 for name in union_check.BOOLS}}
     harm = rng.choice([0, rng.randrange(0, 10001), thresholds["harm_bp"] - 1, thresholds["harm_bp"], 10000])
     margin = rng.choice([0, rng.randrange(0, 10001), thresholds["intent_margin_bp"] - 1,
@@ -97,9 +97,9 @@ def test_union_only_on_a_random_sample_of_the_field_space(images):
 def test_a_disabled_or_foreign_reading_is_the_floor(images):
     calls, responses = images
     lock = policy.lock_id()
-    reading = {"classifier_version": 1, "tool": "delete_path", "path_scope": "workspace", "path_in_toolchain": False,
+    reading = {"classifier_version": 2, "tool": "delete_path", "path_scope": "workspace", "path_in_toolchain": False,
                "path_control": False, "path_glob": False, "path_traversal": False, "path_symlink": False, "command_class": "none",
-               "kill_by_pattern": False, "git_op": "none", "remote_class": "none", "intent_reader_version": ir.READER_VERSION,
+               "kill_by_pattern": False, "git_op": "none", "remote_class": "none", "net_dest": "none", "proc_class": "none", "intent_reader_version": ir.READER_VERSION,
                "semantic_status": ir.VERIFIED, "semantic_lock": lock, "harm_bp": 9000, "intent_class": "inspect",
                "intent_margin_bp": 9000, "probing_count": 0}
     assert calls.decide(calls.reading_bytes(reading)).cause == "semantic:harm"
@@ -123,17 +123,17 @@ def test_a_disabled_or_foreign_reading_is_the_floor(images):
 ])
 def test_a_semantic_field_out_of_its_definition_is_refused(images, change, cause):
     calls, _responses = images
-    reading = {"classifier_version": 1, "tool": "list_dir", "path_scope": "workspace", "path_in_toolchain": False,
+    reading = {"classifier_version": 2, "tool": "list_dir", "path_scope": "workspace", "path_in_toolchain": False,
                "path_control": False, "path_glob": False, "path_traversal": False, "path_symlink": False, "command_class": "none",
-               "kill_by_pattern": False, "git_op": "none", "remote_class": "none", **ir.zero_fields(), **change}
+               "kill_by_pattern": False, "git_op": "none", "remote_class": "none", "net_dest": "none", "proc_class": "none", **ir.zero_fields(), **change}
     assert calls.decide(canon2.dumps(reading)).cause == cause
 
 
 def test_a_float_harm_value_is_unreadable(images):
     calls, _responses = images
-    reading = {"classifier_version": 1, "tool": "list_dir", "path_scope": "workspace", "path_in_toolchain": False,
+    reading = {"classifier_version": 2, "tool": "list_dir", "path_scope": "workspace", "path_in_toolchain": False,
                "path_control": False, "path_glob": False, "path_traversal": False, "path_symlink": False, "command_class": "none",
-               "kill_by_pattern": False, "git_op": "none", "remote_class": "none", **ir.zero_fields()}
+               "kill_by_pattern": False, "git_op": "none", "remote_class": "none", "net_dest": "none", "proc_class": "none", **ir.zero_fields()}
     raw = canon2.dumps(reading).replace(b'"harm_bp":0', b'"harm_bp":0.5')
     assert calls.decide(raw).kind == "refuse"
 

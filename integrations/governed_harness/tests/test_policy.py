@@ -14,18 +14,26 @@ import pytest
 from integrations.governed_harness import classifier, owner_rules, policy
 from prismpath.kernel import canon2, causes
 
-ENUMS = {"tool": ["list_dir", "read_file", "write_file", "delete_path", "run_command", "git", "unknown"],
+ENUMS = {"tool": ["list_dir", "read_file", "write_file", "delete_path", "run_command", "git", "connect", "unknown"],
          "path_scope": ["none", "workspace", "outside", "unknown"],
          "command_class": ["none", "read_only", "mutating", "network", "git", "unknown"],
          "git_op": ["none", "local_read", "local_write", "mutating", "push", "network", "unknown"],
-         "remote_class": ["none", "allowed", "other"]}
+         "remote_class": ["none", "allowed", "other"],
+         "net_dest": ["none", "model_api", "allowed_host", "other", "unknown"],
+         "proc_class": ["none", "single", "tree", "unknown"]}
 BOOLS = ["path_in_toolchain", "path_control", "path_glob", "path_traversal", "path_symlink", "kill_by_pattern"]
 
 
 def field_space():
+    """Every reading the classifier can give: a `net_dest` other than none only with a `connect`, a `proc_class` other
+    than none only with a `run_command` (a policy decides the others too, `test_the_other_readings_are_decided_as_well`)."""
     names = list(ENUMS) + BOOLS
     for values in itertools.product(*ENUMS.values(), *([[False, True]] * len(BOOLS))):
-        yield {"classifier_version": classifier.CLASSIFIER_VERSION, **dict(zip(names, values))}
+        reading = dict(zip(names, values))
+        if (reading["net_dest"] != "none" and reading["tool"] != "connect") or \
+                (reading["proc_class"] != "none" and reading["tool"] != "run_command"):
+            continue
+        yield {"classifier_version": classifier.CLASSIFIER_VERSION, **reading}
 
 
 @pytest.fixture(scope="module")
@@ -48,7 +56,7 @@ def test_the_lean_port_accepts_the_image_and_every_target_names_a_registered_cau
         if kind != "allow":
             assert causes.code(cause) == code and causes.cause_class(code) == "routing"
             seen.add(cause)
-    assert seen == {name for code, name, _k, _d in causes._REGISTRY if 104 <= code <= 113 or code == 128}
+    assert seen == {name for code, name, _k, _d in causes._REGISTRY if 104 <= code <= 113 or code in (128, 130)}
 
 
 def test_the_reading_fields_are_the_policy_fields(agent_policy):
@@ -68,15 +76,28 @@ def _want(reading):
 
 
 def test_every_reading_decides_as_the_owner_rules_say(agent_policy):
-    """The whole field space, 225,792 readings, through the reference: the image and the rules agree."""
+    """The whole field space the classifier gives, 483,840 readings, through the reference: the image and the rules agree."""
     disagree, count = [], 0
     for reading in field_space():
         count += 1
         decision = agent_policy.decide(agent_policy.reading_bytes(reading))
         if (decision.kind, decision.cause) != _want(reading):
             disagree.append((reading, decision))
-    assert count == 7 * 4 * 6 * 7 * 3 * 2 ** 6
+    assert count == (6 + 4 + 5) * 4 * 6 * 7 * 3 * 2 ** 6
     assert disagree == []
+
+
+def test_the_other_readings_are_decided_as_well(agent_policy):
+    """The readings the classifier never gives (a destination without a connect, a process class without a command),
+    a seeded sample of the whole product: the image and the rules agree on them too."""
+    import random
+    rng = random.Random(20261120)
+    for _ in range(6000):
+        reading = {"classifier_version": classifier.CLASSIFIER_VERSION,
+                   **{name: rng.choice(values) for name, values in ENUMS.items()},
+                   **{name: rng.random() < 0.5 for name in BOOLS}}
+        decision = agent_policy.decide(agent_policy.reading_bytes(reading))
+        assert (decision.kind, decision.cause) == _want(reading), reading
 
 
 def _oracle():

@@ -19,12 +19,16 @@ pytest.importorskip("cryptography")
 pytest.importorskip("fcntl")
 
 from prismpath.agent import commands, doctor  # noqa: E402
-from prismpath.agent.policy import (OLDER_STARTERS, STARTERS, Policy, control_check, control_gap, older_starter_of,  # noqa: E402
+from prismpath.agent.policy import (OLDER_STARTERS, STARTERS, Policy, control_check, control_gap, older_date, older_starter_of,  # noqa: E402
                                     starter_of, starter_path)
 from prismpath.kernel import canon2  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[2]
 OLD = sorted((Path(__file__).parent / "fixtures" / "agent_old_starters").glob("*.core.json"))
+# the three recorded between the control-file rule and the connect rule (commit ccf2f60): they have path_control and
+# refuse its changes, and bound classifier_version to 1
+OLD_NET = [p for p in OLD if "ccf2f60" in p.name]
+OLD_CONTROL = [p for p in OLD if "ccf2f60" not in p.name]
 
 
 def _image(path: Path) -> bytes:
@@ -39,15 +43,15 @@ def _with_extra_rule(image: bytes) -> bytes:
     return canon2.dumps(doc)
 
 
-def test_the_fixtures_are_the_four_known_older_starters():
-    assert len(OLD) == 4
+def test_the_fixtures_are_the_seven_known_older_starters():
+    assert len(OLD) == 7 and len(OLD_NET) == 3
     found = {hashlib.sha256(_image(p)).hexdigest()[:16]: p.name.split("-")[0] for p in OLD}
     assert found == {key: value[0] for key, value in OLDER_STARTERS.items()}
     for path in OLD:
         assert starter_of(_image(path)) is None and older_starter_of(_image(path)) is not None
 
 
-@pytest.mark.parametrize("path", OLD, ids=lambda p: p.name)
+@pytest.mark.parametrize("path", OLD_CONTROL, ids=lambda p: p.name)
 def test_an_older_starter_fails_the_check_and_is_named(path):
     image = _image(path)
     assert "no path_control field" in control_gap(Policy(image))      # evaluated, not only looked up by hash
@@ -57,6 +61,15 @@ def test_an_older_starter_fails_the_check_and_is_named(path):
     assert result["policy"] == f"the {name} starter from before 2026-11-19"
     assert result["fix"] == f"prismpath agent init --policy {name}"
     assert "rewrite .claude/settings.json" in result["message"] and result["fix"] in result["message"]
+
+
+@pytest.mark.parametrize("path", OLD_NET, ids=lambda p: p.name)
+def test_a_starter_from_before_the_connect_rule_still_refuses_control_changes_and_is_named(path):
+    image = _image(path)
+    assert control_check(image) == {"refuses_control_changes": True}      # evaluated over every reading, not looked up
+    name, what = older_starter_of(image)
+    assert name == path.name.split("-")[0] and "before the connect rule (cause 130" in what
+    assert older_date(image) == "2026-11-20"
 
 
 @pytest.mark.parametrize("name", sorted(STARTERS))
@@ -72,7 +85,7 @@ def test_a_custom_image_that_refuses_control_changes_gives_no_warning():
 
 
 def test_a_custom_image_without_path_control_fails_outright():
-    image = _with_extra_rule(_image(OLD[0]))
+    image = _with_extra_rule(_image(OLD_CONTROL[0]))
     result = control_check(image)
     assert result["refuses_control_changes"] is False and result["policy"] == "a custom policy"
     assert "no path_control field" in result["reason"] and "replaces its rules" in result["message"]
@@ -129,6 +142,16 @@ def test_a_fresh_init_has_no_warning_in_status_or_doctor(setup):
     assert rows["policy-control"]["status"] == "ok" and rows["policy-control"]["refuses_control_changes"] is True
 
 
+def test_a_starter_from_before_the_connect_rule_is_named_by_status_and_doctor(setup):
+    _record(setup, _image(OLD_NET[0]))
+    report, text = _status(setup)
+    assert report["policy"]["name"] == "default (before 2026-11-20)" and report["policy"]["attested"] is True
+    assert report["policy"]["control"] == {"refuses_control_changes": True}
+    row = {r["check"]: r for r in doctor.diagnose(setup["project"], 10_000)["checks"]}["policy"]
+    assert row["status"] == "warn" and "before the connect rule (cause 130" in row["detail"]
+    assert row["fix"] == "prismpath agent init --policy default" and row["starter"] == "default"
+
+
 def test_an_old_starter_warns_in_status_and_doctor_and_the_json_carries_it(setup):
     _record(setup, _image(next(p for p in OLD if p.name.startswith("default-d9dbfea"))))
     report, text = _status(setup)
@@ -147,13 +170,19 @@ def test_an_old_starter_warns_in_status_and_doctor_and_the_json_carries_it(setup
     assert printed["policy-control"]["status"] == "warn" and printed["policy-control"]["refuses_control_changes"] is False
 
 
-def test_the_hook_still_decides_by_the_recorded_image(setup):
-    """No change to what the hook allows: under the old image a write to the settings file is still allowed."""
-    _record(setup, _image(next(p for p in OLD if p.name.startswith("default-d9dbfea"))))
-    hook = {"session_id": "s", "hook_event_name": "PreToolUse", "tool_name": "Write",
-            "tool_input": {"file_path": str(setup["project"] / ".claude" / "settings.json")}, "cwd": str(setup["project"])}
-    answer = commands.hook(json.dumps(hook).encode(), {"HOME": str(setup["home"]), "CLAUDE_PROJECT_DIR": str(setup["project"])})
-    assert answer["hookSpecificOutput"]["permissionDecision"] in ("allow", "ask")
+def test_the_hook_denies_every_call_under_an_image_from_before_classifier_version_2(setup):
+    """The hook decides by the recorded image, and an older starter bounds `classifier_version` to 1, so the core
+    refuses every reading of the current classifier at its boundary: nothing runs until `agent init` records a current
+    starter. It fails closed, it never allows."""
+    for path in (next(p for p in OLD if p.name.startswith("default-d9dbfea")), OLD_NET[0]):
+        _record(setup, _image(path))
+        for tool, tool_input in (("Write", {"file_path": str(setup["project"] / ".claude" / "settings.json")}),
+                                 ("Read", {"file_path": str(setup["project"] / "a.txt")})):
+            hook = {"session_id": "s", "hook_event_name": "PreToolUse", "tool_name": tool, "tool_input": tool_input,
+                    "cwd": str(setup["project"])}
+            answer = commands.hook(json.dumps(hook).encode(),
+                                   {"HOME": str(setup["home"]), "CLAUDE_PROJECT_DIR": str(setup["project"])})
+            assert answer["hookSpecificOutput"]["permissionDecision"] == "deny"
 
 
 def test_re_recording_keeps_the_old_runs_verifying_and_the_open_session_on_its_old_image(setup):
@@ -169,9 +198,9 @@ def test_re_recording_keeps_the_old_runs_verifying_and_the_open_session_on_its_o
         return commands.hook(json.dumps(hook).encode(), env)
     os.environ["HOME"] = str(setup["home"])
     (setup["project"] / "a.txt").write_text("x\n")
-    assert call("sealed")["hookSpecificOutput"]["permissionDecision"] == "allow"
+    assert call("sealed")["hookSpecificOutput"]["permissionDecision"] == "deny"       # the old image refuses version 2
     call("sealed", "SessionEnd")
-    assert call("open")["hookSpecificOutput"]["permissionDecision"] == "allow"
+    assert call("open")["hookSpecificOutput"]["permissionDecision"] == "deny"
     done = _cli(setup["home"], "agent", "init", "--policy", "default", "--project", str(setup["project"]), "--yes")
     assert done.returncode == 0, done.stderr
     assert call("open")["hookSpecificOutput"]["permissionDecision"] == "deny"

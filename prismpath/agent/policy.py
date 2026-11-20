@@ -81,8 +81,19 @@ OLDER_STARTERS = {
     "bd856d4dc167d5f4": ("default", "the agent_default from before the control-file rule (cause 128)"),
     "c827acc6c86c47b1": ("strict", "the agent_rules from before the control-file rule (cause 128)"),
     "f3eb1c190c0588ec": ("review", "the agent_review from before the control-file rule (cause 128)"),
+    # The three that followed it, recorded by `init` from 2026-11-19 until the connect rule shipped. They have the
+    # path_control field and refuse its changes, but they bound `classifier_version` to 1, so every reading from the
+    # current classifier (version 2) is refused at their boundary until they are recorded again.
+    "e184122df6538d99": ("default", "the agent_default from before the connect rule (cause 130, classifier version 2), "
+                                    "which refuses every reading of the current classifier"),
+    "6e6f4f8604997b41": ("review", "the agent_review from before the connect rule (cause 130, classifier version 2), "
+                                   "which refuses every reading of the current classifier"),
+    "9d50ffe71afff5ef": ("strict", "the agent_rules from before the connect rule (cause 130, classifier version 2), "
+                                   "which refuses every reading of the current classifier"),
 }
-RULE_DATE = "2026-11-19"          # the day the control-file rule shipped: the older images are "from before" it
+RULE_DATE = "2026-11-19"          # the day the control-file rule shipped: the first four older images are "from before" it
+NET_RULE_DATE = "2026-11-20"      # the day the connect rule and classifier version 2 shipped: the next three are "from before" it
+_NET_OLDER = ("e184122df6538d99", "6e6f4f8604997b41", "9d50ffe71afff5ef")
 
 
 def older_starter_of(image: bytes) -> Optional[Tuple[str, str]]:
@@ -90,9 +101,19 @@ def older_starter_of(image: bytes) -> Optional[Tuple[str, str]]:
     return OLDER_STARTERS.get(hashlib.sha256(image).hexdigest()[:16])
 
 
+def older_date(image: bytes) -> Optional[str]:
+    """The day the shipped rule an older starter image lacks was added (`RULE_DATE` or `NET_RULE_DATE`), or None."""
+    key = hashlib.sha256(image).hexdigest()[:16]
+    if key not in OLDER_STARTERS:
+        return None
+    return NET_RULE_DATE if key in _NET_OLDER else RULE_DATE
+
+
 # The values each category of a reading takes, as the Lean model of the classifier lists them
-# (formal/Classifier/Control.lean: allTools, allScopes, allCmds, allGitOps, allRemotes).
-_TOOLS = ("list_dir", "read_file", "write_file", "delete_path", "run_command", "git", "unknown")
+# (formal/Classifier/Control.lean: allTools, allScopes, allCmds, allGitOps, allRemotes, allNetDests, allProcClasses).
+_TOOLS = ("list_dir", "read_file", "write_file", "delete_path", "run_command", "git", "connect", "unknown")
+_NET_DESTS = ("none", "model_api", "allowed_host", "other", "unknown")
+_PROC_CLASSES = ("none", "single", "tree", "unknown")
 _SCOPES = ("none", "workspace", "outside", "unknown")
 _COMMANDS = ("none", "read_only", "mutating", "network", "git", "unknown")
 _GIT_OPS = ("none", "local_read", "local_write", "mutating", "push", "network", "unknown")
@@ -114,20 +135,93 @@ def control_gap(policy: "Policy") -> Optional[str]:
     defines no `path_control` field fails outright, since its rules cannot see a control path at all. It stops at the
     first reading that is not refused, which it names."""
     from prismpath.kernel import core_reference
-    if "path_control" not in policy.doc["fields"]:
+    fields = policy.doc["fields"]
+    if "path_control" not in fields:
         return "it has no path_control field, so its rules cannot see a control file"
+    base = _base_reading(policy)
+    # The classifier gives a proc_class other than none only to a run_command and a net_dest other than none only to a
+    # connect, which is not a change; the Lean model holds the whole product, here the readings it can make.
     for tool, scope, command, git_op, remote in itertools.product(_TOOLS, _SCOPES, _COMMANDS, _GIT_OPS, _REMOTES):
         if not _is_change(tool, command, git_op):
             continue
-        for flags in itertools.product((False, True), repeat=len(_FLAGS)):
-            reading = {"classifier_version": 1, "tool": tool, "path_scope": scope, "command_class": command,
-                       "git_op": git_op, "remote_class": remote, "path_control": True, **dict(zip(_FLAGS, flags))}
-            verdict, _ = core_reference.python_decision(policy.graph, policy.reading_bytes(reading))
-            refused = verdict["verdict"] == "refuse" or (verdict["verdict"] == "route"
-                                                         and verdict["target"].startswith("refuse_"))
-            if not refused:
-                return (f"it does not refuse a change to a control file (tool {tool}, path_scope {scope}, "
-                        f"command_class {command}, git_op {git_op})")
+        for proc in (_PROC_CLASSES if tool == "run_command" and "proc_class" in fields else ("none",)):
+            for flags in itertools.product((False, True), repeat=len(_FLAGS)):
+                reading = {**base, "tool": tool, "path_scope": scope, "command_class": command, "git_op": git_op,
+                           "remote_class": remote, "path_control": True, **dict(zip(_FLAGS, flags))}
+                if "proc_class" in fields:
+                    reading["proc_class"] = proc
+                if _not_refused(policy, reading):
+                    return (f"it does not refuse a change to a control file (tool {tool}, path_scope {scope}, "
+                            f"command_class {command}, git_op {git_op})")
+    return None
+
+
+def _base_reading(policy: "Policy") -> Dict[str, Any]:
+    """The fields of a reading the policy defines, at their values for a call that reads nothing: the classifier
+    version at the top of the policy's own bound (so an older image is asked about the readings it was made for)."""
+    from prismpath.agent import classifier
+    fields = policy.doc["fields"]
+    version = classifier.CLASSIFIER_VERSION
+    match = re.search(r"max=(-?\d+)", fields.get("classifier_version", ""))
+    if match:
+        version = int(match.group(1))
+    base: Dict[str, Any] = {"classifier_version": version}
+    if "net_dest" in fields:
+        base["net_dest"] = "none"
+    if "proc_class" in fields:
+        base["proc_class"] = "none"
+    return base
+
+
+def _not_refused(policy: "Policy", reading: Dict[str, Any]) -> bool:
+    """True when the reference does not refuse the reading (it allows or escalates it). A quick screen reads the first
+    rule that holds as the reference does (`profile._holds`): a boundary refusal, a rule whose target refuses and a
+    reading no rule holds for are refusals, and everything else is decided by the reference's own decision path before
+    it is called not refused."""
+    from prismpath.agent import profile
+    from prismpath.kernel import core_reference, field_definitions, predicates
+    try:
+        if field_definitions.system_boundary(policy.graph, reading) is not None:
+            return False
+        for target, condition in policy.graph.nodes[policy.graph.start].edges:
+            if not predicates.is_deterministic(condition):
+                continue
+            try:
+                if profile._holds(condition, reading):
+                    if target.startswith("refuse_"):
+                        return False
+                    break
+            except predicates.PredicateError:
+                continue
+        else:
+            return False
+    except Exception:  # noqa: BLE001 - decided by the full path
+        pass
+    verdict, _ = core_reference.python_decision(policy.graph, policy.reading_bytes(reading))
+    return not (verdict["verdict"] == "refuse" or (verdict["verdict"] == "route"
+                                                   and verdict["target"].startswith("refuse_")))
+
+
+def net_gap(policy: "Policy") -> Optional[str]:
+    """None when the policy refuses every connection that is not the model's API, otherwise why not.
+
+    This is the oracle's `net_refused` property (`netSafe` in formal/Classifier/Net.lean) over the readings the
+    classifier can make: a `connect` whose `net_dest` is none, allowed_host, other or unknown, and any other tool
+    whose `net_dest` is other or unknown, decided by the reference decision path, must be a refusal. A policy that
+    defines no `net_dest` field fails outright. A reading holding `model_api` is not asked about: whether it runs is
+    the owner's rule."""
+    fields = policy.doc["fields"]
+    if "net_dest" not in fields:
+        return "it has no net_dest field, so its rules cannot see where a connection goes"
+    base = {**_base_reading(policy), "tool": "connect"}
+    for tool, dest in itertools.product(_TOOLS, _NET_DESTS):
+        if dest == "model_api" or (dest in ("none", "allowed_host") and tool != "connect"):
+            continue
+        reading = {**base, "tool": tool, "net_dest": dest, "path_scope": "none", "command_class": "none",
+                   "git_op": "none", "remote_class": "none", "path_control": False,
+                   **{flag: False for flag in _FLAGS}}
+        if _not_refused(policy, reading):
+            return f"it does not refuse a connection (tool {tool}, net_dest {dest})"
     return None
 
 
@@ -138,14 +232,14 @@ def control_check(image: bytes) -> Dict[str, Any]:
     older = older_starter_of(image)
     if starter_of(image) is not None:
         gap = None
-    elif older is not None:
+    elif older is not None and older_date(image) == RULE_DATE:
         gap = "it has no path_control field, so its rules cannot see a control file"
     else:
         gap = control_gap(Policy(image))
     fix_name = older[0] if older else (starter_of(image) or DEFAULT_STARTER)
     result: Dict[str, Any] = {"refuses_control_changes": gap is None}
     if gap is not None:
-        name = (f"the {older[0]} starter from before {RULE_DATE}" if older else "a custom policy")
+        name = (f"the {older[0]} starter from before {older_date(image)}" if older else "a custom policy")
         replaces = "" if older else ", which replaces its rules"
         result.update(
             reason=gap, policy=name, fix=f"prismpath agent init --policy {fix_name}",
