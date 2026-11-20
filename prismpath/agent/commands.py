@@ -236,11 +236,12 @@ def init(project: Path, yes: bool, as_json: bool, confirm=None, out=None, policy
             os.replace(tmp, home / name)
     load_checked(home)
     from prismpath.agent import sandbox_hook
+    sandbox_problem = None
     if sandbox_hook.supported():
         try:
             sandbox_hook.profile_for(home, image)      # compile once now, so the first Bash call does not
-        except sandbox_hook.SandboxRefused:
-            pass                                        # the hook denies Bash with cause 129 until this is fixed
+        except sandbox_hook.SandboxRefused as exc:      # the hook denies Bash with cause 129 until this is fixed
+            sandbox_problem = str(exc) or type(exc).__name__
 
     path = Path(project) / ".claude" / "settings.json"
     before_text = path.read_text(encoding="utf-8") if path.exists() else ""
@@ -280,7 +281,8 @@ def init(project: Path, yes: bool, as_json: bool, confirm=None, out=None, policy
               "keys": {role: {"id": _key_id(home, role), "state": keys[role]} for role in KEY_ROLES},
               "policy": {"name": starter, "image": STARTERS[starter], "sha256": _sha256_hex(image),
                          "state": policy_state},
-              "settings": {"path": str(path), "state": settings_state, "diff": diff, "command": hook_command()}}
+              "settings": {"path": str(path), "state": settings_state, "diff": diff, "command": hook_command()},
+              "sandbox": {"problem": sandbox_problem}}
     if as_json:
         print(json.dumps(report, indent=2), file=out)
     else:
@@ -292,6 +294,10 @@ def init(project: Path, yes: bool, as_json: bool, confirm=None, out=None, policy
             print(f"{path} was not changed; run again with --yes to write the hook entries", file=out)
         else:
             print(f"{path}: {settings_state}", file=out)
+        if sandbox_problem:
+            print(f"warning: the sandbox profile could not be prepared ({sandbox_problem}), so every allowed shell "
+                  f"command will be refused with cause 129 until it is fixed; `prismpath agent doctor` says more",
+                  file=out)
     return 0 if settings_state != "not written" else 1
 
 

@@ -267,3 +267,22 @@ def test_init_compiles_the_profile_cache_so_the_first_bash_call_does_not(world):
     _init(world)
     image = (_agent_dir(world["home"]) / "policy.core.json").read_bytes()
     assert (_agent_dir(world["home"]) / "profiles" / (sandbox_hook._sha256_hex(image) + ".json")).is_file()
+
+
+def test_init_says_when_the_sandbox_profile_cannot_be_prepared(world, monkeypatch):
+    """A compile that fails at init is not silent: init warns that every allowed shell command will be refused."""
+    import io
+    monkeypatch.setenv("HOME", str(world["home"]))
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    monkeypatch.setattr(sandbox_hook, "supported", lambda: True)
+
+    def broken(home, image):
+        raise sandbox_hook.SandboxRefused("bwrap is not executable")
+    monkeypatch.setattr(sandbox_hook, "profile_for", broken)
+    out = io.StringIO()
+    commands.init(Path(world["ws"]), True, False, out=out)
+    assert "could not be prepared (bwrap is not executable)" in out.getvalue()
+    assert "cause 129" in out.getvalue()
+    out = io.StringIO()
+    commands.init(Path(world["ws"]), True, True, out=out)
+    assert json.loads(out.getvalue())["sandbox"]["problem"] == "bwrap is not executable"
