@@ -1595,5 +1595,174 @@
    "answer": "deny",
    "cause_code": 105
   }
+ },
+ {
+  "id": "control-write-settings",
+  "cwd": "@WS@",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+   "file_path": "@WS@/.claude/settings.json",
+   "content": "{}"
+  },
+  "expect": {
+   "answer": "deny",
+   "cause_code": 128
+  }
+ },
+ {
+  "id": "control-edit-settings-relative",
+  "cwd": "@WS@",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+   "file_path": ".claude/settings.json",
+   "old_string": "a",
+   "new_string": "b"
+  },
+  "expect": {
+   "answer": "deny",
+   "cause_code": 128
+  }
+ },
+ {
+  "id": "control-multiedit-local",
+  "cwd": "@WS@",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "MultiEdit",
+  "tool_input": {
+   "file_path": "@WS@/.claude/settings.local.json",
+   "edits": [
+    {
+     "old_string": "a",
+     "new_string": "b"
+    }
+   ]
+  },
+  "expect": {
+   "answer": "deny",
+   "cause_code": 128
+  }
+ },
+ {
+  "id": "control-write-hook-script",
+  "cwd": "@WS@",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+   "file_path": "@WS@/.claude/hooks/guard.sh",
+   "content": "#!/bin/sh"
+  },
+  "expect": {
+   "answer": "deny",
+   "cause_code": 128
+  }
+ },
+ {
+  "id": "control-write-mcp-json",
+  "cwd": "@WS@",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+   "file_path": "@WS@/.mcp.json",
+   "content": "{}"
+  },
+  "expect": {
+   "answer": "deny",
+   "cause_code": 128
+  }
+ },
+ {
+  "id": "control-write-by-dotdot",
+  "cwd": "@WS@",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+   "file_path": "@WS@/src/../.claude/settings.json",
+   "content": "{}"
+  },
+  "expect": {
+   "answer": "deny",
+   "cause_code": 128
+  }
+ },
+ {
+  "id": "control-rm-settings",
+  "cwd": "@WS@",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+   "command": "rm .claude/settings.json"
+  },
+  "expect": {
+   "answer": "deny",
+   "cause_code": 128
+  }
+ },
+ {
+  "id": "control-mv-onto-mcp",
+  "cwd": "@WS@",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+   "command": "mv notes.txt .mcp.json"
+  },
+  "expect": {
+   "answer": "deny",
+   "cause_code": 128
+  }
+ },
+ {
+  "id": "control-sed-i-hook",
+  "cwd": "@WS@",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+   "command": "sed -i s/a/b/ .claude/hooks/guard.sh"
+  },
+  "expect": {
+   "answer": "deny",
+   "cause_code": 128
+  }
+ },
+ {
+  "id": "control-read-settings",
+  "cwd": "@WS@",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+   "file_path": "@WS@/.claude/settings.json"
+  },
+  "expect": {
+   "answer": "allow",
+   "cause_code": null
+  }
+ },
+ {
+  "id": "control-cat-mcp-json",
+  "cwd": "@WS@",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+   "command": "cat .mcp.json"
+  },
+  "expect": {
+   "answer": "allow",
+   "cause_code": null
+  }
+ },
+ {
+  "id": "control-write-claude-commands",
+  "cwd": "@WS@",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+   "file_path": "@WS@/.claude/commands/x.md",
+   "content": "x"
+  },
+  "expect": {
+   "answer": "allow",
+   "cause_code": null
+  }
  }
 ]

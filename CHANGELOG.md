@@ -8,6 +8,33 @@ spec stable.
 
 ## [Unreleased]
 
+### Added: the governed agent no longer changes its own controls (2026-11-19)
+
+- **A change to the agent's own control files is refused under every starter** (`strict`, `default`, `review`), with
+  the new cause 128 `agent:control-write` (appended, routing). Before this, a Write or Edit of
+  `<project>/.claude/settings.json` was allowed under `default` because it is inside the workspace, which let the
+  agent remove the PrismPath hook. The control files are `.claude/settings.json`, `.claude/settings.local.json`,
+  anything under `.claude/hooks/`, `.mcp.json`, `.claude` itself, and the program the installed hook runs when it is
+  inside the workspace. A path is matched after it resolves, so `..` and a symbolic link do not hide it. It covers
+  Write, Edit, MultiEdit, NotebookEdit, the MCP file tools and the Bash commands the plain word grammar reads
+  (`rm`, `mv`, `cp`, `mkdir`, `sed -i` and the rest), source or destination. Reads are decided as before; paths
+  outside the workspace (`~/.claude`, `~/.prismpath`) were and stay refused as outside it.
+- The classifier gains a twelfth reading field, `path_control`, a disk fact like `path_in_toolchain`, and each
+  starter's rules gain one rule and the field definition; the three images are recompiled. **A policy attested by an earlier release ignores the new field, so it keeps allowing these writes (and `status` names it `custom`) until `prismpath agent init` records a starter that has the rule.**
+- The Lean model of the classifier carries the field and proves the rule (`formal/Classifier/Control.lean`): a control
+  path reads control, and under every `controlSafe` policy, which the oracle checks on each shipped image, a change
+  that names one is refused (`control_refused` in the oracle's `--policy` output). The differential harness and the
+  recorded hook inputs (now 132) cover it, and the refusals are receipted like any other, so they are observations a
+  later policy proposal may read; they never change the policy on their own.
+
+### Added: a rule table for the installed policy (2026-11-19)
+
+- **`prismpath agent rules` shows each rule of the installed policy with its hits.** Like `iptables -L -v`, it lists
+  the rules in order with their readable conditions, targets, hit counts and last hit time counted from the
+  receipts that verify, the core's own refusals as rows of their own, the rules never matched, and the rules no
+  reading can reach (decided from the policy alone over every combination of field values). It takes `--json` and
+  `--since`, and writes nothing.
+
 ## [0.2.0] (2026-11-17)
 
 The first release since 0.1.0, and the first through Trusted Publishing. 0.1.1, 0.1.2 and 0.1.3 were tagged or

@@ -6,7 +6,7 @@ THE CLAIM. For every reading r of the call image's field space, let floor(r) be 
 with its semantic fields zeroed (status disabled, lock "none", harm 0, class unknown, margin 0). Then
 
   1. floor(r) is the governed harness's own decision: the harness image (agent_rules.core.json) on r's
-     eleven floor fields, and `governed_harness.owner_rules.expected`;
+     twelve floor fields, and `governed_harness.owner_rules.expected`;
   2. if floor(r) is not allow, decide(r) == floor(r), kind and cause: no weakening, no re-attribution;
   3. if floor(r) is allow, decide(r) is allow, refuse semantic:harm or escalate semantic:intent-mismatch;
   4. if r's status is disabled or its lock is not the signed one, decide(r) == floor(r);
@@ -14,8 +14,8 @@ with its semantic fields zeroed (status disabled, lock "none", harm 0, class unk
      second time);
   6. the Lean oracle (`core-oracle --batch`) gives the reference's verdict on every r and every zeroed r.
 
-THE FIELD SPACE. The floor's eleven fields are enumerated in full, as the harness's own exhaustive check
-does (7 x 4 x 6 x 7 x 3 x 2^5 = 112,896). Of the semantic fields, `intent_class` is enumerated in full
+THE FIELD SPACE. The floor's twelve fields are enumerated in full, as the harness's own exhaustive check
+does (7 x 4 x 6 x 7 x 3 x 2^6 = 225,792). Of the semantic fields, `intent_class` is enumerated in full
 (7 values) and `semantic_status` too (2). `harm_bp` (0..10000), `intent_margin_bp` (0..10000) and
 `semantic_lock` (any string) and `probing_count` (0..1000) are enumerated by their classes, and that is exhaustive, not a sample,
 because the check first AUDITS the image: it walks every condition of every rule and requires that the
@@ -24,7 +24,7 @@ only atoms on those fields are `harm_bp >= T_h`, `intent_margin_bp >= T_m`, `sem
 decision is a function of the truth values of its atoms taken in rule order, so two readings that agree on
 every other field and on which side of each of those three atoms they fall are decided identically. The
 classes are represented by the values on each side of the boundary (T_h - 1 and T_h, T_m - 1 and T_m, L
-and "other", N - 1 and N), so 112,896 x 7 x 2 x 2 x 2 x 2 x 2 = 25,288,704 readings cover the whole space. A boundary sweep
+and "other", N - 1 and N), so 225,792 x 7 x 2 x 2 x 2 x 2 x 2 = 50,577,408 readings cover the whole space. A boundary sweep
 then decides every value 0..10000 of harm_bp and of intent_margin_bp, and 0..1000 of probing_count, at each of
 the floor's allow rules,
 and the response image is enumerated in full (every harm_bp value, both statuses, two locks).
@@ -57,7 +57,7 @@ ENUMS = {"tool": ["list_dir", "read_file", "write_file", "delete_path", "run_com
          "command_class": ["none", "read_only", "mutating", "network", "git", "unknown"],
          "git_op": ["none", "local_read", "local_write", "mutating", "push", "network", "unknown"],
          "remote_class": ["none", "allowed", "other"]}
-BOOLS = ["path_in_toolchain", "path_glob", "path_traversal", "path_symlink", "kill_by_pattern"]
+BOOLS = ["path_in_toolchain", "path_control", "path_glob", "path_traversal", "path_symlink", "kill_by_pattern"]
 INTENTS = ["inspect", "modify-workspace", "cleanup", "vcs-publish", "toolchain-change", "network", "unknown"]
 
 
@@ -122,7 +122,7 @@ def _init():
     _STATE["lock"] = intent_policy.lock_id()
 
 
-ORACLE_BATCH = 16384       # readings per oracle process: one process on all 112,896 holds gigabytes
+ORACLE_BATCH = 16384       # readings per oracle process: one process on all 225,792 holds gigabytes
 
 
 def _oracle_verdicts(image: bytes, readings: List[bytes]) -> List[Dict[str, Any]]:
@@ -145,7 +145,7 @@ def _same(lean, mine) -> bool:
 
 
 def check_floor() -> Dict[str, Any]:
-    """Claim 1 and the Lean oracle on every zeroed reading (the floor, 112,896 readings)."""
+    """Claim 1 and the Lean oracle on every zeroed reading (the floor, 225,792 readings)."""
     calls, harness, = _STATE["calls"], _STATE["harness"]
     readings, raws, problems = [], [], []
     for floor in floor_space():
@@ -290,7 +290,7 @@ def run(out: Path, workers: int) -> Dict[str, Any]:
                         and report["responses"]["problems"] == 0 and report["responses"]["lean_disagreements"] == 0
                         and report["boundary_sweep"]["problems"] == 0
                         and report["boundary_sweep"]["lean_disagreements"] == 0
-                        and totals["readings"] == 112896 * len(combos) == totals["lean_decided"]
+                        and totals["readings"] == 225792 * len(combos) == totals["lean_decided"]
                         and all(totals[key] == 0 for key in ("union_violations", "inactive_changed",
                                                               "wrong_vs_second_reading", "lean_disagreements")))
     out.mkdir(parents=True, exist_ok=True)

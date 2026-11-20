@@ -24,7 +24,8 @@ The generated calls (`--cases`, seeded) are direct classifier calls, Claude Code
 `tools/call` params, biased toward the boundaries of the reading: every program set, every git subcommand and
 listing flag, every kill form, URLs, `..`, globs, `/workspace`, quoting of every kind, shell operators, tilde
 and brace words, non ASCII and control characters, lone surrogates, wrong types and extra keys, long paths and
-long argvs. A string with a lone surrogate is outside the model's domain (Lean strings hold Unicode scalar values);
+long argvs. The control files of the agent are named by path in the PATHS and ordinary words, so a change that names one
+meets every text. A string with a lone surrogate is outside the model's domain (Lean strings hold Unicode scalar values);
 the transport says so (`nonscalar`) and both sides must read the call unknown. Numbers reach the oracle as 0,
 since no part of the reading reads a number's value.
 
@@ -93,7 +94,8 @@ class SyntheticDisk:
 
     def disk(self, raw: str, config: classifier.Config) -> classifier.DiskFacts:
         b = self._bits("disk", raw)
-        return classifier.DiskFacts(inside=b % 10 < 6, toolchain=(b >> 4) % 7 == 0, symlink=(b >> 8) % 7 == 0)
+        return classifier.DiskFacts(inside=b % 10 < 6, toolchain=(b >> 4) % 7 == 0, symlink=(b >> 8) % 7 == 0,
+                                    control=(b >> 12) % 5 == 0)
 
     def inside(self, path: str, root: str) -> bool:
         return self._bits("inside", path, root) % 8 != 0
@@ -136,7 +138,7 @@ class Recorder:
         return self.exists[path]
 
     def tables(self) -> Dict[str, Any]:
-        return {"disk": [[k, v.inside, v.toolchain, v.symlink] for k, v in self.disk.items()],
+        return {"disk": [[k, v.inside, v.toolchain, v.symlink, v.control] for k, v in self.disk.items()],
                 "inside": [[a, b, v] for (a, b), v in self.inside.items()],
                 "same": [[a, b, v] for (a, b), v in self.same.items()],
                 "exists": [[k, v] for k, v in self.exists.items()]}
@@ -256,11 +258,13 @@ def run_oracle(cases: List[Case]) -> Dict[str, Dict[str, Any]]:
 
 
 def check_policies() -> List[str]:
-    """Every shipped agent policy's field definitions fit every reading (Theorems.boundary_accepts_every_reading)."""
+    """Every shipped agent policy's field definitions fit every reading (Theorems.boundary_accepts_every_reading), no
+    reading the hazard scan gives is allowed (ScanTheorems.scan_safe_reading) and every change that names a control
+    file of the agent is refused (Control.control_refused)."""
     bad = []
     for image in POLICIES:
         out = subprocess.run([str(ORACLE), "--policy", str(image)], capture_output=True, check=True, text=True)
-        if json.loads(out.stdout) != {"policy": "accepted", "fits": True, "scan_refused": True}:
+        if json.loads(out.stdout) != {"policy": "accepted", "fits": True, "scan_refused": True, "control_refused": True}:
             bad.append(f"{image.name}: {out.stdout.strip()}")
     return bad
 
@@ -348,7 +352,8 @@ SIGNALS = ["-9", "-KILL", "-SIGKILL", "-s", "TERM", "-sKILL", "-15", "-K1", "-k"
            "-\u0130", "-K\u0669"]
 PATHS = [".", "..", "./a", "a/../b", "../decoy/x", "src/app.py", "notes.txt", "/etc/passwd", "/etc", "/", "//",
          "/workspace", "/workspace/a", "/workspace/../x", "/./workspace/a", "/workspacex", "~", "~/x", "~root", "a~",
-         "*.txt", "a?b", "[ab]", "{a,b}", "x}", "a/**/b", "a\x00b", "a" * 4097, "a" * 4096, "x//y", "a/", "a/.",
+         "*.txt", "a?b", "[ab]", "{a,b}", "x}", "a/**/b", "a\x00b", "a" * 4097, "a" * 4096, ".claude/settings.json", ".claude/settings.local.json", ".claude/hooks/pre.sh", ".mcp.json", ".claude",
+         "src/../.claude/settings.json", ".claude/commands/x.md", "x//y", "a/", "a/.",
          "..a", "a..", "...", "a/..", "../", "/usr/bin/x", "/usr/local/bin/h", ".toolchain/bin/py", "a=b/c",
          "link_out/x", "cfg", "-", "--", "https://example.invalid/x", "git@host:x.git", "ftp://a", "a1+.-://b",
          "1://x", "\xe9://x", "x://", "://x", "S3://b", "a b", "\t", "\u200b", "\u202e", "\xe9", "e\u0301",
@@ -365,7 +370,7 @@ ODD = ["", " ", "\t", "\n", "\r", "\x00", "\x0b", "\x0c", "\x1b", "\x7f", "\x85"
 
 
 CLEAN_PATHS = ["notes.txt", "src/app.py", "src", ".", "build/out.o", "logs/a.log", "README.md", "/etc/hosts",
-               "../x", "a/../b", "*.txt", "logs/[ab].log", "/workspace/notes.txt", ".toolchain/VERSION", "cfg", "link_out/x"]
+               "../x", "a/../b", ".claude/settings.json", ".mcp.json", ".claude/hooks/a.sh", "*.txt", "logs/[ab].log", "/workspace/notes.txt", ".toolchain/VERSION", "cfg", "link_out/x"]
 SEP_AROUND = ["", "", "", "\xe9", "_", "1", " ", ";", "-", "x", "|", "\n", "(", "/", "\xa0", "\x1c"]
 
 
@@ -562,7 +567,7 @@ def gen_hook(rng: random.Random, ws: str) -> Tuple[Dict[str, Any], Optional[str]
     name = rng.choice(["Bash"] * 30 + ["Read"] * 6 + ["Write"] * 4 + ["Edit", "Edit", "MultiEdit", "MultiEdit", "NotebookEdit",
                        "NotebookEdit"] + ["Glob"] * 4 + ["Grep", "Grep", "LS", "LS", "WebFetch", "Task", "mcp__fs__read",
                        "bash", "", "Read "])
-    path = lambda: rng.choice(PATHS + [ws, ws + "/src/a.py", ws + "/../decoy/x", "/tmp/x", _word(rng)])  # noqa: E731
+    path = lambda: rng.choice(PATHS + [ws, ws + "/.claude/settings.json", ws + "/.mcp.json", ws + "/src/a.py", ws + "/../decoy/x", "/tmp/x", _word(rng)])  # noqa: E731
     if name == "Bash":
         ti: Any = {"command": gen_command(rng)}
         if rng.random() < 0.2:

@@ -28,6 +28,10 @@ def expected(r: Dict[str, Any]) -> Tuple[str, Optional[str]]:
     # no network commands
     if r["command_class"] == "network" or r["git_op"] == "network":
         return "refuse", "agent:network"
+    # a change to the agent's own controls (settings, hooks, MCP configuration): refused, never asked
+    if r["path_control"] and (r["tool"] in WRITES or r["command_class"] == "mutating"
+                              or r["git_op"] in ("local_write", "mutating")):
+        return "refuse", "agent:control-write"
     # writes and deletes: never into a toolchain, only by one exact path, never through .. or a link
     if r["tool"] in WRITES:
         if r["path_in_toolchain"]:

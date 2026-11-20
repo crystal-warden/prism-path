@@ -158,6 +158,9 @@ _REGISTRY: Tuple[Tuple[int, str, str, str], ...] = (
     # -- the review starter policy (prismpath/agent/policy/agent_review, `prismpath agent init --policy review`):
     # every call that would change something inside the project asks the person, after the refusals apply.
     (127, "agent:change-asked",          "routing",   "an agent call that would change files or local git state inside the workspace, with none of the earlier refusals holding, under the review policy that asks the person about every change; escalated and not run"),
+    # -- the agent's own controls (prismpath/agent/policy, every starter): a change to the files that hold the hook,
+    # the settings or the MCP servers of the governed agent is refused, so the agent cannot rewrite its own controls.
+    (128, "agent:control-write",         "routing",   "an agent call that would change one of the governed agent's own control files inside the workspace (its settings, its hook scripts, its MCP configuration, or the program its installed hook runs), by a path that resolves onto it; refused and not run, under every starter policy"),
 )
 
 CODES: Dict[int, Tuple[str, str, str]] = {cause_code: (canonical_name, class_name, description)

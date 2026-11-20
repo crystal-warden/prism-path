@@ -188,6 +188,7 @@ structure Reading where
   tool : Tool := .unknown
   pathScope : Scope := .none
   pathInToolchain : Bool := false
+  pathControl : Bool := false
   pathGlob : Bool := false
   pathTraversal : Bool := false
   pathSymlink : Bool := false
@@ -223,6 +224,7 @@ def Reading.members (r : Reading) : List (String × J) :=
    ("command_class", .str r.commandClass.name),
    ("git_op", .str r.gitOp.name),
    ("kill_by_pattern", .bool r.killByPattern),
+   ("path_control", .bool r.pathControl),
    ("path_glob", .bool r.pathGlob),
    ("path_in_toolchain", .bool r.pathInToolchain),
    ("path_scope", .str r.pathScope.name),

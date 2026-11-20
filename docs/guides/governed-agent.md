@@ -81,6 +81,28 @@ prismpath agent verify --tamper-demo
 
 The demo copies a session, flips one byte of its receipts, and verifies the copy. The copy is refused and then deleted. Your own session is not touched.
 
+## See which rules fire
+
+```sh
+prismpath agent rules
+```
+
+`rules` lists the recorded policy's rules in order, the way `iptables -L -v` lists a firewall. Each row has the rule's number, its hits, the time of its last hit, its target (`allow`, `refuse_<code>` or `escalate_<code>` with the cause name) and its condition as the rules file writes it. After the rules come two rows for the core's own refusals, `route:no-matching-edge` (no rule holds) and `route:contract-violation` (the reading broke the policy's field definitions), because there is no catch all rule. Two findings follow. **Never matched** lists the rules with no hit in the counted receipts. **Unreachable** lists a rule that no reading can ever reach because earlier rules cover every reading it matches. That second finding comes from the policy alone, by deciding every combination of field values through the reference kernel. A field without a finite set of values is not enumerated, and `rules` says which rules it did not check.
+
+Only receipts of runs that verify are counted, and the output says how many receipts did not verify (or were decided under another policy) and were skipped. A receipt has no time of its own, so the time of a hit is the time of its run: the signed time of a sealed run, else its last receipt. `--since 2026-11-01` counts only runs at or after that ISO 8601 time. The command reads your runs from scratch copies and never writes a receipt, a seal or a policy.
+
+`--json` prints one object:
+
+| key | holds |
+|---|---|
+| `config_dir`, `since` | the configuration directory and the `--since` time or null |
+| `policy` | `name`, `image` and `sha256` of the recorded policy |
+| `receipts` | `counted`, `not_verified`, `other_policy`, `runs_counted` and `skipped`, a list of `session`, `receipts` and `reason` |
+| `rules` | per rule: `rule`, `condition`, `target`, `decision`, `cause`, `code`, `hits`, `last_hit` |
+| `core_refusals` | per core refusal: `cause`, `code`, `hits`, `last_hit` |
+| `never_matched` | the numbers of the rules with no hit |
+| `unreachable` | `checked`, `readings`, `rules` (numbers) and `not_checked` (`rule` and the `fields` that have no finite set of values) |
+
 ## Pick a policy
 
 `init` records `default` unless you name another starter with `--policy`, as in `prismpath agent init --policy review`. Running `init` again without `--policy` keeps the one you picked. A session already running stays on the policy it began with, so start a new Claude Code session after you switch.
@@ -90,6 +112,8 @@ The demo copies a session, flips one byte of its receipts, and verifies the copy
 | `strict` | reads, listings and read only commands in the project, file writes in the project, local git | a push | a call it cannot read, a shell command that changes files, and the hazards |
 | `default` | the same as `strict` | a push, a call it cannot read (124), a shell command that changes files in the project (125) | a git operation or path it cannot read, a git change it cannot undo, and the hazards |
 | `review` | reads, listings and read only commands in the project, git reads | every change in the project (127), every push, a call it cannot read | the same as `default` |
+
+All three also refuse, with cause 128, every change to the agent's own controls: `.claude/settings.json`, `.claude/settings.local.json`, anything under `.claude/hooks/`, `.mcp.json`, and the program the installed hook runs when it is inside the project. The agent cannot take its own hook out. Reading these files still runs as before.
 
 The hazards are refused by all three. They are a path outside the project, a `..` in a path, a path through a symbolic link, a path that is a pattern, a write into a toolchain, a kill by name pattern and the network. `status` names the starter in use. To write your own rules instead, see [writing-agent-rules.md](writing-agent-rules.md).
 
