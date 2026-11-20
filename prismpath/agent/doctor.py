@@ -13,6 +13,8 @@ Checks, in the order they are reported:
   policy                    the recorded policy's attestation verifies under the authority key, and its
                             hash is one of the shipped starters, strict, default or review (an older
                             shipped image of one, or an attested custom image, is a warning)
+  policy-control            the recorded policy refuses every change to the agent's own control files (warn when
+                            it does not: an older starter, or a custom image without the rule)
   hook-PreToolUse, hook-SessionEnd   the project's .claude/settings.json has our entry, the command ends in
                             `|| exit 2`, and the interpreter it names exists and can `import prismpath`
   hook-dry-run              a recorded Read of a file in the project answers allow within the budget
@@ -33,17 +35,14 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from prismpath.agent import commands
+from prismpath.agent import policy as policy_mod
 from prismpath.agent.commands import (ATTESTATION_FILE, KEY_ROLES, POLICY_FILE, RUNS_DIR, _detail, _is_ours,
                                       _key_paths, _sha256_hex)
 
 BUDGET_MS = 150
 OPEN_RUN_DAYS = 1
 LOW_DISK_BYTES = 1 << 30
-# shipped starter images that are older than the current ones: sha256 prefix -> (its starter, what it was)
-OLDER_IMAGES = {
-    "ca48f48ddc5e5eb0": ("default", "the first agent_default (before cause 125, which asks about a file-changing "
-                                    "shell command inside the project)"),
-}
+OLDER_IMAGES = policy_mod.OLDER_STARTERS      # shipped starter images older than the current ones
 EVENTS = ("PreToolUse", "SessionEnd")
 
 _DRY_RUN = (
@@ -131,6 +130,20 @@ def _check_key_pair(home: Path, role: str) -> Dict[str, Any]:
 
 
 # ------------------------------------------------------------------------------------------ policy
+def _check_control(home: Path) -> Dict[str, Any]:
+    """Whether the recorded policy refuses every change to the agent's own control files (cause 128)."""
+    try:
+        result = policy_mod.control_check((home / POLICY_FILE).read_bytes())
+    except Exception as exc:  # noqa: BLE001
+        return _check("policy-control", "fail", f"the recorded policy could not be checked for control files: {_detail(exc)}",
+                      "prismpath agent init", refuses_control_changes=None)
+    if result["refuses_control_changes"]:
+        return _check("policy-control", "ok", "the recorded policy refuses every change to the agent's own control files",
+                      refuses_control_changes=True)
+    return _check("policy-control", "warn", result["message"], result["fix"], refuses_control_changes=False,
+                  reason=result["reason"])
+
+
 def _check_policy(home: Path) -> Dict[str, Any]:
     from prismpath.agent.policy import STARTERS, starter_of
     fix = "prismpath agent init"
@@ -310,12 +323,21 @@ def _check_disk(home: Path) -> Dict[str, Any]:
 
 
 # ----------------------------------------------------------------------------------------- report
+def _control_rows(home: Path) -> List[Dict[str, Any]]:
+    """The control-files row, only where a recorded policy is usable (the policy row already failed otherwise)."""
+    try:
+        commands.load_checked(home)
+    except Exception:  # noqa: BLE001
+        return []
+    return [_check_control(home)]
+
+
 def diagnose(project: Path, budget_ms: float = BUDGET_MS, now: Optional[float] = None) -> Dict[str, Any]:
     home = commands.config_dir()
     project = Path(project)
     checks = _check_permissions(home)
     if home.is_dir():
-        checks += [_check_key_pair(home, role) for role in KEY_ROLES] + [_check_policy(home)]
+        checks += [_check_key_pair(home, role) for role in KEY_ROLES] + [_check_policy(home)] + _control_rows(home)
     hook_rows, interpreter = _check_hooks(project)
     checks += hook_rows
     checks.append(_check_dry_run(home, project, interpreter, budget_ms) if home.is_dir() else

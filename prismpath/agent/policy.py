@@ -31,10 +31,12 @@ what no rule allows is refused by the core, so the policy fails closed by the co
 """
 from __future__ import annotations
 
+import hashlib
+import itertools
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 HERE = Path(__file__).resolve().parent
 
@@ -68,6 +70,91 @@ def starter_of(image: bytes) -> Optional[str]:
         if (shipped[:-1] if shipped.endswith(b"\n") else shipped) == image:
             return name
     return None
+
+# Shipped starter images that are older than the current ones, by the first 16 hex digits of the sha256 of the image
+# as `init` records it: hash -> (the starter it was, what it was). The first three ones were recorded by `init`
+# before 2026-11-19 and have no `path_control` field, so they allow a change to the agent's own control files. The
+# bytes of each are kept as test fixtures (tests/fixtures/agent_old_starters/).
+OLDER_STARTERS = {
+    "ca48f48ddc5e5eb0": ("default", "the first agent_default (before cause 125, which asks about a file-changing "
+                                    "shell command inside the project)"),
+    "bd856d4dc167d5f4": ("default", "the agent_default from before the control-file rule (cause 128)"),
+    "c827acc6c86c47b1": ("strict", "the agent_rules from before the control-file rule (cause 128)"),
+    "f3eb1c190c0588ec": ("review", "the agent_review from before the control-file rule (cause 128)"),
+}
+RULE_DATE = "2026-11-19"          # the day the control-file rule shipped: the older images are "from before" it
+
+
+def older_starter_of(image: bytes) -> Optional[Tuple[str, str]]:
+    """(starter, description) when `image` is exactly an older shipped image of one, or None."""
+    return OLDER_STARTERS.get(hashlib.sha256(image).hexdigest()[:16])
+
+
+# The values each category of a reading takes, as the Lean model of the classifier lists them
+# (formal/Classifier/Control.lean: allTools, allScopes, allCmds, allGitOps, allRemotes).
+_TOOLS = ("list_dir", "read_file", "write_file", "delete_path", "run_command", "git", "unknown")
+_SCOPES = ("none", "workspace", "outside", "unknown")
+_COMMANDS = ("none", "read_only", "mutating", "network", "git", "unknown")
+_GIT_OPS = ("none", "local_read", "local_write", "mutating", "push", "network", "unknown")
+_REMOTES = ("none", "allowed", "other")
+_FLAGS = ("kill_by_pattern", "path_in_toolchain", "path_glob", "path_traversal", "path_symlink")
+
+
+def _is_change(tool: str, command: str, git_op: str) -> bool:
+    """Lean `isChange`: a file written or deleted, a command that changes files, a local git write or mutation."""
+    return tool in ("write_file", "delete_path") or command == "mutating" or git_op in ("local_write", "mutating")
+
+
+def control_gap(policy: "Policy") -> Optional[str]:
+    """None when the policy refuses every change that reads `path_control`, otherwise why not.
+
+    This is the oracle's `control_refused` property (`controlSafe` in formal/Classifier/Control.lean): every reading
+    with `path_control` true that is a change, over every value of every other field, decided by the reference
+    decision path (`core_reference.python_decision`, the one `Policy.decide` uses), must be a refusal. A policy that
+    defines no `path_control` field fails outright, since its rules cannot see a control path at all. It stops at the
+    first reading that is not refused, which it names."""
+    from prismpath.kernel import core_reference
+    if "path_control" not in policy.doc["fields"]:
+        return "it has no path_control field, so its rules cannot see a control file"
+    for tool, scope, command, git_op, remote in itertools.product(_TOOLS, _SCOPES, _COMMANDS, _GIT_OPS, _REMOTES):
+        if not _is_change(tool, command, git_op):
+            continue
+        for flags in itertools.product((False, True), repeat=len(_FLAGS)):
+            reading = {"classifier_version": 1, "tool": tool, "path_scope": scope, "command_class": command,
+                       "git_op": git_op, "remote_class": remote, "path_control": True, **dict(zip(_FLAGS, flags))}
+            verdict, _ = core_reference.python_decision(policy.graph, policy.reading_bytes(reading))
+            refused = verdict["verdict"] == "refuse" or (verdict["verdict"] == "route"
+                                                         and verdict["target"].startswith("refuse_"))
+            if not refused:
+                return (f"it does not refuse a change to a control file (tool {tool}, path_scope {scope}, "
+                        f"command_class {command}, git_op {git_op})")
+    return None
+
+
+def control_check(image: bytes) -> Dict[str, Any]:
+    """What `status` and `doctor` report about a recorded image: whether it refuses every change to a control file,
+    decided by the image alone. A current starter's image is the one the tests hold to `control_gap`, and an older
+    shipped image has no `path_control` field; anything else is evaluated (a few seconds)."""
+    older = older_starter_of(image)
+    if starter_of(image) is not None:
+        gap = None
+    elif older is not None:
+        gap = "it has no path_control field, so its rules cannot see a control file"
+    else:
+        gap = control_gap(Policy(image))
+    fix_name = older[0] if older else (starter_of(image) or DEFAULT_STARTER)
+    result: Dict[str, Any] = {"refuses_control_changes": gap is None}
+    if gap is not None:
+        name = (f"the {older[0]} starter from before {RULE_DATE}" if older else "a custom policy")
+        replaces = "" if older else ", which replaces its rules"
+        result.update(
+            reason=gap, policy=name, fix=f"prismpath agent init --policy {fix_name}",
+            message=(f"This policy ({name}) does not refuse a change to the agent's own control files, so the agent "
+                     f"can still rewrite .claude/settings.json and remove its hook; run `prismpath agent init --policy "
+                     f"{fix_name}` to record a current starter{replaces} (runs already sealed keep verifying; a session still "
+                     f"open is denied its next call until it ends, and keeps the old policy in its own run)."))
+    return result
+
 _TARGET = re.compile(r"^(allow|refuse_(\d+)|escalate_(\d+))$")
 
 
