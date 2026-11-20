@@ -16,7 +16,8 @@ Linux only, non interactive. The launcher stays outside, trusted. It
      the workspace's control paths read only on top of the writable workspace: `.claude/`, `.mcp.json`,
      `.git/config`, `.git/hooks/` and every CLAUDE.md, CLAUDE.local.md and AGENTS.md. A control file that does
      not exist yet is created empty so that it can be bound, and removed again at exit if it is still empty;
-  5. starts the egress proxy (the interim allowlist unless the caller passes a decider) on the staged socket;
+  5. starts the decider (decider.py) on a second staged unix socket, bound in at /tmp/.pp-decider.sock, with the
+     thin hook client (hook_client.py) staged beside settings.json, and starts the egress proxy (the interim allowlist unless the caller passes a decider) on the staged socket;
   6. runs the program under bwrap in a process group of its own, exits with its status, and on the way out stops
      the proxy, kills what is left of the process group, removes the staged directory and the empty control
      files it made.
@@ -37,7 +38,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, List, Optional, Sequence, Tuple
 
-from prismpath.agent import classifier, commands, egress, sandbox_exec
+from prismpath.agent import classifier, commands, decider as decider_module, egress, hook_client, sandbox_exec
 from prismpath.agent.profile import Profile
 
 STAGE_BASE = "/var/tmp"
@@ -45,6 +46,9 @@ HOME_IN = "/home/agent"
 CONFIG_IN = HOME_IN + "/.claude"
 PROGRAM_DIR_IN = "/opt/agent"
 CREDENTIAL_NAME = ".credentials.json"
+HOOK_CLIENT_NAME = "pp-hook.py"
+DECIDER_SOCKET_IN = "/tmp/.pp-decider.sock"     # inside the sandbox; /tmp is a private tmpfs there
+HOOK_PYTHON = "/usr/bin/python3"                # must exist inside: the system prefix is bound read only
 MAX_PROCESSES = 512       # a placeholder until the spike measures the real peak (plan question 10)
 AGENT_ENV = (("DISABLE_AUTOUPDATER", "1"), ("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "1"),
              ("ENABLE_CLAUDEAI_MCP_SERVERS", "false"))
@@ -62,7 +66,9 @@ class Staged:
     settings: Path
     socket: Path
     log: Path
+    decider_socket: Path
     credential: Optional[Path] = None
+    hook_client: Optional[Path] = None
 
 
 @dataclass
@@ -119,6 +125,12 @@ def pin_program(real: str, ro_mounts: Sequence[str]) -> Tuple[str, List[Tuple[st
 
 
 # ----------------------------------------------------------------------------------------------- staging
+def client_hook_command() -> str:
+    """The hook command under the launcher: the standard library client, run by the interpreter inside the sandbox.
+    `|| exit 2` stays, so a client that cannot start is a block."""
+    return f"{HOOK_PYTHON} -I {CONFIG_IN}/{HOOK_CLIENT_NAME} {DECIDER_SOCKET_IN} || exit 2"
+
+
 def stage(settings: dict, credential: Optional[str], base: str = STAGE_BASE) -> Staged:
     """The per run directory. The caller removes it (`shutil.rmtree`) when done."""
     root = Path(tempfile.mkdtemp(dir=base, prefix="pp-agent-"))
@@ -129,7 +141,11 @@ def stage(settings: dict, credential: Optional[str], base: str = STAGE_BASE) -> 
         path = config / "settings.json"
         path.write_text(commands._settings_text(settings))
         os.chmod(path, 0o444)
-        staged = Staged(root, config, path, root / "egress.sock", root / "egress.log")
+        client = config / HOOK_CLIENT_NAME
+        shutil.copyfile(hook_client.__file__, client)
+        os.chmod(client, 0o444)
+        staged = Staged(root, config, path, root / "egress.sock", root / "egress.log", root / "decider.sock",
+                        hook_client=client)
         if credential is not None:
             source = Path(credential)
             if not source.is_file():
@@ -201,18 +217,24 @@ def launch(command: Sequence[str], workspace: str, credential: Optional[str] = N
     profile = Profile(net="proxy_model", max_processes=max_processes)
     real = resolve_program(command[0])
     inside, program_binds = pin_program(real, profile.ro_mounts)
-    settings = commands.merged_settings({}, hook if hook is not None else commands.hook_command())
+    settings = commands.merged_settings({}, hook if hook is not None else client_hook_command())
     staged = stage(settings, credential, stage_base)
     controls = Controls()
     proxy = None
     proc = None
+    hook_decider = None
     try:
         prepare_controls(root, controls)
+        if hook is None:    # the keys, the policy and the runs stay here; the sandbox only gets the socket
+            hook_decider = decider_module.Decider(staged.decider_socket, env={**os.environ, "CLAUDE_PROJECT_DIR": str(root)}).start()
         proxy = egress.EgressProxy(staged.socket, staged.log, decider=decider, resolver=resolver, connect=connect).start()
         extra_args = ["--tmpfs", HOME_IN, "--tmpfs", CONFIG_IN]
         binds = list(program_binds)
         binds += [(path, path) for path in controls.binds]
         binds.append((str(staged.settings), CONFIG_IN + "/settings.json"))
+        binds.append((str(staged.hook_client), f"{CONFIG_IN}/{HOOK_CLIENT_NAME}"))
+        if hook_decider is not None:
+            binds.append((str(staged.decider_socket), DECIDER_SOCKET_IN))
         if staged.credential is not None:
             binds.append((str(staged.credential), f"{CONFIG_IN}/{CREDENTIAL_NAME}"))
         environment = [("HOME", HOME_IN), ("CLAUDE_CONFIG_DIR", CONFIG_IN), *AGENT_ENV, *env]
@@ -243,7 +265,7 @@ def launch(command: Sequence[str], workspace: str, credential: Optional[str] = N
             raise LaunchError("bwrap did not start the sandbox, so the program was not run (see its message above)")
         return status
     finally:
-        _teardown(proc, proxy, staged, controls, egress_log)
+        _teardown(proc, proxy, hook_decider, staged, controls, egress_log)
 
 
 def _wait(proc: subprocess.Popen) -> int:
@@ -267,7 +289,7 @@ def _wait(proc: subprocess.Popen) -> int:
     return code if code >= 0 else 128 - code
 
 
-def _teardown(proc, proxy, staged: Staged, controls: Controls, egress_log: Optional[str]) -> None:
+def _teardown(proc, proxy, hook_decider, staged: Staged, controls: Controls, egress_log: Optional[str]) -> None:
     if proc is not None:
         try:
             os.killpg(proc.pid, signal.SIGKILL)     # whatever the program left running; the group is ours alone
@@ -277,6 +299,8 @@ def _teardown(proc, proxy, staged: Staged, controls: Controls, egress_log: Optio
             proc.wait(timeout=10)
         except Exception:   # noqa: BLE001
             pass
+    if hook_decider is not None:
+        hook_decider.close()
     if proxy is not None:
         proxy.close()
     if egress_log and staged.log.exists():

@@ -184,7 +184,7 @@ def test_the_stand_in_reaches_the_stub_through_the_proxy_and_is_confined(world, 
                           "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1", "ENABLE_CLAUDEAI_MCP_SERVERS": "false"}
     hooks = out["settings"]["hooks"]
     assert set(hooks) == {"PreToolUse", "SessionEnd"}
-    assert all(commands._is_ours(h["command"]) for event in hooks.values() for g in event for h in g["hooks"])
+    assert all(h["command"] == launcher.client_hook_command() for event in hooks.values() for g in event for h in g["hooks"])
     decisions = [(json.loads(line)["host"], json.loads(line)["decision"]) for line in log.read_text().splitlines()]
     assert ("api.anthropic.com", "allow") in decisions and ("evil.example", "refuse") in decisions
     # torn down: the staged directory (and with it the proxy socket) is gone, no child survives, no litter
