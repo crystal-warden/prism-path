@@ -30,8 +30,10 @@ def unreadable_policy(why):
     return {"policy": "refused", "cause": cause, "reason": rule, "code": causes.code(cause), "causes": [cause]}
 
 
-def python_reading(graph, raw):
-    from prismpath.kernel import canon2, causes, field_definitions
+def python_decision(graph, raw):
+    """The reference's decision on one reading's bytes alone: the strict reader, the system boundary and the first
+    deterministic rule, without the policy check beside them that `python_reading` adds."""
+    from prismpath.kernel import canon2, causes
 
     def refuse(cause, **detail):
         return {"verdict": "refuse", "cause": cause, "code": causes.code(cause), **detail}
@@ -39,12 +41,19 @@ def python_reading(graph, raw):
     try:
         doc = canon2.loads(raw)
     except canon2.Canon2Error as error:
-        return refuse(reading_cause(error.rule), reason=error.rule)
+        return refuse(reading_cause(error.rule), reason=error.rule), None
     except RecursionError:
-        return {"verdict": "refuse", "cause": "crash", "reason": "RecursionError in canon2.loads"}
+        return {"verdict": "refuse", "cause": "crash", "reason": "RecursionError in canon2.loads"}, None
     if not isinstance(doc, dict):
-        return refuse("reading:not-object")
-    verdict = _python_verdict(graph, doc, refuse)
+        return refuse("reading:not-object"), None
+    return _python_verdict(graph, doc, refuse), doc
+
+
+def python_reading(graph, raw):
+    from prismpath.kernel import field_definitions
+    verdict, doc = python_decision(graph, raw)
+    if doc is None:
+        return verdict
     try:
         check = field_definitions.policy_check(graph, doc)
     except Exception as error:   # noqa: BLE001
