@@ -1,0 +1,92 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
+"""What the sandbox's own run of an allowed shell command shows about what the command tried and could not do.
+
+An observation is evidence about the worker. It changes what the system knows and never what it is permitted
+to do: nothing in this file, or in the code that reads an observation, edits a policy, a profile, a rule or
+any decision, and `prismpath agent rules` does not count an observation as a rule hit. Only a signed policy
+widens or narrows what runs (docs/design/enforcement-points-plan.md section 3, NORTH-STAR.md).
+
+How it is observed, and what that can and cannot show. bubblewrap reports no denied open and no refused
+connect, and seccomp or Landlock audit needs privilege or a kernel facility this does not rely on. The runner
+(prismpath/agent/sandbox_exec.py) therefore reads the command's own result: its exit status, whether it hit the
+time limit, and the standard error it wrote, for the C library's error texts (`Permission denied`, `Network is
+unreachable`, ...). That is indicative and is labelled `method: "stderr-pattern"` in every entry. It misses a
+refusal the command swallowed or sent to `/dev/null`, and a `No such file or directory` is what the sandbox
+gives for a path it did not mount and also what a missing file gives, so it is recorded as `path-absent` and
+not as a refusal. The profile and the policy decide what is stopped. This file only notes what the command said.
+
+Where it is kept, and why not in the signed root. `core-receipt/1` and the root statement are the oracle's
+format and are not changed. Observations live in `observations.jsonl` beside the run's journal. Each line is one
+canon/2 object (`prismpath.observation/1`) with the index and SHA-256 of the receipt of the allowed call it is
+bound to, the image hash, the profile hash, a sequence number, the hash of the previous line and its own SHA-256
+over the other fields. `Run.verify_observations` checks every line: its own hash, the chain, that the receipt
+exists and hashes to the recorded value, and that the image and profile hashes are the receipt's and the
+journal line's. The file is not under the signed Merkle root, so a whole line removed from the end cannot be
+detected, and a rewritten file that is internally consistent cannot be told from the original except by the
+receipts it names. A later format may seal its head into the root statement.
+"""
+from __future__ import annotations
+
+import re
+from typing import Any, Dict, List, Optional, Sequence
+
+FORMAT = "prismpath.observation/1"
+FILE = "observations.jsonl"
+METHOD = "stderr-pattern"
+MAX_SIGNALS = 8
+MAX_TEXT = 200
+
+# (kind, pattern over one line of standard error). `path-absent` is deliberately not called a refusal.
+_PATTERNS = (
+    ("access-denied", re.compile(r"Permission denied|Operation not permitted")),
+    ("write-refused", re.compile(r"Read-only file system")),
+    ("path-absent", re.compile(r"No such file or directory")),
+    ("network-unreachable", re.compile(
+        r"Network is unreachable|Temporary failure in name resolution|Name or service not known|"
+        r"Could not resolve host|Cannot assign requested address")),
+    ("process-limit", re.compile(r"Cannot fork|fork: retry|Resource temporarily unavailable")),
+)
+
+
+def signals(stderr: bytes, timed_out: bool = False) -> List[Dict[str, str]]:
+    """The error texts in `stderr` that look like the sandbox stopping an access, one per line, at most
+    MAX_SIGNALS, each text cut to MAX_TEXT characters. A time-out is its own signal."""
+    found: List[Dict[str, str]] = []
+    for line in stderr.decode("utf-8", "replace").splitlines():
+        for kind, pattern in _PATTERNS:
+            if pattern.search(line):
+                found.append({"kind": kind, "text": " ".join(line.split())[:MAX_TEXT]})
+                break
+        if len(found) >= MAX_SIGNALS:
+            break
+    if timed_out:
+        found.append({"kind": "time-limit", "text": "stopped at the time limit"})
+    return found
+
+
+def observed(returncode: int, stderr: bytes, timed_out: bool = False) -> Optional[Dict[str, Any]]:
+    """The `observed` body for one finished sandboxed command, or None when its stderr shows nothing."""
+    found = signals(stderr, timed_out)
+    if not found:
+        return None
+    return {"method": METHOD, "exit_status": int(returncode), "timed_out": bool(timed_out), "signals": found}
+
+
+def record(run_dir: str, session: str, receipt: int, image_sha256: str, profile_sha256: str,
+           returncode: int, stderr: bytes, timed_out: bool = False) -> Optional[int]:
+    """Record the observation of one finished command on the run, bound to the receipt `receipt` of the allowed
+    call. Returns its sequence number, or None when there was nothing to record. Imported late so a command
+    that shows nothing does not pay for the run store."""
+    body = observed(returncode, stderr, timed_out)
+    if body is None:
+        return None
+    from pathlib import Path
+    from prismpath.agent.run import Run
+    return Run(Path(run_dir), session).observe(receipt, image_sha256, profile_sha256, body)
+
+
+def argv(run_dir: str, session: str, receipt: int, image_sha256: str, profile_sha256: str) -> Sequence[str]:
+    """The runner flags the hook adds so the runner can bind an observation to the receipt."""
+    return ["--observe-run", run_dir, "--observe-session", session, "--observe-receipt", str(receipt),
+            "--observe-image", image_sha256, "--observe-profile", profile_sha256]

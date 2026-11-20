@@ -37,6 +37,7 @@ ATTESTATION_FILE = "policy.attestation.json"
 RUNS_DIR = "runs"
 POLICY_CASE = "agent_default"
 HOOK_ERROR = "agent:hook-error"
+SANDBOX_ERROR = "agent:sandbox-unavailable"
 KEY_ROLES = ("authority", "instance")
 
 
@@ -234,6 +235,13 @@ def init(project: Path, yes: bool, as_json: bool, confirm=None, out=None, policy
                 handle.write(data)
             os.replace(tmp, home / name)
     load_checked(home)
+    from prismpath.agent import sandbox_hook
+    sandbox_problem = None
+    if sandbox_hook.supported():
+        try:
+            sandbox_hook.profile_for(home, image)      # compile once now, so the first Bash call does not
+        except sandbox_hook.SandboxRefused as exc:      # the hook denies Bash with cause 129 until this is fixed
+            sandbox_problem = str(exc) or type(exc).__name__
 
     path = Path(project) / ".claude" / "settings.json"
     before_text = path.read_text(encoding="utf-8") if path.exists() else ""
@@ -273,7 +281,8 @@ def init(project: Path, yes: bool, as_json: bool, confirm=None, out=None, policy
               "keys": {role: {"id": _key_id(home, role), "state": keys[role]} for role in KEY_ROLES},
               "policy": {"name": starter, "image": STARTERS[starter], "sha256": _sha256_hex(image),
                          "state": policy_state},
-              "settings": {"path": str(path), "state": settings_state, "diff": diff, "command": hook_command()}}
+              "settings": {"path": str(path), "state": settings_state, "diff": diff, "command": hook_command()},
+              "sandbox": {"problem": sandbox_problem}}
     if as_json:
         print(json.dumps(report, indent=2), file=out)
     else:
@@ -285,14 +294,18 @@ def init(project: Path, yes: bool, as_json: bool, confirm=None, out=None, policy
             print(f"{path} was not changed; run again with --yes to write the hook entries", file=out)
         else:
             print(f"{path}: {settings_state}", file=out)
+        if sandbox_problem:
+            print(f"warning: the sandbox profile could not be prepared ({sandbox_problem}), so every allowed shell "
+                  f"command will be refused with cause 129 until it is fixed; `prismpath agent doctor` says more",
+                  file=out)
     return 0 if settings_state != "not written" else 1
 
 
 # ------------------------------------------------------------------------------------------------- hook
-def _cause_code() -> Optional[int]:
+def _cause_code(name: str = HOOK_ERROR) -> Optional[int]:
     try:
         from prismpath.kernel import causes
-        return causes.code(HOOK_ERROR)
+        return causes.code(name)
     except Exception:  # noqa: BLE001
         return None
 
@@ -302,9 +315,9 @@ def _detail(exc: BaseException) -> str:
     return text if len(text) <= 240 else text[:237] + "..."
 
 
-def deny_answer(detail: str) -> Dict[str, Any]:
-    code = _cause_code()
-    cause = f"{code} {HOOK_ERROR}" if code is not None else HOOK_ERROR
+def deny_answer(detail: str, name: str = HOOK_ERROR) -> Dict[str, Any]:
+    code = _cause_code(name)
+    cause = f"{code} {name}" if code is not None else name
     return {"hookSpecificOutput": {
         "hookEventName": "PreToolUse", "permissionDecision": "deny",
         "permissionDecisionReason": f"PrismPath refused this call: cause {cause} ({detail}). It was not run. "
@@ -336,8 +349,28 @@ def hook(raw: bytes, env: Optional[Mapping[str, str]] = None) -> Dict[str, Any]:
             raise AgentError(f"the hook was called for {event!r}; it answers PreToolUse and SessionEnd")
         from prismpath.agent import claude_code
         result = claude_code.evaluate(data, env, policy)
-        index = store.open(session, policy.image).append(policy.reading_bytes(result.reading), result.decision.verdict)
-        return claude_code.fill_receipt(result.answer, receipt_id(session, index))
+        answer, profile = result.answer, None
+        from prismpath.agent import sandbox_hook
+        has_command = isinstance(data.get("tool_input"), dict) and isinstance(data["tool_input"].get("command"), str)
+        if (result.decision.kind == "allow" or (result.decision.kind == "escalate" and has_command)) \
+                and data.get("tool_name") == "Bash" and sandbox_hook.supported():
+            # an allowed shell call, or a question the person approves, runs only inside the sandbox the same policy compiles to (sandbox_hook.py);
+            # on a platform without the sandbox the call is decided and not confined, as before
+            try:
+                profile = sandbox_hook.sandbox_profile_for_call(data, home, policy.image)
+            except sandbox_hook.SandboxRefused as exc:
+                return deny_answer(_detail(exc), SANDBOX_ERROR)
+        run = store.open(session, policy.image)
+        index = run.append(policy.reading_bytes(result.reading), result.decision.verdict,
+                           sandbox_profile=profile.hash() if profile is not None else None)
+        if profile is not None:
+            # the receipt is written first so the runner can bind what the command shows to it (observe.py)
+            from prismpath.ledgers import core_evidence
+            observe = {"run_dir": str(run.dir), "session": session, "receipt": index, "profile_sha256": profile.hash(),
+                       "image_sha256": core_evidence.sha256_hex(policy.image)}
+            updated = sandbox_hook.sandbox_input(data, result.workspace, profile, observe=observe)
+            answer = claude_code.hook_answer(result.decision, updated)
+        return claude_code.fill_receipt(answer, receipt_id(session, index))
     except BaseException as exc:  # noqa: BLE001 - fail closed on everything, never allow
         if event == "SessionEnd":
             return {"systemMessage": f"PrismPath could not seal this session's run: cause {HOOK_ERROR} "
@@ -396,7 +429,7 @@ def verify(as_json: bool, tamper_demo: bool = False, out=None) -> int:
                     row["was"] = "sealed over other receipts than the journal's"
                 result = run.verify(home, seal=summary["seal"] != "diverged")
                 row.update(receipts=result["receipts"], replayed=result["replayed"], disagree=result["disagree"],
-                           root_statement=result["root_statement"],
+                           root_statement=result["root_statement"], observations=result.get("observations", 0),
                            verified=result["disagree"] == 0 and result["root_statement"] == "signed")
         except (RunError, Exception) as exc:  # noqa: BLE001 - one bad run does not stop the others
             row.update(verified=False, error=_detail(exc))
@@ -419,7 +452,9 @@ def verify(as_json: bool, tamper_demo: bool = False, out=None) -> int:
             else:
                 print(f"{row['session']}: {row['receipts']} receipts, {row['replayed']} replayed through the reference "
                       f"kernel, {row['disagree']} disagree, root statement {row['root_statement']} "
-                      f"(was {row['was']}){'' if row['verified'] else ' REFUSED'}", file=out)
+                      f"(was {row['was']}){'' if row['verified'] else ' REFUSED'}"
+                      + (f"; {row['observations']} sandbox observations bound to their receipts, none of them a decision"
+                         if row.get("observations") else ""), file=out)
         demo = report.get("tamper_demo")
         if demo is not None:
             if demo.get("refused") is True:
@@ -458,6 +493,18 @@ def _tamper_demo(home: Path, verified_rows) -> Dict[str, Any]:
         shutil.rmtree(scratch, ignore_errors=True)
 
 
+def confinement_state() -> Dict[str, Any]:
+    """Whether an allowed shell command is confined on this platform, and the sentence that says so."""
+    from prismpath.agent import sandbox_exec, sandbox_hook
+    if not sandbox_hook.supported():
+        return {"confined": False, "platform": sys.platform,
+                "detail": f"decided but not confined on this platform ({sys.platform}); the sandbox applies on Linux only"}
+    if not sandbox_exec.available():
+        return {"confined": False, "platform": sys.platform,
+                "detail": f"not confined, and every allowed shell command is refused (cause 129): {sandbox_exec.BWRAP} is missing"}
+    return {"confined": True, "platform": sys.platform, "detail": "decided and run inside the sandbox compiled from the policy"}
+
+
 def status(project: Path, as_json: bool, out=None) -> int:
     from prismpath.agent.policy import STARTERS, starter_of
     from prismpath.agent.run import RunStore
@@ -492,7 +539,8 @@ def status(project: Path, as_json: bool, out=None) -> int:
                      for event in ("PreToolUse", "SessionEnd")}
     except Exception:  # noqa: BLE001
         installed = {"PreToolUse": False, "SessionEnd": False}
-    report = {"config_dir": str(home), "keys": keys, "policy": policy, "runs": runs,
+    confinement = confinement_state()
+    report = {"config_dir": str(home), "keys": keys, "policy": policy, "runs": runs, "shell": confinement,
               "project": {"settings": str(settings_path), "hooks": installed}}
     ready = all(k["present"] for k in keys.values()) and policy["attested"]
     if as_json:
@@ -506,6 +554,7 @@ def status(project: Path, as_json: bool, out=None) -> int:
               file=out)
         print(f"hooks in {settings_path}: " + ", ".join(f"{e} {'yes' if v else 'no'}" for e, v in installed.items()),
               file=out)
+        print(f"shell commands: {confinement['detail']}", file=out)
         if not runs:
             print("runs: none", file=out)
         for r in runs:
