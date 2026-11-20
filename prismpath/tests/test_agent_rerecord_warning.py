@@ -163,7 +163,10 @@ def test_an_old_starter_warns_in_status_and_doctor_and_the_json_carries_it(setup
     report = doctor.diagnose(setup["project"], 10_000)
     row = {r["check"]: r for r in report["checks"]}["policy-control"]
     assert row["status"] == "warn" and row["refuses_control_changes"] is False
-    assert row["fix"] == "prismpath agent init --policy default" and report["ok"] is True      # a warning, not a fail
+    assert row["fix"] == "prismpath agent init --policy default"
+    # the older image also bounds classifier_version to 1, so the doctor's own Read is denied: a failure that names it
+    dry = {r["check"]: r for r in report["checks"]}["hook-dry-run"]
+    assert dry["status"] == "fail" and "did not answer allow (deny)" in dry["detail"] and report["ok"] is False
     out = io.StringIO()
     doctor.doctor(setup["project"], True, 10_000, out=out)
     printed = {r["check"]: r for r in json.loads(out.getvalue())["checks"]}
