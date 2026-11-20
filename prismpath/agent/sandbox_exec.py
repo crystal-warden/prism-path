@@ -61,8 +61,10 @@ def bwrap_argv(workspace: Path, profile: SandboxProfile, command: Sequence[str],
              "--setenv", "GIT_COMMITTER_NAME", "agent", "--setenv", "GIT_COMMITTER_EMAIL", "agent@workspace.invalid"]
     for path in profile.read_only:
         argv += ["--ro-bind", path, path]
-    argv += ["--symlink", "usr/bin", "/bin", "--symlink", "usr/lib", "/lib", "--symlink", "usr/sbin", "/sbin",
-             "--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp", "--bind", str(workspace), MOUNT]
+    argv += ["--symlink", "usr/bin", "/bin", "--symlink", "usr/lib", "/lib", "--symlink", "usr/sbin", "/sbin"]
+    if os.path.isdir("/usr/lib64"):     # x86_64 finds its dynamic loader at /lib64, so without it nothing starts
+        argv += ["--symlink", "usr/lib64", "/lib64"]
+    argv += ["--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp", "--bind", str(workspace), MOUNT]
     toolchain = workspace / ".toolchain"
     if toolchain.is_dir() and not toolchain.is_symlink():
         argv += ["--ro-bind", str(toolchain), MOUNT + "/.toolchain"]
