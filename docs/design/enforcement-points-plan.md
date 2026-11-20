@@ -106,3 +106,5 @@ Order: WP1, WP2, then WP3 and WP4 together, then WP5, WP6, WP7.
 4. A refused access in the sandbox stays a refusal and a receipt. It never prompts the person mid run. Refusals feed proposals under section 3.
 5. Writes to the agent's own control files are refused (cause 128, PR #60).
 6. The first device target is the cFS app on NOS3, with the software bus gap stated plainly. The ESP32 waits for the Linux tracer.
+
+The plan for decisions 1 to 4 is in `docs/design/agent-sandbox-plan.md`.
