@@ -11,7 +11,7 @@ differential harness (formal/diff/classifier_diff.py), and prints one JSON line 
 
     {"id": ID, "kind": "call" | "hook" | "mcp", "nonscalar": BOOL, "input": CALL | HOOK_INPUT | PARAMS,
      "remotes": [NAME...], "project_dir": DIR | null, "proc_cwd": DIR, "server_cwd": DIR,
-     "disk": [[PATH, INSIDE, TOOLCHAIN, SYMLINK, CONTROL]...], "inside": [[PATH, ROOT, BOOL]...],
+     "disk": [[PATH, INSIDE, TOOLCHAIN, SYMLINK, CONTROL, HOLDER]...], "inside": [[PATH, ROOT, BOOL]...],
      "same": [[PATH, ROOT, BOOL]...], "exists": [[PATH, BOOL]...]}
 
 is answered with `{"id": ID, "call": CALL, "workspace": DIR, "reading": READING}` (`call` and `workspace` for
@@ -71,8 +71,8 @@ def rows (ms : List (String × J)) (k : String) : List (List J) :=
 
 def diskTable (ms : List (String × J)) : List (Str × Disk) :=
   (rows ms "disk").filterMap (fun r => match r with
-    | [p, i, t, s, c] => do pure (← jStr p, { inside := ← jBool i, toolchain := ← jBool t, symlink := ← jBool s,
-                                                control := ← jBool c })
+    | [p, i, t, s, c, h] => do pure (← jStr p, { inside := ← jBool i, toolchain := ← jBool t, symlink := ← jBool s,
+                                                   control := ← jBool c, holder := ← jBool h })
     | _ => none)
 
 def pairTable (ms : List (String × J)) (k : String) : List ((Str × Str) × Bool) :=
@@ -116,17 +116,17 @@ def answer (line : String) : String :=
       | _ => []
     let dt := diskTable ms
     let disk := diskOf dt
-    let missingDisk (call : J) := (diskQueries remotes call).filter (fun p => (look dt p).isNone)
+    let missingDisk (call : J) := (diskQueriesD remotes call).filter (fun p => (look dt p).isNone)
     if kind == "call" then
       let call := if nonscalar then unknownCall else input
       match missingDisk call with
-      | [] => head ++ ",\"reading\":" ++ readingJson (classify disk remotes call) ++ "}"
+      | [] => head ++ ",\"reading\":" ++ readingJson (classifyD disk remotes call) ++ "}"
       | m => head ++ ",\"missing\":" ++ missingJson m [] [] [] ++ "}"
     else if kind == "mcp" then
       let cwd := match get? ms "server_cwd" with | some (.str s) => s.toList | _ => []
       let call := if nonscalar then unknownCall else mcpCall input cwd
       match missingDisk call with
-      | [] => head ++ ",\"call\":" ++ writeJ call ++ ",\"reading\":" ++ readingJson (classify disk remotes call) ++ "}"
+      | [] => head ++ ",\"call\":" ++ writeJ call ++ ",\"reading\":" ++ readingJson (classifyD disk remotes call) ++ "}"
       | m => head ++ ",\"missing\":" ++ missingJson m [] [] [] ++ "}"
     else if kind == "hook" then
       let pd := match get? ms "project_dir" with | some (.str s) => some s.toList | _ => none
@@ -142,7 +142,7 @@ def answer (line : String) : String :=
       let mEx := q.exists_.filter (fun k => (look ex k).isNone)
       if nonscalar then
         head ++ ",\"call\":" ++ writeJ unknownCall ++ ",\"workspace\":" ++ esc (String.ofList ws) ++
-          ",\"reading\":" ++ readingJson (classify disk [] unknownCall) ++ "}"
+          ",\"reading\":" ++ readingJson (classifyD disk [] unknownCall) ++ "}"
       else if !(mIns.isEmpty && mSame.isEmpty && mEx.isEmpty) then
         head ++ ",\"missing\":" ++ missingJson [] mIns mSame mEx ++ "}"
       else

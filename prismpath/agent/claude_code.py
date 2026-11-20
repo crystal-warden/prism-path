@@ -60,7 +60,10 @@ first stripped of backslashes and quotes, so `pk\\ill` and `p'k'ill` are seen as
               paths (`classifier.disk_facts`), in a command that is not read-only: it holds a redirection to a
               file (not `2>&1`, `>&2` or `>/dev/null`) or the name of a file changing program (`rm`, `mv`, `cp`,
               `tee`, `sed -i`, `git add`, ...; an interpreter or a build tool is not one). The scan does not
-              follow a `cd`; the token naming the directory is itself a control path when it is `.claude`
+              follow a `cd`; the token naming the directory is itself a control path when it is `.claude`. A token
+              that is the workspace root or a directory holding control files counts only in a command that removes
+              or moves (`rm`, `rmdir`, `mv`, `find -delete`, `git rm`, `git clean`): `rm -r . | head` refuses,
+              `cp x . ; ls` does not
   git         after a token whose base name is `git`: an unsafe option or a subcommand the classifier does not
               know (unknown), a network subcommand (network), a mutating one or `reset --hard` (mutating), `push`
               (a push to a remote that is not allowed); the most severe of every git token wins
@@ -403,6 +406,16 @@ def _redirects(text: str) -> bool:
     return False
 
 
+def _destroyer_at(token: str, rest: List[str]) -> bool:
+    base = os.path.basename(token)
+    return (base in ("rm", "rmdir", "mv") or (base == "find" and "-delete" in rest)
+            or (base == "git" and any(arg in ("rm", "clean") for arg in rest)))
+
+
+def _destroy_evidence(tokens: List[str]) -> bool:
+    return any(_destroyer_at(token, tokens[at + 1:]) for at, token in enumerate(tokens))
+
+
 def _write_evidence(text: str, tokens: List[str]) -> bool:
     return _redirects(text) or any(_writer_at(token, tokens[at + 1:]) for at, token in enumerate(tokens))
 
@@ -414,13 +427,17 @@ def _scan_path(cwd: str, token: str) -> str:
 
 def _control_evidence(text: str, tokens: List[str], cwd: str, config: classifier.Config) -> bool:
     """A token that resolves, on the disk, to one of the agent's control paths, in a command that is not
-    read-only (`echo x > .claude/settings.json`, `printf y >> .mcp.json`, `cd .claude && tee settings.json`)."""
+    read-only (`echo x > .claude/settings.json`, `printf y >> .mcp.json`, `cd .claude && tee settings.json`); or
+    to the workspace root or a directory that holds one, in a command that removes or moves (`rm -r .`)."""
     if not _write_evidence(text, tokens):
         return False
+    destroys = _destroy_evidence(tokens)
     for token in tokens:
         path = _scan_path(cwd, token)
-        if path and "\x00" not in path and len(path) <= classifier.MAX_PATH and classifier.disk_facts(path, config).control:
-            return True
+        if path and "\x00" not in path and len(path) <= classifier.MAX_PATH:
+            facts = classifier.disk_facts(path, config)
+            if facts.control or (destroys and facts.holder):
+                return True
     return False
 
 

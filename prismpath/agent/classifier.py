@@ -56,10 +56,12 @@ GLOB_CHARS = set("*?[]{}")
 # made by a path that resolves onto it, is refused under every shipped policy (cause 128). Matching is case
 # insensitive on every platform (macOS and Windows name one file by several spellings, and folding is conservative
 # where the filesystem is case sensitive), compares the resolved and the normalized path, and also catches a hard
-# link to one of them (same device and inode) and a directory that holds one.
+# link to one of them (same device and inode). A directory that holds one (the workspace root, `.git`, a hook
+# program's directory, a directory with a CLAUDE.md below it) is a *holder*: a change that removes or moves it
+# (`destroy_paths`) is a control change, but writing into it is decided by the file written.
 CONTROL_TREES = (".claude", ".git/hooks")     # the directory and everything below it
 CONTROL_FILES = (".mcp.json", ".git/config")  # at the workspace root
-CONTROL_ANCESTORS = (".git",)                 # the directory itself only, since removing it removes the hooks and config
+CONTROL_ANCESTORS = (".git",)                 # holders: removing or moving the directory removes the hooks and config
 CONTROL_NAMES = ("claude.md", "claude.local.md", "agents.md")   # at any depth, compared folded
 WALK_LIMIT = 20000                            # entries examined below a directory for a control file
 WALK_SKIP = frozenset({".git", "node_modules", "target", ".venv", "venv", "__pycache__"})
@@ -229,6 +231,7 @@ class DiskFacts:
     toolchain: bool            # resolves (or normalizes) into a toolchain directory
     symlink: bool              # some prefix below the workspace root (or /) is a symbolic link
     control: bool = False      # resolves (or normalizes) onto one of the agent's control files
+    holder: bool = False       # resolves (or normalizes) onto the workspace root or a directory that holds one
 
 
 def path_facts(raw: Any, config: Config) -> PathFacts:
@@ -260,8 +263,8 @@ def disk_facts(raw: str, config: Config) -> DiskFacts:
     normal = os.path.normpath(lexical)
     toolchain = any(_under(resolved, root) or _under(normal, root) for root in config.toolchain_dirs)
     inside = _under(resolved, config.workspace) and _under(normal, config.workspace)
-    control = _is_control(resolved, normal, config)
-    return DiskFacts(inside, toolchain, symlink, control)
+    control, holder = _control_facts(resolved, normal, config)
+    return DiskFacts(inside, toolchain, symlink, control, holder)
 
 
 def hook_programs(config: Config) -> List[str]:
@@ -310,29 +313,39 @@ def _walk_names(top: str) -> List[str]:
 
 
 def _control_tests(workspace: Path, programs: List[str]):
-    """(pattern test on a folded path, folded hook programs): the path-name part of what is control."""
+    """(control test, holder test) on a path: the path-name part of what is control, and of what holds control."""
     ws = _fold(str(workspace))
     hooks = [_fold(os.path.normpath(p)) for p in programs]
 
-    def by_name(path: str) -> bool:
+    def parts_of(path: str):
         folded = _fold(path)
         if folded == ws:
-            return True                                    # the workspace root holds every control path
+            return folded, []
         if not folded.startswith(ws.rstrip("/") + "/"):
-            return folded in hooks or any(h.startswith(folded.rstrip("/") + "/") for h in hooks)
-        rel = folded[len(ws.rstrip("/")) + 1:]
-        parts = rel.split("/")
+            return folded, None
+        return folded, folded[len(ws.rstrip("/")) + 1:].split("/")
+
+    def control(path: str) -> bool:
+        folded, parts = parts_of(path)
+        if parts is None:
+            return folded in hooks
+        if not parts:
+            return False
         if parts[-1] in CONTROL_NAMES:
             return True
         for tree in CONTROL_TREES:
             head = tree.split("/")
-            if parts[:len(head)] == head or (len(parts) < len(head) and parts == head[:len(parts)]):
+            if parts[:len(head)] == head:
                 return True
-        if rel in CONTROL_FILES or rel in CONTROL_ANCESTORS:
-            return True
-        return folded in hooks or any(h.startswith(folded + "/") for h in hooks)
+        return "/".join(parts) in CONTROL_FILES or folded in hooks
 
-    return by_name
+    def holder(path: str) -> bool:
+        folded, parts = parts_of(path)
+        if parts is None:
+            return any(h.startswith(folded.rstrip("/") + "/") for h in hooks)
+        return not parts or "/".join(parts) in CONTROL_ANCESTORS or any(h.startswith(folded + "/") for h in hooks)
+
+    return control, holder
 
 
 def _control_inodes(config: Config, programs: List[str]) -> set:
@@ -353,23 +366,27 @@ def _control_inodes(config: Config, programs: List[str]) -> set:
     return out
 
 
-def _is_control(resolved: str, normal: str, config: Config) -> bool:
-    """True when the resolved or the normalized path, compared case insensitively, is the workspace root, a control
-    file, a control directory or anything below one, a CLAUDE.md, CLAUDE.local.md or AGENTS.md at any depth, the
-    program an installed PrismPath hook runs or a directory that holds one of these, or when it is a hard link to
-    a control file. Reads the disk at the moment of the call."""
+def _control_facts(resolved: str, normal: str, config: Config) -> Tuple[bool, bool]:
+    """(control, holder) of a path, compared case insensitively, reading the disk at the moment of the call.
+    control: a control file or tree (`.claude/`, `.mcp.json`, `.git/config`, `.git/hooks/`), a CLAUDE.md,
+    CLAUDE.local.md or AGENTS.md at any depth, the program an installed PrismPath hook runs, or a hard link to a
+    control file. holder: the workspace root, `.git`, a directory that holds a hook program, or a directory with
+    a CLAUDE.md, CLAUDE.local.md or AGENTS.md below it."""
     programs = hook_programs(config)
-    by_name = _control_tests(config.workspace, programs)
-    if by_name(resolved) or by_name(normal):
-        return True
+    control, holder = _control_tests(config.workspace, programs)
+    is_control = control(resolved) or control(normal)
+    is_holder = holder(resolved) or holder(normal)
     try:
         st = os.stat(resolved)
     except OSError:
-        return False
+        return is_control, is_holder
     import stat as _stat
     if _stat.S_ISDIR(st.st_mode):
-        return _under(resolved, config.workspace) and bool(_walk_names(resolved))
-    return st.st_nlink > 1 and (st.st_dev, st.st_ino) in _control_inodes(config, programs)
+        if not is_holder and _under(resolved, config.workspace) and _walk_names(resolved):
+            is_holder = True
+    elif not is_control and st.st_nlink > 1 and (st.st_dev, st.st_ino) in _control_inodes(config, programs):
+        is_control = True
+    return is_control, is_holder
 
 
 _SCOPE_RANK = {"none": 0, "workspace": 1, "outside": 2, "unknown": 3}
@@ -521,7 +538,60 @@ def classify(call: Any, config: Config) -> Dict[str, Any]:
         return unknown_reading()
 
 
+def _program(first: str) -> Optional[str]:
+    """The program an argv[0] names, as `command_class` reads it (None for a program of the workspace)."""
+    if first.startswith("/") and os.path.dirname(first) in ("/usr/bin", "/bin", "/usr/sbin", "/sbin"):
+        return os.path.basename(first)
+    return None if "/" in first else first
+
+
+def _git_destroy(subcommand: Any, args: List[str]) -> List[str]:
+    return _path_like_args(args) if subcommand in ("rm", "clean") else []
+
+
+def destroy_paths(call: Any, reading: Dict[str, Any]) -> List[str]:
+    """The paths a call names in a position where it removes or moves them: the delete tool's path; every path of
+    `rm` and `rmdir`; every path of `mv` but the last (the destination); the paths of `find ... -delete`; and the
+    paths of `git rm` and `git clean`. A directory that holds control files is a control target in these, and
+    only these (the holder fact of `disk_facts`); writing into it is decided by the file written. Defined in
+    Lean (`destroyPaths`), where it is read off the same plan as the reading."""
+    tool, args = reading["tool"], call.get("args", {})
+    if tool == "delete_path":
+        return [args["path"]]
+    if tool == "git":
+        sub, rest = args["subcommand"], args.get("args", [])
+        if len(rest) > MAX_ARGV or not all(isinstance(a, str) and "\x00" not in a for a in rest):
+            return []
+        return _git_destroy(sub, rest)
+    if tool != "run_command":
+        return []
+    argv = args["argv"]
+    if not argv or len(argv) > MAX_ARGV or not all(isinstance(a, str) and a and "\x00" not in a for a in argv):
+        return []
+    base = _program(argv[0])
+    rest = argv[1:]
+    if base in ("rm", "rmdir"):
+        return _path_like_args(rest)
+    if base == "mv":
+        return _path_like_args(rest)[:-1]
+    if base == "find" and "-delete" in rest:
+        return _path_like_args(rest)
+    if base == "git":
+        return _git_destroy(rest[0] if rest else None, rest[1:])
+    return []
+
+
 def _classify(call: Any, config: Config) -> Dict[str, Any]:
+    reading = _classify_base(call, config)
+    if reading["tool"] != "unknown":
+        for raw in destroy_paths(call, reading):
+            if isinstance(raw, str) and raw and "\x00" not in raw and len(raw) <= MAX_PATH \
+                    and disk_facts(raw, config).holder:
+                reading["path_control"] = True
+    return reading
+
+
+def _classify_base(call: Any, config: Config) -> Dict[str, Any]:
     if not isinstance(call, dict) or set(call) - {"tool", "args"} or call.get("tool") not in TOOLS:
         return unknown_reading()
     tool, args = call["tool"], call.get("args", {})

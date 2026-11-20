@@ -300,7 +300,7 @@ theorem hookReading_unchanged (d : HookDisk) (disk : Str → Disk) (hook : J) (p
     (h : ∀ c, bashCommand? hook = some c →
       scanReading c (hookCall d hook pd pc).2 (controlEvidence disk (hookCwdOf hook (hookCall d hook pd pc).2) (strip c)) =
         none) :
-    hookReading d disk hook pd pc = classify disk [] (hookCall d hook pd pc).1 := by
+    hookReading d disk hook pd pc = classifyD disk [] (hookCall d hook pd pc).1 := by
   unfold hookReading
   simp only
   split
@@ -315,7 +315,7 @@ with the command class unknown, asks as the unknown reading did). The scan never
 an allow. -/
 theorem hookReading_only_adds_refusals {p : Core.Checked} (hp : scanSafe p = true) (d : HookDisk) (disk : Str → Disk)
     (hook : J) (pd : Option Str) (pc : Str) :
-    hookReading d disk hook pd pc = classify disk [] (hookCall d hook pd pc).1 ∨
+    hookReading d disk hook pd pc = classifyD disk [] (hookCall d hook pd pc).1 ∨
       (isAllow (Core.decideReading p (.ok (hookReading d disk hook pd pc).json)) = false ∧
        (pushOnly (hookReading d disk hook pd pc) = true ∨
         isRefusal (Core.decideReading p (.ok (hookReading d disk hook pd pc).json)) = true)) := by
@@ -354,6 +354,13 @@ theorem controlEvidence_of {disk : Str → Disk} {cwd t tok : Str} (hw : writeEv
     controlEvidence disk cwd t = true := by
   simp only [controlEvidence, hw, Bool.true_and]
   exact List.any_eq_true.mpr ⟨tok, ht, by simp [hok, hc]⟩
+
+/-- The root or a directory that holds control files, in a command that removes or moves. -/
+theorem controlEvidence_of_holder {disk : Str → Disk} {cwd t tok : Str} (hw : writeEvidence t = true)
+    (hd : destroyEvidence (tokens t) = true) (ht : tok ∈ tokens t) (hok : pathOk (scanPath cwd tok) = true)
+    (hh : (disk (scanPath cwd tok)).holder = true) : controlEvidence disk cwd t = true := by
+  simp only [controlEvidence, hw, Bool.true_and]
+  exact List.any_eq_true.mpr ⟨tok, ht, by simp [hok, hh, hd]⟩
 
 /-- **A control path in a command outside the grammar.** When a token of the command's text names a path the disk
 says is a control path, and the command is not read-only, the scan gives a change that names a control path. -/

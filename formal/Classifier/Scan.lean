@@ -155,14 +155,27 @@ def redirects (s : Str) : Bool := redirectsGo (s.length + 1) s
 /-- A command that is not read-only, by its text. -/
 def writeEvidence (t : Str) : Bool := redirects t || writerEvidence (tokens t)
 
+/-- A token that names a program that removes or moves what it is given: `rm`, `rmdir`, `mv`, `find` with `-delete`,
+`git` with `rm` or `clean`. -/
+def destroyerAt (t : Str) (rest : List Str) : Bool :=
+  basename t == lit "rm" || basename t == lit "rmdir" || basename t == lit "mv" ||
+  (basename t == lit "find" && rest.contains (lit "-delete")) ||
+  (basename t == lit "git" && (rest.contains (lit "rm") || rest.contains (lit "clean")))
+
+def destroyEvidence : List Str → Bool
+  | [] => false
+  | t :: rest => destroyerAt t rest || destroyEvidence rest
+
 /-- The path a token names, as the plain grammar would hand it to the classifier: absolute against `cwd`
 (`claude_code._scan_path`). -/
 def scanPath (cwd tok : Str) : Str := spell (if startsWith tok (lit "/") then tok else join cwd tok)
 
-/-- Control evidence: the command is not read-only and a token names a path the disk says is a control path
-(`claude_code._control_evidence`). -/
+/-- Control evidence (`claude_code._control_evidence`): the command is not read-only and a token names a path the
+disk says is a control path; or the command removes or moves and a token names the workspace root or a directory
+that holds control files. -/
 def controlEvidence (disk : Str → Disk) (cwd t : Str) : Bool :=
-  writeEvidence t && (tokens t).any (fun tok => pathOk (scanPath cwd tok) && (disk (scanPath cwd tok)).control)
+  writeEvidence t && (tokens t).any (fun tok => pathOk (scanPath cwd tok) &&
+    ((disk (scanPath cwd tok)).control || (destroyEvidence (tokens t) && (disk (scanPath cwd tok)).holder)))
 
 /-- The disk paths the scan consults for a command (an over-approximation: every token). -/
 def scanQueries (cwd t : Str) : List Str :=
@@ -219,7 +232,7 @@ def hookCwdOf (hook : J) (ws : Str) : Str :=
 the scan finds evidence. -/
 def hookReading (d : HookDisk) (disk : Str → Disk) (hook : J) (projectDir : Option Str) (procCwd : Str) : Reading :=
   let (call, ws) := hookCall d hook projectDir procCwd
-  let base := classify disk [] call
+  let base := classifyD disk [] call
   if isUnknownCall call then
     match bashCommand? hook with
     | some c => (scanReading c ws (controlEvidence disk (hookCwdOf hook ws) (strip c))).getD base

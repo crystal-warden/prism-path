@@ -95,7 +95,7 @@ class SyntheticDisk:
     def disk(self, raw: str, config: classifier.Config) -> classifier.DiskFacts:
         b = self._bits("disk", raw)
         return classifier.DiskFacts(inside=b % 10 < 6, toolchain=(b >> 4) % 7 == 0, symlink=(b >> 8) % 7 == 0,
-                                    control=(b >> 12) % 5 == 0)
+                                    control=(b >> 12) % 5 == 0, holder=(b >> 16) % 5 == 0)
 
     def inside(self, path: str, root: str) -> bool:
         return self._bits("inside", path, root) % 8 != 0
@@ -138,7 +138,7 @@ class Recorder:
         return self.exists[path]
 
     def tables(self) -> Dict[str, Any]:
-        return {"disk": [[k, v.inside, v.toolchain, v.symlink, v.control] for k, v in self.disk.items()],
+        return {"disk": [[k, v.inside, v.toolchain, v.symlink, v.control, v.holder] for k, v in self.disk.items()],
                 "inside": [[a, b, v] for (a, b), v in self.inside.items()],
                 "same": [[a, b, v] for (a, b), v in self.same.items()],
                 "exists": [[k, v] for k, v in self.exists.items()]}
@@ -545,7 +545,7 @@ def _git_compound(rng: random.Random) -> str:
 
 REDIRECTS = [">", ">>", " > ", " >> ", "2>", "&>", ">&", ">|", "> ", ">>", "2>&1", ">&2", "1>&-", ">/dev/null",
              "2>/dev/null", "&>/dev/null", "> /dev/null", ">/dev/nullx", ">&x", ">& ", ">&1x", ">>/dev/null"]
-WRITERS = ["rm -rf", "rm", "mv", "cp", "tee", "tee -a", "touch", "sed -i s/a/b/", "sed -n p", "sed", "find . -delete", "find",
+WRITERS = ["rm -r", "rmdir", "mv -f", "find . -delete", "find", "git rm -r", "git clean -fd", "git checkout", "rm -rf", "rm", "mv", "cp", "tee", "tee -a", "touch", "sed -i s/a/b/", "sed -n p", "sed", "find . -delete", "find",
            "sort -o", "sort", "tree -o x", "tree", "git add", "git commit -m x", "git diff", "git status", "python", "pytest",
            "vim", "dd of=", "tar xf", "install", "/usr/bin/rm", "echo", "printf x", "cat", "grep -r x", "ls", "kill 1"]
 

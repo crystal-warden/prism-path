@@ -151,3 +151,11 @@ elab "#assert_standard_axioms " id:ident : command => do
 #assert_standard_axioms Classifier.controlEvidence_of
 #assert_standard_axioms Classifier.scan_control
 #assert_standard_axioms Classifier.scan_control_refused
+#assert_standard_axioms Classifier.controlEvidence_of_holder
+#assert_standard_axioms Classifier.isChange_classifyD
+#assert_standard_axioms Classifier.classifyD_control
+#assert_standard_axioms Classifier.classify_holder
+#assert_standard_axioms Classifier.change_on_holder_refused
+#assert_standard_axioms Classifier.delete_holder_refused
+#assert_standard_axioms Classifier.destroyArgs_rm
+#assert_standard_axioms Classifier.run_destroy_holder_refused
