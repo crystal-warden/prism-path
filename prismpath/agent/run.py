@@ -245,7 +245,10 @@ class Run:
                       and receipt["case"] == self.session and receipt["reading"] == n
                       and receipt["reading_sha256"] == core_evidence.sha256_hex(reading)
                       and receipt["image_sha256"] == image_sha
-                      and set(entry) == {"i", "reading", "receipt"})
+                      and set(entry) in ({"i", "reading", "receipt"}, {"i", "reading", "receipt", "sandbox"})
+                      and ("sandbox" not in entry or (isinstance(entry["sandbox"], dict)
+                                                      and set(entry["sandbox"]) == {"profile_sha256"}
+                                                      and re.fullmatch(r"[0-9a-f]{64}", str(entry["sandbox"]["profile_sha256"])))))
             except Exception:
                 ok = False
             if not ok:
@@ -262,8 +265,12 @@ class Run:
         """Every complete journal line, parsed and validated, after dropping a torn tail. Call with the lock held."""
         return self._scan(full=True)[1]
 
-    def append(self, reading: bytes, verdict: Dict[str, Any], decider: str = DECIDER) -> int:
-        """Record one decided reading as the next receipt, durably, and return its index."""
+    def append(self, reading: bytes, verdict: Dict[str, Any], decider: str = DECIDER,
+               sandbox_profile: Optional[str] = None) -> int:
+        """Record one decided reading as the next receipt, durably, and return its index. `sandbox_profile` is the
+        SHA-256 of the sandbox profile the allowed call was rewritten to run under; it is kept on the journal
+        line beside the receipt (the receipt is exactly `prismpath.core-receipt/1`, which has no such field),
+        so it is bound to the line by the journal's own check and is not part of the sealed root."""
         with _locked(self.dir / LOCK):
             n = self._scan(full=False)[0]
             image = (self.dir / IMAGE).read_bytes()
@@ -271,7 +278,10 @@ class Run:
                        "image_sha256": core_evidence.sha256_hex(image),
                        "reading_sha256": core_evidence.sha256_hex(reading), "decider": decider,
                        **core_evidence._decision(verdict)}
-            line = canon2.dumps({"i": n, "reading": reading.hex(), "receipt": receipt}) + b"\n"
+            entry = {"i": n, "reading": reading.hex(), "receipt": receipt}
+            if sandbox_profile is not None:
+                entry["sandbox"] = {"profile_sha256": sandbox_profile}
+            line = canon2.dumps(entry) + b"\n"
             path = self.dir / JOURNAL
             new = not path.exists()
             fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)

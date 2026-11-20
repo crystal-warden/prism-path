@@ -37,6 +37,7 @@ ATTESTATION_FILE = "policy.attestation.json"
 RUNS_DIR = "runs"
 POLICY_CASE = "agent_default"
 HOOK_ERROR = "agent:hook-error"
+SANDBOX_ERROR = "agent:sandbox-unavailable"
 KEY_ROLES = ("authority", "instance")
 
 
@@ -289,10 +290,10 @@ def init(project: Path, yes: bool, as_json: bool, confirm=None, out=None, policy
 
 
 # ------------------------------------------------------------------------------------------------- hook
-def _cause_code() -> Optional[int]:
+def _cause_code(name: str = HOOK_ERROR) -> Optional[int]:
     try:
         from prismpath.kernel import causes
-        return causes.code(HOOK_ERROR)
+        return causes.code(name)
     except Exception:  # noqa: BLE001
         return None
 
@@ -302,9 +303,9 @@ def _detail(exc: BaseException) -> str:
     return text if len(text) <= 240 else text[:237] + "..."
 
 
-def deny_answer(detail: str) -> Dict[str, Any]:
-    code = _cause_code()
-    cause = f"{code} {HOOK_ERROR}" if code is not None else HOOK_ERROR
+def deny_answer(detail: str, name: str = HOOK_ERROR) -> Dict[str, Any]:
+    code = _cause_code(name)
+    cause = f"{code} {name}" if code is not None else name
     return {"hookSpecificOutput": {
         "hookEventName": "PreToolUse", "permissionDecision": "deny",
         "permissionDecisionReason": f"PrismPath refused this call: cause {cause} ({detail}). It was not run. "
@@ -336,8 +337,18 @@ def hook(raw: bytes, env: Optional[Mapping[str, str]] = None) -> Dict[str, Any]:
             raise AgentError(f"the hook was called for {event!r}; it answers PreToolUse and SessionEnd")
         from prismpath.agent import claude_code
         result = claude_code.evaluate(data, env, policy)
-        index = store.open(session, policy.image).append(policy.reading_bytes(result.reading), result.decision.verdict)
-        return claude_code.fill_receipt(result.answer, receipt_id(session, index))
+        answer, profile_hash = result.answer, None
+        if result.decision.kind == "allow" and data.get("tool_name") == "Bash":
+            # an allowed shell call runs only inside the sandbox the same policy compiles to (sandbox_hook.py)
+            from prismpath.agent import sandbox_hook
+            try:
+                updated, profile_hash = sandbox_hook.sandbox_allowed_bash(data, result.workspace, home, policy.image)
+            except sandbox_hook.SandboxRefused as exc:
+                return deny_answer(_detail(exc), SANDBOX_ERROR)
+            answer = claude_code.hook_answer(result.decision, updated)
+        index = store.open(session, policy.image).append(policy.reading_bytes(result.reading), result.decision.verdict,
+                                                         sandbox_profile=profile_hash)
+        return claude_code.fill_receipt(answer, receipt_id(session, index))
     except BaseException as exc:  # noqa: BLE001 - fail closed on everything, never allow
         if event == "SessionEnd":
             return {"systemMessage": f"PrismPath could not seal this session's run: cause {HOOK_ERROR} "

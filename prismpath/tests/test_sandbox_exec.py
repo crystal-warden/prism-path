@@ -96,3 +96,30 @@ def test_a_bwrap_that_cannot_start_the_sandbox_is_an_error(tmp_path, monkeypatch
 def test_the_argv_has_no_network_share_by_default(tmp_path):
     assert "--share-net" not in sandbox_exec.bwrap_argv(tmp_path, Profile(), ["true"])
     assert "--share-net" in sandbox_exec.bwrap_argv(tmp_path, Profile(network=True), ["true"])
+
+
+@needs_bwrap
+def test_the_process_limit_stops_a_fork_past_it_and_not_one_inside_it(tmp_path):
+    script = "for i in $(seq 1 40); do sleep 3 & done; wait"
+    stopped = run_sandboxed(["bash", "-c", script], tmp_path, Profile(max_processes=10, timeout_s=20))
+    assert b"Resource temporarily unavailable" in stopped.stderr
+    fine = run_sandboxed(["bash", "-c", "for i in 1 2 3; do sleep 0.1 & done; wait"], tmp_path, Profile(max_processes=10))
+    assert fine.returncode == 0 and not fine.stderr
+
+
+@needs_bwrap
+def test_a_host_mount_is_read_only_unless_the_profile_writes_the_host(tmp_path):
+    import tempfile
+    with tempfile.TemporaryDirectory(dir=os.path.dirname(__file__)) as outside:     # not under /tmp, which the sandbox hides
+        code = f"touch {outside}/m"
+        ro = run_sandboxed(["bash", "-c", "cat /etc/hostname >/dev/null && " + code], tmp_path, Profile(ro_mounts=("/",)))
+        assert ro.returncode != 0 and not os.path.exists(outside + "/m")
+        rw = run_sandboxed(["bash", "-c", code], tmp_path, Profile(ro_mounts=("/",), host_write=True))
+        assert rw.returncode == 0 and os.path.exists(outside + "/m")
+
+
+@needs_bwrap
+def test_the_command_starts_in_the_directory_below_the_workspace_it_is_given(tmp_path):
+    (tmp_path / "sub").mkdir()
+    done = run_sandboxed(["pwd"], tmp_path, mount=str(tmp_path), cwd="sub")
+    assert done.stdout.strip() == str(tmp_path.resolve() / "sub").encode()

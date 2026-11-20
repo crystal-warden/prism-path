@@ -429,9 +429,11 @@ def evaluate(hook_input: Any, env: Optional[Mapping[str, str]] = None, policy: O
 _KIND_TO_PERMISSION = {"allow": "allow", "refuse": "deny", "escalate": "ask"}
 
 
-def hook_answer(decision: Decision) -> Dict[str, Any]:
+def hook_answer(decision: Decision, updated_input: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """The PreToolUse hook's JSON answer to one decision. A refusal's reason names the registered cause and
-    holds RECEIPT_PLACEHOLDER for the caller to fill (fill_receipt); an allow carries no reason."""
+    holds RECEIPT_PLACEHOLDER for the caller to fill (fill_receipt); an allow carries no reason.
+    `updated_input`, for an allow only, is the whole tool input the call is to run with instead of the one
+    the model sent (`updatedInput`, docs/design/hook-rewrite-note.md); a refusal or a question never carries it."""
     permission = _KIND_TO_PERMISSION[decision.kind]
     output: Dict[str, Any] = {"hookEventName": "PreToolUse", "permissionDecision": permission}
     if decision.kind == "refuse":
@@ -440,6 +442,8 @@ def hook_answer(decision: Decision) -> Dict[str, Any]:
     elif decision.kind == "escalate":
         output["permissionDecisionReason"] = (
             f"PrismPath asks you to decide this call: cause {_cause(decision)}. Receipt {RECEIPT_PLACEHOLDER}.")
+    if updated_input is not None and decision.kind == "allow":
+        output["updatedInput"] = updated_input
     return {"hookSpecificOutput": output}
 
 
