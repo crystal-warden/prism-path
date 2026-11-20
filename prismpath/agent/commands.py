@@ -512,6 +512,21 @@ def _tamper_demo(home: Path, verified_rows) -> Dict[str, Any]:
         shutil.rmtree(scratch, ignore_errors=True)
 
 
+def run(program: List[str], workspace: Optional[str] = None, credential: Optional[str] = None,
+        egress_log: Optional[str] = None, max_processes: Optional[int] = None) -> int:
+    """`prismpath agent run -- PROGRAM [ARGS]`: the program as the agent, under the sandbox with only the model
+    API reachable (prismpath/agent/launcher.py). Exits with the program's status. Raises AgentError, with
+    nothing run, off Linux or without bwrap or socat."""
+    import time
+    from prismpath.agent import launcher
+    if program[:1] == ["--"]:
+        program = program[1:]
+    if egress_log is None:
+        egress_log = str(config_dir() / "egress" / f"{time.strftime('%Y%m%dT%H%M%S')}-{os.getpid()}.log")
+    kwargs = {} if max_processes is None else {"max_processes": max_processes}
+    return launcher.launch(program, workspace or os.getcwd(), credential=credential, egress_log=egress_log, **kwargs)
+
+
 def confinement_state() -> Dict[str, Any]:
     """Whether an allowed shell command is confined on this platform, and the sentence that says so."""
     from prismpath.agent import sandbox_exec, sandbox_hook

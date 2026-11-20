@@ -386,6 +386,19 @@ def _add_operator_commands(subparsers) -> None:
                               help='the project whose .claude/settings.json is checked (default as for init)')
     for sub in (agent_init, agent_hook, agent_verify, agent_status, agent_doctor, agent_rules):
         sub.add_argument('--json', action='store_true', help='machine readable output')
+    agent_run = agent_sub.add_parser(
+        'run', help='run a program as the agent under the sandbox (Linux, bubblewrap and socat): the workspace is '
+                    'the only writable path, its control paths and the staged settings are read only, and the '
+                    'only way out is a proxy that allows the model API. A "yes, and don\'t ask again" that '
+                    'Claude Code would save to .claude/settings.local.json fails here, by design')
+    agent_run.add_argument('--workspace', default=None, help='the directory the agent may write (default: the current directory)')
+    agent_run.add_argument('--credential', default=None, metavar='FILE',
+                           help='copy this one file into the sandbox as its Claude credential (off unless given; '
+                                'PrismPath never looks for a login of its own)')
+    agent_run.add_argument('--egress-log', default=None, metavar='FILE',
+                           help='keep the proxy\'s log of every connection attempt here (default: under the agent config directory)')
+    agent_run.add_argument('--max-processes', type=int, default=None, help='the process limit inside the sandbox')
+    agent_run.add_argument('program', nargs=argparse.REMAINDER, help='-- PROGRAM [ARGS]')
     agent_parser.set_defaults(func=agent_cmd)
 
 
@@ -529,6 +542,8 @@ def agent_cmd(args) -> int:
         return commands.hook_main()
     project = args.project if getattr(args, 'project', None) else (os.environ.get('CLAUDE_PROJECT_DIR') or os.getcwd())
     try:
+        if args.agent_action == 'run':
+            return commands.run(args.program, args.workspace, args.credential, args.egress_log, args.max_processes)
         if args.agent_action == 'init':
             return commands.init(project, args.yes, args.json, policy=args.policy)
         if args.agent_action == 'verify':
