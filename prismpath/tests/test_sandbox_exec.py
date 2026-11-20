@@ -110,7 +110,9 @@ def test_the_process_limit_stops_a_fork_past_it_and_not_one_inside_it(tmp_path):
 @needs_bwrap
 def test_a_host_mount_is_read_only_unless_the_profile_writes_the_host(tmp_path):
     import tempfile
-    with tempfile.TemporaryDirectory(dir=os.path.dirname(__file__)) as outside:     # not under /tmp, which the sandbox hides
+    # not under /tmp, which the sandbox replaces with its own empty tmpfs; from an installed wheel in a /tmp venv the
+    # package directory is under /tmp too, so /var/tmp it is
+    with tempfile.TemporaryDirectory(dir="/var/tmp") as outside:
         code = f"touch {outside}/m"
         ro = run_sandboxed(["bash", "-c", "cat /etc/hostname >/dev/null && " + code], tmp_path, Profile(ro_mounts=("/",)))
         assert ro.returncode != 0 and not os.path.exists(outside + "/m")
