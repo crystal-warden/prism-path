@@ -91,6 +91,8 @@ The demo copies a session, flips one byte of its receipts, and verifies the copy
 | `default` | the same as `strict` | a push, a call it cannot read (124), a shell command that changes files in the project (125) | a git operation or path it cannot read, a git change it cannot undo, and the hazards |
 | `review` | reads, listings and read only commands in the project, git reads | every change in the project (127), every push, a call it cannot read | the same as `default` |
 
+All three also refuse, with cause 128, every change to the agent's own controls: `.claude/settings.json`, `.claude/settings.local.json`, anything under `.claude/hooks/`, `.mcp.json`, and the program the installed hook runs when it is inside the project. The agent cannot take its own hook out. Reading these files still runs as before.
+
 The hazards are refused by all three. They are a path outside the project, a `..` in a path, a path through a symbolic link, a path that is a pattern, a write into a toolchain, a kill by name pattern and the network. `status` names the starter in use. To write your own rules instead, see [writing-agent-rules.md](writing-agent-rules.md).
 
 ## Check your setup
