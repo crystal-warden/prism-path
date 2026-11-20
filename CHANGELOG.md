@@ -8,6 +8,26 @@ spec stable.
 
 ## [Unreleased]
 
+### Changed: the control-file refusal closes the gaps it left open (2026-11-20)
+
+- **A shell command outside the plain grammar that redirects onto a control file is refused with 128.** The hazard
+  scan now reads a token that resolves to a control path in a command that is not read-only (a redirection to a file,
+  or `rm`, `mv`, `cp`, `tee`, `sed -i`, `git add` and the like), so `echo x > .claude/settings.json` and
+  `printf y >> .mcp.json` no longer ask under `default` and `review`. The scan still never allows, only adds refusals.
+- **Control paths are matched case insensitively on every platform, through hard links, and more widely.** `.CLAUDE`
+  names the same file on macOS and Windows; a file with the device and inode of a control file is a control path.
+  `.git/hooks/` and `.git/config`, everything under `.claude/` (commands, agents, skills), `CLAUDE.md`,
+  `CLAUDE.local.md` and `AGENTS.md` at any depth are control paths, and so are the workspace root and every directory
+  that holds one (`rm -r .`, `rm -rf ./`, `mv . x`). Reads are unchanged. A consequence: any change whose target is the
+  project root is refused, including `git add .` and `cp x .`.
+- **The written hook command no longer imports a `prismpath/` package planted in the workspace.** Claude Code runs the
+  hook from the project directory, and `python -m prismpath` put that directory first on `sys.path`; the command now
+  runs the interpreter with `-P` (Python 3.11 and later) or `-I` (3.10). A planted `sitecustomize.py`, `usercustomize.py`
+  or `.pth` file was never loaded. Run `prismpath agent init` again to rewrite an installed hook.
+- The Lean model proves the scan's control rule (`scan_control`, `scan_control_refused` in `ScanTheorems.lean`); the
+  differential harness covers redirections and the new paths (0 disagreements in 20,000 generated cases), and the
+  recorded hook inputs are now 154.
+
 ### Added: the governed agent no longer changes its own controls (2026-11-19)
 
 - **A change to the agent's own control files is refused under every starter** (`strict`, `default`, `review`), with
