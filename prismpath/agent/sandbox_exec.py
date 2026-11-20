@@ -26,7 +26,9 @@ The command is never run without the sandbox.
 As a program, `python3 -I sandbox_exec.py --workspace W --cwd C --profile JSON COMMAND`, it runs one shell
 command string under the profile and exits with the command's status. This is what the Claude Code hook
 rewrites an allowed Bash call into (prismpath/agent/commands.py). A sandbox that cannot start exits 126 with
-the reason on standard error and the command is not run.
+the reason on standard error and the command is not run. With `--observe-*` flags it also records what a
+finished command's exit status and standard error show (prismpath/agent/observe.py), bound to the receipt of the
+call; that record changes no output, no exit status and no decision.
 """
 from __future__ import annotations
 
@@ -166,6 +168,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--cwd", default="", help="below the workspace, relative")
     parser.add_argument("--profile", required=True, help="a prismpath.profile/1 object as JSON")
     parser.add_argument("--timeout", type=int, default=None, help="seconds; the profile's timeout_s when not given")
+    for flag in ("run", "session", "receipt", "image", "profile"):    # observe.py: bind what the command shows to its receipt
+        parser.add_argument(f"--observe-{flag}", default=None)
     parser.add_argument("command", help="one shell command string")
     args = parser.parse_args(argv)
     try:
@@ -186,10 +190,24 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     sys.stdout.buffer.write(done.stdout)
     sys.stdout.buffer.flush()
     sys.stderr.buffer.write(done.stderr)
+    _observe(args, done)
     if done.timed_out:
         sys.stderr.write(f"PrismPath stopped this command after {profile.timeout_s} seconds\n")
         return 124
     return done.returncode if done.returncode >= 0 else 128 - done.returncode
+
+
+def _observe(args, done: SandboxResult) -> None:
+    """Record what the finished command showed, when the hook asked for it. An observation never changes the
+    command's output or exit status, and a failure to record one only says so on standard error."""
+    if args.observe_run is None:
+        return
+    try:
+        from prismpath.agent import observe
+        observe.record(args.observe_run, args.observe_session, int(args.observe_receipt), args.observe_image,
+                       args.observe_profile, done.returncode, done.stderr, done.timed_out)
+    except Exception as exc:    # noqa: BLE001 - the command ran; the record is best effort and says so
+        sys.stderr.write(f"PrismPath could not record an observation ({' '.join(str(exc).split())[:120]})\n")
 
 
 if __name__ == "__main__":

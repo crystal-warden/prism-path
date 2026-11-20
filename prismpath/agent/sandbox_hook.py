@@ -102,26 +102,42 @@ def profile_for(home: Path, image: bytes):
 
 
 def rewrite_command(command: str, workspace: str, cwd: str, profile, python: Optional[str] = None,
-                    timeout_s: Optional[int] = None) -> str:
+                    timeout_s: Optional[int] = None, observe: Optional[Mapping[str, Any]] = None) -> str:
     """The shell command that runs `command` under the sandbox with `profile`."""
     python = python or sys.executable
     parts = [python, "-I", str(RUNNER), "--workspace", workspace, "--cwd", cwd,
              "--profile", json.dumps(profile.to_object(), sort_keys=True, separators=(",", ":"))]
     if timeout_s is not None:
         parts += ["--timeout", str(int(timeout_s))]
+    if observe:     # where the runner records what the command showed, bound to the call's receipt (observe.py)
+        from prismpath.agent import observe as observe_module
+        parts += observe_module.argv(observe["run_dir"], observe["session"], observe["receipt"],
+                                     observe["image_sha256"], observe["profile_sha256"])
     parts += ["--", command]
     return " ".join(shlex.quote(part) for part in parts)
 
 
-def sandbox_input(hook_input: Mapping[str, Any], workspace: str, profile, python: Optional[str] = None) -> Dict[str, Any]:
+def sandbox_input(hook_input: Mapping[str, Any], workspace: str, profile, python: Optional[str] = None,
+                  observe: Optional[Mapping[str, Any]] = None) -> Dict[str, Any]:
     """`updatedInput` for an allowed Bash call: the original tool input, whole, with only `command` replaced."""
     tool_input = hook_input.get("tool_input")
     if not isinstance(tool_input, dict) or not isinstance(tool_input.get("command"), str):
         raise SandboxRefused("the Bash call has no command to sandbox")
     cwd = hook_input.get("cwd") if isinstance(hook_input.get("cwd"), str) and hook_input.get("cwd") else workspace
     out = dict(tool_input)
-    out["command"] = rewrite_command(tool_input["command"], workspace, cwd, profile, python, call_timeout_s(tool_input))
+    out["command"] = rewrite_command(tool_input["command"], workspace, cwd, profile, python, call_timeout_s(tool_input), observe)
     return out
+
+
+def sandbox_profile_for_call(hook_input: Mapping[str, Any], home: Path, image: bytes):
+    """The profile an allowed Bash call runs under, after the checks that make it runnable. Raises SandboxRefused."""
+    from prismpath.agent import sandbox_exec
+    tool_input = hook_input.get("tool_input")
+    if not isinstance(tool_input, dict) or not isinstance(tool_input.get("command"), str):
+        raise SandboxRefused("the Bash call has no command to sandbox")
+    if not sandbox_exec.available():
+        raise SandboxRefused(f"{sandbox_exec.BWRAP} is missing, so the command cannot be sandboxed")
+    return profile_for(home, image)
 
 
 def sandbox_allowed_bash(hook_input: Mapping[str, Any], workspace: str, home: Path, image: bytes

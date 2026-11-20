@@ -349,18 +349,25 @@ def hook(raw: bytes, env: Optional[Mapping[str, str]] = None) -> Dict[str, Any]:
             raise AgentError(f"the hook was called for {event!r}; it answers PreToolUse and SessionEnd")
         from prismpath.agent import claude_code
         result = claude_code.evaluate(data, env, policy)
-        answer, profile_hash = result.answer, None
+        answer, profile = result.answer, None
         from prismpath.agent import sandbox_hook
         if result.decision.kind == "allow" and data.get("tool_name") == "Bash" and sandbox_hook.supported():
             # an allowed shell call runs only inside the sandbox the same policy compiles to (sandbox_hook.py);
             # on a platform without the sandbox the call is decided and not confined, as before
             try:
-                updated, profile_hash = sandbox_hook.sandbox_allowed_bash(data, result.workspace, home, policy.image)
+                profile = sandbox_hook.sandbox_profile_for_call(data, home, policy.image)
             except sandbox_hook.SandboxRefused as exc:
                 return deny_answer(_detail(exc), SANDBOX_ERROR)
+        run = store.open(session, policy.image)
+        index = run.append(policy.reading_bytes(result.reading), result.decision.verdict,
+                           sandbox_profile=profile.hash() if profile is not None else None)
+        if profile is not None:
+            # the receipt is written first so the runner can bind what the command shows to it (observe.py)
+            from prismpath.ledgers import core_evidence
+            observe = {"run_dir": str(run.dir), "session": session, "receipt": index, "profile_sha256": profile.hash(),
+                       "image_sha256": core_evidence.sha256_hex(policy.image)}
+            updated = sandbox_hook.sandbox_input(data, result.workspace, profile, observe=observe)
             answer = claude_code.hook_answer(result.decision, updated)
-        index = store.open(session, policy.image).append(policy.reading_bytes(result.reading), result.decision.verdict,
-                                                         sandbox_profile=profile_hash)
         return claude_code.fill_receipt(answer, receipt_id(session, index))
     except BaseException as exc:  # noqa: BLE001 - fail closed on everything, never allow
         if event == "SessionEnd":
@@ -420,7 +427,7 @@ def verify(as_json: bool, tamper_demo: bool = False, out=None) -> int:
                     row["was"] = "sealed over other receipts than the journal's"
                 result = run.verify(home, seal=summary["seal"] != "diverged")
                 row.update(receipts=result["receipts"], replayed=result["replayed"], disagree=result["disagree"],
-                           root_statement=result["root_statement"],
+                           root_statement=result["root_statement"], observations=result.get("observations", 0),
                            verified=result["disagree"] == 0 and result["root_statement"] == "signed")
         except (RunError, Exception) as exc:  # noqa: BLE001 - one bad run does not stop the others
             row.update(verified=False, error=_detail(exc))
@@ -443,7 +450,9 @@ def verify(as_json: bool, tamper_demo: bool = False, out=None) -> int:
             else:
                 print(f"{row['session']}: {row['receipts']} receipts, {row['replayed']} replayed through the reference "
                       f"kernel, {row['disagree']} disagree, root statement {row['root_statement']} "
-                      f"(was {row['was']}){'' if row['verified'] else ' REFUSED'}", file=out)
+                      f"(was {row['was']}){'' if row['verified'] else ' REFUSED'}"
+                      + (f"; {row['observations']} sandbox observations bound to their receipts, none of them a decision"
+                         if row.get("observations") else ""), file=out)
         demo = report.get("tamper_demo")
         if demo is not None:
             if demo.get("refused") is True:
