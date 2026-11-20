@@ -62,7 +62,10 @@ def config_dir(env: Optional[Mapping[str, str]] = None, platform: Optional[str] 
 
 def hook_command() -> str:
     """The command Claude Code runs: this interpreter, so the hook runs the PrismPath that was installed."""
-    argv = [sys.executable, "-m", "prismpath", "agent", "hook"]
+    # `python -m` puts the current directory, which Claude Code sets to the workspace, first on sys.path, so a
+    # `prismpath/` package the agent planted there would run in place of the installed one, before any call is
+    # classified. -P (3.11 and later) drops that entry; -I (3.10) drops it too, and the user's site and PYTHONPATH.
+    argv = [sys.executable, "-P" if sys.version_info >= (3, 11) else "-I", "-m", "prismpath", "agent", "hook"]
     if os.name == "nt":                                     # pragma: no cover
         import subprocess
         return subprocess.list2cmdline(argv)
