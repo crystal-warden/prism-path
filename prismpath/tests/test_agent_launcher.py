@@ -292,8 +292,13 @@ def test_a_program_that_is_not_found_or_a_credential_that_is_not_a_file_runs_not
 @needs_bwrap
 @needs_socat
 def test_the_cli_wiring_passes_the_program_after_double_dash(world, monkeypatch, capsys):
+    import io
     from prismpath import cli
+    from prismpath.agent import commands
     workspace, _stages, root = world
+    monkeypatch.setenv("HOME", str(root / "home"))                 # `agent run` needs the recorded keys and policy
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    commands.init(workspace, True, False, out=io.StringIO())
     code = cli.main(["agent", "run", "--workspace", str(workspace), "--egress-log", str(root / "e.log"), "--",
                      PYTHON, "-c", "import sys; open('cli-ran', 'w').write(' '.join(sys.argv[1:])); sys.exit(4)", "a", "--b"])
     assert code == 4 and (workspace / "cli-ran").read_text() == "a --b"

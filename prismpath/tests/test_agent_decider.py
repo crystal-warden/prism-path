@@ -73,6 +73,7 @@ def _comparable(answer, from_cli):
     reason = out.get("permissionDecisionReason")
     if reason is not None:
         reason = reason.replace(" If you approve it, it runs inside the PrismPath sandbox.", "")
+        reason = reason.replace(" " + commands.DIRECT_ASK_NOTE, "")       # the decider's note on a direct question
         if out["permissionDecision"] == "allow":      # the direct-Bash note replaces nothing the CLI said
             reason = None
         out["permissionDecisionReason"] = reason
@@ -118,6 +119,26 @@ def test_an_allowed_shell_call_runs_directly_and_the_answer_says_so(world):
     assert commands.DIRECT_NOTE in out["permissionDecisionReason"] and "Receipt 0 of session s9" in out["permissionDecisionReason"]
     run = run_module.Run.existing(commands.config_dir({"HOME": str(world["home"])}) / commands.RUNS_DIR, "s9")
     assert "sandbox" not in run._entries()[0]
+
+
+def test_a_shell_question_under_the_decider_says_it_would_run_directly(world):
+    cli_tests._init(world)
+    payload = {"session_id": "s8", "cwd": world["ws"], "hook_event_name": "PreToolUse", "tool_name": "Bash",
+               "tool_input": {"command": "rm -rf build", "description": "clean"}}
+    answer = commands.hook(json.dumps(payload).encode(), {"HOME": str(world["home"])}, direct=True)
+    out = answer["hookSpecificOutput"]
+    assert out["permissionDecision"] == "ask" and "updatedInput" not in out
+    assert out["permissionDecisionReason"].endswith(commands.DIRECT_ASK_NOTE)
+
+
+def test_agent_run_without_init_says_so_and_runs_nothing(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    with pytest.raises(commands.AgentError, match="prismpath agent init.*nothing was run"):
+        commands.run([sys.executable, "-c", f"open({str(ws / 'ran')!r}, 'w')"], workspace=str(ws))
+    assert not (ws / "ran").exists()
 
 
 # ----------------------------------------------------------------------------------------- client fails closed

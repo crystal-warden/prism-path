@@ -345,6 +345,8 @@ def receipt_id(session: str, index: int) -> str:
 
 DIRECT_NOTE = ("PrismPath allowed this shell command to run directly inside the agent sandbox. The per call "
                "sandbox is not applied here.")
+DIRECT_ASK_NOTE = ("If you approve it, it runs directly inside the agent sandbox; the per call sandbox is not applied "
+                   "here.")
 
 
 def hook(raw: bytes, env: Optional[Mapping[str, str]] = None, direct: bool = False) -> Dict[str, Any]:
@@ -401,6 +403,8 @@ def hook(raw: bytes, env: Optional[Mapping[str, str]] = None, direct: bool = Fal
         answer = claude_code.fill_receipt(answer, receipt_id(session, index))
         if direct and result.decision.kind == "allow" and data.get("tool_name") == "Bash":
             answer["hookSpecificOutput"]["permissionDecisionReason"] = DIRECT_NOTE + f" Receipt {receipt_id(session, index)}."
+        elif direct and result.decision.kind == "escalate" and data.get("tool_name") == "Bash" and has_command:
+            answer["hookSpecificOutput"]["permissionDecisionReason"] += " " + DIRECT_ASK_NOTE
         return answer
     except BaseException as exc:  # noqa: BLE001 - fail closed on everything, never allow
         if event == "SessionEnd":
@@ -533,6 +537,16 @@ def run(program: List[str], workspace: Optional[str] = None, credential: Optiona
     from prismpath.agent import launcher
     if program[:1] == ["--"]:
         program = program[1:]
+    # the decider decides every tool call with the recorded keys and policy; without them it would refuse each call
+    # with cause 126, so say what is missing now and run nothing
+    from prismpath.agent.policy import classifier_mismatch
+    try:
+        policy, _store = load_checked(config_dir())
+    except AgentError as exc:
+        raise AgentError(f"{exc}; `prismpath agent run` needs it before it starts the agent, so nothing was run") from exc
+    mismatch = classifier_mismatch(policy)
+    if mismatch:
+        raise AgentError(f"{mismatch}; nothing was run")
     if egress_log is None:
         egress_log = str(config_dir() / "egress" / f"{time.strftime('%Y%m%dT%H%M%S')}-{os.getpid()}.log")
     kwargs = {} if max_processes is None else {"max_processes": max_processes}
