@@ -76,8 +76,18 @@ def _by_rule(data):
     return {row["rule"]: row for row in data["rules"]}
 
 
+def _numbers(data):
+    """The rule numbers the demo hits, found by target so a rule added to the starter does not move them."""
+    rows = data["rules"]
+    net = next(r["rule"] for r in rows if r["target"] == "refuse_106")
+    out = next(r["rule"] for r in rows if r["target"] == "refuse_111")
+    allow = next(r["rule"] for r in rows if r["target"] == "allow" and "read_file" in r["condition"])
+    return net, out, allow
+
+
 def _fill(home, ws):
-    """Session s1: two reads and a write (rule 14 x3). Session s2: a curl (rule 3) and /etc/passwd (rule 8)."""
+    """Session s1: two reads and a write (the workspace file allow, x3). Session s2: a curl (the network refusal) and /etc/passwd
+    (the outside refusal)."""
     note = {"file_path": str(ws / "notes.txt")}
     assert _hook(home, ws, "s1", "Read", note) == "allow"
     assert _hook(home, ws, "s1", "Read", note) == "allow"
@@ -94,13 +104,14 @@ def test_hits_are_counted_per_rule_from_the_hooks_receipts(project):
     data = _rules(home)
     assert _tree(home / ".config") == before              # read only: not even the open run was sealed
     by = _by_rule(data)
-    assert [by[n]["hits"] for n in (3, 8, 14)] == [1, 1, 3]
+    net, out, allow = _numbers(data)
+    assert [by[n]["hits"] for n in (net, out, allow)] == [1, 1, 3]
     assert sum(row["hits"] for row in data["rules"]) == 5 and data["receipts"]["counted"] == 5
     assert data["receipts"]["not_verified"] == 0 and data["receipts"]["runs_counted"] == 2
-    assert by[3]["target"] == "refuse_106" and by[3]["cause"] == "agent:network" and by[3]["decision"] == "refuse"
-    assert by[14]["decision"] == "allow" and by[14]["cause"] is None
-    assert by[14]["last_hit"] and by[1]["last_hit"] is None
-    assert {1, 2} <= set(data["never_matched"]) and not {3, 8, 14} & set(data["never_matched"])
+    assert by[net]["cause"] == "agent:network" and by[net]["decision"] == "refuse"
+    assert by[allow]["decision"] == "allow" and by[allow]["cause"] is None
+    assert by[allow]["last_hit"] and by[1]["last_hit"] is None
+    assert {1, 2} <= set(data["never_matched"]) and not {net, out, allow} & set(data["never_matched"])
     assert [row["cause"] for row in data["core_refusals"]][:2] == ["route:no-matching-edge",
                                                                   "route:contract-violation"]
     assert all(row["hits"] == 0 for row in data["core_refusals"])
@@ -113,7 +124,8 @@ def test_a_core_refusal_is_its_own_row(project):
     from prismpath.agent import commands
     policy, store = commands.load_checked(commands.config_dir({"HOME": str(home)}, "linux"))
     reading = {"classifier_version": 1, "tool": "git", "path_scope": "none", "path_in_toolchain": False,
-               "path_glob": False, "path_traversal": False, "path_symlink": False, "command_class": "none",
+               "path_glob": False, "path_traversal": False, "path_symlink": False, "path_control": False,
+               "command_class": "none",
                "kill_by_pattern": False, "git_op": "none", "remote_class": "none"}
     assert rules.rule_index(policy, policy.reading_bytes(reading)) is None       # no rule holds: the core refuses
     run = store.open("core", policy.image)
@@ -138,7 +150,8 @@ def test_a_receipt_that_does_not_verify_is_skipped_and_counted(project):
     assert out["receipts"]["runs_counted"] == 1
     assert [s["session"] for s in out["receipts"]["skipped"]] == ["s2"]
     by = _by_rule(out)
-    assert by[3]["hits"] == 0 and by[8]["hits"] == 0 and by[14]["hits"] == 3
+    net, outside, allow = _numbers(out)
+    assert by[net]["hits"] == 0 and by[outside]["hits"] == 0 and by[allow]["hits"] == 3
     text = _cli(home, "agent", "rules").stdout.decode()
     assert "2 receipts did not verify" in text and "skipped s2" in text
 
