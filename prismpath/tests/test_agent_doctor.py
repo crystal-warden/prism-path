@@ -78,10 +78,11 @@ def _hook_command(data, event="PreToolUse"):
 
 def test_a_fresh_init_reports_everything_ok(setup):
     report = _report(setup)
-    assert report["ok"] and report["counts"] == {"ok": len(report["checks"]), "warn": 0, "fail": 0}
+    rows = [r for r in report["checks"] if r["check"] != "shell-confinement"]   # a warning off Linux, where nothing is confined
+    assert report["ok"] and all(r["status"] == "ok" for r in rows)
     assert set(_by(report)) == {"config-dir", "key-files", "authority-key", "instance-key", "policy", "hook-PreToolUse",
-                                "hook-SessionEnd", "hook-dry-run", "runs", "disk"}
-    assert all(r["fix"] is None for r in report["checks"])
+                                "hook-SessionEnd", "hook-dry-run", "runs", "disk", "shell-confinement"}
+    assert all(r["fix"] is None for r in rows)
 
 
 @pytest.mark.parametrize("starter", ["strict", "default", "review"])
@@ -113,7 +114,7 @@ def test_the_cli_exits_0_when_nothing_fails_and_prints_a_line_per_check(setup):
     text = done.stdout.decode()
     # the budget is the real 150 ms here, so the dry run may warn on a slow machine, which still exits 0
     assert done.returncode == 0, text + done.stderr.decode()
-    assert text.count("\n") == 11 and "0 fail" in text
+    assert text.count("\n") == 12 and "0 fail" in text
     assert "budget" in text and "150 ms" in text
 
 
