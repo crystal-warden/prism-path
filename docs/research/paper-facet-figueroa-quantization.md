@@ -15,8 +15,9 @@ occupies, derived from the policy itself and provably preserving every decision 
 define **Facet**, a wire protocol that carries those symbols with a codebook agreed from the shared
 signed policy rather than transmitted, a symbol coding that frames itself, and tamper evidence
 anchored to an audit chain. On 64,484 representative fused decisions, the Facet wire costs 1.516
-bytes per decision with its integrity apparatus counted: 66.9 times smaller than OpenTelemetry
-(OTLP) protobuf and 4.7 times smaller than zstd compressed batched OTLP, while it still frames
+bytes per decision with its two epoch roots counted (1.524 with the return channel's ACK as well):
+66.9 times smaller than OpenTelemetry (OTLP) protobuf (66.5 with the ACK) and 4.7 times smaller than
+zstd compressed batched OTLP, while it still frames
 itself, streams, and shows tampering, none of which a compressed record format provides. The
 reduction is structural, not a compression trick: we transmit the decision, not a timestamped
 attribute bag. Decision preservation is machine checked three ways against a frozen corpus.
@@ -223,8 +224,10 @@ Over 64,484 representative fused decisions, batched the way OTLP ships
 | **Facet (O1, per field)** | **1.516** | frames itself, shows tampering |
 
 Facet is 66.9 times smaller than OTLP protobuf and 4.7 times smaller than zstd compressed batched
-OTLP. The Facet figure counts its integrity apparatus (Merkle epoch roots and the ACK channel), and
-every ratio divides by that exact measured cost. The reduction is structural: OTLP ships a
+OTLP. The Facet figure counts the two roots each epoch carries, the Merkle root and the chained epoch
+root (64 B per 4,096 decisions). The 32 B ACK on the return channel is itemized in `results.json` and
+not added; with it the figure is 1.524 B, 66.5 times under OTLP protobuf and still 4.7 times under
+zstd compressed batched OTLP. Every ratio divides by the exact measured cost. The reduction is structural: OTLP ships a
 timestamped, typed attribute bag; Facet ships the decision. A general compressor on a verbose
 format narrows the raw byte gap but gives up framing, streaming, and tamper evidence; the
 differentiator is those properties, not the byte count alone.

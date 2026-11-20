@@ -156,7 +156,7 @@ def main() -> int:
     # pull the decision-codec + JSON numbers to state the ratios in one place
     try:
         prev = json.loads((HERE / "results.json").read_text())
-        # wire_bytes_total counts the integrity apparatus (Merkle epoch roots + ACK), the same
+        # wire_bytes_total counts the two epoch roots (Merkle root + chained root), not the ACK; the same
         # convention as the #84 headline; payload-only wire_bytes understates O1/O2 (1.50/0.50
         # vs the true 1.516/0.516) and overstates every ratio built on them.
         o1 = prev["o1"].get("wire_bytes_total", prev["o1"]["wire_bytes"]) / prev["n"]
@@ -208,8 +208,10 @@ round trip). n = {result['n']:,} representative fused decisions; batched the way
 
 **Headline:** the decision wire is **{ra.get('otlp_over_o1', 'n/a')}× smaller than OTLP protobuf** per
 decision, and **{ra.get('otlp_zstd_over_o1', 'n/a')}× smaller than zstd compressed batched OTLP**.
-O1 and O2 here count their integrity apparatus (Merkle epoch roots + ACK channel), the same
-convention as the #84 headline; every ratio divides by the exact measured cost, not a rounded one.
+O1 and O2 here count the two roots each epoch carries (the Merkle root and the chained epoch root),
+the same convention as the #84 headline; the 32 B ACK on the return channel is itemized in results.json
+and not added (with it O1 is 1.524 B, 66.5× under OTLP protobuf). Every ratio divides by the exact
+measured cost, not a rounded one.
 
 **Why OTLP is this size (honest):** OTLP is a general telemetry *envelope*, not a decision codec.
 Every record carries two per record wall clock timestamps (fixed64), typed attribute values, and
