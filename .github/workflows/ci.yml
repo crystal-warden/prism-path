@@ -30,8 +30,17 @@ jobs:
       # bare numpy+pytest environment still passes.
       - name: Install
         run: pip install numpy pytest cryptography
+      # The sandbox tests run commands under bubblewrap, and the proxied network states relay the proxy socket
+      # with socat inside the sandbox; without these the tests skip, and the sandbox goes unchecked on x86_64.
+      - name: Install the sandbox tools
+        run: sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends bubblewrap socat
       - name: Unit tests (parser / predicates / router / engine / prefilter)
-        run: python -m pytest prismpath/tests -q
+        run: python -m pytest prismpath/tests -q -rs
+      - name: The sandbox tests ran rather than skipped
+        run: |
+          set -o pipefail
+          python -m pytest prismpath/tests/test_sandbox_exec.py prismpath/tests/test_sandbox_net.py -q -rs | tee /tmp/sb.txt
+          ! grep -q "SKIPPED" /tmp/sb.txt
       # The sandbox security + robustness gate. Exits non-zero on ANY code execution or uncaught
       # crash across ~23k adversarial + random predicate inputs. This is the check that guards the
       # "a `when` predicate cannot execute code, and cannot crash a run" claim in the papers.

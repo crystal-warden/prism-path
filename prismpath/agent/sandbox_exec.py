@@ -45,10 +45,13 @@ from typing import List, Optional, Sequence, Tuple
 if __name__ == "__main__":      # run by path under `python -I`, which puts nothing on sys.path
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from prismpath.agent.profile import Profile      # noqa: E402
+from prismpath.agent.profile import Profile, ProfileError      # noqa: E402
 
 BWRAP = "/usr/bin/bwrap"
 MOUNT = "/workspace"
+PROXY_PORT = 3128                       # the relay's loopback port inside the sandbox (its own network namespace, so it cannot clash)
+PROXY_SOCKET_IN = "/tmp/.pp-egress.sock"    # where the proxy's unix socket appears inside; a bind mount cannot be unlinked from inside
+RELAY = "/usr/bin/socat"
 SHELL = "/usr/bin/bash"
 
 
@@ -70,13 +73,19 @@ def available() -> bool:
 
 
 def bwrap_argv(workspace: Path, profile: Profile, command: Sequence[str],
-               extra_ro_binds: Sequence[Tuple[str, str]] = (), mount: str = MOUNT, cwd: str = "") -> List[str]:
+               extra_ro_binds: Sequence[Tuple[str, str]] = (), mount: str = MOUNT, cwd: str = "",
+               proxy_socket: str = "") -> List[str]:
     """The full bwrap command line. `extra_ro_binds` are (source, destination) pairs bound read only after
     the workspace, so they sit on top of it. The workspace is mounted at `mount` and the command starts in
-    `cwd` (a path below the workspace, relative, or empty for its root)."""
+    `cwd` (a path below the workspace, relative, or empty for its root). A profile whose `net` is a proxy state
+    needs `proxy_socket`, the host path of the proxy's unix socket, which is bound in; the sandbox keeps its
+    own network namespace with only `lo`, and `--share-net` is never added for these states. The caller
+    starts the relay (`with_relay`)."""
     workspace = Path(os.path.realpath(workspace))
+    if profile.net != "none" and not proxy_socket:
+        raise SandboxUnavailable("the profile asks for a proxy and no proxy socket was given, so the command was not run")
     argv = [BWRAP, "--unshare-all"]
-    if profile.network:
+    if profile.network and profile.net == "none":
         argv.append("--share-net")
     argv += ["--die-with-parent", "--new-session", "--cap-drop", "ALL",
              "--clearenv", "--setenv", "PATH", "/usr/bin:/bin", "--setenv", "HOME", "/tmp",
@@ -96,6 +105,12 @@ def bwrap_argv(workspace: Path, profile: Profile, command: Sequence[str],
         if os.path.isdir("/usr/lib64"):     # x86_64 finds its dynamic loader at /lib64; without it nothing starts
             argv += ["--symlink", "usr/lib64", "/lib64"]
     argv += ["--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp", "--bind", str(workspace), mount]
+    if profile.net != "none":
+        proxy = f"http://127.0.0.1:{PROXY_PORT}"
+        argv += ["--bind", os.path.realpath(proxy_socket), PROXY_SOCKET_IN]
+        for name in ("HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy"):
+            argv += ["--setenv", name, proxy]
+        argv += ["--setenv", "NO_PROXY", "", "--setenv", "no_proxy", ""]
     toolchain = workspace / ".toolchain"
     if toolchain.is_dir() and not toolchain.is_symlink():
         argv += ["--ro-bind", str(toolchain), mount + "/.toolchain"]
@@ -110,14 +125,29 @@ def limited(command: Sequence[str], max_processes: int) -> List[str]:
     return [SHELL, "-c", f'ulimit -u {int(max_processes)} && exec "$@"', "bash", *command]
 
 
+def with_relay(command: Sequence[str]) -> List[str]:
+    """`command` run after a `socat` relay from 127.0.0.1:PROXY_PORT to the bound proxy socket is listening.
+    The relay lives in the sandbox's process namespace and dies with it. A relay that does not come up
+    within about five seconds stops the command, so nothing runs with a proxy it cannot reach."""
+    script = (f'{RELAY} TCP-LISTEN:{PROXY_PORT},bind=127.0.0.1,fork,reuseaddr UNIX-CONNECT:{PROXY_SOCKET_IN} & '
+              f'for i in $(seq 50); do grep -q ":{PROXY_PORT:04X} .* 0A " /proc/net/tcp && break; sleep 0.1; done; '
+              f'grep -q ":{PROXY_PORT:04X} .* 0A " /proc/net/tcp || {{ echo "the egress relay did not start" >&2; exit 125; }}; '
+              f'exec "$@"')
+    return [SHELL, "-c", script, "bash", *command]
+
+
 def run_sandboxed(command: Sequence[str], workspace: Path, profile: Optional[Profile] = None,
-                  stdin: Optional[bytes] = None, mount: str = MOUNT, cwd: str = "") -> SandboxResult:
+                  stdin: Optional[bytes] = None, mount: str = MOUNT, cwd: str = "",
+                  proxy_socket: str = "") -> SandboxResult:
     """Run `command` (an argv list) in the sandbox and return what it did. A command that fails is a
     result. A sandbox that cannot start is `SandboxUnavailable`."""
     profile = profile or Profile()
     if not command:
         raise ValueError("an empty command")
-    argv = bwrap_argv(workspace, profile, limited(command, profile.max_processes), mount=mount, cwd=cwd)
+    inner = limited(command, profile.max_processes)
+    if profile.net != "none":
+        inner = limited(with_relay(command), profile.max_processes)
+    argv = bwrap_argv(workspace, profile, inner, mount=mount, cwd=cwd, proxy_socket=proxy_socket)
     return _run(argv, profile.timeout_s, stdin)
 
 
@@ -159,7 +189,7 @@ def profile_from_json(text: str) -> Profile:
         raise ValueError("not a prismpath.profile/1 object")
     return Profile(ro_mounts=tuple(obj["ro_mounts"]), rw_path=obj["rw_path"], host_write=bool(obj["host_write"]),
                    network=bool(obj["network"]), max_processes=int(obj["max_processes"]),
-                   timeout_s=int(obj["timeout_s"]))
+                   timeout_s=int(obj["timeout_s"]), net=obj.get("net", "none"))
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
@@ -167,6 +197,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--workspace", required=True)
     parser.add_argument("--cwd", default="", help="below the workspace, relative")
     parser.add_argument("--profile", required=True, help="a prismpath.profile/1 object as JSON")
+    parser.add_argument("--proxy-socket", default="", help="host path of the egress proxy's unix socket (for a proxy profile)")
     parser.add_argument("--timeout", type=int, default=None, help="seconds; the profile's timeout_s when not given")
     for flag in ("run", "session", "receipt", "image", "profile"):    # observe.py: bind what the command shows to its receipt
         parser.add_argument(f"--observe-{flag}", default=None)
@@ -183,8 +214,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         if rel == ".." or rel.startswith("../"):
             raise ValueError("the working directory is outside the workspace")
         done = run_sandboxed([SHELL, "-c", args.command], Path(workspace), profile, stdin=b"", mount=workspace,
-                             cwd="" if rel == "." else rel)
-    except (SandboxUnavailable, ValueError, KeyError, TypeError) as exc:
+                             cwd="" if rel == "." else rel, proxy_socket=args.proxy_socket)
+    except (SandboxUnavailable, ValueError, KeyError, TypeError, ProfileError) as exc:
         sys.stderr.write(f"PrismPath did not run this command: the sandbox could not be set up ({exc})\n")
         return 126
     sys.stdout.buffer.write(done.stdout)
