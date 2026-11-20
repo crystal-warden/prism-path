@@ -1973,6 +1973,29 @@
     ],
     "rationale": "The weakness this cause prevents: when the confinement cannot be applied the call is denied instead of being run without it."
    }
+  },
+  "130": {
+   "name": "agent:net-refused",
+   "class": "routing",
+   "kind": "security-control",
+   "owasp_asi": {
+    "ids": [
+     "ASI02"
+    ],
+    "rationale": "A connection to anything but the model's own API is refused, so a tool the agent was given cannot be turned into a route to an arbitrary host."
+   },
+   "mitre_atlas": {
+    "ids": [
+     "AML.T0025"
+    ],
+    "rationale": "The technique is moving data out over a channel the agent opens; this cause refuses the channel, it does not inspect the data."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-918"
+    ],
+    "rationale": "Nearest entry: a request made to a destination the requester chose; the cause refuses every destination but the allowed ones, it does not validate the request."
+   }
   }
  }
 }
