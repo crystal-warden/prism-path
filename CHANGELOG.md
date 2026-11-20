@@ -8,6 +8,12 @@ spec stable.
 
 ## [Unreleased]
 
+- **`prismpath agent rules` shows each rule of the installed policy with its hits.** Like `iptables -L -v`, it lists
+  the rules in order with their readable conditions, targets, hit counts and last hit time counted from the
+  receipts that verify, the core's own refusals as rows of their own, the rules never matched, and the rules no
+  reading can reach (decided from the policy alone over every combination of field values). It takes `--json` and
+  `--since`, and writes nothing.
+
 ## [0.2.0] (2026-11-17)
 
 The first release since 0.1.0, and the first through Trusted Publishing. 0.1.1, 0.1.2 and 0.1.3 were tagged or
