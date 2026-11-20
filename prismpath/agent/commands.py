@@ -225,7 +225,7 @@ def init(project: Path, yes: bool, as_json: bool, confirm=None, out=None, policy
     home = config_dir()
     _make_dir(home)
     keys = {role: _ensure_key(home, role) for role in KEY_ROLES}
-    from prismpath.agent.policy import DEFAULT_STARTER, STARTERS, Policy, starter_of, starter_path
+    from prismpath.agent.policy import DEFAULT_STARTER, STARTERS, Policy, older_starter_of, starter_of, starter_path
     from prismpath.ledgers import root_statement
     root_statement.check_separation(root_statement.InstanceKey.load(str(_key_paths(home, "instance")[0])),
                                     [_key_id(home, "authority")])
@@ -235,7 +235,8 @@ def init(project: Path, yes: bool, as_json: bool, confirm=None, out=None, policy
         recorded: Optional[bytes] = load_checked(home)[0].image
     except Exception:  # noqa: BLE001 - absent or not verifying: record it again
         recorded = None
-    starter = policy or (recorded is not None and starter_of(recorded)) or DEFAULT_STARTER
+    kept = recorded is not None and (starter_of(recorded) or (older_starter_of(recorded) or (None,))[0])
+    starter = policy or kept or DEFAULT_STARTER
     image = Policy.load(starter_path(starter)).image
     if recorded is None:
         policy_state = "recorded"
@@ -520,7 +521,7 @@ def confinement_state() -> Dict[str, Any]:
 
 
 def status(project: Path, as_json: bool, out=None) -> int:
-    from prismpath.agent.policy import STARTERS, starter_of
+    from prismpath.agent.policy import RULE_DATE, STARTERS, control_check, older_starter_of, starter_of
     from prismpath.agent.run import RunStore
     out = out or sys.stdout
     home = config_dir()
@@ -529,8 +530,14 @@ def status(project: Path, as_json: bool, out=None) -> int:
     policy: Dict[str, Any] = {"path": str(home / POLICY_FILE)}
     if (home / POLICY_FILE).is_file():
         policy["sha256"] = _sha256_hex((home / POLICY_FILE).read_bytes())
-        policy["name"] = starter_of((home / POLICY_FILE).read_bytes()) or "custom"
+        image = (home / POLICY_FILE).read_bytes()
+        older = older_starter_of(image)
+        policy["name"] = starter_of(image) or (f"{older[0]} (before {RULE_DATE})" if older else "custom")
         policy["image"] = STARTERS.get(policy["name"])
+        try:
+            policy["control"] = control_check(image)
+        except Exception as exc:  # noqa: BLE001 - an image that does not load is reported by `attested` below
+            policy["control"] = {"refuses_control_changes": None, "reason": _detail(exc)}
     try:
         load_checked(home)
         policy["attested"] = True
@@ -566,6 +573,8 @@ def status(project: Path, as_json: bool, out=None) -> int:
         named = f"{policy['name']} {policy['sha256']}" if "sha256" in policy else "missing"
         print(f"policy: {named} ({'attested' if policy['attested'] else 'not usable: ' + policy['problem']})",
               file=out)
+        if policy.get("control", {}).get("refuses_control_changes") is False:
+            print(f"warning: {policy['control']['message']}", file=out)
         print(f"hooks in {settings_path}: " + ", ".join(f"{e} {'yes' if v else 'no'}" for e, v in installed.items()),
               file=out)
         print(f"shell commands: {confinement['detail']}", file=out)
