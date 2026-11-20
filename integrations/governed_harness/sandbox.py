@@ -26,28 +26,19 @@ import subprocess
 from pathlib import Path
 from typing import Any, Dict, List
 
-BWRAP = "/usr/bin/bwrap"
+from prismpath.agent import sandbox_exec
+
+BWRAP = sandbox_exec.BWRAP
 EXECUTOR = Path(__file__).resolve().parent / "exec_tool.py"
-MOUNT = "/workspace"
+MOUNT = sandbox_exec.MOUNT
 TIMEOUT_S = 30
 
 
 def bwrap_argv(workspace: Path) -> List[str]:
-    workspace = Path(os.path.realpath(workspace))
-    argv = [BWRAP, "--unshare-all", "--die-with-parent", "--new-session", "--cap-drop", "ALL",
-            "--clearenv", "--setenv", "PATH", "/usr/bin:/bin", "--setenv", "HOME", "/tmp",
-            "--setenv", "LANG", "C.UTF-8", "--setenv", "GIT_CONFIG_NOSYSTEM", "1",
-            "--setenv", "GIT_AUTHOR_NAME", "agent", "--setenv", "GIT_AUTHOR_EMAIL", "agent@workspace.invalid",
-            "--setenv", "GIT_COMMITTER_NAME", "agent", "--setenv", "GIT_COMMITTER_EMAIL", "agent@workspace.invalid",
-            "--ro-bind", "/usr", "/usr", "--symlink", "usr/bin", "/bin", "--symlink", "usr/lib", "/lib",
-            "--symlink", "usr/sbin", "/sbin", "--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp",
-            "--bind", str(workspace), MOUNT]
-    toolchain = workspace / ".toolchain"
-    if toolchain.is_dir() and not toolchain.is_symlink():
-        argv += ["--ro-bind", str(toolchain), MOUNT + "/.toolchain"]
-    argv += ["--ro-bind", str(EXECUTOR), "/run/exec_tool.py", "--chdir", MOUNT,
-             "/usr/bin/python3", "-I", "/run/exec_tool.py"]
-    return argv
+    """The bubblewrap line itself now lives in `prismpath.agent.sandbox_exec`; this adds the executor."""
+    return sandbox_exec.bwrap_argv(workspace, sandbox_exec.SandboxProfile(timeout_s=TIMEOUT_S),
+                                   ["/usr/bin/python3", "-I", "/run/exec_tool.py"],
+                                   [(str(EXECUTOR), "/run/exec_tool.py")])
 
 
 def execute(call: Dict[str, Any], workspace: Path) -> Dict[str, Any]:
