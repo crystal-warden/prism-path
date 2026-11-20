@@ -2,11 +2,13 @@
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """The governed agent never changes its own controls (cause 128 agent:control-write).
 
-The files inside the workspace that hold the agent's controls (`.claude/settings.json`, `.claude/settings.local.json`,
-everything under `.claude/hooks/`, `.mcp.json`, `.claude` itself and the program an installed PrismPath hook runs)
-are refused for every change, under all three starters, by whichever tool names them: the file tools, the MCP file
-tools and the shell commands the plain word grammar reads. A path is matched after it resolves, so `..` and a
-symbolic link do not hide it. A read is decided as before. The paths outside the workspace (`~/.claude`,
+The paths inside the workspace that hold the agent's controls or shape its behaviour (everything under `.claude/`,
+`.mcp.json`, `.git/config`, everything under `.git/hooks/`, `CLAUDE.md`, `CLAUDE.local.md` and `AGENTS.md` at any depth,
+the program an installed PrismPath hook runs, the workspace root and every directory that holds one of these) are
+refused for every change, under all three starters, by whichever tool names them: the file tools, the MCP file
+tools, the shell commands the plain word grammar reads and the commands the hazard scan reads (a redirection or a
+file changing program). A path is matched after it resolves and without regard to case, so `..`, a symbolic link
+and `.CLAUDE` do not hide it, and a hard link to a control file is one too. A read is decided as before. The paths outside the workspace (`~/.claude`,
 `~/.prismpath`) were already refused as outside the workspace and stay so.
 """
 import json
@@ -66,8 +68,7 @@ def test_a_notebook_edit_of_a_control_file_is_refused(name, ws):
                                            ("review", ("escalate", 127))])
 def test_an_ordinary_write_keeps_its_old_verdict(name, expected, ws):
     assert _decide(name, ws, "Write", {"file_path": str(ws / "src" / "a.py"), "content": "x"})[:2] == expected
-    assert _decide(name, ws, "Write", {"file_path": str(ws / ".claude" / "commands" / "x.md"), "content": "x"})[:2] \
-        == expected                                                  # the rest of .claude is not a control file
+    assert _decide(name, ws, "Write", {"file_path": str(ws / "notes" / "CLAUDE.txt"), "content": "x"})[:2] == expected
 
 
 @pytest.mark.parametrize("name", sorted(STARTERS))
@@ -167,3 +168,138 @@ def test_the_rules_say_that_these_refusals_are_observations_not_policy():
     for name in STARTERS.values():
         text = (Path(__file__).resolve().parents[1] / "agent" / "policy" / f"{name}.rules.md").read_text("utf-8")
         assert "observations a later policy proposal may read" in text and "never change the policy on their own" in text
+
+
+# ---------------------------------------------------------------- the gaps PR #60 left open
+@pytest.mark.parametrize("name", sorted(STARTERS))
+@pytest.mark.parametrize("command", [
+    "echo x > .claude/settings.json", "printf y >> .mcp.json", "echo x>.mcp.json", "cat a.txt | tee .claude/hooks/g.sh",
+    "cd .claude && echo x > settings.json", "ls && rm -rf .claude/hooks", "echo x &> .mcp.json", "echo x >&.mcp.json",
+    "echo x > .CLAUDE/settings.json", "echo x > CLAUDE.md", "sed -i s/a/b/ AGENTS.md; ls", "git add .mcp.json && git commit -m x"])
+def test_a_command_outside_the_grammar_that_redirects_onto_a_control_file_is_refused(name, command, ws):
+    (ws / "a.txt").write_text("x\n")
+    assert _decide(name, ws, "Bash", {"command": command})[:2] == ("refuse", CAUSE), command
+
+
+@pytest.mark.parametrize("name", sorted(STARTERS))
+@pytest.mark.parametrize("command", ["cat .mcp.json | head", "cat .mcp.json 2>&1 | head", "grep x .claude/settings.json; ls",
+                                     "echo x > notes.txt", "ls -la . | head", "python -m pytest . 2>&1 | tail -3"])
+def test_a_command_outside_the_grammar_that_only_reads_a_control_file_is_not_a_control_change(name, command, ws):
+    kind, code, _ = _decide(name, ws, "Bash", {"command": command})
+    assert code != CAUSE, command
+
+
+def test_the_scan_asks_with_the_scan_reading(ws):
+    _, _, result = _decide("default", ws, "Bash", {"command": "echo x > .claude/settings.json"})
+    assert result.reading["path_control"] is True and result.reading["command_class"] == "mutating"
+    assert result.reading["tool"] == "run_command"
+
+
+@pytest.mark.parametrize("name", sorted(STARTERS))
+@pytest.mark.parametrize("target", [".CLAUDE/settings.json", ".Claude/Hooks/g.sh", ".MCP.JSON", ".GIT/CONFIG", ".Git/Hooks/pre-commit",
+                                    "claude.MD", "src/Claude.Local.MD", "agents.md"])
+def test_a_spelling_in_another_case_names_the_same_file(name, target, ws):
+    assert _decide(name, ws, "Write", {"file_path": str(ws / target), "content": "x"})[:2] == ("refuse", CAUSE)
+    assert _decide(name, ws, "Bash", {"command": f"rm {target}"})[:2] == ("refuse", CAUSE)
+
+
+@pytest.mark.parametrize("name", sorted(STARTERS))
+def test_a_hard_link_to_a_control_file_is_a_control_path(name, ws):
+    os.link(ws / ".mcp.json", ws / "other" / "innocent.txt")
+    (ws / "CLAUDE.md").write_text("rules\n")
+    (ws / "src" / "deep").mkdir()
+    os.link(ws / "CLAUDE.md", ws / "src" / "deep" / "notes.txt")
+    for path in ("other/innocent.txt", "src/deep/notes.txt"):
+        assert _decide(name, ws, "Write", {"file_path": path, "content": "x"})[:2] == ("refuse", CAUSE), path
+        assert _decide(name, ws, "Bash", {"command": f"rm {path}"})[:2] == ("refuse", CAUSE), path
+        assert _decide(name, ws, "Read", {"file_path": path})[:2] == ("allow", None) or name == "review"
+    assert _decide(name, ws, "Write", {"file_path": "other/plain.txt", "content": "x"})[1] != CAUSE
+    (ws / "other" / "single.txt").write_text("x")           # one link only: not a control file
+    assert _decide(name, ws, "Write", {"file_path": "other/single.txt", "content": "x"})[1] != CAUSE
+
+
+@pytest.mark.parametrize("name", sorted(STARTERS))
+@pytest.mark.parametrize("target", [".git/hooks/pre-commit", ".git/hooks/sub/x", ".git/config", ".git/hooks"])
+def test_git_hooks_and_config_are_control_paths(name, target, ws):
+    (ws / ".git" / "hooks").mkdir(parents=True)
+    assert _decide(name, ws, "Write", {"file_path": str(ws / target), "content": "x"})[:2] == ("refuse", CAUSE)
+    assert _decide(name, ws, "Bash", {"command": f"rm {target}"})[:2] == ("refuse", CAUSE)
+    assert _decide(name, ws, "Write", {"file_path": str(ws / ".git" / "HEAD"), "content": "x"})[1] != CAUSE
+
+
+@pytest.mark.parametrize("name", sorted(STARTERS))
+@pytest.mark.parametrize("target", ["CLAUDE.md", "CLAUDE.local.md", "AGENTS.md", "src/CLAUDE.md", "src/deep/er/AGENTS.md",
+                                    ".claude/commands/x.md", ".claude/agents/a.md", ".claude/skills/s/SKILL.md",
+                                    ".claude/anything.txt"])
+def test_files_that_shape_the_agent_are_control_paths_and_reads_stay_allowed(name, target, ws):
+    assert _decide(name, ws, "Write", {"file_path": str(ws / target), "content": "x"})[:2] == ("refuse", CAUSE)
+    assert _decide(name, ws, "Edit", {"file_path": target, "old_string": "a", "new_string": "b"})[:2] == ("refuse", CAUSE)
+    if name != "review":
+        assert _decide(name, ws, "Read", {"file_path": str(ws / target)})[:2] == ("allow", None)
+
+
+@pytest.mark.parametrize("name", sorted(STARTERS))
+@pytest.mark.parametrize("command", ["rm -r .", "rm -rf ./", "mv . x", "rm -rf .git", "rm -rf src/../.", "mv src/deep x",
+                                     "rm -rf src/deep", "rm -rf other/../src/deep/"])
+def test_a_change_to_the_root_or_a_directory_that_holds_a_control_file_is_refused(name, command, ws):
+    (ws / "src" / "deep").mkdir()
+    (ws / "src" / "deep" / "AGENTS.md").write_text("x\n")
+    (ws / ".git").mkdir()
+    assert _decide(name, ws, "Bash", {"command": command})[:2] == ("refuse", CAUSE), command
+    assert _decide(name, ws, "Bash", {"command": "ls ."})[:2] == ("allow", None)         # a read of the root is a read
+
+
+@pytest.mark.parametrize("name", sorted(STARTERS))
+def test_a_directory_that_holds_no_control_file_is_not_control(name, ws):
+    (ws / "build").mkdir()
+    (ws / "build" / "out.o").write_text("x")
+    assert _decide(name, ws, "Bash", {"command": "rm -rf build"})[1] != CAUSE
+    assert _decide(name, ws, "Bash", {"command": "rm build/out.o"})[1] != CAUSE
+
+
+def test_the_directories_of_a_hook_program_are_control(ws):
+    venv = ws / ".venv" / "bin"
+    venv.mkdir(parents=True)
+    (venv / "python").write_text("#!/bin/sh\n")
+    hook = f"'{venv / 'python'}' -m prismpath agent hook || exit 2"
+    (ws / ".claude" / "settings.json").write_text(json.dumps(
+        {"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": hook}]}]}}))
+    assert _decide("default", ws, "Bash", {"command": "rm -rf .venv"})[:2] == ("refuse", CAUSE)
+    assert _decide("default", ws, "Bash", {"command": "rm -rf .venv/bin"})[:2] == ("refuse", CAUSE)
+
+
+def test_the_walk_below_a_directory_is_bounded(ws, monkeypatch):
+    monkeypatch.setattr(classifier, "WALK_LIMIT", 5)
+    (ws / "many").mkdir()
+    for index in range(10):
+        (ws / "many" / f"f{index}").write_text("x")
+    (ws / "many" / "zz").mkdir()
+    (ws / "many" / "zz" / "CLAUDE.md").write_text("x")
+    assert classifier.disk_facts("many", classifier.Config.for_workspace(ws)).control in (True, False)   # it returns
+
+
+@pytest.mark.skipif(os.name == "nt", reason="the written hook command is a POSIX shell line")
+def test_a_package_planted_in_the_workspace_does_not_shadow_the_hook(tmp_path):
+    """`python -m prismpath` run from the workspace would import a planted `prismpath/` first; the written command
+    does not put the working directory on sys.path (-P, or -I before Python 3.11)."""
+    import subprocess
+    import sys
+    from prismpath.agent import commands
+    work = tmp_path / "work"
+    (work / "prismpath").mkdir(parents=True)
+    marker = tmp_path / "RAN"
+    (work / "prismpath" / "__init__.py").write_text(f"open({str(marker)!r}, 'w').write('planted')\n")
+    (work / "sitecustomize.py").write_text(f"open({str(marker)!r}, 'w').write('site')\n")
+    (work / "x.pth").write_text("import os\n")
+    root = str(Path(__file__).resolve().parents[2])
+    env = {**os.environ, "PYTHONPATH": root}
+    line = commands.hook_command()
+    assert " -P -m prismpath " in line or " -I -m prismpath " in line
+    unsafe = subprocess.run(["sh", "-c", line.replace(" -P -m", " -m").replace(" -I -m", " -m")], input=b"{}",
+                            capture_output=True, cwd=work, env=env)
+    assert marker.exists(), "the premise: without the flag the planted package runs"
+    marker.unlink()
+    done = subprocess.run(["sh", "-c", line], input=b"{}", capture_output=True, cwd=work, env=env)
+    assert not marker.exists()
+    assert json.loads(done.stdout)["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
+    assert unsafe.returncode in (0, 1, 2)

@@ -1761,8 +1761,303 @@
    "content": "x"
   },
   "expect": {
+   "answer": "deny",
+   "cause_code": 128
+  }
+ },
+ {
+  "id": "control-redirect-echo-settings",
+  "cwd": "@WS@",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+   "command": "echo x > .claude/settings.json"
+  },
+  "expect": {
+   "answer": "deny",
+   "cause_code": 128
+  }
+ },
+ {
+  "id": "control-redirect-append-mcp",
+  "cwd": "@WS@",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+   "command": "printf y >> .mcp.json"
+  },
+  "expect": {
+   "answer": "deny",
+   "cause_code": 128
+  }
+ },
+ {
+  "id": "control-redirect-after-cd",
+  "cwd": "@WS@",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+   "command": "cd .claude && echo x > settings.json"
+  },
+  "expect": {
+   "answer": "deny",
+   "cause_code": 128
+  }
+ },
+ {
+  "id": "control-redirect-in-pipeline",
+  "cwd": "@WS@",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+   "command": "cat notes.txt | tee .claude/settings.local.json"
+  },
+  "expect": {
+   "answer": "deny",
+   "cause_code": 128
+  }
+ },
+ {
+  "id": "control-rm-in-compound",
+  "cwd": "@WS@",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+   "command": "ls && rm -rf .claude/hooks"
+  },
+  "expect": {
+   "answer": "deny",
+   "cause_code": 128
+  }
+ },
+ {
+  "id": "control-redirect-to-plain-file-asks",
+  "cwd": "@WS@",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+   "command": "echo x > notes.txt"
+  },
+  "expect": {
+   "answer": "ask",
+   "cause_code": 124
+  }
+ },
+ {
+  "id": "control-read-pipeline-asks",
+  "cwd": "@WS@",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+   "command": "cat .mcp.json | head"
+  },
+  "expect": {
+   "answer": "ask",
+   "cause_code": 124
+  }
+ },
+ {
+  "id": "control-read-with-descriptor-dup-asks",
+  "cwd": "@WS@",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+   "command": "cat .mcp.json 2>&1 | head"
+  },
+  "expect": {
+   "answer": "ask",
+   "cause_code": 124
+  }
+ },
+ {
+  "id": "control-write-upper-case",
+  "cwd": "@WS@",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+   "file_path": "@WS@/.CLAUDE/Settings.JSON",
+   "content": "{}"
+  },
+  "expect": {
+   "answer": "deny",
+   "cause_code": 128
+  }
+ },
+ {
+  "id": "control-write-git-hook",
+  "cwd": "@WS@",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+   "file_path": "@WS@/.git/hooks/pre-commit",
+   "content": "#!/bin/sh"
+  },
+  "expect": {
+   "answer": "deny",
+   "cause_code": 128
+  }
+ },
+ {
+  "id": "control-write-git-config",
+  "cwd": "@WS@",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+   "file_path": "@WS@/.git/config",
+   "content": "[core]"
+  },
+  "expect": {
+   "answer": "deny",
+   "cause_code": 128
+  }
+ },
+ {
+  "id": "control-write-claude-md",
+  "cwd": "@WS@",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+   "file_path": "@WS@/CLAUDE.md",
+   "content": "x"
+  },
+  "expect": {
+   "answer": "deny",
+   "cause_code": 128
+  }
+ },
+ {
+  "id": "control-edit-nested-claude-local-md",
+  "cwd": "@WS@",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+   "file_path": "@WS@/src/CLAUDE.local.md",
+   "old_string": "a",
+   "new_string": "b"
+  },
+  "expect": {
+   "answer": "deny",
+   "cause_code": 128
+  }
+ },
+ {
+  "id": "control-write-agents-md",
+  "cwd": "@WS@",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+   "file_path": "@WS@/AGENTS.md",
+   "content": "x"
+  },
+  "expect": {
+   "answer": "deny",
+   "cause_code": 128
+  }
+ },
+ {
+  "id": "control-write-claude-agents",
+  "cwd": "@WS@",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+   "file_path": "@WS@/.claude/agents/x.md",
+   "content": "x"
+  },
+  "expect": {
+   "answer": "deny",
+   "cause_code": 128
+  }
+ },
+ {
+  "id": "control-write-claude-skills",
+  "cwd": "@WS@",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+   "file_path": "@WS@/.claude/skills/s/SKILL.md",
+   "content": "x"
+  },
+  "expect": {
+   "answer": "deny",
+   "cause_code": 128
+  }
+ },
+ {
+  "id": "control-read-claude-md",
+  "cwd": "@WS@",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+   "file_path": "@WS@/CLAUDE.md"
+  },
+  "expect": {
    "answer": "allow",
    "cause_code": null
+  }
+ },
+ {
+  "id": "control-read-git-config",
+  "cwd": "@WS@",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+   "file_path": "@WS@/.git/config"
+  },
+  "expect": {
+   "answer": "allow",
+   "cause_code": null
+  }
+ },
+ {
+  "id": "control-rm-workspace-root",
+  "cwd": "@WS@",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+   "command": "rm -rf ."
+  },
+  "expect": {
+   "answer": "deny",
+   "cause_code": 128
+  }
+ },
+ {
+  "id": "control-rm-workspace-root-slash",
+  "cwd": "@WS@",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+   "command": "rm -rf ./"
+  },
+  "expect": {
+   "answer": "deny",
+   "cause_code": 128
+  }
+ },
+ {
+  "id": "control-mv-workspace-root",
+  "cwd": "@WS@",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+   "command": "mv . x"
+  },
+  "expect": {
+   "answer": "deny",
+   "cause_code": 128
+  }
+ },
+ {
+  "id": "control-rm-git-directory",
+  "cwd": "@WS@",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+   "command": "rm -rf .git"
+  },
+  "expect": {
+   "answer": "deny",
+   "cause_code": 128
   }
  }
 ]

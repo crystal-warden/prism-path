@@ -170,7 +170,11 @@ def test_plain_word_grammar(command, argv):
     ("git clean -fd;", {"git_op": "mutating"}), ("git reset --hard;", {"git_op": "mutating"}),
     ("git -C /x status;", {"git_op": "unknown"}), ("git frob;", {"git_op": "unknown"}),
     ("git push; git clean -f;", {"git_op": "mutating"}),
-    ("ls $HOME", None), ("echo h\u00e9", None), ("cat /ws/a;", None), ("skill; killer", None),
+    ("echo x > .claude/settings.json;", {"path_control": True, "command_class": "mutating"}),
+    ("printf y >> .mcp.json", {"path_control": True, "command_class": "mutating"}),
+    ("cat a | tee CLAUDE.md", {"path_control": True, "command_class": "mutating"}),
+    ("cat .mcp.json | head", None), ("cat .mcp.json 2>&1 | head", None), ("python x.py .claude/settings.json | head", None),
+    ("echo x > notes.txt", None), ("find . -name x | head", None), ("ls $HOME", None), ("echo h\u00e9", None), ("cat /ws/a;", None), ("skill; killer", None),
     ("git status; git commit -m x;", None), ("git reset;", None), ("npm run build;", None),
 ])
 def test_hazard_scan(command, fields):
