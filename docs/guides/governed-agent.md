@@ -129,7 +129,7 @@ If a call you expected to be governed is not, or a hook feels slow, run `prismpa
 
 ## What this does and does not protect you from
 
-The hook decides. On Linux an allowed Bash call is rewritten to run inside a sandbox built from the same policy, so the programs it starts can reach the workspace and the system files they need and nothing else. Claude Code's own Read, Write and Edit tools, and every call on macOS and Windows, run outside any PrismPath sandbox and have the access Claude Code has. A question you approve in Claude Code's prompt also runs as the model wrote it, without the sandbox.
+The hook decides. On Linux an allowed Bash call is rewritten to run inside a sandbox built from the same policy, so the programs it starts can reach the workspace and the system files they need and nothing else. Claude Code's own Read, Write and Edit tools, and every call on macOS and Windows, run outside any PrismPath sandbox and have the access Claude Code has. A question you approve in Claude Code's prompt runs inside the same sandbox, and the prompt shows the rewritten command. The sandbox is built from what the policy allows, so an approved call that needs more, a push for example, fails inside it.
 
 Nothing PrismPath refuses runs. Every decision, allow, refuse or ask, has a receipt you can verify later.
 

@@ -8,6 +8,11 @@ spec stable.
 
 ## [Unreleased]
 
+### Added: sandbox observations, and approved questions run sandboxed (2026-11-20)
+
+- **An escalated Bash call on Linux is answered ask with the sandboxed command** (`updatedInput`), so a call the person approves runs under the same bwrap profile as an allowed one. A refusal is unchanged, and a missing bwrap or a profile that does not compile is a deny with cause 129. Off Linux the call is asked unchanged.
+- **Sandbox observations.** When a sandboxed command's standard error shows a stopped access, the run records an observation in `observations.jsonl`, bound to the receipt, image hash and profile hash. `prismpath agent verify` checks it. It is not a rule hit and changes no decision. `core-receipt/1` is unchanged.
+
 ### Added: the governed agent no longer changes its own controls (2026-11-19)
 
 - **A change to the agent's own control files is refused under every starter** (`strict`, `default`, `review`), with

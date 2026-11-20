@@ -351,8 +351,10 @@ def hook(raw: bytes, env: Optional[Mapping[str, str]] = None) -> Dict[str, Any]:
         result = claude_code.evaluate(data, env, policy)
         answer, profile = result.answer, None
         from prismpath.agent import sandbox_hook
-        if result.decision.kind == "allow" and data.get("tool_name") == "Bash" and sandbox_hook.supported():
-            # an allowed shell call runs only inside the sandbox the same policy compiles to (sandbox_hook.py);
+        has_command = isinstance(data.get("tool_input"), dict) and isinstance(data["tool_input"].get("command"), str)
+        if (result.decision.kind == "allow" or (result.decision.kind == "escalate" and has_command)) \
+                and data.get("tool_name") == "Bash" and sandbox_hook.supported():
+            # an allowed shell call, or a question the person approves, runs only inside the sandbox the same policy compiles to (sandbox_hook.py);
             # on a platform without the sandbox the call is decided and not confined, as before
             try:
                 profile = sandbox_hook.sandbox_profile_for_call(data, home, policy.image)

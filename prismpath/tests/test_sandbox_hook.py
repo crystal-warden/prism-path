@@ -155,12 +155,28 @@ def test_the_profile_is_cached_by_image_hash_and_a_damaged_cache_is_recompiled(w
 
 
 # ------------------------------------------------------------------------------------- refuse, ask, fail closed
-def test_a_refusal_and_a_question_are_unchanged_and_carry_no_rewrite(world):
+def test_a_refusal_carries_no_rewrite_and_a_question_asks_with_the_rewrite(world):
     _init(world)
-    for command, kind in (("curl -o data.csv https://example.invalid/data.csv", "deny"), ("rm scratch.tmp", "ask"),
-                          ("git push origin HEAD", "ask")):
-        answer = _output(_hook(world["home"], _bash(world, command)))
-        assert answer["permissionDecision"] == kind and "updatedInput" not in answer, command
+    answer = _output(_hook(world["home"], _bash(world, "curl -o data.csv https://example.invalid/data.csv")))
+    assert answer["permissionDecision"] == "deny" and "updatedInput" not in answer
+    for command in ("rm scratch.tmp", "git push origin HEAD"):
+        answer = _output(_hook(world["home"], _bash(world, command, description="d")))
+        assert answer["permissionDecision"] == "ask", command
+        assert answer["updatedInput"]["description"] == "d"
+        assert answer["updatedInput"]["command"].endswith(shlex.quote(command))
+        assert "runs inside the PrismPath sandbox" in answer["permissionDecisionReason"]
+    run = RunStore(_agent_dir(world["home"]) / "runs").get("s1")
+    assert all(line for line in (run.dir / "journal.jsonl").read_text().splitlines() if '"sandbox"' in line)
+
+
+def test_a_missing_bwrap_denies_a_question_with_the_new_cause_and_no_receipt(world, monkeypatch):
+    _init(world)
+    monkeypatch.setattr(sandbox_exec, "BWRAP", str(Path(world["home"]) / "no-such-bwrap"))
+    env = _env(world["home"])
+    out = _output(commands.hook(json.dumps(_bash(world, "rm scratch.tmp")).encode(), {**env, "PATH": os.environ["PATH"]}))
+    assert out["permissionDecision"] == "deny" and "updatedInput" not in out
+    assert f"cause {SANDBOX_CODE} agent:sandbox-unavailable" in out["permissionDecisionReason"]
+    assert not any((_agent_dir(world["home"]) / "runs").glob("*/journal.jsonl"))
 
 
 def test_non_bash_tools_are_not_rewritten(world):

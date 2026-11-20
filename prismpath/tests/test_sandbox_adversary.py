@@ -242,3 +242,27 @@ def test_observations_are_not_rule_hits_and_the_policy_is_untouched(arena):
     after = json.loads(_cli(arena["home"], "agent", "rules", "--json").stdout)
     assert after == base
     assert {p.name: p.read_bytes() for p in home.iterdir() if p.is_file()} == before
+
+
+@needs_bwrap
+def test_an_escalated_script_asks_with_the_rewrite_and_approving_it_reaches_none_of_the_resources(arena):
+    from prismpath.agent.policy import starter_path
+    home = _agent_dir(arena["home"])               # back to the default policy, which asks about such a script
+    image = starter_path("default").read_bytes()
+    (home / commands.POLICY_FILE).write_bytes(image)
+    (home / commands.ATTESTATION_FILE).write_bytes(commands._attestation(home, image))
+    answer = _output(_hook(arena["home"], {**_bash(arena, "sh build.sh"), "session_id": "adv-ask"}))
+    assert answer["permissionDecision"] == "ask" and "updatedInput" in answer
+    assert "runs inside the PrismPath sandbox" in answer["permissionDecisionReason"]
+    decoy, listener = arena["decoy"], arena["listener"]
+    (decoy / "written.txt").unlink(missing_ok=True)
+    before = listener.connections
+    done = _run(arena, answer["updatedInput"]["command"], arena["ws"])     # what an approval runs
+    import time
+    time.sleep(0.2)
+    assert b"DECOY-NOT-A-SECRET" not in done.stdout
+    assert not (decoy / "written.txt").exists() and listener.connections == before
+    run = RunStore(_agent_dir(arena["home"]) / "runs").get("adv-ask")
+    seen = run.observations()
+    assert len(seen) == 1 and seen[0]["receipt"] == 0
+    assert run.summary()["receipts"] == 1 and run.verify_observations() == 1
