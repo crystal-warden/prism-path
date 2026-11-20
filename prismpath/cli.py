@@ -345,7 +345,7 @@ def _add_operator_commands(subparsers) -> None:
 
     agent_parser = subparsers.add_parser(
         'agent', help='Govern a Claude Code session: keys and the signed default policy (init), the PreToolUse '
-                      'hook (hook), the sealed and verified runs of receipts (verify), what is set up (status)')
+                      'hook (hook), the sealed and verified runs of receipts (verify), what is set up (status), the rules with their hits (rules)')
     agent_sub = agent_parser.add_subparsers(dest='agent_action', metavar='<action>', required=True)
     agent_init = agent_sub.add_parser(
         'init', help='make the authority and instance keys in the user config directory, record the signed '
@@ -372,13 +372,19 @@ def _add_operator_commands(subparsers) -> None:
                        'its receipt count, open or sealed')
     agent_status.add_argument('--project', default=None,
                               help='the project whose .claude/settings.json is read (default as for init)')
+    agent_rules = agent_sub.add_parser(
+        'rules', help='the installed policy\'s rules in order, each with its hits and last hit counted from the '
+                      'receipts that verify, the core\'s own refusals, the rules never matched and the rules no '
+                      'reading can reach; it changes nothing')
+    agent_rules.add_argument('--since', default=None, metavar='ISO_TIME',
+                             help='count only runs whose time is at or after this ISO 8601 time')
     agent_doctor = agent_sub.add_parser(
         'doctor', help='check the whole setup (key modes and pairs, the policy, the hook entries and their '
                        'interpreter, a timed dry run, the runs, free disk) and print ok, warn or fail with the '
                        'fixing command for each; it changes nothing')
     agent_doctor.add_argument('--project', default=None,
                               help='the project whose .claude/settings.json is checked (default as for init)')
-    for sub in (agent_init, agent_hook, agent_verify, agent_status, agent_doctor):
+    for sub in (agent_init, agent_hook, agent_verify, agent_status, agent_doctor, agent_rules):
         sub.add_argument('--json', action='store_true', help='machine readable output')
     agent_parser.set_defaults(func=agent_cmd)
 
@@ -527,6 +533,12 @@ def agent_cmd(args) -> int:
             return commands.init(project, args.yes, args.json, policy=args.policy)
         if args.agent_action == 'verify':
             return commands.verify(args.json, args.tamper_demo)
+        if args.agent_action == 'rules':
+            from prismpath.agent import rules as agent_rules_report
+            try:
+                return agent_rules_report.rules(args.since, args.json)
+            except agent_rules_report.RulesError as exc:
+                raise CliError(str(exc))
         if args.agent_action == 'doctor':
             from prismpath.agent import doctor
             return doctor.doctor(project, args.json)
