@@ -164,6 +164,9 @@ _REGISTRY: Tuple[Tuple[int, str, str, str], ...] = (
     # -- the sandbox around an allowed shell call (prismpath/agent/sandbox_exec.py, commands.py hook): an allowed
     # Bash call runs only inside the sandbox the signed policy compiles to, so one that cannot be sandboxed is denied.
     (129, "agent:sandbox-unavailable",   "routing",   "an allowed agent shell command that could not be run inside the sandbox compiled from the signed policy (the profile did not compile, or the sandbox program is missing); refused and not run, never run without the sandbox"),
+    # -- the egress of the sandboxed agent (prismpath/agent/classifier.py `net_dest`, every starter): a connection the
+    # agent asks the proxy to open to anything but the model's own API is refused, so a destination is never reached on a guess.
+    (130, "agent:net-refused",           "routing",   "an agent connection to a destination that is not the model's own API (a host the classifier reads as other, as an allowed host a starter policy does not list, or cannot read, or a port outside 1 to 65535); refused and not opened, under every starter policy"),
 )
 
 CODES: Dict[int, Tuple[str, str, str]] = {cause_code: (canonical_name, class_name, description)

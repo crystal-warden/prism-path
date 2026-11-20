@@ -472,7 +472,7 @@ def hazard_scan(command: str, workspace: str, cwd: Optional[str] = None,
                     "command_class": "network" if network else "mutating" if paths else "unknown",
                     "path_scope": "unknown" if long else "outside" if outside else "none",
                     "path_traversal": traversal, "path_in_toolchain": toolchain, "path_glob": glob,
-                    "path_control": control,
+                    "path_control": control, "proc_class": "unknown",
                     "git_op": git, "remote_class": "other" if git == "push" else "none"})
     return reading
 

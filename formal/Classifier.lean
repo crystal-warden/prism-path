@@ -9,3 +9,4 @@ import Classifier.Theorems
 import Classifier.Axioms
 import Classifier.ScanTheorems
 import Classifier.Control
+import Classifier.Net

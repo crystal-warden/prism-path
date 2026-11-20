@@ -4,6 +4,7 @@ import Lean
 import Classifier.Theorems
 import Classifier.ScanTheorems
 import Classifier.Control
+import Classifier.Net
 /-!
 # The classifier's axiom audit
 
@@ -136,7 +137,6 @@ elab "#assert_standard_axioms " id:ident : command => do
 #assert_standard_axioms Classifier.gitop_mem
 #assert_standard_axioms Classifier.remote_mem
 #assert_standard_axioms Classifier.bool_mem
-#assert_standard_axioms Classifier.controlSpace_mem
 #assert_standard_axioms Classifier.control_refused
 #assert_standard_axioms Classifier.pathFacts_control
 #assert_standard_axioms Classifier.merge_control
@@ -159,3 +159,16 @@ elab "#assert_standard_axioms " id:ident : command => do
 #assert_standard_axioms Classifier.delete_holder_refused
 #assert_standard_axioms Classifier.destroyArgs_rm
 #assert_standard_axioms Classifier.run_destroy_holder_refused
+#assert_standard_axioms Classifier.netdest_mem
+#assert_standard_axioms Classifier.procclass_mem
+#assert_standard_axioms Classifier.net_refused
+#assert_standard_axioms Classifier.plan_connect
+#assert_standard_axioms Classifier.classify_connect
+#assert_standard_axioms Classifier.netDestOf_model_api
+#assert_standard_axioms Classifier.netDestOf_allowed
+#assert_standard_axioms Classifier.netDestOf_ne_none
+#assert_standard_axioms Classifier.netDestOf_other
+#assert_standard_axioms Classifier.netDestOf_unreadable
+#assert_standard_axioms Classifier.connect_bad
+#assert_standard_axioms Classifier.connect_other_refused
+#assert_standard_axioms Classifier.connect_unreadable_refused

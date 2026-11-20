@@ -8,6 +8,12 @@ spec stable.
 
 ## [Unreleased]
 
+### Added: the classifier reads a connection, version 2 (2026-11-20)
+
+- **The classifier gains the tool `connect` and the reading fields `net_dest` and `proc_class`; `CLASSIFIER_VERSION` is 2.** A connect call (`{"tool": "connect", "args": {"host", "port"}}`) reads `net_dest` `model_api` for a host of the constant `MODEL_API` table on port 443, `allowed_host` for an owner listed host on 443, `unknown` for a host it does not read (upper case, a trailing dot, userinfo, a port or a path in it, short IPv4 forms) or a port outside 1 to 65535, and `other` for the rest. `proc_class` is `single`, `tree` or `unknown` for a command and `none` otherwise. Nothing feeds a connect in yet (the proxy is a later package).
+- **Every starter refuses a connection that is not the model's own API with the new cause 130 `agent:net-refused` and allows one to it.** The starter images are recorded again (their field `classifier_version` now holds 2 only), so an older recorded starter refuses every reading until `prismpath agent init`; `prismpath agent doctor` and `status` name the three older images. Existing calls keep their verdicts, since no old rule reads either new field. The intent layer's images are regenerated from the strict starter.
+- **The Lean model proves the network rule** (`Net.lean`): `connect_other_refused`, `connect_unreadable_refused`, `net_refused`, `netDestOf_model_api`, and the oracle's `--policy` mode reports `net_refused` (`netSafe`) for each image. The differential harness reads a corpus of odd hosts and ports with 0 disagreements.
+
 ### Added: sandbox observations, and approved questions run sandboxed (2026-11-20)
 
 - **An escalated Bash call on Linux is answered ask with the sandboxed command** (`updatedInput`), so a call the person approves runs under the same bwrap profile as an allowed one. A refusal is unchanged, and a missing bwrap or a profile that does not compile is a deny with cause 129. Off Linux the call is asked unchanged.

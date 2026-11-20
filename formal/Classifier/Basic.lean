@@ -161,10 +161,22 @@ def MAX_PATH : Nat := 4096
 def MAX_ARGV : Nat := 64
 def MOUNT : Str := lit "/workspace"
 
+/-- `MODEL_API`: the hosts of the model's own API, a `connect` to which on `MODEL_API_PORT` reads `model_api`.
+A change to this list is a classifier version bump, so it is signed, not configured. -/
+def MODEL_API : List Str := wordsOf ["api.anthropic.com", "platform.claude.com"]
+def MODEL_API_PORT : Int := 443
+/-- `HOST_PREFIX`: how an allowed host is carried in the `remotes` list. A push remote never starts with `-`
+(`gitPlan` drops those words), so such an entry can never also read as an allowed remote. -/
+def HOST_PREFIX : Str := lit "-host:"
+/-- Process classes of a program: `PROC_TREE` programs run children (builders, test runners, package managers,
+every wrapper); the programs of the three command sets and `git` are `single`. -/
+def PROC_TREE : List Str := wordsOf ["make", "cargo", "rustc", "gcc", "cc", "npm", "npx", "yarn", "pnpm", "pytest",
+  "pip", "pip3", "gem", "go", "apt", "apt-get", "brew", "systemctl"]
+
 /-! ## The reading -/
 
 inductive Tool where
-  | list_dir | read_file | write_file | delete_path | run_command | git | unknown
+  | list_dir | read_file | write_file | delete_path | run_command | git | connect | unknown
   deriving DecidableEq, Repr, Inhabited
 
 inductive Scope where
@@ -183,6 +195,16 @@ inductive Remote where
   | none | allowed | other
   deriving DecidableEq, Repr, Inhabited
 
+/-- The class of the host and port a `connect` names (`net_dest`). `none` for every other tool. -/
+inductive NetDest where
+  | none | model_api | allowed_host | other | unknown
+  deriving DecidableEq, Repr, Inhabited
+
+/-- What a `run_command` needs of the process table (`proc_class`). `none` for every other tool. -/
+inductive ProcClass where
+  | none | single | tree | unknown
+  deriving DecidableEq, Repr, Inhabited
+
 /-- One reading. `classifier_version` is the constant `CLASSIFIER_VERSION` and is written by `Reading.json`. -/
 structure Reading where
   tool : Tool := .unknown
@@ -196,16 +218,19 @@ structure Reading where
   killByPattern : Bool := false
   gitOp : GitOp := .none
   remoteClass : Remote := .none
+  netDest : NetDest := .none
+  procClass : ProcClass := .none
   deriving DecidableEq, Repr, Inhabited
 
 /-- The unknown reading (`classifier.unknown_reading`): it routes to `agent:unclassifiable`. -/
 def unknownReading : Reading := {}
 
-def CLASSIFIER_VERSION : Nat := 1
+def CLASSIFIER_VERSION : Nat := 2
 
 def Tool.name : Tool → String
   | .list_dir => "list_dir" | .read_file => "read_file" | .write_file => "write_file"
-  | .delete_path => "delete_path" | .run_command => "run_command" | .git => "git" | .unknown => "unknown"
+  | .delete_path => "delete_path" | .run_command => "run_command" | .git => "git" | .connect => "connect"
+  | .unknown => "unknown"
 def Scope.name : Scope → String
   | .none => "none" | .workspace => "workspace" | .outside => "outside" | .unknown => "unknown"
 def CmdClass.name : CmdClass → String
@@ -216,6 +241,11 @@ def GitOp.name : GitOp → String
   | .push => "push" | .network => "network" | .unknown => "unknown"
 def Remote.name : Remote → String
   | .none => "none" | .allowed => "allowed" | .other => "other"
+def NetDest.name : NetDest → String
+  | .none => "none" | .model_api => "model_api" | .allowed_host => "allowed_host" | .other => "other"
+  | .unknown => "unknown"
+def ProcClass.name : ProcClass → String
+  | .none => "none" | .single => "single" | .tree => "tree" | .unknown => "unknown"
 
 /-- The reading as the document the core reads: every field the policy defines, in code point order of the
 names (the canonical member order). -/
@@ -224,12 +254,14 @@ def Reading.members (r : Reading) : List (String × J) :=
    ("command_class", .str r.commandClass.name),
    ("git_op", .str r.gitOp.name),
    ("kill_by_pattern", .bool r.killByPattern),
+   ("net_dest", .str r.netDest.name),
    ("path_control", .bool r.pathControl),
    ("path_glob", .bool r.pathGlob),
    ("path_in_toolchain", .bool r.pathInToolchain),
    ("path_scope", .str r.pathScope.name),
    ("path_symlink", .bool r.pathSymlink),
    ("path_traversal", .bool r.pathTraversal),
+   ("proc_class", .str r.procClass.name),
    ("remote_class", .str r.remoteClass.name),
    ("tool", .str r.tool.name)]
 
