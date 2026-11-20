@@ -3,15 +3,15 @@
 """The intent layer's two signed policies, generated from the harness's floor and the chosen thresholds.
 
 `policy/intent_calls.core.json` decides a proposed call. It is the governed harness's own image
-(`governed_harness/policy/agent_rules.src.json`) with its rules copied VERBATIM and in order, its twelve
+(`governed_harness/policy/agent_rules.src.json`) with its rules copied VERBATIM and in order, its fourteen
 field definitions unchanged, seven semantic fields added, and five semantic rules inserted after the floor's
-last refusal (rule 10, `agent:shell-mutation`) and before its first allow. Every semantic rule is the
+last refusal (rule 11, `agent:shell-mutation`) and before its first allow. Every semantic rule is the
 conjunction of:
 
   V  the reading is verified under the lock this image was signed with
      (semantic_status == "verified" and semantic_lock == <sha256 of intent_lock.json>);
-  G  the floor would allow this reading: the disjunction of the floor's own allow conditions (rules 11,
-     13, 14 and 15, copied from the floor text), with the push escalation of rule 12 excluded. Rules 1 to 10
+  G  the floor would allow this reading: the disjunction of the floor's own allow conditions (rules 12,
+     14, 15, 16 and 17, copied from the floor text), with the push escalation of rule 13 excluded. Rules 1 to 11
      have not fired when a semantic rule is reached, so G holds exactly where the floor's decision is allow;
   and its own semantic condition:
 
@@ -65,7 +65,7 @@ RESPONSES_SRC = HERE / "policy" / "intent_responses.src.json"
 RESPONSES_CORE = HERE / "policy" / "intent_responses.core.json"
 
 HARM, MISMATCH, PROBING = 114, 115, 116
-FLOOR_REFUSALS = 10           # rules 1 to 10 of the floor are its refusals; rule 11 is its first allow
+FLOOR_REFUSALS = 11           # rules 1 to 11 of the floor are its refusals; rule 12 is its first allow
 
 SEMANTIC_DEFS = {
     "intent_reader_version": f"int min={ir.READER_VERSION} max={ir.READER_VERSION}",
@@ -109,7 +109,7 @@ def build_calls(thresholds: Dict[str, Any], lock: str) -> Dict[str, Any]:
     floor = json.loads(FLOOR_SOURCE.read_text())
     rules = floor["rules"]
     assert all(rule["target"].startswith("refuse_") for rule in rules[:FLOOR_REFUSALS])
-    assert [rule["target"] for rule in rules[FLOOR_REFUSALS:]] == ["allow", "escalate_113", "allow", "allow", "allow"]
+    assert [rule["target"] for rule in rules[FLOOR_REFUSALS:]] == ["allow", "escalate_113", "allow", "allow", "allow", "allow"]
     allow_push, allow_rest = rules[FLOOR_REFUSALS]["when"], [rule["when"] for rule in rules[FLOOR_REFUSALS + 2:]]
     floor_allows = ["or", copy.deepcopy(allow_push),
                     ["and", _cmp("git_op", "!=", _s("push")), ["or", *copy.deepcopy(allow_rest)]]]
@@ -172,7 +172,7 @@ def load_responses() -> Policy:
 
 
 FLOOR_FIELDS = ("classifier_version", "tool", "path_scope", "path_in_toolchain", "path_control", "path_glob", "path_traversal",
-                "path_symlink", "command_class", "kill_by_pattern", "git_op", "remote_class")
+                "path_symlink", "command_class", "kill_by_pattern", "git_op", "remote_class", "net_dest", "proc_class")
 
 
 def zeroed(reading: Dict[str, Any]) -> Dict[str, Any]:

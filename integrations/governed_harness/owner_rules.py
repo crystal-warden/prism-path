@@ -28,6 +28,9 @@ def expected(r: Dict[str, Any]) -> Tuple[str, Optional[str]]:
     # no network commands
     if r["command_class"] == "network" or r["git_op"] == "network":
         return "refuse", "agent:network"
+    # a connection to anything but the model's own API (a host a starter does not list, one it cannot read): refused
+    if r["net_dest"] in ("allowed_host", "other", "unknown") or (r["tool"] == "connect" and r["net_dest"] == "none"):
+        return "refuse", "agent:net-refused"
     # a change to the agent's own controls (settings, hooks, MCP configuration): refused, never asked
     if r["path_control"] and (r["tool"] in WRITES or r["command_class"] == "mutating"
                               or r["git_op"] in ("local_write", "mutating")):
@@ -51,6 +54,8 @@ def expected(r: Dict[str, Any]) -> Tuple[str, Optional[str]]:
     # no push except to an allowed remote class; otherwise the owner decides
     if r["git_op"] == "push":
         return ("allow", None) if r["remote_class"] == "allowed" else ("escalate", "agent:push-escalated")
+    if r["tool"] == "connect" and r["net_dest"] == "model_api":
+        return "allow", None
     if r["tool"] in FILE_TOOLS and r["path_scope"] == "workspace":
         return "allow", None
     if r["tool"] == "run_command" and r["command_class"] == "read_only" and r["path_scope"] in ("none", "workspace"):

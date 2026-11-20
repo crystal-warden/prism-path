@@ -34,44 +34,44 @@ def isChange (r : Reading) : Bool :=
   r.tool == .write_file || r.tool == .delete_path || r.commandClass == .mutating || r.gitOp == .local_write ||
   r.gitOp == .mutating
 
-def allTools : List Tool := [.list_dir, .read_file, .write_file, .delete_path, .run_command, .git, .unknown]
+def allTools : List Tool := [.list_dir, .read_file, .write_file, .delete_path, .run_command, .git, .connect, .unknown]
 def allScopes : List Scope := [.none, .workspace, .outside, .unknown]
 def allCmds : List CmdClass := [.none, .read_only, .mutating, .network, .git, .unknown]
 def allGitOps : List GitOp := [.none, .local_read, .local_write, .mutating, .push, .network, .unknown]
 def allRemotes : List Remote := [.none, .allowed, .other]
+def allNetDests : List NetDest := [.none, .model_api, .allowed_host, .other, .unknown]
+def allProcClasses : List ProcClass := [.none, .single, .tree, .unknown]
 
-/-- Every reading with `path_control`: one per combination of the other fields. -/
-def controlSpace : List Reading :=
-  allTools.flatMap fun t => allScopes.flatMap fun s => allCmds.flatMap fun c => allGitOps.flatMap fun g =>
-  allRemotes.flatMap fun rc => bools.flatMap fun k => bools.flatMap fun tc => bools.flatMap fun gl =>
-  bools.flatMap fun tr => bools.map fun sy =>
-    { tool := t, pathScope := s, pathInToolchain := tc, pathControl := true, pathGlob := gl, pathTraversal := tr,
-      pathSymlink := sy, commandClass := c, killByPattern := k, gitOp := g, remoteClass := rc }
-
-/-- Under `p`, every change that names a control file is refused. -/
+/-- Under `p`, every change that names a control file is refused: every reading with `path_control`, one per
+combination of the other fields, decided by the core. -/
 def controlSafe (p : Core.Checked) : Bool :=
-  controlSpace.all (fun r => !isChange r || isRefusal (Core.decideReading p (.ok r.json)))
+  allTools.all fun t => allScopes.all fun s => allCmds.all fun c => allGitOps.all fun g =>
+  allRemotes.all fun rc => allNetDests.all fun nd => allProcClasses.all fun pc =>
+  bools.all fun k => bools.all fun tc => bools.all fun gl => bools.all fun tr => bools.all fun sy =>
+    let r : Reading :=
+      { tool := t, pathScope := s, pathInToolchain := tc, pathControl := true, pathGlob := gl, pathTraversal := tr,
+        pathSymlink := sy, commandClass := c, killByPattern := k, gitOp := g, remoteClass := rc, netDest := nd,
+        procClass := pc }
+    !isChange r || isRefusal (Core.decideReading p (.ok r.json))
 
 theorem tool_mem (t : Tool) : t ∈ allTools := by cases t <;> simp [allTools]
 theorem scope_mem (t : Scope) : t ∈ allScopes := by cases t <;> simp [allScopes]
 theorem cmd_mem (t : CmdClass) : t ∈ allCmds := by cases t <;> simp [allCmds]
 theorem gitop_mem (t : GitOp) : t ∈ allGitOps := by cases t <;> simp [allGitOps]
 theorem remote_mem (t : Remote) : t ∈ allRemotes := by cases t <;> simp [allRemotes]
+theorem netdest_mem (t : NetDest) : t ∈ allNetDests := by cases t <;> simp [allNetDests]
+theorem procclass_mem (t : ProcClass) : t ∈ allProcClasses := by cases t <;> simp [allProcClasses]
 theorem bool_mem (b : Bool) : b ∈ bools := by cases b <;> simp [bools]
-
-theorem controlSpace_mem (r : Reading) (h : r.pathControl = true) : r ∈ controlSpace := by
-  simp only [controlSpace, List.mem_flatMap, List.mem_map]
-  refine ⟨r.tool, tool_mem _, r.pathScope, scope_mem _, r.commandClass, cmd_mem _, r.gitOp, gitop_mem _,
-    r.remoteClass, remote_mem _, r.killByPattern, bool_mem _, r.pathInToolchain, bool_mem _, r.pathGlob, bool_mem _,
-    r.pathTraversal, bool_mem _, r.pathSymlink, bool_mem _, ?_⟩
-  cases r
-  simp_all
 
 /-- **Under a `controlSafe` policy, a change that reads `path_control` is refused.** -/
 theorem control_refused {p : Core.Checked} (hp : controlSafe p = true) {r : Reading} (hc : r.pathControl = true)
     (hch : isChange r = true) : isRefusal (Core.decideReading p (.ok r.json)) = true := by
-  have := List.all_eq_true.mp hp r (controlSpace_mem r hc)
-  simpa [hch] using this
+  simp only [controlSafe, List.all_eq_true] at hp
+  have := hp r.tool (tool_mem _) r.pathScope (scope_mem _) r.commandClass (cmd_mem _) r.gitOp (gitop_mem _)
+    r.remoteClass (remote_mem _) r.netDest (netdest_mem _) r.procClass (procclass_mem _) r.killByPattern (bool_mem _)
+    r.pathInToolchain (bool_mem _) r.pathGlob (bool_mem _) r.pathTraversal (bool_mem _) r.pathSymlink (bool_mem _)
+  cases r
+  simp_all
 
 /-! ## The classifier reads a control path as control -/
 

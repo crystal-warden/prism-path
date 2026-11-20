@@ -3,6 +3,7 @@
 import Classifier.Scan
 import Classifier.Control
 import Classifier.Shape
+import Classifier.Net
 /-!
 # The classifier oracle
 
@@ -29,7 +30,10 @@ the hazard scan can give is allowed and every one but a push alone is refused (`
 `scan_refused`), which `ScanTheorems.hookReading_only_adds_refusals` turns into: under that policy the scan only
 ever adds refusals. It also prints whether every change that reads `path_control` is refused (`controlSafe`, printed
 as `control_refused`), which `Control.control_refused` and `Control.change_on_control_refused` turn into: under that
-policy a change that names a control file of the agent is refused.
+policy a change that names a control file of the agent is refused. And whether every reading with `net_dest` `other`
+or `unknown`, and every `connect` that names none, is refused (`netSafe`, printed as `net_refused`), which
+`Net.net_refused` and `Net.connect_other_refused` turn into: under that policy a `connect` to a host that is neither
+of the model's API nor on the owner's list is refused.
 
 Only this file does input and output; everything it prints is computed by the model's functions.
 -/
@@ -182,7 +186,8 @@ def main (args : List String) : IO UInt32 := do
     match Core.loadPolicy (Core.readCanonical img) with
     | .ok c => IO.println ("{\"policy\":\"accepted\",\"fits\":" ++ (if fitsAll c.defs then "true" else "false") ++
         ",\"scan_refused\":" ++ (if scanSafe c then "true" else "false") ++
-        ",\"control_refused\":" ++ (if controlSafe c then "true" else "false") ++ "}")
+        ",\"control_refused\":" ++ (if controlSafe c then "true" else "false") ++
+        ",\"net_refused\":" ++ (if netSafe c then "true" else "false") ++ "}")
     | .error _ => IO.println "{\"policy\":\"refused\"}"
     return 0
   | _ =>
