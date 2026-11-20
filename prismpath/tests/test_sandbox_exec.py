@@ -7,7 +7,8 @@ import socket
 import pytest
 
 from prismpath.agent import sandbox_exec
-from prismpath.agent.sandbox_exec import SandboxProfile, SandboxUnavailable, run_sandboxed
+from prismpath.agent.profile import Profile
+from prismpath.agent.sandbox_exec import SandboxUnavailable, run_sandboxed
 
 
 def _bwrap_works() -> str:
@@ -53,7 +54,7 @@ def test_a_write_outside_the_workspace_fails_and_one_inside_lands(tmp_path):
 @needs_bwrap
 def test_with_the_network_off_a_connect_fails(tmp_path):
     code = "import socket; socket.create_connection(('1.1.1.1', 53), timeout=3)"
-    done = run_sandboxed(["python3", "-c", code], tmp_path, SandboxProfile(timeout_s=20))
+    done = run_sandboxed(["python3", "-c", code], tmp_path, Profile(timeout_s=20))
     assert done.returncode != 0 and not done.timed_out
 
 
@@ -65,13 +66,13 @@ def test_network_on_shares_the_host_network_namespace(tmp_path):
         server.listen(1)
         port = server.getsockname()[1]
         code = f"import socket; socket.create_connection(('127.0.0.1', {port}), timeout=3)"
-        assert run_sandboxed(["python3", "-c", code], tmp_path, SandboxProfile(network=True)).returncode == 0
-        assert run_sandboxed(["python3", "-c", code], tmp_path, SandboxProfile(network=False)).returncode != 0
+        assert run_sandboxed(["python3", "-c", code], tmp_path, Profile(network=True)).returncode == 0
+        assert run_sandboxed(["python3", "-c", code], tmp_path, Profile(network=False)).returncode != 0
 
 
 @needs_bwrap
 def test_the_time_limit_stops_a_long_command(tmp_path):
-    done = run_sandboxed(["sleep", "30"], tmp_path, SandboxProfile(timeout_s=1))
+    done = run_sandboxed(["sleep", "30"], tmp_path, Profile(timeout_s=1))
     assert done.timed_out
 
 
@@ -93,5 +94,5 @@ def test_a_bwrap_that_cannot_start_the_sandbox_is_an_error(tmp_path, monkeypatch
 
 
 def test_the_argv_has_no_network_share_by_default(tmp_path):
-    assert "--share-net" not in sandbox_exec.bwrap_argv(tmp_path, SandboxProfile(), ["true"])
-    assert "--share-net" in sandbox_exec.bwrap_argv(tmp_path, SandboxProfile(network=True), ["true"])
+    assert "--share-net" not in sandbox_exec.bwrap_argv(tmp_path, Profile(), ["true"])
+    assert "--share-net" in sandbox_exec.bwrap_argv(tmp_path, Profile(network=True), ["true"])

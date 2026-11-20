@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from prismpath.agent import sandbox_exec
+from prismpath.agent.profile import Profile
 
 BWRAP = sandbox_exec.BWRAP
 EXECUTOR = Path(__file__).resolve().parent / "exec_tool.py"
@@ -36,7 +37,7 @@ TIMEOUT_S = 30
 
 def bwrap_argv(workspace: Path) -> List[str]:
     """The bubblewrap line itself now lives in `prismpath.agent.sandbox_exec`; this adds the executor."""
-    return sandbox_exec.bwrap_argv(workspace, sandbox_exec.SandboxProfile(timeout_s=TIMEOUT_S),
+    return sandbox_exec.bwrap_argv(workspace, Profile(timeout_s=TIMEOUT_S),
                                    ["/usr/bin/python3", "-I", "/run/exec_tool.py"],
                                    [(str(EXECUTOR), "/run/exec_tool.py")])
 
