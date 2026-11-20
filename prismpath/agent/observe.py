@@ -90,3 +90,47 @@ def argv(run_dir: str, session: str, receipt: int, image_sha256: str, profile_sh
     """The runner flags the hook adds so the runner can bind an observation to the receipt."""
     return ["--observe-run", run_dir, "--observe-session", session, "--observe-receipt", str(receipt),
             "--observe-image", image_sha256, "--observe-profile", profile_sha256]
+
+
+EVENT = "PrismPathObservation"
+MAX_STDERR = 1 << 16
+SOCKET_TIMEOUT_S = 10.0
+
+
+def socket_argv(socket_path: str, session: str, receipt: int, image_sha256: str, profile_sha256: str) -> Sequence[str]:
+    """The runner flags of a runner inside the outer agent sandbox: it has no run directory, so it asks the decider
+    in the launcher to record the observation."""
+    return ["--observe-socket", socket_path, "--observe-session", session, "--observe-receipt", str(receipt),
+            "--observe-image", image_sha256, "--observe-profile", profile_sha256]
+
+
+def send(socket_path: str, session: str, receipt: int, image_sha256: str, profile_sha256: str,
+         returncode: int, stderr: bytes, timed_out: bool = False) -> None:
+    """Ask the decider to record the observation of one finished command (standard library only). The decider
+    reads the error texts itself, from the tail of `stderr`, and refuses a receipt or a hash that is not the
+    call's. What a caller inside the sandbox sends is a claim, and it can only add knowledge, never widen anything."""
+    import json
+    import socket
+    text = stderr[-MAX_STDERR:].decode("utf-8", "replace")
+    body = json.dumps({"hook_event_name": EVENT, "session_id": session, "receipt": int(receipt),
+                       "image_sha256": image_sha256, "profile_sha256": profile_sha256, "returncode": int(returncode),
+                       "timed_out": bool(timed_out), "stderr": text}).encode("utf-8")
+    sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    try:
+        sock.settimeout(SOCKET_TIMEOUT_S)
+        sock.connect(socket_path)
+        sock.sendall(body)
+        sock.shutdown(socket.SHUT_WR)
+        reply = b""
+        while True:
+            chunk = sock.recv(65536)
+            if not chunk:
+                break
+            reply += chunk
+            if len(reply) > 65536:
+                break
+    finally:
+        sock.close()
+    answer = json.loads(reply.decode("utf-8"))
+    if not isinstance(answer, dict) or answer.get("recorded") is not True:
+        raise RuntimeError(str(answer.get("systemMessage", "not recorded")) if isinstance(answer, dict) else "bad reply")

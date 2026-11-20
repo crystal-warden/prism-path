@@ -213,6 +213,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--profile", required=True, help="a prismpath.profile/1 or /2 object as JSON")
     parser.add_argument("--proxy-socket", default="", help="host path of the egress proxy's unix socket (for a proxy profile)")
     parser.add_argument("--timeout", type=int, default=None, help="seconds; the profile's timeout_s when not given")
+    parser.add_argument("--observe-socket", default=None, help="the decider's unix socket, for a runner inside the agent sandbox")
     for flag in ("run", "session", "receipt", "image", "profile"):    # observe.py: bind what the command shows to its receipt
         parser.add_argument(f"--observe-{flag}", default=None)
     parser.add_argument("command", help="one shell command string")
@@ -245,10 +246,14 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 def _observe(args, done: SandboxResult) -> None:
     """Record what the finished command showed, when the hook asked for it. An observation never changes the
     command's output or exit status, and a failure to record one only says so on standard error."""
-    if args.observe_run is None:
+    if args.observe_run is None and args.observe_socket is None:
         return
     try:
         from prismpath.agent import observe
+        if args.observe_socket is not None:     # nested: the run directory is outside, the decider records it
+            observe.send(args.observe_socket, args.observe_session, int(args.observe_receipt), args.observe_image,
+                         args.observe_profile, done.returncode, done.stderr, done.timed_out)
+            return
         observe.record(args.observe_run, args.observe_session, int(args.observe_receipt), args.observe_image,
                        args.observe_profile, done.returncode, done.stderr, done.timed_out)
     except Exception as exc:    # noqa: BLE001 - the command ran; the record is best effort and says so

@@ -48,7 +48,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Callable, List, Optional, Sequence, Tuple
 
-from prismpath.agent import classifier, commands, decider as decider_module, egress, egress_policy, hook_client, local_route, sandbox_exec
+from prismpath.agent import classifier, commands, decider as decider_module, egress, egress_policy, hook_client, local_route, sandbox_exec, sandbox_hook
 from prismpath.agent.profile import Profile, ProfileError, compile_profile
 
 STAGE_BASE = "/var/tmp"
@@ -59,6 +59,9 @@ CREDENTIAL_NAME = ".credentials.json"
 HOOK_CLIENT_NAME = "pp-hook.py"
 DECIDER_SOCKET_IN = "/tmp/.pp-decider.sock"     # inside the sandbox; /tmp is a private tmpfs there
 HOOK_PYTHON = "/usr/bin/python3"                # must exist inside: the system prefix is bound read only
+PACKAGE_IN = "/opt/pp"                          # the prismpath package, bound read only, for the per call runner (WP8)
+RUNNER_IN = f"{PACKAGE_IN}/prismpath/agent/sandbox_exec.py"
+PROBE_TIMEOUT_S = 30
 MAX_PROCESSES = 512       # a placeholder until the spike measures the real peak (plan question 10)
 AGENT_ENV = (("DISABLE_AUTOUPDATER", "1"), ("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "1"),
              ("ENABLE_CLAUDEAI_MCP_SERVERS", "false"))
@@ -255,10 +258,9 @@ def launch(command: Sequence[str], workspace: str, credential: Optional[str] = N
     model_route = None
     proc = None
     hook_decider = None
+    nested = None
     try:
         prepare_controls(root, controls)
-        if hook is None:    # the keys, the policy and the runs stay here; the sandbox only gets the socket
-            hook_decider = decider_module.Decider(staged.decider_socket, env={**os.environ, "CLAUDE_PROJECT_DIR": str(root)}).start()
         proxy = egress.EgressProxy(staged.socket, staged.log, decider=decider, gate=gate, resolver=resolver, connect=connect).start()
         if model_target is not None:
             model_route = local_route.LocalModelRoute(staged.root / "model.sock", staged.log, *model_target).start()
@@ -268,10 +270,10 @@ def launch(command: Sequence[str], workspace: str, credential: Optional[str] = N
         binds += [(os.path.realpath(path), os.path.realpath(path)) for path in extra_ro]
         if model_route is not None:
             binds.append((model_route.socket_path, sandbox_exec.MODEL_SOCKET_IN))
+        if hook is None:    # the per call sandbox runs nested in this one, so its runner and the package it imports are bound read only
+            binds.append((str(Path(sandbox_exec.__file__).resolve().parents[1]), f"{PACKAGE_IN}/prismpath"))
         binds.append((str(staged.settings), CONFIG_IN + "/settings.json"))
         binds.append((str(staged.hook_client), f"{CONFIG_IN}/{HOOK_CLIENT_NAME}"))
-        if hook_decider is not None:
-            binds.append((str(staged.decider_socket), DECIDER_SOCKET_IN))
         if staged.credential is not None:
             binds.append((str(staged.credential), f"{CONFIG_IN}/{CREDENTIAL_NAME}"))
         environment = [("HOME", HOME_IN), ("CLAUDE_CONFIG_DIR", CONFIG_IN), *AGENT_ENV]
@@ -279,8 +281,16 @@ def launch(command: Sequence[str], workspace: str, credential: Optional[str] = N
             environment += [("NO_PROXY", "127.0.0.1,localhost"), ("no_proxy", "127.0.0.1,localhost")]
         environment += list(env)
         inner = sandbox_exec.limited(sandbox_exec.with_relay([inside, *command[1:]], model_target[1] if model_target else 0), profile.max_processes)
-        argv = sandbox_exec.bwrap_argv(root, profile, inner, extra_ro_binds=binds, mount=str(root),
-                                       proxy_socket=str(staged.socket), extra_args=extra_args, env=environment)
+
+        def outer(command_inside, extra_binds=()):
+            return sandbox_exec.bwrap_argv(root, profile, command_inside, extra_ro_binds=[*binds, *extra_binds], mount=str(root),
+                                           proxy_socket=str(staged.socket), extra_args=extra_args, env=environment)
+        if hook is None:    # the keys, the policy and the runs stay here; the sandbox only gets the socket
+            nested = probe_nested(outer, root)
+            hook_decider = decider_module.Decider(staged.decider_socket, env={**os.environ, "CLAUDE_PROJECT_DIR": str(root)},
+                                                  nested=nested).start()
+            binds.append((str(staged.decider_socket), DECIDER_SOCKET_IN))
+        argv = outer(inner)
         read_fd, write_fd = os.pipe()
         argv = [argv[0], "--info-fd", str(write_fd), *argv[1:]]
         try:
@@ -307,6 +317,26 @@ def launch(command: Sequence[str], workspace: str, credential: Optional[str] = N
     finally:
         _teardown(proc, (hook_decider, proxy, model_route), staged, controls, egress_log)
         _seal(gate.run if gate is not None else None, home_dir)
+
+
+def probe_nested(outer: Callable, workspace: Path) -> sandbox_hook.Nested:
+    """Whether a per call sandbox can run nested in the agent sandbox on this host, found by running the real
+    runner once: the same outer sandbox, the system interpreter, the bound runner and the strictest bash profile,
+    around `true`. A host that forbids nested user namespaces (an AppArmor restriction, `user.max_user_namespaces`),
+    or a system interpreter too old for the package, shows up here and not as a failed call later. The answer is
+    given to the decider, which then denies every shell command with cause 129 when it is false (agent-sandbox-plan,
+    question 4: the stricter answer, never the outer profile alone)."""
+    probe = [HOOK_PYTHON, "-I", RUNNER_IN, "--workspace", str(workspace), "--profile",
+             json.dumps(Profile().to_object(), sort_keys=True, separators=(",", ":")), "--", "true"]
+    reason, ok = "", False
+    try:
+        done = sandbox_exec._run(outer(probe), PROBE_TIMEOUT_S, b"")
+        ok = done.returncode == 0 and not done.timed_out
+        if not ok:
+            reason = " ".join(done.stderr.decode("utf-8", "replace").split())[-200:] or f"exit status {done.returncode}"
+    except sandbox_exec.SandboxUnavailable as exc:
+        reason = " ".join(str(exc).split())[-200:]
+    return sandbox_hook.Nested(HOOK_PYTHON, RUNNER_IN, DECIDER_SOCKET_IN, ok, reason)
 
 
 def _policy_profile(home: Path, max_processes: int):
