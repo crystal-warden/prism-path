@@ -15,7 +15,7 @@ Every reading holds every field the policy defines, with no absence, no float, o
 declares:
 
   classifier_version  int, this module's CLASSIFIER_VERSION
-  tool                list_dir | read_file | write_file | delete_path | run_command | git | unknown
+  tool                list_dir | read_file | write_file | delete_path | run_command | git | connect | unknown
   path_scope          none | workspace | outside | unknown      (the worst path the call names)
   path_in_toolchain   a named path resolves into a toolchain directory
   path_control        a named path is one of the agent's own controls (CONTROL_TREES, CONTROL_FILES, CONTROL_NAMES, the hook it runs, the root and what holds one)
@@ -26,6 +26,16 @@ declares:
   kill_by_pattern     the call signals processes chosen by a name or pattern, not by one process id
   git_op              none | local_read | local_write | mutating | push | network | unknown
   remote_class        none | allowed | other                    (a push's remote)
+  net_dest            none | model_api | allowed_host | other | unknown   (a connect's host and port)
+  proc_class          none | single | tree | unknown            (what a run_command needs of the process table)
+
+A `connect` is a connection the sandboxed agent asks the egress proxy to open. Its call is
+`{"tool": "connect", "args": {"host": str, "port": int}}` (the port a true `int`, not a bool), and nothing in the
+Claude Code hook or the MCP mapping makes one: a later package feeds it from the proxy. Its reading holds `tool`
+connect, `net_dest` from `net_dest()` and every other field at its default. `model_api` is a host of `MODEL_API`
+on port 443, `allowed_host` a host the owner listed (`Config.allowed_hosts`) on 443, `unknown` a host that is not
+read (`host_ok`) or a port outside 1 to 65535, and `other` every other readable host and port. Every other call has
+`net_dest` none.
 
 The reading has two halves (docs/design/spec-verified-classifier.md). The SYNTACTIC half is everything read
 off the call's text: the tool and its argument schema, the command class of an argv, a kill by pattern, the
@@ -48,9 +58,15 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-CLASSIFIER_VERSION = 1
+CLASSIFIER_VERSION = 2
 MOUNT = "/workspace"          # where the sandbox mounts the workspace, and the path the model is told
 TOOLS = ("list_dir", "read_file", "write_file", "delete_path", "run_command", "git")
+CONNECT = "connect"           # not in TOOLS: the MCP mapping passes the names in TOOLS through, and a server's tool named
+                              # `connect` must not read as the proxy's request
+CALL_TOOLS = TOOLS + (CONNECT,)
+MODEL_API = ("api.anthropic.com", "platform.claude.com")   # a change here is a classifier version bump
+MODEL_API_PORT = 443
+HOST_CHARS = frozenset("abcdefghijklmnopqrstuvwxyz0123456789-.")
 GLOB_CHARS = set("*?[]{}")
 # The agent's management plane: what it is governed by and what shapes how it behaves. A change to one of these,
 # made by a path that resolves onto it, is refused under every shipped policy (cause 128). Matching is case
@@ -76,6 +92,7 @@ _SCHEMA: Dict[str, Tuple[Dict[str, type], Dict[str, type]]] = {
     "delete_path": ({"path": str}, {}),
     "run_command": ({"argv": list}, {}),
     "git": ({"subcommand": str}, {"args": list}),
+    "connect": ({"host": str, "port": int}, {}),
 }
 
 # run_command: what a program is, by the basename of argv[0]. Anything in none of these sets is unknown.
@@ -146,6 +163,11 @@ def git_listing(subcommand: str, args: List[str]) -> bool:
     return not expect_value
 
 
+# proc_class of a run_command: a program that runs children is `tree`, any other program the classifier knows `single`.
+PROC_TREE = frozenset({"make", "cargo", "rustc", "gcc", "cc", "npm", "npx", "yarn", "pnpm", "pytest", "pip", "pip3",
+                       "gem", "go", "apt", "apt-get", "brew", "systemctl"})
+_FIND_EXEC = ("-exec", "-execdir", "-ok", "-okdir")
+
 GIT_UNSAFE_OPTIONS = ("--exec", "--upload-pack", "--receive-pack", "-c", "--config", "--git-dir", "--work-tree", "-C")
 
 
@@ -156,25 +178,27 @@ class Config:
     workspace: Path
     toolchain_dirs: Tuple[Path, ...] = ()
     allowed_remotes: Tuple[str, ...] = ()
+    allowed_hosts: Tuple[str, ...] = ()       # lower case host names a connect to port 443 may reach (net_dest allowed_host)
 
     def __post_init__(self):
         self.workspace = Path(os.path.realpath(self.workspace))
 
     @classmethod
-    def for_workspace(cls, workspace, allowed_remotes: Iterable[str] = ()) -> "Config":
+    def for_workspace(cls, workspace, allowed_remotes: Iterable[str] = (), allowed_hosts: Iterable[str] = ()) -> "Config":
         """The example's configuration: the workspace's own `.toolchain` directory and the host's toolchain
         directories (the system prefixes and the per user toolchain homes)."""
         workspace = Path(os.path.realpath(workspace))
         home = Path(os.path.expanduser("~"))
         dirs = [workspace / ".toolchain", Path("/usr"), Path("/opt"), Path("/etc"), home / ".cargo",
                 home / ".rustup", home / ".elan", home / ".local", home / ".npm", home / ".pyenv"]
-        return cls(workspace, tuple(dirs), tuple(allowed_remotes))
+        return cls(workspace, tuple(dirs), tuple(allowed_remotes), tuple(allowed_hosts))
 
 
 def base_reading() -> Dict[str, Any]:
     return {"classifier_version": CLASSIFIER_VERSION, "tool": "unknown", "path_scope": "none",
             "path_in_toolchain": False, "path_control": False, "path_glob": False, "path_traversal": False, "path_symlink": False,
-            "command_class": "none", "kill_by_pattern": False, "git_op": "none", "remote_class": "none"}
+            "command_class": "none", "kill_by_pattern": False, "git_op": "none", "remote_class": "none",
+            "net_dest": "none", "proc_class": "none"}
 
 
 def unknown_reading() -> Dict[str, Any]:
@@ -487,6 +511,56 @@ def command_class(argv: List[str]) -> str:
     return "unknown"
 
 
+def proc_class(argv: List[str]) -> str:
+    """`proc_class` of a non empty argv: `tree` for a program that runs children (every wrapper, a builder, a test
+    runner, a package manager, `find` with an exec action), `single` for any other program the classifier knows,
+    `unknown` for a program of the workspace, a privilege program and anything it does not know."""
+    base = _program(argv[0])
+    if base is None or not base or base in PRIVILEGE:
+        return "unknown"
+    if base in WRAPPERS or base in PROC_TREE or (base == "find" and any(arg in _FIND_EXEC for arg in argv[1:])):
+        return "tree"
+    if base in READ_ONLY or base in MUTATING or base in NETWORK or base in INSTALLERS or base == "git":
+        return "single"
+    return "unknown"
+
+
+def _octet(label: str) -> bool:
+    return bool(label) and all(c in _DIGITS for c in label) and len(label) <= 3 \
+        and (len(label) == 1 or label[0] != "0") and int(label) <= 255
+
+
+def _label(label: str) -> bool:
+    return 0 < len(label) <= 63 and label[0] != "-" and label[-1] != "-"
+
+
+def host_ok(host: str) -> bool:
+    """True when the classifier reads `host`: lower case ASCII letters, digits, `-` and `.`, at most 253
+    characters, no empty label (so no trailing or leading dot, no `..`), each label at most 63 characters and not
+    starting or ending with `-`, and a last label that starts with a digit only when the whole host is a dotted quad
+    of decimal octets (so `0x7f.1`, `2130706433`, `127.1` and `1.2.3` are not read). Upper case, `@`, `:`, `[`, `/`,
+    `%` and any non ASCII character are not in the set."""
+    if not host or len(host) > 253 or not set(host) <= HOST_CHARS:
+        return False
+    labels = host.split(".")
+    if not all(_label(label) for label in labels):
+        return False
+    if labels[-1][0] in _DIGITS:
+        return len(labels) == 4 and all(_octet(label) for label in labels)
+    return True
+
+
+def net_dest(host: str, port: int, config: "Config") -> str:
+    """`net_dest` of a connect to `host` and `port`."""
+    if not host_ok(host) or not 1 <= port <= 65535:
+        return "unknown"
+    if host in MODEL_API and port == MODEL_API_PORT:
+        return "model_api"
+    if host in config.allowed_hosts and port == MODEL_API_PORT:
+        return "allowed_host"
+    return "other"
+
+
 def git_facts(subcommand: Any, args: Any, config: Config) -> Tuple[str, str, List[PathFacts]]:
     """(git_op, remote_class, path facts) of `git SUBCOMMAND ARGS...`."""
     if not isinstance(subcommand, str) or not subcommand or subcommand.startswith("-") or \
@@ -592,13 +666,16 @@ def _classify(call: Any, config: Config) -> Dict[str, Any]:
 
 
 def _classify_base(call: Any, config: Config) -> Dict[str, Any]:
-    if not isinstance(call, dict) or set(call) - {"tool", "args"} or call.get("tool") not in TOOLS:
+    if not isinstance(call, dict) or set(call) - {"tool", "args"} or call.get("tool") not in CALL_TOOLS:
         return unknown_reading()
     tool, args = call["tool"], call.get("args", {})
     if not _schema_ok(tool, args):
         return unknown_reading()
     reading = base_reading()
     reading["tool"] = tool
+    if tool == CONNECT:
+        reading["net_dest"] = net_dest(args["host"], args["port"], config)
+        return reading
     if tool in ("list_dir", "read_file", "write_file", "delete_path"):
         _merge_paths(reading, [path_facts(args.get("path", "."), config)])
         return reading
@@ -610,7 +687,9 @@ def _classify_base(call: Any, config: Config) -> Dict[str, Any]:
     argv = args["argv"]
     if not argv or len(argv) > MAX_ARGV or not all(isinstance(arg, str) and arg and "\x00" not in arg for arg in argv):
         reading["command_class"] = "unknown"
+        reading["proc_class"] = "unknown"
         return reading
+    reading["proc_class"] = proc_class(argv)
     reading["kill_by_pattern"] = kill_by_pattern(argv)
     reading["command_class"] = command_class(argv)
     if reading["command_class"] == "git":

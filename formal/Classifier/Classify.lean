@@ -179,6 +179,60 @@ def commandClass : List Str → CmdClass
       else if MUTATING.contains base || isInstaller base then .mutating
       else .unknown
 
+/-! ## Process class -/
+
+def FIND_EXEC : List Str := wordsOf ["-exec", "-execdir", "-ok", "-okdir"]
+
+/-- `proc_class` of a non empty argv: `tree` for a program that runs children (every wrapper, a builder, a test
+runner, a package manager, `find` with an exec action), `single` for any other program the classifier knows,
+`unknown` for a program of the workspace, a privilege program, and anything it does not know. -/
+def procClassOf : List Str → ProcClass
+  | [] => .unknown
+  | first :: args =>
+    match program first with
+    | none => .unknown
+    | some base =>
+      if base.isEmpty || PRIVILEGE.contains base then .unknown
+      else if WRAPPERS.contains base || PROC_TREE.contains base ||
+          (base == lit "find" && args.any (fun a => FIND_EXEC.contains a)) then .tree
+      else if READ_ONLY.contains base || MUTATING.contains base || NETWORK.contains base || isInstaller base ||
+          base == lit "git" then .single
+      else .unknown
+
+/-! ## The host and port of a connect -/
+
+/-- A character of a host name: ASCII lower case letters, digits, `-` and `.`. Anything else (an upper case letter,
+`@`, `:`, `[`, `/`, `%`, a space, a non ASCII character) makes the host unreadable. -/
+def isHostChar (c : Char) : Bool := isAsciiLower c || isAsciiDigit c || c == '-' || c == '.'
+
+/-- A label: one to 63 characters, not starting or ending with `-`. -/
+def labelOk (l : Str) : Bool := !l.isEmpty && l.length ≤ 63 && l.head? != some '-' && l.getLast? != some '-'
+
+/-- A decimal octet as an address writes it: one to three digits, no leading zero, at most 255. -/
+def isOctet (l : Str) : Bool :=
+  !l.isEmpty && l.all isAsciiDigit && l.length ≤ 3 && (l.length == 1 || l.head? != some '0') &&
+  l.foldl (fun n c => n * 10 + (c.toNat - 48)) 0 ≤ 255
+
+/-- A host the classifier reads (`classifier.host_ok`): lower case, at most 253 characters, no empty label (so no
+trailing dot, no leading dot, no `..`), and a last label that starts with a digit only when the whole host is a
+dotted quad of decimal octets (so `0x7f.1`, `2130706433`, `1.2.3` and `127.1` are unreadable, and an address
+in the form of IPv6 or with a port or userinfo has characters outside the set). -/
+def hostOk (h : Str) : Bool :=
+  !h.isEmpty && h.length ≤ 253 && h.all isHostChar && (splitBy (· == '.') h).all labelOk &&
+  (match (splitBy (· == '.') h).getLast? with
+   | some l => !(l.head?.any isAsciiDigit) || ((splitBy (· == '.') h).length == 4 && (splitBy (· == '.') h).all isOctet)
+   | none => false)
+
+/-- `net_dest` of a connect to `host` and `port` (`classifier.net_dest`). `remotes` carries the owner's allowed
+hosts as `HOST_PREFIX ++ host`. A host the classifier cannot read, or a port outside 1 to 65535, is `unknown`;
+the model's API hosts on port 443 are `model_api`; an allowed host on 443 is `allowed_host`; every other
+readable host and port is `other`. -/
+def netDestOf (remotes : List Str) (host : Str) (port : Int) : NetDest :=
+  if !hostOk host || port < 1 || port > 65535 then .unknown
+  else if MODEL_API.contains host && port == MODEL_API_PORT then .model_api
+  else if remotes.contains (HOST_PREFIX ++ host) && port == MODEL_API_PORT then .allowed_host
+  else .other
+
 /-! ## git -/
 
 /-- `-n` and one or more ASCII digits. -/
@@ -232,12 +286,13 @@ def gitPlan (remotes : List Str) (sub : Option Str) (args : Option (List Str)) :
 
 /-- A value's kind as the schema names it. -/
 inductive VKind where
-  | str | list
+  | str | list | int
   deriving DecidableEq
 
 def VKind.ok : VKind → J → Bool
   | .str, .str _ => true
   | .list, .arr _ => true
+  | .int, .int _ => true
   | _, _ => false
 
 /-- `_SCHEMA`: the required and optional keys of each tool, with the kind of each value. -/
@@ -248,6 +303,7 @@ def schema : Tool → List (String × VKind) × List (String × VKind)
   | .delete_path => ([("path", .str)], [])
   | .run_command => ([("argv", .list)], [])
   | .git => ([("subcommand", .str)], [("args", .list)])
+  | .connect => ([("host", .str), ("port", .int)], [])
   | .unknown => ([], [])
 
 /-- `_schema_ok`. -/
@@ -261,7 +317,7 @@ def schemaOk (t : Tool) : J → Bool
 def toolOf (s : String) : Tool :=
   match s with
   | "list_dir" => .list_dir | "read_file" => .read_file | "write_file" => .write_file
-  | "delete_path" => .delete_path | "run_command" => .run_command | "git" => .git | _ => .unknown
+  | "delete_path" => .delete_path | "run_command" => .run_command | "git" => .git | "connect" => .connect | _ => .unknown
 
 /-- An argv as `_classify` accepts it: a non empty list of at most `MAX_ARGV` non empty strings without NUL. -/
 def argvOf? (xs : List J) : Option (List Str) :=
@@ -279,7 +335,8 @@ def gitArgsOf? (xs : List J) : Option (List Str) :=
 
 /-- The reading of a run_command argv before its paths are merged, and the paths. -/
 def runPlan (remotes : List Str) (argv : List Str) : Reading × List Str :=
-  let base : Reading := { tool := .run_command, killByPattern := killByPattern argv, commandClass := commandClass argv }
+  let base : Reading := { tool := .run_command, killByPattern := killByPattern argv, commandClass := commandClass argv,
+                          procClass := procClassOf argv }
   if base.commandClass == .git then
     let (op, rc, ps) := gitPlan remotes (argv.drop 1).head? (some (argv.drop 2))
     ({ base with gitOp := op, remoteClass := rc }, ps)
@@ -311,8 +368,12 @@ def plan (remotes : List Str) (call : J) : Reading × List Str :=
               | some (.arr xs) =>
                 match argvOf? xs with
                 | some argv => runPlan remotes argv
-                | none => ({ tool := .run_command, commandClass := .unknown }, [])
+                | none => ({ tool := .run_command, commandClass := .unknown, procClass := .unknown }, [])
               | _ => (unknownReading, [])
+            | .connect =>
+              match get? am "host", get? am "port" with
+              | some (.str h), some (.int n) => ({ tool := .connect, netDest := netDestOf remotes h.toList n }, [])
+              | _, _ => (unknownReading, [])
             | .unknown => (unknownReading, [])
           | _ => (unknownReading, [])
       | _ => (unknownReading, [])
