@@ -42,7 +42,7 @@ def test_recorded_inputs_agree(oracle):
     with tempfile.TemporaryDirectory() as tmp:
         cases = classifier_diff.recorded_cases(Path(tmp))
         result = classifier_diff.run(cases)
-    assert result["kinds"] == {"hook": 154, "call": 54}
+    assert result["kinds"] == {"hook": 161, "call": 54}
     assert result["disagreements"] == {}
 
 

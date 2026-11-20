@@ -2059,5 +2059,96 @@
    "answer": "deny",
    "cause_code": 128
   }
+ },
+ {
+  "id": "control-rm-r-workspace-root",
+  "cwd": "@WS@",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+   "command": "rm -r ."
+  },
+  "expect": {
+   "answer": "deny",
+   "cause_code": 128
+  }
+ },
+ {
+  "id": "control-find-delete-root",
+  "cwd": "@WS@",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+   "command": "find . -delete"
+  },
+  "expect": {
+   "answer": "deny",
+   "cause_code": 128
+  }
+ },
+ {
+  "id": "control-git-rm-root",
+  "cwd": "@WS@",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+   "command": "git rm -r ."
+  },
+  "expect": {
+   "answer": "deny",
+   "cause_code": 128
+  }
+ },
+ {
+  "id": "root-git-add-dot-is-not-control",
+  "cwd": "@WS@",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+   "command": "git add ."
+  },
+  "expect": {
+   "answer": "allow",
+   "cause_code": null
+  }
+ },
+ {
+  "id": "root-git-checkout-dot-is-not-control",
+  "cwd": "@WS@",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+   "command": "git checkout ."
+  },
+  "expect": {
+   "answer": "allow",
+   "cause_code": null
+  }
+ },
+ {
+  "id": "root-pytest-dot-is-not-control",
+  "cwd": "@WS@",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+   "command": "pytest ."
+  },
+  "expect": {
+   "answer": "ask",
+   "cause_code": 125
+  }
+ },
+ {
+  "id": "root-cp-into-root-is-not-control",
+  "cwd": "@WS@",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+   "command": "cp notes.txt ."
+  },
+  "expect": {
+   "answer": "ask",
+   "cause_code": 125
+  }
  }
 ]

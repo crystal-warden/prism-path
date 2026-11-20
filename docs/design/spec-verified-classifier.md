@@ -156,12 +156,14 @@ on every platform** (Unicode NFC and `casefold`), it is any of:
 - a file or directory named `CLAUDE.md`, `CLAUDE.local.md` or `AGENTS.md`, at any depth;
 - the program the installed PrismPath hook runs, when that program is inside the workspace (the first word of a hook
   command in `.claude/settings.json`);
-- **the workspace root, `.git`, and any ancestor directory of a control path**: a directory that holds a control file
-  (the directory of a hook program, a directory with a `CLAUDE.md` or `AGENTS.md` anywhere below it). A change whose
-  target is such a directory (`rm -r .`, `rm -rf ./`, `mv . x`, `rm -rf .git`, `rm -rf docs/` with a `docs/CLAUDE.md`)
-  removes or replaces what is in it, so it is a control change. The search below a directory examines at most
-  `WALK_LIMIT` (20,000) entries and does not enter `.git`, `node_modules`, `target`, `.venv`, `venv` or `__pycache__`
-  directories it meets on the way; past the limit it stops, and the answer is the one found so far;
+- **holders**, the workspace root, `.git`, a directory that holds a hook program, and a directory with a `CLAUDE.md`,
+  `CLAUDE.local.md` or `AGENTS.md` anywhere below it. A holder is a control target **only where a call removes or
+  moves it** (`destroy_paths`, below): `rm -r .`, `rm -rf ./`, `rm -rf .git`, `mv . x`, `find . -delete`, `git rm -r .`,
+  `git clean -fd .`, `rm -rf docs/` with a `docs/CLAUDE.md`. Writing into a holder (`cp x .`, `tee ./new`, a redirect
+  to a new file, `git add .`, `pytest .`) names the directory without changing it, and is decided by the file
+  written, as before. The search below a directory examines at most `WALK_LIMIT` (20,000) entries and does not enter
+  `.git`, `node_modules`, `target`, `.venv`, `venv` or `__pycache__` directories it meets on the way; past the limit it
+  stops, and the answer is the one found so far;
 - **a hard link to any of these**: a file whose device and inode match a control file that exists (`os.stat`
   `st_dev`/`st_ino`, checked only when the path's link count is above one). A link made after the call is classified is
   the sandbox's job, not the classifier's, like any change to the disk between classification and execution.
@@ -170,7 +172,7 @@ Case insensitivity is the conservative choice: macOS and Windows name one file b
 on a case sensitive filesystem the folding refuses a few more paths than it must (`.Claude/x`), never fewer.
 
 Which paths those are is read off the disk at the moment of the call, like a toolchain directory
-(`classifier.disk_facts`, `DiskFacts.control`), so the model takes it as an input like the other disk facts, and a
+(`classifier.disk_facts`, `DiskFacts.control` and `DiskFacts.holder`), so the model takes it as an input like the other disk facts, and a
 `..` component or a symbolic link does not hide the file. The rule is the same in all three starters, placed among the
 refusals that hold whatever else does:
 
@@ -179,8 +181,11 @@ refusals that hold whatever else does:
 
 It covers every way the classifier reads a change: Write, Edit, MultiEdit and NotebookEdit, the MCP file tools of
 `mcp_map.py`, and the Bash commands the plain word grammar reads (`rm`, `mv`, `cp`, `mkdir`, `sed -i`, `tee` and the rest
-of `MUTATING`), as source or destination, since the classifier does not tell the two apart. A read is decided as before
-(`ls .`, `cat CLAUDE.md`, a Read of `.claude/settings.json`). A refusal is receipted with its cause like any other, so it is an
+of `MUTATING`), as source or destination, since the classifier does not tell the two apart. **What removes or moves** is defined by the call, not the disk (`classifier.destroy_paths`, `destroyPaths` in Lean):
+the delete tool's path; every path of `rm` and `rmdir`; every path of `mv` but the last (the destination); the paths
+of `find ... -delete`; and the paths of `git rm` and `git clean`. For those paths `path_control` is also set when the
+path is a holder (`classifyD` in Lean: the reading of `classify` with only `path_control` changed). A read is decided
+as before (`ls .`, `cat CLAUDE.md`, a Read of `.claude/settings.json`). A refusal is receipted with its cause like any other, so it is an
 observation: a later policy proposal may read these refusals, and they never change the policy on their own.
 
 **Commands outside the plain grammar.** `echo x > .claude/settings.json` or `printf y >> .mcp.json` has an operator
@@ -205,18 +210,18 @@ syntactic check and that the disk says is a control path gives `path_control`; `
 every one of the 112,896 readings with `path_control` that is a change is refused, computed with the core's own
 evaluator and proved to be all of them by `controlSpace_mem`), a change that names a control path is refused, whatever
 the call; `write_control_refused`, `delete_control_refused` and `run_mutating_control_refused` for the write tool, the
-delete tool and a file changing command; and for the scan `scan_control` (control evidence gives a reading that is a
+delete tool and a file changing command; `classify_holder`, `change_on_holder_refused`, `delete_holder_refused`,
+`destroyArgs_rm` and `run_destroy_holder_refused` for a removal or a move of a holder (the holder fact is a disk fact
+like the control fact, and only `destroyPaths` makes it count); and for the scan `scan_control` (control evidence gives a reading that is a
 change naming a control path), `scan_control_refused` (under every policy the oracle reports as `scan_refused`, that
-reading is refused), with `controlEvidence_of`, `writeEvidence_of_redirect` and `writeEvidence_of_writer` for the two
+reading is refused), with `controlEvidence_of`, `controlEvidence_of_holder`, `writeEvidence_of_redirect` and `writeEvidence_of_writer` for the two
 halves of the evidence. All three shipped agent policies are `controlSafe` and `scanSafe`, and the harness requires it.
 The case folding, the inode check, the directory search and which paths are control are disk facts, an input of the
 model, so they are exercised by the tests and the harness's real disk, not proved.
 
-Cost, stated plainly: any change whose target is the workspace root is a control change, so `cp x .`, `git add .`,
-`git checkout .` and `pytest .` (the plain grammar reads `pytest` as a changing command) are refused with 128; `git add -A`,
-`git add src`, `pytest` and `pytest tests` are not
-affected. This follows from reading a path argument as a possible target, which the classifier cannot tell apart from
-a source.
+Writing into the root or a holder keeps the verdict it had before the control rule (`git add .` and `git checkout .`
+allow, `pytest .` and `cp x .` ask under `default`, as on the commit before it). In the scan, which cannot tell a
+source from a destination, `mv x .` in a command outside the grammar counts as a move of `.`.
 
 Not covered, on purpose: a command that changes a control file through an interpreter or a build tool; a `cd` followed
 by a relative path in a command outside the grammar; a hard link to a `CLAUDE.md` below the first 20,000 entries; a

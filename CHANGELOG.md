@@ -17,16 +17,17 @@ spec stable.
 - **Control paths are matched case insensitively on every platform, through hard links, and more widely.** `.CLAUDE`
   names the same file on macOS and Windows; a file with the device and inode of a control file is a control path.
   `.git/hooks/` and `.git/config`, everything under `.claude/` (commands, agents, skills), `CLAUDE.md`,
-  `CLAUDE.local.md` and `AGENTS.md` at any depth are control paths, and so are the workspace root and every directory
-  that holds one (`rm -r .`, `rm -rf ./`, `mv . x`). Reads are unchanged. A consequence: any change whose target is the
-  project root is refused, including `git add .` and `cp x .`.
+  `CLAUDE.local.md` and `AGENTS.md` at any depth are control paths. Reads are unchanged. The workspace root, `.git` and
+  every directory that holds control files are control targets only for a removal or a move (`rm -r .`, `rm -rf ./`,
+  `rm -rf .git`, `mv . x`, `find . -delete`, `git rm -r .`, `git clean`); writing into them (`cp x .`, `tee ./new`,
+  `git add .`, `pytest .`) is decided as before.
 - **The written hook command no longer imports a `prismpath/` package planted in the workspace.** Claude Code runs the
   hook from the project directory, and `python -m prismpath` put that directory first on `sys.path`; the command now
   runs the interpreter with `-P` (Python 3.11 and later) or `-I` (3.10). A planted `sitecustomize.py`, `usercustomize.py`
   or `.pth` file was never loaded. Run `prismpath agent init` again to rewrite an installed hook.
 - The Lean model proves the scan's control rule (`scan_control`, `scan_control_refused` in `ScanTheorems.lean`); the
   differential harness covers redirections and the new paths (0 disagreements in 20,000 generated cases), and the
-  recorded hook inputs are now 154.
+  recorded hook inputs are now 161.
 
 ### Added: the governed agent no longer changes its own controls (2026-11-19)
 

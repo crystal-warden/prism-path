@@ -240,13 +240,30 @@ def test_files_that_shape_the_agent_are_control_paths_and_reads_stay_allowed(nam
 
 @pytest.mark.parametrize("name", sorted(STARTERS))
 @pytest.mark.parametrize("command", ["rm -r .", "rm -rf ./", "mv . x", "rm -rf .git", "rm -rf src/../.", "mv src/deep x",
-                                     "rm -rf src/deep", "rm -rf other/../src/deep/"])
+                                     "rm -rf src/deep", "rm -rf other/../src/deep/", "rm -r .", "rmdir src/deep", "find . -delete",
+                                     "git rm -r .", "git clean -fdx ."])
 def test_a_change_to_the_root_or_a_directory_that_holds_a_control_file_is_refused(name, command, ws):
     (ws / "src" / "deep").mkdir()
     (ws / "src" / "deep" / "AGENTS.md").write_text("x\n")
     (ws / ".git").mkdir()
-    assert _decide(name, ws, "Bash", {"command": command})[:2] == ("refuse", CAUSE), command
+    kind, code, result = _decide(name, ws, "Bash", {"command": command})
+    assert result.reading["path_control"] is True and kind == "refuse", command
+    assert code == CAUSE, command
     assert _decide(name, ws, "Bash", {"command": "ls ."})[:2] == ("allow", None)         # a read of the root is a read
+
+
+@pytest.mark.parametrize("name", sorted(STARTERS))
+@pytest.mark.parametrize("command", ["git add .", "git checkout .", "cp notes.txt .", "cp -r src/deep .", "mv notes.txt .",
+                                     "mv notes.txt ./", "pytest .", "tee ./new", "tar czf out.tgz .", "echo x > fresh.txt",
+                                     "cat notes.txt | tee ./new"])
+def test_writing_into_the_root_or_a_holder_is_decided_as_before(name, command, ws):
+    """The root and the directories that hold control files are control targets only for a removal or a move; a
+    command that names them to write into them, or to read them, gets the verdict it had before the rule."""
+    (ws / "notes.txt").write_text("n\n")
+    (ws / "src" / "deep").mkdir()
+    (ws / "src" / "deep" / "AGENTS.md").write_text("x\n")
+    _, _, result = _decide(name, ws, "Bash", {"command": command})
+    assert result.reading["path_control"] is False and result.decision.cause_code != CAUSE, command
 
 
 @pytest.mark.parametrize("name", sorted(STARTERS))
@@ -266,6 +283,7 @@ def test_the_directories_of_a_hook_program_are_control(ws):
         {"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": hook}]}]}}))
     assert _decide("default", ws, "Bash", {"command": "rm -rf .venv"})[:2] == ("refuse", CAUSE)
     assert _decide("default", ws, "Bash", {"command": "rm -rf .venv/bin"})[:2] == ("refuse", CAUSE)
+    assert _decide("default", ws, "Bash", {"command": "cp x .venv/bin"})[1] != CAUSE      # into it: decided as before
 
 
 def test_the_walk_below_a_directory_is_bounded(ws, monkeypatch):
