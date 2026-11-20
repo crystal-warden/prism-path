@@ -191,8 +191,10 @@ def profile_from_json(text: str) -> Profile:
     """The profile a canonical object names. Raises ValueError on anything that is not a profile."""
     from prismpath.agent import profile as profile_module
     obj = json.loads(text)
-    if not isinstance(obj, dict) or obj.get("format") != profile_module.FORMAT:
-        raise ValueError("not a prismpath.profile/1 object")
+    if not isinstance(obj, dict) or obj.get("format") not in (profile_module.FORMAT, profile_module.FORMAT_NET):
+        raise ValueError("not a prismpath.profile/1 or /2 object")
+    if (obj["format"] == profile_module.FORMAT_NET) != ("net" in obj):    # /2 is the format that carries net, and only it
+        raise ValueError("the profile's format and its net field disagree")
     return Profile(ro_mounts=tuple(obj["ro_mounts"]), rw_path=obj["rw_path"], host_write=bool(obj["host_write"]),
                    network=bool(obj["network"]), max_processes=int(obj["max_processes"]),
                    timeout_s=int(obj["timeout_s"]), net=obj.get("net", "none"))
@@ -202,7 +204,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = argparse.ArgumentParser(prog="sandbox_exec.py")
     parser.add_argument("--workspace", required=True)
     parser.add_argument("--cwd", default="", help="below the workspace, relative")
-    parser.add_argument("--profile", required=True, help="a prismpath.profile/1 object as JSON")
+    parser.add_argument("--profile", required=True, help="a prismpath.profile/1 or /2 object as JSON")
     parser.add_argument("--proxy-socket", default="", help="host path of the egress proxy's unix socket (for a proxy profile)")
     parser.add_argument("--timeout", type=int, default=None, help="seconds; the profile's timeout_s when not given")
     for flag in ("run", "session", "receipt", "image", "profile"):    # observe.py: bind what the command shows to its receipt
