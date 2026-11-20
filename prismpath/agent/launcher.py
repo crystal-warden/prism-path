@@ -12,11 +12,16 @@ Linux only, non interactive. The launcher stays outside, trusted. It
      the PrismPath hook entries, the proxy's unix socket and its log, and, only when the caller names a file
      with `credential`, one copy of it. The agent sees it as CLAUDE_CONFIG_DIR on a private tmpfs home, with
      settings.json (and the credential) bound read only over it;
-  4. builds the agent profile (system prefix read only, the workspace read write, `net` proxy_model) and binds
+  4. loads the recorded policy (keys checked, attestation verified: `commands.load_checked`), compiles it to the agent
+     profile (`compile_profile(image, "agent")`: the system prefix read only, the workspace read write, `net` from
+     the allow set) and refuses to run when the image allows no connection to the model API. It binds
      the workspace's control paths read only on top of the writable workspace: `.claude/`, `.mcp.json`,
      `.git/config`, `.git/hooks/` and every CLAUDE.md, CLAUDE.local.md and AGENTS.md. A control file that does
      not exist yet is created empty so that it can be bound, and removed again at exit if it is still empty;
-  5. starts the egress proxy (the interim allowlist unless the caller passes a decider) on the staged socket;
+  5. starts the egress proxy on the staged socket with the policy gate (egress_policy.py): each CONNECT is read into
+     a connect reading, decided by the active image and written as a receipt in a run of its own
+     (`egress-<time>-<pid>`, sealed at exit), and a refusal is cause 130. A caller that passes `decider` (a test or
+     an embedder with no recorded policy) gets a plain decider and no receipts, and the profile is `proxy_model`;
   6. runs the program under bwrap in a process group of its own, exits with its status, and on the way out stops
      the proxy, kills what is left of the process group, removes the staged directory and the empty control
      files it made.
@@ -33,12 +38,13 @@ import signal
 import subprocess
 import sys
 import tempfile
-from dataclasses import dataclass, field
+import time
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Callable, List, Optional, Sequence, Tuple
 
-from prismpath.agent import classifier, commands, egress, sandbox_exec
-from prismpath.agent.profile import Profile
+from prismpath.agent import classifier, commands, egress, egress_policy, sandbox_exec
+from prismpath.agent.profile import Profile, ProfileError, compile_profile
 
 STAGE_BASE = "/var/tmp"
 HOME_IN = "/home/agent"
@@ -187,7 +193,8 @@ def prepare_controls(workspace: Path, out: Controls) -> Controls:
 # ------------------------------------------------------------------------------------------------- launch
 def launch(command: Sequence[str], workspace: str, credential: Optional[str] = None,
            egress_log: Optional[str] = None, stage_base: str = STAGE_BASE, max_processes: int = MAX_PROCESSES,
-           decider: Callable = egress.interim_decider, resolver: Callable = egress.system_resolver,
+           decider: Optional[Callable] = None, home: Optional[str] = None, allowed_hosts: Sequence[str] = (),
+           session: Optional[str] = None, resolver: Callable = egress.system_resolver,
            connect: Callable = egress.system_connect, hook: Optional[str] = None,
            env: Sequence[Tuple[str, str]] = (), on_start: Optional[Callable[[int], None]] = None) -> int:
     """Run `command` as the agent and return its exit status. `on_start(pid)` is for tests. Raises
@@ -198,7 +205,15 @@ def launch(command: Sequence[str], workspace: str, credential: Optional[str] = N
     root = Path(os.path.realpath(workspace))
     if not root.is_dir():
         raise LaunchError(f"the workspace {workspace} is not a directory, so nothing was run")
-    profile = Profile(net="proxy_model", max_processes=max_processes)
+    gate = None
+    home_dir = Path(home) if home else commands.config_dir()
+    if decider is None:
+        profile, policy, store = _policy_profile(home_dir, max_processes)
+        session = session or f"egress-{time.strftime('%Y%m%dT%H%M%S')}-{os.getpid()}"
+        gate = egress_policy.PolicyGate(policy, store, session, root, profile, allowed_hosts)
+        decider = egress.refuse_all
+    else:
+        profile = Profile(net="proxy_model", max_processes=max_processes)
     real = resolve_program(command[0])
     inside, program_binds = pin_program(real, profile.ro_mounts)
     settings = commands.merged_settings({}, hook if hook is not None else commands.hook_command())
@@ -208,7 +223,7 @@ def launch(command: Sequence[str], workspace: str, credential: Optional[str] = N
     proc = None
     try:
         prepare_controls(root, controls)
-        proxy = egress.EgressProxy(staged.socket, staged.log, decider=decider, resolver=resolver, connect=connect).start()
+        proxy = egress.EgressProxy(staged.socket, staged.log, decider=decider, gate=gate, resolver=resolver, connect=connect).start()
         extra_args = ["--tmpfs", HOME_IN, "--tmpfs", CONFIG_IN]
         binds = list(program_binds)
         binds += [(path, path) for path in controls.binds]
@@ -244,6 +259,33 @@ def launch(command: Sequence[str], workspace: str, credential: Optional[str] = N
         return status
     finally:
         _teardown(proc, proxy, staged, controls, egress_log)
+        _seal(gate.run if gate is not None else None, home_dir)
+
+
+def _policy_profile(home: Path, max_processes: int):
+    """(the agent profile, the policy, the store of runs) of the recorded policy, or a LaunchError saying what to fix."""
+    try:
+        policy, store = commands.load_checked(home)
+        profile = compile_profile(policy, "agent")
+    except commands.AgentError as exc:
+        raise LaunchError(f"{exc}, so nothing was run") from exc
+    except ProfileError as exc:
+        raise LaunchError(f"the recorded policy does not compile to an agent profile ({exc}), so nothing was run") from exc
+    if profile.net == "none":
+        raise LaunchError("the recorded policy allows no connection to the model API, so the agent could not reach "
+                          "its model and nothing was run; record a policy with a connect rule for model_api")
+    return replace(profile, max_processes=max_processes), policy, store
+
+
+def _seal(run, home: Path) -> None:
+    """Seal the run the proxy's receipts went to, if it has any; a failure is said and does not change the exit status."""
+    if run is None:
+        return
+    try:
+        if run.is_open():
+            run.seal(home)
+    except Exception as exc:  # noqa: BLE001
+        sys.stderr.write(f"PrismPath could not seal the egress run {run.session} ({exc}); `prismpath agent verify` seals it later\n")
 
 
 def _wait(proc: subprocess.Popen) -> int:

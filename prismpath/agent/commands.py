@@ -513,9 +513,11 @@ def _tamper_demo(home: Path, verified_rows) -> Dict[str, Any]:
 
 
 def run(program: List[str], workspace: Optional[str] = None, credential: Optional[str] = None,
-        egress_log: Optional[str] = None, max_processes: Optional[int] = None) -> int:
-    """`prismpath agent run -- PROGRAM [ARGS]`: the program as the agent, under the sandbox with only the model
-    API reachable (prismpath/agent/launcher.py). Exits with the program's status. Raises AgentError, with
+        egress_log: Optional[str] = None, max_processes: Optional[int] = None,
+        allowed_hosts: Optional[List[str]] = None) -> int:
+    """`prismpath agent run -- PROGRAM [ARGS]`: the program as the agent, under the sandbox with only the hosts the
+    recorded policy allows reachable (the model API, and `allowed_hosts` if the policy allows that class;
+    prismpath/agent/launcher.py). Exits with the program's status. Raises AgentError, with
     nothing run, off Linux or without bwrap or socat."""
     import time
     from prismpath.agent import launcher
@@ -524,6 +526,8 @@ def run(program: List[str], workspace: Optional[str] = None, credential: Optiona
     if egress_log is None:
         egress_log = str(config_dir() / "egress" / f"{time.strftime('%Y%m%dT%H%M%S')}-{os.getpid()}.log")
     kwargs = {} if max_processes is None else {"max_processes": max_processes}
+    if allowed_hosts:
+        kwargs["allowed_hosts"] = [host.lower() for host in allowed_hosts]
     return launcher.launch(program, workspace or os.getcwd(), credential=credential, egress_log=egress_log, **kwargs)
 
 

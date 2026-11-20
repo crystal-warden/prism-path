@@ -398,6 +398,8 @@ def _add_operator_commands(subparsers) -> None:
     agent_run.add_argument('--egress-log', default=None, metavar='FILE',
                            help='keep the proxy\'s log of every connection attempt here (default: under the agent config directory)')
     agent_run.add_argument('--max-processes', type=int, default=None, help='the process limit inside the sandbox')
+    agent_run.add_argument('--allow-host', action='append', default=None, metavar='HOST',
+                           help='a host name the policy may allow on port 443 (net_dest allowed_host); repeatable')
     agent_run.add_argument('program', nargs=argparse.REMAINDER, help='-- PROGRAM [ARGS]')
     agent_parser.set_defaults(func=agent_cmd)
 
@@ -543,7 +545,7 @@ def agent_cmd(args) -> int:
     project = args.project if getattr(args, 'project', None) else (os.environ.get('CLAUDE_PROJECT_DIR') or os.getcwd())
     try:
         if args.agent_action == 'run':
-            return commands.run(args.program, args.workspace, args.credential, args.egress_log, args.max_processes)
+            return commands.run(args.program, args.workspace, args.credential, args.egress_log, args.max_processes, args.allow_host)
         if args.agent_action == 'init':
             return commands.init(project, args.yes, args.json, policy=args.policy)
         if args.agent_action == 'verify':
