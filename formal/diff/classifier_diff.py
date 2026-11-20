@@ -26,8 +26,13 @@ listing flag, every kill form, URLs, `..`, globs, `/workspace`, quoting of every
 and brace words, non ASCII and control characters, lone surrogates, wrong types and extra keys, long paths and
 long argvs. The control paths of the agent (settings, hooks, MCP file, CLAUDE.md, git hooks and config, in several spellings) are named in the PATHS and ordinary
 words, and redirects and file changing programs are joined to them, so a change that names one meets every text. A string with a lone surrogate is outside the model's domain (Lean strings hold Unicode scalar values);
-the transport says so (`nonscalar`) and both sides must read the call unknown. Numbers reach the oracle as 0,
-since no part of the reading reads a number's value.
+the transport says so (`nonscalar`) and both sides must read the call unknown. A connect's port is the one number the reading
+reads, so integers reach the oracle as themselves (clamped to plus or minus 2**53 - 1, which no port range
+tells from a larger one) and a float as null (it is no integer and no string, and fails the schema as the Python's
+`type(port) is int` does). The connect calls (`{"tool": "connect", "args": {"host": H, "port": P}}`) are drawn from
+HOSTS, a corpus of odd hosts (case, trailing and leading dot, userinfo, ports and paths in the host, IP literals in
+every form, labels at and past their limits, non ASCII) and PORTS (0, 65535, 65536, negatives, past 2**53, a bool,
+a float, a string), with a configured list of allowed hosts chosen from the same corpus.
 
     python formal/diff/classifier_diff.py --cases 20000 --seed 1     # the full run
     python formal/diff/classifier_diff.py --cases 2000 --seed 7      # a quick run
@@ -158,11 +163,14 @@ def recording(rec: Recorder):
 
 # ----------------------------------------------------------------- one case through the Python
 def transport(value: Any) -> Any:
-    """A Python value as the oracle reads it: numbers carry only their kind, so every number is 0."""
+    """A Python value as the oracle reads it: an integer as itself, clamped to plus or minus `EXACT` (a connect's port is
+    read by its range), a float as null (no schema takes a float, and none takes null)."""
     if isinstance(value, bool) or value is None or isinstance(value, str):
         return value
-    if isinstance(value, (int, float)):
-        return 0
+    if isinstance(value, int):
+        return max(-EXACT, min(EXACT, value))
+    if isinstance(value, float):
+        return None
     if isinstance(value, dict):
         return {key: transport(item) for key, item in value.items()}
     if isinstance(value, (list, tuple)):
@@ -172,11 +180,14 @@ def transport(value: Any) -> Any:
 
 class Case:
     def __init__(self, ident: str, kind: str, value: Any, provider, config: Optional[classifier.Config] = None,
-                 project_dir: Optional[str] = None, server_cwd: str = "/srv", remotes: Tuple[str, ...] = ()):
+                 project_dir: Optional[str] = None, server_cwd: str = "/srv", remotes: Tuple[str, ...] = (),
+                 hosts: Tuple[str, ...] = ()):
         self.id, self.kind, self.value, self.provider = ident, kind, value, provider
         self.config = config or classifier.Config(Path("/"), (), remotes)
         self.project_dir, self.server_cwd, self.remotes = project_dir, server_cwd, tuple(remotes)
+        self.hosts = tuple(hosts) if self.kind != "hook" else ()
         self.config.allowed_remotes = self.remotes if self.kind != "hook" else ()
+        self.config.allowed_hosts = self.hosts
         self.rec = Recorder(provider, self.config)
         self.python: Dict[str, Any] = {}
         self.proc_cwd = os.getcwd()
@@ -204,7 +215,7 @@ class Case:
     def line(self) -> str:
         doc = {"id": self.id, "kind": self.kind, "nonscalar": self.nonscalar(),
                "input": None if self.nonscalar() else transport(self.value),
-               "remotes": list(self.remotes) if self.kind != "hook" else [],
+               "remotes": (list(self.remotes) + ["-host:" + h for h in self.hosts]) if self.kind != "hook" else [],
                "project_dir": self.project_dir, "proc_cwd": self.proc_cwd, "server_cwd": self.server_cwd}
         doc.update(self.rec.tables())
         if self.nonscalar():
@@ -260,11 +271,13 @@ def run_oracle(cases: List[Case]) -> Dict[str, Dict[str, Any]]:
 def check_policies() -> List[str]:
     """Every shipped agent policy's field definitions fit every reading (Theorems.boundary_accepts_every_reading), no
     reading the hazard scan gives is allowed (ScanTheorems.scan_safe_reading) and every change that names a control
-    file of the agent is refused (Control.control_refused)."""
+    file of the agent is refused (Control.control_refused) and every connect that is not the model's API is refused
+    (Net.net_refused)."""
     bad = []
     for image in POLICIES:
         out = subprocess.run([str(ORACLE), "--policy", str(image)], capture_output=True, check=True, text=True)
-        if json.loads(out.stdout) != {"policy": "accepted", "fits": True, "scan_refused": True, "control_refused": True}:
+        if json.loads(out.stdout) != {"policy": "accepted", "fits": True, "scan_refused": True, "control_refused": True,
+                                    "net_refused": True}:
             bad.append(f"{image.name}: {out.stdout.strip()}")
     return bad
 
@@ -493,7 +506,10 @@ def _maybe_break(rng: random.Random, call: Dict[str, Any]) -> Any:
 
 
 def gen_call(rng: random.Random) -> Any:
-    tool = rng.choice(list(classifier.TOOLS) * 6 + ["run_command"] * 12 + ["git"] * 4 + ["unknown", "", "Read", "list_dirs"])
+    tool = rng.choice(list(classifier.TOOLS) * 6 + ["run_command"] * 12 + ["git"] * 4 + ["connect"] * 3 +
+                      ["unknown", "", "Read", "list_dirs"])
+    if tool == "connect":
+        return gen_connect(rng)
     if tool in ("list_dir", "read_file", "delete_path"):
         args = {} if tool == "list_dir" and rng.random() < 0.2 else {"path": rng.choice(PATHS + [_word(rng)])}
     elif tool == "write_file":
@@ -507,6 +523,79 @@ def gen_call(rng: random.Random) -> Any:
     else:
         args = {"path": "x"}
     return _maybe_break(rng, {"tool": tool, "args": args})
+
+
+LONG_LABEL = "a" * 63
+HOSTS = [
+    "api.anthropic.com", "platform.claude.com", "API.ANTHROPIC.COM", "Api.Anthropic.com", "platform.Claude.com",
+    "api.anthropic.com.", "api.anthropic.com..", ".api.anthropic.com", "api..anthropic.com",
+    "api.anthropic.com@evil.example", "evil.example@api.anthropic.com", "user:pw@api.anthropic.com",
+    "api.anthropic.com:443", "api.anthropic.com:80", "api.anthropic.com:", ":443", "https://api.anthropic.com",
+    "api.anthropic.com/", "api.anthropic.com/x", "api.anthropic.com#x", "api.anthropic.com?x", "api.anthropic.com%2f",
+    "api.anthropic.com\\evil.example", "api.anthropic.com evil", "api.anthropic.com\t", "api.anthropic.com\x00",
+    "api.anthropic.com\n", "api.anthropic.com.evil.example", "evil-api.anthropic.com", "xapi.anthropic.com",
+    "api.anthropic.com.com", "anthropic.com", "claude.com", "platform.claude.com.evil.example", "api.claude.com",
+    "\u0430pi.anthropic.com", "api.anthropic.com\u200b", "api.anthropic.com\uff0e", "api\u3002anthropic.com",
+    "xn--e1afmkfd.example", "xn--", "pypi.org", "example.com", "docs.example.org", "localhost", "LOCALHOST",
+    "localhost.", "foo", "a", "-a.example", "a-.example", "a.-b", "a..b", ".", "..", "-", "", " ", "a b.example",
+    "1.2.3.4", "8.8.8.8", "127.0.0.1", "0.0.0.0", "255.255.255.255", "256.1.1.1", "01.2.3.4", "1.2.3", "1.2.3.4.5",
+    "1.2.3.4.", "127.1", "2130706433", "0x7f.0.0.1", "0x7f000001", "0177.0.0.1", "1.2.3.04", "1.2.3.4a", "1.2.3.a",
+    "1.2.3.1e3", "169.254.169.254", "10.0.0.1", "192.168.0.1", "[::1]", "::1", "[2001:db8::1]", "::ffff:127.0.0.1",
+    "fe80::1%eth0", "metadata.google.internal", "123.example", "a.123", "a.1a", "1a.example", "1e3.example",
+    "exa_mple.com", "ex*mple.com", "ex?mple.com", "\xe9.example", "e\u0301.example", "\U0001f600.example",
+    "\ud800.example", LONG_LABEL + ".com", LONG_LABEL + "a.com", ("a" * 49 + ".") * 5 + "com",
+    "b" * 250 + ".com", "b" * 251 + ".com", "b" * 253, "b" * 254, ("a." * 126) + "a", ("a." * 127) + "a",
+]
+ALLOWED_HOSTS = ["docs.example.org", "example.com", "1.2.3.4", "Example.com", "api.anthropic.com", "foo", "a",
+                 "api.anthropic.com.", "127.0.0.1", "", "xn--e1afmkfd.example", "pypi.org"]
+PORTS = [443, 443, 443, 80, 8080, 8443, 444, 4430, 0, 1, 2, 22, 65535, 65534, 65536, 65537, -1, -443, -65535, 2 ** 15,
+         2 ** 16, 2 ** 31, 2 ** 53 - 1, 2 ** 53, 2 ** 63, 2 ** 64, 2 ** 70, -2 ** 70, 443.0, 443.5, 1.0, True, False,
+         "443", "", None, [443], {"p": 443}]
+
+
+def _host(rng: random.Random) -> Any:
+    host = rng.choice(HOSTS)
+    r = rng.random()
+    if r < 0.1:
+        host = host.upper()
+    elif r < 0.17:
+        host += "."
+    elif r < 0.22:
+        host = rng.choice(["user@", "u:p@", "@", "x.y@"]) + host
+    elif r < 0.26:
+        host = host + rng.choice([":443", ":0", ":65536", ":x", "/", "/x", "?q", "#f", " "])
+    elif r < 0.3:
+        host = rng.choice(["a.", "www.", "x-y."]) + host
+    elif r < 0.33:
+        host = rng.choice([None, 1, 1.5, True, [], {}, ["api.anthropic.com"]])
+    return host
+
+
+def gen_connect(rng: random.Random, hosts: Tuple[str, ...] = ()) -> Any:
+    """A connect call: mostly well formed in shape with an odd host or port, now and then broken in shape. Two in five
+    name a host of the model's table or of the configured list, usually on port 443, so the classes a policy lets
+    through meet every neighbouring spelling."""
+    port = rng.choice(PORTS)
+    host = _host(rng)
+    if rng.random() < 0.4:
+        host = rng.choice(list(hosts) + list(classifier.MODEL_API))
+        if rng.random() < 0.7:
+            port = 443
+    call: Dict[str, Any] = {"tool": "connect", "args": {"host": host, "port": port}}
+    r = rng.random()
+    if r < 0.05:
+        call["args"].pop(rng.choice(["host", "port"]))
+    elif r < 0.09:
+        call["args"][rng.choice(["path", "url", "scheme", "host2"])] = rng.choice(["x", 1, None])
+    elif r < 0.11:
+        call["args"] = rng.choice([{}, None, [], "x", {"host": "a.example"}, {"port": 443}])
+    elif r < 0.13:
+        call["extra"] = rng.choice([1, "x", None])
+    elif r < 0.15:
+        call = {"tool": rng.choice(["Connect", "CONNECT", "connect ", "connect\x00"]), "args": call["args"]}
+    elif r < 0.17:
+        call = {"tool": "connect"}
+    return call
 
 
 def _quote(rng: random.Random, word: str) -> str:
@@ -638,7 +727,7 @@ FS_NAMES = ["read_text_file", "read_media_file", "get_file_info", "list_director
 
 
 def gen_mcp(rng: random.Random) -> Any:
-    name = rng.choice(FS_NAMES + list(classifier.TOOLS) + ["", "exec", None])
+    name = rng.choice(FS_NAMES + list(classifier.TOOLS) + ["", "exec", "connect", None])
     if name in classifier.TOOLS:
         args = gen_call(rng)
         arguments = args.get("args", {}) if isinstance(args, dict) else args
@@ -665,8 +754,11 @@ def generated_cases(n: int, seed: int) -> List[Case]:
     for i in range(n):
         r = rng.random()
         remotes = tuple(rng.sample(["origin", "backup", "upstream", ""], rng.randint(0, 2)))
-        if r < 0.4:
-            out.append(Case(f"gen:{i}:call", "call", gen_call(rng), disk, remotes=remotes))
+        hosts = tuple(rng.sample(ALLOWED_HOSTS, rng.randint(0, 3)))
+        if r < 0.1:
+            out.append(Case(f"gen:{i}:connect", "call", gen_connect(rng, hosts), disk, remotes=remotes, hosts=hosts))
+        elif r < 0.4:
+            out.append(Case(f"gen:{i}:call", "call", gen_call(rng), disk, remotes=remotes, hosts=hosts))
         elif r < 0.85:
             hook, pd = gen_hook(rng, ws)
             out.append(Case(f"gen:{i}:hook", "hook", hook, disk, project_dir=pd))

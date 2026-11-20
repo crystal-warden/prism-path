@@ -372,6 +372,10 @@ def hook(raw: bytes, env: Optional[Mapping[str, str]] = None, direct: bool = Fal
         if event != "PreToolUse":
             raise AgentError(f"the hook was called for {event!r}; it answers PreToolUse and SessionEnd")
         from prismpath.agent import claude_code
+        from prismpath.agent.policy import classifier_mismatch
+        mismatch = classifier_mismatch(policy)
+        if mismatch:
+            raise AgentError(mismatch)          # a deny with the hook-error cause and the fix, not a bare cause 37
         result = claude_code.evaluate(data, env, policy)
         answer, profile = result.answer, None
         from prismpath.agent import sandbox_hook
@@ -548,7 +552,7 @@ def confinement_state() -> Dict[str, Any]:
 
 
 def status(project: Path, as_json: bool, out=None) -> int:
-    from prismpath.agent.policy import RULE_DATE, STARTERS, control_check, older_starter_of, starter_of
+    from prismpath.agent.policy import STARTERS, control_check, older_date, older_starter_of, starter_of
     from prismpath.agent.run import RunStore
     out = out or sys.stdout
     home = config_dir()
@@ -559,7 +563,7 @@ def status(project: Path, as_json: bool, out=None) -> int:
         policy["sha256"] = _sha256_hex((home / POLICY_FILE).read_bytes())
         image = (home / POLICY_FILE).read_bytes()
         older = older_starter_of(image)
-        policy["name"] = starter_of(image) or (f"{older[0]} (before {RULE_DATE})" if older else "custom")
+        policy["name"] = starter_of(image) or (f"{older[0]} (before {older_date(image)})" if older else "custom")
         policy["image"] = STARTERS.get(policy["name"])
         try:
             policy["control"] = control_check(image)

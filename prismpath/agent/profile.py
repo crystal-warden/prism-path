@@ -59,13 +59,21 @@ MAX_INT_RANGE = 64
 
 # the values each classifier field takes (the field list at the top of prismpath/agent/classifier.py)
 KNOWN_CATEGORIES = {
-    "tool": ("list_dir", "read_file", "write_file", "delete_path", "run_command", "git", "unknown"),
+    "tool": ("list_dir", "read_file", "write_file", "delete_path", "run_command", "git", "connect", "unknown"),
     "path_scope": ("none", "workspace", "outside", "unknown"),
     "command_class": ("none", "read_only", "mutating", "network", "git", "unknown"),
     "git_op": ("none", "local_read", "local_write", "mutating", "push", "network", "unknown"),
     "remote_class": ("none", "allowed", "other"),
+    "net_dest": ("none", "model_api", "allowed_host", "other", "unknown"),
+    "proc_class": ("none", "single", "tree", "unknown"),
 }
 REQUIRED_FIELDS = ("path_scope", "command_class", "git_op")
+# What the classifier never produces, so the walk does not decide it: a field that is `none` unless another field has
+# one of some values (a `net_dest` other than none only for a `connect`, a `proc_class` other than none only for a
+# `run_command`). (field, its empty value, the gate field, the gate values.) A group of values is skipped only when it
+# holds no empty value and its gate group holds none of the gate values, so a policy whose rules cannot tell the gate
+# values apart is still walked whole. Without this the two fields multiply the walk by their classes.
+CLASSIFIER_ONLY = (("net_dest", "none", "tool", ("connect",)), ("proc_class", "none", "tool", ("run_command",)))
 OUTSIDE_SCOPES = ("outside", "unknown", None)
 NETWORK_VALUES = ("network", "unknown")
 CHANGING_TOOLS = ("write_file", "delete_path")
@@ -216,20 +224,69 @@ def _gives(reading: Dict[str, Any]) -> Tuple[bool, bool, bool]:
     return outside, outside and changes, command in NETWORK_VALUES or git in NETWORK_VALUES
 
 
+_PARSED: Dict[str, Any] = {}
+
+
+def _holds(condition: str, reading: Dict[str, Any]) -> bool:
+    """`predicates.eval_condition`, step for step, with the parse and the static check of a condition made once and
+    kept (they depend on the condition's text alone). The walk asks the same few conditions of every reading, and
+    parsing them each time was most of its cost."""
+    import ast
+    from prismpath.kernel import predicates
+    cached = _PARSED.get(condition)
+    if cached is None:
+        expr = predicates._expr_of(condition)
+        low = expr.lower()
+        if low in predicates.ALWAYS or low in predicates.NEVER:
+            cached = ("const", low in predicates.ALWAYS)
+        else:
+            try:
+                tree = ast.parse(expr, mode="eval")
+                predicates.fold_unary_signs(tree)
+                for node in ast.walk(tree):
+                    if not isinstance(node, predicates._ALLOWED_NODES):
+                        raise predicates.PredicateError(f"disallowed syntax ({type(node).__name__})")
+                cached = ("tree", tree)
+            except (SyntaxError, ValueError):       # PredicateError is a ValueError: unreadable, never matching
+                cached = ("never", False)
+        _PARSED[condition] = cached
+    kind, value = cached
+    if kind == "tree":
+        return bool(predicates._ev(value.body, reading, 0))
+    return value
+
+
 def _first_allows(policy, reading: Dict[str, Any]) -> bool:
     """A quick screen, never the answer: the two steps of the reference's decision (`system_boundary`, then the
     first rule that holds, as `core_reference._python_verdict` takes them) without the policy check
     `Policy.decide` also runs, which does not change a verdict but is most of its cost. A reading it turns away
     is refused or escalated by the reference as well; a reading it passes is still decided by `Policy.decide`
-    before it counts."""
-    from prismpath.kernel import engine, field_definitions
+    before it counts. The first rule is found as `engine.first_deterministic` finds it, by `_holds`."""
+    from prismpath.kernel import field_definitions, predicates
     try:
         if field_definitions.system_boundary(policy.graph, reading) is not None:
             return False
-        target, _cond = engine.first_deterministic(policy.graph.nodes[policy.graph.start].edges, reading)
+        for target, condition in policy.graph.nodes[policy.graph.start].edges:
+            if not predicates.is_deterministic(condition):
+                continue
+            try:
+                if _holds(condition, reading):
+                    return target == "allow"
+            except predicates.PredicateError:
+                pass
+        return False
     except Exception:  # noqa: BLE001 - decided by the full path, which refuses it
         return True
-    return target == "allow"
+
+
+def _unproduced(names: List[str], combo) -> bool:
+    """True when a combination of value groups is one the classifier never gives (`CLASSIFIER_ONLY`)."""
+    groups = dict(zip(names, combo))
+    for field, empty, gate, values in CLASSIFIER_ONLY:
+        if field in groups and gate in groups and empty not in groups[field] \
+                and not any(value in groups[gate] for value in values):
+            return True
+    return False
 
 
 def needs(policy) -> Tuple[bool, bool, bool]:
@@ -260,6 +317,8 @@ def needs(policy) -> Tuple[bool, bool, bool]:
     groups = [_classes(domains[n], atoms[n]) if understood else [[v] for v in domains[n]] for n in names]
     found = [False, False, False]
     for combo in itertools.product(*groups):
+        if _unproduced(names, combo):
+            continue
         gave = [False, False, False]
         for members in itertools.product(*combo):
             gave = [a or b for a, b in zip(gave, _gives(dict(zip(names, members), **constant)))]

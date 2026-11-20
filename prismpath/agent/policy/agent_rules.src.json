@@ -1,7 +1,7 @@
 {
   "format": "prismpath.core/1",
   "fields": {
-    "classifier_version": "int min=1 max=1",
+    "classifier_version": "int min=2 max=2",
     "tool": "category",
     "path_scope": "category",
     "path_in_toolchain": "bool",
@@ -12,6 +12,8 @@
     "command_class": "category",
     "kill_by_pattern": "bool",
     "git_op": "category",
+    "net_dest": "category",
+    "proc_class": "category",
     "remote_class": "category"
   },
   "rules": [
@@ -24,6 +26,9 @@
     {"target": "refuse_106",
      "when": ["or", ["cmp", "command_class", "==", ["str", "network"]],
                     ["cmp", "git_op", "==", ["str", "network"]]]},
+    {"target": "refuse_130",
+     "when": ["or", ["in", "net_dest", [["str", "allowed_host"], ["str", "other"], ["str", "unknown"]]],
+                    ["and", ["cmp", "tool", "==", ["str", "connect"]], ["cmp", "net_dest", "==", ["str", "none"]]]]},
     {"target": "refuse_128",
      "when": ["and", ["or", ["in", "tool", [["str", "write_file"], ["str", "delete_path"]]], ["cmp", "command_class", "==", ["str", "mutating"]], ["in", "git_op", [["str", "local_write"], ["str", "mutating"]]]], ["truthy", "path_control"]]},
     {"target": "refuse_107",
@@ -46,6 +51,8 @@
      "when": ["and", ["cmp", "git_op", "==", ["str", "push"]],
                      ["cmp", "remote_class", "==", ["str", "allowed"]]]},
     {"target": "escalate_113", "when": ["cmp", "git_op", "==", ["str", "push"]]},
+    {"target": "allow",
+     "when": ["and", ["cmp", "tool", "==", ["str", "connect"]], ["cmp", "net_dest", "==", ["str", "model_api"]]]},
     {"target": "allow",
      "when": ["and", ["in", "tool", [["str", "list_dir"], ["str", "read_file"], ["str", "write_file"], ["str", "delete_path"]]],
                      ["cmp", "path_scope", "==", ["str", "workspace"]]]},

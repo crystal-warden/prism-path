@@ -58,11 +58,13 @@ from typing import Any, Dict, List, Optional
 
 # the values each classifier field takes (the field list at the top of prismpath/agent/classifier.py)
 KNOWN_CATEGORIES = {
-    "tool": ("list_dir", "read_file", "write_file", "delete_path", "run_command", "git", "unknown"),
+    "tool": ("list_dir", "read_file", "write_file", "delete_path", "run_command", "git", "connect", "unknown"),
     "path_scope": ("none", "workspace", "outside", "unknown"),
     "command_class": ("none", "read_only", "mutating", "network", "git", "unknown"),
     "git_op": ("none", "local_read", "local_write", "mutating", "push", "network", "unknown"),
     "remote_class": ("none", "allowed", "other"),
+    "net_dest": ("none", "model_api", "allowed_host", "other", "unknown"),
+    "proc_class": ("none", "single", "tree", "unknown"),
 }
 MAX_INT_RANGE = 64
 CORE_REFUSALS = ("route:no-matching-edge", "route:contract-violation")
@@ -244,7 +246,7 @@ def _domain(name: str, text: str):
 
 def unreachable(policy) -> Dict[str, Any]:
     """Which rules no reading can reach, by deciding every reading of the finite domain through the reference."""
-    from prismpath.kernel import engine
+    from prismpath.kernel import predicates
     doc = policy.doc
     fields = doc["fields"]
     reads = [_names_read(rule["when"], fields) for rule in doc["rules"]]
@@ -258,15 +260,25 @@ def unreachable(policy) -> Dict[str, Any]:
     used = sorted(set().union(*(reads[n - 1] for n in numbers)) if numbers else set())
     constant = {name: values[0] for name, values in domains.items() if values and name not in used}
     names = [name for name in used]
+    from prismpath.agent.profile import CLASSIFIER_ONLY, _holds
     chosen, readings = set(), 0
     for combo in itertools.product(*(domains[name] for name in names)):
-        readings += 1
         doc_reading = dict(zip(names, combo), **constant)
-        _target, cond = engine.first_deterministic(edges, doc_reading)
-        if cond is not None:
-            chosen.add(next(i for i, (_t, c) in enumerate(edges) if c is cond))
-            if len(chosen) == len(edges):
-                break
+        if any(field in doc_reading and gate in doc_reading and doc_reading[field] != empty
+               and doc_reading[gate] not in values for field, empty, gate, values in CLASSIFIER_ONLY):
+            continue            # a reading the classifier never gives (a destination without a connect)
+        readings += 1
+        for at, (_target, cond) in enumerate(edges):       # engine.first_deterministic, each condition parsed once
+            if not predicates.is_deterministic(cond):
+                continue
+            try:
+                if _holds(cond, doc_reading):
+                    chosen.add(at)
+                    break
+            except predicates.PredicateError:
+                continue
+        if len(chosen) == len(edges):
+            break
     never = [numbers[i] for i in range(len(edges)) if i not in chosen]
     return {"checked": True, "readings": readings, "rules": never, "not_checked": not_checked}
 

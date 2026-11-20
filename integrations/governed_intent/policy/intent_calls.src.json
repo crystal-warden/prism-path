@@ -1,7 +1,7 @@
 {
  "format": "prismpath.core/1",
  "fields": {
-  "classifier_version": "int min=1 max=1",
+  "classifier_version": "int min=2 max=2",
   "tool": "category",
   "path_scope": "category",
   "path_in_toolchain": "bool",
@@ -12,6 +12,8 @@
   "command_class": "category",
   "kill_by_pattern": "bool",
   "git_op": "category",
+  "net_dest": "category",
+  "proc_class": "category",
   "remote_class": "category",
   "intent_reader_version": "int min=2 max=2",
   "semantic_status": "category",
@@ -91,6 +93,51 @@
      [
       "str",
       "network"
+     ]
+    ]
+   ]
+  },
+  {
+   "target": "refuse_130",
+   "when": [
+    "or",
+    [
+     "in",
+     "net_dest",
+     [
+      [
+       "str",
+       "allowed_host"
+      ],
+      [
+       "str",
+       "other"
+      ],
+      [
+       "str",
+       "unknown"
+      ]
+     ]
+    ],
+    [
+     "and",
+     [
+      "cmp",
+      "tool",
+      "==",
+      [
+       "str",
+       "connect"
+      ]
+     ],
+     [
+      "cmp",
+      "net_dest",
+      "==",
+      [
+       "str",
+       "none"
+      ]
      ]
     ]
    ]
@@ -341,6 +388,27 @@
        [
         "and",
         [
+         "cmp",
+         "tool",
+         "==",
+         [
+          "str",
+          "connect"
+         ]
+        ],
+        [
+         "cmp",
+         "net_dest",
+         "==",
+         [
+          "str",
+          "model_api"
+         ]
+        ]
+       ],
+       [
+        "and",
+        [
          "in",
          "tool",
          [
@@ -516,6 +584,27 @@
        [
         "and",
         [
+         "cmp",
+         "tool",
+         "==",
+         [
+          "str",
+          "connect"
+         ]
+        ],
+        [
+         "cmp",
+         "net_dest",
+         "==",
+         [
+          "str",
+          "model_api"
+         ]
+        ]
+       ],
+       [
+        "and",
+        [
          "in",
          "tool",
          [
@@ -688,6 +777,27 @@
       ],
       [
        "or",
+       [
+        "and",
+        [
+         "cmp",
+         "tool",
+         "==",
+         [
+          "str",
+          "connect"
+         ]
+        ],
+        [
+         "cmp",
+         "net_dest",
+         "==",
+         [
+          "str",
+          "model_api"
+         ]
+        ]
+       ],
        [
         "and",
         [
@@ -901,6 +1011,27 @@
        [
         "and",
         [
+         "cmp",
+         "tool",
+         "==",
+         [
+          "str",
+          "connect"
+         ]
+        ],
+        [
+         "cmp",
+         "net_dest",
+         "==",
+         [
+          "str",
+          "model_api"
+         ]
+        ]
+       ],
+       [
+        "and",
+        [
          "in",
          "tool",
          [
@@ -1111,6 +1242,27 @@
        [
         "and",
         [
+         "cmp",
+         "tool",
+         "==",
+         [
+          "str",
+          "connect"
+         ]
+        ],
+        [
+         "cmp",
+         "net_dest",
+         "==",
+         [
+          "str",
+          "model_api"
+         ]
+        ]
+       ],
+       [
+        "and",
+        [
          "in",
          "tool",
          [
@@ -1276,6 +1428,30 @@
     [
      "str",
      "push"
+    ]
+   ]
+  },
+  {
+   "target": "allow",
+   "when": [
+    "and",
+    [
+     "cmp",
+     "tool",
+     "==",
+     [
+      "str",
+      "connect"
+     ]
+    ],
+    [
+     "cmp",
+     "net_dest",
+     "==",
+     [
+      "str",
+      "model_api"
+     ]
     ]
    ]
   },
