@@ -35,7 +35,7 @@ def test_the_floor_is_copied_verbatim(images):
     floor = json.loads(harness_policy.SOURCE_PATH.read_text())
     rules = calls.doc["rules"]
     floor_rules = canon2.loads(canon2.canonicalize(json.dumps(floor).encode()))["rules"]
-    assert rules[:10] == floor_rules[:10] and rules[15:] == floor_rules[10:]
+    assert rules[:11] == floor_rules[:11] and rules[16:] == floor_rules[11:]
     assert all(calls.doc["fields"][name] == definition
                for name, definition in canon2.loads(canon2.canonicalize(json.dumps(floor).encode()))["fields"].items())
 
