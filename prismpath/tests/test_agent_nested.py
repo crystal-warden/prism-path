@@ -333,6 +333,16 @@ def test_the_disagreement_table_the_stricter_layer_wins_and_the_known_gap_is_ass
     assert gap is KNOWN_GAP_CREDENTIAL_READ, (
         "the outer sandbox no longer lets the agent's own file tool read the staged credential: the known gap is "
         "closed, so flip KNOWN_GAP_CREDENTIAL_READ and update section 4 of docs/design/agent-sandbox-plan.md")
+    if not NESTING:
+        # a host that forbids the nested sandbox: every shell row is refused with cause 129, never run under the outer
+        # profile alone, and the run still verifies; the file tool rows above hold either way
+        for name in ("ask", "allow-allow", "allow-blocked"):
+            out = _answer(by[name])
+            assert out["permissionDecision"] == "deny" and "129" in out["permissionDecisionReason"], name
+            assert "ran" not in by[name], name
+        done = cli_tests._cli(arena["home"], "agent", "verify", "--json")
+        assert done.returncode == 0 and json.loads(done.stdout)["verified"] is True
+        return
     # row 2: ask carries the rewrite, so an approval still runs nested
     ask = _answer(by["ask"])
     assert ask["permissionDecision"] == "ask" and ask["updatedInput"]["command"].startswith(
