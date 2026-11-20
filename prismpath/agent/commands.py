@@ -343,19 +343,32 @@ def receipt_id(session: str, index: int) -> str:
     return f"{index} of session {session}"
 
 
-DIRECT_NOTE = ("PrismPath allowed this shell command to run directly inside the agent sandbox. The per call "
-               "sandbox is not applied here.")
-DIRECT_ASK_NOTE = ("If you approve it, it runs directly inside the agent sandbox; the per call sandbox is not applied "
-                   "here.")
+def observation_answer(data: Dict[str, Any], home: Path, store) -> Dict[str, Any]:
+    """Record what a nested per call sandbox showed (`observe.send`), bound to the receipt of the call. The request
+    comes from inside the agent sandbox, so it is a claim: it is read from at most the tail of the standard error, and
+    `Run.observe` refuses a receipt or hashes that are not the call's."""
+    from prismpath.agent import observe
+    session = data.get("session_id")
+    stderr = data.get("stderr")
+    body = observe.observed(int(data["returncode"]), stderr.encode("utf-8", "replace")[-observe.MAX_STDERR:] if isinstance(stderr, str) else b"",
+                            bool(data.get("timed_out")))
+    if body is None:
+        return {"recorded": True}
+    if not (store.root / _run_dir(session)).exists():
+        raise AgentError(f"session {session} has no run to record an observation in")
+    receipt = data.get("receipt")
+    store.get(session).observe(receipt, str(data.get("image_sha256")), str(data.get("profile_sha256")), body)
+    return {"recorded": True}
 
 
-def hook(raw: bytes, env: Optional[Mapping[str, str]] = None, direct: bool = False) -> Dict[str, Any]:
+def hook(raw: bytes, env: Optional[Mapping[str, str]] = None, nested=None) -> Dict[str, Any]:
     """The answer to one hook input. Never raises; whatever fails is a deny with cause 126.
 
-    `direct` is for the decider of `prismpath agent run`, where the hook client is inside the outer sandbox and
-    the host interpreter that the per call sandbox rewrite names does not exist. An allowed shell command is then
-    not rewritten: it runs inside the outer sandbox as it is, the receipt carries no sandbox profile, and the
-    answer says so."""
+    `nested` (a `sandbox_hook.Nested`) is for the decider of `prismpath agent run`, where the hook client is inside
+    the outer sandbox and the host interpreter and checkout that the per call rewrite names do not exist there. The
+    rewrite then names the system interpreter and the runner the launcher bound, and the runner reports what the
+    command showed over the decider's socket. Where the outer sandbox cannot host the per call one, a shell command
+    is denied with cause 129; it is never run under the outer profile alone."""
     event = None
     try:
         data = json.loads(raw.decode("utf-8"))
@@ -371,6 +384,11 @@ def hook(raw: bytes, env: Optional[Mapping[str, str]] = None, direct: bool = Fal
             if (store.root / _run_dir(session)).exists():
                 store.get(session).seal(home)
             return {}
+        if event == "PrismPathObservation" and nested is not None:
+            try:
+                return observation_answer(data, home, store)
+            except Exception as exc:    # noqa: BLE001
+                return {"recorded": False, "systemMessage": f"the observation was not recorded: {_detail(exc)}"}
         if event != "PreToolUse":
             raise AgentError(f"the hook was called for {event!r}; it answers PreToolUse and SessionEnd")
         from prismpath.agent import claude_code
@@ -383,11 +401,11 @@ def hook(raw: bytes, env: Optional[Mapping[str, str]] = None, direct: bool = Fal
         from prismpath.agent import sandbox_hook
         has_command = isinstance(data.get("tool_input"), dict) and isinstance(data["tool_input"].get("command"), str)
         if (result.decision.kind == "allow" or (result.decision.kind == "escalate" and has_command)) \
-                and data.get("tool_name") == "Bash" and sandbox_hook.supported() and not direct:
+                and data.get("tool_name") == "Bash" and sandbox_hook.supported():
             # an allowed shell call, or a question the person approves, runs only inside the sandbox the same policy compiles to (sandbox_hook.py);
             # on a platform without the sandbox the call is decided and not confined, as before
             try:
-                profile = sandbox_hook.sandbox_profile_for_call(data, home, policy.image)
+                profile = sandbox_hook.sandbox_profile_for_call(data, home, policy.image, nested)
             except sandbox_hook.SandboxRefused as exc:
                 return deny_answer(_detail(exc), SANDBOX_ERROR)
         run = store.open(session, policy.image)
@@ -396,15 +414,16 @@ def hook(raw: bytes, env: Optional[Mapping[str, str]] = None, direct: bool = Fal
         if profile is not None:
             # the receipt is written first so the runner can bind what the command shows to it (observe.py)
             from prismpath.ledgers import core_evidence
-            observe = {"run_dir": str(run.dir), "session": session, "receipt": index, "profile_sha256": profile.hash(),
+            observe = {"session": session, "receipt": index, "profile_sha256": profile.hash(),
                        "image_sha256": core_evidence.sha256_hex(policy.image)}
-            updated = sandbox_hook.sandbox_input(data, result.workspace, profile, observe=observe)
+            if nested is None:
+                observe["run_dir"] = str(run.dir)
+            else:
+                observe["socket"] = nested.socket
+            updated = sandbox_hook.sandbox_input(data, result.workspace, profile, observe=observe,
+                                                 python=nested.python if nested else None, runner=nested.runner if nested else None)
             answer = claude_code.hook_answer(result.decision, updated)
         answer = claude_code.fill_receipt(answer, receipt_id(session, index))
-        if direct and result.decision.kind == "allow" and data.get("tool_name") == "Bash":
-            answer["hookSpecificOutput"]["permissionDecisionReason"] = DIRECT_NOTE + f" Receipt {receipt_id(session, index)}."
-        elif direct and result.decision.kind == "escalate" and data.get("tool_name") == "Bash" and has_command:
-            answer["hookSpecificOutput"]["permissionDecisionReason"] += " " + DIRECT_ASK_NOTE
         return answer
     except BaseException as exc:  # noqa: BLE001 - fail closed on everything, never allow
         if event == "SessionEnd":
