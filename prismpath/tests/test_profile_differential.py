@@ -39,14 +39,15 @@ from typing import Callable, Dict, List, Optional
 
 import pytest
 
-from prismpath.agent import classifier, sandbox_exec
-from prismpath.agent.policy import Policy, starter_path
-from prismpath.agent.profile import STRICTEST, Profile, compile_profile
-from prismpath.agent.sandbox_exec import SandboxUnavailable, run_sandboxed
-
 ROOT = Path(__file__).resolve().parents[2]
+if not (ROOT / "formal" / "diff" / "core_diff.py").exists():
+    pytest.skip("formal/diff is not beside this package (an installed wheel)", allow_module_level=True)
 sys.path.insert(0, str(ROOT / "formal" / "diff"))
 import core_diff  # noqa: E402
+from prismpath.agent import classifier, sandbox_exec  # noqa: E402
+from prismpath.agent.policy import Policy, starter_path  # noqa: E402
+from prismpath.agent.profile import STRICTEST, Profile, compile_profile  # noqa: E402
+from prismpath.agent.sandbox_exec import SandboxUnavailable, run_sandboxed  # noqa: E402
 
 SECRET = "pp-secret-8f3a"
 REMOTE = "origin"

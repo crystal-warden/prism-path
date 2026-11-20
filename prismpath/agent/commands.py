@@ -235,6 +235,12 @@ def init(project: Path, yes: bool, as_json: bool, confirm=None, out=None, policy
                 handle.write(data)
             os.replace(tmp, home / name)
     load_checked(home)
+    from prismpath.agent import sandbox_hook
+    if sandbox_hook.supported():
+        try:
+            sandbox_hook.profile_for(home, image)      # compile once now, so the first Bash call does not
+        except sandbox_hook.SandboxRefused:
+            pass                                        # the hook denies Bash with cause 129 until this is fixed
 
     path = Path(project) / ".claude" / "settings.json"
     before_text = path.read_text(encoding="utf-8") if path.exists() else ""
@@ -338,9 +344,10 @@ def hook(raw: bytes, env: Optional[Mapping[str, str]] = None) -> Dict[str, Any]:
         from prismpath.agent import claude_code
         result = claude_code.evaluate(data, env, policy)
         answer, profile_hash = result.answer, None
-        if result.decision.kind == "allow" and data.get("tool_name") == "Bash":
-            # an allowed shell call runs only inside the sandbox the same policy compiles to (sandbox_hook.py)
-            from prismpath.agent import sandbox_hook
+        from prismpath.agent import sandbox_hook
+        if result.decision.kind == "allow" and data.get("tool_name") == "Bash" and sandbox_hook.supported():
+            # an allowed shell call runs only inside the sandbox the same policy compiles to (sandbox_hook.py);
+            # on a platform without the sandbox the call is decided and not confined, as before
             try:
                 updated, profile_hash = sandbox_hook.sandbox_allowed_bash(data, result.workspace, home, policy.image)
             except sandbox_hook.SandboxRefused as exc:
@@ -469,6 +476,18 @@ def _tamper_demo(home: Path, verified_rows) -> Dict[str, Any]:
         shutil.rmtree(scratch, ignore_errors=True)
 
 
+def confinement_state() -> Dict[str, Any]:
+    """Whether an allowed shell command is confined on this platform, and the sentence that says so."""
+    from prismpath.agent import sandbox_exec, sandbox_hook
+    if not sandbox_hook.supported():
+        return {"confined": False, "platform": sys.platform,
+                "detail": f"decided but not confined on this platform ({sys.platform}); the sandbox applies on Linux only"}
+    if not sandbox_exec.available():
+        return {"confined": False, "platform": sys.platform,
+                "detail": f"not confined, and every allowed shell command is refused (cause 129): {sandbox_exec.BWRAP} is missing"}
+    return {"confined": True, "platform": sys.platform, "detail": "decided and run inside the sandbox compiled from the policy"}
+
+
 def status(project: Path, as_json: bool, out=None) -> int:
     from prismpath.agent.policy import STARTERS, starter_of
     from prismpath.agent.run import RunStore
@@ -503,7 +522,8 @@ def status(project: Path, as_json: bool, out=None) -> int:
                      for event in ("PreToolUse", "SessionEnd")}
     except Exception:  # noqa: BLE001
         installed = {"PreToolUse": False, "SessionEnd": False}
-    report = {"config_dir": str(home), "keys": keys, "policy": policy, "runs": runs,
+    confinement = confinement_state()
+    report = {"config_dir": str(home), "keys": keys, "policy": policy, "runs": runs, "shell": confinement,
               "project": {"settings": str(settings_path), "hooks": installed}}
     ready = all(k["present"] for k in keys.values()) and policy["attested"]
     if as_json:
@@ -517,6 +537,7 @@ def status(project: Path, as_json: bool, out=None) -> int:
               file=out)
         print(f"hooks in {settings_path}: " + ", ".join(f"{e} {'yes' if v else 'no'}" for e, v in installed.items()),
               file=out)
+        print(f"shell commands: {confinement['detail']}", file=out)
         if not runs:
             print("runs: none", file=out)
         for r in runs:

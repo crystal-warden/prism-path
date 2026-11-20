@@ -31,6 +31,7 @@ the reason on standard error and the command is not run.
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import json
 import os
 import subprocess
@@ -164,10 +165,15 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--workspace", required=True)
     parser.add_argument("--cwd", default="", help="below the workspace, relative")
     parser.add_argument("--profile", required=True, help="a prismpath.profile/1 object as JSON")
+    parser.add_argument("--timeout", type=int, default=None, help="seconds; the profile's timeout_s when not given")
     parser.add_argument("command", help="one shell command string")
     args = parser.parse_args(argv)
     try:
         profile = profile_from_json(args.profile)
+        if args.timeout is not None:
+            if args.timeout < 1:
+                raise ValueError("the time limit is not positive")
+            profile = dataclasses.replace(profile, timeout_s=args.timeout)
         workspace = os.path.realpath(args.workspace)
         rel = os.path.relpath(os.path.realpath(os.path.join(workspace, args.cwd)), workspace)
         if rel == ".." or rel.startswith("../"):

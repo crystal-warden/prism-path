@@ -20,6 +20,10 @@ by the absolute path of the runner file. Each argument, the original command abo
 wrote, a quote, a semicolon, `$(...)`, a newline, is one argument to the runner and is read by a shell only
 inside the sandbox.
 
+On any platform but Linux `supported()` is false and the hook does not rewrite (see commands.hook): the call is
+decided and not confined, and `prismpath agent status` and `doctor` say so. The time limit of a call is the Bash
+`timeout` the model gave, else 120 s, at most 600 s (`call_timeout_s`).
+
 It fails closed. A profile that does not compile or a missing bwrap raises `SandboxRefused`, which the hook
 answers as a deny with cause 129 `agent:sandbox-unavailable`. A bwrap that is present and cannot start (user
 namespaces off) is found when the command runs: the runner exits 126 and the command is not run.
@@ -36,6 +40,25 @@ from typing import Any, Dict, Mapping, Optional, Tuple
 PROFILES_DIR = "profiles"
 RUNNER = Path(__file__).resolve().parent / "sandbox_exec.py"
 SANDBOX_CAUSE = "agent:sandbox-unavailable"
+
+
+DEFAULT_TIMEOUT_S = 120        # Claude Code's own default for a Bash call
+MAX_TIMEOUT_S = 600            # and its maximum
+
+
+def supported() -> bool:
+    """True where the sandbox applies: Linux. Elsewhere the hook decides a shell command and does not confine it."""
+    return sys.platform.startswith("linux")
+
+
+def call_timeout_s(tool_input: Mapping[str, Any]) -> int:
+    """The time limit of one call: the Bash `timeout` (milliseconds, as Claude Code sends it) when it is a positive
+    number, else 120 s, never past 600 s. The profile's `timeout_s` is the default of a caller that gives none
+    (`run_sandboxed`), not what the hook applies, so the profile and its hash are the same for every call."""
+    value = tool_input.get("timeout")
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not value > 0:
+        return DEFAULT_TIMEOUT_S
+    return max(1, min(MAX_TIMEOUT_S, int(-(-value // 1000))))
 
 
 class SandboxRefused(Exception):
@@ -78,11 +101,15 @@ def profile_for(home: Path, image: bytes):
     return compiled
 
 
-def rewrite_command(command: str, workspace: str, cwd: str, profile, python: Optional[str] = None) -> str:
+def rewrite_command(command: str, workspace: str, cwd: str, profile, python: Optional[str] = None,
+                    timeout_s: Optional[int] = None) -> str:
     """The shell command that runs `command` under the sandbox with `profile`."""
     python = python or sys.executable
     parts = [python, "-I", str(RUNNER), "--workspace", workspace, "--cwd", cwd,
-             "--profile", json.dumps(profile.to_object(), sort_keys=True, separators=(",", ":")), "--", command]
+             "--profile", json.dumps(profile.to_object(), sort_keys=True, separators=(",", ":"))]
+    if timeout_s is not None:
+        parts += ["--timeout", str(int(timeout_s))]
+    parts += ["--", command]
     return " ".join(shlex.quote(part) for part in parts)
 
 
@@ -93,7 +120,7 @@ def sandbox_input(hook_input: Mapping[str, Any], workspace: str, profile, python
         raise SandboxRefused("the Bash call has no command to sandbox")
     cwd = hook_input.get("cwd") if isinstance(hook_input.get("cwd"), str) and hook_input.get("cwd") else workspace
     out = dict(tool_input)
-    out["command"] = rewrite_command(tool_input["command"], workspace, cwd, profile, python)
+    out["command"] = rewrite_command(tool_input["command"], workspace, cwd, profile, python, call_timeout_s(tool_input))
     return out
 
 

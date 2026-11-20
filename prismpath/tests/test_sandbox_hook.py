@@ -8,6 +8,7 @@ throwaway directory. The hook inputs are the A2 recordings used by test_agent_cl
 import json
 import os
 import shlex
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -188,6 +189,7 @@ def test_a_missing_bwrap_is_a_deny_with_the_new_cause(world, monkeypatch):
 
 def test_a_profile_that_cannot_compile_is_a_deny_with_the_new_cause(world, monkeypatch):
     _init(world)
+    shutil.rmtree(_agent_dir(world["home"]) / "profiles")           # init cached the profile; a changed image would have none
 
     def broken(_image):
         raise profile_module.ProfileError("field 'x' has no finite domain")
@@ -208,3 +210,60 @@ def test_the_runner_run_by_hand_without_bwrap_says_so_and_runs_nothing(world, tm
     done = subprocess.run([sys.executable, "-I", "-c", "import sys; sys.path.insert(0, %r)\n%s" % (str(Path(__file__).parents[2]), script)],
                           capture_output=True)
     assert done.returncode == 126 and b"did not run" in done.stderr and not fake.exists()
+
+
+# ------------------------------------------------------------------------------- platform, time limit, init
+def test_off_linux_an_allowed_bash_call_is_allowed_unchanged_and_status_and_doctor_say_it_is_not_confined(world, monkeypatch, capsys):
+    from prismpath.agent import doctor
+    _init(world)
+    monkeypatch.setattr(sandbox_hook, "supported", lambda: False)
+    monkeypatch.setattr(sandbox_exec, "BWRAP", str(Path(world["home"]) / "no-such-bwrap"))     # irrelevant off Linux
+    env = {**_env(world["home"]), "PATH": os.environ["PATH"]}
+    out = _output(commands.hook(json.dumps(_bash(world, "ls -la src")).encode(), env))
+    assert out["permissionDecision"] == "allow" and "updatedInput" not in out
+    state = commands.confinement_state()
+    assert not state["confined"] and "decided but not confined" in state["detail"] and "linux only" in state["detail"].lower()
+    monkeypatch.setenv("HOME", str(world["home"]))
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    commands.status(Path(world["ws"]), False)
+    assert "decided but not confined on this platform" in capsys.readouterr().out
+    row = next(c for c in doctor.diagnose(Path(world["ws"]))["checks"] if c["check"] == "shell-confinement")
+    assert row["status"] == "warn" and "not confined" in row["detail"]
+
+
+def test_on_linux_a_broken_bwrap_stays_a_deny_and_status_says_so(world, monkeypatch):
+    _init(world)
+    monkeypatch.setattr(sandbox_hook, "supported", lambda: True)
+    monkeypatch.setattr(sandbox_exec, "BWRAP", str(Path(world["home"]) / "no-such-bwrap"))
+    state = commands.confinement_state()
+    assert not state["confined"] and "cause 129" in state["detail"]
+    _deny_with_sandbox_cause(world)
+
+
+@pytest.mark.parametrize("given, seconds", [(None, 120), (5000, 5), (5001, 6), (90000, 90), (900000, 600), (0, 120),
+                                            (-5, 120), ("9", 120), (True, 120), (1, 1)])
+def test_the_call_time_limit_is_the_bash_timeout_else_120_s_at_most_600_s(given, seconds):
+    tool_input = {} if given is None else {"timeout": given}
+    assert sandbox_hook.call_timeout_s(tool_input) == seconds
+
+
+def test_the_rewrite_carries_the_time_limit_and_the_profile_hash_does_not_depend_on_it(world):
+    _init(world)
+    first = _output(_hook(world["home"], _bash(world, "ls", timeout=7000)))["updatedInput"]["command"]
+    second = _output(_hook(world["home"], _bash(world, "ls")))["updatedInput"]["command"]
+    assert shlex.split(first)[shlex.split(first).index("--timeout") + 1] == "7"
+    assert shlex.split(second)[shlex.split(second).index("--timeout") + 1] == "120"
+    assert profile_module.STRICTEST.timeout_s == 30 and profile_module.STRICTEST.hash() == "767dd3c84cbb5ec504548e158571d52e7c217a530b8f43350305e14856010595"
+
+
+@needs_bwrap
+def test_the_runner_stops_a_command_at_the_given_limit(world):
+    command = sandbox_hook.rewrite_command("sleep 20", world["ws"], world["ws"], profile_module.STRICTEST, timeout_s=1)
+    done = subprocess.run(["/bin/bash", "-c", command], capture_output=True, timeout=30)
+    assert done.returncode == 124 and b"stopped this command" in done.stderr
+
+
+def test_init_compiles_the_profile_cache_so_the_first_bash_call_does_not(world):
+    _init(world)
+    image = (_agent_dir(world["home"]) / "policy.core.json").read_bytes()
+    assert (_agent_dir(world["home"]) / "profiles" / (sandbox_hook._sha256_hex(image) + ".json")).is_file()

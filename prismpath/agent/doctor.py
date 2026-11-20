@@ -316,6 +316,10 @@ def diagnose(project: Path, budget_ms: float = BUDGET_MS, now: Optional[float] =
     checks = _check_permissions(home)
     if home.is_dir():
         checks += [_check_key_pair(home, role) for role in KEY_ROLES] + [_check_policy(home)]
+    state = commands.confinement_state()
+    checks.append(_check("shell-confinement", "ok" if state["confined"] else "fail" if "refused" in state["detail"] else "warn",
+                         state["detail"], None if state["confined"] else
+                         ("install bubblewrap (bwrap) so allowed shell commands can run" if "refused" in state["detail"] else None)))
     hook_rows, interpreter = _check_hooks(project)
     checks += hook_rows
     checks.append(_check_dry_run(home, project, interpreter, budget_ms) if home.is_dir() else
