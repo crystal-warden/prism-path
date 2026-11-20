@@ -2,7 +2,7 @@
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """An HTTP CONNECT proxy on a unix socket, the one door out of the agent sandbox (agent-sandbox-plan, 2 and 5).
 
-    python -m prismpath.agent.egress --socket PATH --log FILE
+    EgressProxy(socket_path, log_path, gate=policy_gate).start()
 
 Standard library only. The proxy accepts a CONNECT on the socket, reads the destination as written, and
 decides it in this order, answering 403 with a short reason at the first refusal:
@@ -13,7 +13,8 @@ decides it in this order, answering 403 with a short reason at the first refusal
      form (dotted, decimal, hex, octal, short, bracketed IPv6), no empty label and at most one trailing dot,
      which is dropped so `a.com.` and `a.com` are one destination;
   4. the port is one of `allowed_ports` (443 unless the caller lists more);
-  5. the decider function the caller passed in allows (host, port);
+  5. the caller's decision allows it: the gate (asked first, with the target as written) or else the decider
+     function (host, port) the caller passed in;
   6. the proxy resolves the name itself and every address must be globally routable. Loopback, link local,
      private, carrier grade NAT, unspecified, multicast and reserved addresses are refused, and so are the
      IPv4 mapped, NAT64 and 6to4 IPv6 forms of them. The connection goes to the address that was checked, so
@@ -22,12 +23,15 @@ decides it in this order, answering 403 with a short reason at the first refusal
 An allowed tunnel is a byte relay (the proxy never reads the TLS inside) that closes after `idle_timeout`
 seconds with no bytes either way. At most `max_connections` run at once; the next gets 503. Every attempt,
 allowed or refused, appends one JSON line (time, host, port, decision, reason) to the log file the caller
-names. The process writes to that file and to its socket path and nowhere else.
+names. The proxy writes to that file and to its socket path and nowhere else (a gate it is given may write more:
+the policy gate appends receipts to a run).
 
-The interim decider allows the names in INTERIM_ALLOWLIST. It is a permission outside the signed image, fixed
-per release, and WP7 replaces it with readings decided by the kernel."""
-import argparse
-import hashlib
+The caller passes the decision in. There is no allowlist in this file: with no `gate` and no `decider` every
+destination is refused. `gate(authority)` is asked first, with the CONNECT target exactly as written (case, trailing
+dot, userinfo and all), once the request line and method are well formed, and answers (allowed, reason). The launcher
+passes the policy decider (prismpath/agent/egress_policy.py): it reads the target into a connect reading with the
+classifier, decides it with the active attested image and writes a receipt, so an odd spelling is refused with the
+classifier's own reading. `decider(host, port)` is asked after the target is normalised, for a caller with no policy."""
 import ipaddress
 import json
 import os
@@ -38,7 +42,6 @@ import stat
 import threading
 import time
 
-INTERIM_ALLOWLIST = ("api.anthropic.com", "platform.claude.com")
 MAX_HEADER_BYTES = 8192
 MAX_CONNECTIONS = 32
 HEADER_TIMEOUT = 10.0
@@ -48,16 +51,9 @@ _LABEL = re.compile(r"^[a-z0-9_]([a-z0-9_-]{0,61}[a-z0-9_])?$")
 _PORT = re.compile(r"^[0-9]{1,5}$")
 
 
-def interim_allowlist_sha256():
-    """The hash the launcher records beside the image hash while the allowlist is a constant."""
-    return hashlib.sha256("\n".join(INTERIM_ALLOWLIST).encode()).hexdigest()
-
-
-def interim_decider(host, port):
-    """(allowed, reason) for a normalised host and port against the interim constant."""
-    if host in INTERIM_ALLOWLIST:
-        return True, "interim-allowlist"
-    return False, "host-not-allowed"
+def refuse_all(host, port):
+    """The decider when none is given: nothing is allowed."""
+    return False, "no-decider"
 
 
 class Refusal(Exception):
@@ -149,12 +145,12 @@ def system_connect(address, port, timeout):
 
 
 class EgressProxy:
-    def __init__(self, socket_path, log_path, decider=interim_decider, resolver=system_resolver, connect=system_connect,
+    def __init__(self, socket_path, log_path, decider=refuse_all, gate=None, resolver=system_resolver, connect=system_connect,
                  allowed_ports=(443,), max_header=MAX_HEADER_BYTES, max_connections=MAX_CONNECTIONS,
                  header_timeout=HEADER_TIMEOUT, idle_timeout=IDLE_TIMEOUT, connect_timeout=CONNECT_TIMEOUT):
         self.socket_path = str(socket_path)
         self.log_path = str(log_path)
-        self.decider, self.resolver, self.connect = decider, resolver, connect
+        self.decider, self.gate, self.resolver, self.connect = decider, gate, resolver, connect
         self.allowed_ports = tuple(allowed_ports)
         self.max_header, self.max_connections = max_header, max_connections
         self.header_timeout, self.idle_timeout, self.connect_timeout = header_timeout, idle_timeout, connect_timeout
@@ -224,8 +220,8 @@ class EgressProxy:
         upstream = None
         try:
             head, rest = self._read_head(client)
-            host, port, target = self._parse_request(head)
-            allowed, reason = self._decide(host, port)
+            host, port, target, gated = self._parse_request(head)
+            allowed, reason = gated if gated is not None else self._decide(host, port)
             if not allowed:
                 raise Refusal(reason)
             addresses = self._resolve(host)
@@ -292,12 +288,24 @@ class EgressProxy:
         for line in lines[1:]:
             if ":" not in line or line[0] in " \t":
                 raise Refusal("malformed-request", 400)
+        gated = None
         try:
+            if self.gate is not None:
+                gated = self._gated(parts[1])
+                if not gated[0]:
+                    raise Refusal(gated[1])
             host, port = parse_authority(parts[1], self.allowed_ports)
         except Refusal as refusal:
             refusal.target = parts[1]
             raise
-        return host, port, parts[1]
+        return host, port, parts[1], gated
+
+    def _gated(self, authority):
+        try:
+            allowed, reason = self.gate(authority)
+        except Exception:
+            return False, "decider-error"
+        return bool(allowed), str(reason)
 
     def _decide(self, host, port):
         try:
@@ -359,22 +367,3 @@ class EgressProxy:
         with self._log_lock:
             with open(self.log_path, "a", encoding="ascii") as handle:
                 handle.write(line + "\n")
-
-
-def main(argv=None):
-    parser = argparse.ArgumentParser(description="CONNECT proxy on a unix socket with the interim allowlist")
-    parser.add_argument("--socket", required=True)
-    parser.add_argument("--log", required=True)
-    args = parser.parse_args(argv)
-    proxy = EgressProxy(args.socket, args.log).start()
-    try:
-        while True:
-            time.sleep(3600)
-    except KeyboardInterrupt:
-        pass
-    finally:
-        proxy.close()
-
-
-if __name__ == "__main__":
-    main()

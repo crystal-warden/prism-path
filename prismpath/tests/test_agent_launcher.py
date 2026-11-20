@@ -100,12 +100,30 @@ def _make_ca(directory: Path):
     return cert, key
 
 
+@pytest.fixture(scope="module")
+def agent_home(tmp_path_factory):
+    """A recorded policy (keys, starter, attestation) in a home of its own, so `launch` never reads the real one."""
+    home = tmp_path_factory.mktemp("agent-home")
+    saved = {k: os.environ.get(k) for k in ("HOME", "XDG_CONFIG_HOME", "APPDATA")}
+    os.environ["HOME"] = str(home)
+    os.environ.pop("XDG_CONFIG_HOME", None)
+    os.environ.pop("APPDATA", None)
+    try:
+        assert commands.init(home, yes=True, as_json=False, out=open(os.devnull, "w")) == 0
+        yield home
+    finally:
+        for key, value in saved.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+
 @pytest.fixture(autouse=True)
-def _no_real_config_dir(monkeypatch):
-    """The config directory comes from HOME only: GitHub's runners set XDG_CONFIG_HOME, which config_dir prefers, so
-    a copy of os.environ with HOME swapped would still find the runner's own (empty) config directory."""
-    for name in ("XDG_CONFIG_HOME", "APPDATA"):
-        monkeypatch.delenv(name, raising=False)
+def use_agent_home(agent_home, monkeypatch):
+    monkeypatch.setenv("HOME", str(agent_home))
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    monkeypatch.delenv("APPDATA", raising=False)
 
 
 @pytest.fixture
@@ -194,7 +212,14 @@ def test_the_stand_in_reaches_the_stub_through_the_proxy_and_is_confined(world, 
     assert set(hooks) == {"PreToolUse", "SessionEnd"}
     assert all(h["command"] == launcher.client_hook_command() for event in hooks.values() for g in event for h in g["hooks"])
     decisions = [(json.loads(line)["host"], json.loads(line)["decision"]) for line in log.read_text().splitlines()]
-    assert ("api.anthropic.com", "allow") in decisions and ("evil.example", "refuse") in decisions
+    assert ("api.anthropic.com", "allow") in decisions and ("evil.example:443", "refuse") in decisions
+    # the proxy's decisions are receipts of a run the policy decided, sealed at exit, and they verify
+    home = commands.config_dir()
+    _policy, store = commands.load_checked(home)
+    egress_runs = [r for r in store.runs() if r.session.startswith("egress-")]
+    assert len(egress_runs) == 1 and not egress_runs[0].is_open()
+    summary = egress_runs[0].verify(home)
+    assert summary["receipts"] == 2 and summary["disagree"] == 0
     # torn down: the staged directory (and with it the proxy socket) is gone, no child survives, no litter
     assert list(stages.iterdir()) == []
     assert _processes_with(MARKER) == []
@@ -258,6 +283,26 @@ def test_the_exit_status_of_a_failing_program_is_passed_on_and_teardown_still_ru
     workspace, stages, _root = world
     code = launcher.launch([PYTHON, "-c", "import sys; sys.exit(3)"], str(workspace), stage_base=str(stages))
     assert code == 3 and list(stages.iterdir()) == [] and list(workspace.iterdir()) == [workspace / "agent.py"]
+
+
+@needs_bwrap
+@needs_socat
+def test_no_recorded_policy_runs_nothing(world, monkeypatch, tmp_path):
+    workspace, stages, _root = world
+    monkeypatch.setenv("HOME", str(tmp_path / "empty-home"))
+    with pytest.raises(launcher.LaunchError, match="agent init"):
+        launcher.launch([PYTHON, "-c", "open('ran', 'w')"], str(workspace), stage_base=str(stages))
+    assert not (workspace / "ran").exists() and list(stages.iterdir()) == [] and not (workspace / ".claude").exists()
+
+
+@needs_bwrap
+@needs_socat
+def test_a_policy_with_no_model_route_runs_nothing(world, monkeypatch):
+    workspace, stages, _root = world
+    monkeypatch.setattr(launcher, "compile_profile", lambda image, role: launcher.Profile(net="none"))
+    with pytest.raises(launcher.LaunchError, match="allows no connection to the model API"):
+        launcher.launch([PYTHON, "-c", "open('ran', 'w')"], str(workspace), stage_base=str(stages))
+    assert not (workspace / "ran").exists() and list(stages.iterdir()) == [] and not (workspace / ".claude").exists()
 
 
 def test_missing_bwrap_is_an_error_and_nothing_runs(world, monkeypatch):

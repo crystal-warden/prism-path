@@ -57,8 +57,14 @@ def echo():
     server.server.close()
 
 
+def allow_api(host, port):
+    """A test decider: the one name the tests dial. The proxy itself holds no allowlist."""
+    return (True, "test-allow") if host == "api.anthropic.com" else (False, "host-not-allowed")
+
+
 def make_proxy(tmp_path, echo, hosts=None, **kwargs):
     hosts = hosts if hosts is not None else {"api.anthropic.com": [PUBLIC]}
+    kwargs.setdefault("decider", allow_api)
     dialled = []
 
     def resolver(name):
@@ -129,7 +135,7 @@ def test_an_allowed_host_tunnels_through_the_resolver_override(tmp_path, echo):
         client.close()
         assert proxy.dialled == [(PUBLIC, 443)]
         entry = wait_log(proxy)[0]
-        assert (entry["host"], entry["port"], entry["decision"], entry["reason"]) == ("api.anthropic.com", 443, "allow", "interim-allowlist")
+        assert (entry["host"], entry["port"], entry["decision"], entry["reason"]) == ("api.anthropic.com", 443, "allow", "test-allow")
 
 
 def test_a_trailing_dot_and_upper_case_are_the_same_destination(tmp_path, echo):
@@ -335,11 +341,12 @@ def test_start_refuses_to_replace_a_file_that_is_not_a_socket(tmp_path, echo):
     assert victim.read_text() == "keep"
 
 
-def test_the_interim_allowlist_is_the_plans_constant():
-    assert egress.INTERIM_ALLOWLIST == ("api.anthropic.com", "platform.claude.com")
-    assert len(egress.interim_allowlist_sha256()) == 64
-    assert egress.interim_decider("platform.claude.com", 443)[0] is True
-    assert egress.interim_decider("claude.ai", 443)[0] is False
+def test_the_proxy_holds_no_allowlist_and_refuses_everything_without_a_decision(tmp_path, echo):
+    assert not hasattr(egress, "INTERIM_ALLOWLIST") and not hasattr(egress, "interim_decider")
+    with make_proxy(tmp_path, echo, decider=egress.refuse_all) as proxy:
+        client = talk(proxy, connect_line("api.anthropic.com:443"))
+        assert status(answer(client)) == 403
+        assert wait_log(proxy)[0]["reason"] == "no-decider"
 
 
 # the host parser on its own
