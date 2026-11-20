@@ -37,8 +37,17 @@ cannot be walked, so `compile_profile` raises `ProfileError` naming the field an
 profile: a caller treats the error as a refusal and runs nothing. A caller that wants a profile anyway can use
 `STRICTEST`, which mounts nothing but the system prefix and the workspace and has no network.
 
-The canonical bytes are a `prismpath.profile/1` object in canon/2 (prismpath.kernel.canon2), and the hash is
-the SHA-256 of those bytes. The profile does not carry the image's hash: two images that need the same things
+The canonical bytes are a canon/2 object (prismpath.kernel.canon2), and the hash is the SHA-256 of those bytes. A
+profile with no `net` (every bash role profile, and the starters') is `prismpath.profile/1` with the same bytes it
+always had, so its hash does not move. A profile that carries `net` is `prismpath.profile/2`, which adds that one field.
+
+Roles. `compile_profile(image, "bash")` is the profile of one allowed shell command and never has a proxy: `net` is
+`none`. `compile_profile(image, "agent")` is the profile of the whole agent process tree: the mounts are the fixed
+ones (the system prefix read only and the workspace, never the host and never the host network), and `net` comes from
+the allow set: `proxy_model` when some allowed `connect` reading has `net_dest` `model_api`, `proxy_allow` when some
+has `allowed_host` as well, `none` otherwise (`other` and `unknown` never give a state). The proxy decides each
+connection with the same image (prismpath/agent/egress_policy.py), so the compiled state and the proxy's answer are
+one decision, held together by the differential test (prismpath/tests/test_egress_policy.py). The profile does not carry the image's hash: two images that need the same things
 get the same profile and the same hash, and a receipt records the image's hash beside the profile's.
 """
 from __future__ import annotations
@@ -50,7 +59,9 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 from prismpath.kernel import canon2
 
-FORMAT = "prismpath.profile/1"
+FORMAT = "prismpath.profile/1"          # a profile with no `net`: the bytes (and hash) every such profile has always had
+FORMAT_NET = "prismpath.profile/2"      # a profile that carries `net`
+ROLES = ("bash", "agent")
 SYSTEM_PREFIX = "/usr"
 WORKSPACE = "workspace"        # the role of the one read write path; the runner binds the real directory
 MAX_PROCESSES = 64
@@ -105,7 +116,7 @@ class Profile:
             raise ProfileError("a profile with a proxy cannot also share the host network")
 
     def to_object(self) -> Dict[str, Any]:
-        obj = {"format": FORMAT, "ro_mounts": sorted(self.ro_mounts), "rw_path": self.rw_path,
+        obj = {"format": FORMAT_NET if self.net != "none" else FORMAT, "ro_mounts": sorted(self.ro_mounts), "rw_path": self.rw_path,
                "host_write": self.host_write, "network": self.network, "max_processes": self.max_processes, "timeout_s": self.timeout_s}
         if self.net != "none":      # absent when none, so every profile that exists keeps its canonical bytes and hash
             obj["net"] = self.net
@@ -224,6 +235,14 @@ def _gives(reading: Dict[str, Any]) -> Tuple[bool, bool, bool]:
     return outside, outside and changes, command in NETWORK_VALUES or git in NETWORK_VALUES
 
 
+def _net_gives(reading: Dict[str, Any]) -> Tuple[bool, bool]:
+    """(model_api, allowed_host): which proxy classes one allowed reading needs. Only a `connect` gives either."""
+    if reading.get("tool") != "connect":
+        return False, False
+    dest = reading.get("net_dest")
+    return dest == "model_api", dest == "allowed_host"
+
+
 _PARSED: Dict[str, Any] = {}
 
 
@@ -290,7 +309,12 @@ def _unproduced(names: List[str], combo) -> bool:
 
 
 def needs(policy) -> Tuple[bool, bool, bool]:
-    """(outside, outside_write, network): the union over the allow set of what a reading needs, every reading
+    """(outside, outside_write, network) of `needs_all`, the three a bash role profile is made from."""
+    return needs_all(policy)[:3]
+
+
+def needs_all(policy, read_also: Tuple[str, ...] = ()) -> Tuple[bool, bool, bool, bool, bool]:
+    """(outside, outside_write, network, model_api, allowed_host): the union over the allow set of what a reading needs, every reading
     of the finite domain decided through the reference (`Policy.decide`). Raises ProfileError when a field has
     no finite domain.
 
@@ -309,25 +333,26 @@ def needs(policy) -> Tuple[bool, bool, bool]:
         for atom in found:
             if atom[1] in atoms:
                 atoms[atom[1]].append(atom)
-    read = set()
+    read = set(read_also)
     for rule in doc["rules"]:
         read |= _names_read(rule["when"], fields)
     names = sorted(read)
     constant = {name: values[0] for name, values in domains.items() if name not in read}
     groups = [_classes(domains[n], atoms[n]) if understood else [[v] for v in domains[n]] for n in names]
-    found = [False, False, False]
+    found = [False] * 5
     for combo in itertools.product(*groups):
         if _unproduced(names, combo):
             continue
-        gave = [False, False, False]
+        gave = [False] * 5
         for members in itertools.product(*combo):
-            gave = [a or b for a, b in zip(gave, _gives(dict(zip(names, members), **constant)))]
+            reading = dict(zip(names, members), **constant)
+            gave = [a or b for a, b in zip(gave, (*_gives(reading), *_net_gives(reading)))]
         if all(f or not g for f, g in zip(found, gave)):
             continue        # nothing this group needs is still unknown, so it is not worth a decision
         reading = dict(zip(names, (g[0] for g in combo)), **constant)
         if _first_allows(policy, reading) and policy.decide(policy.reading_bytes(reading)).runs:
             found = [f or g for f, g in zip(found, gave)]
-    return found[0], found[1], found[2]
+    return found[0], found[1], found[2], found[3], found[4]
 
 
 def allow_set(policy):
@@ -347,16 +372,23 @@ def allow_set(policy):
 
 
 # ------------------------------------------------------------------------------------------- the compile
-def compile_profile(image: Union[bytes, "Policy"]) -> Profile:  # noqa: F821
-    """The profile an image needs: the strictest one its allow set permits. Raises ProfileError."""
+def compile_profile(image: Union[bytes, "Policy"], role: str = "bash") -> Profile:  # noqa: F821
+    """The profile an image needs: the strictest one its allow set permits. `role` is `bash` (one allowed shell
+    command, never a proxy) or `agent` (the whole agent process tree, `net` from the allow set). Raises ProfileError."""
     from prismpath.agent.policy import Policy
+    if role not in ROLES:
+        raise ProfileError(f"role must be one of {ROLES}, not {role!r}")
     try:
         policy = image if isinstance(image, Policy) else Policy(image)
     except ValueError as exc:
         raise ProfileError(f"the image does not load: {exc}")
-    for name in REQUIRED_FIELDS:
+    required = REQUIRED_FIELDS + (("tool", "net_dest") if role == "agent" else ())
+    for name in required:
         if name not in policy.doc["fields"]:
             raise ProfileError(f"the image does not define {name!r}, so its allow set cannot be projected")
-    outside, outside_write, network = needs(policy)
+    outside, outside_write, network, model, allowed = needs_all(policy, ("tool", "net_dest") if role == "agent" else ())
+    if role == "agent":
+        net = "proxy_allow" if allowed else "proxy_model" if model else "none"
+        return Profile(net=net)         # the fixed mounts: the system prefix and the workspace, and never the host network
     mounts = ("/",) if outside else (SYSTEM_PREFIX,)
     return Profile(ro_mounts=mounts, host_write=outside_write, network=network)
