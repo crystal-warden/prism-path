@@ -24,8 +24,8 @@ The generated calls (`--cases`, seeded) are direct classifier calls, Claude Code
 `tools/call` params, biased toward the boundaries of the reading: every program set, every git subcommand and
 listing flag, every kill form, URLs, `..`, globs, `/workspace`, quoting of every kind, shell operators, tilde
 and brace words, non ASCII and control characters, lone surrogates, wrong types and extra keys, long paths and
-long argvs. The control files of the agent are named by path in the PATHS and ordinary words, so a change that names one
-meets every text. A string with a lone surrogate is outside the model's domain (Lean strings hold Unicode scalar values);
+long argvs. The control paths of the agent (settings, hooks, MCP file, CLAUDE.md, git hooks and config, in several spellings) are named in the PATHS and ordinary
+words, and redirects and file changing programs are joined to them, so a change that names one meets every text. A string with a lone surrogate is outside the model's domain (Lean strings hold Unicode scalar values);
 the transport says so (`nonscalar`) and both sides must read the call unknown. Numbers reach the oracle as 0,
 since no part of the reading reads a number's value.
 
@@ -95,7 +95,7 @@ class SyntheticDisk:
     def disk(self, raw: str, config: classifier.Config) -> classifier.DiskFacts:
         b = self._bits("disk", raw)
         return classifier.DiskFacts(inside=b % 10 < 6, toolchain=(b >> 4) % 7 == 0, symlink=(b >> 8) % 7 == 0,
-                                    control=(b >> 12) % 5 == 0)
+                                    control=(b >> 12) % 5 == 0, holder=(b >> 16) % 5 == 0)
 
     def inside(self, path: str, root: str) -> bool:
         return self._bits("inside", path, root) % 8 != 0
@@ -138,7 +138,7 @@ class Recorder:
         return self.exists[path]
 
     def tables(self) -> Dict[str, Any]:
-        return {"disk": [[k, v.inside, v.toolchain, v.symlink, v.control] for k, v in self.disk.items()],
+        return {"disk": [[k, v.inside, v.toolchain, v.symlink, v.control, v.holder] for k, v in self.disk.items()],
                 "inside": [[a, b, v] for (a, b), v in self.inside.items()],
                 "same": [[a, b, v] for (a, b), v in self.same.items()],
                 "exists": [[k, v] for k, v in self.exists.items()]}
@@ -353,7 +353,8 @@ SIGNALS = ["-9", "-KILL", "-SIGKILL", "-s", "TERM", "-sKILL", "-15", "-K1", "-k"
 PATHS = [".", "..", "./a", "a/../b", "../decoy/x", "src/app.py", "notes.txt", "/etc/passwd", "/etc", "/", "//",
          "/workspace", "/workspace/a", "/workspace/../x", "/./workspace/a", "/workspacex", "~", "~/x", "~root", "a~",
          "*.txt", "a?b", "[ab]", "{a,b}", "x}", "a/**/b", "a\x00b", "a" * 4097, "a" * 4096, ".claude/settings.json", ".claude/settings.local.json", ".claude/hooks/pre.sh", ".mcp.json", ".claude",
-         "src/../.claude/settings.json", ".claude/commands/x.md", "x//y", "a/", "a/.",
+         "src/../.claude/settings.json", ".claude/commands/x.md", ".CLAUDE/Settings.json", ".git/hooks/pre-commit", ".git/config", ".git", "CLAUDE.md",
+         "sub/CLAUDE.local.md", "AGENTS.md", "/workspace/.mcp.json", "x//y", "a/", "a/.",
          "..a", "a..", "...", "a/..", "../", "/usr/bin/x", "/usr/local/bin/h", ".toolchain/bin/py", "a=b/c",
          "link_out/x", "cfg", "-", "--", "https://example.invalid/x", "git@host:x.git", "ftp://a", "a1+.-://b",
          "1://x", "\xe9://x", "x://", "://x", "S3://b", "a b", "\t", "\u200b", "\u202e", "\xe9", "e\u0301",
@@ -542,9 +543,31 @@ def _git_compound(rng: random.Random) -> str:
     return rng.choice([" ; ", " && ", " | ", "\n", " & "]).join(parts) + rng.choice(["", ";", " \\"])
 
 
+REDIRECTS = [">", ">>", " > ", " >> ", "2>", "&>", ">&", ">|", "> ", ">>", "2>&1", ">&2", "1>&-", ">/dev/null",
+             "2>/dev/null", "&>/dev/null", "> /dev/null", ">/dev/nullx", ">&x", ">& ", ">&1x", ">>/dev/null"]
+WRITERS = ["rm -r", "rmdir", "mv -f", "find . -delete", "find", "git rm -r", "git clean -fd", "git checkout", "rm -rf", "rm", "mv", "cp", "tee", "tee -a", "touch", "sed -i s/a/b/", "sed -n p", "sed", "find . -delete", "find",
+           "sort -o", "sort", "tree -o x", "tree", "git add", "git commit -m x", "git diff", "git status", "python", "pytest",
+           "vim", "dd of=", "tar xf", "install", "/usr/bin/rm", "echo", "printf x", "cat", "grep -r x", "ls", "kill 1"]
+
+
+def _redirect_compound(rng: random.Random) -> str:
+    """A command outside the grammar that redirects, or names a file changing program, with control paths and
+    ordinary paths among its words: the scan's control rule, its redirect and writer tests included."""
+    parts = []
+    for _ in range(rng.randint(1, 3)):
+        words = [rng.choice(WRITERS)] + [rng.choice(PATHS + ["x", "-n", "."]) for _ in range(rng.randint(0, 2))]
+        if rng.random() < 0.6:
+            words.insert(rng.randint(1, len(words)), rng.choice(REDIRECTS) + rng.choice(["", "", " "]))
+            words.append(rng.choice(PATHS))
+        parts.append(" ".join(words))
+    return rng.choice([" ; ", " && ", " | ", "\n"]).join(parts)
+
+
 def gen_command(rng: random.Random) -> str:
     if rng.random() < 0.08:
         return _git_compound(rng)
+    if rng.random() < 0.12:
+        return _redirect_compound(rng)
     argv = [a for a in _argv(rng) if isinstance(a, str)] or ["ls"]
     if rng.random() < 0.5:         # a command in the grammar, quoted where a word needs it
         argv = [a for a in argv if all(c in claude_code.QUOTED or c in "'\"" for c in a)] or ["ls", "-la"]

@@ -116,3 +116,8 @@ gate plugin is any module exposing this table's attributes (discovered via `plug
 
 > Design property: because the seam is a narrow ports/adapters boundary, adding a build target is a
 > new plugin module, not a change to the engine.
+
+
+## Enforcement points
+
+How one signed policy reaches the hook, the sandbox, the network and devices, and which of them give a real guarantee: [`enforcement-points-plan.md`](enforcement-points-plan.md).

@@ -8,6 +8,32 @@ spec stable.
 
 ## [Unreleased]
 
+### Added: sandbox observations, and approved questions run sandboxed (2026-11-20)
+
+- **An escalated Bash call on Linux is answered ask with the sandboxed command** (`updatedInput`), so a call the person approves runs under the same bwrap profile as an allowed one. A refusal is unchanged, and a missing bwrap or a profile that does not compile is a deny with cause 129. Off Linux the call is asked unchanged.
+- **Sandbox observations.** When a sandboxed command's standard error shows a stopped access, the run records an observation in `observations.jsonl`, bound to the receipt, image hash and profile hash. `prismpath agent verify` checks it. It is not a rule hit and changes no decision. `core-receipt/1` is unchanged.
+
+### Changed: the control-file refusal closes the gaps it left open (2026-11-20)
+
+- **A shell command outside the plain grammar that redirects onto a control file is refused with 128.** The hazard
+  scan now reads a token that resolves to a control path in a command that is not read-only (a redirection to a file,
+  or `rm`, `mv`, `cp`, `tee`, `sed -i`, `git add` and the like), so `echo x > .claude/settings.json` and
+  `printf y >> .mcp.json` no longer ask under `default` and `review`. The scan still never allows, only adds refusals.
+- **Control paths are matched case insensitively on every platform, through hard links, and more widely.** `.CLAUDE`
+  names the same file on macOS and Windows; a file with the device and inode of a control file is a control path.
+  `.git/hooks/` and `.git/config`, everything under `.claude/` (commands, agents, skills), `CLAUDE.md`,
+  `CLAUDE.local.md` and `AGENTS.md` at any depth are control paths. Reads are unchanged. The workspace root, `.git` and
+  every directory that holds control files are control targets only for a removal or a move (`rm -r .`, `rm -rf ./`,
+  `rm -rf .git`, `mv . x`, `find . -delete`, `git rm -r .`, `git clean`); writing into them (`cp x .`, `tee ./new`,
+  `git add .`, `pytest .`) is decided as before.
+- **The written hook command no longer imports a `prismpath/` package planted in the workspace.** Claude Code runs the
+  hook from the project directory, and `python -m prismpath` put that directory first on `sys.path`; the command now
+  runs the interpreter with `-P` (Python 3.11 and later) or `-I` (3.10). A planted `sitecustomize.py`, `usercustomize.py`
+  or `.pth` file was never loaded. Run `prismpath agent init` again to rewrite an installed hook.
+- The Lean model proves the scan's control rule (`scan_control`, `scan_control_refused` in `ScanTheorems.lean`); the
+  differential harness covers redirections and the new paths (0 disagreements in 20,000 generated cases), and the
+  recorded hook inputs are now 161.
+
 ### Added: a warning for a policy recorded before the control-file rule (2026-11-20)
 
 - **`prismpath agent status` and `prismpath agent doctor` warn when the recorded policy allows a change to the agent's own control files.** The check is the oracle's `control_refused` property (`controlSafe` in `formal/Classifier/Control.lean`) evaluated through the reference decision path over every reading with `path_control` that is a change; a policy without the field fails outright. The four shipped images from before 2026-11-19 are recognised by hash, so the message says "the default starter from before 2026-11-19" rather than `custom`, and names the fix, `prismpath agent init --policy <starter>`. Runs already sealed keep verifying, and a session still open is denied its next call. The hook decides exactly as before. `status --json` carries `policy.control.refuses_control_changes`, and the `doctor` row `policy-control` carries `refuses_control_changes`.
@@ -32,6 +58,14 @@ spec stable.
   that names one is refused (`control_refused` in the oracle's `--policy` output). The differential harness and the
   recorded hook inputs (now 132) cover it, and the refusals are receipted like any other, so they are observations a
   later policy proposal may read; they never change the policy on their own.
+
+### Added: a rule table for the installed policy (2026-11-19)
+
+- **`prismpath agent rules` shows each rule of the installed policy with its hits.** Like `iptables -L -v`, it lists
+  the rules in order with their readable conditions, targets, hit counts and last hit time counted from the
+  receipts that verify, the core's own refusals as rows of their own, the rules never matched, and the rules no
+  reading can reach (decided from the policy alone over every combination of field values). It takes `--json` and
+  `--since`, and writes nothing.
 
 ## [0.2.0] (2026-11-17)
 

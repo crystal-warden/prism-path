@@ -161,6 +161,9 @@ _REGISTRY: Tuple[Tuple[int, str, str, str], ...] = (
     # -- the agent's own controls (prismpath/agent/policy, every starter): a change to the files that hold the hook,
     # the settings or the MCP servers of the governed agent is refused, so the agent cannot rewrite its own controls.
     (128, "agent:control-write",         "routing",   "an agent call that would change one of the governed agent's own control files inside the workspace (its settings, its hook scripts, its MCP configuration, or the program its installed hook runs), by a path that resolves onto it; refused and not run, under every starter policy"),
+    # -- the sandbox around an allowed shell call (prismpath/agent/sandbox_exec.py, commands.py hook): an allowed
+    # Bash call runs only inside the sandbox the signed policy compiles to, so one that cannot be sandboxed is denied.
+    (129, "agent:sandbox-unavailable",   "routing",   "an allowed agent shell command that could not be run inside the sandbox compiled from the signed policy (the profile did not compile, or the sandbox program is missing); refused and not run, never run without the sandbox"),
 )
 
 CODES: Dict[int, Tuple[str, str, str]] = {cause_code: (canonical_name, class_name, description)

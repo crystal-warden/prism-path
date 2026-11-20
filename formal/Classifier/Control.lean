@@ -92,18 +92,32 @@ theorem classify_control {disk : Str → Disk} {remotes : List Str} {call : J} {
   rw [classify_eq]
   exact merge_control (List.mem_map_of_mem hp) (pathFacts_control disk hok hc) _
 
+theorem isChange_classifyD (disk : Str → Disk) (remotes : List Str) (call : J) :
+    isChange (classifyD disk remotes call) = isChange (classify disk remotes call) := rfl
+
+theorem classifyD_control {disk : Str → Disk} {remotes : List Str} {call : J}
+    (h : (classify disk remotes call).pathControl = true) : (classifyD disk remotes call).pathControl = true := by
+  simp [classifyD, h]
+
+/-- **A directory that a removal or a move names and that holds control files reads as control.** -/
+theorem classify_holder {disk : Str → Disk} {remotes : List Str} {call : J} {p : Str}
+    (hp : p ∈ destroyPaths remotes call) (hok : pathOk p = true) (hh : (disk p).holder = true) :
+    (classifyD disk remotes call).pathControl = true := by
+  simp only [classifyD, Bool.or_eq_true]
+  exact Or.inr (List.any_eq_true.mpr ⟨p, hp, by simp [holderHit, hok, hh]⟩)
+
 /-- **Under every `controlSafe` policy, a change that names a control file is refused**, whatever the call. -/
 theorem change_on_control_refused {pol : Core.Checked} (hs : controlSafe pol = true) {disk : Str → Disk}
     {remotes : List Str} {call : J} {p : Str} (hp : p ∈ (plan remotes call).2) (hok : pathOk p = true)
     (hc : (disk p).control = true) (hch : isChange (classify disk remotes call) = true) :
-    isRefusal (Core.decideReading pol (.ok (classify disk remotes call).json)) = true :=
-  control_refused hs (classify_control hp hok hc) hch
+    isRefusal (Core.decideReading pol (.ok (classifyD disk remotes call).json)) = true :=
+  control_refused hs (classifyD_control (classify_control hp hok hc)) (by rw [isChange_classifyD]; exact hch)
 
 /-- The write tool is a change. -/
 theorem write_control_refused {pol : Core.Checked} (hs : controlSafe pol = true) (disk : Str → Disk)
     (remotes : List Str) (p c : String) (hok : pathOk p.toList = true) (hc : (disk p.toList).control = true) :
     isRefusal (Core.decideReading pol
-      (.ok (classify disk remotes
+      (.ok (classifyD disk remotes
         (.obj [("tool", .str "write_file"), ("args", .obj [("path", .str p), ("content", .str c)])])).json)) = true := by
   have hp : p.toList ∈ (plan remotes
       (.obj [("tool", .str "write_file"), ("args", .obj [("path", .str p), ("content", .str c)])])).2 := by
@@ -120,7 +134,7 @@ theorem write_control_refused {pol : Core.Checked} (hs : controlSafe pol = true)
 theorem delete_control_refused {pol : Core.Checked} (hs : controlSafe pol = true) (disk : Str → Disk)
     (remotes : List Str) (p : String) (hok : pathOk p.toList = true) (hc : (disk p.toList).control = true) :
     isRefusal (Core.decideReading pol
-      (.ok (classify disk remotes (.obj [("tool", .str "delete_path"), ("args", .obj [("path", .str p)])])).json)) =
+      (.ok (classifyD disk remotes (.obj [("tool", .str "delete_path"), ("args", .obj [("path", .str p)])])).json)) =
       true := by
   have hp : p.toList ∈ (plan remotes (.obj [("tool", .str "delete_path"), ("args", .obj [("path", .str p)])])).2 := by
     rw [path_tool_plan remotes "delete_path" (by simp)]; simp
@@ -139,7 +153,7 @@ theorem run_mutating_control_refused {pol : Core.Checked} (hs : controlSafe pol 
     (hm : commandClass argv = .mutating) {a : Str} (ha : a ∈ argv.drop 1) (hd : startsWith a (lit "-") = false)
     (hok : pathOk a = true) (hc : (disk a).control = true) :
     isRefusal (Core.decideReading pol
-      (.ok (classify disk remotes (.obj [("tool", .str "run_command"), ("args", .obj [("argv", .arr xs)])])).json)) =
+      (.ok (classifyD disk remotes (.obj [("tool", .str "run_command"), ("args", .obj [("argv", .arr xs)])])).json)) =
       true := by
   have hg : commandClass argv ≠ .git := by rw [hm]; intro e; cases e
   have hp : a ∈ (plan remotes (.obj [("tool", .str "run_command"), ("args", .obj [("argv", .arr xs)])])).2 := by
@@ -150,6 +164,56 @@ theorem run_mutating_control_refused {pol : Core.Checked} (hs : controlSafe pol 
   rw [classify_eq]
   simp only [isChange]
   rw [hk, runCall_plan remotes xs argv h, (runPlan_keeps remotes argv).2.1, hm]
+  simp
+
+/-! ## Removing or moving the root or a directory that holds control files -/
+
+/-- **Under every `controlSafe` policy, a change that removes or moves a holder is refused.** -/
+theorem change_on_holder_refused {pol : Core.Checked} (hs : controlSafe pol = true) {disk : Str → Disk}
+    {remotes : List Str} {call : J} {p : Str} (hp : p ∈ destroyPaths remotes call) (hok : pathOk p = true)
+    (hh : (disk p).holder = true) (hch : isChange (classify disk remotes call) = true) :
+    isRefusal (Core.decideReading pol (.ok (classifyD disk remotes call).json)) = true :=
+  control_refused hs (classify_holder hp hok hh) (by rw [isChange_classifyD]; exact hch)
+
+/-- The delete tool naming the root or a directory that holds control files is refused. -/
+theorem delete_holder_refused {pol : Core.Checked} (hs : controlSafe pol = true) (disk : Str → Disk)
+    (remotes : List Str) (p : String) (hok : pathOk p.toList = true) (hh : (disk p.toList).holder = true) :
+    isRefusal (Core.decideReading pol
+      (.ok (classifyD disk remotes (.obj [("tool", .str "delete_path"), ("args", .obj [("path", .str p)])])).json)) =
+      true := by
+  have hplan := path_tool_plan remotes "delete_path" (by simp) p
+  have hd : p.toList ∈ destroyPaths remotes (.obj [("tool", .str "delete_path"), ("args", .obj [("path", .str p)])]) := by
+    simp only [destroyPaths, hplan, toolOf]; simp
+  refine change_on_holder_refused hs hd hok hh ?_
+  rw [classify_eq, hplan]
+  simp [isChange, mergePaths_keeps, toolOf]
+
+/-- `rm` and `rmdir` destroy every path they name. -/
+theorem destroyArgs_rm {first : Str} {args : List Str} {base : Str} (hb : program first = some base)
+    (hr : base = lit "rm" ∨ base = lit "rmdir") {a : Str} (ha : a ∈ pathLike false args) :
+    a ∈ destroyArgs (first :: args) := by
+  simp only [destroyArgs, hb]
+  rcases hr with rfl | rfl <;> simpa using ha
+
+/-- A file changing command whose argv destroys a path that is the root or holds control files is refused. -/
+theorem run_destroy_holder_refused {pol : Core.Checked} (hs : controlSafe pol = true) (disk : Str → Disk)
+    (remotes : List Str) (xs : List J) (argv : List Str) (h : argvOf? xs = some argv)
+    (hm : commandClass argv = .mutating) {a : Str} (ha : a ∈ destroyArgs argv) (hok : pathOk a = true)
+    (hh : (disk a).holder = true) :
+    isRefusal (Core.decideReading pol
+      (.ok (classifyD disk remotes (.obj [("tool", .str "run_command"), ("args", .obj [("argv", .arr xs)])])).json)) =
+      true := by
+  have hpl := runCall_plan remotes xs argv h
+  have hd : a ∈ destroyPaths remotes (.obj [("tool", .str "run_command"), ("args", .obj [("argv", .arr xs)])]) := by
+    have ht := (runPlan_keeps remotes argv).1
+    simp only [destroyPaths, hpl, ht]
+    simp [get?, Core.field?, h, ha]
+  refine change_on_holder_refused hs hd hok hh ?_
+  have hk := (mergePaths_keeps (plan remotes (.obj [("tool", .str "run_command"), ("args", .obj [("argv", .arr xs)])])).1
+    ((plan remotes (.obj [("tool", .str "run_command"), ("args", .obj [("argv", .arr xs)])])).2.map (pathFacts disk))).2.1
+  rw [classify_eq]
+  simp only [isChange]
+  rw [hk, hpl, (runPlan_keeps remotes argv).2.1, hm]
   simp
 
 end Classifier

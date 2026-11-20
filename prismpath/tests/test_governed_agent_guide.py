@@ -79,7 +79,7 @@ def test_the_guide_runs_as_written(sandbox):
     written = json.loads(settings.read_text())
     commands = [h["command"] for event in ("PreToolUse", "SessionEnd") for g in written["hooks"][event]
                 for h in g["hooks"]]
-    assert len(commands) == 2 and all(c.endswith("-m prismpath agent hook || exit 2") for c in commands)
+    assert len(commands) == 2 and all(c.endswith("prismpath agent hook || exit 2") for c in commands)
     assert (home / ".config" / "prismpath" / "agent" / "authority.key").is_file()
 
     # the remaining blocks in one shell, so the guide's shell function is there for the calls that follow it

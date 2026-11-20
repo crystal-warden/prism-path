@@ -96,9 +96,10 @@ alone:
 | toolchain | a token has a `.toolchain` component | `path_in_toolchain` |
 | glob | a token holds `* ? [ ]` | `path_glob` |
 | long | a token is longer than 4096 characters or holds a NUL (the classifier's own path check) | `path_scope` unknown |
+| control | a token that, as a path against the hook's `cwd`, the disk says is a control path (section 4.3), in a command that is not read-only (a `>` to a file, or a file changing program; section 4.3 lists them) | `path_control`, and `command_class` mutating |
 | git | after a token whose base name is `git`: an unsafe option (`--exec`, `--upload-pack`, `--receive-pack`, `-c`, `--config`, `--git-dir`, `--work-tree`, `-C`) or a subcommand the classifier does not know (unknown); a network subcommand (network); a mutating subcommand or `reset --hard` (mutating); `push` (push, to a remote that is not allowed); `remote` with anything but `-v` (unknown). The most severe over every git token wins, in the order unknown, network, mutating, push | `git_op` (and `remote_class` other for a push) |
 
-A path token is one that gives outside, traversal, toolchain, glob or long evidence. A network word inside a
+A path token is one that gives outside, traversal, toolchain, glob or long evidence (control evidence is read per token from the disk and is not a path token in this sense). A network word inside a
 path token does not count (`~/.ssh/id_rsa` is a path, so `cat ~/.ssh/id_rsa` refuses as outside the workspace, not
 as network). Any path evidence also makes `command_class` mutating (a command that cannot be read is taken to
 change files), so the path refusal rules, which apply to changes, fire. When the scan finds nothing the reading is
@@ -113,7 +114,7 @@ What it proves (`ScanTheorems.lean`): each rule as stated (`scan_kill`, `scan_ne
 (`network_word_in_path_only`); no evidence, no change (`scan_none`, `hookReading_unchanged`); and **the scan only
 ever adds refusals** (`hookReading_only_adds_refusals`). Under a policy whose scan readings are safe (`scanSafe`:
 none is allowed, and every one but a push alone is refused, computed by the oracle's `--policy` mode with the
-core's own evaluator over the 639 readings the scan can give, proved to be all of them by `scanReading_mem`), a hook
+core's own evaluator over the 1,279 readings the scan can give, proved to be all of them by `scanReading_mem`), a hook
 reading is the mapped call's reading unchanged, or one the policy never allows and refuses unless the scan found
 only a push. A push alone asks, as the unknown reading did. All three shipped agent policies are `scanSafe`, and
 the harness requires it. The scan never runs on a command the grammar reads, so it cannot change an allowed call.
@@ -145,35 +146,86 @@ version to 1.
 
 ### 4.3 The agent's own controls (`path_control`, cause 128)
 
-The agent must not rewrite the controls that govern it. A path the call names reads `path_control` when, resolved
-(`realpath`) or normalized (`normpath`), it is one of `.claude/settings.json`, `.claude/settings.local.json`,
-`.mcp.json`, `.claude` itself, anything under `.claude/hooks/`, or the program the installed PrismPath hook runs when
-that program is inside the workspace (the first word of a hook command in `.claude/settings.json`). Which paths those
-are is read off the disk at the moment of the call, like a toolchain directory (`classifier.disk_facts`, `DiskFacts.control`),
-so the model takes it as an input like the other disk facts, and a `..` component or a symbolic link does not hide
-the file. The rule is the same in all three starters, placed among the refusals that hold whatever else does:
+The agent must not rewrite the controls that govern it, or the files that shape how it behaves. A path the call
+names reads `path_control` when, resolved (`realpath`) or normalized (`normpath`) and compared **case insensitively
+on every platform** (Unicode NFC and `casefold`), it is any of:
+
+- anything under `.claude/`, `.claude` itself included (settings, local settings, `hooks/`, `commands/`, `agents/`,
+  `skills/`);
+- `.mcp.json`, `.git/config`, and anything under `.git/hooks/` (persistence and hook execution);
+- a file or directory named `CLAUDE.md`, `CLAUDE.local.md` or `AGENTS.md`, at any depth;
+- the program the installed PrismPath hook runs, when that program is inside the workspace (the first word of a hook
+  command in `.claude/settings.json`);
+- **holders**, the workspace root, `.git`, a directory that holds a hook program, and a directory with a `CLAUDE.md`,
+  `CLAUDE.local.md` or `AGENTS.md` anywhere below it. A holder is a control target **only where a call removes or
+  moves it** (`destroy_paths`, below): `rm -r .`, `rm -rf ./`, `rm -rf .git`, `mv . x`, `find . -delete`, `git rm -r .`,
+  `git clean -fd .`, `rm -rf docs/` with a `docs/CLAUDE.md`. Writing into a holder (`cp x .`, `tee ./new`, a redirect
+  to a new file, `git add .`, `pytest .`) names the directory without changing it, and is decided by the file
+  written, as before. The search below a directory examines at most `WALK_LIMIT` (20,000) entries and does not enter
+  `.git`, `node_modules`, `target`, `.venv`, `venv` or `__pycache__` directories it meets on the way; past the limit it
+  stops, and the answer is the one found so far;
+- **a hard link to any of these**: a file whose device and inode match a control file that exists (`os.stat`
+  `st_dev`/`st_ino`, checked only when the path's link count is above one). A link made after the call is classified is
+  the sandbox's job, not the classifier's, like any change to the disk between classification and execution.
+
+Case insensitivity is the conservative choice: macOS and Windows name one file by several spellings (`.CLAUDE`), and
+on a case sensitive filesystem the folding refuses a few more paths than it must (`.Claude/x`), never fewer.
+
+Which paths those are is read off the disk at the moment of the call, like a toolchain directory
+(`classifier.disk_facts`, `DiskFacts.control` and `DiskFacts.holder`), so the model takes it as an input like the other disk facts, and a
+`..` component or a symbolic link does not hide the file. The rule is the same in all three starters, placed among the
+refusals that hold whatever else does:
 
     -> refuse agent:control-write: when (tool in ["write_file", "delete_path"] or command_class == "mutating"
                                         or git_op in ["local_write", "mutating"]) and path_control
 
 It covers every way the classifier reads a change: Write, Edit, MultiEdit and NotebookEdit, the MCP file tools of
 `mcp_map.py`, and the Bash commands the plain word grammar reads (`rm`, `mv`, `cp`, `mkdir`, `sed -i`, `tee` and the rest
-of `MUTATING`), as source or destination, since the classifier does not tell the two apart. A read is decided as before.
-A refusal is receipted with its cause like any other, so it is an observation: a later policy proposal may read these
-refusals, and they never change the policy on their own.
+of `MUTATING`), as source or destination, since the classifier does not tell the two apart. **What removes or moves** is defined by the call, not the disk (`classifier.destroy_paths`, `destroyPaths` in Lean):
+the delete tool's path; every path of `rm` and `rmdir`; every path of `mv` but the last (the destination); the paths
+of `find ... -delete`; and the paths of `git rm` and `git clean`. For those paths `path_control` is also set when the
+path is a holder (`classifyD` in Lean: the reading of `classify` with only `path_control` changed). A read is decided
+as before (`ls .`, `cat CLAUDE.md`, a Read of `.claude/settings.json`). A refusal is receipted with its cause like any other, so it is an
+observation: a later policy proposal may read these refusals, and they never change the policy on their own.
 
-What it proves (`Control.lean`): `classify_control`, a path the call names that passes the syntactic check and that the
-disk says is a control file gives `path_control`; `control_refused` and `change_on_control_refused`, under a policy
-the oracle's `--policy` mode reports as `control_refused` (`controlSafe`: every one of the 112,896 readings with
-`path_control` that is a change is refused, computed with the core's own evaluator and proved to be all of them by
-`controlSpace_mem`), a change that names a control file is refused, whatever the call; and `write_control_refused`,
-`delete_control_refused` and `run_mutating_control_refused` for the write tool, the delete tool and a file changing
-command. All three shipped agent policies are `controlSafe`, and the harness requires it.
+**Commands outside the plain grammar.** `echo x > .claude/settings.json` or `printf y >> .mcp.json` has an operator
+the grammar does not read, so it maps to the unknown call; the hazard scan (section 4.1) now also looks for a control
+path. Its evidence is a token that, as a path against the hook's `cwd`, the disk says is a control path, in a command
+that is not read-only. A command is not read-only, by its text, when it holds a `>` that sends output to a file (not a
+duplicated descriptor such as `2>&1` or `>&2`, and not `>/dev/null`) or names a program that changes files (`rm`,
+`rmdir`, `mv`, `cp`, `ln`, `chmod`, `chown`, `chgrp`, `touch`, `mkdir`, `dd`, `truncate`, `shred`, `tee`, `install`,
+`unlink`, `tar`, `unzip`, `zip`, `gzip`, `gunzip`, `patch`, `vim`, `vi`, `nano`, `ed`, a `find` with an effect, a `sed
+-i`, a `sort -o`, a `tree -o`, or `git` with a subcommand that writes). An interpreter or a build tool (`python`,
+`pytest`, `make`) is not one, because what it writes is not in the text: `python -m pytest . 2>&1 | tail` still asks
+and is not refused as a change to the root. The scan's reading is a change that names a control path
+(`command_class` mutating, `path_control`), so every shipped starter refuses it with 128 and, as for every scan
+reading, it never allows. The scan does not follow a `cd` (`cd sub && echo x > settings.json` names `settings.json`
+against the hook's `cwd`); it catches `cd .claude && echo x > settings.json` because the token `.claude` is itself a
+control path in a command that redirects. A command that writes through an interpreter (`python -c "open(...)"`) is not
+read by the scan and asks, as any command outside the grammar does.
 
-Not covered, on purpose: a Bash command outside the plain grammar (a redirect, `>`, is an operator) that writes a control
-file reads unknown and is asked about, or refused under `strict`, as any such command is; the hazard scan looks for
-hazards, not control paths. A path that names the workspace root or a parent of `.claude` other than `.claude` itself
-(`rm -r .`) is not read as control. The directory `.git/hooks` is not a control file here.
+What it proves (`Control.lean`, `ScanTheorems.lean`): `classify_control`, a path the call names that passes the
+syntactic check and that the disk says is a control path gives `path_control`; `control_refused` and
+`change_on_control_refused`, under a policy the oracle's `--policy` mode reports as `control_refused` (`controlSafe`:
+every one of the 112,896 readings with `path_control` that is a change is refused, computed with the core's own
+evaluator and proved to be all of them by `controlSpace_mem`), a change that names a control path is refused, whatever
+the call; `write_control_refused`, `delete_control_refused` and `run_mutating_control_refused` for the write tool, the
+delete tool and a file changing command; `classify_holder`, `change_on_holder_refused`, `delete_holder_refused`,
+`destroyArgs_rm` and `run_destroy_holder_refused` for a removal or a move of a holder (the holder fact is a disk fact
+like the control fact, and only `destroyPaths` makes it count); and for the scan `scan_control` (control evidence gives a reading that is a
+change naming a control path), `scan_control_refused` (under every policy the oracle reports as `scan_refused`, that
+reading is refused), with `controlEvidence_of`, `controlEvidence_of_holder`, `writeEvidence_of_redirect` and `writeEvidence_of_writer` for the two
+halves of the evidence. All three shipped agent policies are `controlSafe` and `scanSafe`, and the harness requires it.
+The case folding, the inode check, the directory search and which paths are control are disk facts, an input of the
+model, so they are exercised by the tests and the harness's real disk, not proved.
+
+Writing into the root or a holder keeps the verdict it had before the control rule (`git add .` and `git checkout .`
+allow, `pytest .` and `cp x .` ask under `default`, as on the commit before it). In the scan, which cannot tell a
+source from a destination, `mv x .` in a command outside the grammar counts as a move of `.`.
+
+Not covered, on purpose: a command that changes a control file through an interpreter or a build tool; a `cd` followed
+by a relative path in a command outside the grammar; a hard link to a `CLAUDE.md` below the first 20,000 entries; a
+control file that does not exist yet and is hard linked after the call (the sandbox's job).
 
 ## 5. What is proven
 

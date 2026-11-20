@@ -83,6 +83,34 @@ prismpath agent verify --tamper-demo
 
 The demo copies a session, flips one byte of its receipts, and verifies the copy. The copy is refused and then deleted. Your own session is not touched.
 
+### Sandbox observations
+
+When a shell command that ran in the sandbox shows on its standard error that an access was stopped, such as a permission error or a network that is unreachable, the runner adds an observation to the session. It is bound to the receipt of the allowed call and carries the hash of the policy and of the sandbox profile. `verify` checks each one against its receipt and counts it. An observation is what the command said, read from its exit status and its error text, so it can miss a refusal the command hid and it cannot tell a path the sandbox hid from a path that does not exist. It is kept in its own file in the run, outside the signed root, so a line removed from the end would not be noticed.
+
+An observation never changes what is allowed. It does not edit the policy or the profile, it is not a rule hit in `prismpath agent rules`, and nothing that decides reads it. Only a policy you sign widens what runs.
+
+## See which rules fire
+
+```sh
+prismpath agent rules
+```
+
+`rules` lists the recorded policy's rules in order, the way `iptables -L -v` lists a firewall. Each row has the rule's number, its hits, the time of its last hit, its target (`allow`, `refuse_<code>` or `escalate_<code>` with the cause name) and its condition as the rules file writes it. After the rules come two rows for the core's own refusals, `route:no-matching-edge` (no rule holds) and `route:contract-violation` (the reading broke the policy's field definitions), because there is no catch all rule. Two findings follow. **Never matched** lists the rules with no hit in the counted receipts. **Unreachable** lists a rule that no reading can ever reach because earlier rules cover every reading it matches. That second finding comes from the policy alone, by deciding every combination of field values through the reference kernel. A field without a finite set of values is not enumerated, and `rules` says which rules it did not check.
+
+Only receipts of runs that verify are counted, and the output says how many receipts did not verify (or were decided under another policy) and were skipped. A receipt has no time of its own, so the time of a hit is the time of its run: the signed time of a sealed run, else its last receipt. `--since 2026-11-01` counts only runs at or after that ISO 8601 time. The command reads your runs from scratch copies and never writes a receipt, a seal or a policy.
+
+`--json` prints one object:
+
+| key | holds |
+|---|---|
+| `config_dir`, `since` | the configuration directory and the `--since` time or null |
+| `policy` | `name`, `image` and `sha256` of the recorded policy |
+| `receipts` | `counted`, `not_verified`, `other_policy`, `runs_counted` and `skipped`, a list of `session`, `receipts` and `reason` |
+| `rules` | per rule: `rule`, `condition`, `target`, `decision`, `cause`, `code`, `hits`, `last_hit` |
+| `core_refusals` | per core refusal: `cause`, `code`, `hits`, `last_hit` |
+| `never_matched` | the numbers of the rules with no hit |
+| `unreachable` | `checked`, `readings`, `rules` (numbers) and `not_checked` (`rule` and the `fields` that have no finite set of values) |
+
 ## Pick a policy
 
 `init` records `default` unless you name another starter with `--policy`, as in `prismpath agent init --policy review`. Running `init` again without `--policy` keeps the one you picked. A session already running stays on the policy it began with, so start a new Claude Code session after you switch.
@@ -93,7 +121,7 @@ The demo copies a session, flips one byte of its receipts, and verifies the copy
 | `default` | the same as `strict` | a push, a call it cannot read (124), a shell command that changes files in the project (125) | a git operation or path it cannot read, a git change it cannot undo, and the hazards |
 | `review` | reads, listings and read only commands in the project, git reads | every change in the project (127), every push, a call it cannot read | the same as `default` |
 
-All three also refuse, with cause 128, every change to the agent's own controls: `.claude/settings.json`, `.claude/settings.local.json`, anything under `.claude/hooks/`, `.mcp.json`, and the program the installed hook runs when it is inside the project. The agent cannot take its own hook out. Reading these files still runs as before.
+All three also refuse, with cause 128, every change to the agent's own controls and to the files that shape how it behaves: everything under `.claude/`, `.mcp.json`, `.git/config`, everything under `.git/hooks/`, `CLAUDE.md`, `CLAUDE.local.md` and `AGENTS.md` at any depth, the program the installed hook runs when it is inside the project, and, for a removal or a move only, the project root or a directory that holds one of these (`rm -r .`; writing into them is decided as before). A path is matched after it resolves and without regard to case, and a hard link to a control file is one too. A shell command that redirects onto one (`echo x > .claude/settings.json`) is refused as well. The agent cannot take its own hook out. Reading these files still runs as before.
 
 The hazards are refused by all three. They are a path outside the project, a `..` in a path, a path through a symbolic link, a path that is a pattern, a write into a toolchain, a kill by name pattern and the network. `status` names the starter in use. To write your own rules instead, see [writing-agent-rules.md](writing-agent-rules.md).
 
@@ -103,7 +131,7 @@ If a call you expected to be governed is not, or a hook feels slow, run `prismpa
 
 ## What this does and does not protect you from
 
-The hook decides. Claude Code runs an allowed call itself, outside any PrismPath sandbox. PrismPath does not wrap the process, so a call it allows has the access Claude Code has.
+The hook decides. On Linux an allowed Bash call is rewritten to run inside a sandbox built from the same policy, so the programs it starts can reach the workspace and the system files they need and nothing else. Claude Code's own Read, Write and Edit tools, and every call on macOS and Windows, run outside any PrismPath sandbox and have the access Claude Code has. A question you approve in Claude Code's prompt runs inside the same sandbox, and the prompt shows the rewritten command. The sandbox is built from what the policy allows, so an approved call that needs more, a push for example, fails inside it.
 
 Nothing PrismPath refuses runs. Every decision, allow, refuse or ask, has a receipt you can verify later.
 
