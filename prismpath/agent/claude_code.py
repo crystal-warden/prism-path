@@ -56,18 +56,27 @@ first stripped of backslashes and quotes, so `pk\\ill` and `p'k'ill` are seen as
   toolchain   a token with a `.toolchain` component
   glob        a token with `* ? [ ]`
   long        a token longer than `classifier.MAX_PATH` or holding a NUL (path scope unknown)
+  control     a token that, taken as a path against the hook's `cwd`, the disk says is one of the agent's control
+              paths (`classifier.disk_facts`), in a command that is not read-only: it holds a redirection to a
+              file (not `2>&1`, `>&2` or `>/dev/null`) or the name of a file changing program (`rm`, `mv`, `cp`,
+              `tee`, `sed -i`, `git add`, ...; an interpreter or a build tool is not one). The scan does not
+              follow a `cd`; the token naming the directory is itself a control path when it is `.claude`. A token
+              that is the workspace root or a directory holding control files counts only in a command that removes
+              or moves (`rm`, `rmdir`, `mv`, `find -delete`, `git rm`, `git clean`): `rm -r . | head` refuses,
+              `cp x . ; ls` does not
   git         after a token whose base name is `git`: an unsafe option or a subcommand the classifier does not
               know (unknown), a network subcommand (network), a mutating one or `reset --hard` (mutating), `push`
               (a push to a remote that is not allowed); the most severe of every git token wins
 
 Evidence makes the reading a run_command reading with `kill_by_pattern`, `command_class` network (network) or
-mutating (any path evidence), `path_scope` unknown (long) or outside, the path flags and `git_op` as found; under
+mutating (any path evidence, control included), `path_scope` unknown (long) or outside, the path flags,
+`path_control` and `git_op` as found; under
 every shipped policy that reading is never allowed and, but for a push alone (which asks as before), refused
 (`ScanTheorems.scan_safe_reading`, checked per image by the oracle). No evidence
 leaves the unknown reading exactly as it was: the command still asks. The scan never reads a command the
 grammar reads, so it never changes an allowed call.
 
-Three facts are read off the disk, not the text: whether `cwd` is inside the workspace (`_inside`), whether it
+Three facts are read off the disk, not the text (and the scan's control rule reads a fourth, `classifier.disk_facts`, for each token): whether `cwd` is inside the workspace (`_inside`), whether it
 is the workspace (`_same_dir`) and whether a bare word names something in `cwd` (`_exists`). They are
 observations, like the classifier's `disk_facts`, and are not proved.
 """
@@ -357,7 +366,83 @@ def _git_scan(tokens: List[str]) -> str:
     return op
 
 
-def hazard_scan(command: str, workspace: str) -> Optional[Dict[str, Any]]:
+# A command that is not read-only, by its text: a redirection to a file, or a program that changes files (or a
+# git subcommand that does) met anywhere in it. Only the scan's control rule reads this. An interpreter or a
+# build tool (`python`, `pytest`, `make`) is not one: what it writes is not in the text, and the command asks.
+SCAN_WRITERS = frozenset({"rm", "rmdir", "mv", "cp", "ln", "chmod", "chown", "chgrp", "touch", "mkdir", "dd", "truncate",
+                          "shred", "tee", "install", "unlink", "tar", "unzip", "zip", "gzip", "gunzip", "patch", "vim",
+                          "vi", "nano", "ed"})
+_GIT_WRITE_WORDS = frozenset(classifier.GIT_LOCAL_WRITE | classifier.GIT_MUTATING | {"reset"})
+
+
+def _writer_at(token: str, rest: List[str]) -> bool:
+    base = os.path.basename(token)
+    return (base in SCAN_WRITERS
+            or (base == "find" and any(arg in classifier._FIND_EFFECTS for arg in rest))
+            or (base == "sed" and any(arg == "-i" or arg.startswith("-i") or arg.startswith("--in-place") for arg in rest))
+            or (base == "sort" and any(arg == "-o" or arg.startswith("--output") for arg in rest))
+            or (base == "tree" and "-o" in rest)
+            or (base == "git" and any(arg in _GIT_WRITE_WORDS for arg in rest)))
+
+
+def _redirects(text: str) -> bool:
+    """A `>` that sends output to a file: not `2>&1` or `>&2` (a duplicated descriptor) and not `>/dev/null`."""
+    at, size = 0, len(text)
+    while at < size:
+        if text[at] != ">":
+            at += 1
+            continue
+        at += 1
+        if at < size and text[at] == ">":
+            at += 1
+        while at < size and text[at] in " \t":
+            at += 1
+        if text.startswith("&", at) and at + 1 < size and (text[at + 1] in "0123456789-"):
+            at += 1
+        elif text.startswith("/dev/null", at):
+            at += len("/dev/null")
+        else:
+            return True
+    return False
+
+
+def _destroyer_at(token: str, rest: List[str]) -> bool:
+    base = os.path.basename(token)
+    return (base in ("rm", "rmdir", "mv") or (base == "find" and "-delete" in rest)
+            or (base == "git" and any(arg in ("rm", "clean") for arg in rest)))
+
+
+def _destroy_evidence(tokens: List[str]) -> bool:
+    return any(_destroyer_at(token, tokens[at + 1:]) for at, token in enumerate(tokens))
+
+
+def _write_evidence(text: str, tokens: List[str]) -> bool:
+    return _redirects(text) or any(_writer_at(token, tokens[at + 1:]) for at, token in enumerate(tokens))
+
+
+def _scan_path(cwd: str, token: str) -> str:
+    """The path a token names, as the plain grammar would hand it to the classifier: absolute against `cwd`."""
+    return _spell(token if token.startswith("/") else os.path.join(cwd, token))
+
+
+def _control_evidence(text: str, tokens: List[str], cwd: str, config: classifier.Config) -> bool:
+    """A token that resolves, on the disk, to one of the agent's control paths, in a command that is not
+    read-only (`echo x > .claude/settings.json`, `printf y >> .mcp.json`, `cd .claude && tee settings.json`); or
+    to the workspace root or a directory that holds one, in a command that removes or moves (`rm -r .`)."""
+    if not _write_evidence(text, tokens):
+        return False
+    destroys = _destroy_evidence(tokens)
+    for token in tokens:
+        path = _scan_path(cwd, token)
+        if path and "\x00" not in path and len(path) <= classifier.MAX_PATH:
+            facts = classifier.disk_facts(path, config)
+            if facts.control or (destroys and facts.holder):
+                return True
+    return False
+
+
+def hazard_scan(command: str, workspace: str, cwd: Optional[str] = None,
+                config: Optional[classifier.Config] = None) -> Optional[Dict[str, Any]]:
     """The reading of a Bash command the grammar does not read, when its text shows a hazard; None when the
     scan finds nothing (the command then keeps the unknown reading and asks)."""
     text = "".join(char for char in command if char not in _STRIP)
@@ -378,7 +463,8 @@ def hazard_scan(command: str, workspace: str) -> Optional[Dict[str, Any]]:
     glob = any(any(c in _SCAN_GLOB for c in token) for token in tokens)
     long = any(len(token) > classifier.MAX_PATH or "\x00" in token for token in tokens)
     git = _git_scan(tokens)
-    paths = outside or traversal or toolchain or glob or long
+    control = _control_evidence(text, tokens, cwd or workspace, config or classifier.Config.for_workspace(workspace))
+    paths = outside or traversal or toolchain or glob or long or control
     if not (kill or network or paths or git != "none"):
         return None
     reading = classifier.base_reading()
@@ -386,6 +472,7 @@ def hazard_scan(command: str, workspace: str) -> Optional[Dict[str, Any]]:
                     "command_class": "network" if network else "mutating" if paths else "unknown",
                     "path_scope": "unknown" if long else "outside" if outside else "none",
                     "path_traversal": traversal, "path_in_toolchain": toolchain, "path_glob": glob,
+                    "path_control": control,
                     "git_op": git, "remote_class": "other" if git == "push" else "none"})
     return reading
 
@@ -398,7 +485,8 @@ def hook_reading(hook_input: Any, hc: HookCall, config: classifier.Config) -> Di
             and classifier.scalar(hc.workspace) and hook_input.get("tool_name") == "Bash" \
             and isinstance(hook_input.get("tool_input"), dict) \
             and isinstance(hook_input["tool_input"].get("command"), str):
-        scanned = hazard_scan(hook_input["tool_input"]["command"], hc.workspace)
+        cwd = hook_input.get("cwd") if isinstance(hook_input.get("cwd"), str) and hook_input.get("cwd") else hc.workspace
+        scanned = hazard_scan(hook_input["tool_input"]["command"], hc.workspace, cwd, config)
         if scanned is not None:
             return scanned
     return reading

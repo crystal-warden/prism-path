@@ -30,6 +30,7 @@ structure Disk where
   toolchain : Bool
   symlink : Bool
   control : Bool
+  holder : Bool
   deriving DecidableEq, Repr, Inhabited
 
 /-- The facts of one named path (`classifier.PathFacts`). -/
@@ -324,5 +325,64 @@ def classify (disk : Str → Disk) (remotes : List Str) (call : J) : Reading :=
 
 /-- The paths at which `classify` consults the disk: the planned paths that pass the syntactic check. -/
 def diskQueries (remotes : List Str) (call : J) : List Str := (plan remotes call).2.filter pathOk
+
+/-! ## Removing or moving a directory that holds control files -/
+
+/-- The paths of `git rm` and `git clean`: a directory that holds control files is a control target there. -/
+def gitDestroy (sub : Option Str) (rest : List Str) : List Str :=
+  match sub with
+  | some s => if s == lit "rm" || s == lit "clean" then pathLike false rest else []
+  | none => []
+
+/-- The paths an argv names where it removes or moves them: every path of `rm` and `rmdir`, every path of `mv` but
+the last, the paths of `find ... -delete`, and the paths of `git rm` and `git clean`
+(`classifier.destroy_paths`). -/
+def destroyArgs : List Str → List Str
+  | [] => []
+  | first :: args =>
+    match program first with
+    | none => []
+    | some base =>
+      if base == lit "rm" || base == lit "rmdir" then pathLike false args
+      else if base == lit "mv" then (pathLike false args).dropLast
+      else if base == lit "find" && args.contains (lit "-delete") then pathLike false args
+      else if base == lit "git" then gitDestroy args.head? (args.drop 1)
+      else []
+
+/-- `classifier.destroy_paths` of a call. -/
+def destroyPaths (remotes : List Str) (call : J) : List Str :=
+  let pl := plan remotes call
+  if pl.1.tool == .delete_path then pl.2
+  else match call with
+    | .obj ms =>
+      match get? ms "args" with
+      | some (.obj am) =>
+        if pl.1.tool == .run_command then
+          match get? am "argv" with
+          | some (.arr xs) => match argvOf? xs with | some argv => destroyArgs argv | none => []
+          | _ => []
+        else if pl.1.tool == .git then
+          match get? am "subcommand" with
+          | some (.str s) =>
+            match (match get? am "args" with | some (.arr xs) => gitArgsOf? xs | _ => some []) with
+            | some gargs => gitDestroy (some s.toList) gargs
+            | none => []
+          | _ => []
+        else []
+      | _ => []
+    | _ => []
+
+def holderHit (disk : Str → Disk) (p : Str) : Bool := pathOk p && (disk p).holder
+
+/-- `classifier.classify`, including the directories a removal or a move names: the reading of `classify`, with
+`path_control` also set when a path in `destroyPaths` is the workspace root or holds control files. Only
+`path_control` differs from `classify`. -/
+def classifyD (disk : Str → Disk) (remotes : List Str) (call : J) : Reading :=
+  let r := classify disk remotes call
+  { r with pathControl := r.pathControl || (destroyPaths remotes call).any (holderHit disk) }
+
+/-- The paths at which `classifyD` consults the disk. -/
+def diskQueriesD (remotes : List Str) (call : J) : List Str :=
+  diskQueries remotes call ++ (destroyPaths remotes call).filter pathOk
 
 end Classifier

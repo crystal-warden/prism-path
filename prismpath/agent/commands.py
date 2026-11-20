@@ -61,9 +61,23 @@ def config_dir(env: Optional[Mapping[str, str]] = None, platform: Optional[str] 
     return base.joinpath(*AGENT_DIR)
 
 
+# Python 3.10's stand-in for -P: `python -c` puts '' (the current directory) first on sys.path; drop it, then run
+# the module named by the first argument as `python -m` would.
+LAUNCHER_310 = ("import sys, runpy; del sys.path[0]; "
+                "runpy.run_module(sys.argv.pop(1), run_name='__main__', alter_sys=True)")
+
+
 def hook_command() -> str:
     """The command Claude Code runs: this interpreter, so the hook runs the PrismPath that was installed."""
-    argv = [sys.executable, "-m", "prismpath", "agent", "hook"]
+    # `python -m` puts the current directory, which Claude Code sets to the workspace, first on sys.path, so a
+    # `prismpath/` package the agent planted there would run in place of the installed one, before any call is
+    # classified. -P (3.11 and later) drops that entry. 3.10 has no -P, and -I would also drop the user's site and
+    # PYTHONPATH, so a `pip install --user` PrismPath would not import and every call would be refused; there a short
+    # -c launcher drops only that first entry and runs the module named by the next word.
+    if sys.version_info >= (3, 11):
+        argv = [sys.executable, "-P", "-m", "prismpath", "agent", "hook"]
+    else:
+        argv = [sys.executable, "-c", LAUNCHER_310, "prismpath", "agent", "hook"]
     if os.name == "nt":                                     # pragma: no cover
         import subprocess
         return subprocess.list2cmdline(argv)

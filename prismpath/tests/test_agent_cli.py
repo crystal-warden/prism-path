@@ -127,7 +127,7 @@ def test_init_shows_the_change_writes_it_only_when_told_and_keeps_other_settings
     assert written["model"] == "x" and written["permissions"] == other["permissions"]
     assert written["hooks"]["PostToolUse"] == other["hooks"]["PostToolUse"]
     pre, end = written["hooks"]["PreToolUse"], written["hooks"]["SessionEnd"]
-    assert pre[0]["matcher"] == "*" and pre[0]["hooks"][0]["command"].endswith("-m prismpath agent hook || exit 2")
+    assert pre[0]["matcher"] == "*" and pre[0]["hooks"][0]["command"].endswith(" prismpath agent hook || exit 2")
     assert end[0]["hooks"][0]["command"] == pre[0]["hooks"][0]["command"]
 
     agent = _agent_dir(home)
