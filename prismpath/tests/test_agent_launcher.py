@@ -285,6 +285,8 @@ def test_the_exit_status_of_a_failing_program_is_passed_on_and_teardown_still_ru
     assert code == 3 and list(stages.iterdir()) == [] and list(workspace.iterdir()) == [workspace / "agent.py"]
 
 
+@needs_bwrap
+@needs_socat
 def test_no_recorded_policy_runs_nothing(world, monkeypatch, tmp_path):
     workspace, stages, _root = world
     monkeypatch.setenv("HOME", str(tmp_path / "empty-home"))
@@ -293,6 +295,8 @@ def test_no_recorded_policy_runs_nothing(world, monkeypatch, tmp_path):
     assert not (workspace / "ran").exists() and list(stages.iterdir()) == [] and not (workspace / ".claude").exists()
 
 
+@needs_bwrap
+@needs_socat
 def test_a_policy_with_no_model_route_runs_nothing(world, monkeypatch):
     workspace, stages, _root = world
     monkeypatch.setattr(launcher, "compile_profile", lambda image, role: launcher.Profile(net="none"))
