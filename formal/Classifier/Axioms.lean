@@ -3,6 +3,7 @@
 import Lean
 import Classifier.Theorems
 import Classifier.ScanTheorems
+import Classifier.Control
 /-!
 # The classifier's axiom audit
 
@@ -129,3 +130,18 @@ elab "#assert_standard_axioms " id:ident : command => do
 #assert_standard_axioms Classifier.scan_safe_reading
 #assert_standard_axioms Classifier.hookReading_unchanged
 #assert_standard_axioms Classifier.hookReading_only_adds_refusals
+#assert_standard_axioms Classifier.tool_mem
+#assert_standard_axioms Classifier.scope_mem
+#assert_standard_axioms Classifier.cmd_mem
+#assert_standard_axioms Classifier.gitop_mem
+#assert_standard_axioms Classifier.remote_mem
+#assert_standard_axioms Classifier.bool_mem
+#assert_standard_axioms Classifier.controlSpace_mem
+#assert_standard_axioms Classifier.control_refused
+#assert_standard_axioms Classifier.pathFacts_control
+#assert_standard_axioms Classifier.merge_control
+#assert_standard_axioms Classifier.classify_control
+#assert_standard_axioms Classifier.change_on_control_refused
+#assert_standard_axioms Classifier.write_control_refused
+#assert_standard_axioms Classifier.delete_control_refused
+#assert_standard_axioms Classifier.run_mutating_control_refused

@@ -29,6 +29,7 @@ structure Disk where
   inside : Bool
   toolchain : Bool
   symlink : Bool
+  control : Bool
   deriving DecidableEq, Repr, Inhabited
 
 /-- The facts of one named path (`classifier.PathFacts`). -/
@@ -38,6 +39,7 @@ structure PathFacts where
   glob : Bool := false
   traversal : Bool := false
   symlink : Bool := false
+  control : Bool := false
   deriving DecidableEq, Repr, Inhabited
 
 /-- The syntactic check of a named path: a non empty string with no NUL, at most `MAX_PATH` characters. -/
@@ -53,7 +55,7 @@ def pathFacts (disk : Str → Disk) (raw : Str) : PathFacts :=
   if pathOk raw then
     let d := disk raw
     { scope := if d.inside then .workspace else .outside, toolchain := d.toolchain, glob := isGlob raw,
-      traversal := isTraversal raw, symlink := d.symlink }
+      traversal := isTraversal raw, symlink := d.symlink, control := d.control }
   else { scope := .unknown }
 
 def Scope.rank : Scope → Nat
@@ -64,7 +66,8 @@ def mergeOne (r : Reading) (f : PathFacts) : Reading :=
            pathInToolchain := r.pathInToolchain || f.toolchain,
            pathGlob := r.pathGlob || f.glob,
            pathTraversal := r.pathTraversal || f.traversal,
-           pathSymlink := r.pathSymlink || f.symlink }
+           pathSymlink := r.pathSymlink || f.symlink,
+           pathControl := r.pathControl || f.control }
 
 /-- `_merge_paths`. -/
 def mergePaths (r : Reading) (fs : List PathFacts) : Reading := fs.foldl mergeOne r

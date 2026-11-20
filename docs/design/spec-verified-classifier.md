@@ -16,7 +16,7 @@ differential harness.
 
 ## 2. What is a function of text and what is not
 
-A reading has eleven fields. Every one is computed from the call's text, except three facts per named path,
+A reading has twelve fields. Every one is computed from the call's text, except four facts per named path,
 which are read off the disk:
 
 | read off the text (modelled and proved) | read off the disk (observed, not proved) |
@@ -25,7 +25,7 @@ which are read off the disk:
 | the command class of an argv: the program sets, the installers, `python -m pip`, `find`, `sed -i`, `sort -o`, `tree -o`, a URL in an argument | whether it resolves or normalizes into a toolchain directory (`path_in_toolchain`) |
 | `kill_by_pattern`: pkill and killall, a kill not by process id, `xargs kill`, a kill inside the argument of a program that runs programs | whether it passes through a symbolic link (`path_symlink`) |
 | `git_op` and `remote_class`: every subcommand set, the listing forms of tag and branch, the unsafe options, the remote of a push | for a Bash command: whether `cwd` is inside the workspace, whether it is the workspace, and whether a bare word names something in `cwd` |
-| `path_glob`, `path_traversal`, and the syntactic check of a path (non empty, no NUL, at most 4096 characters, else scope `unknown`) | |
+| `path_glob`, `path_traversal`, and the syntactic check of a path (non empty, no NUL, at most 4096 characters, else scope `unknown`) | whether it resolves, or normalizes, onto one of the agent's own control files (`path_control`, section 4.3) |
 | which paths a call names, and how their facts merge (the worst scope, any flag) | |
 | the Claude Code mapping: Read, Write, Edit, MultiEdit, NotebookEdit, Glob, Grep, LS, Bash; the workspace from `CLAUDE_PROJECT_DIR` or `cwd`; relative paths against `cwd`; the `/workspace` spelling | |
 | the MCP mapping: the classifier's own tools and the reference filesystem server's | |
@@ -143,6 +143,38 @@ On 20,000 generated Bash commands against a real workspace (the same set through
 `CLASSIFIER_VERSION` stays 1: the change makes readings more conservative and every signed policy bounds the
 version to 1.
 
+### 4.3 The agent's own controls (`path_control`, cause 128)
+
+The agent must not rewrite the controls that govern it. A path the call names reads `path_control` when, resolved
+(`realpath`) or normalized (`normpath`), it is one of `.claude/settings.json`, `.claude/settings.local.json`,
+`.mcp.json`, `.claude` itself, anything under `.claude/hooks/`, or the program the installed PrismPath hook runs when
+that program is inside the workspace (the first word of a hook command in `.claude/settings.json`). Which paths those
+are is read off the disk at the moment of the call, like a toolchain directory (`classifier.disk_facts`, `DiskFacts.control`),
+so the model takes it as an input like the other disk facts, and a `..` component or a symbolic link does not hide
+the file. The rule is the same in all three starters, placed among the refusals that hold whatever else does:
+
+    -> refuse agent:control-write: when (tool in ["write_file", "delete_path"] or command_class == "mutating"
+                                        or git_op in ["local_write", "mutating"]) and path_control
+
+It covers every way the classifier reads a change: Write, Edit, MultiEdit and NotebookEdit, the MCP file tools of
+`mcp_map.py`, and the Bash commands the plain word grammar reads (`rm`, `mv`, `cp`, `mkdir`, `sed -i`, `tee` and the rest
+of `MUTATING`), as source or destination, since the classifier does not tell the two apart. A read is decided as before.
+A refusal is receipted with its cause like any other, so it is an observation: a later policy proposal may read these
+refusals, and they never change the policy on their own.
+
+What it proves (`Control.lean`): `classify_control`, a path the call names that passes the syntactic check and that the
+disk says is a control file gives `path_control`; `control_refused` and `change_on_control_refused`, under a policy
+the oracle's `--policy` mode reports as `control_refused` (`controlSafe`: every one of the 112,896 readings with
+`path_control` that is a change is refused, computed with the core's own evaluator and proved to be all of them by
+`controlSpace_mem`), a change that names a control file is refused, whatever the call; and `write_control_refused`,
+`delete_control_refused` and `run_mutating_control_refused` for the write tool, the delete tool and a file changing
+command. All three shipped agent policies are `controlSafe`, and the harness requires it.
+
+Not covered, on purpose: a Bash command outside the plain grammar (a redirect, `>`, is an operator) that writes a control
+file reads unknown and is asked about, or refused under `strict`, as any such command is; the hazard scan looks for
+hazards, not control paths. A path that names the workspace root or a parent of `.claude` other than `.claude` itself
+(`rm -r .`) is not read as control. The directory `.git/hooks` is not a control file here.
+
 ## 5. What is proven
 
 Every theorem is in `formal/Classifier/Theorems.lean`, builds with no unfinished proof, and depends on the
@@ -168,7 +200,7 @@ standard axioms at most (`Axioms.lean` enforces it at every build).
 | `git_unsafe_unknown`, `git_push_remote` | an option that runs a program or moves the repository makes git unknown; a push is to an allowed remote only when its first remote word is allowed (`origin` by default) |
 | `classify_unknown_tool`, `hook_unknown_tool`, `mcp_unknown_tool` | an unknown classifier tool, Claude Code tool or MCP tool reads unknown |
 | `scan_kill`, `scan_network`, `scan_outside`, `scan_traversal`, `scan_toolchain`, `scan_glob`, `scan_long`, `scan_git`, `network_word_in_path_only`, `scan_none`, `hookReading_only_adds_refusals` | the hazard scan (section 4.1): each rule as stated, the path label, no evidence no change, and under every `scanSafe` policy the scan never allows and only adds refusals |
-| `reading_fields` | every reading holds the eleven fields, in canonical order, with `classifier_version` 1 |
+| `reading_fields` | every reading holds the twelve fields, in canonical order, with `classifier_version` 1 |
 | `accept_fits`, `boundary_accepts_every_reading`, `decide_never_contract` | **the core's boundary never refuses a classifier reading for its shape**: for a policy whose field definitions all fit, the system boundary accepts every reading, so the verdict is a route or no match, never `route:contract-violation`. The three shipped agent policies fit: the oracle's `--policy` mode computes it on each image and the harness requires it |
 
 ## 6. The oracle and the differential harness
@@ -181,7 +213,7 @@ theorems prove sufficient.
 `formal/diff/classifier_diff.py` runs every case through the Python and through the oracle. The Python's four
 disk functions are replaced for the run by a provider that records every fact asked; the facts go to the oracle,
 and a fact the oracle needs and the Python did not ask is observed and the case run again. The real disk
-provider (a throwaway workspace and decoy with links in and out) serves the 120 recorded hook inputs and the 51
+provider (a throwaway workspace and decoy with links in and out) serves the 132 recorded hook inputs and the 51
 adversary probes (54 calls); a synthetic provider, each fact a seeded function of its key, serves the generated
 calls, so every combination of disk facts meets every text. Numbers reach the oracle as 0, since no part of the
 reading reads a number's value; a call with a lone surrogate reaches it as outside the domain.
