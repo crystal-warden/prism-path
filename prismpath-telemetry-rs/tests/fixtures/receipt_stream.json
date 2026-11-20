@@ -5032,6 +5032,60 @@
    "hex": "1170c0e4614218"
   },
   {
+   "name": "code_128",
+   "fields": {
+    "seq": 4159,
+    "prev_node": 5,
+    "event": 24,
+    "next_node": 9,
+    "cause": 128
+   },
+   "rust_overflow": false,
+   "symbols": [
+    128,
+    24,
+    9,
+    5,
+    4159
+   ],
+   "wire_ints": [
+    129,
+    25,
+    10,
+    6,
+    4160
+   ],
+   "bits": "100100010111010001101001110011000001001010101011",
+   "hex": "917469cc12ab"
+  },
+  {
+   "name": "name_agent:control-write",
+   "fields": {
+    "seq": 4159,
+    "prev_node": 5,
+    "event": 24,
+    "next_node": 9,
+    "cause": "agent:control-write"
+   },
+   "rust_overflow": false,
+   "symbols": [
+    128,
+    24,
+    9,
+    5,
+    4159
+   ],
+   "wire_ints": [
+    129,
+    25,
+    10,
+    6,
+    4160
+   ],
+   "bits": "100100010111010001101001110011000001001010101011",
+   "hex": "917469cc12ab"
+  },
+  {
    "name": "code_0",
    "fields": {
     "seq": 1,
@@ -5750,29 +5804,29 @@
   {
    "name": "seeded_0",
    "fields": {
-    "seq": 396749276,
-    "prev_node": 638713881,
-    "event": 6577559408,
-    "next_node": 1558277355,
+    "seq": 68,
+    "prev_node": 112,
+    "event": 46,
+    "next_node": 60,
     "cause": 0
    },
    "rust_overflow": false,
    "symbols": [
     0,
-    6577559408,
-    1558277355,
-    638713881,
-    396749276
+    46,
+    60,
+    112,
+    68
    ],
    "wire_ints": [
     1,
-    6577559409,
-    1558277356,
-    638713882,
-    396749277
+    47,
+    61,
+    113,
+    69
    ],
-   "bits": "110010101001010010010000101010001001010001010100110010010101000100100100001010100101001010100110100101001001010001001000001000000001001011010010010100001010010100100000100001001011",
-   "hex": "ca9490a89454c951242a52a69494482012d250a52084b0"
+   "bits": "110000010111001000011001000100111000010011",
+   "hex": "c172191384c0"
   },
   {
    "name": "seeded_1",
@@ -11102,6 +11156,20 @@
    "registry_cause": null
   },
   {
+   "name": "frame_of_code_128",
+   "hex": "917469cc12ab",
+   "receipt": {
+    "cause": 128,
+    "cause_name": "agent:control-write",
+    "event": 24,
+    "next_node": 9,
+    "prev_node": 5,
+    "seq": 4159
+   },
+   "refusal_cause": "ok",
+   "registry_cause": null
+  },
+  {
    "name": "frame_of_code_0",
    "hex": "cdec",
    "receipt": {
@@ -11369,14 +11437,14 @@
   },
   {
    "name": "frame_of_seeded_0",
-   "hex": "ca9490a89454c951242a52a69494482012d250a52084b0",
+   "hex": "c172191384c0",
    "receipt": {
     "cause": 0,
     "cause_name": null,
-    "event": 6577559408,
-    "next_node": 1558277355,
-    "prev_node": 638713881,
-    "seq": 396749276
+    "event": 46,
+    "next_node": 60,
+    "prev_node": 112,
+    "seq": 68
    },
    "refusal_cause": "ok",
    "registry_cause": null

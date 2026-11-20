@@ -11,7 +11,7 @@
 pub const CAUSE_NONE: u8 = 0;
 
 /// `registry_sha256()` of the Python registry when this file was generated.
-pub const REGISTRY_SHA256: &str = "45c465f0b3d4700c949a5c5bbfcf0126e98c9651dd1ecdda6742bd659e3090a8";
+pub const REGISTRY_SHA256: &str = "62b93d698a525a83fe2830335ede31cdcdf83c45c8e858f581e8757e91282977";
 
 /// The cause class, the semantic axis of the registry.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -231,6 +231,8 @@ pub const AGENT_SHELL_MUTATION_ASKED: u8 = 125;
 pub const AGENT_HOOK_ERROR: u8 = 126;
 /// `agent:change-asked`
 pub const AGENT_CHANGE_ASKED: u8 = 127;
+/// `agent:control-write`
+pub const AGENT_CONTROL_WRITE: u8 = 128;
 
 /// Every registered cause, in registry order.
 pub const REGISTRY: &[Cause] = &[
@@ -327,6 +329,7 @@ pub const REGISTRY: &[Cause] = &[
     Cause { code: 125, name: "agent:shell-mutation-asked", class: CauseClass::Routing, description: "an agent shell command that changes files, with every path inside the workspace and none of the earlier refusals holding, under the default policy that asks the person; escalated and not run" },
     Cause { code: 126, name: "agent:hook-error", class: CauseClass::Routing, description: "the governed agent hook could not decide a tool call (input that does not read, a missing or broken key, a recorded policy that does not verify, or an error of its own); refused and not run, never allowed" },
     Cause { code: 127, name: "agent:change-asked", class: CauseClass::Routing, description: "an agent call that would change files or local git state inside the workspace, with none of the earlier refusals holding, under the review policy that asks the person about every change; escalated and not run" },
+    Cause { code: 128, name: "agent:control-write", class: CauseClass::Routing, description: "an agent call that would change one of the governed agent's own control files inside the workspace (its settings, its hook scripts, its MCP configuration, or the program its installed hook runs), by a path that resolves onto it; refused and not run, under every starter policy" },
 ];
 
 /// The engine's stop vocabulary mapped onto the registry; `terminal` and `waiting` are clean and have no cause.
