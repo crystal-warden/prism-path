@@ -73,6 +73,9 @@ CHANGING_COMMANDS = ("mutating", "network", "git", "unknown")
 CHANGING_GIT_OPS = ("local_write", "mutating", "push", "network", "unknown")
 
 
+NET_STATES = ("none", "proxy_model", "proxy_allow")
+
+
 class ProfileError(Exception):
     """The image cannot be projected onto a profile; the caller runs nothing."""
 
@@ -85,10 +88,20 @@ class Profile:
     network: bool = False
     max_processes: int = MAX_PROCESSES
     timeout_s: int = TIMEOUT_S
+    net: str = "none"      # none | proxy_model | proxy_allow: the two proxy states reach only a proxy socket, never the host network
+
+    def __post_init__(self) -> None:
+        if self.net not in NET_STATES:
+            raise ProfileError(f"net must be one of {NET_STATES}, not {self.net!r}")
+        if self.net != "none" and self.network:
+            raise ProfileError("a profile with a proxy cannot also share the host network")
 
     def to_object(self) -> Dict[str, Any]:
-        return {"format": FORMAT, "ro_mounts": sorted(self.ro_mounts), "rw_path": self.rw_path,
-                "host_write": self.host_write, "network": self.network, "max_processes": self.max_processes, "timeout_s": self.timeout_s}
+        obj = {"format": FORMAT, "ro_mounts": sorted(self.ro_mounts), "rw_path": self.rw_path,
+               "host_write": self.host_write, "network": self.network, "max_processes": self.max_processes, "timeout_s": self.timeout_s}
+        if self.net != "none":      # absent when none, so every profile that exists keeps its canonical bytes and hash
+            obj["net"] = self.net
+        return obj
 
     def canonical(self) -> bytes:
         """The profile's canonical canon/2 bytes."""
