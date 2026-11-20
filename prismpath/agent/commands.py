@@ -343,8 +343,19 @@ def receipt_id(session: str, index: int) -> str:
     return f"{index} of session {session}"
 
 
-def hook(raw: bytes, env: Optional[Mapping[str, str]] = None) -> Dict[str, Any]:
-    """The answer to one hook input. Never raises; whatever fails is a deny with cause 126."""
+DIRECT_NOTE = ("PrismPath allowed this shell command to run directly inside the agent sandbox. The per call "
+               "sandbox is not applied here.")
+DIRECT_ASK_NOTE = ("If you approve it, it runs directly inside the agent sandbox; the per call sandbox is not applied "
+                   "here.")
+
+
+def hook(raw: bytes, env: Optional[Mapping[str, str]] = None, direct: bool = False) -> Dict[str, Any]:
+    """The answer to one hook input. Never raises; whatever fails is a deny with cause 126.
+
+    `direct` is for the decider of `prismpath agent run`, where the hook client is inside the outer sandbox and
+    the host interpreter that the per call sandbox rewrite names does not exist. An allowed shell command is then
+    not rewritten: it runs inside the outer sandbox as it is, the receipt carries no sandbox profile, and the
+    answer says so."""
     event = None
     try:
         data = json.loads(raw.decode("utf-8"))
@@ -372,7 +383,7 @@ def hook(raw: bytes, env: Optional[Mapping[str, str]] = None) -> Dict[str, Any]:
         from prismpath.agent import sandbox_hook
         has_command = isinstance(data.get("tool_input"), dict) and isinstance(data["tool_input"].get("command"), str)
         if (result.decision.kind == "allow" or (result.decision.kind == "escalate" and has_command)) \
-                and data.get("tool_name") == "Bash" and sandbox_hook.supported():
+                and data.get("tool_name") == "Bash" and sandbox_hook.supported() and not direct:
             # an allowed shell call, or a question the person approves, runs only inside the sandbox the same policy compiles to (sandbox_hook.py);
             # on a platform without the sandbox the call is decided and not confined, as before
             try:
@@ -389,7 +400,12 @@ def hook(raw: bytes, env: Optional[Mapping[str, str]] = None) -> Dict[str, Any]:
                        "image_sha256": core_evidence.sha256_hex(policy.image)}
             updated = sandbox_hook.sandbox_input(data, result.workspace, profile, observe=observe)
             answer = claude_code.hook_answer(result.decision, updated)
-        return claude_code.fill_receipt(answer, receipt_id(session, index))
+        answer = claude_code.fill_receipt(answer, receipt_id(session, index))
+        if direct and result.decision.kind == "allow" and data.get("tool_name") == "Bash":
+            answer["hookSpecificOutput"]["permissionDecisionReason"] = DIRECT_NOTE + f" Receipt {receipt_id(session, index)}."
+        elif direct and result.decision.kind == "escalate" and data.get("tool_name") == "Bash" and has_command:
+            answer["hookSpecificOutput"]["permissionDecisionReason"] += " " + DIRECT_ASK_NOTE
+        return answer
     except BaseException as exc:  # noqa: BLE001 - fail closed on everything, never allow
         if event == "SessionEnd":
             return {"systemMessage": f"PrismPath could not seal this session's run: cause {HOOK_ERROR} "
@@ -524,6 +540,16 @@ def run(program: List[str], workspace: Optional[str] = None, credential: Optiona
     from prismpath.agent import launcher
     if program[:1] == ["--"]:
         program = program[1:]
+    # the decider decides every tool call with the recorded keys and policy; without them it would refuse each call
+    # with cause 126, so say what is missing now and run nothing
+    from prismpath.agent.policy import classifier_mismatch
+    try:
+        policy, _store = load_checked(config_dir())
+    except AgentError as exc:
+        raise AgentError(f"{exc}; `prismpath agent run` needs it before it starts the agent, so nothing was run") from exc
+    mismatch = classifier_mismatch(policy)
+    if mismatch:
+        raise AgentError(f"{mismatch}; nothing was run")
     if egress_log is None:
         egress_log = str(config_dir() / "egress" / f"{time.strftime('%Y%m%dT%H%M%S')}-{os.getpid()}.log")
     kwargs = {} if max_processes is None else {"max_processes": max_processes}

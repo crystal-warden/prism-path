@@ -210,7 +210,7 @@ def test_the_stand_in_reaches_the_stub_through_the_proxy_and_is_confined(world, 
                           "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1", "ENABLE_CLAUDEAI_MCP_SERVERS": "false"}
     hooks = out["settings"]["hooks"]
     assert set(hooks) == {"PreToolUse", "SessionEnd"}
-    assert all(commands._is_ours(h["command"]) for event in hooks.values() for g in event for h in g["hooks"])
+    assert all(h["command"] == launcher.client_hook_command() for event in hooks.values() for g in event for h in g["hooks"])
     decisions = [(json.loads(line)["host"], json.loads(line)["decision"]) for line in log.read_text().splitlines()]
     assert ("api.anthropic.com", "allow") in decisions and ("evil.example:443", "refuse") in decisions
     # the proxy's decisions are receipts of a run the policy decided, sealed at exit, and they verify
@@ -341,8 +341,13 @@ def test_a_program_that_is_not_found_or_a_credential_that_is_not_a_file_runs_not
 @needs_bwrap
 @needs_socat
 def test_the_cli_wiring_passes_the_program_after_double_dash(world, monkeypatch, capsys):
+    import io
     from prismpath import cli
+    from prismpath.agent import commands
     workspace, _stages, root = world
+    monkeypatch.setenv("HOME", str(root / "home"))                 # `agent run` needs the recorded keys and policy
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    commands.init(workspace, True, False, out=io.StringIO())
     code = cli.main(["agent", "run", "--workspace", str(workspace), "--egress-log", str(root / "e.log"), "--",
                      PYTHON, "-c", "import sys; open('cli-ran', 'w').write(' '.join(sys.argv[1:])); sys.exit(4)", "a", "--b"])
     assert code == 4 and (workspace / "cli-ran").read_text() == "a --b"

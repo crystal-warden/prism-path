@@ -21,10 +21,12 @@ Linux only, non interactive. The launcher stays outside, trusted. It
   4b. with `local_model` (http://HOST:PORT), also starts a fixed route to that one server (local_route.py): a
      unix socket in the staged directory forwarding to HOST:PORT only, and a relay inside at 127.0.0.1:PORT.
      It is not an exception in the proxy's private address rule, and each use is a line in the egress log;
-  5. starts the egress proxy on the staged socket with the policy gate (egress_policy.py): each CONNECT is read into
-     a connect reading, decided by the active image and written as a receipt in a run of its own
-     (`egress-<time>-<pid>`, sealed at exit), and a refusal is cause 130. A caller that passes `decider` (a test or
-     an embedder with no recorded policy) gets a plain decider and no receipts, and the profile is `proxy_model`;
+  5. starts the decider (decider.py) on a second staged unix socket, bound in at /tmp/.pp-decider.sock, with the
+     thin hook client (hook_client.py) staged beside settings.json, and starts the egress proxy on the staged socket
+     with the policy gate (egress_policy.py): each CONNECT is read into a connect reading, decided by the active image
+     and written as a receipt in a run of its own (`egress-<time>-<pid>`, sealed at exit), and a refusal is cause 130.
+     A caller that passes `decider` (a test or an embedder with no recorded policy) gets a plain decider and no
+     receipts, and the profile is `proxy_model`;
   6. runs the program under bwrap in a process group of its own, exits with its status, and on the way out stops
      the proxy, kills what is left of the process group, removes the staged directory and the empty control
      files it made.
@@ -46,7 +48,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Callable, List, Optional, Sequence, Tuple
 
-from prismpath.agent import classifier, commands, egress, egress_policy, local_route, sandbox_exec
+from prismpath.agent import classifier, commands, decider as decider_module, egress, egress_policy, hook_client, local_route, sandbox_exec
 from prismpath.agent.profile import Profile, ProfileError, compile_profile
 
 STAGE_BASE = "/var/tmp"
@@ -54,6 +56,9 @@ HOME_IN = "/home/agent"
 CONFIG_IN = HOME_IN + "/.claude"
 PROGRAM_DIR_IN = "/opt/agent"
 CREDENTIAL_NAME = ".credentials.json"
+HOOK_CLIENT_NAME = "pp-hook.py"
+DECIDER_SOCKET_IN = "/tmp/.pp-decider.sock"     # inside the sandbox; /tmp is a private tmpfs there
+HOOK_PYTHON = "/usr/bin/python3"                # must exist inside: the system prefix is bound read only
 MAX_PROCESSES = 512       # a placeholder until the spike measures the real peak (plan question 10)
 AGENT_ENV = (("DISABLE_AUTOUPDATER", "1"), ("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "1"),
              ("ENABLE_CLAUDEAI_MCP_SERVERS", "false"))
@@ -71,7 +76,9 @@ class Staged:
     settings: Path
     socket: Path
     log: Path
+    decider_socket: Path
     credential: Optional[Path] = None
+    hook_client: Optional[Path] = None
 
 
 @dataclass
@@ -128,6 +135,12 @@ def pin_program(real: str, ro_mounts: Sequence[str]) -> Tuple[str, List[Tuple[st
 
 
 # ----------------------------------------------------------------------------------------------- staging
+def client_hook_command() -> str:
+    """The hook command under the launcher: the standard library client, run by the interpreter inside the sandbox.
+    `|| exit 2` stays, so a client that cannot start is a block."""
+    return f"{HOOK_PYTHON} -I {CONFIG_IN}/{HOOK_CLIENT_NAME} {DECIDER_SOCKET_IN} || exit 2"
+
+
 def stage(settings: dict, credential: Optional[str], base: str = STAGE_BASE) -> Staged:
     """The per run directory. The caller removes it (`shutil.rmtree`) when done."""
     root = Path(tempfile.mkdtemp(dir=base, prefix="pp-agent-"))
@@ -138,7 +151,11 @@ def stage(settings: dict, credential: Optional[str], base: str = STAGE_BASE) -> 
         path = config / "settings.json"
         path.write_text(commands._settings_text(settings))
         os.chmod(path, 0o444)
-        staged = Staged(root, config, path, root / "egress.sock", root / "egress.log")
+        client = config / HOOK_CLIENT_NAME
+        shutil.copyfile(hook_client.__file__, client)
+        os.chmod(client, 0o444)
+        staged = Staged(root, config, path, root / "egress.sock", root / "egress.log", root / "decider.sock",
+                        hook_client=client)
         if credential is not None:
             source = Path(credential)
             if not source.is_file():
@@ -231,14 +248,17 @@ def launch(command: Sequence[str], workspace: str, credential: Optional[str] = N
         profile = Profile(net="proxy_model", max_processes=max_processes)
     real = resolve_program(command[0])
     inside, program_binds = pin_program(real, profile.ro_mounts)
-    settings = commands.merged_settings({}, hook if hook is not None else commands.hook_command())
+    settings = commands.merged_settings({}, hook if hook is not None else client_hook_command())
     staged = stage(settings, credential, stage_base)
     controls = Controls()
     proxy = None
     model_route = None
     proc = None
+    hook_decider = None
     try:
         prepare_controls(root, controls)
+        if hook is None:    # the keys, the policy and the runs stay here; the sandbox only gets the socket
+            hook_decider = decider_module.Decider(staged.decider_socket, env={**os.environ, "CLAUDE_PROJECT_DIR": str(root)}).start()
         proxy = egress.EgressProxy(staged.socket, staged.log, decider=decider, gate=gate, resolver=resolver, connect=connect).start()
         if model_target is not None:
             model_route = local_route.LocalModelRoute(staged.root / "model.sock", staged.log, *model_target).start()
@@ -249,6 +269,9 @@ def launch(command: Sequence[str], workspace: str, credential: Optional[str] = N
         if model_route is not None:
             binds.append((model_route.socket_path, sandbox_exec.MODEL_SOCKET_IN))
         binds.append((str(staged.settings), CONFIG_IN + "/settings.json"))
+        binds.append((str(staged.hook_client), f"{CONFIG_IN}/{HOOK_CLIENT_NAME}"))
+        if hook_decider is not None:
+            binds.append((str(staged.decider_socket), DECIDER_SOCKET_IN))
         if staged.credential is not None:
             binds.append((str(staged.credential), f"{CONFIG_IN}/{CREDENTIAL_NAME}"))
         environment = [("HOME", HOME_IN), ("CLAUDE_CONFIG_DIR", CONFIG_IN), *AGENT_ENV]
@@ -282,7 +305,7 @@ def launch(command: Sequence[str], workspace: str, credential: Optional[str] = N
             raise LaunchError("bwrap did not start the sandbox, so the program was not run (see its message above)")
         return status
     finally:
-        _teardown(proc, (proxy, model_route), staged, controls, egress_log)
+        _teardown(proc, (hook_decider, proxy, model_route), staged, controls, egress_log)
         _seal(gate.run if gate is not None else None, home_dir)
 
 
