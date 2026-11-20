@@ -398,6 +398,11 @@ def _add_operator_commands(subparsers) -> None:
     agent_run.add_argument('--egress-log', default=None, metavar='FILE',
                            help='keep the proxy\'s log of every connection attempt here (default: under the agent config directory)')
     agent_run.add_argument('--max-processes', type=int, default=None, help='the process limit inside the sandbox')
+    agent_run.add_argument('--local-model', default=None, metavar='http://HOST:PORT',
+                           help='a fixed route to one local model server: the sandbox reaches only that host and port, '
+                                'at 127.0.0.1:PORT inside, and each use is logged (a separate route, not a proxy exception)')
+    agent_run.add_argument('--ro', action='append', default=None, metavar='PATH',
+                           help='also show this host path to the program, read only (repeatable)')
     agent_run.add_argument('program', nargs=argparse.REMAINDER, help='-- PROGRAM [ARGS]')
     agent_parser.set_defaults(func=agent_cmd)
 
@@ -543,7 +548,8 @@ def agent_cmd(args) -> int:
     project = args.project if getattr(args, 'project', None) else (os.environ.get('CLAUDE_PROJECT_DIR') or os.getcwd())
     try:
         if args.agent_action == 'run':
-            return commands.run(args.program, args.workspace, args.credential, args.egress_log, args.max_processes)
+            return commands.run(args.program, args.workspace, args.credential, args.egress_log, args.max_processes,
+                                args.local_model, args.ro)
         if args.agent_action == 'init':
             return commands.init(project, args.yes, args.json, policy=args.policy)
         if args.agent_action == 'verify':

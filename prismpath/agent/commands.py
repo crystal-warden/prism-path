@@ -509,7 +509,8 @@ def _tamper_demo(home: Path, verified_rows) -> Dict[str, Any]:
 
 
 def run(program: List[str], workspace: Optional[str] = None, credential: Optional[str] = None,
-        egress_log: Optional[str] = None, max_processes: Optional[int] = None) -> int:
+        egress_log: Optional[str] = None, max_processes: Optional[int] = None,
+        local_model: Optional[str] = None, extra_ro: Optional[List[str]] = None) -> int:
     """`prismpath agent run -- PROGRAM [ARGS]`: the program as the agent, under the sandbox with only the model
     API reachable (prismpath/agent/launcher.py). Exits with the program's status. Raises AgentError, with
     nothing run, off Linux or without bwrap or socat."""
@@ -520,6 +521,10 @@ def run(program: List[str], workspace: Optional[str] = None, credential: Optiona
     if egress_log is None:
         egress_log = str(config_dir() / "egress" / f"{time.strftime('%Y%m%dT%H%M%S')}-{os.getpid()}.log")
     kwargs = {} if max_processes is None else {"max_processes": max_processes}
+    if local_model:
+        kwargs["local_model"] = local_model
+    if extra_ro:
+        kwargs["extra_ro"] = extra_ro
     return launcher.launch(program, workspace or os.getcwd(), credential=credential, egress_log=egress_log, **kwargs)
 
 

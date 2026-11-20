@@ -307,3 +307,108 @@ def test_prepare_controls_creates_what_is_missing_and_never_a_git_directory(tmp_
     assert not (tmp_path / ".git").exists()
     controls.remove_created()
     assert list(tmp_path.iterdir()) == []
+
+
+# ---------------------------------------------------------------------------------- the local model route
+MODEL_STAND_IN = r'''
+import json, socket, sys, urllib.request
+out = {}
+def attempt(name, fn):
+    try:
+        out[name] = fn()
+    except BaseException as exc:
+        out[name] = "fail: " + type(exc).__name__
+def get(port):
+    return urllib.request.urlopen(f"http://127.0.0.1:{port}/v1/models", timeout=5).read().decode()
+def raw(host, port):
+    socket.create_connection((host, port), timeout=3).close()
+    return "connected"
+good, other = int(sys.argv[1]), int(sys.argv[2])
+attempt("model", lambda: get(good))
+attempt("model_again", lambda: get(good))
+attempt("other_local_port", lambda: get(other))
+attempt("raw_to_host_port", lambda: raw("127.0.0.1", other))
+attempt("raw_outside", lambda: raw("%s", 8888))
+json.dump(out, open("out.json", "w"))
+''' % PUBLIC
+
+
+def _http_stub(body: bytes):
+    """A plain HTTP server on a host port; yields (port, hits)."""
+    server = socket.socket()
+    server.bind(("127.0.0.1", 0))
+    server.listen(8)
+    hits = []
+
+    def serve():
+        while True:
+            try:
+                conn, _ = server.accept()
+            except OSError:
+                return
+            with conn:
+                request = conn.recv(4096)
+                hits.append(request.split(b"\r\n")[0])
+                conn.sendall(b"HTTP/1.1 200 OK\r\nContent-Length: %d\r\nConnection: close\r\n\r\n" % len(body) + body)
+    threading.Thread(target=serve, daemon=True).start()
+    return server, hits
+
+
+def _model_run(world, good_port, other_port, **kwargs):
+    workspace, stages, root = world
+    (workspace / "model.py").write_text(MODEL_STAND_IN)
+    log = root / "egress.log"
+    code = launcher.launch([PYTHON, "model.py", str(good_port), str(other_port)], str(workspace), stage_base=str(stages),
+                           egress_log=str(log), **kwargs)
+    return code, json.loads((workspace / "out.json").read_text()), log
+
+
+@needs_bwrap
+@needs_socat
+def test_the_local_model_route_reaches_only_its_one_host_and_port(world):
+    good, good_hits = _http_stub(b"model one")
+    other, other_hits = _http_stub(b"model two")
+    good_port = good.getsockname()[1]
+    try:
+        code, out, log = _model_run(world, good_port, other.getsockname()[1], local_model=f"http://localhost:{good_port}")
+    finally:
+        good.close()
+        other.close()
+    assert code == 0
+    assert out["model"] == "model one" and out["model_again"] == "model one"     # through the route, twice
+    assert out["other_local_port"].startswith("fail")                             # a different host port is not reachable
+    assert out["raw_to_host_port"].startswith("fail")                             # no raw loopback to the host either
+    assert out["raw_outside"].startswith("fail")
+    assert len(good_hits) == 2 and other_hits == []
+    rows = [json.loads(line) for line in log.read_text().splitlines()]
+    assert [r["route"] for r in rows] == ["local-model", "local-model"]
+    assert all(r["decision"] == "allow" and r["port"] == good_port for r in rows)
+    assert list(world[1].iterdir()) == []                                         # the route's socket went with the stage
+
+
+@needs_bwrap
+@needs_socat
+def test_without_the_option_there_is_no_model_route(world):
+    good, good_hits = _http_stub(b"model one")
+    try:
+        _code, out, _log = _model_run(world, good.getsockname()[1], good.getsockname()[1])
+    finally:
+        good.close()
+    assert out["model"].startswith("fail") and good_hits == []
+
+
+def test_a_bad_local_model_target_or_port_clash_starts_nothing(world):
+    workspace, stages, _root = world
+    for target in ("https://localhost:8888", "http://localhost", "http://u:p@localhost:8888", "http://localhost:8888/v1",
+                   "http://localhost:3128"):
+        with pytest.raises(launcher.LaunchError):
+            launcher.launch([PYTHON, "-c", "pass"], str(workspace), stage_base=str(stages), local_model=target)
+    assert list(stages.iterdir()) == []
+
+
+def test_parse_target():
+    from prismpath.agent import local_route
+    assert local_route.parse_target("http://localhost:8888") == ("localhost", 8888)
+    assert local_route.parse_target("127.0.0.1:9000/") == ("127.0.0.1", 9000)
+    with pytest.raises(local_route.RouteError):
+        local_route.parse_target("http://localhost:99999")
