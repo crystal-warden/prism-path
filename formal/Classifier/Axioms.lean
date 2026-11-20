@@ -145,3 +145,9 @@ elab "#assert_standard_axioms " id:ident : command => do
 #assert_standard_axioms Classifier.write_control_refused
 #assert_standard_axioms Classifier.delete_control_refused
 #assert_standard_axioms Classifier.run_mutating_control_refused
+#assert_standard_axioms Classifier.writeEvidence_of_redirect
+#assert_standard_axioms Classifier.writerEvidence_of
+#assert_standard_axioms Classifier.writeEvidence_of_writer
+#assert_standard_axioms Classifier.controlEvidence_of
+#assert_standard_axioms Classifier.scan_control
+#assert_standard_axioms Classifier.scan_control_refused

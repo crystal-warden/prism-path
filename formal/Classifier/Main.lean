@@ -17,7 +17,7 @@ differential harness (formal/diff/classifier_diff.py), and prints one JSON line 
 is answered with `{"id": ID, "call": CALL, "workspace": DIR, "reading": READING}` (`call` and `workspace` for
 the mappings only), or, when a disk fact the model consults is not in the tables, with
 `{"id": ID, "missing": {...}}` naming every one, so the harness can observe them and ask again. Which facts
-the model consults is `diskQueries` and `hookQueries`; `Theorems.classify_local` and
+the model consults is `diskQueries`, `hookQueries` and, for a Bash command the scan reads, `scanQueries`; `Theorems.classify_local` and
 `Theorems.hookCallIn_local` prove that no other fact can change the answer, so a table that holds them
 determines it. `nonscalar` says the input holds a string that is not Unicode scalar values, outside the
 model's domain: it reads unknown.
@@ -147,7 +147,10 @@ def answer (line : String) : String :=
         head ++ ",\"missing\":" ++ missingJson [] mIns mSame mEx ++ "}"
       else
         let (call, ws') := hookCall hd input pd pc
-        match missingDisk call with
+        let scanQ := match isUnknownCall call, bashCommand? input with
+          | true, some c => (scanQueries (hookCwdOf input ws') (strip c)).filter (fun p => (look dt p).isNone)
+          | _, _ => []
+        match missingDisk call ++ scanQ with
         | [] => head ++ ",\"call\":" ++ writeJ call ++ ",\"workspace\":" ++ esc (String.ofList ws') ++
             ",\"reading\":" ++ readingJson (hookReading hd disk input pd pc) ++ "}"
         | m => head ++ ",\"missing\":" ++ missingJson m [] [] [] ++ "}"

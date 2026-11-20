@@ -24,26 +24,26 @@ def evidence (ws t : Str) : Bool × Bool × Bool × Bool × Bool × Bool × Bool
   (killEvidence t, networkEvidence ws t, outsideEvidence ws t, traversalEvidence t, toolchainEvidence t,
    globEvidence t, longEvidence t, gitScan (tokens t))
 
-theorem scanReading_eq (c ws : Str) : scanReading c ws =
+theorem scanReading_eq (c ws : Str) (ctrl : Bool) : scanReading c ws ctrl =
     let t := strip c
     if fires (killEvidence t) (networkEvidence ws t) (outsideEvidence ws t) (traversalEvidence t) (toolchainEvidence t)
-        (globEvidence t) (longEvidence t) (gitScan (tokens t)) then
+        (globEvidence t) (longEvidence t) (gitScan (tokens t)) ctrl then
       some (scanOf (killEvidence t) (networkEvidence ws t) (outsideEvidence ws t) (traversalEvidence t)
-        (toolchainEvidence t) (globEvidence t) (longEvidence t) (gitScan (tokens t)))
+        (toolchainEvidence t) (globEvidence t) (longEvidence t) (gitScan (tokens t)) ctrl)
     else none := rfl
 
-theorem scan_fires {c ws : Str} (h : fires (killEvidence (strip c)) (networkEvidence ws (strip c))
+theorem scan_fires {c ws : Str} {ctrl : Bool} (h : fires (killEvidence (strip c)) (networkEvidence ws (strip c))
       (outsideEvidence ws (strip c)) (traversalEvidence (strip c)) (toolchainEvidence (strip c)) (globEvidence (strip c))
-      (longEvidence (strip c)) (gitScan (tokens (strip c))) = true) :
-    scanReading c ws = some (scanOf (killEvidence (strip c)) (networkEvidence ws (strip c)) (outsideEvidence ws (strip c))
+      (longEvidence (strip c)) (gitScan (tokens (strip c))) ctrl = true) :
+    scanReading c ws ctrl = some (scanOf (killEvidence (strip c)) (networkEvidence ws (strip c)) (outsideEvidence ws (strip c))
       (traversalEvidence (strip c)) (toolchainEvidence (strip c)) (globEvidence (strip c)) (longEvidence (strip c))
-      (gitScan (tokens (strip c)))) := by
+      (gitScan (tokens (strip c))) ctrl) := by
   rw [scanReading_eq]; simp only [h, if_true]
 
 /-- **No evidence, no change**: the scan gives nothing. -/
-theorem scan_none {c ws : Str} (h : fires (killEvidence (strip c)) (networkEvidence ws (strip c))
+theorem scan_none {c ws : Str} {ctrl : Bool} (h : fires (killEvidence (strip c)) (networkEvidence ws (strip c))
       (outsideEvidence ws (strip c)) (traversalEvidence (strip c)) (toolchainEvidence (strip c)) (globEvidence (strip c))
-      (longEvidence (strip c)) (gitScan (tokens (strip c))) = false) : scanReading c ws = none := by
+      (longEvidence (strip c)) (gitScan (tokens (strip c))) ctrl = false) : scanReading c ws ctrl = none := by
   rw [scanReading_eq]; simp only [h, Bool.false_eq_true, if_false]
 
 /-! ## The detection rules -/
@@ -202,42 +202,42 @@ theorem gitOpOf_unknown_sub {rest : List Str} {s : Str} (hu : rest.any unsafeOpt
 
 /-! ## Each rule gives its field -/
 
-theorem scan_kill {c ws : Str} (h : killEvidence (strip c) = true) :
-    ∃ r, scanReading c ws = some r ∧ r.killByPattern = true :=
+theorem scan_kill {c ws : Str} {ctrl : Bool} (h : killEvidence (strip c) = true) :
+    ∃ r, scanReading c ws ctrl = some r ∧ r.killByPattern = true :=
   ⟨_, scan_fires (by simp [fires, h]), by simp [scanOf, h]⟩
 
-theorem scan_network {c ws : Str} (h : networkEvidence ws (strip c) = true) :
-    ∃ r, scanReading c ws = some r ∧ r.commandClass = .network :=
+theorem scan_network {c ws : Str} {ctrl : Bool} (h : networkEvidence ws (strip c) = true) :
+    ∃ r, scanReading c ws ctrl = some r ∧ r.commandClass = .network :=
   ⟨_, scan_fires (by simp [fires, h]), by simp [scanOf, h]⟩
 
-theorem scan_outside {c ws : Str} (h : outsideEvidence ws (strip c) = true) :
-    ∃ r, scanReading c ws = some r ∧ (r.pathScope = .outside ∨ r.pathScope = .unknown) ∧ r.commandClass ≠ .unknown :=
+theorem scan_outside {c ws : Str} {ctrl : Bool} (h : outsideEvidence ws (strip c) = true) :
+    ∃ r, scanReading c ws ctrl = some r ∧ (r.pathScope = .outside ∨ r.pathScope = .unknown) ∧ r.commandClass ≠ .unknown :=
   ⟨_, scan_fires (by simp [fires, h]), by
     simp only [scanOf, h]; constructor
     · split <;> simp
     · split <;> simp⟩
 
-theorem scan_traversal {c ws : Str} (h : traversalEvidence (strip c) = true) :
-    ∃ r, scanReading c ws = some r ∧ r.pathTraversal = true ∧ r.commandClass ≠ .unknown :=
+theorem scan_traversal {c ws : Str} {ctrl : Bool} (h : traversalEvidence (strip c) = true) :
+    ∃ r, scanReading c ws ctrl = some r ∧ r.pathTraversal = true ∧ r.commandClass ≠ .unknown :=
   ⟨_, scan_fires (by simp [fires, h]), by simp [scanOf, h]; split <;> simp⟩
 
-theorem scan_toolchain {c ws : Str} (h : toolchainEvidence (strip c) = true) :
-    ∃ r, scanReading c ws = some r ∧ r.pathInToolchain = true ∧ r.commandClass ≠ .unknown :=
+theorem scan_toolchain {c ws : Str} {ctrl : Bool} (h : toolchainEvidence (strip c) = true) :
+    ∃ r, scanReading c ws ctrl = some r ∧ r.pathInToolchain = true ∧ r.commandClass ≠ .unknown :=
   ⟨_, scan_fires (by simp [fires, h]), by simp [scanOf, h]; split <;> simp⟩
 
-theorem scan_glob {c ws : Str} (h : globEvidence (strip c) = true) :
-    ∃ r, scanReading c ws = some r ∧ r.pathGlob = true ∧ r.commandClass ≠ .unknown :=
+theorem scan_glob {c ws : Str} {ctrl : Bool} (h : globEvidence (strip c) = true) :
+    ∃ r, scanReading c ws ctrl = some r ∧ r.pathGlob = true ∧ r.commandClass ≠ .unknown :=
   ⟨_, scan_fires (by simp [fires, h]), by simp [scanOf, h]; split <;> simp⟩
 
 /-- **Long**: a token the classifier's path check refuses gives the unknown scope. -/
-theorem scan_long {c ws : Str} (h : longEvidence (strip c) = true) :
-    ∃ r, scanReading c ws = some r ∧ r.pathScope = .unknown :=
+theorem scan_long {c ws : Str} {ctrl : Bool} (h : longEvidence (strip c) = true) :
+    ∃ r, scanReading c ws ctrl = some r ∧ r.pathScope = .unknown :=
   ⟨_, scan_fires (by simp [fires, h]), by simp [scanOf, h]⟩
 
 /-- **git**: the scan's git operation is the most severe of every git token's, and a push names a remote that is
 not allowed. -/
-theorem scan_git {c ws : Str} (h : gitScan (tokens (strip c)) ≠ .none) :
-    ∃ r, scanReading c ws = some r ∧ r.gitOp = gitScan (tokens (strip c)) ∧
+theorem scan_git {c ws : Str} {ctrl : Bool} (h : gitScan (tokens (strip c)) ≠ .none) :
+    ∃ r, scanReading c ws ctrl = some r ∧ r.gitOp = gitScan (tokens (strip c)) ∧
       (r.gitOp = .push → r.remoteClass = .other) := by
   have hf : (gitScan (tokens (strip c)) != GitOp.none) = true := by simpa using h
   refine ⟨_, scan_fires (by simp [fires, hf]), by simp [scanOf], ?_⟩
@@ -268,26 +268,28 @@ theorem gitScan_mem : ∀ toks : List Str, gitScan toks ∈ gitOps
       · simp [gitOps]
     · exact gitScan_mem rest
 
-theorem scanOf_mem (k n o tr tc g l : Bool) (gi : GitOp) (hg : gi ∈ gitOps) (h : fires k n o tr tc g l gi = true) :
-    scanOf k n o tr tc g l gi ∈ scanSpace := by
+theorem scanOf_mem (k n o tr tc g l : Bool) (gi : GitOp) (c : Bool) (hg : gi ∈ gitOps)
+    (h : fires k n o tr tc g l gi c = true) : scanOf k n o tr tc g l gi c ∈ scanSpace := by
   simp only [scanSpace, bools, gitOps, List.mem_flatMap, List.mem_filterMap, List.mem_cons, List.not_mem_nil, or_false]
   refine ⟨k, by cases k <;> simp, n, by cases n <;> simp, o, by cases o <;> simp, tr, by cases tr <;> simp,
-    tc, by cases tc <;> simp, g, by cases g <;> simp, l, by cases l <;> simp, gi, by simpa [gitOps] using hg, by simp [h]⟩
+    tc, by cases tc <;> simp, g, by cases g <;> simp, l, by cases l <;> simp, gi, by simpa [gitOps] using hg,
+    c, by cases c <;> simp, by simp [h]⟩
 
-theorem scanReading_mem {c ws : Str} {r : Reading} (h : scanReading c ws = some r) : r ∈ scanSpace := by
+theorem scanReading_mem {c ws : Str} {ctrl : Bool} {r : Reading} (h : scanReading c ws ctrl = some r) :
+    r ∈ scanSpace := by
   rw [scanReading_eq] at h
   simp only at h
   split at h
   · rename_i hf
     simp only [Option.some.injEq] at h
     subst h
-    exact scanOf_mem _ _ _ _ _ _ _ _ (gitScan_mem _) hf
+    exact scanOf_mem _ _ _ _ _ _ _ _ _ (gitScan_mem _) hf
   · cases h
 
 /-- **Every reading the scan gives is never allowed, and refused unless it is a push alone**, under a policy the
 oracle's `--policy` mode reports as `scan_refused` (all three shipped agent policies are). -/
-theorem scan_safe_reading {p : Core.Checked} (hp : scanSafe p = true) {c ws : Str} {r : Reading}
-    (h : scanReading c ws = some r) :
+theorem scan_safe_reading {p : Core.Checked} (hp : scanSafe p = true) {c ws : Str} {ctrl : Bool} {r : Reading}
+    (h : scanReading c ws ctrl = some r) :
     isAllow (Core.decideReading p (.ok r.json)) = false ∧
       (pushOnly r = true ∨ isRefusal (Core.decideReading p (.ok r.json)) = true) := by
   have := List.all_eq_true.mp hp r (scanReading_mem h)
@@ -295,7 +297,9 @@ theorem scan_safe_reading {p : Core.Checked} (hp : scanSafe p = true) {c ws : St
   exact this
 
 theorem hookReading_unchanged (d : HookDisk) (disk : Str → Disk) (hook : J) (pd : Option Str) (pc : Str)
-    (h : ∀ c, bashCommand? hook = some c → scanReading c (hookCall d hook pd pc).2 = none) :
+    (h : ∀ c, bashCommand? hook = some c →
+      scanReading c (hookCall d hook pd pc).2 (controlEvidence disk (hookCwdOf hook (hookCall d hook pd pc).2) (strip c)) =
+        none) :
     hookReading d disk hook pd pc = classify disk [] (hookCall d hook pd pc).1 := by
   unfold hookReading
   simp only
@@ -320,10 +324,54 @@ theorem hookReading_only_adds_refusals {p : Core.Checked} (hp : scanSafe p = tru
   split
   · split
     · rename_i c _
-      cases hs : scanReading c (hookCall d hook pd pc).2 with
+      cases hs : scanReading c (hookCall d hook pd pc).2
+          (controlEvidence disk (hookCwdOf hook (hookCall d hook pd pc).2) (strip c)) with
       | none => left; rfl
       | some r => right; exact scan_safe_reading hp hs
     · left; rfl
   · left; rfl
+
+
+/-! ## Control paths in a command outside the grammar -/
+
+theorem writeEvidence_of_redirect {t : Str} (h : redirects t = true) : writeEvidence t = true := by
+  simp [writeEvidence, h]
+
+theorem writerEvidence_of : ∀ {toks : List Str} {pre : List Str} {w : Str} {rest : List Str},
+    toks = pre ++ w :: rest → writerAt w rest = true → writerEvidence toks = true
+  | _, [], w, rest, rfl, h => by simp [writerEvidence, h]
+  | _, p :: pre, w, rest, rfl, h => by
+    simp only [List.cons_append, writerEvidence, Bool.or_eq_true]
+    exact Or.inr (writerEvidence_of rfl h)
+
+/-- A file changing program in the text (`rm`, `mv`, `tee`, ..., `sed -i`, `git add`) is evidence of a change. -/
+theorem writeEvidence_of_writer {t : Str} {pre rest : List Str} {w : Str} (hs : tokens t = pre ++ w :: rest)
+    (h : writerAt w rest = true) : writeEvidence t = true := by
+  simp [writeEvidence, writerEvidence_of hs h]
+
+theorem controlEvidence_of {disk : Str → Disk} {cwd t tok : Str} (hw : writeEvidence t = true) (ht : tok ∈ tokens t)
+    (hok : pathOk (scanPath cwd tok) = true) (hc : (disk (scanPath cwd tok)).control = true) :
+    controlEvidence disk cwd t = true := by
+  simp only [controlEvidence, hw, Bool.true_and]
+  exact List.any_eq_true.mpr ⟨tok, ht, by simp [hok, hc]⟩
+
+/-- **A control path in a command outside the grammar.** When a token of the command's text names a path the disk
+says is a control path, and the command is not read-only, the scan gives a change that names a control path. -/
+theorem scan_control {c ws : Str} {ctrl : Bool} (h : ctrl = true) :
+    ∃ r, scanReading c ws ctrl = some r ∧ r.pathControl = true ∧ (r.commandClass = .mutating ∨ r.commandClass = .network) :=
+  ⟨_, scan_fires (by simp [fires, h]), by simp [scanOf, h]⟩
+
+/-- **Under every policy whose scan readings are safe, such a command is refused.** A reading that names a control
+path is never the push alone, so `scanSafe` refuses it. -/
+theorem scan_control_refused {p : Core.Checked} (hp : scanSafe p = true) {c ws : Str} {ctrl : Bool} (h : ctrl = true) :
+    ∃ r, scanReading c ws ctrl = some r ∧ r.pathControl = true ∧
+      isRefusal (Core.decideReading p (.ok r.json)) = true := by
+  obtain ⟨r, hr, hc, _⟩ := scan_control (c := c) (ws := ws) h
+  refine ⟨r, hr, hc, ?_⟩
+  rcases (scan_safe_reading hp hr).2 with hpush | href
+  · exfalso
+    have : r = scanOf false false false false false false false .push false := by simpa [pushOnly] using hpush
+    rw [this] at hc; simp [scanOf] at hc
+  · exact href
 
 end Classifier
