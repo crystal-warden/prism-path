@@ -347,3 +347,65 @@ def test_the_proxy_holds_no_allowlist_and_refuses_everything_without_a_decision(
         client = talk(proxy, connect_line("api.anthropic.com:443"))
         assert status(answer(client)) == 403
         assert wait_log(proxy)[0]["reason"] == "no-decider"
+
+
+# the host parser on its own
+
+@pytest.mark.parametrize("authority,expected", [
+    ("api.anthropic.com:443", ("api.anthropic.com", 443)),
+    ("API.ANTHROPIC.COM:443", ("api.anthropic.com", 443)),
+    ("api.anthropic.com.:443", ("api.anthropic.com", 443)),
+    ("a_b.example:443", ("a_b.example", 443)),
+    ("xn--bcher-kva.example:443", ("xn--bcher-kva.example", 443)),
+])
+def test_parse_accepts_and_normalises(authority, expected):
+    assert parse_authority(authority) == expected
+
+
+@pytest.mark.parametrize("authority,reason", [
+    ("127.0.0.1:443", "ip-literal"),
+    ("127.0.0.1.:443", "ip-literal"),
+    ("2130706433:443", "ip-literal"),
+    ("0x7f000001:443", "ip-literal"),
+    ("0X7F.0.0.1:443", "ip-literal"),
+    ("0177.0.0.1:443", "ip-literal"),
+    ("127.1:443", "ip-literal"),
+    ("1.2.3.4:443", "ip-literal"),
+    ("[::1]:443", "ip-literal"),
+    ("[::ffff:127.0.0.1]:443", "ip-literal"),
+    ("::1:443", "bad-authority"),
+    ("evil.com.127.1:443", "ip-literal"),
+    ("localhost@api.anthropic.com:443", "userinfo"),
+    ("api.anthropic.com@127.0.0.1:443", "userinfo"),
+    ("api.anthropic.com:443@evil.example:443", "userinfo"),
+    ("user:pw@api.anthropic.com:443", "userinfo"),
+    ("api.anthropic.com:0", "bad-port"),
+    ("api.anthropic.com:65536", "bad-port"),
+    ("api.anthropic.com:99999", "bad-port"),
+    ("api.anthropic.com:-1", "bad-port"),
+    ("api.anthropic.com:+443", "bad-port"),
+    ("api.anthropic.com:0443x", "bad-port"),
+    ("api.anthropic.com:", "bad-port"),
+    ("api.anthropic.com", "bad-authority"),
+    (":443", "bad-host"),
+    (".:443", "bad-host"),
+    ("api.anthropic.com..:443", "bad-host"),
+    (".api.anthropic.com:443", "bad-host"),
+    ("api..anthropic.com:443", "bad-host"),
+    ("-bad.example:443", "bad-host"),
+    ("api.anthropic.com\t:443", "bad-authority"),
+    ("api.anthropic.com :443", "bad-authority"),
+    ("api.anthropic.com/path:443", "bad-host"),
+    ("bücher.example:443", "bad-authority"),
+    ("a" * 64 + ".example:443", "bad-host"),
+    ("", "bad-authority"),
+    ("api.anthropic.com:80", "port-not-allowed"),
+])
+def test_parse_refuses_the_odd_forms(authority, reason):
+    with pytest.raises(Refusal) as info:
+        parse_authority(authority)
+    assert info.value.reason == reason
+
+
+def test_parse_lets_a_listed_port_through():
+    assert parse_authority("a.example:8443", allowed_ports=(443, 8443)) == ("a.example", 8443)
