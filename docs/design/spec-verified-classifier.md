@@ -16,7 +16,7 @@ differential harness.
 
 ## 2. What is a function of text and what is not
 
-A reading has twelve fields. Every one is computed from the call's text, except four facts per named path,
+A reading has fourteen fields. Every one is computed from the call's text, except four facts per named path,
 which are read off the disk:
 
 | read off the text (modelled and proved) | read off the disk (observed, not proved) |
@@ -207,8 +207,8 @@ read by the scan and asks, as any command outside the grammar does.
 What it proves (`Control.lean`, `ScanTheorems.lean`): `classify_control`, a path the call names that passes the
 syntactic check and that the disk says is a control path gives `path_control`; `control_refused` and
 `change_on_control_refused`, under a policy the oracle's `--policy` mode reports as `control_refused` (`controlSafe`:
-every one of the 112,896 readings with `path_control` that is a change is refused, computed with the core's own
-evaluator and proved to be all of them by `controlSpace_mem`), a change that names a control path is refused, whatever
+every one of the 2,580,480 readings with `path_control` that is a change is refused, computed with the core's own
+evaluator and proved to be all of them by `control_refused`), a change that names a control path is refused, whatever
 the call; `write_control_refused`, `delete_control_refused` and `run_mutating_control_refused` for the write tool, the
 delete tool and a file changing command; `classify_holder`, `change_on_holder_refused`, `delete_holder_refused`,
 `destroyArgs_rm` and `run_destroy_holder_refused` for a removal or a move of a holder (the holder fact is a disk fact
@@ -226,6 +226,59 @@ source from a destination, `mv x .` in a command outside the grammar counts as a
 Not covered, on purpose: a command that changes a control file through an interpreter or a build tool; a `cd` followed
 by a relative path in a command outside the grammar; a hard link to a `CLAUDE.md` below the first 20,000 entries; a
 control file that does not exist yet and is hard linked after the call (the sandbox's job).
+
+### 4.4 The network (`net_dest`, `proc_class`, cause 130)
+
+The sandboxed agent reaches the network only through a proxy that asks the policy about each connection
+(`docs/design/agent-sandbox-plan.md`, section 3). Classifier version 2 adds the tool `connect`, two reading fields and
+one cause. The proxy does not feed the classifier yet (a later package does); this package defines the call and the
+reading.
+
+A connect call is `{"tool": "connect", "args": {"host": str, "port": int}}`. The port is a true integer (a bool, a
+float or a string fails the schema and the call reads unknown). The Claude Code hook and the MCP mapping never make one,
+and an MCP tool named `connect` reads unknown (the mappings pass through only the classifier's original six tool names).
+Its reading holds `tool` `connect`, `net_dest`, and every other field at its default.
+
+| `net_dest` | when |
+|---|---|
+| `unknown` | the host is not read (`host_ok`) or the port is outside 1 to 65535 |
+| `model_api` | the host is in the constant `MODEL_API` table (`api.anthropic.com`, `platform.claude.com`) and the port is 443 |
+| `allowed_host` | the host is one the owner listed (`Config.allowed_hosts`) and the port is 443 |
+| `other` | every other readable host and port |
+
+A host is read when it is lower case ASCII letters, digits, `-` and `.`, at most 253 characters, has no empty label
+(no leading or trailing dot, no `..`), each label at most 63 characters and not starting or ending with `-`, and its last
+label starts with a digit only when the whole host is a dotted quad of decimal octets without leading zeros. So a trailing
+dot, an upper case letter, userinfo (`@`), a port or a path in the host, a bracketed or colon form of an address, and the
+short forms of an IPv4 address (`127.1`, `2130706433`, `0x7f.0.0.1`) are all `unknown`. A canonical dotted quad is `other`
+unless the owner listed it; the proxy refuses a private or loopback result by itself. The model's table is classifier
+code, so a change to it is a version bump and a signed image, never configuration.
+
+`proc_class` is `none` for every tool but `run_command`. For a command it is `tree` for a program that runs children (every
+wrapper, a builder, a test runner, a package manager, `find` with an exec action), `single` for any other program the
+classifier knows, and `unknown` for a program of the workspace, a privilege program, anything else, an argv that does not
+read, and every reading the hazard scan gives. No starter reads it yet. It exists so a sandbox profile can take its process
+limit from the allow set.
+
+Every starter refuses a reading with `net_dest` `allowed_host`, `other` or `unknown`, and a `connect` that names none, with
+cause 130 `agent:net-refused`, and allows `connect` to `model_api`. The starters list no allowed host, so they refuse
+`allowed_host` too; an owner who lists hosts writes the rule that allows them. The existing readings keep their verdicts:
+none of the old rules reads either new field, and every call that is not a connect has `net_dest` `none`.
+
+What it proves (`Net.lean`): `netDestOf_model_api` and `netDestOf_allowed`, a connect reads `model_api` or `allowed_host`
+only for a host of the table or of the owner's list, on port 443; `netDestOf_other`, any other host reads `other` or
+`unknown`; `netDestOf_unreadable`, an unreadable host or a port outside 1 to 65535 reads `unknown`; `net_refused`, under
+a policy the oracle's `--policy` mode reports as `net_refused` (`netSafe`: every one of the 5,160,960 readings that is a
+`connect` naming no class, or has `net_dest` `other` or `unknown`, is refused, computed with the core's own evaluator),
+every such reading is refused; and `connect_other_refused` and `connect_unreadable_refused`, so a connect to a host that
+is neither in `MODEL_API` nor on the owner's list, whatever the host and port, is refused under every `netSafe` policy. All
+three shipped agent policies are `netSafe`, and the harness requires it. The owner's list reaches the model in its
+`remotes` input as `-host:NAME`, which no push remote can spell.
+
+Not proved: that the proxy decides every connection it opens through this reading, and that the sandbox leaves no other
+route. The reading of a host is text, held to the Lean by the differential harness over a corpus of odd hosts (case,
+trailing and leading dots, userinfo, ports and paths in the host, IP literals in every form, labels at and past their
+limits, non ASCII) and ports (0, 65535, 65536, negatives, past 2 to the 53rd, a bool, a float, a string).
 
 ## 5. What is proven
 
@@ -252,7 +305,7 @@ standard axioms at most (`Axioms.lean` enforces it at every build).
 | `git_unsafe_unknown`, `git_push_remote` | an option that runs a program or moves the repository makes git unknown; a push is to an allowed remote only when its first remote word is allowed (`origin` by default) |
 | `classify_unknown_tool`, `hook_unknown_tool`, `mcp_unknown_tool` | an unknown classifier tool, Claude Code tool or MCP tool reads unknown |
 | `scan_kill`, `scan_network`, `scan_outside`, `scan_traversal`, `scan_toolchain`, `scan_glob`, `scan_long`, `scan_git`, `network_word_in_path_only`, `scan_none`, `hookReading_only_adds_refusals` | the hazard scan (section 4.1): each rule as stated, the path label, no evidence no change, and under every `scanSafe` policy the scan never allows and only adds refusals |
-| `reading_fields` | every reading holds the twelve fields, in canonical order, with `classifier_version` 1 |
+| `reading_fields` | every reading holds the fourteen fields, in canonical order, with `classifier_version` 2 |
 | `accept_fits`, `boundary_accepts_every_reading`, `decide_never_contract` | **the core's boundary never refuses a classifier reading for its shape**: for a policy whose field definitions all fit, the system boundary accepts every reading, so the verdict is a route or no match, never `route:contract-violation`. The three shipped agent policies fit: the oracle's `--policy` mode computes it on each image and the harness requires it |
 
 ## 6. The oracle and the differential harness
