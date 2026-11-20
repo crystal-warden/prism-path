@@ -8,6 +8,11 @@ spec stable.
 
 ## [Unreleased]
 
+### Added: the compile and the egress proxy read the policy (2026-11-20)
+
+- **`compile_profile(image, role)` takes a role, `bash` or `agent`.** The agent role derives `net` from the allow set (`proxy_model` when an allowed connect reads `model_api`, `proxy_allow` when one reads `allowed_host`, `none` otherwise) and keeps the fixed mounts. A profile that carries `net` is `prismpath.profile/2`; one with none (the bash role, and the starters' profile, hash 767dd3c8) keeps its `prismpath.profile/1` bytes.
+- **The egress proxy decides each CONNECT with the signed policy and writes a receipt.** The constant allowlist is gone. `prismpath agent run` loads the recorded policy, refuses to start when it allows no connection to the model API, and takes `--allow-host` for the `allowed_host` class.
+
 ### Added: the classifier reads a connection, version 2 (2026-11-20)
 
 - **The classifier gains the tool `connect` and the reading fields `net_dest` and `proc_class`; `CLASSIFIER_VERSION` is 2.** A connect call (`{"tool": "connect", "args": {"host", "port"}}`) reads `net_dest` `model_api` for a host of the constant `MODEL_API` table on port 443, `allowed_host` for an owner listed host on 443, `unknown` for a host it does not read (upper case, a trailing dot, userinfo, a port or a path in it, short IPv4 forms) or a port outside 1 to 65535, and `other` for the rest. `proc_class` is `single`, `tree` or `unknown` for a command and `none` otherwise. Nothing feeds a connect in yet (the proxy is a later package).

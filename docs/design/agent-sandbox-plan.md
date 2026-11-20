@@ -97,9 +97,9 @@ What it does not guarantee. A model API host accepts any valid API key, so a com
 
 **Recommendation.** A for the first build. It is rootless, uses what is installed, matches a design that is already documented as working in Claude Code's own sandbox, and gives the strongest property (no route), at the cost of one trusted proxy process.
 
-### 2.2 Interim allowlist, stated as a gap
+### 2.2 The proxy reads the policy (was an interim allowlist)
 
-Until the policy fields of section 3 exist, the proxy's allowlist is a constant in the launcher (`api.anthropic.com`, plus `platform.claude.com` for OAuth). That is a permission outside the signed image. It is narrow, fixed per release, and not set by any observation. The launcher records its SHA-256 in the run beside the image hash. It is replaced by readings in WP7. Until then the plan says it plainly, as the tracer results do for the profile hash.
+The first build of the proxy carried a constant allowlist, a permission outside the signed image. WP7 removed it. The proxy has no list of its own: the launcher passes it a gate (`prismpath/agent/egress_policy.py`) that reads each `CONNECT` target as written into a `connect` reading with the classifier (`Config.allowed_hosts` from `--allow-host`), decides it with the reference kernel under the active attested image, and appends a receipt to a run of its own (`egress-<time>-<pid>`, sealed at exit) with the agent profile's hash on the journal line. A refusal is cause 130, an escalation is a refusal at the proxy (nobody is there to answer), and a receipt that cannot be written is a refusal. With no gate and no decider the proxy refuses everything. `compile_profile(image, "agent")` derives the net state from the same image, and `prismpath/tests/test_egress_policy.py` holds both to the Lean oracle over the connect readings.
 
 ### 2.3 Optional hardening, later
 
