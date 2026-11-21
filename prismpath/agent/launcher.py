@@ -163,6 +163,9 @@ def prepare_controls(workspace: Path, out: Controls) -> Controls:
     return controls_module.materialize(controls_module.discover(workspace), out)
 
 
+EGRESS_LOG_NAME = "egress.log"
+
+
 # ------------------------------------------------------------------------------------------------- launch
 def launch(command: Sequence[str], workspace: str, credential: Optional[str] = None,
            egress_log: Optional[str] = None, stage_base: str = STAGE_BASE, max_processes: int = MAX_PROCESSES,
@@ -265,6 +268,8 @@ def launch(command: Sequence[str], workspace: str, credential: Optional[str] = N
             raise LaunchError("bwrap did not start the sandbox, so the program was not run (see its message above)")
         return status
     finally:
+        if egress_log is None and gate is not None and gate.run is not None:
+            egress_log = str(gate.run.dir / EGRESS_LOG_NAME)     # kept with the egress run's receipts unless a path was named
         _teardown(proc, (hook_decider, proxy, model_route), staged, controls, egress_log)
         _seal(gate.run if gate is not None else None, home_dir)
 
