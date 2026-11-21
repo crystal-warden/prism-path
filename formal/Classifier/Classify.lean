@@ -46,16 +46,20 @@ structure PathFacts where
 /-- The syntactic check of a named path: a non empty string with no NUL, at most `MAX_PATH` characters. -/
 def pathOk (raw : Str) : Bool := !raw.isEmpty && !raw.contains '\x00' && raw.length ≤ MAX_PATH
 
-/-- A glob: a pattern character anywhere, or a leading `~`. -/
-def isGlob (raw : Str) : Bool := raw.any isGlobChar || startsWith raw (lit "~")
+/-- A glob: a pattern character anywhere. A leading `~` is not a pattern: it is a home path, read as outside. -/
+def isGlob (raw : Str) : Bool := raw.any isGlobChar
 
 /-- A `..` component. -/
 def isTraversal (raw : Str) : Bool := (splitSlash raw).contains (lit "..")
 
+/-- A home path: its first component is `~` or `~user`. The classifier does not expand it and reads it as
+outside the workspace, whatever `HOME` is on the host (a `~` that is not the first component is an ordinary name). -/
+def isHome (raw : Str) : Bool := startsWith raw (lit "~")
+
 def pathFacts (disk : Str → Disk) (raw : Str) : PathFacts :=
   if pathOk raw then
     let d := disk raw
-    { scope := if d.inside then .workspace else .outside, toolchain := d.toolchain, glob := isGlob raw,
+    { scope := if isHome raw || !d.inside then .outside else .workspace, toolchain := d.toolchain, glob := isGlob raw,
       traversal := isTraversal raw, symlink := d.symlink, control := d.control }
   else { scope := .unknown }
 

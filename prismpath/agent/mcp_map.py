@@ -15,8 +15,8 @@ Two families of MCP tools are read, and nothing else:
   * the file tools of the reference filesystem server (@modelcontextprotocol/server-filesystem), by name,
     with every argument key known. Their paths are host paths: an absolute path is the path it names (a path
     under `/workspace` is spelled `/./workspace/...` so the classifier does not read it as the mount), and a
-    relative path is joined to the directory the server was started in. A path starting with `~` is unknown,
-    since the server expands it and the classifier would not.
+    relative path is joined to the directory the server was started in. A path whose first component is `~` or
+    `~user` is handed over as it is, and the classifier reads it as outside the workspace.
 
       read_text_file, read_media_file, get_file_info          read_file    the path
       list_directory, list_directory_with_sizes, directory_tree list_dir   the path
@@ -63,8 +63,10 @@ def _spell(raw: str) -> str:
 
 def host_path(raw: Any, server_cwd: str) -> Optional[str]:
     """The absolute host path a filesystem tool's path names, spelled for the classifier, or None."""
-    if not isinstance(raw, str) or not raw or raw.startswith("~"):
+    if not isinstance(raw, str) or not raw:
         return None
+    if raw.startswith("~"):
+        return raw              # a home path: the classifier reads it as outside the workspace
     if raw.startswith("/"):
         return _spell(raw)
     return _spell(os.path.join(server_cwd, raw))

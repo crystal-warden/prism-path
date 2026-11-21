@@ -75,9 +75,25 @@ def test_traversal_is_flagged_even_when_it_lands_inside(world):
     assert fields(reading, "path_scope", "path_traversal") == ("workspace", True)
 
 
-@pytest.mark.parametrize("path", ["*.log", "logs/*", "tmp_?.txt", "logs/[ab].log", "{a,b}.txt", "~/x"])
+@pytest.mark.parametrize("path", ["*.log", "logs/*", "tmp_?.txt", "logs/[ab].log", "{a,b}.txt"])
 def test_globs_are_flagged(world, path):
     assert classify({"tool": "delete_path", "args": {"path": path}}, world[0])["path_glob"] is True
+
+
+@pytest.mark.parametrize("path", ["~", "~/x", "~/.ssh/config", "~root", "~root/x"])
+def test_a_home_path_reads_as_outside(world, path, monkeypatch):
+    """The first component `~` or `~user` is never expanded: outside, even when HOME is the workspace."""
+    config, ws, _ = world
+    monkeypatch.setenv("HOME", str(ws))
+    for tool, args in (("read_file", {"path": path}), ("write_file", {"path": path, "content": ""}), ("list_dir", {"path": path})):
+        reading = classify({"tool": tool, "args": args}, config)
+        assert fields(reading, "path_scope", "path_glob") == ("outside", False), (tool, path)
+
+
+@pytest.mark.parametrize("path", ["foo/~bar", "a~", "./~x"])
+def test_a_tilde_that_is_not_the_first_component_is_a_name(world, path):
+    reading = classify({"tool": "write_file", "args": {"path": path, "content": ""}}, world[0])
+    assert fields(reading, "path_scope", "path_glob") == ("workspace", False)
 
 
 def test_symlinks_are_flagged_and_resolved(world):

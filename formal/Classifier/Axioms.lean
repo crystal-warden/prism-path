@@ -55,6 +55,8 @@ elab "#assert_standard_axioms " id:ident : command => do
 #assert_standard_axioms Classifier.workspace_program_mutating
 #assert_standard_axioms Classifier.pathFacts_traversal
 #assert_standard_axioms Classifier.pathFacts_glob
+#assert_standard_axioms Classifier.pathFacts_home
+#assert_standard_axioms Classifier.classify_home
 #assert_standard_axioms Classifier.classify_traversal
 #assert_standard_axioms Classifier.classify_glob
 #assert_standard_axioms Classifier.isGlob_of_char

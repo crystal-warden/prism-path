@@ -130,7 +130,7 @@ def _absolute(raw: Any, cwd: str) -> Optional[str]:
     if not isinstance(raw, str) or not raw:
         return None
     if raw.startswith("~"):
-        return None             # the classifier would read ~ as a workspace entry; a person reads it
+        return raw              # a home path: the classifier reads it as outside the workspace, never expanded
     if raw.startswith("/"):
         return _spell(raw)
     return _spell(os.path.join(cwd, raw))
@@ -294,8 +294,9 @@ def _list_call(name: str, tool_input: Dict[str, Any], cwd: str) -> Dict[str, Any
         if not isinstance(pattern, str) or not pattern:
             return _unknown()
         if pattern.startswith("~"):
-            return _unknown()
-        path = _spell(pattern) if pattern.startswith("/") else base_abs.rstrip("/") + "/" + pattern
+            path = pattern      # a home pattern reads as outside the workspace, like a home path
+        else:
+            path = _spell(pattern) if pattern.startswith("/") else base_abs.rstrip("/") + "/" + pattern
         return {"tool": "list_dir", "args": {"path": path}}
     return {"tool": "list_dir", "args": {"path": base_abs}}
 

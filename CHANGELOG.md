@@ -29,6 +29,10 @@ spec stable.
   read only program and every plain git read, with the options each prints in its own help, in a temporary tree, and
   requires the tree unchanged and no child run.
 
+### Fixed: file tool paths that start with `~` refuse as outside the workspace (2026-11-20)
+
+- **A path whose first component is `~` or `~user` reads as outside the workspace** for Read, Write, Edit, MultiEdit, NotebookEdit, Glob, Grep and the filesystem server's tools, so the agent's own Read of `~/.ssh/config` refuses with cause 111 where it was asked with 124. The rule is always outside, whatever `HOME` is, as the Bash scan already reads it. A `~` that is not the first component is an ordinary name, and a leading `~` no longer sets `path_glob`. Proved in Lean (`pathFacts_home`, `classify_home`), covered by the oracle, the differential harness and four recorded hook inputs.
+
 ### Added: gateway grants (2026-11-21)
 
 - **`prismpath gateway grant --path-class CLASS --method-class CLASS --ttl SECONDS` signs a grant with the gateway home's authority key, and the gateway reads the `X-PrismPath-Grant` header as the request's `grant` field.** A grant (`prismpath.grant/1`, canon/2, Ed25519 over a domain-separated document) names the route and method classes it covers, the policy image it was issued under and a window of at most 30 days. It names no holder, so it is the same grant whoever presents it. It reads `valid` only when it verifies under this gateway's key and policy, covers the request and is in force, `expired` past its window, and `invalid` otherwise. `prismpath gateway revoke --grant-id ID` adds it to `grants.revoked` in the home, which is read again when it changes, so the next request that presents it is refused; a list that cannot be read revokes every grant. The grant id and the SHA-256 of the grant are kept on the receipt's journal line, and the grant header is never forwarded. The demo policy lets a granted read reach the admin routes.
