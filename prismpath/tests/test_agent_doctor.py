@@ -115,7 +115,7 @@ def test_the_cli_exits_0_when_nothing_fails_and_prints_a_line_per_check(setup):
     text = done.stdout.decode()
     # the budget is the real 150 ms here, so the dry run may warn on a slow machine, which still exits 0
     assert done.returncode == 0, text + done.stderr.decode()
-    assert text.count("\n") == 16 and "0 fail" in text
+    assert text.count("\n") == 15 and "0 fail" in text
     assert "budget" in text and "150 ms" in text
 
 
