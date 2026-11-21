@@ -72,6 +72,18 @@ struct { __uint(type, BPF_MAP_TYPE_ARRAY); __type(key, __u32); __type(value, str
 struct { __uint(type, BPF_MAP_TYPE_ARRAY); __type(key, __u32); __type(value, __u64);
          __uint(max_entries, MAX_NODES); } verdict_map SEC(".maps");
 
+/* Frames the front end cannot read, counted by reason (the NET_REFUSED_* indices below). The count is kept whether
+ * or not the program is enforcing; what a refused frame gets is decided in `refuse`. */
+#define NET_REFUSED_IPV6      0
+#define NET_REFUSED_VLAN      1
+#define NET_REFUSED_ETHERTYPE 2
+#define NET_REFUSED_SHORT     3
+#define NET_REFUSED_IHL       4
+#define NET_REFUSED_ARP       5
+#define NET_REFUSED_KINDS     8
+struct { __uint(type, BPF_MAP_TYPE_ARRAY); __type(key, __u32); __type(value, __u64);
+         __uint(max_entries, NET_REFUSED_KINDS); } refused_map SEC(".maps");
+
 /* Two banks of every table map above, so the evaluator must offset each index by a whole bank; the
  * other three programs hold one bank and this switch compiles that arithmetic away for them. */
 #define PPT_EVAL_BANKED 1
@@ -87,20 +99,50 @@ static __always_inline void set_reg(struct ppt_regfile *regfile, __u32 slot, __s
     regfile->reg[slot & (MAX_FIELDS_PER_PKT - 1)].val = val;
 }
 
+/* A frame this program cannot classify. It is counted, then dropped when the active table enforces (a node of
+ * its drop mask exists) and passed when the table only observes, so an observe-only attach on a mirror never
+ * changes traffic. Closed means: IPv6, a VLAN tag (802.1Q or 802.1ad), any other ethertype and a truncated or
+ * malformed IPv4 header are refused, because the table's address fields hold IPv4 only and nothing here can say
+ * what such a frame would have been decided. ARP is the one exception, counted and passed: it carries no
+ * routable payload and a segment cannot resolve a neighbour without it. */
+static __always_inline int refuse(__u32 reason, int closed)
+{
+    __u64 *cnt = bpf_map_lookup_elem(&refused_map, &reason);
+    if (cnt) __sync_fetch_and_add(cnt, 1);
+    if (reason == NET_REFUSED_ARP) return XDP_PASS;
+    return closed ? XDP_DROP : XDP_PASS;
+}
+
 SEC("xdp")
 int ppt_net_prog(struct xdp_md *ctx)
 {
     void *data = (void *)(long)ctx->data;
     void *data_end = (void *)(long)ctx->data_end;
 
+    /* Read the active bank ONCE — a single aligned load, atomic against the loader's flip. Every
+     * table access below is confined to this bank; whichever value we read (old or new), the whole
+     * policy we evaluate is internally consistent. */
+    __u32 zero_key = 0;
+    __u32 *bank_ptr = bpf_map_lookup_elem(&bank_map, &zero_key);
+    __u32 bank = (bank_ptr ? *bank_ptr : 0) & 1;
+
+    struct ppt_config *cfg = bpf_map_lookup_elem(&config_map, &bank);   /* per-bank config */
+    int closed = cfg && cfg->drop_mask != 0;
+
     struct ethhdr *eth = data;
-    if ((void *)(eth + 1) > data_end) return XDP_PASS;
-    if (eth->h_proto != bpf_htons(ETH_P_IP)) return XDP_PASS;      /* IPv4 only in v1 */
+    if ((void *)(eth + 1) > data_end) return refuse(NET_REFUSED_SHORT, closed);
+    if (eth->h_proto != bpf_htons(ETH_P_IP)) {                     /* IPv4 only */
+        if (eth->h_proto == bpf_htons(ETH_P_IPV6)) return refuse(NET_REFUSED_IPV6, closed);
+        if (eth->h_proto == bpf_htons(ETH_P_8021Q) || eth->h_proto == bpf_htons(ETH_P_8021AD))
+            return refuse(NET_REFUSED_VLAN, closed);
+        if (eth->h_proto == bpf_htons(ETH_P_ARP)) return refuse(NET_REFUSED_ARP, closed);
+        return refuse(NET_REFUSED_ETHERTYPE, closed);
+    }
 
     struct iphdr *iph = (void *)(eth + 1);
-    if ((void *)(iph + 1) > data_end) return XDP_PASS;
+    if ((void *)(iph + 1) > data_end) return refuse(NET_REFUSED_SHORT, closed);
     __u32 ihl = iph->ihl * 4;
-    if (ihl < sizeof(struct iphdr)) return XDP_PASS;
+    if (ihl < sizeof(struct iphdr)) return refuse(NET_REFUSED_IHL, closed);
 
     __s32 src_ip = (__s32)bpf_ntohl(iph->saddr);
     __s32 dst_ip = (__s32)bpf_ntohl(iph->daddr);
@@ -150,14 +192,6 @@ int ppt_net_prog(struct xdp_md *ctx)
         set_reg(regfile, 6, tcp_flags);
     set_reg(regfile, 7, ttl);
 
-    /* Read the active bank ONCE — a single aligned load, atomic against the loader's flip. Every
-     * table access below is confined to this bank; whichever value we read (old or new), the whole
-     * policy we evaluate is internally consistent. */
-    __u32 zero_key = 0;
-    __u32 *bank_ptr = bpf_map_lookup_elem(&bank_map, &zero_key);
-    __u32 bank = (bank_ptr ? *bank_ptr : 0) & 1;
-
-    struct ppt_config *cfg = bpf_map_lookup_elem(&config_map, &bank);   /* per-bank config */
     __u32 start_node = cfg ? cfg->start_node : 0;
 
     __s32 matched_edge = -1, target_node = -1;

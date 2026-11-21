@@ -19,8 +19,9 @@ Compile with `prismpath policy compile demo.rules.md -o demo.core.json`.
 A request the gateway cannot read, a body it will not take and a grant that does not verify are refused before anything else is looked at.
 -> refuse gateway:request-refused: when method_class == "unknown" or path_class == "unknown" or body_class in ["unknown", "oversize"] or content_class == "unknown" or query == "unknown" or grant == "invalid"
 
-The admin routes need a valid grant. Grants are not built yet, so nothing reaches them.
+The admin routes need a valid grant, signed by the gateway's authority key for the admin class and the request's method class.
 -> refuse gateway:request-refused: when path_class == "admin" and grant != "valid"
+-> allow: when path_class == "admin" and method_class == "read" and body_class == "none" and grant == "valid"
 
 What runs: reads of the orders and of everything else that has no body, and a JSON order written with a valid grant.
 -> allow: when path_class == "orders" and method_class == "read" and body_class == "none"

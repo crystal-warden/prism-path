@@ -6,7 +6,8 @@ Each hook call of an agent is a separate short-lived process, so the receipts of
 a run directory, one per session id under a root the caller names (`RunStore`). A run holds:
 
   * `image.bin`: the policy image of the session, written once; a later call with other bytes is refused;
-  * `journal.jsonl`: the open part. One canon/2 line per decided reading, `{"i", "reading" (hex), "receipt"}`,
+  * `journal.jsonl`: the open part. One canon/2 line per decided reading, `{"i", "reading" (hex), "receipt"}`
+    (and the `sandbox` profile hash of an allowed shell call or the `grant` a gateway request presented),
     where `receipt` is exactly the `prismpath.core-receipt/1` that `evidence.EpisodeRun.record` writes;
   * `lock`: the lock file every operation takes exclusively (`fcntl.flock`);
   * `journal.prefix`: the validated-prefix record that keeps an append's cost independent of the run's length;
@@ -98,6 +99,30 @@ _OPTIONAL_OUTCOME_KEYS = {"tool_use_id", "failure"}
 _TOOL_USE_ID = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
 LOCK = "lock"
 _SAFE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+
+
+
+_HEX64 = re.compile(r"[0-9a-f]{64}")
+_GRANT_ID = re.compile(r"[0-9a-f]{32}")
+
+
+def _extras_ok(entry: Dict[str, Any]) -> bool:
+    """A journal line holds `i`, `reading` and `receipt`, and at most a sandbox record, a tool_use_id and a grant."""
+    if not {"i", "reading", "receipt"} <= set(entry) <= {"i", "reading", "receipt", "sandbox", "tool_use_id", "grant"}:
+        return False
+    sandbox, grant = entry.get("sandbox"), entry.get("grant")
+    if "sandbox" in entry and not (isinstance(sandbox, dict)
+                                   and set(sandbox) in ({"profile_sha256"}, {"profile_sha256", "backend"})
+                                   and _HEX64.fullmatch(str(sandbox["profile_sha256"]))
+                                   and sandbox.get("backend", "bwrap") in ("bwrap", "landlock")):
+        return False
+    if "tool_use_id" in entry and not valid_tool_use_id(entry["tool_use_id"]):
+        return False
+    if "grant" in entry and not (isinstance(grant, dict) and set(grant) == {"grant_id", "grant_sha256"}
+                                 and _GRANT_ID.fullmatch(str(grant["grant_id"]))
+                                 and _HEX64.fullmatch(str(grant["grant_sha256"]))):
+        return False
+    return True
 
 
 class RunError(Exception):
@@ -312,12 +337,7 @@ class Run:
                       and receipt["case"] == self.session and receipt["reading"] == n
                       and receipt["reading_sha256"] == core_evidence.sha256_hex(reading)
                       and receipt["image_sha256"] == image_sha
-                      and {"i", "reading", "receipt"} <= set(entry) <= {"i", "reading", "receipt", "sandbox", "tool_use_id"}
-                      and ("tool_use_id" not in entry or valid_tool_use_id(entry["tool_use_id"]))
-                      and ("sandbox" not in entry or (isinstance(entry["sandbox"], dict)
-                                                      and set(entry["sandbox"]) in ({"profile_sha256"}, {"profile_sha256", "backend"})
-                                                      and re.fullmatch(r"[0-9a-f]{64}", str(entry["sandbox"]["profile_sha256"]))
-                                                      and entry["sandbox"].get("backend", "bwrap") in ("bwrap", "landlock"))))
+                      and _extras_ok(entry))
             except Exception:
                 ok = False
             if not ok:
@@ -336,7 +356,7 @@ class Run:
 
     def append(self, reading: bytes, verdict: Dict[str, Any], decider: str = DECIDER,
                sandbox_profile: Optional[str] = None, sandbox_backend: Optional[str] = None,
-               tool_use_id: Optional[str] = None) -> int:
+               tool_use_id: Optional[str] = None, grant: Optional[Dict[str, str]] = None) -> int:
         """Record one decided reading as the next receipt, durably, and return its index. `sandbox_profile` is the
         SHA-256 of the sandbox profile the allowed call was rewritten to run under; it is kept on the journal
         line beside the receipt (the receipt is exactly `prismpath.core-receipt/1`, which has no such field),
@@ -345,7 +365,7 @@ class Run:
         none was written before the backend was recorded and means bwrap. `tool_use_id`, the id Claude Code gave the
         call, is kept the same way (an optional key of the line, never in the receipt), so the PostToolUse outcome of
         that call can be bound to this receipt (`Run.outcome_of_hook`). A value that is not shaped like an id is left
-        off."""
+        off. `grant` is the `{"grant_id", "grant_sha256"}` of the grant a gateway request presented, kept the same way."""
         with _locked(self.dir / LOCK):
             n = self._scan(full=False)[0]
             image = (self.dir / IMAGE).read_bytes()
@@ -360,6 +380,10 @@ class Run:
                     entry["sandbox"]["backend"] = sandbox_backend
             if valid_tool_use_id(tool_use_id):
                 entry["tool_use_id"] = tool_use_id
+            if grant is not None:
+                entry["grant"] = {"grant_id": grant["grant_id"], "grant_sha256": grant["grant_sha256"]}
+            if not _extras_ok(entry):
+                raise RunError(f"session {self.session}: a journal line's sandbox or grant record is malformed")
             line = canon2.dumps(entry) + b"\n"
             path = self.dir / JOURNAL
             new = not path.exists()

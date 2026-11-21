@@ -394,7 +394,7 @@ PIDS = ["1", "12", "1234", "0", "00", "007", "-1", "\u0661\u0662", "\xb2", "1a",
 SIGNALS = ["-9", "-KILL", "-SIGKILL", "-s", "TERM", "-sKILL", "-15", "-K1", "-k", "-9\n", "-\u0669", "-\u0669", "-\xb2",
            "-\u0130", "-K\u0669"]
 PATHS = [".", "..", "./a", "a/../b", "../decoy/x", "src/app.py", "notes.txt", "/etc/passwd", "/etc", "/", "//",
-         "/workspace", "/workspace/a", "/workspace/../x", "/./workspace/a", "/workspacex", "~", "~/x", "~root", "a~",
+         "/workspace", "/workspace/a", "/workspace/../x", "/./workspace/a", "/workspacex", "~", "~/x", "~root", "~root/x", "~/.ssh/config", "foo/~bar", "a~",
          "*.txt", "a?b", "[ab]", "{a,b}", "x}", "a/**/b", "a\x00b", "a" * 4097, "a" * 4096, ".claude/settings.json", ".claude/settings.local.json", ".claude/hooks/pre.sh", ".mcp.json", ".claude",
          "src/../.claude/settings.json", ".claude/commands/x.md", ".CLAUDE/Settings.json", ".git/hooks/pre-commit", ".git/config", ".git", "CLAUDE.md",
          "sub/CLAUDE.local.md", "AGENTS.md", "/workspace/.mcp.json", "x//y", "a/", "a/.",
@@ -730,7 +730,7 @@ def gen_hook(rng: random.Random, ws: str) -> Tuple[Dict[str, Any], Optional[str]
     elif name in ("Glob", "Grep", "LS"):
         ti = {}
         if rng.random() < 0.7:
-            ti["pattern"] = rng.choice(["**/*.py", "*.txt", "/etc/*", "../*", "~/x", "", "TODO", "a/b", 5])
+            ti["pattern"] = rng.choice(["**/*.py", "*.txt", "/etc/*", "../*", "~/x", "~/*", "foo/~bar", "", "TODO", "a/b", 5])
         if rng.random() < 0.6:
             ti["path"] = rng.choice([path(), "", None, 3])
         if rng.random() < 0.05:

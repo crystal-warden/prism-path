@@ -81,6 +81,17 @@ theorem merge_unknown {fs : List PathFacts} {f : PathFacts} (hf : f ∈ fs) (hu 
     simp only [mergeOne, hu]
     cases r.pathScope <;> simp [Scope.rank]
 
+/-- A member that reads outside or unknown makes the merged scope outside or unknown. -/
+theorem merge_outside {fs : List PathFacts} {f : PathFacts} (hf : f ∈ fs) (hu : f.scope = .outside)
+    (r : Reading) : (mergePaths r fs).pathScope = .outside ∨ (mergePaths r fs).pathScope = .unknown := by
+  refine mergePaths_of_mem (P := fun r => r.pathScope = .outside ∨ r.pathScope = .unknown) ?_ ?_ hf
+  · intro r g h
+    simp only [mergeOne]
+    rcases h with h | h <;> cases hg : g.scope <;> simp [Scope.rank, h]
+  · intro r
+    simp only [mergeOne, hu]
+    cases r.pathScope <;> simp [Scope.rank]
+
 /-! ## Determinism and locality -/
 
 theorem pathFacts_congr {f g : Str → Disk} {raw : Str} (h : pathOk raw = true → f raw = g raw) :
@@ -473,6 +484,12 @@ theorem pathFacts_traversal (disk : Str → Disk) {raw : Str} (h : isTraversal r
     (pathFacts disk raw).traversal = true ∨ (pathFacts disk raw).scope = .unknown := by
   unfold pathFacts; split <;> simp [h]
 
+/-- **A home path reads as outside the workspace**, whatever the disk says (or is unknown when the path is
+unreadable): `~` and `~user` are never expanded and never read as a workspace entry. -/
+theorem pathFacts_home (disk : Str → Disk) {raw : Str} (h : isHome raw = true) :
+    (pathFacts disk raw).scope = .outside ∨ (pathFacts disk raw).scope = .unknown := by
+  unfold pathFacts; split <;> simp [h]
+
 theorem pathFacts_glob (disk : Str → Disk) {raw : Str} (h : isGlob raw = true) :
     (pathFacts disk raw).glob = true ∨ (pathFacts disk raw).scope = .unknown := by
   unfold pathFacts; split <;> simp [h]
@@ -489,6 +506,16 @@ theorem classify_traversal {disk : Str → Disk} {remotes : List Str} {call : J}
   · exact Or.inl (merge_traversal hm h _)
   · exact Or.inr (merge_unknown hm h _)
 
+/-- At the level of the reading: a call that names a home path never reads as a workspace path or no path. -/
+theorem classify_home {disk : Str → Disk} {remotes : List Str} {call : J} {p : Str}
+    (hp : p ∈ (plan remotes call).2) (hh : isHome p = true) :
+    (classify disk remotes call).pathScope = .outside ∨ (classify disk remotes call).pathScope = .unknown := by
+  rw [classify_eq]
+  have hm : pathFacts disk p ∈ (plan remotes call).2.map (pathFacts disk) := List.mem_map_of_mem hp
+  rcases pathFacts_home disk hh with h | h
+  · exact merge_outside hm h _
+  · exact Or.inr (merge_unknown hm h _)
+
 /-- **A glob character gives path_glob**, in the same sense. -/
 theorem classify_glob {disk : Str → Disk} {remotes : List Str} {call : J} {p : Str}
     (hp : p ∈ (plan remotes call).2) (hg : isGlob p = true) :
@@ -500,8 +527,8 @@ theorem classify_glob {disk : Str → Disk} {remotes : List Str} {call : J} {p :
   · exact Or.inr (merge_unknown hm h _)
 
 theorem isGlob_of_char {raw : Str} {c : Char} (hc : c ∈ raw) (hg : isGlobChar c = true) : isGlob raw = true := by
-  simp only [isGlob, Bool.or_eq_true, List.any_eq_true]
-  exact Or.inl ⟨c, hc, hg⟩
+  simp only [isGlob, List.any_eq_true]
+  exact ⟨c, hc, hg⟩
 
 theorem isTraversal_of_component {raw : Str} (h : lit ".." ∈ splitSlash raw) : isTraversal raw = true := by
   simp [isTraversal, h]
