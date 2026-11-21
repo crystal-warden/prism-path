@@ -337,7 +337,7 @@ def _path_token(token: str, workspace: str) -> bool:
 
 def _git_op_of(rest: List[str]) -> str:
     """What the tokens after a `git` token say it does (formal/Classifier/Scan.lean, gitOpOf)."""
-    if any(arg == option or arg.startswith(option + "=") for arg in rest for option in classifier.GIT_UNSAFE_OPTIONS):
+    if any(classifier.git_unsafe_option(arg) for arg in rest):
         return "unknown"
     sub = next((arg for arg in rest if not arg.startswith("-")), None)
     if sub is None:
@@ -372,7 +372,7 @@ def _git_scan(tokens: List[str]) -> str:
 # build tool (`python`, `pytest`, `make`) is not one: what it writes is not in the text, and the command asks.
 SCAN_WRITERS = frozenset({"rm", "rmdir", "mv", "cp", "ln", "chmod", "chown", "chgrp", "touch", "mkdir", "dd", "truncate",
                           "shred", "tee", "install", "unlink", "tar", "unzip", "zip", "gzip", "gunzip", "patch", "vim",
-                          "vi", "nano", "ed"})
+                          "vi", "nano", "ed", "sed", "sort", "uniq", "xxd", "tree"})
 _GIT_WRITE_WORDS = frozenset(classifier.GIT_LOCAL_WRITE | classifier.GIT_MUTATING | {"reset"})
 
 
@@ -380,9 +380,6 @@ def _writer_at(token: str, rest: List[str]) -> bool:
     base = os.path.basename(token)
     return (base in SCAN_WRITERS
             or (base == "find" and any(arg in classifier._FIND_EFFECTS for arg in rest))
-            or (base == "sed" and any(arg == "-i" or arg.startswith("-i") or arg.startswith("--in-place") for arg in rest))
-            or (base == "sort" and any(arg == "-o" or arg.startswith("--output") for arg in rest))
-            or (base == "tree" and "-o" in rest)
             or (base == "git" and any(arg in _GIT_WRITE_WORDS for arg in rest)))
 
 

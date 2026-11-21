@@ -124,7 +124,7 @@ def test_the_lean_oracle_decides_every_reading_as_the_reference(agent_policy):
 
 
 @pytest.mark.parametrize("change,cause", [
-    ({"classifier_version": 3}, "route:contract-violation"),
+    ({"classifier_version": 4}, "route:contract-violation"),
     ({"path_glob": 1}, "route:contract-violation"),
     ({"tool": None}, "route:contract-violation"),
 ])
@@ -146,7 +146,7 @@ def test_a_reading_not_in_its_canonical_bytes_or_with_a_float_is_refused(agent_p
     reading = {**classifier.base_reading(), "tool": "list_dir", "path_scope": "workspace"}
     spaced = canon2.dumps(reading).replace(b",", b", ")
     assert agent_policy.decide(spaced).cause == "reading:not-canonical"
-    floated = canon2.dumps(reading).replace(b'"classifier_version":2', b'"classifier_version":2.0')
+    floated = canon2.dumps(reading).replace(b'"classifier_version":3', b'"classifier_version":3.0')
     assert agent_policy.decide(floated).cause == "reading:unreadable"
     assert agent_policy.decide(b"[1]").cause == "reading:not-object"
 

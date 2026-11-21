@@ -123,7 +123,7 @@ def test_a_core_refusal_is_its_own_row(project):
     # a reading the policy has no rule for: a git push to an unlisted remote in a tool the classifier calls unknown
     from prismpath.agent import commands
     policy, store = commands.load_checked(commands.config_dir({"HOME": str(home)}, "linux"))
-    reading = {"classifier_version": 2, "net_dest": "none", "proc_class": "none", "tool": "git", "path_scope": "none", "path_in_toolchain": False,
+    reading = {"classifier_version": 3, "net_dest": "none", "proc_class": "none", "tool": "git", "path_scope": "none", "path_in_toolchain": False,
                "path_glob": False, "path_traversal": False, "path_symlink": False, "path_control": False,
                "command_class": "none",
                "kill_by_pattern": False, "git_op": "none", "remote_class": "none"}
