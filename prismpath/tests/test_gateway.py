@@ -112,7 +112,7 @@ def test_a_grant_read_without_a_verifier():
 def test_demo_policy_compiles_to_the_shipped_image_and_is_registered():
     text = (POLICY / "demo.rules.md").read_text(encoding="utf-8")
     assert policy_source.compile_source(text) + b"\n" == (POLICY / "demo.core.json").read_bytes()
-    assert causes.code("gateway:request-refused") == 131 and max(causes.CODES) == 132
+    assert causes.code("gateway:request-refused") == 131 and max(causes.CODES) == 134
     from prismpath.agent.policy import Policy
     assert sorted(Policy.load(POLICY / "demo.core.json").fields) == sorted(rd.FIELDS)
 
