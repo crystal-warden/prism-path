@@ -20,10 +20,13 @@ from prismpath.hotswap import policy_pack as pp  # noqa: E402
 from prismpath.telemetry import facet_mcp as fm  # noqa: E402
 from prismpath.telemetry import packed, selfheal  # noqa: E402
 
-ROOT = Path(__file__).resolve().parents[3]
+from prismpath.tests._repo import REPO_ROOT as ROOT  # noqa: E402
+
 FUSION = ROOT / "adapters/fusion/flows/fusion_triage.md"
 INPUT = ROOT / "prismpath-hw/demo/flows/demo_input.md"
 INTENT = ROOT / "integrations/governed_intent/policy/intent_calls.core.json"
+if not all(path.exists() for path in (FUSION, INPUT, INTENT)):   # skipped here so the acceptance skip budget can name this file
+    pytest.skip("the three policies the server is tested with are only in a repo checkout", allow_module_level=True)
 BLOCK_BITS = 64
 
 
