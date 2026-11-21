@@ -65,20 +65,24 @@ def signals(stderr: bytes, timed_out: bool = False) -> List[Dict[str, str]]:
     return found
 
 
-def observed(returncode: int, stderr: bytes, timed_out: bool = False) -> Optional[Dict[str, Any]]:
-    """The `observed` body for one finished sandboxed command, or None when its stderr shows nothing."""
+def observed(returncode: int, stderr: bytes, timed_out: bool = False, backend: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """The `observed` body for one finished sandboxed command, or None when its stderr shows nothing. `backend` is
+    the per call sandbox that ran the command (`bwrap` or `landlock`)."""
     found = signals(stderr, timed_out)
     if not found:
         return None
-    return {"method": METHOD, "exit_status": int(returncode), "timed_out": bool(timed_out), "signals": found}
+    body = {"method": METHOD, "exit_status": int(returncode), "timed_out": bool(timed_out), "signals": found}
+    if backend:
+        body["backend"] = str(backend)[:16]
+    return body
 
 
 def record(run_dir: str, session: str, receipt: int, image_sha256: str, profile_sha256: str,
-           returncode: int, stderr: bytes, timed_out: bool = False) -> Optional[int]:
+           returncode: int, stderr: bytes, timed_out: bool = False, backend: Optional[str] = None) -> Optional[int]:
     """Record the observation of one finished command on the run, bound to the receipt `receipt` of the allowed
     call. Returns its sequence number, or None when there was nothing to record. Imported late so a command
     that shows nothing does not pay for the run store."""
-    body = observed(returncode, stderr, timed_out)
+    body = observed(returncode, stderr, timed_out, backend)
     if body is None:
         return None
     from pathlib import Path
@@ -105,7 +109,7 @@ def socket_argv(socket_path: str, session: str, receipt: int, image_sha256: str,
 
 
 def send(socket_path: str, session: str, receipt: int, image_sha256: str, profile_sha256: str,
-         returncode: int, stderr: bytes, timed_out: bool = False) -> None:
+         returncode: int, stderr: bytes, timed_out: bool = False, backend: Optional[str] = None) -> None:
     """Ask the decider to record the observation of one finished command (standard library only). The decider
     reads the error texts itself, from the tail of `stderr`, and refuses a receipt or a hash that is not the
     call's. What a caller inside the sandbox sends is a claim, and it can only add knowledge, never widen anything."""
@@ -114,7 +118,7 @@ def send(socket_path: str, session: str, receipt: int, image_sha256: str, profil
     text = stderr[-MAX_STDERR:].decode("utf-8", "replace")
     body = json.dumps({"hook_event_name": EVENT, "session_id": session, "receipt": int(receipt),
                        "image_sha256": image_sha256, "profile_sha256": profile_sha256, "returncode": int(returncode),
-                       "timed_out": bool(timed_out), "stderr": text}).encode("utf-8")
+                       "timed_out": bool(timed_out), "stderr": text, "backend": backend or ""}).encode("utf-8")
     sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     try:
         sock.settimeout(SOCKET_TIMEOUT_S)
