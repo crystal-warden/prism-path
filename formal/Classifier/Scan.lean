@@ -120,7 +120,8 @@ def gitScan : List Str → GitOp
 /-- The programs whose name in a command's text is evidence that it changes files. An interpreter or a build
 tool is not among them: what it writes is not in the text. -/
 def SCAN_WRITERS : List Str := wordsOf ["rm", "rmdir", "mv", "cp", "ln", "chmod", "chown", "chgrp", "touch", "mkdir", "dd",
-  "truncate", "shred", "tee", "install", "unlink", "tar", "unzip", "zip", "gzip", "gunzip", "patch", "vim", "vi", "nano", "ed"]
+  "truncate", "shred", "tee", "install", "unlink", "tar", "unzip", "zip", "gzip", "gunzip", "patch", "vim", "vi", "nano", "ed",
+  "sed", "sort", "uniq", "xxd", "tree"]
 
 def gitWriteWord (a : Str) : Bool := GIT_LOCAL_WRITE.contains a || GIT_MUTATING.contains a || a == lit "reset"
 
@@ -128,9 +129,6 @@ def gitWriteWord (a : Str) : Bool := GIT_LOCAL_WRITE.contains a || GIT_MUTATING.
 def writerAt (t : Str) (rest : List Str) : Bool :=
   SCAN_WRITERS.contains (basename t) ||
   (basename t == lit "find" && rest.any (fun a => FIND_EFFECTS.contains a)) ||
-  (basename t == lit "sed" && rest.any (fun a => a == lit "-i" || startsWith a (lit "-i") || startsWith a (lit "--in-place"))) ||
-  (basename t == lit "sort" && rest.any (fun a => a == lit "-o" || startsWith a (lit "--output"))) ||
-  (basename t == lit "tree" && rest.contains (lit "-o")) ||
   (basename t == lit "git" && rest.any gitWriteWord)
 
 def writerEvidence : List Str → Bool

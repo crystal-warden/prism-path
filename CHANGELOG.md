@@ -12,6 +12,27 @@ spec stable.
 
 - **`prismpath-telemetry-rs` builds each Fibonacci code as an integer (a compile-time table for 1 to 255, a search over a fixed table above) and packs it with a `BitWriter`, instead of building a string of `0` and `1` characters and walking it.** `zeckendorf::encode`, `encode_stream`, `packed::pack` and `packed::encode` give the same bytes as before and are held to the old string algorithms by `tests/test_fast_encode.rs`. Acceptance checks a value without copying it (`quantizer::accept_check`, `prismpath_rs::field_definitions::check_canonical`), since the accepted value compares as the value given. `wire::Encoder` sorts the field order once and writes a reading's packed bytes directly: `encode_packed_into` takes the HashMap reading `encode_reading` takes, with the same refusals, `encode_row_into` takes one value per field in wire order, and `encode_symbols_packed` takes cell symbols. On 1M readings of the fusion policy the shipped path went from 1.5M to 2.0M readings per second, the encoder takes 7.6M (HashMap) and 12M (row), and code and pack alone about 45M; on the 12 field agent policy 0.53M, 0.68M, 2.7M, 4.7M and about 22M.
 
+### Fixed: programs the classifier read as read only could write files or run commands (2026-11-21)
+
+- **What was wrong.** `sed`, `sort`, `uniq`, `xxd` and `tree` were on the classifier's read only list, and only the
+  literal flags `sed -i`, `sort -o` and `tree -o` were caught. So `sed -ri`, `sort -o.claude/settings.json`,
+  `uniq notes .claude/settings.json`, `sed 'w FILE'`, `sed '1e CMD'` and `xxd -r notes .git/hooks/pre-commit` read
+  `read_only` and the starter policies allowed them, through the Claude Code hook. Likewise `git diff --output=FILE`,
+  `git grep -O sh` (and `--open-files-in-pager`) and `git diff --no-index` read as a plain allowed git listing.
+  Through the Claude Code hook that let a command rewrite the agent's own settings or hooks.
+- **What changed.** `CLASSIFIER_VERSION` is 3. `sed`, `sort`, `uniq`, `xxd`, `tree`, `file` (`-C` writes a file) and
+  `date` (`-s` sets the clock) are mutating, and so are named writers in the hazard scan. A git argument that is
+  `--output`, `--open-files-in-pager`, `--no-index`, `--ext-diff`, `--contents`, `--ignore-revs-file` or `--remerge-diff` (it writes temporary objects) (or any prefix of
+  one, which git accepts) or a short cluster holding `O` is an unsafe option, so the call reads git `unknown`. The three
+  starters are recompiled for version 3, the previous images are named as older starters, and a recorded policy from
+  before this fix gets the re-init message. The MCP proxy now decides under the recorded, attested policy of
+  `agent init` (`commands.load_checked`), refuses every call without one, and accepts `--policy` only when it is that
+  policy.
+- **What is proven.** The theorems prove the model's readings and refusals given the model's lists. They do not prove
+  that a listed program is read only. `prismpath/tests/test_read_only_runs.py` now checks that by running every
+  read only program and every plain git read, with the options each prints in its own help, in a temporary tree, and
+  requires the tree unchanged and no child run.
+
 ### Changed: review fixes (2026-11-21)
 
 - **`prismpath gateway` will not serve without `--routes FILE`**, because with an empty table every path reads `other` and a policy that allows `other` would allow all of them. The route table's canon/2 digest is kept on each receipt's journal line (`routes_sha256`, outside the sealed root and the receipt format) and `gateway verify` reports it.
@@ -151,9 +172,10 @@ What changed since 0.1.0, in short:
   Agentic Applications, MITRE ATLAS and CWE, and the regulatory mapping relates them to the frameworks it names.
 - **OpenTelemetry decision attributes.** A proposal and a producer (`prismpath.agent.otel`) for the outcome, the cause
   and the receipt of a governed tool call on its span.
-- **The classifier is proven.** Its reading of a call is defined in Lean and held to the Python over the recorded
-  inputs, the adversary probes and 20,000 generated calls, and a proven hazard scan keeps hazards refused when a
-  command falls outside its grammar.
+- **The classifier's readings are proven given its lists.** Its reading of a call is defined in Lean and held to the
+  Python over the recorded inputs, the adversary probes and 20,000 generated calls, and a proven hazard scan keeps
+  hazards refused when a command falls outside its grammar. This was worded "The classifier is proven" in 0.2.0,
+  which overstated it: see the Unreleased fix below.
 - **Every Merkle tree is RFC 6962's**, with consistency proofs, a streaming root in Python, Rust and C, and strict
   canon/2 readers. These are breaking changes and are listed below.
 - **Native crates.** The four Rust crates (kernel, Facet telemetry wire, policy hot swap, preflight) are held to the

@@ -90,10 +90,20 @@ OLDER_STARTERS = {
                                    "which refuses every reading of the current classifier"),
     "9d50ffe71afff5ef": ("strict", "the agent_rules from before the connect rule (cause 130, classifier version 2), "
                                    "which refuses every reading of the current classifier"),
+    # The three recorded from 2026-11-20 until the read-only fix (classifier version 3). They bound `classifier_version`
+    # to 2, and they allow `sed`, `sort`, `uniq`, `xxd`, `tree` and the git options that write files or run programs.
+    "b64f0e29805388f5": ("default", "the agent_default from before the read-only fix (classifier version 3), which "
+                                    "refuses every reading of the current classifier"),
+    "4cb122afd5c105de": ("review", "the agent_review from before the read-only fix (classifier version 3), which "
+                                   "refuses every reading of the current classifier"),
+    "0a079f267aab636c": ("strict", "the agent_rules from before the read-only fix (classifier version 3), which "
+                                   "refuses every reading of the current classifier"),
 }
 RULE_DATE = "2026-11-19"          # the day the control-file rule shipped: the first four older images are "from before" it
 NET_RULE_DATE = "2026-11-20"      # the day the connect rule and classifier version 2 shipped: the next three are "from before" it
 _NET_OLDER = ("e184122df6538d99", "6e6f4f8604997b41", "9d50ffe71afff5ef")
+READONLY_RULE_DATE = "2026-11-21"   # the day classifier version 3 shipped: the last three are "from before" it
+_READONLY_OLDER = ("b64f0e29805388f5", "4cb122afd5c105de", "0a079f267aab636c")
 
 
 def older_starter_of(image: bytes) -> Optional[Tuple[str, str]]:
@@ -106,6 +116,8 @@ def older_date(image: bytes) -> Optional[str]:
     key = hashlib.sha256(image).hexdigest()[:16]
     if key not in OLDER_STARTERS:
         return None
+    if key in _READONLY_OLDER:
+        return READONLY_RULE_DATE
     return NET_RULE_DATE if key in _NET_OLDER else RULE_DATE
 
 
