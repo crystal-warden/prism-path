@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
-"""WP10 of docs/design/agent-sandbox-plan.md: the adversary set for the whole agent, the hook alone against the launcher.
+"""The adversary set for the whole agent, the hook alone against the launcher.
 
 `test_sandbox_adversary.py` measured one thing, an allowed shell child. This measures the agent itself. A stand-in
 program plays Claude Code (no Claude, no real login, no model). It makes the same attempts in two ways:
