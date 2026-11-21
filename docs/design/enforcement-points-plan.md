@@ -108,3 +108,4 @@ Order: WP1, WP2, then WP3 and WP4 together, then WP5, WP6, WP7.
 6. The first device target is the cFS app on NOS3, with the software bus gap stated plainly. The ESP32 waits for the Linux tracer.
 
 The plan for decisions 1 to 4 is in `docs/design/agent-sandbox-plan.md`.
+7. The enforcement point also goes in front of the resource, whatever the worker is, and one protocol carries the signed policy to every point. See `docs/design/prismpath-at-the-resource.md` and `docs/design/policy-distribution.md`.
