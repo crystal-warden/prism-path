@@ -367,6 +367,35 @@ class Run:
         """Every complete journal line, parsed and validated, after dropping a torn tail. Call with the lock held."""
         return self._scan(full=True)[1]
 
+    def _last_entry_with_tool_use_id(self, tool_use_id: str) -> Optional[Dict[str, Any]]:
+        """The latest journal line that carries `tool_use_id`, or None. Call with the lock held.
+
+        The cost does not grow with the run: `_scan(full=False)` validates only what was appended since the
+        prefix record, and the journal is then read backwards in blocks, a line at a time, parsing only a line that
+        holds the id (Claude Code answers a call a moment after it was decided, so the line is near the end). Lines
+        the prefix record covers are trusted here as they are on append; `seal` and `verify` still validate them all."""
+        self._scan(full=False)
+        path = self.dir / JOURNAL
+        if not path.exists():
+            return None
+        needle = b'"tool_use_id":' + canon2.dumps(tool_use_id)
+        with open(path, "rb") as handle:
+            position = handle.seek(0, os.SEEK_END)
+            tail = b""
+            while position > 0:
+                step = min(65536, position)
+                position -= step
+                handle.seek(position)
+                tail = handle.read(step) + tail
+                parts = tail.split(b"\n")
+                tail = parts[0] if position > 0 else b""        # a partial first line waits for the next block
+                for line in reversed(parts[1:] if position > 0 else parts):
+                    if needle in line:
+                        entry = canon2.loads(line)
+                        if entry.get("tool_use_id") == tool_use_id and _extras_ok(entry):
+                            return entry
+        return None
+
     def append(self, reading: bytes, verdict: Dict[str, Any], decider: str = DECIDER,
                sandbox_profile: Optional[str] = None, sandbox_backend: Optional[str] = None,
                tool_use_id: Optional[str] = None, grant: Optional[Dict[str, str]] = None,
@@ -398,6 +427,9 @@ class Run:
                 entry["tool_use_id"] = tool_use_id
             if grant is not None:
                 entry["grant"] = {"grant_id": grant["grant_id"], "grant_sha256": grant["grant_sha256"]}
+            for key, value in (("routes_sha256", routes_sha256), ("hosts_sha256", hosts_sha256)):
+                if value is not None:
+                    entry[key] = value
             if not _extras_ok(entry):
                 raise RunError(f"session {self.session}: a journal line's sandbox or grant record is malformed")
             line = canon2.dumps(entry) + b"\n"
@@ -430,9 +462,6 @@ class Run:
             if not isinstance(receipt, int) or isinstance(receipt, bool) or not 0 <= receipt < len(entries):
                 raise RunError(f"session {self.session}: there is no receipt {receipt} to bind an observation to")
             self._check_binding(entries[receipt], image_sha256, profile_sha256, observed)
-            for key, value in (("routes_sha256", routes_sha256), ("hosts_sha256", hosts_sha256)):
-                if value is not None:
-                    entry[key] = value
             lines = self._observation_lines()
             prev = lines[-1]["sha256"] if lines else ""
             entry = {"format": observe_format(), "i": len(lines), "receipt": receipt,
@@ -607,11 +636,10 @@ class Run:
             if not valid_tool_use_id(tool_use_id):
                 unbound = "no-tool-use-id"
             else:
-                matches = [e for e in self._entries() if e.get("tool_use_id") == tool_use_id]
-                if not matches:
+                target = self._last_entry_with_tool_use_id(tool_use_id)
+                if target is None:
                     unbound = "no-receipt"
                 else:
-                    target = matches[-1]
                     if receipt_kind(target["receipt"]) == "refuse":
                         unbound = "receipt-was-a-refusal"
                     elif any(l.get("receipt") == target["i"] and l["source"] == "hook" for l in lines):
@@ -728,6 +756,14 @@ class Run:
             return len(lines)
 
     # ------------------------------------------------------------------ seal
+    def bound_digests(self) -> Dict[str, List[str]]:
+        """The distinct route table and allowed host list digests the journal's lines carry, each sorted. One value
+        is a run decided under one table or list, none is a run that recorded none (an agent run has no route table),
+        and more than one is a run that was resumed under another."""
+        with _locked(self.dir / LOCK):
+            entries = self._entries()
+        return {key: sorted({e[key] for e in entries if key in e}) for key in BOUND_DIGESTS}
+
     def summary(self) -> Dict[str, Any]:
         """The receipt count, whether the run is open, and how its seal stands against the journal, every
         journal line validated: `unsealed` (no seal file yet), `partial` (some seal files and not all, a first
@@ -759,14 +795,6 @@ class Run:
         files = [self.dir / name for name in core_evidence.FILES]
         if not all(f.exists() for f in files):
             return False
-    def bound_digests(self) -> Dict[str, List[str]]:
-        """The distinct route table and allowed host list digests the journal's lines carry, each sorted. One value
-        is a run decided under one table or list, none is a run that recorded none (an agent run has no route table),
-        and more than one is a run that was resumed under another."""
-        with _locked(self.dir / LOCK):
-            entries = self._entries()
-        return {key: sorted({e[key] for e in entries if key in e}) for key in BOUND_DIGESTS}
-
         return (self.dir / "receipts.jsonl").read_bytes() == self._receipt_bytes(entries)
 
     def seal(self, keys: Path, time_us: Optional[int] = None, decider: str = DECIDER) -> Dict[str, Any]:
@@ -825,6 +853,7 @@ class Run:
                                           pin_instance=Path(keys) / "instance.pub", replay=replay)
         result["observations"] = self.verify_observations()      # raises RunCorrupt on a damaged or unbound one
         result["outcomes"] = self.verify_outcomes()               # the same for the outcomes file
+        result["bound"] = self.bound_digests()                    # the route table and host list digests, outside the root
         return result
 
 
@@ -856,7 +885,6 @@ class RunStore:
                 if run_dir_name(session) != name:
                     session = name
             out.append(Run(self.root / name, session))
-        result["bound"] = self.bound_digests()                    # the route table and host list digests, outside the root
         return out
 
     def sessions(self) -> List[str]:
