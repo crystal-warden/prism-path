@@ -16,6 +16,7 @@ field.path_traversal: bool
 field.proc_class: category
 field.remote_class: category
 field.tool: category
+field.zone_reach: category
 ---
 ## core_decision
 The strict starter, `prismpath agent init --policy strict`. A call it cannot read and a shell command that changes files are refused.
@@ -38,6 +39,10 @@ are observations a later policy proposal may read; they never change the policy 
 -> refuse agent:symlink-path: when tool in ["write_file", "delete_path"] and path_symlink
 -> refuse agent:outside-workspace: when path_scope == "outside"
 -> refuse agent:shell-mutation: when command_class == "mutating" or git_op == "mutating"
+
+A change to code the owner protects waits for the person, and so does one whose reach is not known (no zone information
+point answered, or the file is not one it can read). Only a change that reads `none` for every path it names goes on to the rules below.
+-> escalate agent:zone-asked: when tool in ["write_file", "delete_path"] and zone_reach in ["protected", "unknown"]
 
 A push runs only to a remote the owner allowed; any other push waits for the owner.
 -> allow: when git_op == "push" and remote_class == "allowed"

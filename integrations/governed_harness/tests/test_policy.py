@@ -20,7 +20,8 @@ ENUMS = {"tool": ["list_dir", "read_file", "write_file", "delete_path", "run_com
          "git_op": ["none", "local_read", "local_write", "mutating", "push", "network", "unknown"],
          "remote_class": ["none", "allowed", "other"],
          "net_dest": ["none", "model_api", "allowed_host", "other", "unknown"],
-         "proc_class": ["none", "single", "tree", "unknown"]}
+         "proc_class": ["none", "single", "tree", "unknown"],
+         "zone_reach": ["none", "protected", "unknown"]}
 BOOLS = ["path_in_toolchain", "path_control", "path_glob", "path_traversal", "path_symlink", "kill_by_pattern"]
 
 
@@ -31,7 +32,8 @@ def field_space():
     for values in itertools.product(*ENUMS.values(), *([[False, True]] * len(BOOLS))):
         reading = dict(zip(names, values))
         if (reading["net_dest"] != "none" and reading["tool"] != "connect") or \
-                (reading["proc_class"] != "none" and reading["tool"] != "run_command"):
+                (reading["proc_class"] != "none" and reading["tool"] != "run_command") or \
+                (reading["zone_reach"] != "none" and reading["tool"] not in ("write_file", "delete_path", "run_command")):
             continue
         yield {"classifier_version": classifier.CLASSIFIER_VERSION, **reading}
 
@@ -56,7 +58,7 @@ def test_the_lean_port_accepts_the_image_and_every_target_names_a_registered_cau
         if kind != "allow":
             assert causes.code(cause) == code and causes.cause_class(code) == "routing"
             seen.add(cause)
-    assert seen == {name for code, name, _k, _d in causes._REGISTRY if 104 <= code <= 113 or code in (128, 130)}
+    assert seen == {name for code, name, _k, _d in causes._REGISTRY if 104 <= code <= 113 or code in (128, 130, 131)}
 
 
 def test_the_reading_fields_are_the_policy_fields(agent_policy):

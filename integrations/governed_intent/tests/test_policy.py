@@ -99,7 +99,7 @@ def test_a_disabled_or_foreign_reading_is_the_floor(images):
     lock = policy.lock_id()
     reading = {"classifier_version": 2, "tool": "delete_path", "path_scope": "workspace", "path_in_toolchain": False,
                "path_control": False, "path_glob": False, "path_traversal": False, "path_symlink": False, "command_class": "none",
-               "kill_by_pattern": False, "git_op": "none", "remote_class": "none", "net_dest": "none", "proc_class": "none", "intent_reader_version": ir.READER_VERSION,
+               "kill_by_pattern": False, "git_op": "none", "remote_class": "none", "net_dest": "none", "proc_class": "none", "zone_reach": "none", "intent_reader_version": ir.READER_VERSION,
                "semantic_status": ir.VERIFIED, "semantic_lock": lock, "harm_bp": 9000, "intent_class": "inspect",
                "intent_margin_bp": 9000, "probing_count": 0}
     assert calls.decide(calls.reading_bytes(reading)).cause == "semantic:harm"
@@ -125,7 +125,7 @@ def test_a_semantic_field_out_of_its_definition_is_refused(images, change, cause
     calls, _responses = images
     reading = {"classifier_version": 2, "tool": "list_dir", "path_scope": "workspace", "path_in_toolchain": False,
                "path_control": False, "path_glob": False, "path_traversal": False, "path_symlink": False, "command_class": "none",
-               "kill_by_pattern": False, "git_op": "none", "remote_class": "none", "net_dest": "none", "proc_class": "none", **ir.zero_fields(), **change}
+               "kill_by_pattern": False, "git_op": "none", "remote_class": "none", "net_dest": "none", "proc_class": "none", "zone_reach": "none", **ir.zero_fields(), **change}
     assert calls.decide(canon2.dumps(reading)).cause == cause
 
 
@@ -133,7 +133,7 @@ def test_a_float_harm_value_is_unreadable(images):
     calls, _responses = images
     reading = {"classifier_version": 2, "tool": "list_dir", "path_scope": "workspace", "path_in_toolchain": False,
                "path_control": False, "path_glob": False, "path_traversal": False, "path_symlink": False, "command_class": "none",
-               "kill_by_pattern": False, "git_op": "none", "remote_class": "none", "net_dest": "none", "proc_class": "none", **ir.zero_fields()}
+               "kill_by_pattern": False, "git_op": "none", "remote_class": "none", "net_dest": "none", "proc_class": "none", "zone_reach": "none", **ir.zero_fields()}
     raw = canon2.dumps(reading).replace(b'"harm_bp":0', b'"harm_bp":0.5')
     assert calls.decide(raw).kind == "refuse"
 

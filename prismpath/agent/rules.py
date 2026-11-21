@@ -65,6 +65,7 @@ KNOWN_CATEGORIES = {
     "remote_class": ("none", "allowed", "other"),
     "net_dest": ("none", "model_api", "allowed_host", "other", "unknown"),
     "proc_class": ("none", "single", "tree", "unknown"),
+    "zone_reach": ("none", "protected", "unknown"),
 }
 MAX_INT_RANGE = 64
 CORE_REFUSALS = ("route:no-matching-edge", "route:contract-violation")

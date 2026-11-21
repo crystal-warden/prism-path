@@ -3,6 +3,7 @@
   "fields": {
     "classifier_version": "int min=2 max=2",
     "tool": "category",
+    "zone_reach": "category",
     "path_scope": "category",
     "path_in_toolchain": "bool",
     "path_control": "bool",
@@ -47,6 +48,9 @@
     {"target": "refuse_112",
      "when": ["or", ["cmp", "command_class", "==", ["str", "mutating"]],
                     ["cmp", "git_op", "==", ["str", "mutating"]]]},
+    {"target": "escalate_131",
+     "when": ["and", ["in", "tool", [["str", "write_file"], ["str", "delete_path"]]],
+                     ["in", "zone_reach", [["str", "protected"], ["str", "unknown"]]]]},
     {"target": "allow",
      "when": ["and", ["cmp", "git_op", "==", ["str", "push"]],
                      ["cmp", "remote_class", "==", ["str", "allowed"]]]},

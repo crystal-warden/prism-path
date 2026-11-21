@@ -16,6 +16,7 @@ field.path_traversal: bool
 field.proc_class: category
 field.remote_class: category
 field.tool: category
+field.zone_reach: category
 ---
 ## core_decision
 The review starter, `prismpath agent init --policy review`. Reads run, every change asks, and the hazards are refused as in the others.
@@ -38,6 +39,10 @@ are observations a later policy proposal may read; they never change the policy 
 -> refuse agent:symlink-path: when (tool in ["write_file", "delete_path"] or command_class == "mutating") and path_symlink
 -> refuse agent:outside-workspace: when path_scope == "outside"
 -> refuse agent:shell-mutation: when git_op == "mutating"
+
+A change to code the owner protects waits for the person, and so does one whose reach is not known (no zone information
+point answered, or the file is not one it can read). Only a change that reads `none` for every path it names goes on to the rules below.
+-> escalate agent:zone-asked: when (tool in ["write_file", "delete_path"] or command_class == "mutating") and zone_reach in ["protected", "unknown"]
 
 A tool or command the classifier cannot read waits for the person.
 -> escalate agent:unreadable-asked: when tool == "unknown" or command_class == "unknown"

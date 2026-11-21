@@ -58,7 +58,8 @@ ENUMS = {"tool": ["list_dir", "read_file", "write_file", "delete_path", "run_com
          "git_op": ["none", "local_read", "local_write", "mutating", "push", "network", "unknown"],
          "remote_class": ["none", "allowed", "other"],
          "net_dest": ["none", "model_api", "allowed_host", "other", "unknown"],
-         "proc_class": ["none", "single", "tree", "unknown"]}
+         "proc_class": ["none", "single", "tree", "unknown"],
+         "zone_reach": ["none", "protected", "unknown"]}
 BOOLS = ["path_in_toolchain", "path_control", "path_glob", "path_traversal", "path_symlink", "kill_by_pattern"]
 INTENTS = ["inspect", "modify-workspace", "cleanup", "vcs-publish", "toolchain-change", "network", "unknown"]
 
@@ -77,7 +78,8 @@ def floor_space():
     for values in itertools.product(*ENUMS.values(), *([[False, True]] * len(BOOLS))):
         reading = dict(zip(names, values))
         if (reading["net_dest"] != "none" and reading["tool"] != "connect") or \
-                (reading["proc_class"] != "none" and reading["tool"] != "run_command"):
+                (reading["proc_class"] != "none" and reading["tool"] != "run_command") or \
+                (reading["zone_reach"] != "none" and reading["tool"] not in ("write_file", "delete_path", "run_command")):
             continue
         yield {"classifier_version": classifier.CLASSIFIER_VERSION, **reading}
 
