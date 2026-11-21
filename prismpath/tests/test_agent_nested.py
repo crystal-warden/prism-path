@@ -25,7 +25,7 @@ import pytest
 pytest.importorskip("cryptography")
 pytest.importorskip("fcntl")
 
-from prismpath.agent import commands, launcher, run as run_module, sandbox_hook  # noqa: E402
+from prismpath.agent import commands, landlock, launcher, run as run_module, sandbox_hook  # noqa: E402
 from prismpath.agent.profile import STRICTEST, compile_profile  # noqa: E402
 from prismpath.kernel import causes  # noqa: E402
 from prismpath.tests import test_agent_cli as cli_tests  # noqa: E402
@@ -37,8 +37,9 @@ from prismpath.tests.test_sandbox_exec import needs_bwrap  # noqa: E402
 
 def _nesting_works():
     """Whether this host lets a bwrap sandbox start a second one inside it. Ubuntu 24.04's AppArmor setting (GitHub's
-    runners among them) forbids the nested user namespace, and there the launcher denies every shell command with
-    cause 129 by design; the tests that need a nested sandbox to run skip, and the deny is asserted instead."""
+    runners among them) forbids the nested user namespace. There the launcher runs the per call sandbox under Landlock
+    instead (test_landlock_backend.py), and denies every shell command with cause 129 only where Landlock is missing
+    too. The tests that need a nested bwrap skip here, and the Landlock ones run in its place."""
     import subprocess
     from prismpath.agent import sandbox_exec as _se
     if not os.access(_se.BWRAP, os.X_OK):
@@ -201,11 +202,13 @@ def test_a_rewritten_call_runs_nested_and_the_inner_layer_stops_and_records_what
     obs = seen[0]
     assert obs["receipt"] == 0 and obs["profile_sha256"] == STRICTEST.hash()
     assert obs["image_sha256"] == hashlib.sha256(arena["image"]).hexdigest()
+    (outcome,) = run.outcomes()                       # the runner finishing the command is an outcome of the same receipt
+    assert outcome["source"] == "runner" and outcome["receipt"] == 0 and outcome["decision"] == "allow"
     kinds = {s["kind"] for s in obs["observed"]["signals"]}
     assert {"path-absent", "network-unreachable"} <= kinds and obs["observed"]["method"] == "stderr-pattern"
     done = cli_tests._cli(arena["home"], "agent", "verify", "--json")
     report = json.loads(done.stdout)
-    assert done.returncode == 0 and report["verified"] is True and report["runs"][0]["observations"] == 1
+    assert done.returncode == 0 and report["verified"] is True and report["runs"][0]["observations"] == 1 and report["runs"][0]["outcomes"] == 1
 
 
 @needs_bwrap
@@ -219,6 +222,7 @@ def test_the_rewrite_cannot_be_walked_around_a_forged_observation_is_refused_and
     home = cli_tests._agent_dir(arena["home"])
     run = run_module.RunStore(home / commands.RUNS_DIR).get(sess)
     assert run.observations() == []                                      # nothing was refused, nothing is recorded
+    assert [(o["source"], o["outcome"], o["receipt"]) for o in run.outcomes()] == [("runner", "ran", 0)]   # but it did run
     # a claim about another receipt or another profile is refused by the decider's binding, and is not recorded
     from prismpath.agent import observe
     image_sha = hashlib.sha256(arena["image"]).hexdigest()
@@ -229,7 +233,7 @@ def test_the_rewrite_cannot_be_walked_around_a_forged_observation_is_refused_and
         answer = commands.hook(json.dumps(body).encode(), {**os.environ, "HOME": str(arena["home"])},
                                nested=Nested("/usr/bin/python3", "/x", "/y"))
         assert answer["recorded"] is False and "not recorded" in answer["systemMessage"]
-    assert run.observations() == []
+    assert run.observations() == [] and len(run.outcomes()) == 1                  # the forged claims added no outcome either
     # without a nested decider the stdin hook does not take observation requests at all
     answer = commands.hook(json.dumps(body).encode(), {**os.environ, "HOME": str(arena["home"])})
     assert answer["hookSpecificOutput"]["permissionDecision"] == "deny"
@@ -333,8 +337,8 @@ def test_the_disagreement_table_the_stricter_layer_wins_and_the_known_gap_is_ass
     assert gap is KNOWN_GAP_CREDENTIAL_READ, (
         "the outer sandbox no longer lets the agent's own file tool read the staged credential: the known gap is "
         "closed, so flip KNOWN_GAP_CREDENTIAL_READ")
-    if not NESTING:
-        # a host that forbids the nested sandbox: every shell row is refused with cause 129, never run under the outer
+    if not NESTING and not landlock.available():
+        # a host with no per call backend (no nested bwrap, no Landlock): every shell row is refused with cause 129, never run under the outer
         # profile alone, and the run still verifies; the file tool rows above hold either way
         for name in ("ask", "allow-allow", "allow-blocked"):
             out = _answer(by[name])

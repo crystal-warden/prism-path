@@ -27,6 +27,7 @@ Linux only, non interactive. The launcher stays outside, trusted. It
      and written as a receipt in a run of its own (`egress-<time>-<pid>`, sealed at exit), and a refusal is cause 130.
      A caller that passes `decider` (a test or an embedder with no recorded policy) gets a plain decider and no
      receipts, and the profile is `proxy_model`;
+  5b. finds out which per call sandbox works inside (bubblewrap, else Landlock; sandbox_exec.BACKENDS), once, and tells the decider;
   6. runs the program under bwrap in a process group of its own, exits with its status, and on the way out stops
      the proxy, kills what is left of the process group, removes the staged directory and the empty control
      files it made.
@@ -48,7 +49,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Callable, List, Optional, Sequence, Tuple
 
-from prismpath.agent import classifier, commands, decider as decider_module, egress, egress_policy, hook_client, local_route, sandbox_exec, sandbox_hook
+from prismpath.agent import classifier, commands, controls as controls_module, decider as decider_module, egress, egress_policy, hook_client, local_route, sandbox_exec, sandbox_hook
 from prismpath.agent.profile import Profile, ProfileError, compile_profile
 
 STAGE_BASE = "/var/tmp"
@@ -62,10 +63,12 @@ HOOK_PYTHON = "/usr/bin/python3"                # must exist inside: the system 
 PACKAGE_IN = "/opt/pp"                          # the prismpath package, bound read only, for the per call runner
 RUNNER_IN = f"{PACKAGE_IN}/prismpath/agent/sandbox_exec.py"
 PROBE_TIMEOUT_S = 30
+BACKENDS = sandbox_exec.BACKENDS     # the per call backends, in order of preference; a test narrows it to force one
 MAX_PROCESSES = 512       # a placeholder until the spike measures the real peak (plan question 10)
 AGENT_ENV = (("DISABLE_AUTOUPDATER", "1"), ("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "1"),
              ("ENABLE_CLAUDEAI_MCP_SERVERS", "false"))
-ROOT_CONTROL_NAMES = ("CLAUDE.md", "CLAUDE.local.md", "AGENTS.md")
+ROOT_CONTROL_NAMES = controls_module.ROOT_CONTROL_NAMES
+Controls = controls_module.Controls
 
 
 class LaunchError(commands.AgentError):
@@ -82,27 +85,6 @@ class Staged:
     decider_socket: Path
     credential: Optional[Path] = None
     hook_client: Optional[Path] = None
-
-
-@dataclass
-class Controls:
-    """The workspace's control paths: what to bind read only, and what the launcher created to bind it."""
-    binds: List[str] = field(default_factory=list)
-    created_files: List[Path] = field(default_factory=list)
-    created_dirs: List[Path] = field(default_factory=list)
-
-    def remove_created(self) -> None:
-        for path in self.created_files:
-            try:
-                if path.is_file() and not path.is_symlink() and path.stat().st_size == 0:
-                    path.unlink()
-            except OSError:
-                pass
-        for path in reversed(self.created_dirs):
-            try:
-                path.rmdir()
-            except OSError:
-                pass
 
 
 # ------------------------------------------------------------------------------------------------ checks
@@ -174,43 +156,11 @@ def stage(settings: dict, credential: Optional[str], base: str = STAGE_BASE) -> 
 
 
 def prepare_controls(workspace: Path, out: Controls) -> Controls:
-    """Make every control path of the workspace bindable. Existing ones are listed. Missing root ones are
-    created empty (`.claude/` always, the three named files, `.mcp.json`, and `.git/config` and `.git/hooks/`
-    when there is a `.git`, which is never created). What it creates is recorded in `out` as it goes."""
-    def bind(path: Path) -> None:
-        if not path.is_symlink():
-            out.binds.append(str(path))
-
-    existing = {classifier._fold(n): n for n in os.listdir(workspace)}
-    for name in (".claude", ".mcp.json") + ROOT_CONTROL_NAMES:
-        if classifier._fold(name) not in existing:
-            path = workspace / name
-            if name == ".claude":
-                path.mkdir()
-                out.created_dirs.append(path)
-            else:
-                path.touch()
-                out.created_files.append(path)
-            existing[classifier._fold(name)] = name
-        bind(workspace / existing[classifier._fold(name)])
-    git = workspace / ".git"
-    if git.is_dir() and not git.is_symlink():
-        config = git / "config"
-        if not config.exists() and not config.is_symlink():
-            config.touch()
-            out.created_files.append(config)
-        bind(config)
-        hooks = git / "hooks"
-        if not hooks.exists() and not hooks.is_symlink():
-            hooks.mkdir()
-            out.created_dirs.append(hooks)
-        bind(hooks)
-    for found in classifier._walk_names(str(workspace)):
-        path = Path(found)
-        if path.parent != workspace:        # the root ones are bound above
-            bind(path)
-    out.binds = list(dict.fromkeys(out.binds))
-    return out
+    """Make every control path of the workspace bindable (`controls.discover` finds them, and the per call sandbox
+    uses the same list). Existing ones are listed. Missing root ones are created empty (`.claude/` always, the three
+    named files, `.mcp.json`, and `.git/config` and `.git/hooks/` when there is a `.git`, which is never created).
+    What it creates is recorded in `out` as it goes."""
+    return controls_module.materialize(controls_module.discover(workspace), out)
 
 
 # ------------------------------------------------------------------------------------------------- launch
@@ -320,22 +270,28 @@ def launch(command: Sequence[str], workspace: str, credential: Optional[str] = N
 
 
 def probe_nested(outer: Callable, workspace: Path) -> sandbox_hook.Nested:
-    """Whether a per call sandbox can run nested in the agent sandbox on this host, found by running the real
-    runner once: the same outer sandbox, the system interpreter, the bound runner and the strictest bash profile,
-    around `true`. A host that forbids nested user namespaces (an AppArmor restriction, `user.max_user_namespaces`),
-    or a system interpreter too old for the package, shows up here and not as a failed call later. The answer is
-    given to the decider, which then denies every shell command with cause 129 when it is false: the stricter answer, never the outer profile alone."""
-    probe = [HOOK_PYTHON, "-I", RUNNER_IN, "--workspace", str(workspace), "--profile",
-             json.dumps(Profile().to_object(), sort_keys=True, separators=(",", ":")), "--", "true"]
-    reason, ok = "", False
-    try:
-        done = sandbox_exec._run(outer(probe), PROBE_TIMEOUT_S, b"")
-        ok = done.returncode == 0 and not done.timed_out
-        if not ok:
+    """Which per call sandbox can run inside the agent sandbox on this host, found by running the real runner once per
+    backend: the same outer sandbox, the system interpreter, the bound runner and the strictest bash profile, around
+    `true`. The backends are tried in the owner's order (`sandbox_exec.BACKENDS`: bubblewrap, then Landlock) and the
+    first that works is the answer, which the decider writes into every receipt and the runner is told to hold to.
+    A host that forbids nested user namespaces (an AppArmor restriction, `user.max_user_namespaces`) fails the bubblewrap
+    probe and, where Landlock works, runs the call under Landlock instead. A host where neither works, or a system
+    interpreter too old for the package, shows up here and not as a failed call later, and the decider then denies every
+    shell command with cause 129: the stricter answer, never the outer profile alone."""
+    reasons = []
+    for backend in BACKENDS:
+        probe = [HOOK_PYTHON, "-I", RUNNER_IN, "--workspace", str(workspace), "--backend", backend, "--profile",
+                 json.dumps(Profile().to_object(), sort_keys=True, separators=(",", ":")), "--", "true"]
+        reason = ""
+        try:
+            done = sandbox_exec._run(outer(probe), PROBE_TIMEOUT_S, b"")
+            if done.returncode == 0 and not done.timed_out:
+                return sandbox_hook.Nested(HOOK_PYTHON, RUNNER_IN, DECIDER_SOCKET_IN, True, "", backend)
             reason = " ".join(done.stderr.decode("utf-8", "replace").split())[-200:] or f"exit status {done.returncode}"
-    except sandbox_exec.SandboxUnavailable as exc:
-        reason = " ".join(str(exc).split())[-200:]
-    return sandbox_hook.Nested(HOOK_PYTHON, RUNNER_IN, DECIDER_SOCKET_IN, ok, reason)
+        except sandbox_exec.SandboxUnavailable as exc:
+            reason = " ".join(str(exc).split())[-200:]
+        reasons.append(f"{backend}: {reason}")
+    return sandbox_hook.Nested(HOOK_PYTHON, RUNNER_IN, DECIDER_SOCKET_IN, False, "; ".join(reasons)[-300:])
 
 
 def _policy_profile(home: Path, max_processes: int):
