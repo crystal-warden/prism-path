@@ -37,7 +37,7 @@ def add_parser(subparsers) -> None:
     gateway.add_argument('--upstream', default=None, metavar='URL', help='serve: the one service, http://HOST[:PORT]')
     gateway.add_argument('--listen', default='127.0.0.1:8080', metavar='ADDR', help='serve: HOST:PORT (default 127.0.0.1:8080)')
     gateway.add_argument('--routes', default=None, metavar='FILE',
-                         help='serve: the route table (default: none, every path is `other`)')
+                         help='serve: the route table, required (the demo one is prismpath/gateway/policy/demo.routes.json)')
     gateway.add_argument('--session', default=None, help='serve: the id of the run (default a fresh one)')
     gateway.add_argument('--forward-header', action='append', default=[], metavar='NAME',
                          help='serve: also pass this request header to the service (repeatable)')
@@ -98,7 +98,10 @@ def serve(args) -> int:
     if not args.upstream:
         raise SystemExit("prismpath gateway: name the service with --upstream URL")
     host, _, port = args.listen.rpartition(":")
-    routes = Routes.load(Path(args.routes)) if args.routes else Routes()
+    if not args.routes:
+        raise SystemExit("prismpath gateway: name the route table with --routes FILE; without one every path reads `other` "
+                         f"and a policy that allows `other` would allow all of them (the demo table is {DEMO_ROUTES})")
+    routes = Routes.load(Path(args.routes))
     gateway = Gateway(args.upstream, routes, _home(args), args.session, args.forward_header, args.timeout,
                       args.deadline, args.upstream_timeout, args.max_response, args.max_connections)
     if gateway.failure:
@@ -135,6 +138,7 @@ def verify(home: Path, as_json: bool, out=None) -> int:
                 result = run.verify(home, seal=summary["seal"] != "diverged")
                 row.update(receipts=result["receipts"], replayed=result["replayed"], disagree=result["disagree"],
                            root_statement=result["root_statement"],
+                           routes_sha256=result["bound"]["routes_sha256"],
                            verified=result["disagree"] == 0 and result["root_statement"] == "signed")
         except Exception as exc:   # noqa: BLE001 - one bad run does not stop the others
             row.update(verified=False, error=commands._detail(exc))
@@ -150,8 +154,9 @@ def verify(home: Path, as_json: bool, out=None) -> int:
                 print(f"{r['session']}: no receipts yet", file=out)
             else:
                 print(f"{r['session']}: {r['receipts']} receipts, {r['replayed']} replayed through the reference kernel, "
-                      f"{r['disagree']} disagree, root statement {r['root_statement']}{'' if r['verified'] else ' REFUSED'}",
-                      file=out)
+                      f"{r['disagree']} disagree, root statement {r['root_statement']}{'' if r['verified'] else ' REFUSED'}; "
+                      f"route table sha256 {', '.join(r['routes_sha256']) or 'not recorded'} (kept on the journal lines, "
+                      f"outside the signed root)", file=out)
     return 0 if ok else 1
 
 

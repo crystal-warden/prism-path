@@ -7,8 +7,12 @@ a run directory, one per session id under a root the caller names (`RunStore`). 
 
   * `image.bin`: the policy image of the session, written once; a later call with other bytes is refused;
   * `journal.jsonl`: the open part. One canon/2 line per decided reading, `{"i", "reading" (hex), "receipt"}`
-    (and the `sandbox` profile hash of an allowed shell call or the `grant` a gateway request presented),
-    where `receipt` is exactly the `prismpath.core-receipt/1` that `evidence.EpisodeRun.record` writes;
+    where `receipt` is exactly the `prismpath.core-receipt/1` that `evidence.EpisodeRun.record` writes. A line may
+    carry extras beside them: `sandbox` (the profile hash and backend of an allowed shell call), `tool_use_id` (the
+    id Claude Code gave the call), `grant` (the grant a gateway request presented), `routes_sha256` (the digest of
+    the gateway's route table) and `hosts_sha256` (the digest of the egress proxy's allowed host list). The journal check binds the
+    extras to their line (`_extras_ok` and the line's own canon/2 bytes), and the sealed root does not: it covers
+    only the receipts, so an extra is evidence of the journal and not of the signed root;
   * `lock`: the lock file every operation takes exclusively (`fcntl.flock`);
   * `journal.prefix`: the validated-prefix record that keeps an append's cost independent of the run's length;
   * after a seal, the files `core_evidence.verify` reads, in the layout of `prismpath.agent.evidence`:
@@ -103,12 +107,18 @@ _SAFE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 
 
 _HEX64 = re.compile(r"[0-9a-f]{64}")
+# Digests of a launcher or server argument that is not part of the signed policy: the gateway's route table
+# (`routes_sha256`) and the egress proxy's allowed host list (`hosts_sha256`).
+BOUND_DIGESTS = ("routes_sha256", "hosts_sha256")
 _GRANT_ID = re.compile(r"[0-9a-f]{32}")
 
 
 def _extras_ok(entry: Dict[str, Any]) -> bool:
-    """A journal line holds `i`, `reading` and `receipt`, and at most a sandbox record, a tool_use_id and a grant."""
-    if not {"i", "reading", "receipt"} <= set(entry) <= {"i", "reading", "receipt", "sandbox", "tool_use_id", "grant"}:
+    """A journal line holds `i`, `reading` and `receipt`, and at most a sandbox record, a tool_use_id, a grant, and the
+    digest of the gateway's route table or of the egress proxy's allowed host list the line was decided under."""
+    if not {"i", "reading", "receipt"} <= set(entry) <= {"i", "reading", "receipt", "sandbox", "tool_use_id", "grant", *BOUND_DIGESTS}:
+        return False
+    if any(key in entry and not _HEX64.fullmatch(str(entry[key])) for key in BOUND_DIGESTS):
         return False
     sandbox, grant = entry.get("sandbox"), entry.get("grant")
     if "sandbox" in entry and not (isinstance(sandbox, dict)
@@ -356,7 +366,8 @@ class Run:
 
     def append(self, reading: bytes, verdict: Dict[str, Any], decider: str = DECIDER,
                sandbox_profile: Optional[str] = None, sandbox_backend: Optional[str] = None,
-               tool_use_id: Optional[str] = None, grant: Optional[Dict[str, str]] = None) -> int:
+               tool_use_id: Optional[str] = None, grant: Optional[Dict[str, str]] = None,
+               routes_sha256: Optional[str] = None, hosts_sha256: Optional[str] = None) -> int:
         """Record one decided reading as the next receipt, durably, and return its index. `sandbox_profile` is the
         SHA-256 of the sandbox profile the allowed call was rewritten to run under; it is kept on the journal
         line beside the receipt (the receipt is exactly `prismpath.core-receipt/1`, which has no such field),
@@ -365,7 +376,9 @@ class Run:
         none was written before the backend was recorded and means bwrap. `tool_use_id`, the id Claude Code gave the
         call, is kept the same way (an optional key of the line, never in the receipt), so the PostToolUse outcome of
         that call can be bound to this receipt (`Run.outcome_of_hook`). A value that is not shaped like an id is left
-        off. `grant` is the `{"grant_id", "grant_sha256"}` of the grant a gateway request presented, kept the same way."""
+        off. `grant` is the `{"grant_id", "grant_sha256"}` of the grant a gateway request presented, kept the same way.
+        `routes_sha256` and `hosts_sha256` are the digests of the gateway's route table and of the egress proxy's allowed
+        host list, kept the same way, so that `verify` reports which table or list the receipts were decided under."""
         with _locked(self.dir / LOCK):
             n = self._scan(full=False)[0]
             image = (self.dir / IMAGE).read_bytes()
@@ -414,6 +427,9 @@ class Run:
             if not isinstance(receipt, int) or isinstance(receipt, bool) or not 0 <= receipt < len(entries):
                 raise RunError(f"session {self.session}: there is no receipt {receipt} to bind an observation to")
             self._check_binding(entries[receipt], image_sha256, profile_sha256, observed)
+            for key, value in (("routes_sha256", routes_sha256), ("hosts_sha256", hosts_sha256)):
+                if value is not None:
+                    entry[key] = value
             lines = self._observation_lines()
             prev = lines[-1]["sha256"] if lines else ""
             entry = {"format": observe_format(), "i": len(lines), "receipt": receipt,
@@ -740,6 +756,14 @@ class Run:
         files = [self.dir / name for name in core_evidence.FILES]
         if not all(f.exists() for f in files):
             return False
+    def bound_digests(self) -> Dict[str, List[str]]:
+        """The distinct route table and allowed host list digests the journal's lines carry, each sorted. One value
+        is a run decided under one table or list, none is a run that recorded none (an agent run has no route table),
+        and more than one is a run that was resumed under another."""
+        with _locked(self.dir / LOCK):
+            entries = self._entries()
+        return {key: sorted({e[key] for e in entries if key in e}) for key in BOUND_DIGESTS}
+
         return (self.dir / "receipts.jsonl").read_bytes() == self._receipt_bytes(entries)
 
     def seal(self, keys: Path, time_us: Optional[int] = None, decider: str = DECIDER) -> Dict[str, Any]:
@@ -829,6 +853,7 @@ class RunStore:
                 if run_dir_name(session) != name:
                     session = name
             out.append(Run(self.root / name, session))
+        result["bound"] = self.bound_digests()                    # the route table and host list digests, outside the root
         return out
 
     def sessions(self) -> List[str]:

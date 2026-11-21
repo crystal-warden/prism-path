@@ -95,6 +95,17 @@ class Routes:
     def load(cls, path: Path) -> "Routes":
         return cls.from_doc(json.loads(Path(path).read_text(encoding="utf-8")))
 
+    def canonical(self) -> bytes:
+        """The table as canon/2 bytes, in order, with each path lower case, so the same table is the same bytes
+        whatever its file's spacing or key order."""
+        from prismpath.kernel import canon2
+        return canon2.dumps({"routes": [{"match": base + ("/*" if prefix else ""), "class": name}
+                                        for base, prefix, name in self.entries]})
+
+    def digest(self) -> str:
+        import hashlib
+        return hashlib.sha256(self.canonical()).hexdigest()
+
     def classes(self) -> List[str]:
         return sorted({name for _p, _x, name in self.entries} | {"other", "unknown"})
 
