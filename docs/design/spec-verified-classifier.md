@@ -122,7 +122,7 @@ the harness requires it. The scan never runs on a command the grammar reads, so 
 
 ### 4.2 What changed, measured
 
-On the 120 recorded hook inputs, against main before the grammar: three changed, all from ask to refuse:
+On the 120 written hook inputs, against main before the grammar: three changed, all from ask to refuse:
 `kill-3` (`sh -c 'kill $(pgrep -f 987654)'`, 105), `shell-tilde` (`cat ~/.ssh/id_rsa`, 111, outside the workspace)
 and `shell-brace` (`cat {/etc/passwd,notes.txt}`, 111). The second scan changed one recorded answer, the label of
 `shell-tilde`, from 106 to 111. The 51 adversary probes, the starter tables and the guide tests are otherwise
@@ -334,7 +334,7 @@ theorems prove sufficient.
 `formal/diff/classifier_diff.py` runs every case through the Python and through the oracle. The Python's four
 disk functions are replaced for the run by a provider that records every fact asked; the facts go to the oracle,
 and a fact the oracle needs and the Python did not ask is observed and the case run again. The real disk
-provider (a throwaway workspace and decoy with links in and out) serves the 132 recorded hook inputs and the 51
+provider (a throwaway workspace and decoy with links in and out) serves the 132 written hook inputs and the 51
 adversary probes (54 calls); a synthetic provider, each fact a seeded function of its key, serves the generated
 calls, so every combination of disk facts meets every text. Numbers reach the oracle as 0, since no part of the
 reading reads a number's value; a call with a lone surrogate reaches it as outside the domain.
@@ -344,7 +344,7 @@ spellings of programs, every git subcommand and listing flag, every kill form wi
 kill words, URLs, `..`, globs, home paths (`~`, `~/x`, `~root/x`, `foo/~bar`), `/workspace`, quoting of every kind, shell operators, tilde and brace words, non
 ASCII and control characters, lone surrogates, wrong types, missing and extra keys, long paths and long argvs.
 
-Result: 219 recorded calls, 0 disagreements; 20,000 generated calls (seed 1), 0 disagreements; 100,000 (seed 2),
+Result: 219 written calls, 0 disagreements; 20,000 generated calls (seed 1), 0 disagreements; 100,000 (seed 2),
 0 disagreements. The harness was checked to see the Python change: dropping `ls` from `READ_ONLY`, allowing `~`
 in plain words or `!` in quotes, Unicode `\d` in the signal, a Unicode `\b` around pkill, Unicode digits as
 process ids, or a 4097 character path limit each gives disagreements on the 20,000 run, and so does breaking the
