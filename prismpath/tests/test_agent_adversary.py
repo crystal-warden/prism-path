@@ -460,11 +460,15 @@ def test_the_launcher_run_leaves_the_host_as_it_found_it(results, arena):
     assert (ws / ".claude" / "settings.json").read_bytes() == arena["control_before"]
     assert not Path(arena["plan"]["written"]).exists()
     assert (Path(arena["decoy"]) / "secret.txt").read_text() == SECRET + "\n"
+    # a probe of this run works in this run's workspace; another suite's probes on the same host are not ours
+    here = os.stat(ws)
     leftovers = []
     for entry in os.listdir("/proc"):
         try:
             if entry.isdigit() and b"probe.py" in Path(f"/proc/{entry}/cmdline").read_bytes():
-                leftovers.append(entry)
+                where = os.stat(f"/proc/{entry}/cwd")
+                if (where.st_dev, where.st_ino) == (here.st_dev, here.st_ino):
+                    leftovers.append(entry)
         except OSError:
             pass
     assert leftovers == []

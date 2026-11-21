@@ -19,7 +19,7 @@ declares:
   path_scope          none | workspace | outside | unknown      (the worst path the call names)
   path_in_toolchain   a named path resolves into a toolchain directory
   path_control        a named path is one of the agent's own controls (CONTROL_TREES, CONTROL_FILES, CONTROL_NAMES, the hook it runs, the root and what holds one)
-  path_glob           a named path is a pattern (* ? [ ] { } or a leading ~), not one exact path
+  path_glob           a named path is a pattern (* ? [ ] { }), not one exact path
   path_traversal      a named path has a .. component
   path_symlink        a named path passes through, or ends at, a symbolic link
   command_class       none | read_only | mutating | network | git | unknown   (run_command only)
@@ -262,10 +262,11 @@ def path_facts(raw: Any, config: Config) -> PathFacts:
     """The facts of one named path: the syntactic ones read here off the text, the rest observed on the disk."""
     if not isinstance(raw, str) or not raw or "\x00" in raw or len(raw) > MAX_PATH:
         return PathFacts("unknown")
-    glob = any(char in GLOB_CHARS for char in raw) or raw.startswith("~")
+    glob = any(char in GLOB_CHARS for char in raw)
     traversal = ".." in raw.split("/")
     disk = disk_facts(raw, config)
-    return PathFacts("workspace" if disk.inside else "outside", disk.toolchain, glob, traversal, disk.symlink,
+    # a home path (first component `~` or `~user`) is never expanded and never read as a workspace entry
+    return PathFacts("outside" if raw.startswith("~") or not disk.inside else "workspace", disk.toolchain, glob, traversal, disk.symlink,
                      disk.control)
 
 
