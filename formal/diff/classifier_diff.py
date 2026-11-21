@@ -63,16 +63,28 @@ from prismpath.agent import claude_code, classifier, mcp_map  # noqa: E402
 ORACLE = Path(os.environ.get("PRISMPATH_CLASSIFIER_ORACLE")
               or ROOT / "formal" / ".lake" / "build" / "bin" / "classifier-oracle")
 FIXTURES = ROOT / "prismpath" / "tests" / "fixtures" / "claude_code_hooks.json"
+ZONE_FIXTURES = ROOT / "prismpath" / "tests" / "fixtures" / "claude_code_zone_hooks.json"   # recorded inputs with a zone answer
 POLICIES = sorted((ROOT / "prismpath" / "agent" / "policy").glob("*.core.json"))
 EXACT = 2 ** 53 - 1
 
-_ORIGINAL = {"disk": classifier.disk_facts, "inside": claude_code._inside, "same": claude_code._same_dir,
+_ORIGINAL = {"zone": classifier.zone_fact, "disk": classifier.disk_facts, "inside": claude_code._inside, "same": claude_code._same_dir,
              "exists": claude_code._exists}
 
 
 # ----------------------------------------------------------------- providers of disk facts
+def _zone_answer(seed: int, raw: str) -> str:
+    """The zone information point's answer for a path: a seeded function of the path, so every combination of
+    `none`, `protected` and `unknown` meets every shape of call. No real Context Cloud is asked here; the real adapter
+    is held to the same contract by prismpath/tests/test_zones.py."""
+    b = int.from_bytes(hashlib.sha256(json.dumps([seed, "zone", raw], ensure_ascii=True).encode()).digest()[:4], "big")
+    return ("none", "none", "protected", "unknown", "none", "protected", "unknown")[b % 7]
+
+
 class RealDisk:
     """The original functions, observing the real disk."""
+
+    def zone(self, raw: str, config: classifier.Config) -> str:
+        return _zone_answer(0, raw)
 
     def disk(self, raw: str, config: classifier.Config) -> classifier.DiskFacts:
         return _ORIGINAL["disk"](raw, config)
@@ -96,6 +108,9 @@ class SyntheticDisk:
     def _bits(self, *key: str) -> int:
         text = json.dumps([self.seed, *key], ensure_ascii=True)
         return int.from_bytes(hashlib.sha256(text.encode()).digest()[:4], "big")
+
+    def zone(self, raw: str, config: classifier.Config) -> str:
+        return _zone_answer(self.seed, raw)
 
     def disk(self, raw: str, config: classifier.Config) -> classifier.DiskFacts:
         b = self._bits("disk", raw)
@@ -121,6 +136,12 @@ class Recorder:
         self.inside: Dict[Tuple[str, str], bool] = {}
         self.same: Dict[Tuple[str, str], bool] = {}
         self.exists: Dict[str, bool] = {}
+        self.zone: Dict[str, str] = {}
+
+    def ask_zone(self, raw, config=None):
+        if raw not in self.zone:
+            self.zone[raw] = self.provider.zone(raw, config or self.config)
+        return self.zone[raw]
 
     def ask_disk(self, raw, config=None):
         if raw not in self.disk:
@@ -146,19 +167,22 @@ class Recorder:
         return {"disk": [[k, v.inside, v.toolchain, v.symlink, v.control, v.holder] for k, v in self.disk.items()],
                 "inside": [[a, b, v] for (a, b), v in self.inside.items()],
                 "same": [[a, b, v] for (a, b), v in self.same.items()],
-                "exists": [[k, v] for k, v in self.exists.items()]}
+                "exists": [[k, v] for k, v in self.exists.items()],
+                "zone": [[k, v] for k, v in self.zone.items()]}
 
 
 @contextmanager
 def recording(rec: Recorder):
     """The Python's disk functions answered by `rec` for the duration."""
-    saved = (classifier.disk_facts, claude_code._inside, claude_code._same_dir, claude_code._exists)
+    saved = (classifier.disk_facts, claude_code._inside, claude_code._same_dir, claude_code._exists, classifier.zone_fact)
     classifier.disk_facts = lambda raw, config: rec.ask_disk(raw, config)
+    classifier.zone_fact = lambda raw, config: rec.ask_zone(raw, config)
     claude_code._inside, claude_code._same_dir, claude_code._exists = rec.ask_inside, rec.ask_same, rec.ask_exists
     try:
         yield rec
     finally:
-        classifier.disk_facts, claude_code._inside, claude_code._same_dir, claude_code._exists = saved
+        (classifier.disk_facts, claude_code._inside, claude_code._same_dir, claude_code._exists,
+         classifier.zone_fact) = saved
 
 
 # ----------------------------------------------------------------- one case through the Python
@@ -219,7 +243,8 @@ class Case:
                "project_dir": self.project_dir, "proc_cwd": self.proc_cwd, "server_cwd": self.server_cwd}
         doc.update(self.rec.tables())
         if self.nonscalar():
-            doc.update({"project_dir": None, "server_cwd": "", "disk": [], "inside": [], "same": [], "exists": []})
+            doc.update({"project_dir": None, "server_cwd": "", "disk": [], "inside": [], "same": [], "exists": [],
+                        "zone": []})
         return json.dumps(doc, ensure_ascii=False, separators=(",", ":"))
 
     def fill(self, missing: Dict[str, Any]) -> None:
@@ -231,6 +256,8 @@ class Case:
             self.rec.ask_same(path, root)
         for path in missing.get("exists", []):
             self.rec.ask_exists(path)
+        for raw in missing.get("zone", []):
+            self.rec.ask_zone(raw)
 
     def compare(self, lean: Dict[str, Any]) -> Optional[str]:
         want = {"reading": self.python["reading"]}
@@ -272,17 +299,17 @@ def check_policies() -> List[str]:
     """Every shipped agent policy's field definitions fit every reading (Theorems.boundary_accepts_every_reading), no
     reading the hazard scan gives is allowed (ScanTheorems.scan_safe_reading) and every change that names a control
     file of the agent is refused (Control.control_refused) and every connect that is not the model's API is refused
-    (Net.net_refused)."""
+    (Net.net_refused) and no change that reads `zone_reach` protected or unknown is allowed (Zone.zone_not_allowed)."""
     bad = []
     for image in POLICIES:
         out = subprocess.run([str(ORACLE), "--policy", str(image)], capture_output=True, check=True, text=True)
         if json.loads(out.stdout) != {"policy": "accepted", "fits": True, "scan_refused": True, "control_refused": True,
-                                    "net_refused": True}:
+                                    "net_refused": True, "zone_asked": True}:
             bad.append(f"{image.name}: {out.stdout.strip()}")
     return bad
 
 
-def run(cases: List[Case], rounds: int = 4) -> Dict[str, Any]:
+def run(cases: List[Case], rounds: int = 6) -> Dict[str, Any]:
     for case in cases:
         case.run_python()
     pending, answers, asked = list(cases), {}, 0
@@ -310,8 +337,11 @@ def run(cases: List[Case], rounds: int = 4) -> Dict[str, Any]:
             disagreements[case.id] = diff
     kinds = Counter(case.kind for case in cases)
     readings = Counter((case.python["reading"]["tool"], case.python["reading"]["command_class"]) for case in cases)
+    zones = Counter(case.python["reading"]["zone_reach"] for case in cases
+                    if case.python["reading"]["tool"] in ("write_file", "delete_path")
+                    or case.python["reading"]["command_class"] == "mutating")
     return {"cases": len(cases), "kinds": dict(kinds), "refilled": asked, "disagreements": disagreements,
-            "nonscalar": sum(case.nonscalar() for case in cases), "readings": readings}
+            "nonscalar": sum(case.nonscalar() for case in cases), "readings": readings, "zones": zones}
 
 
 # ----------------------------------------------------------------- recorded inputs on the real disk
@@ -326,13 +356,13 @@ def _fill(value: Any, world: Dict[str, str]) -> Any:
 
 
 def recorded_cases(root: Path) -> List[Case]:
-    """The 120 recorded hook inputs and the 51 adversary probes, on a real throwaway world."""
+    """The 161 recorded hook inputs, the 9 with a zone answer and the 51 adversary probes, on a real throwaway world."""
     from integrations.governed_harness import adversary
     made = adversary.make_world(root / "world")
     world = {"ws": str(made["ws"].resolve()), "decoy": str(made["decoy"].resolve())}
     real = RealDisk()
     out: List[Case] = []
-    for case in json.loads(FIXTURES.read_text(encoding="utf-8")):
+    for case in json.loads(FIXTURES.read_text(encoding="utf-8")) + json.loads(ZONE_FIXTURES.read_text(encoding="utf-8")):
         hook = {"session_id": "s1", "transcript_path": "/tmp/t.jsonl", "cwd": _fill(case["cwd"], world),
                 "hook_event_name": "PreToolUse", "tool_name": case["tool_name"], "tool_use_id": "toolu_1",
                 "tool_input": _fill(case["tool_input"], world)}
@@ -786,7 +816,8 @@ def main(argv=None) -> int:
         if res is None:
             continue
         print(f"{name}: {res['cases']} cases {res['kinds']}, {res['nonscalar']} outside the scalar domain, "
-              f"{res['refilled']} asked again for disk facts, {len(res['disagreements'])} disagreements")
+              f"{res['refilled']} asked again for disk or zone facts, {len(res['disagreements'])} disagreements")
+        print(f"  zone_reach of the changing calls: {dict(sorted(res['zones'].items()))}")
         for ident, diff in list(res["disagreements"].items())[:20]:
             print(f"  {ident}: {diff}")
     print(f"policies: {len(POLICIES)} images, {len(bad)} with a definition some reading does not fit")

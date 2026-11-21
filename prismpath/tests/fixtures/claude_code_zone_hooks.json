@@ -1,0 +1,136 @@
+[
+ {
+  "id": "zone-write-protected",
+  "cwd": "@WS@",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+   "file_path": "src/app.py",
+   "content": "x"
+  },
+  "zone": "protected",
+  "expect": {
+   "answer": "ask",
+   "cause_code": 131
+  }
+ },
+ {
+  "id": "zone-write-unknown",
+  "cwd": "@WS@",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+   "file_path": "src/app.py",
+   "content": "x"
+  },
+  "zone": "unknown",
+  "expect": {
+   "answer": "ask",
+   "cause_code": 131
+  }
+ },
+ {
+  "id": "zone-write-none",
+  "cwd": "@WS@",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+   "file_path": "src/app.py",
+   "content": "x"
+  },
+  "zone": "none",
+  "expect": {
+   "answer": "allow",
+   "cause_code": null
+  }
+ },
+ {
+  "id": "zone-edit-protected",
+  "cwd": "@WS@",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+   "file_path": "src/app.py",
+   "old_string": "a",
+   "new_string": "b"
+  },
+  "zone": "protected",
+  "expect": {
+   "answer": "ask",
+   "cause_code": 131
+  }
+ },
+ {
+  "id": "zone-edit-none",
+  "cwd": "@WS@",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+   "file_path": "src/app.py",
+   "old_string": "a",
+   "new_string": "b"
+  },
+  "zone": "none",
+  "expect": {
+   "answer": "allow",
+   "cause_code": null
+  }
+ },
+ {
+  "id": "zone-rm-protected",
+  "cwd": "@WS@",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+   "command": "rm notes.txt"
+  },
+  "zone": "protected",
+  "expect": {
+   "answer": "ask",
+   "cause_code": 131
+  }
+ },
+ {
+  "id": "zone-rm-none",
+  "cwd": "@WS@",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+   "command": "rm notes.txt"
+  },
+  "zone": "none",
+  "expect": {
+   "answer": "ask",
+   "cause_code": 125
+  }
+ },
+ {
+  "id": "zone-read-protected",
+  "cwd": "@WS@",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+   "file_path": "src/app.py"
+  },
+  "zone": "protected",
+  "expect": {
+   "answer": "allow",
+   "cause_code": null
+  }
+ },
+ {
+  "id": "zone-out-of-workspace-is-still-refused",
+  "cwd": "@WS@",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+   "file_path": "@DECOY@/status.txt",
+   "content": "x"
+  },
+  "zone": "unknown",
+  "expect": {
+   "answer": "deny",
+   "cause_code": 111
+  }
+ }
+]
