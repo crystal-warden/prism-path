@@ -253,8 +253,9 @@ class Run:
                       and receipt["image_sha256"] == image_sha
                       and set(entry) in ({"i", "reading", "receipt"}, {"i", "reading", "receipt", "sandbox"})
                       and ("sandbox" not in entry or (isinstance(entry["sandbox"], dict)
-                                                      and set(entry["sandbox"]) == {"profile_sha256"}
-                                                      and re.fullmatch(r"[0-9a-f]{64}", str(entry["sandbox"]["profile_sha256"])))))
+                                                      and set(entry["sandbox"]) in ({"profile_sha256"}, {"profile_sha256", "backend"})
+                                                      and re.fullmatch(r"[0-9a-f]{64}", str(entry["sandbox"]["profile_sha256"]))
+                                                      and entry["sandbox"].get("backend", "bwrap") in ("bwrap", "landlock"))))
             except Exception:
                 ok = False
             if not ok:
@@ -272,11 +273,13 @@ class Run:
         return self._scan(full=True)[1]
 
     def append(self, reading: bytes, verdict: Dict[str, Any], decider: str = DECIDER,
-               sandbox_profile: Optional[str] = None) -> int:
+               sandbox_profile: Optional[str] = None, sandbox_backend: Optional[str] = None) -> int:
         """Record one decided reading as the next receipt, durably, and return its index. `sandbox_profile` is the
         SHA-256 of the sandbox profile the allowed call was rewritten to run under; it is kept on the journal
         line beside the receipt (the receipt is exactly `prismpath.core-receipt/1`, which has no such field),
-        so it is bound to the line by the journal's own check and is not part of the sealed root."""
+        so it is bound to the line by the journal's own check and is not part of the sealed root. `sandbox_backend`
+        (`bwrap` or `landlock`) is the per call sandbox the hook had the call rewritten to run in; a line that has
+        none was written before the backend was recorded and means bwrap."""
         with _locked(self.dir / LOCK):
             n = self._scan(full=False)[0]
             image = (self.dir / IMAGE).read_bytes()
@@ -287,6 +290,8 @@ class Run:
             entry = {"i": n, "reading": reading.hex(), "receipt": receipt}
             if sandbox_profile is not None:
                 entry["sandbox"] = {"profile_sha256": sandbox_profile}
+                if sandbox_backend is not None:
+                    entry["sandbox"]["backend"] = sandbox_backend
             line = canon2.dumps(entry) + b"\n"
             path = self.dir / JOURNAL
             new = not path.exists()
@@ -316,7 +321,7 @@ class Run:
             entries = self._entries()
             if not isinstance(receipt, int) or isinstance(receipt, bool) or not 0 <= receipt < len(entries):
                 raise RunError(f"session {self.session}: there is no receipt {receipt} to bind an observation to")
-            self._check_binding(entries[receipt], image_sha256, profile_sha256)
+            self._check_binding(entries[receipt], image_sha256, profile_sha256, observed)
             lines = self._observation_lines()
             prev = lines[-1]["sha256"] if lines else ""
             entry = {"format": observe_format(), "i": len(lines), "receipt": receipt,
@@ -339,11 +344,15 @@ class Run:
             return entry["i"]
 
     @staticmethod
-    def _check_binding(journal_entry: Dict[str, Any], image_sha256: str, profile_sha256: str) -> None:
+    def _check_binding(journal_entry: Dict[str, Any], image_sha256: str, profile_sha256: str,
+                       observed: Optional[Dict[str, Any]] = None) -> None:
         if journal_entry["receipt"]["image_sha256"] != image_sha256:
             raise RunError("the observation's image hash is not the receipt's")
         if journal_entry.get("sandbox", {}).get("profile_sha256") != profile_sha256:
             raise RunError("the observation's profile hash is not the one the receipt's call was sandboxed under")
+        claimed = (observed or {}).get("backend")
+        if claimed is not None and claimed != journal_entry["sandbox"].get("backend", "bwrap"):
+            raise RunError("the observation names a per call sandbox other than the one the receipt's call was rewritten to use")
 
     def _observation_lines(self) -> List[Dict[str, Any]]:
         """The observation lines, each checked for its own hash, its place in the chain and its format. Call with
@@ -393,7 +402,7 @@ class Run:
                 if not isinstance(n, int) or isinstance(n, bool) or not 0 <= n < len(entries):
                     raise RunCorrupt(f"session {self.session}: observation {line['i']} names receipt {n}, which does not exist")
                 try:
-                    self._check_binding(entries[n], line["image_sha256"], line["profile_sha256"])
+                    self._check_binding(entries[n], line["image_sha256"], line["profile_sha256"], line.get("observed"))
                 except RunError as exc:
                     raise RunCorrupt(f"session {self.session}: observation {line['i']}: {exc}") from exc
                 if line["receipt_sha256"] != core_evidence.sha256_hex(canon2.dumps(entries[n]["receipt"])):

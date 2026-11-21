@@ -27,6 +27,7 @@ Linux only, non interactive. The launcher stays outside, trusted. It
      and written as a receipt in a run of its own (`egress-<time>-<pid>`, sealed at exit), and a refusal is cause 130.
      A caller that passes `decider` (a test or an embedder with no recorded policy) gets a plain decider and no
      receipts, and the profile is `proxy_model`;
+  5b. finds out which per call sandbox works inside (bubblewrap, else Landlock; sandbox_exec.BACKENDS), once, and tells the decider;
   6. runs the program under bwrap in a process group of its own, exits with its status, and on the way out stops
      the proxy, kills what is left of the process group, removes the staged directory and the empty control
      files it made.
@@ -62,6 +63,7 @@ HOOK_PYTHON = "/usr/bin/python3"                # must exist inside: the system 
 PACKAGE_IN = "/opt/pp"                          # the prismpath package, bound read only, for the per call runner (WP8)
 RUNNER_IN = f"{PACKAGE_IN}/prismpath/agent/sandbox_exec.py"
 PROBE_TIMEOUT_S = 30
+BACKENDS = sandbox_exec.BACKENDS     # the per call backends, in order of preference; a test narrows it to force one
 MAX_PROCESSES = 512       # a placeholder until the spike measures the real peak (plan question 10)
 AGENT_ENV = (("DISABLE_AUTOUPDATER", "1"), ("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "1"),
              ("ENABLE_CLAUDEAI_MCP_SERVERS", "false"))
@@ -320,23 +322,28 @@ def launch(command: Sequence[str], workspace: str, credential: Optional[str] = N
 
 
 def probe_nested(outer: Callable, workspace: Path) -> sandbox_hook.Nested:
-    """Whether a per call sandbox can run nested in the agent sandbox on this host, found by running the real
-    runner once: the same outer sandbox, the system interpreter, the bound runner and the strictest bash profile,
-    around `true`. A host that forbids nested user namespaces (an AppArmor restriction, `user.max_user_namespaces`),
-    or a system interpreter too old for the package, shows up here and not as a failed call later. The answer is
-    given to the decider, which then denies every shell command with cause 129 when it is false (agent-sandbox-plan,
-    question 4: the stricter answer, never the outer profile alone)."""
-    probe = [HOOK_PYTHON, "-I", RUNNER_IN, "--workspace", str(workspace), "--profile",
-             json.dumps(Profile().to_object(), sort_keys=True, separators=(",", ":")), "--", "true"]
-    reason, ok = "", False
-    try:
-        done = sandbox_exec._run(outer(probe), PROBE_TIMEOUT_S, b"")
-        ok = done.returncode == 0 and not done.timed_out
-        if not ok:
+    """Which per call sandbox can run inside the agent sandbox on this host, found by running the real runner once per
+    backend: the same outer sandbox, the system interpreter, the bound runner and the strictest bash profile, around
+    `true`. The backends are tried in the owner's order (`sandbox_exec.BACKENDS`: bubblewrap, then Landlock) and the
+    first that works is the answer, which the decider writes into every receipt and the runner is told to hold to.
+    A host that forbids nested user namespaces (an AppArmor restriction, `user.max_user_namespaces`) fails the bubblewrap
+    probe and, where Landlock works, runs the call under Landlock instead. A host where neither works, or a system
+    interpreter too old for the package, shows up here and not as a failed call later, and the decider then denies every
+    shell command with cause 129 (agent-sandbox-plan, question 4: the stricter answer, never the outer profile alone)."""
+    reasons = []
+    for backend in BACKENDS:
+        probe = [HOOK_PYTHON, "-I", RUNNER_IN, "--workspace", str(workspace), "--backend", backend, "--profile",
+                 json.dumps(Profile().to_object(), sort_keys=True, separators=(",", ":")), "--", "true"]
+        reason = ""
+        try:
+            done = sandbox_exec._run(outer(probe), PROBE_TIMEOUT_S, b"")
+            if done.returncode == 0 and not done.timed_out:
+                return sandbox_hook.Nested(HOOK_PYTHON, RUNNER_IN, DECIDER_SOCKET_IN, True, "", backend)
             reason = " ".join(done.stderr.decode("utf-8", "replace").split())[-200:] or f"exit status {done.returncode}"
-    except sandbox_exec.SandboxUnavailable as exc:
-        reason = " ".join(str(exc).split())[-200:]
-    return sandbox_hook.Nested(HOOK_PYTHON, RUNNER_IN, DECIDER_SOCKET_IN, ok, reason)
+        except sandbox_exec.SandboxUnavailable as exc:
+            reason = " ".join(str(exc).split())[-200:]
+        reasons.append(f"{backend}: {reason}")
+    return sandbox_hook.Nested(HOOK_PYTHON, RUNNER_IN, DECIDER_SOCKET_IN, False, "; ".join(reasons)[-300:])
 
 
 def _policy_profile(home: Path, max_processes: int):

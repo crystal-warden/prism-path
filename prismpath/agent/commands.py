@@ -351,7 +351,8 @@ def observation_answer(data: Dict[str, Any], home: Path, store) -> Dict[str, Any
     session = data.get("session_id")
     stderr = data.get("stderr")
     body = observe.observed(int(data["returncode"]), stderr.encode("utf-8", "replace")[-observe.MAX_STDERR:] if isinstance(stderr, str) else b"",
-                            bool(data.get("timed_out")))
+                            bool(data.get("timed_out")),
+                            str(data.get("backend") or "") or None)
     if body is None:
         return {"recorded": True}
     if not (store.root / _run_dir(session)).exists():
@@ -410,7 +411,8 @@ def hook(raw: bytes, env: Optional[Mapping[str, str]] = None, nested=None) -> Di
                 return deny_answer(_detail(exc), SANDBOX_ERROR)
         run = store.open(session, policy.image)
         index = run.append(policy.reading_bytes(result.reading), result.decision.verdict,
-                           sandbox_profile=profile.hash() if profile is not None else None)
+                           sandbox_profile=profile.hash() if profile is not None else None,
+                           sandbox_backend=(nested.backend if nested else "bwrap") if profile is not None else None)
         if profile is not None:
             # the receipt is written first so the runner can bind what the command shows to it (observe.py)
             from prismpath.ledgers import core_evidence
@@ -421,7 +423,8 @@ def hook(raw: bytes, env: Optional[Mapping[str, str]] = None, nested=None) -> Di
             else:
                 observe["socket"] = nested.socket
             updated = sandbox_hook.sandbox_input(data, result.workspace, profile, observe=observe,
-                                                 python=nested.python if nested else None, runner=nested.runner if nested else None)
+                                                 python=nested.python if nested else None, runner=nested.runner if nested else None,
+                                                 backend=nested.backend if nested else "bwrap")
             answer = claude_code.hook_answer(result.decision, updated)
         answer = claude_code.fill_receipt(answer, receipt_id(session, index))
         return answer
