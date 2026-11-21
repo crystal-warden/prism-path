@@ -124,7 +124,7 @@ three defects in the reference quantizer, now fixed and pinned by the corpus.
 
 **Facet** is the wire on top: self framing Fibonacci codes, per packet Merkle roots, a staleness bound
 by cadence, replay refusal with a named cause, and a concentrator for fleets. About 1.5 B per decision
-with its integrity apparatus counted, 66.9 times under an OpenTelemetry record of the same decision;
+with its epoch roots counted, 66.9 times under an OpenTelemetry record of the same decision;
 2.06 B per reading at fleet 50; readable in Wireshark through the shipped dissector.
 [protocol](PROTOCOL.md) · [paper](docs/research/paper-facet-figueroa-quantization.md) ·
 [dissector](integrations/wireshark/README.md)

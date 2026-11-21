@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
-"""The decider of `prismpath agent run` (agent-sandbox-plan, section 4 and WP5).
+"""The decider of `prismpath agent run`.
 
 It runs in the launcher process, outside the sandbox, on a unix socket the launcher binds into the sandbox. The
 thin hook client inside (`hook_client.py`) sends it one hook input per connection and reads one answer. The
@@ -9,9 +9,11 @@ the keys, the policy and the runs directory that stay outside, and the disk fact
 real workspace, which the sandbox mounts at the same path.
 
 Shell commands. The per call sandbox rewrite names the host interpreter by absolute path, which does not exist
-inside the outer sandbox, so the decider asks for `direct=True`: an allowed shell command runs as it is inside
-the outer sandbox, the receipt carries no sandbox profile, and the answer says so. A per call sandbox nested in
-the outer one is WP8.
+inside the outer sandbox, so the decider is given a `sandbox_hook.Nested`: the rewrite names the system interpreter
+and a runner the launcher bound read only, the per call sandbox runs nested in the outer one with the bash role
+profile, and the receipt carries that profile's hash. The runner reports what the command showed over this same
+socket (`observe.send`), because the run directory is outside. Where nesting is unavailable the answer is a deny with
+cause 129.
 
 Bounds. One request is read to EOF within `read_timeout_s` and at most `max_input` bytes, else it is answered
 with a deny and nothing is decided. At most `max_connections` are served at once and decisions are taken one at
@@ -37,12 +39,12 @@ MAX_CONNECTIONS = 8
 class Decider:
     def __init__(self, path, env: Optional[Mapping[str, str]] = None, max_input: int = MAX_INPUT,
                  read_timeout_s: float = READ_TIMEOUT_S, max_connections: int = MAX_CONNECTIONS,
-                 handler: Optional[Callable[[bytes], dict]] = None):
+                 handler: Optional[Callable[[bytes], dict]] = None, nested=None):
         self.path = Path(path)
         self.env = dict(os.environ if env is None else env)
         self.max_input = max_input
         self.read_timeout_s = read_timeout_s
-        self._handler = handler or (lambda raw: commands.hook(raw, self.env, direct=True))
+        self._handler = handler or (lambda raw: commands.hook(raw, self.env, nested=nested))
         self._slots = threading.BoundedSemaphore(max_connections)
         self._decide = threading.Lock()
         self._server: Optional[socket.socket] = None

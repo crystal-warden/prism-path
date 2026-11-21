@@ -16,8 +16,10 @@ round trip). n = 64,484 representative fused decisions; batched the way OTLP shi
 
 **Headline:** the decision wire is **66.9× smaller than OTLP protobuf** per
 decision, and **4.7× smaller than zstd compressed batched OTLP**.
-O1 and O2 here count their integrity apparatus (Merkle epoch roots + ACK channel), the same
-convention as the #84 headline; every ratio divides by the exact measured cost, not a rounded one.
+O1 and O2 here count the two roots each epoch carries (the Merkle root and the chained epoch root),
+the same convention as the #84 headline; the 32 B ACK on the return channel is itemized in results.json
+and not added (with it O1 is 1.524 B, 66.5× under OTLP protobuf). Every ratio divides by the exact
+measured cost, not a rounded one.
 
 **Why OTLP is this size (honest):** OTLP is a general telemetry *envelope*, not a decision codec.
 Every record carries two per record wall clock timestamps (fixed64), typed attribute values, and

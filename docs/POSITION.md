@@ -98,7 +98,7 @@ three defects in the reference quantizer, now fixed and pinned by the corpus (ro
 
 Facet is the wire on top: self framing Fibonacci codes, per packet Merkle roots, a refresh profile that
 bounds staleness by cadence, replay refusal with a named cause, and a concentrator that amortises the IP
-envelope across a fleet. Measured: about 1.5 B per decision with its integrity apparatus counted, 66.9
+envelope across a fleet. Measured: about 1.5 B per decision with its epoch roots counted, 66.9
 times under an OpenTelemetry record of the same decision (rows #84, #95); 2.06 B per reading at fleet 50
 (row #127); 4 to 6 B per reading against 117, 237, and 512 B for OPA, Cedar, and Cerbos over their
 documented interfaces (row #142). The wire is PrismPath's own and composes with other engines.

@@ -230,8 +230,8 @@ control file that does not exist yet and is hard linked after the call (the sand
 
 ### 4.4 The network (`net_dest`, `proc_class`, cause 130)
 
-The sandboxed agent reaches the network only through a proxy that asks the policy about each connection
-(`docs/design/agent-sandbox-plan.md`, section 3). Classifier version 2 adds the tool `connect`, two reading fields and
+The sandboxed agent reaches the network only through a proxy that asks the policy about each connection.
+Classifier version 2 adds the tool `connect`, two reading fields and
 one cause. The proxy does not feed the classifier yet (a later package does); this package defines the call and the
 reading.
 

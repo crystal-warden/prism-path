@@ -9,7 +9,7 @@ The hook decides a call under the active attested image. For an allowed Bash cal
      a cache entry is used only when it parses, names this image and its profile hashes to the hash it records,
      and is otherwise recompiled;
   2. answers `allow` with `updatedInput`, the whole tool input with `command` replaced by a command that runs the
-     original under `prismpath/agent/sandbox_exec.py` (docs/design/hook-rewrite-note.md: `updatedInput` replaces the
+     original under `prismpath/agent/sandbox_exec.py` (`updatedInput` replaces the
      whole object, so every other field is carried over unchanged);
   3. returns the profile's hash for the receipt.
 
@@ -34,6 +34,7 @@ import json
 import os
 import shlex
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Mapping, Optional, Tuple
 
@@ -63,6 +64,21 @@ def call_timeout_s(tool_input: Mapping[str, Any]) -> int:
 
 class SandboxRefused(Exception):
     """The call was allowed but cannot be run inside the sandbox; the hook denies it."""
+
+
+@dataclass(frozen=True)
+class Nested:
+    """Where the per call sandbox runs: inside the outer agent sandbox of `prismpath agent run`. The host interpreter and the host checkout do not exist there, so the rewrite names the
+    system interpreter (under the read only system prefix) and a runner that the launcher bound read only, and the
+    runner reaches the launcher's decider over `socket` to record what the command showed. `available` is what the
+    launcher measured at start by running this very runner nested once; when it is false every shell command is
+    refused with cause 129, never run under the outer profile alone (the outer sandbox holds the model credential
+    for the agent itself, which a shell child must not see)."""
+    python: str
+    runner: str
+    socket: str
+    available: bool = True
+    reason: str = ""
 
 
 def _sha256_hex(data: bytes) -> str:
@@ -102,42 +118,56 @@ def profile_for(home: Path, image: bytes):
 
 
 def rewrite_command(command: str, workspace: str, cwd: str, profile, python: Optional[str] = None,
-                    timeout_s: Optional[int] = None, observe: Optional[Mapping[str, Any]] = None) -> str:
+                    timeout_s: Optional[int] = None, observe: Optional[Mapping[str, Any]] = None,
+                    runner: Optional[str] = None) -> str:
     """The shell command that runs `command` under the sandbox with `profile`."""
     python = python or sys.executable
-    parts = [python, "-I", str(RUNNER), "--workspace", workspace, "--cwd", cwd,
+    parts = [python, "-I", str(runner or RUNNER), "--workspace", workspace, "--cwd", cwd,
              "--profile", json.dumps(profile.to_object(), sort_keys=True, separators=(",", ":"))]
     if timeout_s is not None:
         parts += ["--timeout", str(int(timeout_s))]
     if observe:     # where the runner records what the command showed, bound to the call's receipt (observe.py)
         from prismpath.agent import observe as observe_module
-        parts += observe_module.argv(observe["run_dir"], observe["session"], observe["receipt"],
-                                     observe["image_sha256"], observe["profile_sha256"])
+        if "socket" in observe:     # nested: the run directory is outside, so the decider records it
+            parts += observe_module.socket_argv(observe["socket"], observe["session"], observe["receipt"],
+                                                observe["image_sha256"], observe["profile_sha256"])
+        else:
+            parts += observe_module.argv(observe["run_dir"], observe["session"], observe["receipt"],
+                                         observe["image_sha256"], observe["profile_sha256"])
     parts += ["--", command]
     return " ".join(shlex.quote(part) for part in parts)
 
 
 def sandbox_input(hook_input: Mapping[str, Any], workspace: str, profile, python: Optional[str] = None,
-                  observe: Optional[Mapping[str, Any]] = None) -> Dict[str, Any]:
+                  observe: Optional[Mapping[str, Any]] = None, runner: Optional[str] = None) -> Dict[str, Any]:
     """`updatedInput` for an allowed Bash call: the original tool input, whole, with only `command` replaced."""
     tool_input = hook_input.get("tool_input")
     if not isinstance(tool_input, dict) or not isinstance(tool_input.get("command"), str):
         raise SandboxRefused("the Bash call has no command to sandbox")
     cwd = hook_input.get("cwd") if isinstance(hook_input.get("cwd"), str) and hook_input.get("cwd") else workspace
     out = dict(tool_input)
-    out["command"] = rewrite_command(tool_input["command"], workspace, cwd, profile, python, call_timeout_s(tool_input), observe)
+    out["command"] = rewrite_command(tool_input["command"], workspace, cwd, profile, python, call_timeout_s(tool_input), observe, runner)
     return out
 
 
-def sandbox_profile_for_call(hook_input: Mapping[str, Any], home: Path, image: bytes):
-    """The profile an allowed Bash call runs under, after the checks that make it runnable. Raises SandboxRefused."""
+def sandbox_profile_for_call(hook_input: Mapping[str, Any], home: Path, image: bytes, nested: Optional[Nested] = None):
+    """The profile an allowed Bash call runs under, after the checks that make it runnable. Raises SandboxRefused.
+    Nested, it also refuses when the outer sandbox cannot host the per call one, and when the profile asks for a
+    view of the host (`/` read only): inside, `/` is the outer sandbox's own root, which holds the model credential."""
     from prismpath.agent import sandbox_exec
     tool_input = hook_input.get("tool_input")
     if not isinstance(tool_input, dict) or not isinstance(tool_input.get("command"), str):
         raise SandboxRefused("the Bash call has no command to sandbox")
+    if nested is not None and not nested.available:
+        raise SandboxRefused("a per call sandbox cannot be nested inside the agent sandbox on this host, so the command "
+                             "was not run" + (f" ({nested.reason})" if nested.reason else ""))
     if not sandbox_exec.available():
         raise SandboxRefused(f"{sandbox_exec.BWRAP} is missing, so the command cannot be sandboxed")
-    return profile_for(home, image)
+    profile = profile_for(home, image)
+    if nested is not None and "/" in profile.ro_mounts:
+        raise SandboxRefused("the policy lets a shell command see the host, and inside the agent sandbox that view would "
+                             "include the model credential, so the command was not run")
+    return profile
 
 
 def sandbox_allowed_bash(hook_input: Mapping[str, Any], workspace: str, home: Path, image: bytes
