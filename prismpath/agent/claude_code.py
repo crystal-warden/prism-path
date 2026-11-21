@@ -13,7 +13,7 @@ This module is trusted code outside the verified core, like the classifier (clas
 would do is read here, so it is read conservatively: whatever this module cannot read in full is the
 `unknown` call, which the default policy (`policy/agent_default`) escalates to the person.
 
-The mapping (docs/design/governed-agent-plan.md, A2):
+The mapping:
 
   Read                          read_file     the file path
   Write, Edit, MultiEdit,       write_file    the file path (the content is never classified)
