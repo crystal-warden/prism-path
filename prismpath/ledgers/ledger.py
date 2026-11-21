@@ -8,7 +8,7 @@ per-run orphan ref — its git tree is the content-hashed state the gate blessed
 correlate it to the flow node. Progress is then a projection over `git log` (event sourcing), so a
 tamper-evident audit trail and a resume-able done-set come for free from a tool already on the box.
 
-Design (see docs/design/commit-as-state.md):
+Design:
   * NEVER in-tree. The ledger is a SEPARATE bare repo under $XDG_STATE_HOME/prismpath/<flow>.git,
     written entirely via git plumbing (hash-object / write-tree / commit-tree / update-ref) with
     GIT_DIR pinned — so a project's own repo (its refs, index, working tree) is never touched, and

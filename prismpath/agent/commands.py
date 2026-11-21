@@ -525,7 +525,7 @@ def verify(as_json: bool, tamper_demo: bool = False, out=None) -> int:
                 result = run.verify(home, seal=summary["seal"] != "diverged")
                 row.update(receipts=result["receipts"], replayed=result["replayed"], disagree=result["disagree"],
                            root_statement=result["root_statement"], observations=result.get("observations", 0),
-                           outcomes=result.get("outcomes", 0),
+                           outcomes=result.get("outcomes", 0), bound=result.get("bound", {}),
                            verified=result["disagree"] == 0 and result["root_statement"] == "signed")
         except (RunError, Exception) as exc:  # noqa: BLE001 - one bad run does not stop the others
             row.update(verified=False, error=_detail(exc))
@@ -552,7 +552,9 @@ def verify(as_json: bool, tamper_demo: bool = False, out=None) -> int:
                       + (f"; {row['observations']} sandbox observations bound to their receipts, none of them a decision"
                          if row.get("observations") else "")
                       + (f"; {row['outcomes']} outcome entries chained and bound to their receipts (outside the signed root, none of them a decision)"
-                         if row.get("outcomes") else ""), file=out)
+                         if row.get("outcomes") else "")
+                      + (f"; allowed host list sha256 {', '.join(row['bound']['hosts_sha256'])} (kept on the journal lines, outside the signed root)"
+                         if row.get("bound", {}).get("hosts_sha256") else ""), file=out)
         demo = report.get("tamper_demo")
         if demo is not None:
             if demo.get("refused") is True:
@@ -599,7 +601,6 @@ def run(program: List[str], workspace: Optional[str] = None, credential: Optiona
     recorded policy allows reachable (the model API, and `allowed_hosts` if the policy allows that class;
     prismpath/agent/launcher.py). Exits with the program's status. Raises AgentError, with
     nothing run, off Linux or without bwrap or socat."""
-    import time
     from prismpath.agent import launcher
     if program[:1] == ["--"]:
         program = program[1:]
@@ -613,8 +614,6 @@ def run(program: List[str], workspace: Optional[str] = None, credential: Optiona
     mismatch = classifier_mismatch(policy)
     if mismatch:
         raise AgentError(f"{mismatch}; nothing was run")
-    if egress_log is None:
-        egress_log = str(config_dir() / "egress" / f"{time.strftime('%Y%m%dT%H%M%S')}-{os.getpid()}.log")
     kwargs = {} if max_processes is None else {"max_processes": max_processes}
     if local_model:
         kwargs["local_model"] = local_model
@@ -638,10 +637,10 @@ def confinement_state() -> Dict[str, Any]:
 
 
 def outcome_line(c: Dict[str, int]) -> str:
-    """One line of what became of the calls: `allowed 5 (4 ran, 1 no outcome); asked 2 (1 approved and ran, 1 no
-    outcome); refused 3`. A call still waiting for its outcome shows as no outcome."""
+    """One line of what became of the calls: `allowed 5 (4 ran, 1 no outcome); asked 3 (1 approved and ran, 1 failed or interrupted,
+    1 no outcome); refused 3`. A call still waiting for its outcome shows as no outcome."""
     return (f"allowed {c['allowed']} ({c['allowed_ran']} ran, {c['allowed_no_outcome']} no outcome); "
-            f"asked {c['asked']} ({c['asked_approved']} approved and ran, {c['asked_no_outcome']} no outcome); "
+            f"asked {c['asked']} ({c['asked_approved']} approved and ran, {c['asked_failed']} failed or interrupted, {c['asked_no_outcome']} no outcome); "
             f"refused {c['refused']}" + (f"; {c['unbound']} outcome events could not be bound" if c.get("unbound") else ""))
 
 
