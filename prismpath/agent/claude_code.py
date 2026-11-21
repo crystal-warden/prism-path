@@ -88,7 +88,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional
 
-from . import classifier
+from . import classifier, session_state
 from .policy import DEFAULT_POLICY_PATH, Decision, Policy
 
 RECEIPT_PLACEHOLDER = "{receipt}"      # the caller replaces it with the receipt's id (fill_receipt)
@@ -507,16 +507,21 @@ class HookResult:
 
 
 def evaluate(hook_input: Any, env: Optional[Mapping[str, str]] = None, policy: Optional[Policy] = None,
-             zones: Any = None) -> HookResult:
+             zones: Any = None, session: Optional[Mapping[str, str]] = None) -> HookResult:
     """Classify one hook input, decide it under `policy` (agent_default when None) and write the hook answer.
     `zones` is the zone information point (prismpath/agent/zones.py), or a function of the workspace that gives it;
-    None declares no zone, so nothing is protected."""
+    None declares no zone, so nothing is protected. `session` is the session's state (`session_state.read`), which a
+    policy that defines the session fields reads as part of the reading; a policy that does not define them never sees
+    it, and one that does and is given none reads the most restrictive state."""
     policy = policy or load_default_policy()
     hc = hook_call(hook_input, env)
     point = zones(hc.workspace) if callable(zones) else zones
     config = classifier.Config.for_workspace(hc.workspace) if point is None \
         else classifier.Config.for_workspace(hc.workspace, zones=point)
     reading = hook_reading(hook_input, hc, config)
+    if policy.stateful:
+        reading = {**reading, **({name: session[name] for name in session_state.FIELDS} if session is not None
+                                 else session_state.RESTRICTIVE)}
     decision = policy.decide(policy.reading_bytes(reading))
     return HookResult(decision, reading, hc.call, hc.workspace, hook_answer(decision))
 

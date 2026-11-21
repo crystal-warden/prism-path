@@ -133,6 +133,11 @@ class RunCorrupt(RunError):
     """The journal is damaged somewhere a killed writer cannot have damaged it."""
 
 
+class RunStale(RunError):
+    """An append that named how many receipts the run held when its decision was made found another count: a receipt
+    was appended since (a parallel tool call), so the decision may rest on state that is no longer true."""
+
+
 def observe_format() -> str:
     from prismpath.agent import observe
     return observe.FORMAT
@@ -354,9 +359,27 @@ class Run:
         """Every complete journal line, parsed and validated, after dropping a torn tail. Call with the lock held."""
         return self._scan(full=True)[1]
 
+    #: files a run holds only once it has a journal: a run that has one of them and no journal has lost it
+    _JOURNAL_FILES = (PREFIX, TORN, OBSERVATIONS, OUTCOMES, "receipts.jsonl", "run.json")
+
+    def snapshot(self) -> "tuple[int, List[Dict[str, Any]]]":
+        """`(count, entries)`: how many receipts the run holds and every journal line, each validated against its
+        reading and the image, read under the lock. A run with no journal and none of the files only a journal leaves
+        has none; one that has such a file and no journal is `RunCorrupt`. What a decision that depends on the session's
+        history reads (prismpath/agent/session_state.py)."""
+        with _locked(self.dir / LOCK):
+            if not (self.dir / IMAGE).exists():
+                raise RunError(f"no run for session {self.session}")
+            if not (self.dir / JOURNAL).exists():
+                if any((self.dir / name).exists() for name in self._JOURNAL_FILES):
+                    raise RunCorrupt(f"session {self.session}: the journal is missing")
+                return 0, []
+            return self._scan(full=True)
+
     def append(self, reading: bytes, verdict: Dict[str, Any], decider: str = DECIDER,
                sandbox_profile: Optional[str] = None, sandbox_backend: Optional[str] = None,
-               tool_use_id: Optional[str] = None, grant: Optional[Dict[str, str]] = None) -> int:
+               tool_use_id: Optional[str] = None, grant: Optional[Dict[str, str]] = None,
+               expect: Optional[int] = None) -> int:
         """Record one decided reading as the next receipt, durably, and return its index. `sandbox_profile` is the
         SHA-256 of the sandbox profile the allowed call was rewritten to run under; it is kept on the journal
         line beside the receipt (the receipt is exactly `prismpath.core-receipt/1`, which has no such field),
@@ -365,9 +388,13 @@ class Run:
         none was written before the backend was recorded and means bwrap. `tool_use_id`, the id Claude Code gave the
         call, is kept the same way (an optional key of the line, never in the receipt), so the PostToolUse outcome of
         that call can be bound to this receipt (`Run.outcome_of_hook`). A value that is not shaped like an id is left
-        off. `grant` is the `{"grant_id", "grant_sha256"}` of the grant a gateway request presented, kept the same way."""
+        off. `grant` is the `{"grant_id", "grant_sha256"}` of the grant a gateway request presented, kept the same way.
+        `expect`, when given, is the number of receipts the caller's decision was made against (`snapshot`): the append
+        is refused with `RunStale`, writing nothing, when the run holds another number."""
         with _locked(self.dir / LOCK):
             n = self._scan(full=False)[0]
+            if expect is not None and n != expect:
+                raise RunStale(f"session {self.session}: the run holds {n} receipts, not the {expect} this decision was made against")
             image = (self.dir / IMAGE).read_bytes()
             receipt = {"format": core_evidence.RECEIPT_FORMAT, "idx": n, "case": self.session, "reading": n,
                        "image_sha256": core_evidence.sha256_hex(image),

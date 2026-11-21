@@ -78,6 +78,8 @@ KNOWN_CATEGORIES = {
     "net_dest": ("none", "model_api", "allowed_host", "other", "unknown"),
     "proc_class": ("none", "single", "tree", "unknown"),
     "zone_reach": ("none", "protected", "unknown"),
+    "session_protected_changes": ("none", "some"),
+    "session_shell_runs": ("none", "few", "many"),
 }
 REQUIRED_FIELDS = ("path_scope", "command_class", "git_op")
 # What the classifier never produces, so the walk does not decide it: a field that is `none` unless another field has

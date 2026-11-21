@@ -133,8 +133,9 @@ ADVERSARY_CASES = [case for case in FIXTURES if ADVERSARY.match(case["id"])]
 
 
 # ----------------------------------------------------------------- the starters themselves
-def test_the_starters_are_strict_default_and_review():
-    assert STARTERS == {"strict": "agent_rules", "default": "agent_default", "review": "agent_review"}
+def test_the_starters_are_strict_default_review_and_session():
+    assert STARTERS == {"strict": "agent_rules", "default": "agent_default", "review": "agent_review",
+                        "session": "agent_session"}
     assert DEFAULT_STARTER == "default"
 
 

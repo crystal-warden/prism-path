@@ -9,7 +9,7 @@ Where things live. Everything the commands keep is in one directory of the user'
   authority.key, authority.pub   the authority key, which says which policy may run (mode 0600)
   instance.key, instance.pub     the instance key, which signs the root statement over a run (mode 0600)
   policy.core.json               the policy image every hook call decides under: the starter `init --policy`
-                                 chose (`strict`, `default` or `review`), `default` (agent_default) unless told
+                                 chose (`strict`, `default`, `review` or `session`), `default` (agent_default) unless told
   policy.attestation.json        its `prismpath.core-image/1` attestation, signed with the authority key
   runs/<session>                 one run per Claude Code session (`prismpath.agent.run`)
 
@@ -44,6 +44,7 @@ KEY_ROLES = ("authority", "instance")
 # whose receipt is already written (Run.outcome_of_hook); they cannot block anything and decide nothing.
 HOOK_EVENTS = (("PreToolUse", "*"), ("SessionEnd", None), ("PostToolUse", "*"), ("PostToolUseFailure", "*"))
 OUTCOME_EVENTS = ("PostToolUse", "PostToolUseFailure")
+STATE_ATTEMPTS = 8      # how often a decision is made again when a parallel call appended a receipt first
 
 
 class AgentError(Exception):
@@ -224,7 +225,7 @@ def _settings_text(settings: Dict[str, Any]) -> str:
 def init(project: Path, yes: bool, as_json: bool, confirm=None, out=None, policy: Optional[str] = None) -> int:
     """Keys, policy and the project's hook entries. `confirm(prompt) -> bool` asks the person; None means
     ask on a terminal and otherwise take no for an answer. `policy` names the starter to record (`strict`,
-    `default`, `review`); None keeps the starter already recorded, and records `default` where there is none."""
+    `default`, `review`, `session`); None keeps the starter already recorded, and records `default` where there is none."""
     import difflib
     out = out or sys.stdout
     home = config_dir()
@@ -433,25 +434,36 @@ def hook(raw: bytes, env: Optional[Mapping[str, str]] = None, nested=None) -> Di
         mismatch = classifier_mismatch(policy)
         if mismatch:
             raise AgentError(mismatch)          # a deny with the hook-error cause and the fix, not a bare cause 37
-        from prismpath.agent import zones as zone_module
-        result = claude_code.evaluate(data, env, policy, lambda ws: zone_module.information_point(
-            home, policy.image, Path(ws), env))
-        answer, profile = result.answer, None
+        from prismpath.agent import run as run_module, session_state, zones as zone_module
         from prismpath.agent import sandbox_hook
-        has_command = isinstance(data.get("tool_input"), dict) and isinstance(data["tool_input"].get("command"), str)
-        if (result.decision.kind == "allow" or (result.decision.kind == "escalate" and has_command)) \
-                and data.get("tool_name") == "Bash" and sandbox_hook.supported():
-            # an allowed shell call, or a question the person approves, runs only inside the sandbox the same policy compiles to (sandbox_hook.py);
-            # on a platform without the sandbox the call is decided and not confined, as before
+        # A policy that reads the session's history decides against the receipts the session holds when the decision
+        # is made, and the append names that count: a receipt appended meanwhile (a parallel tool call) means the
+        # decision may rest on state that is no longer true, so it is made again.
+        for _attempt in range(STATE_ATTEMPTS):
+            state, held = session_state.read(store, session) if policy.stateful else (None, None)
+            result = claude_code.evaluate(data, env, policy, lambda ws: zone_module.information_point(
+                home, policy.image, Path(ws), env), session=state)
+            answer, profile = result.answer, None
+            has_command = isinstance(data.get("tool_input"), dict) and isinstance(data["tool_input"].get("command"), str)
+            if (result.decision.kind == "allow" or (result.decision.kind == "escalate" and has_command)) \
+                    and data.get("tool_name") == "Bash" and sandbox_hook.supported():
+                # an allowed shell call, or a question the person approves, runs only inside the sandbox the same policy compiles to (sandbox_hook.py);
+                # on a platform without the sandbox the call is decided and not confined, as before
+                try:
+                    profile = sandbox_hook.sandbox_profile_for_call(data, home, policy.image, nested)
+                except sandbox_hook.SandboxRefused as exc:
+                    return deny_answer(_detail(exc), SANDBOX_ERROR)
+            run = store.open(session, policy.image)
             try:
-                profile = sandbox_hook.sandbox_profile_for_call(data, home, policy.image, nested)
-            except sandbox_hook.SandboxRefused as exc:
-                return deny_answer(_detail(exc), SANDBOX_ERROR)
-        run = store.open(session, policy.image)
-        index = run.append(policy.reading_bytes(result.reading), result.decision.verdict,
-                           sandbox_profile=profile.hash() if profile is not None else None,
-                           sandbox_backend=(nested.backend if nested else "bwrap") if profile is not None else None,
-                           tool_use_id=data.get("tool_use_id"))
+                index = run.append(policy.reading_bytes(result.reading), result.decision.verdict,
+                                   sandbox_profile=profile.hash() if profile is not None else None,
+                                   sandbox_backend=(nested.backend if nested else "bwrap") if profile is not None else None,
+                                   tool_use_id=data.get("tool_use_id"), expect=held)
+                break
+            except run_module.RunStale:
+                continue
+        else:
+            raise AgentError(f"the session's journal changed under {STATE_ATTEMPTS} decisions in a row, so none was made")
         if profile is not None:
             # the receipt is written first so the runner can bind what the command shows to it (observe.py)
             from prismpath.ledgers import core_evidence

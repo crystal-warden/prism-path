@@ -40,6 +40,7 @@ from typing import Any, Dict, Optional, Tuple
 
 HERE = Path(__file__).resolve().parent
 
+from prismpath.agent import session_state  # noqa: E402
 from prismpath.kernel import canon2, causes, core_policy, core_reference, core_render  # noqa: E402
 from prismpath.kernel.parser import parse  # noqa: E402
 
@@ -53,7 +54,9 @@ DEFAULT_POLICY_PATH = HERE / "policy" / "agent_default.core.json"   # agent_rule
 #   strict   agent_rules: a call it cannot read and a shell command that changes files are refused
 #   default  agent_default: those two ask the person instead
 #   review   agent_review: agent_default, but every change inside the workspace asks (cause 127)
-STARTERS = {"strict": "agent_rules", "default": "agent_default", "review": "agent_review"}
+#   session  agent_session: agent_default, and two questions that depend on what the session already did (causes 133,
+#            134; prismpath/agent/session_state.py): the only starter that reads the session's history
+STARTERS = {"strict": "agent_rules", "default": "agent_default", "review": "agent_review", "session": "agent_session"}
 DEFAULT_STARTER = "default"
 
 
@@ -321,6 +324,7 @@ class Policy:
         self.flow = core_render.render(self.doc)
         self.graph = parse(self.flow)
         self.fields = sorted(self.doc["fields"])
+        self.stateful = session_state.defined_by(self.doc["fields"])      # the policy reads the session's history
         for rule in self.doc["rules"]:
             if target_decision(rule["target"]) is None:
                 raise ValueError(f"the policy names a target the harness does not know: {rule['target']}")
@@ -330,7 +334,11 @@ class Policy:
         return cls(Path(path).read_bytes())
 
     def reading_bytes(self, reading: Dict[str, Any]) -> bytes:
-        """A reading's canonical canon/2 bytes: the only spelling the core reads."""
+        """A reading's canonical canon/2 bytes: the only spelling the core reads. A policy that reads the session's
+        history (`session_state`) is given both session fields when the reading lacks them, at the most restrictive
+        value: a caller that did not read the session's state cannot make a decision the state would have restricted."""
+        if self.stateful and not all(name in reading for name in session_state.FIELDS):
+            reading = {**session_state.RESTRICTIVE, **reading}
         return canon2.dumps(reading)
 
     def verdict(self, raw: bytes) -> Dict[str, Any]:
