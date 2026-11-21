@@ -119,7 +119,7 @@ def test_toolchain_paths(world):
     (["ls", "-la"], "read_only"), (["cat", "notes.txt"], "read_only"), (["wc", "-l", "notes.txt"], "read_only"),
     (["grep", "-rn", "TODO", "."], "read_only"), (["/usr/bin/ls"], "read_only"), (["find", ".", "-name", "*.log"], "read_only"),
     (["find", ".", "-name", "*.log", "-delete"], "mutating"), (["find", ".", "-exec", "rm", "{}", ";"], "mutating"),
-    (["sed", "-n", "1p", "notes.txt"], "read_only"), (["sed", "-i", "s/a/b/", "notes.txt"], "mutating"),
+    (["sed", "-n", "1p", "notes.txt"], "mutating"), (["sed", "-i", "s/a/b/", "notes.txt"], "mutating"),
     (["rm", "notes.txt"], "mutating"), (["rm", "-rf", "logs"], "mutating"), (["mv", "a", "b"], "mutating"),
     (["python3", "x.py"], "mutating"), (["bash", "-c", "ls"], "mutating"), (["./run.sh"], "mutating"),
     (["/opt/tool/bin/x"], "mutating"), (["curl", "https://example.com"], "network"), (["wget", "x"], "network"),

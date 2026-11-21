@@ -58,7 +58,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-CLASSIFIER_VERSION = 2
+CLASSIFIER_VERSION = 3
 MOUNT = "/workspace"          # where the sandbox mounts the workspace, and the path the model is told
 TOOLS = ("list_dir", "read_file", "write_file", "delete_path", "run_command", "git")
 CONNECT = "connect"           # not in TOOLS: the MCP mapping passes the names in TOOLS through, and a server's tool named
@@ -97,15 +97,16 @@ _SCHEMA: Dict[str, Tuple[Dict[str, type], Dict[str, type]]] = {
 
 # run_command: what a program is, by the basename of argv[0]. Anything in none of these sets is unknown.
 READ_ONLY = frozenset({"ls", "cat", "head", "tail", "wc", "grep", "egrep", "fgrep", "echo", "pwd", "true", "false",
-                       "sort", "uniq", "diff", "cmp", "stat", "file", "date", "basename", "dirname", "realpath",
-                       "readlink", "tree", "du", "md5sum", "sha1sum", "sha256sum", "cut", "printf", "which", "whoami",
-                       "uname", "id", "find", "sed", "nl", "od", "xxd", "column", "comm", "join", "paste", "rev",
+                       "diff", "cmp", "stat", "basename", "dirname", "realpath",
+                       "readlink", "du", "md5sum", "sha1sum", "sha256sum", "cut", "printf", "which", "whoami",
+                       "uname", "id", "find", "nl", "od", "column", "comm", "join", "paste", "rev",
                        "seq", "tac", "test", "expr", "pgrep", "ps"})
 MUTATING = frozenset({"rm", "rmdir", "mv", "cp", "ln", "chmod", "chown", "chgrp", "touch", "mkdir", "dd", "truncate",
                       "shred", "tee", "install", "unlink", "tar", "unzip", "zip", "gzip", "gunzip", "patch", "kill",
                       "pkill", "killall", "python", "python3", "perl", "ruby", "node", "bash", "sh", "zsh", "dash",
                       "make", "cargo", "rustc", "gcc", "cc", "npm", "npx", "pytest", "xargs", "env", "nohup",
-                      "timeout", "nice", "awk", "gawk", "mawk", "vim", "vi", "nano", "ed", "crontab", "systemctl"})
+                      "timeout", "nice", "awk", "gawk", "mawk", "vim", "vi", "nano", "ed", "crontab", "systemctl", "sed", "sort",
+                      "uniq", "xxd", "tree", "file", "date"})
 NETWORK = frozenset({"curl", "wget", "ssh", "scp", "sftp", "nc", "ncat", "netcat", "telnet", "ftp", "ping", "ping6",
                      "dig", "nslookup", "host", "traceroute", "tracepath", "socat", "apt", "apt-get", "brew", "aria2c",
                      "http", "https", "lynx", "w3m", "links", "rsync", "torsocks"})
@@ -169,6 +170,20 @@ PROC_TREE = frozenset({"make", "cargo", "rustc", "gcc", "cc", "npm", "npx", "yar
 _FIND_EXEC = ("-exec", "-execdir", "-ok", "-okdir")
 
 GIT_UNSAFE_OPTIONS = ("--exec", "--upload-pack", "--receive-pack", "-c", "--config", "--git-dir", "--work-tree", "-C")
+# Options of the read subcommands that write a file, run a program or read outside the repository. git accepts any
+# unambiguous prefix of a long option, so a long argument that is a prefix of one of these (or of the options above)
+# is unsafe too, and a short cluster that holds `O` (`git grep -Osh`, `git diff -Oorderfile`) is unsafe.
+GIT_UNSAFE_LONG = ("--exec", "--upload-pack", "--receive-pack", "--config", "--git-dir", "--work-tree", "--output",
+                   "--open-files-in-pager", "--no-index", "--ext-diff", "--contents", "--ignore-revs-file", "--remerge-diff")
+
+
+def git_unsafe_option(arg: str) -> bool:
+    if any(arg == option or arg.startswith(option + "=") for option in GIT_UNSAFE_OPTIONS):
+        return True
+    if arg.startswith("--"):
+        name = arg.split("=", 1)[0]
+        return len(name) >= 3 and any(option.startswith(name) for option in GIT_UNSAFE_LONG)
+    return arg.startswith("-") and "O" in arg
 
 
 @dataclass
@@ -499,12 +514,6 @@ def command_class(argv: List[str]) -> str:
         return "network"
     if base == "find" and any(arg in _FIND_EFFECTS for arg in argv[1:]):
         return "mutating"
-    if base == "sed" and any(arg == "-i" or arg.startswith("-i") or arg.startswith("--in-place") for arg in argv[1:]):
-        return "mutating"
-    if base == "sort" and any(arg == "-o" or arg.startswith("--output") for arg in argv[1:]):
-        return "mutating"
-    if base == "tree" and "-o" in argv[1:]:
-        return "mutating"
     if base in READ_ONLY:
         return "read_only"
     if base in MUTATING or base in INSTALLERS:
@@ -568,7 +577,7 @@ def git_facts(subcommand: Any, args: Any, config: Config) -> Tuple[str, str, Lis
             not isinstance(args, list) or len(args) > MAX_ARGV or \
             not all(isinstance(arg, str) and "\x00" not in arg for arg in args):
         return "unknown", "none", []
-    if any(arg == option or arg.startswith(option + "=") for arg in args for option in GIT_UNSAFE_OPTIONS):
+    if any(git_unsafe_option(arg) for arg in args):
         return "unknown", "none", []
     if subcommand == "push":
         words = [arg for arg in args if not arg.startswith("-")]

@@ -362,7 +362,8 @@
     "tool_use_id": "toolu_0162fH5rgmpYZ7nzngJHupTH"
    },
    "live_answer": "allow",
-   "expect": "allow"
+   "expect": "ask",
+   "changed": "classifier version 3 reads sed as mutating (it can write files and run commands), so a sed call inside the project is asked about; live it was allowed as read only"
   },
   {
    "id": "live-17",

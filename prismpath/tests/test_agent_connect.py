@@ -56,7 +56,7 @@ def test_the_class_of_a_host_and_port(host, port, want):
 def test_a_connect_reads_nothing_but_its_class():
     reading = classifier.classify({"tool": "connect", "args": {"host": "api.anthropic.com", "port": 443}}, CONFIG)
     assert reading == {**classifier.base_reading(), "tool": "connect", "net_dest": "model_api"}
-    assert reading["classifier_version"] == 2 == classifier.CLASSIFIER_VERSION
+    assert reading["classifier_version"] == 3 == classifier.CLASSIFIER_VERSION
 
 
 @pytest.mark.parametrize("call", [
@@ -157,6 +157,6 @@ def test_existing_readings_keep_their_verdicts_under_the_new_starters():
             reading = {"tool": tool, "path_scope": scope, "command_class": command, "git_op": git_op,
                        "remote_class": remote, **hazards}
             was = _decide(before, {"classifier_version": 1, **reading})
-            now = _decide(after, {"classifier_version": 2, "net_dest": "none",
+            now = _decide(after, {"classifier_version": 3, "net_dest": "none",
                                   "proc_class": rng.choice(("none", "single", "tree", "unknown")), **reading})
             assert (now.kind, now.cause) == (was.kind, was.cause), (name, reading)
