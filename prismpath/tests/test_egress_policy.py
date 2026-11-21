@@ -194,7 +194,7 @@ class _MemoryStore:
         def __init__(self):
             self.entries = []
 
-        def append(self, reading, verdict, decider=None, sandbox_profile=None):
+        def append(self, reading, verdict, decider=None, sandbox_profile=None, hosts_sha256=None):
             self.entries.append((reading, verdict, sandbox_profile))
             return len(self.entries) - 1
 
@@ -245,9 +245,19 @@ def test_a_refused_connect_has_a_receipt_that_verify_accepts_and_rules_counts_un
     run = gate.run
     lines = [json.loads(line) for line in (run.dir / "journal.jsonl").read_text().splitlines()]
     assert {line["sandbox"]["profile_sha256"] for line in lines} == {gate.profile.hash()}
+    # and the allowed host list `--allow-host` named, which no signed policy holds, is recorded as a digest and reported
+    assert {line["hosts_sha256"] for line in lines} == {egress_policy.hosts_digest((ALLOWED,))}
+    assert rows["egress-test"]["bound"]["hosts_sha256"] == [egress_policy.hosts_digest((ALLOWED,))]
+    assert "allowed host list sha256 " + egress_policy.hosts_digest((ALLOWED,)) in _cli(home, "agent", "verify").stdout.decode()
     assert all(MODEL not in line["reading"] and "evil" not in bytes.fromhex(line["reading"]).decode() for line in lines)
     refusal = next(line for line in lines if json.loads(bytes.fromhex(line["reading"]))["net_dest"] == "other")
     assert refusal["receipt"]["decision"] == "route" and refusal["receipt"]["target"] == "refuse_130"   # cause 130
+
+
+def test_the_allowed_host_digest_is_of_the_sorted_lower_case_list_and_differs_with_the_list():
+    assert egress_policy.hosts_digest(["B.example", "a.example", "a.example"]) == egress_policy.hosts_digest(["a.example", "b.example"])
+    assert egress_policy.hosts_digest([]) != egress_policy.hosts_digest(["a.example"])
+    assert len(egress_policy.hosts_digest([])) == 64
 
 
 def test_the_odd_host_corpus_is_refused_at_the_proxy_with_the_classifiers_reading(world, tmp_path):

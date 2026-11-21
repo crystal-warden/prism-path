@@ -392,12 +392,12 @@ def test_rules_counts_what_became_of_each_rule(project):
     assert all(set(r) >= set(rules.OUTCOME_KEYS) for r in data["rules"]) and by
     assert all("refused" in c for c in data["core_refusals"])
     text = _cli(home, "agent", "rules").stdout.decode()
-    assert "1 ran, 1 none" in text and "1 approved, 1 none" in text and "1 refused" in text
+    assert "1 ran, 1 none" in text and "1 approved and ran, 0 failed, 1 none" in text and "1 refused" in text
     assert "decide nothing" in text
     status = _status(home)
     assert status["outcomes"]["allowed"] == 2 and status["outcomes"]["asked_approved"] == 1
     plain = _cli(home, "agent", "status", "--project", str(ws)).stdout.decode()
-    assert "allowed 2 (1 ran, 1 no outcome); asked 2 (1 approved and ran, 1 no outcome); refused 1" in plain
+    assert "allowed 2 (1 ran, 1 no outcome); asked 2 (1 approved and ran, 0 failed or interrupted, 1 no outcome); refused 1" in plain
     assert "PostToolUse yes, PostToolUseFailure yes" in plain
 
 
@@ -420,6 +420,26 @@ def _approve(home, ws, session, times, command="touch made.txt", approve=True):
             _post(home, ws, session, "Bash", {"command": command}, use_id)
 
 
+def test_a_failed_or_interrupted_asked_call_is_not_an_approval_that_ran(project):
+    home, ws = project
+    _approve(home, ws, "a", 2)                                                  # approved and ran twice
+    for n, interrupt in enumerate((False, True)):                               # asked, then failed once and interrupted once
+        use_id = f"toolu_f{n}"
+        assert _pre(home, ws, "f", *TOUCH, use_id) == "ask"
+        _fail(home, ws, "f", *TOUCH, use_id, interrupt=interrupt)
+    data = json.loads(_cli(home, "agent", "approvals", "--min", "3", "--json").stdout)
+    assert data["candidates"] == []                                             # two ran, two failed: below three on `ran` only
+    data = json.loads(_cli(home, "agent", "approvals", "--min", "2", "--json").stdout)
+    (candidate,) = data["candidates"]
+    assert (candidate["approved"], candidate["asked_failed"], candidate["asked"]) == (2, 2, 4)
+    assert candidate["examples"][0]["approved"] == 2                            # the examples count the calls that ran
+    ask = next(r for r in _rules(home)["rules"] if r["cause"] == "agent:shell-mutation-asked")
+    assert (ask["asked_approved"], ask["asked_failed"], ask["asked_no_outcome"]) == (2, 2, 0)
+    counts = _status(home)["outcomes"]
+    assert (counts["asked"], counts["asked_approved"], counts["asked_failed"]) == (4, 2, 2)
+    assert "2 failed or interrupted" in _cli(home, "agent", "approvals", "--min", "2").stdout.decode()
+
+
 def test_approvals_lists_a_rule_approved_three_times_with_classes_only(project):
     home, ws = project
     _approve(home, ws, "a", 3)
@@ -433,6 +453,7 @@ def test_approvals_lists_a_rule_approved_three_times_with_classes_only(project):
     (candidate,) = data["candidates"]
     assert candidate["cause"] == "agent:shell-mutation-asked"
     assert candidate["approved"] == 5 and candidate["asked"] == 6 and candidate["asked_no_outcome"] == 1
+    assert candidate["asked_failed"] == 0
     assert candidate["examples"] and candidate["examples"][0]["approved"] == 5
     assert candidate["examples"][0]["reading"] == "command_class=mutating path_scope=workspace proc_class=single tool=run_command"
     assert "touch" not in done.stdout.decode() and "old.log" not in done.stdout.decode()      # classes only, never the command

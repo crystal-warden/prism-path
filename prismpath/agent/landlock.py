@@ -301,6 +301,9 @@ def enforce(rules: Iterable[Rule], abi: Optional[int] = None, net_rules: bool = 
         raise OSError(ctypes.get_errno(), "no_new_privs")
     if nproc is not None:
         import resource
+        hard = resource.getrlimit(resource.RLIMIT_NPROC)[1]
+        if hard != resource.RLIM_INFINITY:
+            nproc = min(nproc, hard)        # an outer sandbox's limit is a ceiling: the call may be held lower, never raised past it
         resource.setrlimit(resource.RLIMIT_NPROC, (nproc, nproc))
     ruleset = _create(abi, net_rules, scope_rules)
     try:

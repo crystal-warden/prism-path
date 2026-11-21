@@ -6,8 +6,8 @@ import Classifier.Hook
 
 `claude_code.hazard_scan`: a Bash command that maps to the unknown call is scanned on its raw text for evidence
 of a hazard, by rules stated on the text alone; evidence becomes reading fields the refusal rules fire on before
-the unclassifiable escalation, and no evidence leaves the unknown reading as it was (docs/design/spec-verified-
-classifier.md section 4.1). The text is first stripped of backslashes and quotes (`strip`).
+the unclassifiable escalation, and no evidence leaves the unknown reading as it was (section 4.1 of
+docs/design/spec-verified-classifier.md). The text is first stripped of backslashes and quotes (`strip`).
 
 * kill: an ASCII word (`asciiWords`, maximal runs of letters, digits and `_`) that is `pkill`, `killall` or `kill`;
 * network: an ASCII word in `NETWORK` inside a token that gives no path evidence, a URL scheme (`hasURL`), or an

@@ -21,7 +21,7 @@ one, so these cases are not literal replays:
   * The harness's `/workspace` mount does not exist in Claude Code. trav-5 stays a traversal (109) because of
     its `..`, and `shell-workspace-mount-is-real-dir` shows `/workspace/...` is read as the real directory.
   * unk-1, unk-2 and unk-4 name tools Claude Code does not have (http_get, move_file, exec_shell). Their
-    equivalents are the tool classes the plan names as unknown: WebFetch, and mcp__* tools. They ASK (124)
+    equivalents are the tool classes the classifier reads as unknown: WebFetch, and mcp__* tools. They ASK (124)
     where the harness's rules refused (104).
   * kill-3 and unk-3 differ from the harness in cause only: kill-3 is a shell one liner with `$(`, which the
     adapter reads as unknown, so it asks (124) where the harness refused it as a kill by pattern (105); unk-3

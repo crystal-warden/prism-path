@@ -64,7 +64,7 @@ PACKAGE_IN = "/opt/pp"                          # the prismpath package, bound r
 RUNNER_IN = f"{PACKAGE_IN}/prismpath/agent/sandbox_exec.py"
 PROBE_TIMEOUT_S = 30
 BACKENDS = sandbox_exec.BACKENDS     # the per call backends, in order of preference; a test narrows it to force one
-MAX_PROCESSES = 512       # a placeholder until the spike measures the real peak (plan question 10)
+MAX_PROCESSES = 512       # the process limit inside the sandbox unless the caller names one; no measurement of a real agent's peak backs it
 AGENT_ENV = (("DISABLE_AUTOUPDATER", "1"), ("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "1"),
              ("ENABLE_CLAUDEAI_MCP_SERVERS", "false"))
 ROOT_CONTROL_NAMES = controls_module.ROOT_CONTROL_NAMES
@@ -161,6 +161,9 @@ def prepare_controls(workspace: Path, out: Controls) -> Controls:
     named files, `.mcp.json`, and `.git/config` and `.git/hooks/` when there is a `.git`, which is never created).
     What it creates is recorded in `out` as it goes."""
     return controls_module.materialize(controls_module.discover(workspace), out)
+
+
+EGRESS_LOG_NAME = "egress.log"
 
 
 # ------------------------------------------------------------------------------------------------- launch
@@ -265,6 +268,8 @@ def launch(command: Sequence[str], workspace: str, credential: Optional[str] = N
             raise LaunchError("bwrap did not start the sandbox, so the program was not run (see its message above)")
         return status
     finally:
+        if egress_log is None and gate is not None and gate.run is not None:
+            egress_log = str(gate.run.dir / EGRESS_LOG_NAME)     # kept with the egress run's receipts unless a path was named
         _teardown(proc, (hook_decider, proxy, model_route), staged, controls, egress_log)
         _seal(gate.run if gate is not None else None, home_dir)
 

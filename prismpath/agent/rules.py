@@ -26,8 +26,9 @@ later than the hit itself. `--since` keeps the runs whose time is at or after it
 
 Outcomes. What became of each receipt is read from the run's `outcomes.jsonl` (prismpath/agent/run.py), after
 `verify` has checked its chain and binding. Per rule the report adds `allowed_ran` and `allowed_no_outcome` for a
-rule that allows, `asked_approved` (the person said yes and the call ran) and `asked_no_outcome` (declined, or
-approved and never ran, which cannot be told apart) for a rule that escalates, and `refused` for a rule that
+rule that allows, `asked_approved` (the person said yes and the call ran), `asked_failed` (it was started and failed or was
+interrupted, so it was not a call that ran) and `asked_no_outcome` (declined, or approved and never ran, which cannot
+be told apart) for a rule that escalates, and `refused` for a rule that
 refuses and for the core's own refusals. A call still waiting for its outcome counts as having none. These counts
 are records, never decisions: nothing here changes a rule, a policy or a verdict.
 
@@ -46,7 +47,7 @@ the other rules are checked with those rules left out, which can only make a rul
   receipts {counted, not_verified, other_policy, runs_counted,
             skipped [{session, receipts, reason}]}
   rules [{rule, condition, target, decision, cause, code, hits, last_hit,
-          allowed_ran, allowed_no_outcome, asked_approved, asked_no_outcome, refused}]
+          allowed_ran, allowed_no_outcome, asked_approved, asked_failed, asked_no_outcome, refused}]
   core_refusals [{cause, code, hits, last_hit, refused}]
   never_matched [rule numbers]
   unreachable {checked, readings, rules [rule numbers], not_checked [{rule, fields}]}
@@ -194,12 +195,13 @@ def _read_runs(home: Path, policy, since: Optional[datetime]) -> Dict[str, Any]:
                 tally["counted"] += 1
                 index = rule_index(policy, raw)
                 had = journal_line["i"] in done
+                result = done.get(journal_line["i"])
                 if index is not None:
                     row = tally["outcome"].setdefault(index, {})
                     kind = _KIND[policy.decide(raw).kind]
-                    key = _OUTCOME_KEY[(kind, had)]
+                    key = "asked_failed" if kind == "asked" and result == "failed" else _OUTCOME_KEY[(kind, had)]
                     row[key] = row.get(key, 0) + 1
-                    if kind == "asked" and had:
+                    if kind == "asked" and result == "ran":
                         examples = tally["approved"].setdefault(index, {})
                         shown = reading_classes(canon2.loads(raw))
                         examples[shown] = examples.get(shown, 0) + 1
@@ -223,7 +225,7 @@ _KIND = {"allow": "allowed", "escalate": "asked", "refuse": "refused"}
 _OUTCOME_KEY = {("allowed", True): "allowed_ran", ("allowed", False): "allowed_no_outcome",
                 ("asked", True): "asked_approved", ("asked", False): "asked_no_outcome",
                 ("refused", True): "refused", ("refused", False): "refused"}
-OUTCOME_KEYS = ("allowed_ran", "allowed_no_outcome", "asked_approved", "asked_no_outcome", "refused")
+OUTCOME_KEYS = ("allowed_ran", "allowed_no_outcome", "asked_approved", "asked_failed", "asked_no_outcome", "refused")
 MAX_EXAMPLES = 3
 
 
@@ -371,7 +373,7 @@ def render(data: Dict[str, Any]) -> str:
         if row["decision"] == "allow":
             return f"{row['allowed_ran']} ran, {row['allowed_no_outcome']} none"
         if row["decision"] == "escalate":
-            return f"{row['asked_approved']} approved, {row['asked_no_outcome']} none"
+            return f"{row['asked_approved']} approved and ran, {row['asked_failed']} failed, {row['asked_no_outcome']} none"
         return f"{row['refused']} refused"
     body = [[row["rule"], row["hits"], what_became(row), row["last_hit"] or "-",
              row["target"] + (f" {row['cause']}" if row["cause"] else ""), row["condition"]] for row in data["rules"]]
@@ -379,8 +381,8 @@ def render(data: Dict[str, Any]) -> str:
               "(the core itself)"] for c in data["core_refusals"]]
     lines += _table(["rule", "hits", "outcome", "last hit", "target", "condition"], body)
     lines += ["", "outcome: for an allow rule, calls that ran (a PostToolUse or the sandbox runner reported it) and calls "
-                  "with no outcome; for an escalate rule, calls the person approved that ran and calls with no outcome "
-                  "(declined, or approved and not run); a call still waiting counts as none. Records only; they decide nothing."]
+                  "with no outcome; for an escalate rule, calls the person approved that ran, calls that failed or were interrupted, "
+                  "and calls with no outcome (declined, or approved and not run); a call still waiting counts as none. Records only; they decide nothing."]
     lines += ["", "Never matched:"]
     never = data["never_matched"]
     lines += [f"  rule {n}: {rules[n]['target']}  {rules[n]['condition']}" for n in never] or ["  none"]
@@ -394,7 +396,7 @@ def render(data: Dict[str, Any]) -> str:
 
 
 def approvals(home: Path, policy, minimum: int, since: Optional[datetime]) -> Dict[str, Any]:
-    """The escalate rules whose asks were approved (the call ran) at least `minimum` times, each with its counts and
+    """The escalate rules whose asks were approved and ran (a failed or interrupted call is not counted) at least `minimum` times, each with its counts and
     up to MAX_EXAMPLES readings as classes only, most often approved first. They are candidates for the owner to
     sign into the envelope as an allow rule; this lists them and changes nothing. An approval is an observation of
     what the person said yes to: it can change what the system knows and never what it is permitted to do."""
@@ -410,8 +412,9 @@ def approvals(home: Path, policy, minimum: int, since: Optional[datetime]) -> Di
             continue
         examples = sorted(tally["approved"].get(number, {}).items(), key=lambda kv: (-kv[1], kv[0]))[:MAX_EXAMPLES]
         out.append({"rule": number, "condition": row["condition"], "target": row["target"], "cause": row["cause"],
-                    "approved": approved, "asked_no_outcome": counted.get("asked_no_outcome", 0),
-                    "asked": approved + counted.get("asked_no_outcome", 0),
+                    "approved": approved, "asked_failed": counted.get("asked_failed", 0),
+                    "asked_no_outcome": counted.get("asked_no_outcome", 0),
+                    "asked": approved + counted.get("asked_failed", 0) + counted.get("asked_no_outcome", 0),
                     "examples": [{"reading": text, "approved": count} for text, count in examples]})
     out.sort(key=lambda r: (-r["approved"], r["rule"]))
     return {"note": APPROVALS_NOTE, "minimum": minimum, "since": since.strftime("%Y-%m-%dT%H:%M:%SZ") if since else None,
@@ -431,8 +434,8 @@ def render_approvals(data: Dict[str, Any]) -> str:
         lines.append("none")
     for c in data["candidates"]:
         lines.append(f"rule {c['rule']}: {c['target']} {c['cause']}  {c['condition']}")
-        lines.append(f"  approved and ran {c['approved']} of {c['asked']} asked ({c['asked_no_outcome']} with no outcome: "
-                     f"declined, or approved and not run)")
+        lines.append(f"  approved and ran {c['approved']} of {c['asked']} asked ({c['asked_failed']} failed or interrupted, "
+                     f"{c['asked_no_outcome']} with no outcome: declined, or approved and not run)")
         lines += [f"  e.g. {e['reading']}  ({e['approved']}x)" for e in c["examples"]]
     lines.append("To adopt one, write an allow rule for that class of call in the policy source and sign it with the authority "
                  "key (docs/guides/writing-agent-rules.md). This command never does.")

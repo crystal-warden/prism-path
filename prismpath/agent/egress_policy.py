@@ -40,12 +40,21 @@ def split_authority(authority: str) -> Tuple[str, int]:
     return host, int(port)
 
 
+def hosts_digest(allowed_hosts: Iterable[str]) -> str:
+    """The digest of the allowed host list `--allow-host` named: lower case, sorted, without repeats, as canon/2 bytes.
+    The list is a launcher argument and not part of the signed policy, so each egress receipt records it."""
+    import hashlib
+    from prismpath.kernel import canon2
+    return hashlib.sha256(canon2.dumps(sorted({str(h).lower() for h in allowed_hosts}))).hexdigest()
+
+
 class PolicyGate:
     def __init__(self, policy, store, session: str, workspace, profile: Profile, allowed_hosts: Iterable[str] = ()):
         self.policy, self.store, self.session, self.profile = policy, store, session, profile
         self.run = None         # opened by the first receipt, so a run with no connection leaves no run behind
         self.config = classifier.Config.for_workspace(Path(workspace), allowed_hosts=tuple(allowed_hosts))
         self.profile_sha256 = profile.hash()
+        self.hosts_sha256 = hosts_digest(allowed_hosts)
         self._lock = threading.Lock()
 
     def reading(self, authority: str) -> dict:
@@ -60,7 +69,7 @@ class PolicyGate:
             with self._lock:
                 if self.run is None:
                     self.run = self.store.open(self.session, self.policy.image)
-                self.run.append(raw, decision.verdict, sandbox_profile=self.profile_sha256)
+                self.run.append(raw, decision.verdict, sandbox_profile=self.profile_sha256, hosts_sha256=self.hosts_sha256)
         except Exception:  # noqa: BLE001 - no receipt, no tunnel
             return False, "receipt-error"
         if decision.kind == "allow":
