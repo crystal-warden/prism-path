@@ -49,7 +49,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Callable, List, Optional, Sequence, Tuple
 
-from prismpath.agent import classifier, commands, decider as decider_module, egress, egress_policy, hook_client, local_route, sandbox_exec, sandbox_hook
+from prismpath.agent import classifier, commands, controls as controls_module, decider as decider_module, egress, egress_policy, hook_client, local_route, sandbox_exec, sandbox_hook
 from prismpath.agent.profile import Profile, ProfileError, compile_profile
 
 STAGE_BASE = "/var/tmp"
@@ -67,7 +67,8 @@ BACKENDS = sandbox_exec.BACKENDS     # the per call backends, in order of prefer
 MAX_PROCESSES = 512       # a placeholder until the spike measures the real peak (plan question 10)
 AGENT_ENV = (("DISABLE_AUTOUPDATER", "1"), ("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "1"),
              ("ENABLE_CLAUDEAI_MCP_SERVERS", "false"))
-ROOT_CONTROL_NAMES = ("CLAUDE.md", "CLAUDE.local.md", "AGENTS.md")
+ROOT_CONTROL_NAMES = controls_module.ROOT_CONTROL_NAMES
+Controls = controls_module.Controls
 
 
 class LaunchError(commands.AgentError):
@@ -84,27 +85,6 @@ class Staged:
     decider_socket: Path
     credential: Optional[Path] = None
     hook_client: Optional[Path] = None
-
-
-@dataclass
-class Controls:
-    """The workspace's control paths: what to bind read only, and what the launcher created to bind it."""
-    binds: List[str] = field(default_factory=list)
-    created_files: List[Path] = field(default_factory=list)
-    created_dirs: List[Path] = field(default_factory=list)
-
-    def remove_created(self) -> None:
-        for path in self.created_files:
-            try:
-                if path.is_file() and not path.is_symlink() and path.stat().st_size == 0:
-                    path.unlink()
-            except OSError:
-                pass
-        for path in reversed(self.created_dirs):
-            try:
-                path.rmdir()
-            except OSError:
-                pass
 
 
 # ------------------------------------------------------------------------------------------------ checks
@@ -176,43 +156,11 @@ def stage(settings: dict, credential: Optional[str], base: str = STAGE_BASE) -> 
 
 
 def prepare_controls(workspace: Path, out: Controls) -> Controls:
-    """Make every control path of the workspace bindable. Existing ones are listed. Missing root ones are
-    created empty (`.claude/` always, the three named files, `.mcp.json`, and `.git/config` and `.git/hooks/`
-    when there is a `.git`, which is never created). What it creates is recorded in `out` as it goes."""
-    def bind(path: Path) -> None:
-        if not path.is_symlink():
-            out.binds.append(str(path))
-
-    existing = {classifier._fold(n): n for n in os.listdir(workspace)}
-    for name in (".claude", ".mcp.json") + ROOT_CONTROL_NAMES:
-        if classifier._fold(name) not in existing:
-            path = workspace / name
-            if name == ".claude":
-                path.mkdir()
-                out.created_dirs.append(path)
-            else:
-                path.touch()
-                out.created_files.append(path)
-            existing[classifier._fold(name)] = name
-        bind(workspace / existing[classifier._fold(name)])
-    git = workspace / ".git"
-    if git.is_dir() and not git.is_symlink():
-        config = git / "config"
-        if not config.exists() and not config.is_symlink():
-            config.touch()
-            out.created_files.append(config)
-        bind(config)
-        hooks = git / "hooks"
-        if not hooks.exists() and not hooks.is_symlink():
-            hooks.mkdir()
-            out.created_dirs.append(hooks)
-        bind(hooks)
-    for found in classifier._walk_names(str(workspace)):
-        path = Path(found)
-        if path.parent != workspace:        # the root ones are bound above
-            bind(path)
-    out.binds = list(dict.fromkeys(out.binds))
-    return out
+    """Make every control path of the workspace bindable (`controls.discover` finds them, and the per call sandbox
+    uses the same list). Existing ones are listed. Missing root ones are created empty (`.claude/` always, the three
+    named files, `.mcp.json`, and `.git/config` and `.git/hooks/` when there is a `.git`, which is never created).
+    What it creates is recorded in `out` as it goes."""
+    return controls_module.materialize(controls_module.discover(workspace), out)
 
 
 # ------------------------------------------------------------------------------------------------- launch

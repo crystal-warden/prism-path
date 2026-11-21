@@ -39,7 +39,10 @@ def _bwrap_ok() -> bool:
 needs_bwrap_here = pytest.mark.skipif(not _bwrap_ok(), reason="bwrap cannot start here")
 
 # what every adversary case must come to, whatever backend ran it
-ALL_DENIED = {"read": None, "write": False, "credential": None, "connect": False, "unix": False}
+ALL_DENIED = {"read": None, "write": False, "credential": None, "connect": False, "unix": False,
+              "controls_changed": []}
+SETTINGS, RULES = '{"hooks": {}}', "rules"
+for_attempts = ("settings", "claude_md", "hook", "mcp", "claude_new")
 
 ADVERSARY = r'''
 import json, os, socket, sys
@@ -64,13 +67,29 @@ def unix():
     s = socket.socket(socket.AF_UNIX); s.settimeout(3); s.connect(%(sock)r); s.close()
     return True
 attempt("unix", unix)
+# the WP10 shell child: a script an allowed call runs edits the workspace's control files
+def append_settings():
+    open(".claude/settings.json", "a").write("EDIT"); return True
+attempt("settings", append_settings)
+def overwrite_rules():
+    open("CLAUDE.md", "w").write("EDIT"); return True
+attempt("claude_md", overwrite_rules)
+def plant_hook():
+    open(".git/hooks/pre-commit", "w").write("EDIT"); return True
+attempt("hook", plant_hook)
+def plant_mcp():
+    open(".mcp.json", "w").write("EDIT"); return True
+attempt("mcp", plant_mcp)
+def plant_in_control_dir():
+    open(".claude/new.json", "w").write("EDIT"); return True
+attempt("claude_new", plant_in_control_dir)
 inside = {}
 try:
-    open("made.txt", "w").write("ok"); inside["write"] = True
+    open("src/made.txt", "w").write("ok"); inside["write"] = True
 except OSError:
     inside["write"] = False
 try:
-    inside["read"] = open("made.txt").read()
+    inside["read"] = open("src/made.txt").read()
 except OSError:
     inside["read"] = None
 out["inside"] = inside
@@ -87,6 +106,12 @@ def arena():
     root = Path(tempfile.mkdtemp(prefix="pp-landlock-", dir="/var/tmp"))
     ws = root / "ws"
     ws.mkdir()
+    (ws / "src").mkdir()
+    (ws / ".claude").mkdir()
+    (ws / ".claude" / "settings.json").write_text(SETTINGS)
+    (ws / "CLAUDE.md").write_text(RULES)
+    (ws / ".git" / "hooks").mkdir(parents=True)
+    (ws / ".git" / "config").write_text("[core]\n")
     (root / "decoy.txt").write_text("DECOY")
     (root / "credential.json").write_text("FAKE-CREDENTIAL-NOT-A-KEY")
     sock_path = str(root / "decider.sock")
@@ -124,7 +149,7 @@ def arena():
 
 def _adversary(arena, backend, **switches):
     ws = arena["ws"]
-    (ws / "made.txt").unlink(missing_ok=True)
+    (ws / "src" / "made.txt").unlink(missing_ok=True)
     if backend == "landlock":
         done = sandbox_exec.run_landlock("python3 tool.py", ws, Profile(timeout_s=60), stdin=b"", **switches)
     else:
@@ -137,6 +162,18 @@ def _adversary(arena, backend, **switches):
     written = arena["root"] / "written.txt"
     result["write"] = written.exists()
     written.unlink(missing_ok=True)
+    # the control files are judged the same way, by what is on the host afterwards
+    changed = []
+    if (ws / ".claude" / "settings.json").read_text() != SETTINGS:
+        changed.append("settings")
+    if (ws / "CLAUDE.md").read_text() != RULES:
+        changed.append("claude_md")
+    for name, path in (("hook", ".git/hooks/pre-commit"), ("mcp", ".mcp.json"), ("claude_new", ".claude/new.json")):
+        if (ws / path).exists():
+            changed.append(name)
+    result["controls_changed"] = changed
+    for name in for_attempts:
+        result.pop(name, None)
     return result, done
 
 
@@ -235,8 +272,8 @@ def test_the_scratch_directory_is_private_to_the_call_and_removed_afterwards(are
 
 @needs_landlock
 def test_a_time_limit_ends_the_command_and_what_it_left_running(arena):
-    started = arena["ws"] / "pid.txt"
-    done = sandbox_exec.run_landlock("sleep 300 & echo $! > pid.txt; sleep 300", arena["ws"], Profile(timeout_s=1), stdin=b"")
+    started = arena["ws"] / "src" / "pid.txt"
+    done = sandbox_exec.run_landlock("sleep 300 & echo $! > src/pid.txt; sleep 300", arena["ws"], Profile(timeout_s=1), stdin=b"")
     assert done.timed_out
     pid = int(started.read_text())
     import time
@@ -252,9 +289,9 @@ def test_a_time_limit_ends_the_command_and_what_it_left_running(arena):
 
 @needs_landlock
 def test_a_background_process_does_not_outlive_a_command_that_returns(arena):
-    done = sandbox_exec.run_landlock("sleep 300 & echo $! > pid.txt", arena["ws"], Profile(timeout_s=20), stdin=b"")
+    done = sandbox_exec.run_landlock("sleep 300 & echo $! > src/pid.txt", arena["ws"], Profile(timeout_s=20), stdin=b"")
     assert done.returncode == 0 and not done.timed_out
-    pid = int((arena["ws"] / "pid.txt").read_text())
+    pid = int((arena["ws"] / "src" / "pid.txt").read_text())
     import time
     for _ in range(100):
         try:
@@ -287,11 +324,74 @@ def test_a_profile_with_a_network_is_refused_and_nothing_runs(arena):
 
 
 @needs_landlock
-def test_a_writable_toolchain_directory_is_refused_because_landlock_cannot_make_part_of_a_directory_read_only(arena):
+def test_a_toolchain_directory_no_mount_protects_is_left_read_only_by_the_rules(arena):
     (arena["ws"] / ".toolchain").mkdir()
-    with pytest.raises(SandboxUnavailable, match=r"\.toolchain"):
-        sandbox_exec.run_landlock("echo ran > ran.txt", arena["ws"], stdin=b"")
-    assert not (arena["ws"] / "ran.txt").exists()
+    (arena["ws"] / ".toolchain" / "tool").write_text("t")
+    done = sandbox_exec.run_landlock("cat .toolchain/tool; echo x > .toolchain/tool; echo y > .toolchain/new; echo z > src/ok.txt",
+                                     arena["ws"], stdin=b"")
+    assert done.stdout == b"t" and done.stderr.count(b"Permission denied") == 2
+    assert (arena["ws"] / ".toolchain" / "tool").read_text() == "t" and (arena["ws"] / "src" / "ok.txt").exists()
+
+
+@needs_landlock
+def test_what_the_control_path_rules_cost_is_stated_not_hidden(arena):
+    """Landlock cannot make one path read only inside a writable tree, so a directory that holds a control path cannot
+    take new entries: the workspace root and .git. A directory with none, `src/`, is unrestricted."""
+    done = sandbox_exec.run_landlock("echo a > new_at_root.txt; echo b > src/new.txt; mkdir src/d && echo c > src/d/f; "
+                                     "echo e >> tool.py; rm src/new.txt; echo f > .git/index.lock", arena["ws"], stdin=b"")
+    assert done.stderr.count(b"Permission denied") == 2      # a new file at the root, a new file in .git
+    assert not (arena["ws"] / "new_at_root.txt").exists() and not (arena["ws"] / "src" / "new.txt").exists()
+    assert (arena["ws"] / "src" / "d" / "f").exists() and (arena["ws"] / "tool.py").read_text().endswith("e\n")
+
+
+def test_workspace_rules_with_no_hole_is_one_rule_and_with_a_hole_never_grants_the_hole_or_its_directory(tmp_path):
+    (tmp_path / "a").mkdir()
+    (tmp_path / "a" / "x.txt").write_text("x")
+    (tmp_path / "CLAUDE.md").write_text("r")
+    (tmp_path / "src").mkdir()
+    assert landlock.workspace_rules(str(tmp_path), []) == [landlock.Rule(str(tmp_path), ~0)]
+    rules = {r.path: r.access for r in landlock.workspace_rules(str(tmp_path), [str(tmp_path / "CLAUDE.md"), str(tmp_path / ".mcp.json")])}
+    assert rules[str(tmp_path)] == landlock.FS_READ_DIR                       # the root is listed, not granted
+    assert rules[str(tmp_path / "CLAUDE.md")] == landlock.FS_READ_FILE        # the hole is read only
+    assert rules[str(tmp_path / "a")] == ~0 and rules[str(tmp_path / "src")] == ~0
+    assert str(tmp_path / ".mcp.json") not in rules                           # a missing hole has no rule, and no way to be created
+
+
+def test_the_control_paths_come_from_one_list_the_launcher_and_the_per_call_sandbox_share(tmp_path):
+    from prismpath.agent import controls
+    (tmp_path / ".git").mkdir()
+    (tmp_path / "sub").mkdir()
+    (tmp_path / "sub" / "agents.md").write_text("x")           # the classifier folds case
+    found = controls.discover(tmp_path)
+    assert str(tmp_path / ".claude") in found.binds and str(tmp_path / ".git" / "hooks") in found.binds
+    assert str(tmp_path / "sub" / "agents.md") in found.binds
+    assert not (tmp_path / ".claude").exists()                  # looking creates nothing
+    made = controls.materialize(found, controls.Controls())
+    assert (tmp_path / ".claude").is_dir() and (tmp_path / "CLAUDE.md").is_file()
+    made.remove_created()
+    assert not (tmp_path / ".claude").exists() and not (tmp_path / "CLAUDE.md").exists() and not (tmp_path / ".git" / "hooks").exists()
+
+
+@needs_landlock
+@needs_bwrap_here
+def test_the_wp10_shell_child_is_stopped_in_hook_mode_on_the_host_by_either_backend(arena):
+    """A hook rewrites an allowed Bash call to the runner (sandbox_hook.rewrite_command). Run that command as Claude Code
+    would, on the host and not under the launcher, with each backend, and the script that edits the control files fails."""
+    import shlex
+    import subprocess
+    import sys
+    from prismpath.agent import sandbox_hook
+    for backend in ("bwrap", "landlock"):
+        for name in (".mcp.json", ".claude/new.json", ".git/hooks/pre-commit"):
+            (arena["ws"] / name).unlink(missing_ok=True)
+        command = sandbox_hook.rewrite_command("python3 tool.py", str(arena["ws"]), str(arena["ws"]), STRICTEST,
+                                               python=sys.executable, backend=backend)
+        done = subprocess.run(["bash", "-c", command], capture_output=True, timeout=120)
+        assert done.returncode == 0, done.stderr.decode()
+        assert (arena["ws"] / ".claude" / "settings.json").read_text() == SETTINGS, backend
+        assert (arena["ws"] / "CLAUDE.md").read_text() == RULES, backend
+        for name in (".mcp.json", ".claude/new.json", ".git/hooks/pre-commit"):
+            assert not (arena["ws"] / name).exists(), (backend, name)
 
 
 def test_a_named_backend_that_is_not_there_is_never_replaced_by_another(arena, monkeypatch):
@@ -389,8 +489,11 @@ def _nested_run(arena, session, backends, monkeypatch):
     monkeypatch.setattr(launcher, "probe_nested", spy)
     steps = _launch(arena, [
         {"name": "tool", "input": _bash(arena, "python3 tool.py", session), "raw": True},
+        {"name": "ctl", "input": _bash(arena, "echo a > rootfile.txt; echo b >> .claude/settings.json; echo c > CLAUDE.md; "
+                                              "echo d > .claude/new.json", session)},
         {"name": "end", "input": {"session_id": session, "hook_event_name": "SessionEnd"}},
     ], arena["credential"])
+    steps[0]["ctl"] = steps[1]
     return steps[0], seen["nested"]
 
 
@@ -404,13 +507,22 @@ def _check_nested(arena, step, nested, session, backend):
     rc, stdout, stderr = step["ran"]
     assert json.loads(stdout) == NESTED_ALL_DENIED, (stdout, stderr)
     assert "PrismPath did not run" not in stderr
+    # the shell child that edits the control files: the launcher's read only binds hold in either backend, and the rest of
+    # the workspace (its root too, since a mount protects the control paths) is still writable
+    rc, _out, err = step["ctl"]["ran"]
+    assert (Path(arena["ws"]) / "rootfile.txt").read_text() == "a\n"
+    assert not (Path(arena["ws"]) / ".claude" / "new.json").exists()
+    for name in (".claude/settings.json", "CLAUDE.md"):
+        path = Path(arena["ws"]) / name
+        assert not path.exists() or not path.read_text().endswith(("b\n", "c\n")), name
+    assert rc != 0 and err.count("Read-only file system") + err.count("Permission denied") >= 3, err
     home = cli_tests._agent_dir(arena["home"])
     run = run_module.RunStore(home / commands.RUNS_DIR).get(session)
     entries = run._entries()
     assert entries[0]["sandbox"] == {"profile_sha256": STRICTEST.hash(), "backend": backend}      # the receipt says which
     seen = run.observations()
-    assert len(seen) == 1 and seen[0]["profile_sha256"] == STRICTEST.hash()
-    assert seen[0]["observed"]["backend"] == backend                                              # and so does the observation
+    assert len(seen) == 2 and seen[0]["profile_sha256"] == STRICTEST.hash()          # the adversary tool, then the control edit
+    assert seen[0]["observed"]["backend"] == seen[1]["observed"]["backend"] == backend                                              # and so does the observation
     done = cli_tests._cli(arena["home"], "agent", "verify", "--json")
     assert done.returncode == 0 and json.loads(done.stdout)["verified"] is True
     return seen[0]

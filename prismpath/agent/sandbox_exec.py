@@ -48,7 +48,7 @@ from typing import List, Optional, Sequence, Tuple
 if __name__ == "__main__":      # run by path under `python -I`, which puts nothing on sys.path
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from prismpath.agent import landlock                           # noqa: E402
+from prismpath.agent import controls, landlock                           # noqa: E402
 from prismpath.agent.profile import Profile, ProfileError      # noqa: E402
 
 BWRAP = "/usr/bin/bwrap"
@@ -82,8 +82,9 @@ def available() -> bool:
 def bwrap_argv(workspace: Path, profile: Profile, command: Sequence[str],
                extra_ro_binds: Sequence[Tuple[str, str]] = (), mount: str = MOUNT, cwd: str = "",
                proxy_socket: str = "", extra_args: Sequence[str] = (),
-               env: Sequence[Tuple[str, str]] = ()) -> List[str]:
-    """The full bwrap command line. `extra_ro_binds` are (source, destination) pairs bound read only after
+               env: Sequence[Tuple[str, str]] = (), control_binds: Sequence[str] = ()) -> List[str]:
+    """The full bwrap command line. `control_binds` are host paths below the workspace (its control paths,
+    controls.py) bound read only over the writable workspace, at the same place below `mount`. `extra_ro_binds` are (source, destination) pairs bound read only after
     the workspace, so they sit on top of it. The workspace is mounted at `mount` and the command starts in
     `cwd` (a path below the workspace, relative, or empty for its root). A profile whose `net` is a proxy state
     needs `proxy_socket`, the host path of the proxy's unix socket, which is bound in; the sandbox keeps its
@@ -127,6 +128,10 @@ def bwrap_argv(workspace: Path, profile: Profile, command: Sequence[str],
     toolchain = workspace / ".toolchain"
     if toolchain.is_dir() and not toolchain.is_symlink():
         argv += ["--ro-bind", str(toolchain), mount + "/.toolchain"]
+    for source in control_binds:
+        rel = os.path.relpath(source, workspace)
+        if rel != ".." and not rel.startswith("../") and os.path.lexists(source):
+            argv += ["--ro-bind", source, mount + "/" + rel]
     for source, destination in extra_ro_binds:
         argv += ["--ro-bind", source, destination]
     argv += ["--chdir", mount + ("/" + cwd.strip("/") if cwd.strip("/") else ""), *command]
@@ -156,7 +161,7 @@ def with_relay(command: Sequence[str], model_port: int = 0) -> List[str]:
 
 def run_sandboxed(command: Sequence[str], workspace: Path, profile: Optional[Profile] = None,
                   stdin: Optional[bytes] = None, mount: str = MOUNT, cwd: str = "",
-                  proxy_socket: str = "") -> SandboxResult:
+                  proxy_socket: str = "", control_binds: Sequence[str] = ()) -> SandboxResult:
     """Run `command` (an argv list) in the sandbox and return what it did. A command that fails is a
     result. A sandbox that cannot start is `SandboxUnavailable`."""
     profile = profile or Profile()
@@ -165,7 +170,7 @@ def run_sandboxed(command: Sequence[str], workspace: Path, profile: Optional[Pro
     inner = limited(command, profile.max_processes)
     if profile.net != "none":
         inner = limited(with_relay(command), profile.max_processes)
-    argv = bwrap_argv(workspace, profile, inner, mount=mount, cwd=cwd, proxy_socket=proxy_socket)
+    argv = bwrap_argv(workspace, profile, inner, mount=mount, cwd=cwd, proxy_socket=proxy_socket, control_binds=control_binds)
     return _run(argv, profile.timeout_s, stdin)
 
 
@@ -206,10 +211,18 @@ def landlock_refusal(profile: Profile, workspace: Path) -> str:
         return "Landlock is not available on this kernel"
     if profile.network or profile.net != "none":
         return "the Landlock backend runs only profiles with no network"
-    toolchain = Path(workspace) / ".toolchain"
-    if toolchain.is_dir() and not toolchain.is_symlink() and not os.statvfs(toolchain).f_flag & os.ST_RDONLY:
-        return "the workspace's .toolchain is not a read only mount, and Landlock cannot make a part of a writable directory read only"
     return ""
+
+
+def _holes(workspace: Path) -> List[str]:
+    """The paths below the workspace that must stay read only and that no read only mount protects: the control paths
+    (existing ones, and the root ones that are missing, which a script must not create) and `.toolchain`."""
+    holes = [path for path in controls.discover(workspace).binds
+             if not (os.path.lexists(path) and controls.on_read_only_mount(path))]
+    toolchain = Path(workspace) / ".toolchain"
+    if toolchain.is_dir() and not toolchain.is_symlink() and not controls.on_read_only_mount(str(toolchain)):
+        holes.append(str(toolchain))
+    return holes
 
 
 def _task_count() -> int:
@@ -293,7 +306,7 @@ def run_landlock(command: str, workspace: Path, profile: Optional[Profile] = Non
            "GIT_COMMITTER_NAME": "agent", "GIT_COMMITTER_EMAIL": "agent@workspace.invalid"}
     if scratch:
         env["TMPDIR"] = scratch
-    rules = landlock.rules_for(profile.ro_mounts, profile.host_write, str(workspace), scratch)
+    rules = landlock.rules_for(profile.ro_mounts, profile.host_write, str(workspace), scratch, holes=_holes(workspace))
     nproc = _task_count() + int(profile.max_processes)
     out, err, feed = tempfile.TemporaryFile(), tempfile.TemporaryFile(), None
     try:
@@ -377,14 +390,22 @@ def run_backend(backend: str, command: str, workspace: Path, profile: Profile, s
     if backend not in ("auto",) + BACKENDS:
         raise ValueError(f"unknown backend {backend!r}")
     if backend in ("bwrap", "auto"):
+        made = controls.Controls()
         try:
+            try:
+                found = controls.discover(Path(os.path.realpath(workspace)))
+                controls.materialize(found, made)      # so a missing `.claude/` or CLAUDE.md can be bound read only too
+            except OSError as exc:
+                raise SandboxUnavailable(f"the workspace's control paths cannot be protected ({exc}), so the command was not run") from exc
             return run_sandboxed([SHELL, "-c", command], workspace, profile, stdin=stdin, mount=mount, cwd=cwd,
-                                 proxy_socket=proxy_socket)
+                                 proxy_socket=proxy_socket, control_binds=found.binds)
         except SandboxUnavailable as first:
             if backend == "bwrap":
                 raise
             if landlock_refusal(profile, workspace):
                 raise first
+        finally:
+            made.remove_created()
     return run_landlock(command, workspace, profile, stdin=stdin, cwd=cwd)
 
 

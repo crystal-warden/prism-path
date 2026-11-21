@@ -218,9 +218,11 @@ def test_the_new_cause_is_registered_after_the_highest_earlier_one():
     assert SANDBOX_CODE == 129 and causes.code("agent:control-write") == 128
 
 
-def test_the_runner_run_by_hand_without_bwrap_says_so_and_runs_nothing(world, tmp_path):
+def test_the_runner_told_to_use_bwrap_without_bwrap_says_so_and_runs_nothing(world, tmp_path):
+    """The hook always names its backend (`--backend bwrap` outside the launcher), so a missing bwrap is a refusal and
+    never a silent Landlock run; only `--backend auto`, the default of a runner started by hand, falls back."""
     fake = tmp_path / "marker"
-    script = ("import sys; sys.argv=['x','--workspace',%r,'--profile',%r,'--','touch %s']; "
+    script = ("import sys; sys.argv=['x','--workspace',%r,'--backend','bwrap','--profile',%r,'--','touch %s']; "
               "from prismpath.agent import sandbox_exec as s; s.BWRAP='/nonexistent/bwrap'; sys.exit(s.main(sys.argv[1:]))"
               % (world["ws"], json.dumps(profile_module.STRICTEST.to_object()), fake))
     done = subprocess.run([sys.executable, "-I", "-c", "import sys; sys.path.insert(0, %r)\n%s" % (str(Path(__file__).parents[2]), script)],

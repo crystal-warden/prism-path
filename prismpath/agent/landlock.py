@@ -191,14 +191,56 @@ class Rule:
     access: int
 
 
-def rules_for(ro_mounts: Sequence[str], host_write: bool, workspace: str, scratch: Optional[str], proc: bool = True
-              ) -> List[Rule]:
+def workspace_rules(workspace: str, holes: Iterable[str]) -> List[Rule]:
+    """The rules that make the workspace writable except for `holes`, which stay read only (the control paths,
+    controls.py, and a `.toolchain` that no mount protects). Landlock rules only add access to a whole tree, so a
+    read only hole inside a writable tree cannot be said. Instead every directory that has a hole at or below it is not
+    granted as a whole: its entries are, one by one, a whole tree for a directory with no hole beneath it, read and
+    write on the file for a file, read only for a hole, and a directory with a hole below is entered the same way.
+    No hole means one rule for the whole workspace. What that costs is the creation, rename and removal of entries
+    directly in a directory that holds a hole (the workspace root always does: `.claude`, `CLAUDE.md`; and `.git`, which holds
+    `config` and `hooks`): a new file cannot be made there, an existing one can be rewritten but not deleted or
+    renamed. Everything below a directory with no hole is unrestricted. Links are skipped, so a link is never a way to
+    a path that has no rule. A control file that does not exist yet can never be created, because its directory
+    cannot take new entries."""
+    holes = {os.path.normpath(h) for h in holes}
+    if not holes:
+        return [Rule(workspace, ~0)]
+    rules: List[Rule] = []
+
+    def below(path: str) -> bool:
+        prefix = path.rstrip("/") + "/"
+        return any(h.startswith(prefix) for h in holes)
+
+    def plan(directory: str) -> None:
+        rules.append(Rule(directory, FS_READ_DIR))
+        try:
+            with os.scandir(directory) as it:
+                entries = list(it)
+        except OSError:
+            return
+        for entry in entries:
+            path, is_dir = entry.path, entry.is_dir(follow_symlinks=False)
+            if entry.is_symlink():
+                continue
+            if path in holes:
+                rules.append(Rule(path, RO if is_dir else FS_READ_FILE))
+            elif is_dir:
+                plan(path) if below(path) else rules.append(Rule(path, ~0))
+            else:
+                rules.append(Rule(path, FS_READ_FILE | FS_WRITE_FILE | FS_TRUNCATE | FS_EXECUTE))
+    plan(workspace)
+    return rules
+
+
+def rules_for(ro_mounts: Sequence[str], host_write: bool, workspace: str, scratch: Optional[str], proc: bool = True,
+              holes: Iterable[str] = ()) -> List[Rule]:
     """The path rules of a no network profile. The caller supplies the paths as they are in the outer sandbox, so the
     workspace is at its own path."""
     out: List[Rule] = []
     for path in ro_mounts:
         out.append(Rule(path, ~0 if (path == "/" and host_write) else RO))
-    out.append(Rule(workspace, ~0))
+    out.extend(workspace_rules(workspace, holes))
     if scratch:
         out.append(Rule(scratch, ~0))
     for device in DEVICES:
