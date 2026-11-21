@@ -125,7 +125,10 @@ def test_init_shows_the_change_writes_it_only_when_told_and_keeps_other_settings
     assert report["settings"]["state"] == "written" and report["policy"]["state"] in ("kept", "recorded")
     written = json.loads(settings.read_text())
     assert written["model"] == "x" and written["permissions"] == other["permissions"]
-    assert written["hooks"]["PostToolUse"] == other["hooks"]["PostToolUse"]
+    post = written["hooks"]["PostToolUse"]             # the person's own entry stays first; ours is added for outcomes
+    assert post[0] == other["hooks"]["PostToolUse"][0] and len(post) == 2 and post[1]["matcher"] == "*"
+    assert post[1]["hooks"][0]["command"].endswith(" prismpath agent hook || exit 2")
+    assert written["hooks"]["PostToolUseFailure"][0]["hooks"][0]["command"] == post[1]["hooks"][0]["command"]
     pre, end = written["hooks"]["PreToolUse"], written["hooks"]["SessionEnd"]
     assert pre[0]["matcher"] == "*" and pre[0]["hooks"][0]["command"].endswith(" prismpath agent hook || exit 2")
     assert end[0]["hooks"][0]["command"] == pre[0]["hooks"][0]["command"]
@@ -186,8 +189,10 @@ def test_every_recorded_hook_input_end_to_end(world):
     assert allows and allows < len(FIXTURES)
 
     status = json.loads(_cli(home, "agent", "status", "--json", "--project", world["ws"]).stdout)
-    assert status["runs"] == [{"session": "s1", "receipts": len(FIXTURES), "state": "open"}]
-    assert status["project"]["hooks"] == {"PreToolUse": True, "SessionEnd": True}
+    assert [{k: v for k, v in r.items() if k != "outcomes"} for r in status["runs"]] == [
+        {"session": "s1", "receipts": len(FIXTURES), "state": "open"}]
+    assert status["runs"][0]["outcomes"]["allowed_ran"] == 0       # no PostToolUse was sent, so nothing ran as far as it knows
+    assert status["project"]["hooks"] == {"PreToolUse": True, "SessionEnd": True, "PostToolUse": True, "PostToolUseFailure": True}
 
     assert _hook(home, {"session_id": "s1", "hook_event_name": "SessionEnd", "reason": "exit", "cwd": world["ws"]}) == {}
     status = json.loads(_cli(home, "agent", "status", "--json", "--project", world["ws"]).stdout)
@@ -270,7 +275,8 @@ def test_the_hook_fails_closed(world):
         path.write_bytes(original)
         assert _hook(home, good)["hookSpecificOutput"]["permissionDecision"] == "allow", name
     status = json.loads(_cli(home, "agent", "status", "--json").stdout)
-    assert status["runs"] == [{"session": "s1", "receipts": 6, "state": "open"}]     # no receipt for an error
+    assert [{k: v for k, v in r.items() if k != "outcomes"} for r in status["runs"]] == [
+        {"session": "s1", "receipts": 6, "state": "open"}]     # no receipt for an error
 
 
 def test_a_session_end_that_cannot_seal_says_so_and_allows_nothing(world):

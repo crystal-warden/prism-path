@@ -201,11 +201,13 @@ def test_a_rewritten_call_runs_nested_and_the_inner_layer_stops_and_records_what
     obs = seen[0]
     assert obs["receipt"] == 0 and obs["profile_sha256"] == STRICTEST.hash()
     assert obs["image_sha256"] == hashlib.sha256(arena["image"]).hexdigest()
+    (outcome,) = run.outcomes()                       # the runner finishing the command is an outcome of the same receipt
+    assert outcome["source"] == "runner" and outcome["receipt"] == 0 and outcome["decision"] == "allow"
     kinds = {s["kind"] for s in obs["observed"]["signals"]}
     assert {"path-absent", "network-unreachable"} <= kinds and obs["observed"]["method"] == "stderr-pattern"
     done = cli_tests._cli(arena["home"], "agent", "verify", "--json")
     report = json.loads(done.stdout)
-    assert done.returncode == 0 and report["verified"] is True and report["runs"][0]["observations"] == 1
+    assert done.returncode == 0 and report["verified"] is True and report["runs"][0]["observations"] == 1 and report["runs"][0]["outcomes"] == 1
 
 
 @needs_bwrap
@@ -219,6 +221,7 @@ def test_the_rewrite_cannot_be_walked_around_a_forged_observation_is_refused_and
     home = cli_tests._agent_dir(arena["home"])
     run = run_module.RunStore(home / commands.RUNS_DIR).get(sess)
     assert run.observations() == []                                      # nothing was refused, nothing is recorded
+    assert [(o["source"], o["outcome"], o["receipt"]) for o in run.outcomes()] == [("runner", "ran", 0)]   # but it did run
     # a claim about another receipt or another profile is refused by the decider's binding, and is not recorded
     from prismpath.agent import observe
     image_sha = hashlib.sha256(arena["image"]).hexdigest()
@@ -229,7 +232,7 @@ def test_the_rewrite_cannot_be_walked_around_a_forged_observation_is_refused_and
         answer = commands.hook(json.dumps(body).encode(), {**os.environ, "HOME": str(arena["home"])},
                                nested=Nested("/usr/bin/python3", "/x", "/y"))
         assert answer["recorded"] is False and "not recorded" in answer["systemMessage"]
-    assert run.observations() == []
+    assert run.observations() == [] and len(run.outcomes()) == 1                  # the forged claims added no outcome either
     # without a nested decider the stdin hook does not take observation requests at all
     answer = commands.hook(json.dumps(body).encode(), {**os.environ, "HOME": str(arena["home"])})
     assert answer["hookSpecificOutput"]["permissionDecision"] == "deny"
