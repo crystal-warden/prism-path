@@ -14,7 +14,7 @@ readings, a bit run left over that is not zero padding, or a symbol outside its 
 What it cannot catch is a bit flip that still decodes to valid symbols. The stream carries no integrity
 check of its own. That is the epoch's Merkle root (PROTOCOL.md 2.4), which this module does not touch.
 
-This is the baseline of docs/research/facet-model-reading.md (condition C). The server that fixes what it found
+This is the baseline the model reading study measured (condition C). The server that fixes what it found
 is `prismpath/telemetry/facet_mcp.py`; the Policy codec here is that module's.
 """
 from __future__ import annotations
