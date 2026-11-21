@@ -8,6 +8,13 @@ spec stable.
 
 ## [Unreleased]
 
+### Added: what became of each call, and approvals worth a rule (2026-11-20)
+
+- **The receipt's journal line carries Claude Code's `tool_use_id`**, an optional key bound to the line the way `sandbox.profile_sha256` is. `core-receipt/1` and the signed root are unchanged: the key is in the journal line, not the receipt, so no oracle or replay changed.
+- **`prismpath agent init` installs `PostToolUse` and `PostToolUseFailure` hook entries**, and `merged_settings`, `doctor` (a warning when missing), `status` and the launcher's staged settings know them. Each event appends one entry to a new hash-chained `outcomes.jsonl` in the run, bound to the receipt with the same `tool_use_id`: `ran` or `failed` with a failure class, the tool name and the receipt's index and hash, and no tool output. An event that cannot be bound is recorded `unbound` and changes nothing. The nested runner's report of a finished shell command is an outcome too. At SessionEnd an allowed receipt with no outcome is recorded `no outcome` and an escalated one `no outcome (declined or not run)`. The file is outside the signed root, like `observations.jsonl`; outcomes are records and decide nothing. `verify` checks its chain and binding.
+- **`prismpath agent rules` counts what became of each rule** (`allowed_ran`, `allowed_no_outcome`, `asked_approved`, `asked_no_outcome`, `refused`, also in `--json`), and `status` shows totals for each session.
+- **`prismpath agent approvals [--min N]` lists the rules whose asks were approved N times (3 by default)** with counts and example readings as classes only, labelled as candidates for the owner to sign. It changes nothing and adopts nothing.
+
 ### Added: the compile and the egress proxy read the policy (2026-11-20)
 
 - **`compile_profile(image, role)` takes a role, `bash` or `agent`.** The agent role derives `net` from the allow set (`proxy_model` when an allowed connect reads `model_api`, `proxy_allow` when one reads `allowed_host`, `none` otherwise) and keeps the fixed mounts. A profile that carries `net` is `prismpath.profile/2`; one with none (the bash role, and the starters' profile, hash 767dd3c8) keeps its `prismpath.profile/1` bytes.
