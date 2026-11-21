@@ -505,11 +505,17 @@ class HookResult:
     answer: Dict[str, Any]
 
 
-def evaluate(hook_input: Any, env: Optional[Mapping[str, str]] = None, policy: Optional[Policy] = None) -> HookResult:
-    """Classify one hook input, decide it under `policy` (agent_default when None) and write the hook answer."""
+def evaluate(hook_input: Any, env: Optional[Mapping[str, str]] = None, policy: Optional[Policy] = None,
+             zones: Any = None) -> HookResult:
+    """Classify one hook input, decide it under `policy` (agent_default when None) and write the hook answer.
+    `zones` is the zone information point (prismpath/agent/zones.py), or a function of the workspace that gives it;
+    None declares no zone, so nothing is protected."""
     policy = policy or load_default_policy()
     hc = hook_call(hook_input, env)
-    reading = hook_reading(hook_input, hc, classifier.Config.for_workspace(hc.workspace))
+    point = zones(hc.workspace) if callable(zones) else zones
+    config = classifier.Config.for_workspace(hc.workspace) if point is None \
+        else classifier.Config.for_workspace(hc.workspace, zones=point)
+    reading = hook_reading(hook_input, hc, config)
     decision = policy.decide(policy.reading_bytes(reading))
     return HookResult(decision, reading, hc.call, hc.workspace, hook_answer(decision))
 

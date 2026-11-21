@@ -28,6 +28,14 @@ declares:
   remote_class        none | allowed | other                    (a push's remote)
   net_dest            none | model_api | allowed_host | other | unknown   (a connect's host and port)
   proc_class          none | single | tree | unknown            (what a run_command needs of the process table)
+  zone_reach          none | protected | unknown                (a call that changes files, against the owner's zones)
+
+`zone_reach` is read off an information point (`Config.zones`, prismpath/agent/zones.py), an observation like the
+disk's and outside the proof. A call that changes files (the write and delete tools and a mutating command) asks the
+point about each path it names that the syntactic check passes (`zone_fact`), and reads `protected` when any answers
+protected, else `unknown` when any answers anything but none, else `none`. A changing call with no such path, or with no
+information point (`Config.zones` is None), reads `unknown`; a call that changes no file reads `none`. It is never
+`none` unless a point answered `none` for every path it was asked about.
 
 A `connect` is a connection the sandboxed agent asks the egress proxy to open. Its call is
 `{"tool": "connect", "args": {"host": str, "port": int}}` (the port a true `int`, not a bool), and nothing in the
@@ -179,26 +187,31 @@ class Config:
     toolchain_dirs: Tuple[Path, ...] = ()
     allowed_remotes: Tuple[str, ...] = ()
     allowed_hosts: Tuple[str, ...] = ()       # lower case host names a connect to port 443 may reach (net_dest allowed_host)
+    zones: Any = None                         # the zone information point (zones.py); None reads every changing call unknown
 
     def __post_init__(self):
         self.workspace = Path(os.path.realpath(self.workspace))
 
     @classmethod
-    def for_workspace(cls, workspace, allowed_remotes: Iterable[str] = (), allowed_hosts: Iterable[str] = ()) -> "Config":
+    def for_workspace(cls, workspace, allowed_remotes: Iterable[str] = (), allowed_hosts: Iterable[str] = (),
+                      zones: Any = "none") -> "Config":
         """The example's configuration: the workspace's own `.toolchain` directory and the host's toolchain
         directories (the system prefixes and the per user toolchain homes)."""
         workspace = Path(os.path.realpath(workspace))
         home = Path(os.path.expanduser("~"))
         dirs = [workspace / ".toolchain", Path("/usr"), Path("/opt"), Path("/etc"), home / ".cargo",
                 home / ".rustup", home / ".elan", home / ".local", home / ".npm", home / ".pyenv"]
-        return cls(workspace, tuple(dirs), tuple(allowed_remotes), tuple(allowed_hosts))
+        if isinstance(zones, str) and zones == "none":     # no zone declared: the default point says nothing is protected
+            from prismpath.agent import zones as zone_module
+            zones = zone_module.NO_ZONES
+        return cls(workspace, tuple(dirs), tuple(allowed_remotes), tuple(allowed_hosts), zones)
 
 
 def base_reading() -> Dict[str, Any]:
     return {"classifier_version": CLASSIFIER_VERSION, "tool": "unknown", "path_scope": "none",
             "path_in_toolchain": False, "path_control": False, "path_glob": False, "path_traversal": False, "path_symlink": False,
             "command_class": "none", "kill_by_pattern": False, "git_op": "none", "remote_class": "none",
-            "net_dest": "none", "proc_class": "none"}
+            "net_dest": "none", "proc_class": "none", "zone_reach": "none"}
 
 
 def unknown_reading() -> Dict[str, Any]:
@@ -655,8 +668,45 @@ def destroy_paths(call: Any, reading: Dict[str, Any]) -> List[str]:
     return []
 
 
+def path_ok(raw: Any) -> bool:
+    """The syntactic check of a path: a non empty string of at most MAX_PATH characters with no NUL."""
+    return isinstance(raw, str) and bool(raw) and "\x00" not in raw and len(raw) <= MAX_PATH
+
+
+def zone_fact(raw: str, config: Config) -> str:
+    """What the zone information point says about one path: `none`, `protected` or `unknown`. The only function of the
+    classifier that asks the point (the differential harness replaces it, as it does `disk_facts`); no point, an
+    answer outside the three, or an error is `unknown`."""
+    point = config.zones
+    if point is None:
+        return "unknown"
+    try:
+        answer = point.reach(raw, config)
+    except Exception:   # noqa: BLE001 - a point that fails says nothing, which is unknown
+        return "unknown"
+    return answer if answer in ("none", "protected", "unknown") else "unknown"
+
+
+def zone_reach(call: Any, reading: Dict[str, Any], config: Config) -> str:
+    """`zone_reach` of a call that was read (see the module docstring)."""
+    tool, args = reading["tool"], call.get("args", {})
+    if tool in ("write_file", "delete_path"):
+        raws = [args.get("path", ".")]
+    elif tool == "run_command" and reading["command_class"] == "mutating":
+        raws = _path_like_args(args["argv"][1:])
+    else:
+        return "none"
+    queried = [raw for raw in raws if path_ok(raw)]
+    if not queried:
+        return "unknown"
+    answers = [zone_fact(raw, config) for raw in queried]
+    return "protected" if "protected" in answers else ("unknown" if "unknown" in answers else "none")
+
+
 def _classify(call: Any, config: Config) -> Dict[str, Any]:
     reading = _classify_base(call, config)
+    if reading["tool"] != "unknown":
+        reading["zone_reach"] = zone_reach(call, reading, config)
     if reading["tool"] != "unknown":
         for raw in destroy_paths(call, reading):
             if isinstance(raw, str) and raw and "\x00" not in raw and len(raw) <= MAX_PATH \

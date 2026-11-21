@@ -28,6 +28,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional
 
@@ -396,7 +397,9 @@ def hook(raw: bytes, env: Optional[Mapping[str, str]] = None, nested=None) -> Di
         mismatch = classifier_mismatch(policy)
         if mismatch:
             raise AgentError(mismatch)          # a deny with the hook-error cause and the fix, not a bare cause 37
-        result = claude_code.evaluate(data, env, policy)
+        from prismpath.agent import zones as zone_module
+        result = claude_code.evaluate(data, env, policy, lambda ws: zone_module.information_point(
+            home, policy.image, Path(ws), env))
         answer, profile = result.answer, None
         from prismpath.agent import sandbox_hook
         has_command = isinstance(data.get("tool_input"), dict) and isinstance(data["tool_input"].get("command"), str)
@@ -591,6 +594,45 @@ def confinement_state() -> Dict[str, Any]:
         return {"confined": False, "platform": sys.platform,
                 "detail": f"not confined, and every allowed shell command is refused (cause 129): {sandbox_exec.BWRAP} is missing"}
     return {"confined": True, "platform": sys.platform, "detail": "decided and run inside the sandbox compiled from the policy"}
+
+
+def zones_cmd(action: str, project: Path, protected: Optional[List[str]], protected_file: Optional[str],
+              index: Optional[str], as_json: bool, out=None) -> int:
+    """`prismpath agent zones set|status|warm` (prismpath/agent/zones.py)."""
+    from prismpath.agent import zones
+    out = out or sys.stdout
+    home = config_dir()
+    load_checked(home)                                     # keys and a recorded policy that verifies, or AgentError
+    image = (home / POLICY_FILE).read_bytes()
+    project = Path(os.path.realpath(project))
+    try:
+        if action == "set":
+            names = [n for item in (protected or []) for n in item.split(",") if n]
+            if protected_file:
+                names += [line.strip() for line in Path(protected_file).read_text(encoding="utf-8").split("\n")
+                          if line.strip() and not line.strip().startswith("#")]
+            doc = zones.zone_document(names, project, Path(index) if index else None, image)
+            zones.sign(home, doc)
+            result = {"recorded": True, "project": doc["project"], "index": doc["index"],
+                      "protected": doc["protected"], "policy_sha256": doc["policy_sha256"]}
+        elif action == "status":
+            result = zones.status(home, image, project)
+        else:
+            point = zones.information_point(home, image, project)
+            if not isinstance(point, zones.ContextCloudZones):
+                raise AgentError(f"there is nothing to warm: {zones.status(home, image, project)['detail']}")
+            started = time.monotonic()
+            facts = point.warm()
+            result = {"files": len(facts), "seconds": round(time.monotonic() - started, 2),
+                      "by_fact": {k: sum(1 for v in facts.values() if v == k) for k in zones.ANSWERS}}
+    except zones.ZoneError as exc:
+        raise AgentError(str(exc))
+    if as_json:
+        print(json.dumps(result, indent=1, sort_keys=True), file=out)
+    else:
+        for key, value in result.items():
+            print(f"{key}: {value}", file=out)
+    return 0
 
 
 def status(project: Path, as_json: bool, out=None) -> int:

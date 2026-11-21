@@ -384,7 +384,21 @@ def _add_operator_commands(subparsers) -> None:
                        'fixing command for each; it changes nothing')
     agent_doctor.add_argument('--project', default=None,
                               help='the project whose .claude/settings.json is checked (default as for init)')
-    for sub in (agent_init, agent_hook, agent_verify, agent_status, agent_doctor, agent_rules):
+    agent_zones = agent_sub.add_parser(
+        'zones', help='the owner\'s protected code: `set` records and signs a zone file (the protected names, bound to '
+                      'the recorded policy and the project), `status` says what the hook will do about zones, `warm` '
+                      'asks Context Cloud about every file so the hook answers from the cache')
+    agent_zones.add_argument('zones_action', choices=('set', 'status', 'warm'))
+    agent_zones.add_argument('--project', default=None,
+                             help='the project the zones are for (default as for init)')
+    agent_zones.add_argument('--protected', action='append', default=None, metavar='NAME',
+                             help='set: a protected function, class or module by its dotted name, as Context Cloud '
+                                  'spells it (repeat, or comma separate)')
+    agent_zones.add_argument('--protected-file', default=None, metavar='FILE',
+                             help='set: a file with one protected name per line')
+    agent_zones.add_argument('--index', default=None, metavar='FILE',
+                             help='set: the Context Cloud index (default .contextcloud/index.sqlite in the project)')
+    for sub in (agent_init, agent_hook, agent_verify, agent_status, agent_doctor, agent_rules, agent_zones):
         sub.add_argument('--json', action='store_true', help='machine readable output')
     agent_run = agent_sub.add_parser(
         'run', help='run a program as the agent under the sandbox (Linux, bubblewrap and socat): the workspace is '
@@ -562,6 +576,9 @@ def agent_cmd(args) -> int:
                 return agent_rules_report.rules(args.since, args.json)
             except agent_rules_report.RulesError as exc:
                 raise CliError(str(exc))
+        if args.agent_action == 'zones':
+            return commands.zones_cmd(args.zones_action, project, args.protected, args.protected_file, args.index,
+                                      args.json)
         if args.agent_action == 'doctor':
             from prismpath.agent import doctor
             return doctor.doctor(project, args.json)
