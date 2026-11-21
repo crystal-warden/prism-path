@@ -65,7 +65,7 @@ jobs:
           set -o pipefail
           python -m pytest prismpath/tests/test_agent_nested.py prismpath/tests/test_agent_adversary.py -q -rs | tee /tmp/pc.txt
           ! grep -i "SKIPPED" /tmp/pc.txt | grep -i "neither a nested bubblewrap nor Landlock"
- Exits non-zero on ANY code execution or uncaught
+      # The sandbox security + robustness gate. Exits non-zero on ANY code execution or uncaught
       # crash across ~23k adversarial + random predicate inputs. This is the check that guards the
       # "a `when` predicate cannot execute code, and cannot crash a run" claim in the papers.
       - name: Fuzz the predicate sandbox
