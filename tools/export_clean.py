@@ -129,7 +129,7 @@ EXCLUDE_PREFIXES = [
     "tools/mirror/", "tools/mirror_readme.md", "tools/tests/test_export.py", "tools/mirror_publish.yml", "tools/mirror_crates_publish.yml", "tools/export_clean.py",
     "tools/arch_guard.", "tools/arch_scorecard.json", "tools/arith_lint.py", "tools/docs_health.py",
     "tools/evidence_check.py", "tools/ledger_lint.py", "tools/run_corpora.py", "tools/fq_redundancy.py", "tools/gen_mission_control_guide.py",
-    "tools/reproduce.sh", "docs/guides/reproduce.md",
+    "tools/reproduce.sh",
 ]
 EXCLUDE_SUFFIXES = [".deferrals"]           # empty top-level scratch files
 EXCLUDE_EXACT = {"docs_health_report.md", "interactions.jsonl"}

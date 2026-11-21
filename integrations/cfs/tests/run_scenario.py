@@ -511,7 +511,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     args = parser.parse_args(argv)
     exe_dir = Path(args.build_dir)
     if not (exe_dir / "core-cpu1").exists():
-        print(f"no staged cFS build at {exe_dir} (see integrations/cfs/README.md)", file=sys.stderr)
+        print(f"no staged cFS build at {exe_dir} (build cFS natively and point --build-dir at its exe/cpu1)", file=sys.stderr)
         return 2
     check = Check()
 
