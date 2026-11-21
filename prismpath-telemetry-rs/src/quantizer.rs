@@ -2,7 +2,7 @@
 // Copyright 2026 Crystal Warden Supply Chain Labs LLC
 //! Decision-preserving quantizer — the differentiator.
 
-use prismpath_rs::{accept_canonical, DefinedKind, FieldDefinition, Graph, Value, V};
+use prismpath_rs::{DefinedKind, FieldDefinition, Graph, Value, V};
 use std::collections::HashMap;
 
 pub const OTHER: &str = "\x00__other__";
@@ -112,11 +112,11 @@ impl FieldPartition {
 
     /// The symbol of a value on a defined field, or the refusal reason. Nothing is converted.
     fn defined_symbol(&self, definition: &FieldDefinition, value: &V) -> Result<usize, &'static str> {
-        let canonical = accept_canonical(definition, value)?;
-        if matches!(canonical, V::Null) {
+        // the accepted value compares as the value given (check_canonical), so the cell is read from it
+        if prismpath_rs::field_definitions::check_canonical(definition, value)? {
             return self.absent_symbol.ok_or(prismpath_rs::field_definitions::REFUSAL_MISSING);
         }
-        self.present_symbol(&canonical).map_err(|_| prismpath_rs::field_definitions::REFUSAL_OUT_OF_RANGE)
+        self.present_symbol(value).map_err(|_| prismpath_rs::field_definitions::REFUSAL_OUT_OF_RANGE)
     }
 
     /// The cell index a value falls in. `Err` only for a value outside every cell of a numeric
@@ -177,9 +177,10 @@ impl FieldPartition {
             return self.defined_symbol(definition, value)
                 .map_err(|reason| AcceptanceError { field: self.field.clone(), refusal: InputRefusal::from_reason(reason) });
         }
-        let converted = accept_value(&self.kind, value)
-            .map_err(|refusal| AcceptanceError { field: self.field.clone(), refusal })?;
-        self.present_symbol(&converted)
+        // what accept_value accepts compares as the value given (a number stays, a bool is 0 or 1 and a 0 or 1
+        // is that bool), so the cell is read from it without making the accepted copy
+        accept_check(&self.kind, value).map_err(|refusal| AcceptanceError { field: self.field.clone(), refusal })?;
+        self.present_symbol(value)
             .map_err(|_| AcceptanceError { field: self.field.clone(), refusal: InputRefusal::OutOfRange })
     }
 }
@@ -266,6 +267,20 @@ impl std::fmt::Display for AcceptanceError {
 /// else is the wrong type. Every remaining conversion is one the engine cannot tell apart. Python's
 /// `accept_value` is the same function; the inputs corpus pins both.
 pub fn accept_value(kind: &FieldKind, value: &V) -> Result<V, InputRefusal> {
+    accept_check(kind, value)?;
+    Ok(match (kind, value) {
+        (FieldKind::Numeric, V::Bool(flag)) => V::Num(if *flag { 1.0 } else { 0.0 }),
+        (FieldKind::Boolean, V::Num(number)) => V::Bool(*number == 1.0),
+        (_, other) => other.clone(),
+    })
+}
+
+/// `accept_value`'s checks without the converted copy: `Ok` exactly when `accept_value` accepts.
+pub fn accept_check(kind: &FieldKind, value: &V) -> Result<(), InputRefusal> {
+    accept_value_checked(kind, value)
+}
+
+fn accept_value_checked(kind: &FieldKind, value: &V) -> Result<(), InputRefusal> {
     if matches!(value, V::Null) {
         return Err(InputRefusal::Missing);
     }
@@ -287,15 +302,15 @@ pub fn accept_value(kind: &FieldKind, value: &V) -> Result<V, InputRefusal> {
             if number.abs() >= SAFE_INTEGER_LIMIT {
                 return Err(InputRefusal::OutOfRange);
             }
-            Ok(V::Num(number))
+            Ok(())
         }
         FieldKind::Boolean => match value {
-            V::Bool(flag) => Ok(V::Bool(*flag)),
-            V::Num(number) if *number == 0.0 || *number == 1.0 => Ok(V::Bool(*number == 1.0)),
+            V::Bool(_) => Ok(()),
+            V::Num(number) if *number == 0.0 || *number == 1.0 => Ok(()),
             _ => Err(InputRefusal::WrongType),
         },
         FieldKind::Categorical => match value {
-            V::Str(text) => Ok(V::Str(text.clone())),
+            V::Str(_) => Ok(()),
             _ => Err(InputRefusal::WrongType),
         },
     }

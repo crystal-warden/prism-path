@@ -4,39 +4,112 @@
 
 use prismpath_rs::causes;
 
-fn fibs_upto(upper_bound: usize) -> Vec<usize> {
-    // `fibs` is seeded with [1, 2] and only ever grows, so `.last()` is always Some. A term the usize cannot
-    // hold is beyond any bound, so the growth stops there.
-    let mut fibs = vec![1, 2];
-    while *fibs.last().expect("fibs seeded non-empty") <= upper_bound {
-        match fibs[fibs.len() - 1].checked_add(fibs[fibs.len() - 2]) {
-            Some(next) => fibs.push(next),
-            None => return fibs,
+/// The Fibonacci weights 1, 2, 3, 5, ... that fit a `usize`, the Zeckendorf digits a code carries.
+const FIB_COUNT: usize = fib_count();
+const FIBS: [usize; FIB_COUNT] = fib_table();
+
+const fn fib_count() -> usize {
+    let (mut low, mut high, mut count) = (1usize, 2usize, 2usize);
+    loop {
+        match low.checked_add(high) {
+            Some(next) => {
+                low = high;
+                high = next;
+                count += 1;
+            }
+            None => return count,
         }
     }
-    if *fibs.last().expect("fibs seeded non-empty") > upper_bound {
-        fibs.pop();
+}
+
+const fn fib_table() -> [usize; FIB_COUNT] {
+    let mut table = [0usize; FIB_COUNT];
+    table[0] = 1;
+    table[1] = 2;
+    let mut index = 2;
+    while index < FIB_COUNT {
+        table[index] = table[index - 1] + table[index - 2];
+        index += 1;
     }
-    fibs
+    table
+}
+
+/// The Fibonacci code of a positive `value` as an integer and its length in bits: the code's first bit is
+/// bit `len - 1`, its last (the terminator) bit 0. The same bits `encode` spells as a string, with no
+/// allocation, for writers that pack codes straight into words. `None` for 0.
+pub fn code_bits(value: usize) -> Option<(u128, u32)> {
+    if value < 1 {
+        return None;
+    }
+    if value < SMALL_CODES.len() {
+        return Some(SMALL_CODES[value]);
+    }
+    Some(code_bits_search(value))
+}
+
+/// The codes of 1 to 255 (index 0 unused), built at compile time by `code_bits_search`'s own steps; a wire
+/// symbol is almost always one of them.
+const SMALL_CODES: [(u128, u32); 256] = small_codes();
+
+const fn small_codes() -> [(u128, u32); 256] {
+    let mut table = [(0u128, 0u32); 256];
+    let mut value = 1;
+    while value < 256 {
+        table[value] = code_bits_const(value);
+        value += 1;
+    }
+    table
+}
+
+/// `code_bits_search` as a `const fn`, for the table.
+const fn code_bits_const(value: usize) -> (u128, u32) {
+    let mut top = 0;
+    while top + 1 < FIB_COUNT && FIBS[top + 1] <= value {
+        top += 1;
+    }
+    let len = top as u32 + 2;
+    let mut code: u128 = 1;
+    let mut rem = value;
+    let mut index = top + 1;
+    while index > 0 {
+        index -= 1;
+        if FIBS[index] <= rem {
+            rem -= FIBS[index];
+            code |= 1u128 << (len - 1 - index as u32);
+        }
+    }
+    (code, len)
+}
+
+fn code_bits_search(value: usize) -> (u128, u32) {
+    // the highest weight not above the value; every positive usize has one, since FIBS starts at 1
+    let top = FIBS.partition_point(|&weight| weight <= value) - 1;
+    let len = top as u32 + 2; // one digit per weight up to `top`, then the terminator
+    let mut code: u128 = 1; // the terminator
+    let mut rem = value;
+    let mut index = top + 1;
+    while index > 0 {
+        index -= 1;
+        if FIBS[index] <= rem {
+            rem -= FIBS[index];
+            code |= 1u128 << (len - 1 - index as u32);
+        }
+    }
+    debug_assert_eq!(rem, 0, "Zeckendorf decomposition failed for {value}");
+    (code, len)
+}
+
+fn push_code(out: &mut String, code: u128, len: u32) {
+    for position in (0..len).rev() {
+        out.push(if (code >> position) & 1 == 1 { '1' } else { '0' });
+    }
 }
 
 /// Fibonacci code of a positive integer `n` (>= 1) as a bit-string ending in `"11"`.
 pub fn encode(value: usize) -> Result<String, String> {
-    if value < 1 {
-        return Err(format!("Fibonacci coding is for positive integers; got {value}"));
-    }
-    let fibs = fibs_upto(value);
-    let mut bits = vec!['0'; fibs.len()];
-    let mut rem = value;
-    for index in (0..fibs.len()).rev() {
-        if fibs[index] <= rem {
-            bits[index] = '1';
-            rem -= fibs[index];
-        }
-    }
-    assert_eq!(rem, 0, "Zeckendorf decomposition failed for {value}");
-    let mut out: String = bits.into_iter().collect();
-    out.push('1'); // append terminator -> unique trailing '11'
+    let (code, len) = code_bits(value).ok_or_else(|| format!("Fibonacci coding is for positive integers; got {value}"))?;
+    let mut out = String::with_capacity(len as usize);
+    push_code(&mut out, code, len);
     Ok(out)
 }
 
@@ -83,9 +156,10 @@ pub fn decode(code: &str) -> Result<usize, String> {
 /// Concatenate the codes; each code's trailing `"11"` frames the next — zero header, self-delimiting.
 /// `Err` if any value is `< 1` (Fibonacci coding is for positive integers; the wire sends symbol+1).
 pub fn encode_stream(values: &[usize]) -> Result<String, String> {
-    let mut out = String::new();
+    let mut out = String::with_capacity(values.len() * 8);
     for &value in values {
-        out.push_str(&encode(value)?);
+        let (code, len) = code_bits(value).ok_or_else(|| format!("Fibonacci coding is for positive integers; got {value}"))?;
+        push_code(&mut out, code, len);
     }
     Ok(out)
 }

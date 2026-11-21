@@ -69,6 +69,105 @@ pub fn encode_reading_checked(
         field: String::new(), refusal: quantizer::InputRefusal::OutOfRange })
 }
 
+/// A policy's encoder: the field order sorted once, each reading quantized and coded straight into packed
+/// words. `encode_packed` gives the bytes `packed::pack(&encode_reading(parts, reading)?, word_bits)` gives,
+/// with the same refusal in the same field order, without building the symbol map or the bit string.
+pub struct Encoder<'a> {
+    fields: Vec<(&'a String, &'a FieldPartition)>,
+    word_bits: usize,
+}
+
+impl<'a> Encoder<'a> {
+    /// An encoder for `parts`, packing `word_bits`-bit words (a multiple of 8 from 8 to 64).
+    pub fn new(parts: &'a HashMap<String, FieldPartition>, word_bits: usize) -> Self {
+        assert!(crate::packed::writer_word_bits(word_bits), "word_bits must be 8 to 64 in steps of 8");
+        let mut fields: Vec<(&String, &FieldPartition)> = parts.iter().collect();
+        fields.sort_by(|left, right| left.0.cmp(right.0));
+        Encoder { fields, word_bits }
+    }
+
+    /// The reading's cell symbols in field order, as `quantizer::checked_quantize` reads them.
+    pub fn symbols_into(&self, reading: &HashMap<String, V>, out: &mut Vec<usize>) -> Result<(), quantizer::AcceptanceError> {
+        out.clear();
+        for (field, partition) in &self.fields {
+            let value = match reading.get(*field) {
+                Some(value) => value,
+                None if partition.definition.is_some() => &V::Null,
+                None => return Err(quantizer::AcceptanceError { field: (*field).clone(), refusal: quantizer::InputRefusal::Missing }),
+            };
+            out.push(partition.checked_symbol(value)?);
+        }
+        Ok(())
+    }
+
+    /// One reading's packed bytes, appended to `dest`; on a refusal `dest` is left as it was.
+    pub fn encode_packed_into(&self, reading: &HashMap<String, V>, dest: &mut Vec<u8>) -> Result<(), String> {
+        crate::packed::BitWriter::write_into(dest, self.word_bits, |writer| {
+            for (field, partition) in &self.fields {
+                let value = match reading.get(*field) {
+                    Some(value) => value,
+                    None if partition.definition.is_some() => &V::Null,
+                    None => {
+                        return Err(quantizer::AcceptanceError { field: (*field).clone(), refusal: quantizer::InputRefusal::Missing }.to_string())
+                    }
+                };
+                let symbol = partition.checked_symbol(value).map_err(|error| error.to_string())?;
+                let (code, len) = zeckendorf::code_bits(symbol + 1).expect("a symbol + 1 is positive");
+                writer.put(code, len);
+            }
+            Ok(())
+        })
+    }
+
+    /// Packed bytes for a reading given as one value per field in wire order (`fields`), appended to `dest`,
+    /// with each value accepted and refused as `encode_packed_into` would; `V::Null` stands for a missing
+    /// value. On a refusal `dest` is left as it was.
+    pub fn encode_row_into(&self, row: &[V], dest: &mut Vec<u8>) -> Result<(), String> {
+        if row.len() != self.fields.len() {
+            return Err(format!("{} values for {} fields", row.len(), self.fields.len()));
+        }
+        crate::packed::BitWriter::write_into(dest, self.word_bits, |writer| {
+            for ((field, partition), value) in self.fields.iter().zip(row) {
+                if matches!(value, V::Null) && partition.definition.is_none() {
+                    return Err(quantizer::AcceptanceError { field: (*field).clone(), refusal: quantizer::InputRefusal::Missing }.to_string());
+                }
+                let symbol = partition.checked_symbol(value).map_err(|error| error.to_string())?;
+                let (code, len) = zeckendorf::code_bits(symbol + 1).expect("a symbol + 1 is positive");
+                writer.put(code, len);
+            }
+            Ok(())
+        })
+    }
+
+    /// One reading's packed bytes.
+    pub fn encode_packed(&self, reading: &HashMap<String, V>) -> Result<Vec<u8>, String> {
+        let mut out = Vec::new();
+        self.encode_packed_into(reading, &mut out)?;
+        Ok(out)
+    }
+
+    /// Packed bytes for cell symbols already in field order (one per field), for a caller that quantized
+    /// them itself.
+    pub fn encode_symbols_packed(&self, symbols: &[usize], dest: &mut Vec<u8>) -> Result<(), String> {
+        if symbols.len() != self.fields.len() {
+            return Err(format!("{} symbols for {} fields", symbols.len(), self.fields.len()));
+        }
+        crate::packed::BitWriter::write_into(dest, self.word_bits, |writer| {
+            for &symbol in symbols {
+                let code_value = symbol.checked_add(1).ok_or_else(|| format!("symbol {symbol} is beyond the wire's range"))?;
+                let (code, len) = zeckendorf::code_bits(code_value).expect("a symbol + 1 is positive");
+                writer.put(code, len);
+            }
+            Ok(())
+        })
+    }
+
+    /// The fields in wire order.
+    pub fn fields(&self) -> Vec<&str> {
+        self.fields.iter().map(|(field, _)| field.as_str()).collect()
+    }
+}
+
 /// Why a stream did not decode under its policy: the decoder's own message and, where it is exactly one of the
 /// strict decode causes, the registry code beside it. A symbol count that is not the policy's field count is
 /// `wire:codebook-mismatch` (51, invariant I3); the other refusal carries none.
