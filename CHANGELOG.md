@@ -8,6 +8,11 @@ spec stable.
 
 ## [Unreleased]
 
+### Added: a Landlock backend for the per call sandbox (2026-11-21)
+
+- **Where a bwrap inside a bwrap is forbidden (Ubuntu 24.04), an allowed shell command under `prismpath agent run` now runs under Landlock instead of being refused with cause 129.** `prismpath/agent/landlock.py` (standard library `ctypes`, ABI detected at run time) applies the bash role profile to the command's process: read and execute under the profile's mounts, read write under the workspace and a private scratch directory, TCP bind and connect refused from ABI 4, and a small seccomp filter that refuses `socket()` (which also closes the proxy's and the decider's unix sockets, UDP and `io_uring`), `ptrace` and System V IPC. The launcher probes bubblewrap, then Landlock, and denies with cause 129 only when neither works. The journal line of each receipt and each observation record the backend that ran (`sandbox.backend`).
+- **Both per call backends keep the workspace's control paths read only** (`prismpath/agent/controls.py`, the list the launcher also uses), so a script run by an allowed call cannot edit `.claude/settings.json`, `CLAUDE.md` or `.git/hooks/`. Under Landlock without the launcher's mounts a directory that holds a control path (the workspace root, `.git`) takes no new entries.
+
 ### Added: the compile and the egress proxy read the policy (2026-11-20)
 
 - **`compile_profile(image, role)` takes a role, `bash` or `agent`.** The agent role derives `net` from the allow set (`proxy_model` when an allowed connect reads `model_api`, `proxy_allow` when one reads `allowed_host`, `none` otherwise) and keeps the fixed mounts. A profile that carries `net` is `prismpath.profile/2`; one with none (the bash role, and the starters' profile, hash 767dd3c8) keeps its `prismpath.profile/1` bytes.
