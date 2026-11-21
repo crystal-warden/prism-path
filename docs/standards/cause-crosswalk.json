@@ -1996,6 +1996,29 @@
     ],
     "rationale": "Nearest entry: a request made to a destination the requester chose; the cause refuses every destination but the allowed ones, it does not validate the request."
    }
+  },
+  "131": {
+   "name": "agent:zone-asked",
+   "class": "routing",
+   "kind": "security-control",
+   "owasp_asi": {
+    "ids": [
+     "ASI02"
+    ],
+    "rationale": "A change to code the owner protects, or one whose reach into it is not known, waits for the person, whatever the agent that proposes it."
+   },
+   "mitre_atlas": {
+    "ids": [
+     "AML.T0053"
+    ],
+    "rationale": "An agent tool call that would change files in a zone of code the owner marked protected."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-862"
+    ],
+    "rationale": "Nearest entry: a change to protected code made without authorization; the cause asks for that authorization, it does not check it."
+   }
   }
  }
 }
