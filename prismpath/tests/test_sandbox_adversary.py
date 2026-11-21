@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
-"""WP5 of docs/design/enforcement-points-plan.md: an allowed command whose child reaches outside the workspace.
+"""An allowed command whose child reaches outside the workspace.
 
 The policy here allows a shell command that changes files inside the workspace to run (the starters ask the person
 about one), so `python3 tool.py` and `sh build.sh` are allowed calls. Each script opens a decoy secret under
@@ -10,7 +10,7 @@ allowed before the sandbox (and what a person's approval of a question still run
 The first reaches all three, the second none, so the gap the sandbox closes stays measured. The decoy holds no
 real secret and the listener is the test's own.
 
-WP6 is checked on the same runs: the sandboxed run's refusals are recorded as observations bound to the call's
+The same runs check that the sandboxed run's refusals are recorded as observations bound to the call's
 receipt, and `prismpath agent verify` verifies the run with them.
 """
 import json

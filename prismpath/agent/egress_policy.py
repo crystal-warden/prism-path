@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
-"""The egress proxy's decision, read from the signed policy (agent-sandbox-plan, 2.2 and WP7).
+"""The egress proxy's decision, read from the signed policy.
 
 `PolicyGate` is the `gate` of `egress.EgressProxy`. It runs in the launcher, outside the sandbox, with the keys and
 the runs directory that stay there. For each CONNECT it
