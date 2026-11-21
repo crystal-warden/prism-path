@@ -429,7 +429,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     nos3 = args.nos3.resolve()
     fortytwo = (args.fortytwo or nos3.parent / "42").resolve()
     if not (nos3 / "fsw" / "cfe").is_dir() or not (nos3 / "scripts" / "env.sh").exists():
-        print(f"no NOS3 checkout with submodules at {nos3} (see integrations/cfs/nos3/README.md)", file=sys.stderr)
+        print(f"no NOS3 checkout with submodules at {nos3} (a NOS3 checkout with its submodules, and docker)", file=sys.stderr)
         return 2
     if sh(["docker", "version"]).returncode != 0:
         print("docker is not available", file=sys.stderr)
