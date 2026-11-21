@@ -407,11 +407,11 @@ def test_each_attempt_by_a_shell_child_hook_alone_outer_only_and_nested(results,
         row = host[f"shell:{name}"]
         assert row["verdict"] == "allow", (name, row)       # the script is an allowed call: the hook cannot see inside it
         assert _honoured(row) is True, (name, row)          # the hook alone lets the child reach all of it
-    # The tracer's per call sandbox on the host, with no launcher, stops the shell child from everything but the control
-    # file: the workspace is read write there, so `.claude/settings.json` is protected only by the hook's rule, which
-    # cannot see inside a script. The launcher binds the control paths read only, which closes it (asserted below).
+    # The per call sandbox on the host, with no launcher, stops the shell child from all of it, the control file too:
+    # each backend keeps the workspace's control paths read only (prismpath/agent/controls.py), which a script the hook
+    # cannot see inside would otherwise reach.
     for name in ATTEMPTS:
-        assert _reached(host[f"shell:{name}"], "nested") is (name == "edit_control"), (name, host[f"shell:{name}"]["nested"])
+        assert _reached(host[f"shell:{name}"], "nested") is False, (name, host[f"shell:{name}"]["nested"])
     if not NESTING:
         pytest.skip("this host forbids a sandbox inside a sandbox; the launcher denies shell commands with cause 129 there")
     for name in ATTEMPTS:

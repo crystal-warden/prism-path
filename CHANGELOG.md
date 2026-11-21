@@ -8,6 +8,11 @@ spec stable.
 
 ## [Unreleased]
 
+### Added: a Landlock backend for the per call sandbox (2026-11-21)
+
+- **Where a bwrap inside a bwrap is forbidden (Ubuntu 24.04), an allowed shell command under `prismpath agent run` now runs under Landlock instead of being refused with cause 129.** `prismpath/agent/landlock.py` (standard library `ctypes`, ABI detected at run time) applies the bash role profile to the command's process: read and execute under the profile's mounts, read write under the workspace and a private scratch directory, TCP bind and connect refused from ABI 4, and a small seccomp filter that refuses `socket()` (which also closes the proxy's and the decider's unix sockets, UDP and `io_uring`), `ptrace` and System V IPC. The launcher probes bubblewrap, then Landlock, and denies with cause 129 only when neither works. The journal line of each receipt and each observation record the backend that ran (`sandbox.backend`).
+- **Both per call backends keep the workspace's control paths read only** (`prismpath/agent/controls.py`, the list the launcher also uses), so a script run by an allowed call cannot edit `.claude/settings.json`, `CLAUDE.md` or `.git/hooks/`. Under Landlock without the launcher's mounts a directory that holds a control path (the workspace root, `.git`) takes no new entries.
+
 ### Added: the gateway, the first enforcement point in front of a resource (2026-11-20)
 
 - **`prismpath gateway --upstream URL --listen ADDR` is an HTTP reverse proxy that decides every request with the core under an attested policy and receipts the decision before the service sees it.** A request is read into the fields `method_class`, `path_class` (from the owner's route table), `body_class`, `content_class`, `query` and `grant`, in the canon/2 form the agent classifier's readings use, without asking who sent it, so a curl, a script and a model get the same decision. What it cannot read reads `unknown` and is refused, nothing is forwarded without a durable receipt, a missing or unattested policy refuses every request, and sizes and times are bounded. A refusal is a 403 with the new cause 131 `gateway:request-refused`; `gateway init`, `verify` and `rules` record the policy, verify the run and count rule hits. The demo policy `prismpath/gateway/policy/demo.rules.md` compiles to its attested image; grants are a stub until a later package.
