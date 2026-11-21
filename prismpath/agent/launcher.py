@@ -64,7 +64,7 @@ PACKAGE_IN = "/opt/pp"                          # the prismpath package, bound r
 RUNNER_IN = f"{PACKAGE_IN}/prismpath/agent/sandbox_exec.py"
 PROBE_TIMEOUT_S = 30
 BACKENDS = sandbox_exec.BACKENDS     # the per call backends, in order of preference; a test narrows it to force one
-MAX_PROCESSES = 512       # a placeholder until the spike measures the real peak (plan question 10)
+MAX_PROCESSES = 512       # the process limit inside the sandbox unless the caller names one; no measurement of a real agent's peak backs it
 AGENT_ENV = (("DISABLE_AUTOUPDATER", "1"), ("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "1"),
              ("ENABLE_CLAUDEAI_MCP_SERVERS", "false"))
 ROOT_CONTROL_NAMES = controls_module.ROOT_CONTROL_NAMES

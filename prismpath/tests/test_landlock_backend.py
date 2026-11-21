@@ -3,7 +3,7 @@
 """The Landlock backend of the per call sandbox (prismpath/agent/landlock.py).
 
 The claim under test is that the choice of backend never widens anything: bubblewrap and Landlock deny the same
-accesses from the adversary cases of WP5 and WP8 (a decoy outside the workspace, a write outside, the fake model
+accesses in the adversary cases (a decoy outside the workspace, a write outside, the fake model
 credential, a connect), and where the host forbids a sandbox inside a sandbox the launcher runs the call under Landlock
 and the same cases are stopped there, recorded with the backend that ran.
 
@@ -67,7 +67,7 @@ def unix():
     s = socket.socket(socket.AF_UNIX); s.settimeout(3); s.connect(%(sock)r); s.close()
     return True
 attempt("unix", unix)
-# the WP10 shell child: a script an allowed call runs edits the workspace's control files
+# the shell child: a script an allowed call runs edits the workspace's control files
 def append_settings():
     open(".claude/settings.json", "a").write("EDIT"); return True
 attempt("settings", append_settings)
@@ -374,7 +374,7 @@ def test_the_control_paths_come_from_one_list_the_launcher_and_the_per_call_sand
 
 @needs_landlock
 @needs_bwrap_here
-def test_the_wp10_shell_child_is_stopped_in_hook_mode_on_the_host_by_either_backend(arena):
+def test_the_control_file_shell_child_is_stopped_in_hook_mode_on_the_host_by_either_backend(arena):
     """A hook rewrites an allowed Bash call to the runner (sandbox_hook.rewrite_command). Run that command as Claude Code
     would, on the host and not under the launcher, with each backend, and the script that edits the control files fails."""
     import shlex
