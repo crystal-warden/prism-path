@@ -12,6 +12,11 @@ compiled natively (`formal/diff/ebpf_batch.c`; the verifier and the JIT are not 
 cover those), and compared with the oracle's decisions on the connect readings the packet corresponds to. The table may
 be stricter than the oracle and must never be looser. Every stricter case is classified by its reason.
 
+Closed edge: a frame the program cannot classify (IPv6, 802.1Q and 802.1ad VLAN tags, other ethertypes, a cut off or
+malformed IPv4 header) is dropped by an enforcing table, never passed, and the corpus holds each of them, among them an
+IPv4 packet to an allowed address inside a VLAN tag. ARP is the one counted and passed. An observing table passes them.
+The owner's destination table is signed, and the compile, the dry run and the first attach all refuse one that is not.
+
 The signed table: the pack signature, the envelope, the version floor, the flow's hash in the manifest, the table
 recompiled from the flow, and the loader's parser, all in the dry run that loads nothing.
 """
@@ -19,6 +24,8 @@ import importlib.util
 import json
 import os
 import shutil
+import struct
+import subprocess
 import sys
 from collections import Counter
 from pathlib import Path
@@ -238,12 +245,31 @@ def _frames():
             out += [(f"icmp {src}>{dst}", net_cert.frame(src, dst, ICMP, b"\x08\x00" + b"\x00" * 6)),
                     (f"gre {src}>{dst}", net_cert.frame(src, dst, GRE, b"\x00" * 24)),
                     (f"udp later fragment payload like tcp 443 {src}>{dst}", net_cert.frame(src, dst, UDP, looks_like_tcp, frag_off=185))]
-    ipv4 = net_cert.frame("192.168.4.20", "160.79.104.10", TCP, net_cert.tcp(40000, 443, 0x02))
-    eth = ipv4[:12]
-    out += [("ipv6 ethertype", eth + b"\x86\xdd" + b"\x60" + b"\x00" * 60), ("arp", eth + b"\x08\x06" + b"\x00" * 28),
-            ("vlan tagged ipv4", eth + b"\x81\x00\x00\x01" + ipv4[12:]), ("short frame", ipv4[:20]),
-            ("ihl below 5", ipv4[:14] + b"\x44" + ipv4[15:])]
+    out += _odd_frames()
     return out
+
+
+def _ipv6_tcp(dst_port, src="fd00::14", dst="2606:4700::6810:84e5"):
+    """An Ethernet + IPv6 + TCP frame, the connect an IPv6 host would make to an address the table cannot name."""
+    import ipaddress
+    seg = net_cert.tcp(40000, dst_port, 0x02)
+    header = struct.pack("!IHBB", 0x60000000, len(seg), TCP, 64) + ipaddress.IPv6Address(src).packed + ipaddress.IPv6Address(dst).packed
+    return struct.pack("!6s6sH", b"\xff" * 6, b"\x02" * 6, 0x86DD) + header + seg
+
+
+def _odd_frames():
+    """Frames the front end cannot classify, each with the label the corpus and the tests use for its reason."""
+    ipv4 = net_cert.frame("192.168.4.20", "160.79.104.10", TCP, net_cert.tcp(40000, 443, 0x02))   # an allowed connect
+    eth = ipv4[:12]
+    return [("ipv6 ethertype", eth + b"\x86\xdd" + b"\x60" + b"\x00" * 60), ("arp", eth + b"\x08\x06" + b"\x00" * 28),
+            ("ipv6 tcp 443", _ipv6_tcp(443)), ("ipv6 tcp 80", _ipv6_tcp(80)), ("ipv6 mapped model address", _ipv6_tcp(443, dst="::ffff:160.79.104.10")),
+            ("vlan tagged ipv4", eth + b"\x81\x00\x00\x01" + ipv4[12:]),
+            ("vlan tagged ipv4 priority 7 vid 4094", eth + b"\x81\x00\xef\xfe" + ipv4[12:]),
+            ("qinq tagged ipv4", eth + b"\x88\xa8\x00\x02\x81\x00\x00\x01" + ipv4[12:]),
+            ("vlan tagged ipv6", eth + b"\x81\x00\x00\x01" + _ipv6_tcp(443)[12:]),
+            ("lldp", eth + b"\x88\xcc" + b"\x00" * 30), ("mpls", eth + b"\x88\x47" + b"\x00" * 30),
+            ("short frame", ipv4[:20]), ("ihl below 5", ipv4[:14] + b"\x44" + ipv4[15:]), ("cut ethernet header", ipv4[:10]),
+            ("empty frame", b"")]
 
 
 def _lean_table(raw, readings):
@@ -274,8 +300,8 @@ def run_differential(name, tmp_path, evaluator, sources):
     outcomes, stricter, wrong = Counter(), {}, []
     governed = {int(__import__("ipaddress").IPv4Address(s)) for s in sources}
     for (label, _frame), reading, decided in zip(labelled, readings_of, got):
-        if reading is None:
-            expected = "unseen"
+        if reading is None:                                                 # unclassifiable: closed, ARP the one pass
+            expected = "pass" if nf.refusal(_frame) == "arp" else "drop"
         elif governed and reading["src_ip"] not in governed:
             expected = "pass"
         elif "dst_port" not in reading or reading["protocol"] != TCP:
@@ -343,10 +369,45 @@ def test_the_stricter_cases_are_listed_with_their_reasons(oracle, evaluator, tmp
     assert any(r.startswith("another name") for r in stricter)              # api and shared names disagree at 160.79.104.11
 
 
-def test_a_frame_the_program_does_not_read_is_passed_undecided_and_is_listed_not_hidden(evaluator):
+def test_a_frame_the_edge_cannot_classify_is_dropped_and_never_passed_except_arp(evaluator):
     edge = nf.project(ALL_IMAGES["default"], DESTS, GOVERNED)
-    odd = [frame for label, frame in _frames() if label in ("ipv6 ethertype", "arp", "vlan tagged ipv4", "short frame", "ihl below 5")]
-    assert len(odd) == 5 and nf.decide_frames(evaluator, edge.ppt, edge.names, odd) == ["unseen"] * 5
+    odd = _odd_frames()
+    reasons = {label: nf.refusal(frame) for label, frame in odd}
+    assert reasons["ipv6 tcp 443"] == "ipv6" and reasons["vlan tagged ipv4"] == "vlan" and reasons["qinq tagged ipv4"] == "vlan"
+    assert reasons["vlan tagged ipv6"] == "vlan" and reasons["lldp"] == "ethertype" and reasons["arp"] == "arp"
+    assert reasons["short frame"] == reasons["cut ethernet header"] == reasons["empty frame"] == "short"
+    assert reasons["ihl below 5"] == "ip-header" and None not in reasons.values()
+    got = dict(zip([label for label, _ in odd], nf.decide_frames(evaluator, edge.ppt, edge.names, [f for _l, f in odd])))
+    assert {label for label, outcome in got.items() if outcome == "pass"} == {"arp"}
+    assert {label for label, outcome in got.items() if outcome == "drop"} == set(got) - {"arp"}
+    # the same frames from an ungoverned source are still dropped: the edge cannot read a source it cannot parse
+    assert "vlan tagged ipv4" in got and got["vlan tagged ipv4"] == "drop"
+
+
+def test_a_table_that_only_observes_passes_the_frames_it_cannot_classify(evaluator):
+    edge = nf.project(ALL_IMAGES["default"], DESTS, GOVERNED)
+    odd = [frame for _label, frame in _odd_frames()]
+    assert nf.decide_frames(evaluator, edge.ppt, ("edge", "allow", "pass", "keep"), odd) == ["pass"] * len(odd)
+
+
+def test_a_vlan_tagged_allowed_connect_is_dropped_while_the_untagged_one_is_allowed(evaluator):
+    edge = nf.project(ALL_IMAGES["default"], DESTS, GOVERNED)
+    plain = net_cert.frame("192.168.4.20", "160.79.104.10", TCP, net_cert.tcp(40000, 443, 0x02))
+    tagged = plain[:12] + b"\x81\x00\x00\x2a" + plain[12:]
+    assert nf.decide_frames(evaluator, edge.ppt, edge.names, [plain, tagged]) == ["allow", "drop"]
+
+
+def test_the_program_counts_and_drops_what_it_cannot_classify_closed_only_when_the_table_enforces():
+    source = (_ebpf / "ppt_net.bpf.c").read_text()
+    assert "refused_map" in source and "closed ? XDP_DROP : XDP_PASS" in source and "cfg->drop_mask != 0" in source
+    assert source.count("refuse(NET_REFUSED_") == 7                           # every early return of the front end goes through it
+    assert "return XDP_PASS;" not in source.split("int ppt_net_prog")[1].split("struct ppt_regfile")[0]
+
+
+def test_an_ipv6_destination_is_refused_not_truncated():
+    for address in ("2606:4700::6810:84e5", "::ffff:160.79.104.10"):
+        with pytest.raises(nf.DestinationError, match="dotted quad"):
+            nf.Destinations.from_object({"format": nf.DEST_FORMAT, "allowed_host": {"a.example": [address]}})
 
 
 def test_a_table_the_loaders_parser_refuses_is_an_error_not_a_decision(evaluator):
@@ -362,11 +423,14 @@ def signed(tmp_path):
     from prismpath.hotswap import policy_pack as pp
     edge = nf.project(ALL_IMAGES["default"], DESTS, GOVERNED)
     out = tmp_path / "edge"
-    nf.write_edge(out, edge)
     keys = pp.keygen(str(tmp_path / "keys"))
+    dests = tmp_path / "dests.json"
+    dests.write_text(json.dumps(DESTS.to_object()))
+    nf.sign_destinations(dests, keys["private"], keys["public"], 1)
+    nf.write_edge(out, edge, str(dests))
     manifest = nf.sign(out, keys["private"], keys["public"], "edge-env", 1, str(tmp_path / "env"))
     return {"out": out, "edge": edge, "keys": keys, "manifest": manifest, "env": str(tmp_path / "env" / "edge-env.envelope"),
-            "state": str(tmp_path / "state"), "tmp": tmp_path, "pp": pp}
+            "state": str(tmp_path / "state"), "tmp": tmp_path, "pp": pp, "dests": dests}
 
 
 def _verify(s, **kw):
@@ -410,7 +474,8 @@ def test_the_loaders_own_checks_refuse_a_table_the_dry_run_is_given_altered(sign
 
 @pytest.mark.parametrize("tamper, reason", [
     ("table", "sig"), ("flow", "flow:sha256-not-signed"), ("names", "names:differ-from-flow"),
-    ("image", "image:not-the-source"), ("dests", "destinations:not-the-source")])
+    ("image", "image:not-the-source"), ("dests", "destinations:not-the-source"),
+    ("carried-dests", "dests:tampered")])
 def test_the_dry_run_refuses_a_table_that_is_not_the_signed_projection_of_its_image(signed, evaluator, tamper, reason):
     out = signed["out"]
     image, dests = ALL_IMAGES["default"], DESTS
@@ -424,6 +489,10 @@ def test_the_dry_run_refuses_a_table_that_is_not_the_signed_projection_of_its_im
         (out / "edge.names").write_text("edge\nallow\npass\nblock\n")
     elif tamper == "image":
         image = ALL_IMAGES["allow_host"]
+    elif tamper == "carried-dests":
+        carried = json.loads((out / nf.DEST_COPY).read_text())
+        carried["allowed_host"]["docs.example.com"] = ["93.184.216.99"]
+        (out / nf.DEST_COPY).write_text(json.dumps(carried))
     else:
         dests = nf.Destinations.from_object({**DESTS.to_object(), "allowed_host": {"docs.example.com": ["93.184.216.99"]}})
     result = _verify(signed, evaluator=evaluator, image=image, destinations=dests)
@@ -450,7 +519,9 @@ def test_the_command_line_compiles_signs_and_dry_runs_a_table(tmp_path, evaluato
     image.write_bytes(ALL_IMAGES["default"])
     dests.write_text(json.dumps(DESTS.to_object()))
     keys = pp.keygen(str(tmp_path / "keys"))
-    assert nf.main(["compile", str(image), str(dests), str(out), "--source", "192.168.4.20"]) == 0
+    assert nf.main(["compile", str(image), str(dests), str(out), "--pub", keys["public"]]) == 2    # unsigned table: refused
+    assert nf.main(["sign-dests", str(dests), "--priv", keys["private"], "--pub", keys["public"]]) == 0
+    assert nf.main(["compile", str(image), str(dests), str(out), "--pub", keys["public"], "--source", "192.168.4.20"]) == 0
     assert nf.main(["sign", str(out), "--priv", keys["private"], "--pub", keys["public"], "--envelope-id", "e", "--version", "3",
                     "--envelope-dir", str(tmp_path / "env")]) == 0
     capsys.readouterr()
@@ -458,4 +529,203 @@ def test_the_command_line_compiles_signs_and_dry_runs_a_table(tmp_path, evaluato
                     "--state", str(tmp_path / "state"), "--image", str(image), "--dests", str(dests)]) == 0
     result = json.loads(capsys.readouterr().out)
     assert result["ok"] and result["version"] == 3 and result["dry_run"]
-    assert nf.main(["compile", str(image), str(tmp_path / "bad.json"), str(out)]) == 2
+    assert nf.main(["compile", str(image), str(tmp_path / "bad.json"), str(out), "--pub", keys["public"]]) == 2
+
+
+# ------------------------------------------------------------------- the owner signs the destination table
+@pytest.fixture()
+def owner(tmp_path):
+    pytest.importorskip("cryptography")
+    from prismpath.hotswap import policy_pack as pp
+    keys = pp.keygen(str(tmp_path / "keys"))
+    dests = tmp_path / "dests.json"
+    dests.write_text(json.dumps(DESTS.to_object()))
+    return {"keys": keys, "dests": dests, "pub": [keys["public"]], "tmp": tmp_path, "pp": pp}
+
+
+def test_a_signed_destination_table_loads_and_carries_the_owners_key(owner):
+    manifest = nf.sign_destinations(owner["dests"], owner["keys"]["private"], owner["keys"]["public"], 2)
+    assert manifest["key_id"] == owner["keys"]["key_id"] and manifest["destinations_sha256"] == DESTS.sha256() and manifest["version"] == 2
+    assert nf.Destinations.load_signed(owner["dests"], owner["pub"]) == DESTS
+    assert nf.verify_destinations(owner["dests"], owner["pub"])[0] == []
+
+
+def test_an_unsigned_destination_table_is_refused_by_the_compile(owner):
+    with pytest.raises(nf.DestinationError, match="dests:unsigned"):
+        nf.Destinations.load_signed(owner["dests"], owner["pub"])
+    nf.sign_destinations(owner["dests"], owner["keys"]["private"], owner["keys"]["public"])
+    Path(str(owner["dests"]) + ".manifest.sig").unlink()
+    assert nf.verify_destinations(owner["dests"], owner["pub"])[0] == ["dests:unsigned"]
+
+
+@pytest.mark.parametrize("tamper, reason", [
+    ("edit-address", "dests:tampered"), ("add-host", "dests:tampered"), ("whitespace", "dests:tampered"),
+    ("manifest-hash", "dests:sig-invalid"), ("signature", "dests:sig-invalid"), ("manifest-junk", "dests:bad-manifest"),
+    ("other-key", "dests:sig-invalid"), ("revoked", "dests:revoked-key"), ("not-a-table", "dests:invalid")])
+def test_a_tampered_or_wrongly_signed_destination_table_is_refused(owner, tamper, reason):
+    path, pp = owner["dests"], owner["pp"]
+    keys = owner["keys"]
+    nf.sign_destinations(path, keys["private"], keys["public"])
+    manifest_path, sig_path = Path(str(path) + ".manifest.json"), Path(str(path) + ".manifest.sig")
+    revoked = frozenset()
+    pub = owner["pub"]
+    obj = json.loads(path.read_text())
+    if tamper == "edit-address":
+        obj["allowed_host"]["docs.example.com"] = ["93.184.216.99"]
+        path.write_text(json.dumps(obj))
+    elif tamper == "add-host":
+        obj["allowed_host"]["evil.example"] = ["6.6.6.6"]
+        path.write_text(json.dumps(obj))
+    elif tamper == "whitespace":
+        path.write_text(path.read_text() + "\n")                              # even a harmless edit is not what was signed
+    elif tamper == "manifest-hash":
+        manifest_path.write_bytes(manifest_path.read_bytes().replace(DESTS.sha256().encode(), b"0" * 64))
+    elif tamper == "signature":
+        sig = bytearray(sig_path.read_bytes()); sig[0] ^= 1
+        sig_path.write_bytes(bytes(sig))
+    elif tamper == "manifest-junk":
+        manifest_path.write_text("not json")
+    elif tamper == "other-key":
+        pub = [pp.keygen(str(owner["tmp"] / "other"))["public"]]
+    elif tamper == "revoked":
+        revoked = frozenset([keys["key_id"]])
+    else:                                                                       # signed, but not a table the edge can use
+        path.write_text(json.dumps({"format": "x"}))
+        manifest = json.loads(manifest_path.read_text())
+        manifest["file_sha256"] = pp.sha256_hex(path.read_bytes())
+        pp.write_signed_document(str(manifest_path), manifest)
+        sig_path.write_bytes(pp._load_private(keys["private"]).sign(pp.signed_bytes(manifest)))
+    got, table, _manifest = nf.verify_destinations(path, pub, revoked)
+    assert got == [reason] and table is None
+    with pytest.raises(nf.DestinationError, match=reason):
+        nf.Destinations.load_signed(path, pub, revoked)
+
+
+def test_a_table_the_edge_cannot_use_is_not_signed(owner):
+    owner["dests"].write_text(json.dumps({"format": nf.DEST_FORMAT, "allowed_host": {"a.example": ["2606:4700::1"]}}))
+    with pytest.raises(nf.DestinationError, match="dotted quad"):
+        nf.sign_destinations(owner["dests"], owner["keys"]["private"], owner["keys"]["public"])
+    other = owner["pp"].keygen(str(owner["tmp"] / "other"))
+    owner["dests"].write_text(json.dumps(DESTS.to_object()))
+    with pytest.raises(ValueError, match="private half"):
+        nf.sign_destinations(owner["dests"], other["private"], owner["keys"]["public"])
+    assert not Path(str(owner["dests"]) + ".manifest.json").exists()
+
+
+# ----------------------------------------------------------------------------- the first attach is gated too
+class _Loader:
+    """Stands in for `./loader`: records the argv and the environment it was run with."""
+    def __init__(self, rc=0):
+        self.calls, self.envs, self.rc = [], [], rc
+
+    def __call__(self, argv, capture_output=True, text=True, env=None):
+        self.calls.append(argv)
+        self.envs.append(env)
+        return subprocess.CompletedProcess(argv, self.rc, "OK: attached\n", "")
+
+
+def _attach(s, loader, **kw):
+    return nf.attach(s["out"], "lo", [s["keys"]["public"]], s["env"], s["state"], loader="./loader", run=loader, **kw)
+
+
+def test_the_first_attach_runs_every_gate_then_hands_the_loader_the_verified_hash_and_the_names(signed):
+    loader = _Loader()
+    result = _attach(signed, loader)
+    assert result["ok"] and result["version"] == 1 and len(loader.calls) == 1
+    out = signed["out"]
+    assert loader.calls[0] == ["./loader", str(out / "edge.ppt"), "netattach", "lo", str(out / "edge.names")]
+    assert loader.envs[0]["PPT_NET_VERIFIED_SHA256"] == signed["edge"].ppt_sha256
+    assert (Path(signed["state"]) / "active_version").read_text() == "1"
+    rows = (Path(signed["state"]) / "net_swaps.log").read_text()
+    assert '"attach"' in rows
+    again = _attach(signed, _Loader())                                           # the floor is at 1: the same version is a replay
+    assert not again["ok"] and any(r.startswith("version:not-monotonic") for r in again["reasons"])
+
+
+def test_a_dry_run_attach_stops_before_the_loader(signed):
+    loader = _Loader()
+    result = _attach(signed, loader, dry_run=True)
+    assert result["ok"] and result["dry_run"] and loader.calls == []
+    assert not (Path(signed["state"]) / "active_version").exists()
+
+
+@pytest.mark.parametrize("tamper, reason", [
+    ("dests-edit", "dests:tampered"), ("dests-unsigned", "dests:unsigned"), ("dests-missing", "dests:unsigned"),
+    ("dests-resigned-by-another", "dests:sig-invalid"), ("dests-swapped-for-another-signed-table", "destinations:not-the-flows"),
+    ("table", "image:sha256-mismatch"), ("flow", "flow:sha256-not-signed"), ("names", "names:differ-from-flow")])
+def test_an_attach_the_gates_refuse_never_reaches_the_loader(signed, tmp_path, tamper, reason):
+    out, pp = signed["out"], signed["pp"]
+    dests = out / nf.DEST_COPY
+    if tamper == "dests-edit":
+        carried = json.loads(dests.read_text())
+        carried["allowed_host"]["docs.example.com"] = ["93.184.216.99"]
+        dests.write_text(json.dumps(carried))
+    elif tamper == "dests-unsigned":
+        Path(str(dests) + ".manifest.sig").unlink()
+    elif tamper == "dests-missing":
+        for name in (nf.DEST_COPY, nf.DEST_COPY + ".manifest.json", nf.DEST_COPY + ".manifest.sig"):
+            (out / name).unlink()
+    elif tamper == "dests-resigned-by-another":
+        other = pp.keygen(str(tmp_path / "other"))
+        nf.sign_destinations(dests, other["private"], other["public"])
+    elif tamper == "dests-swapped-for-another-signed-table":
+        other_table = tmp_path / "other.json"
+        other_table.write_text(json.dumps({**DESTS.to_object(), "allowed_host": {"docs.example.com": ["93.184.216.99"]}}))
+        nf.sign_destinations(other_table, signed["keys"]["private"], signed["keys"]["public"])
+        for suffix in ("", ".manifest.json", ".manifest.sig"):
+            shutil.copyfile(str(other_table) + suffix, str(dests) + suffix)
+    elif tamper == "table":
+        ppt = bytearray((out / "edge.ppt").read_bytes()); ppt[-1] ^= 1
+        (out / "edge.ppt").write_bytes(bytes(ppt))
+    elif tamper == "flow":
+        (out / "edge.flow.md").write_text((out / "edge.flow.md").read_text().replace("Passes.", "Passes!"))
+    else:
+        (out / "edge.names").write_text("edge\nallow\npass\nblock\n")
+    loader = _Loader()
+    result = _attach(signed, loader)
+    assert not result["ok"] and loader.calls == []
+    assert reason in result["reasons"], result["reasons"]
+    assert not (Path(signed["state"]) / "active_version").exists()
+
+
+def test_a_swap_through_net_swap_checks_the_carried_destination_table_too(signed):
+    check = nf.edge_check(signed["out"], [signed["keys"]["public"]])
+    good = (signed["out"] / "edge.ppt").read_bytes()
+    assert check(good) == []
+    assert check(good + b"x") == ["edge:not-the-directorys-table"]
+    Path(str(signed["out"] / nf.DEST_COPY) + ".manifest.sig").unlink()
+    assert "dests:unsigned" in check(good)
+    loader = _Loader()
+    result = nf.net_swap.preload_swap(str(signed["out"] / "edge.ppt"), "lo", [signed["keys"]["public"]], signed["env"],
+                                      signed["state"], run=loader, extra_checks=[check])
+    assert not result["ok"] and loader.calls == [] and "dests:unsigned" in result["reasons"]
+
+
+def test_net_swap_on_the_command_line_attaches_an_edge_only_with_its_signed_destination_table(signed, tmp_path, capsys):
+    fake = tmp_path / "loader"
+    fake.write_text("#!/bin/sh\necho \"$PPT_NET_VERIFIED_SHA256 $*\"\n")
+    fake.chmod(0o755)
+    args = [str(signed["out"] / "edge.ppt"), "lo", "--pub", signed["keys"]["public"], "--envelope", signed["env"],
+            "--state", signed["state"], "--loader", str(fake), "--attach", "--edge", str(signed["out"]),
+            "--names", str(signed["out"] / "edge.names")]
+    Path(str(signed["out"] / nf.DEST_COPY) + ".manifest.sig").unlink()
+    assert nf.net_swap.main(args) == 1 and "dests:unsigned" in capsys.readouterr().out
+    assert not (Path(signed["state"]) / "active_version").exists()
+
+
+# ----------------------------------------------------------------------- the loader refuses an unverified table
+LOADER = _ebpf / "loader"
+
+
+@pytest.mark.skipif(not LOADER.exists(), reason="loader not built (make -C prismpath-ebpf)")
+def test_the_loaders_own_gate_refuses_a_table_that_is_not_the_one_the_host_verified(signed):
+    table = str(signed["out"] / "edge.ppt")
+    run = lambda env: subprocess.run([str(LOADER), table, "netverify"], capture_output=True, text=True, cwd=_ebpf,
+                                     env={k: v for k, v in {**os.environ, **env}.items() if v is not None})
+    clean = {"PPT_NET_VERIFIED_SHA256": None, "PPT_NET_ALLOW_UNVERIFIED": None}
+    assert run(clean).returncode == 2 and "no verified table" in run(clean).stderr                  # a bare invocation
+    wrong = run({**clean, "PPT_NET_VERIFIED_SHA256": "0" * 64})
+    assert wrong.returncode == 2 and "is not the verified table" in wrong.stderr                    # some other table
+    assert run({**clean, "PPT_NET_VERIFIED_SHA256": signed["edge"].ppt_sha256}).returncode == 0     # the one verified
+    bypass = run({**clean, "PPT_NET_ALLOW_UNVERIFIED": "1"})
+    assert bypass.returncode == 0 and "UNVERIFIED" in bypass.stderr                                 # the operator's explicit bypass
