@@ -4,8 +4,8 @@
 &nbsp;[![license: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 &nbsp;[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21816125.svg)](https://doi.org/10.5281/zenodo.21816125)
 
-**Define what an autonomous system is allowed to do. Enforce it where the system runs. Change it without
-rebuilding the system. Get a signed receipt for every decision.**
+**PrismPath puts gates around agents. You write the rules, and PrismPath allows the action, refuses it, or stops
+and asks you. From AI agents to the Linux kernel's network stack and IoT sensors, every decision gets a receipt.**
 
 PrismPath is a control plane for autonomous systems, one of many. What is unusual is the approach. The
 decision structure a person authors is restricted to a decidable, tabular fragment. That fragment produces
@@ -115,12 +115,13 @@ executes.
 
 ## Ship the decision, not the data
 
-A policy depends on only some distinctions in its input. **Figueroa quantization** derives, from the
-policy text, the cells of each field that can change a decision, and a reading is sent as one symbol per
+A policy depends on only some distinctions in its input. **Decision sufficient quantization** (also called
+Figueroa quantization) derives, from the policy text, the cells of each field that can change a decision, and a reading is sent as one symbol per
 cell: any representative of a cell routes identically. That decision preservation is proven in Lean 4,
 thirteen theorems with zero `sorry` on the standard axioms, within a declared domain of well typed
 integer readings, and bridged to the shipped code by 623 evaluated checks. Stating the theorem found
-three defects in the reference quantizer, now fixed and pinned by the corpus.
+three defects in the reference quantizer, now fixed and pinned by the corpus. It is sound but not
+minimal: across the shipped policies 27 of 367 cells could be merged without changing any decision.
 
 **Facet** is the wire on top: self framing Fibonacci codes, per packet Merkle roots, a staleness bound
 by cadence, replay refusal with a named cause, and a concentrator for fleets. About 1.5 B per decision
@@ -130,6 +131,11 @@ with its epoch roots counted, 66.9 times under an OpenTelemetry record of the sa
 [dissector](integrations/wireshark/README.md)
 
 ## What is implemented, what is demonstrated, what is research
+
+PrismPath doesn't watch how an agent thinks. It looks at what the agent is about to do. It knows a short
+list of file operations and commands, and it checks each one against the rules you wrote before it runs.
+When the agent tries something that isn't on that list, PrismPath doesn't guess what it means. It stops and
+asks you, or refuses outright. Your rules decide which.
 
 | capability | status |
 |---|---|
@@ -142,7 +148,7 @@ with its epoch roots counted, 66.9 times under an OpenTelemetry record of the sa
 | in kernel execution (eBPF, XDP and TC) | demonstrated, CI gated |
 | microcontroller execution, four ISAs; FPGA fabric with a pin witnessed bound | demonstrated on hardware |
 | distributed policy update behind a quorum on real radios | demonstrated in the field |
-| Figueroa quantization | proven within the declared domain |
+| decision sufficient quantization (Figueroa quantization) | proven within the declared domain |
 | Facet wire, Vector codec, Wireshark dissector | implemented and measured |
 | GRC adjudication adapter: machine checkable controls, evidence typed determinations, OSCAL | implemented, dogfooded on a real enclave |
 | drift detection beyond the lockfile and staleness bound, authorized recovery, homeostatic control | research direction |
