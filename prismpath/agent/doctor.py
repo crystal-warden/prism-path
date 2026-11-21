@@ -17,6 +17,8 @@ Checks, in the order they are reported:
                             it does not: an older starter, or a custom image without the rule)
   hook-PreToolUse, hook-SessionEnd   the project's .claude/settings.json has our entry, the command ends in
                             `|| exit 2`, and the interpreter it names exists and can `import prismpath`
+  hook-PostToolUse, hook-PostToolUseFailure   the same for the two events that record outcomes; a missing
+                            entry is a warning, since calls are still decided and only outcomes go unrecorded
   hook-dry-run              a recorded Read of a file in the project answers allow within the budget
   runs                      an open run older than a day (warn), a run that fails verification (fail)
   disk                      free space under the runs directory (warn under 1 GiB)
@@ -43,7 +45,8 @@ BUDGET_MS = 150
 OPEN_RUN_DAYS = 1
 LOW_DISK_BYTES = 1 << 30
 OLDER_IMAGES = policy_mod.OLDER_STARTERS      # shipped starter images older than the current ones
-EVENTS = ("PreToolUse", "SessionEnd")
+EVENTS = ("PreToolUse", "SessionEnd", "PostToolUse", "PostToolUseFailure")
+OUTCOME_EVENTS = ("PostToolUse", "PostToolUseFailure")     # a missing entry is a warning: calls are still governed, outcomes are not recorded
 
 _DRY_RUN = (
     "import json, sys\n"
@@ -200,6 +203,10 @@ def _can_import(interpreter: str, project: Path) -> Optional[str]:
     return lines[-1] if lines else f"exit {done.returncode}"
 
 
+def _bad(event: str) -> str:
+    return "warn" if event in OUTCOME_EVENTS else "fail"
+
+
 def _check_hooks(project: Path):
     """The rows for the two events and the first usable interpreter (None when there is none)."""
     path = project / ".claude" / "settings.json"
@@ -207,16 +214,18 @@ def _check_hooks(project: Path):
     try:
         settings = json.loads(path.read_text(encoding="utf-8"))
     except FileNotFoundError:
-        return [_check(f"hook-{e}", "fail", f"{path} does not exist", fix) for e in EVENTS], None
+        return [_check(f"hook-{e}", _bad(e), f"{path} does not exist", fix) for e in EVENTS], None
     except Exception as exc:  # noqa: BLE001
-        return [_check(f"hook-{e}", "fail", f"{path} does not read as JSON ({_detail(exc)})",
+        return [_check(f"hook-{e}", _bad(e), f"{path} does not read as JSON ({_detail(exc)})",
                        f"fix {_q(path)} by hand, then {fix}") for e in EVENTS], None
     rows, usable, imports = [], None, {}
     for event in EVENTS:
         name = f"hook-{event}"
         commands_found = _entries(settings, event)
         if not commands_found:
-            rows.append(_check(name, "fail", f"{path} has no PrismPath {event} entry, so those calls are not governed", fix))
+            rows.append(_check(name, _bad(event), f"{path} has no PrismPath {event} entry, " + (
+                "so what became of each call is not recorded (calls are still decided)" if event in OUTCOME_EVENTS
+                else "so those calls are not governed"), fix))
             continue
         problem = None
         for command in commands_found:
@@ -236,7 +245,7 @@ def _check_hooks(project: Path):
             if problem:
                 break
         if problem:
-            rows.append(_check(name, "fail", problem, fix))
+            rows.append(_check(name, _bad(event), problem, fix))
         else:
             rows.append(_check(name, "ok", f"{event} runs {commands_found[0]}"))
     return rows, usable

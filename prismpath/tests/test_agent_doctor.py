@@ -81,7 +81,7 @@ def test_a_fresh_init_reports_everything_ok(setup):
     rows = [r for r in report["checks"] if r["check"] != "shell-confinement"]   # a warning off Linux, where nothing is confined
     assert report["ok"] and all(r["status"] == "ok" for r in rows)
     assert set(_by(report)) == {"config-dir", "key-files", "authority-key", "instance-key", "policy", "policy-control",
-                                "hook-PreToolUse", "hook-SessionEnd", "hook-dry-run", "runs", "disk",
+                                "hook-PreToolUse", "hook-SessionEnd", "hook-PostToolUse", "hook-PostToolUseFailure", "hook-dry-run", "runs", "disk",
                                 "shell-confinement"}
     assert all(r["fix"] is None for r in rows)
 
@@ -115,7 +115,7 @@ def test_the_cli_exits_0_when_nothing_fails_and_prints_a_line_per_check(setup):
     text = done.stdout.decode()
     # the budget is the real 150 ms here, so the dry run may warn on a slow machine, which still exits 0
     assert done.returncode == 0, text + done.stderr.decode()
-    assert text.count("\n") == 13 and "0 fail" in text
+    assert text.count("\n") == 15 and "0 fail" in text
     assert "budget" in text and "150 ms" in text
 
 

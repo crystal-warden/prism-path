@@ -9,7 +9,8 @@ argument, and prints the answer. The launcher copies this file, unchanged, into 
 binds it read only. It imports the standard library and nothing of PrismPath, and runs under /usr/bin/python3.
 
 It fails closed. A missing socket, a timeout, a reply that is not JSON or does not decide, an input that is too
-large: each prints a deny with the registered cause 126 `agent:hook-error` and exits 0. The settings run it as
+large: each prints a deny with the registered cause 126 `agent:hook-error` and exits 0. The exception is a PostToolUse or
+PostToolUseFailure event, which only reports an outcome after the call has run: it prints `{}` and nothing changes. The settings run it as
 `python3 -I hook_client.py SOCKET || exit 2`, so a crash before this code runs is a block as well.
 """
 import json
@@ -80,6 +81,8 @@ def ask(path, raw):
         if event == "SessionEnd":
             return {"systemMessage": f"PrismPath could not seal this session's run: cause {CAUSE} "
                                      f"({type(exc).__name__}). `prismpath agent verify` seals it later."}
+        if event in ("PostToolUse", "PostToolUseFailure"):
+            return {}       # the call already ran: nothing to deny, and an outcome that could not be sent changes nothing
         return deny(f"the decider did not answer: {type(exc).__name__}")
 
 

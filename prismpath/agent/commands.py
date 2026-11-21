@@ -39,6 +39,10 @@ POLICY_CASE = "agent_default"
 HOOK_ERROR = "agent:hook-error"
 SANDBOX_ERROR = "agent:sandbox-unavailable"
 KEY_ROLES = ("authority", "instance")
+# (event, matcher) of the entries init writes. PreToolUse decides. The two Post events only record what became of a call
+# whose receipt is already written (Run.outcome_of_hook); they cannot block anything and decide nothing.
+HOOK_EVENTS = (("PreToolUse", "*"), ("SessionEnd", None), ("PostToolUse", "*"), ("PostToolUseFailure", "*"))
+OUTCOME_EVENTS = ("PostToolUse", "PostToolUseFailure")
 
 
 class AgentError(Exception):
@@ -187,14 +191,14 @@ def _is_ours(command: Any) -> bool:
 
 
 def merged_settings(settings: Dict[str, Any], command: str) -> Dict[str, Any]:
-    """`settings` with the PreToolUse and SessionEnd hook entries running `command`, every other key kept.
+    """`settings` with the PreToolUse, SessionEnd, PostToolUse and PostToolUseFailure hook entries running `command`, every other key kept.
     An entry that already runs a PrismPath hook is pointed at `command` in place, so running it twice adds
     nothing."""
     out = json.loads(json.dumps(settings))
     hooks = out.setdefault("hooks", {})
     if not isinstance(hooks, dict):
         raise AgentError("the settings' `hooks` is not an object; fix it by hand first")
-    for event, matcher in (("PreToolUse", "*"), ("SessionEnd", None)):
+    for event, matcher in HOOK_EVENTS:
         groups = hooks.setdefault(event, [])
         if not isinstance(groups, list):
             raise AgentError(f"the settings' `hooks.{event}` is not a list; fix it by hand first")
@@ -350,16 +354,40 @@ def observation_answer(data: Dict[str, Any], home: Path, store) -> Dict[str, Any
     from prismpath.agent import observe
     session = data.get("session_id")
     stderr = data.get("stderr")
-    body = observe.observed(int(data["returncode"]), stderr.encode("utf-8", "replace")[-observe.MAX_STDERR:] if isinstance(stderr, str) else b"",
-                            bool(data.get("timed_out")),
-                            str(data.get("backend") or "") or None)
-    if body is None:
-        return {"recorded": True}
+    returncode, timed_out = int(data["returncode"]), bool(data.get("timed_out"))
+    body = observe.observed(returncode, stderr.encode("utf-8", "replace")[-observe.MAX_STDERR:] if isinstance(stderr, str) else b"",
+                            timed_out, str(data.get("backend") or "") or None)
     if not (store.root / _run_dir(session)).exists():
         raise AgentError(f"session {session} has no run to record an observation in")
-    receipt = data.get("receipt")
-    store.get(session).observe(receipt, str(data.get("image_sha256")), str(data.get("profile_sha256")), body)
+    receipt, image, profile = data.get("receipt"), str(data.get("image_sha256")), str(data.get("profile_sha256"))
+    run = store.get(session)
+    if body is not None:
+        run.observe(receipt, image, profile, body)
+    # the runner finished the command, whatever it showed: that is an outcome of the receipt (like an observation, a claim)
+    run.outcome_of_runner(receipt, image, profile, returncode, timed_out)
     return {"recorded": True}
+
+
+def failure_class(data: Dict[str, Any]) -> str:
+    """The class of a PostToolUseFailure, from fields the hooks reference documents (`is_interrupt`, and the
+    `Exit code N` first line of `error` for a shell command). The error text itself is never kept."""
+    import re
+    if data.get("is_interrupt") is True:
+        return "interrupt"
+    error = data.get("error")
+    return "exit-nonzero" if isinstance(error, str) and re.match(r"Exit code -?\d+", error) else "error"
+
+
+def outcome_answer(data: Dict[str, Any], event: str, store) -> Dict[str, Any]:
+    """Record a PostToolUse or PostToolUseFailure event as the outcome of the call whose receipt carries the same
+    `tool_use_id`. An outcome is read only and decides nothing: the call already ran, the answer is always `{}`, and
+    what cannot be bound (no run, no id, no receipt, a refusal, a repeat) is recorded as unbound or dropped, never
+    raised. Nothing the tool returned (`tool_response`, `error`) is kept."""
+    session = data["session_id"]
+    if (store.root / _run_dir(session)).exists():
+        store.get(session).outcome_of_hook(data.get("tool_use_id"), event, data.get("tool_name"),
+                                           failure_class(data) if event == "PostToolUseFailure" else None)
+    return {}
 
 
 def hook(raw: bytes, env: Optional[Mapping[str, str]] = None, nested=None) -> Dict[str, Any]:
@@ -383,8 +411,15 @@ def hook(raw: bytes, env: Optional[Mapping[str, str]] = None, nested=None) -> Di
         policy, store = load_checked(home)
         if event == "SessionEnd":
             if (store.root / _run_dir(session)).exists():
-                store.get(session).seal(home)
+                run = store.get(session)
+                try:
+                    run.infer_outcomes()    # allowed and asked receipts with no outcome, recorded as such; never blocks the seal
+                except Exception:           # noqa: BLE001
+                    pass
+                run.seal(home)
             return {}
+        if event in OUTCOME_EVENTS:
+            return outcome_answer(data, event, store)
         if event == "PrismPathObservation" and nested is not None:
             try:
                 return observation_answer(data, home, store)
@@ -412,7 +447,8 @@ def hook(raw: bytes, env: Optional[Mapping[str, str]] = None, nested=None) -> Di
         run = store.open(session, policy.image)
         index = run.append(policy.reading_bytes(result.reading), result.decision.verdict,
                            sandbox_profile=profile.hash() if profile is not None else None,
-                           sandbox_backend=(nested.backend if nested else "bwrap") if profile is not None else None)
+                           sandbox_backend=(nested.backend if nested else "bwrap") if profile is not None else None,
+                           tool_use_id=data.get("tool_use_id"))
         if profile is not None:
             # the receipt is written first so the runner can bind what the command shows to it (observe.py)
             from prismpath.ledgers import core_evidence
@@ -432,6 +468,8 @@ def hook(raw: bytes, env: Optional[Mapping[str, str]] = None, nested=None) -> Di
         if event == "SessionEnd":
             return {"systemMessage": f"PrismPath could not seal this session's run: cause {HOOK_ERROR} "
                                      f"({_detail(exc)}). `prismpath agent verify` seals it later."}
+        if event in OUTCOME_EVENTS:     # the call already ran: there is nothing to deny, and nothing changes
+            return {"systemMessage": f"PrismPath could not record this outcome ({_detail(exc)}). Nothing was changed."}
         return deny_answer(_detail(exc))
 
 
@@ -487,6 +525,7 @@ def verify(as_json: bool, tamper_demo: bool = False, out=None) -> int:
                 result = run.verify(home, seal=summary["seal"] != "diverged")
                 row.update(receipts=result["receipts"], replayed=result["replayed"], disagree=result["disagree"],
                            root_statement=result["root_statement"], observations=result.get("observations", 0),
+                           outcomes=result.get("outcomes", 0),
                            verified=result["disagree"] == 0 and result["root_statement"] == "signed")
         except (RunError, Exception) as exc:  # noqa: BLE001 - one bad run does not stop the others
             row.update(verified=False, error=_detail(exc))
@@ -511,7 +550,9 @@ def verify(as_json: bool, tamper_demo: bool = False, out=None) -> int:
                       f"kernel, {row['disagree']} disagree, root statement {row['root_statement']} "
                       f"(was {row['was']}){'' if row['verified'] else ' REFUSED'}"
                       + (f"; {row['observations']} sandbox observations bound to their receipts, none of them a decision"
-                         if row.get("observations") else ""), file=out)
+                         if row.get("observations") else "")
+                      + (f"; {row['outcomes']} outcome entries chained and bound to their receipts (outside the signed root, none of them a decision)"
+                         if row.get("outcomes") else ""), file=out)
         demo = report.get("tamper_demo")
         if demo is not None:
             if demo.get("refused") is True:
@@ -596,6 +637,14 @@ def confinement_state() -> Dict[str, Any]:
     return {"confined": True, "platform": sys.platform, "detail": "decided and run inside the sandbox compiled from the policy"}
 
 
+def outcome_line(c: Dict[str, int]) -> str:
+    """One line of what became of the calls: `allowed 5 (4 ran, 1 no outcome); asked 2 (1 approved and ran, 1 no
+    outcome); refused 3`. A call still waiting for its outcome shows as no outcome."""
+    return (f"allowed {c['allowed']} ({c['allowed_ran']} ran, {c['allowed_no_outcome']} no outcome); "
+            f"asked {c['asked']} ({c['asked_approved']} approved and ran, {c['asked_no_outcome']} no outcome); "
+            f"refused {c['refused']}" + (f"; {c['unbound']} outcome events could not be bound" if c.get("unbound") else ""))
+
+
 def status(project: Path, as_json: bool, out=None) -> int:
     from prismpath.agent.policy import STARTERS, control_check, older_date, older_starter_of, starter_of
     from prismpath.agent.run import RunStore
@@ -624,7 +673,7 @@ def status(project: Path, as_json: bool, out=None) -> int:
         try:
             summary = run.summary()
             runs.append({"session": run.session, "receipts": summary["receipts"],
-                         "state": "open" if summary["open"] else "sealed"})
+                         "state": "open" if summary["open"] else "sealed", "outcomes": run.outcome_counts()})
         except Exception as exc:  # noqa: BLE001
             runs.append({"session": run.session, "receipts": None, "state": "corrupt", "problem": _detail(exc)})
     settings_path = Path(project) / ".claude" / "settings.json"
@@ -633,12 +682,16 @@ def status(project: Path, as_json: bool, out=None) -> int:
         hooks = settings.get("hooks", {}) if isinstance(settings, dict) else {}
         installed = {event: any(_is_ours(h.get("command")) for g in hooks.get(event, []) if isinstance(g, dict)
                                 for h in g.get("hooks", []) if isinstance(h, dict))
-                     for event in ("PreToolUse", "SessionEnd")}
+                     for event, _matcher in HOOK_EVENTS}
     except Exception:  # noqa: BLE001
-        installed = {"PreToolUse": False, "SessionEnd": False}
+        installed = {event: False for event, _matcher in HOOK_EVENTS}
     confinement = confinement_state()
+    totals: Dict[str, int] = {}
+    for r in runs:
+        for key, value in (r.get("outcomes") or {}).items():
+            totals[key] = totals.get(key, 0) + value
     report = {"config_dir": str(home), "keys": keys, "policy": policy, "runs": runs, "shell": confinement,
-              "project": {"settings": str(settings_path), "hooks": installed}}
+              "outcomes": totals, "project": {"settings": str(settings_path), "hooks": installed}}
     ready = all(k["present"] for k in keys.values()) and policy["attested"]
     if as_json:
         print(json.dumps(report, indent=2), file=out)
@@ -657,5 +710,10 @@ def status(project: Path, as_json: bool, out=None) -> int:
         if not runs:
             print("runs: none", file=out)
         for r in runs:
-            print(f"run {r['session']}: {r['receipts']} receipts, {r['state']}", file=out)
+            print(f"run {r['session']}: {r['receipts']} receipts, {r['state']}"
+                  + (f"; {outcome_line(r['outcomes'])}" if r.get("outcomes") else ""), file=out)
+        if totals:
+            print(f"all runs: {outcome_line(totals)}", file=out)
+            print("outcomes are records of what became of a call (PostToolUse, the sandbox runner, the end of the "
+                  "session); outside the signed root, they decide nothing", file=out)
     return 0 if ready else 1
