@@ -25,7 +25,7 @@ import pytest
 pytest.importorskip("cryptography")
 pytest.importorskip("fcntl")
 
-from prismpath.agent import commands, launcher, run as run_module, sandbox_hook  # noqa: E402
+from prismpath.agent import commands, landlock, launcher, run as run_module, sandbox_hook  # noqa: E402
 from prismpath.agent.profile import STRICTEST, compile_profile  # noqa: E402
 from prismpath.kernel import causes  # noqa: E402
 from prismpath.tests import test_agent_cli as cli_tests  # noqa: E402
@@ -37,8 +37,9 @@ from prismpath.tests.test_sandbox_exec import needs_bwrap  # noqa: E402
 
 def _nesting_works():
     """Whether this host lets a bwrap sandbox start a second one inside it. Ubuntu 24.04's AppArmor setting (GitHub's
-    runners among them) forbids the nested user namespace, and there the launcher denies every shell command with
-    cause 129 by design; the tests that need a nested sandbox to run skip, and the deny is asserted instead."""
+    runners among them) forbids the nested user namespace. There the launcher runs the per call sandbox under Landlock
+    instead (test_landlock_backend.py), and denies every shell command with cause 129 only where Landlock is missing
+    too. The tests that need a nested bwrap skip here, and the Landlock ones run in its place."""
     import subprocess
     from prismpath.agent import sandbox_exec as _se
     if not os.access(_se.BWRAP, os.X_OK):
@@ -336,8 +337,8 @@ def test_the_disagreement_table_the_stricter_layer_wins_and_the_known_gap_is_ass
     assert gap is KNOWN_GAP_CREDENTIAL_READ, (
         "the outer sandbox no longer lets the agent's own file tool read the staged credential: the known gap is "
         "closed, so flip KNOWN_GAP_CREDENTIAL_READ")
-    if not NESTING:
-        # a host that forbids the nested sandbox: every shell row is refused with cause 129, never run under the outer
+    if not NESTING and not landlock.available():
+        # a host with no per call backend (no nested bwrap, no Landlock): every shell row is refused with cause 129, never run under the outer
         # profile alone, and the run still verifies; the file tool rows above hold either way
         for name in ("ask", "allow-allow", "allow-blocked"):
             out = _answer(by[name])

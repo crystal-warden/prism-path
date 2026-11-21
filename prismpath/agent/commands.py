@@ -356,7 +356,7 @@ def observation_answer(data: Dict[str, Any], home: Path, store) -> Dict[str, Any
     stderr = data.get("stderr")
     returncode, timed_out = int(data["returncode"]), bool(data.get("timed_out"))
     body = observe.observed(returncode, stderr.encode("utf-8", "replace")[-observe.MAX_STDERR:] if isinstance(stderr, str) else b"",
-                            timed_out)
+                            timed_out, str(data.get("backend") or "") or None)
     if not (store.root / _run_dir(session)).exists():
         raise AgentError(f"session {session} has no run to record an observation in")
     receipt, image, profile = data.get("receipt"), str(data.get("image_sha256")), str(data.get("profile_sha256"))
@@ -447,6 +447,7 @@ def hook(raw: bytes, env: Optional[Mapping[str, str]] = None, nested=None) -> Di
         run = store.open(session, policy.image)
         index = run.append(policy.reading_bytes(result.reading), result.decision.verdict,
                            sandbox_profile=profile.hash() if profile is not None else None,
+                           sandbox_backend=(nested.backend if nested else "bwrap") if profile is not None else None,
                            tool_use_id=data.get("tool_use_id"))
         if profile is not None:
             # the receipt is written first so the runner can bind what the command shows to it (observe.py)
@@ -458,7 +459,8 @@ def hook(raw: bytes, env: Optional[Mapping[str, str]] = None, nested=None) -> Di
             else:
                 observe["socket"] = nested.socket
             updated = sandbox_hook.sandbox_input(data, result.workspace, profile, observe=observe,
-                                                 python=nested.python if nested else None, runner=nested.runner if nested else None)
+                                                 python=nested.python if nested else None, runner=nested.runner if nested else None,
+                                                 backend=nested.backend if nested else "bwrap")
             answer = claude_code.hook_answer(result.decision, updated)
         answer = claude_code.fill_receipt(answer, receipt_id(session, index))
         return answer
