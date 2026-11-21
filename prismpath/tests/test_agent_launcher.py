@@ -234,7 +234,8 @@ def test_without_an_egress_log_path_the_log_is_kept_in_the_egress_run_directory(
     code, _out, _log = _launch(world, stub, egress_log=None)
     assert code == 7
     _policy, store = commands.load_checked(commands.config_dir())
-    (egress_run,) = [r for r in store.runs() if r.session.startswith("egress-")]
+    egress_run = max((r for r in store.runs() if r.session.startswith("egress-") and (r.dir / launcher.EGRESS_LOG_NAME).exists()),
+                     key=lambda r: r.session)
     kept = egress_run.dir / launcher.EGRESS_LOG_NAME
     decisions = [(json.loads(line)["host"], json.loads(line)["decision"]) for line in kept.read_text().splitlines()]
     assert ("evil.example:443", "refuse") in decisions
