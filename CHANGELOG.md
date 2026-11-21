@@ -8,6 +8,27 @@ spec stable.
 
 ## [Unreleased]
 
+### Fixed: programs the classifier read as read only could write files or run commands (2026-11-21)
+
+- **What was wrong.** `sed`, `sort`, `uniq`, `xxd` and `tree` were on the classifier's read only list, and only the
+  literal flags `sed -i`, `sort -o` and `tree -o` were caught. So `sed -ri`, `sort -o.claude/settings.json`,
+  `uniq notes .claude/settings.json`, `sed 'w FILE'`, `sed '1e CMD'` and `xxd -r notes .git/hooks/pre-commit` read
+  `read_only` and the starter policies allowed them, through the Claude Code hook. Likewise `git diff --output=FILE`,
+  `git grep -O sh` (and `--open-files-in-pager`) and `git diff --no-index` read as a plain allowed git listing.
+  Through the Claude Code hook that let a command rewrite the agent's own settings or hooks.
+- **What changed.** `CLASSIFIER_VERSION` is 3. `sed`, `sort`, `uniq`, `xxd`, `tree`, `file` (`-C` writes a file) and
+  `date` (`-s` sets the clock) are mutating, and so are named writers in the hazard scan. A git argument that is
+  `--output`, `--open-files-in-pager`, `--no-index`, `--ext-diff`, `--contents`, `--ignore-revs-file` or `--remerge-diff` (it writes temporary objects) (or any prefix of
+  one, which git accepts) or a short cluster holding `O` is an unsafe option, so the call reads git `unknown`. The three
+  starters are recompiled for version 3, the previous images are named as older starters, and a recorded policy from
+  before this fix gets the re-init message. The MCP proxy now decides under the recorded, attested policy of
+  `agent init` (`commands.load_checked`), refuses every call without one, and accepts `--policy` only when it is that
+  policy.
+- **What is proven.** The theorems prove the model's readings and refusals given the model's lists. They do not prove
+  that a listed program is read only. `prismpath/tests/test_read_only_runs.py` now checks that by running every
+  read only program and every plain git read, with the options each prints in its own help, in a temporary tree, and
+  requires the tree unchanged and no child run.
+
 ### Added: gateway grants (2026-11-21)
 
 - **`prismpath gateway grant --path-class CLASS --method-class CLASS --ttl SECONDS` signs a grant with the gateway home's authority key, and the gateway reads the `X-PrismPath-Grant` header as the request's `grant` field.** A grant (`prismpath.grant/1`, canon/2, Ed25519 over a domain-separated document) names the route and method classes it covers, the policy image it was issued under and a window of at most 30 days. It names no holder, so it is the same grant whoever presents it. It reads `valid` only when it verifies under this gateway's key and policy, covers the request and is in force, `expired` past its window, and `invalid` otherwise. `prismpath gateway revoke --grant-id ID` adds it to `grants.revoked` in the home, which is read again when it changes, so the next request that presents it is refused; a list that cannot be read revokes every grant. The grant id and the SHA-256 of the grant are kept on the receipt's journal line, and the grant header is never forwarded. The demo policy lets a granted read reach the admin routes.
@@ -131,9 +152,10 @@ What changed since 0.1.0, in short:
   Agentic Applications, MITRE ATLAS and CWE, and the regulatory mapping relates them to the frameworks it names.
 - **OpenTelemetry decision attributes.** A proposal and a producer (`prismpath.agent.otel`) for the outcome, the cause
   and the receipt of a governed tool call on its span.
-- **The classifier is proven.** Its reading of a call is defined in Lean and held to the Python over the recorded
-  inputs, the adversary probes and 20,000 generated calls, and a proven hazard scan keeps hazards refused when a
-  command falls outside its grammar.
+- **The classifier's readings are proven given its lists.** Its reading of a call is defined in Lean and held to the
+  Python over the recorded inputs, the adversary probes and 20,000 generated calls, and a proven hazard scan keeps
+  hazards refused when a command falls outside its grammar. This was worded "The classifier is proven" in 0.2.0,
+  which overstated it: see the Unreleased fix below.
 - **Every Merkle tree is RFC 6962's**, with consistency proofs, a streaming root in Python, Rust and C, and strict
   canon/2 readers. These are breaking changes and are listed below.
 - **Native crates.** The four Rust crates (kernel, Facet telemetry wire, policy hot swap, preflight) are held to the
