@@ -126,6 +126,10 @@ The model's memory is in vLLM, outside. For plan question 10 (four times the pea
 - `Decider.close` waited its full five second join each time, because closing a listening socket does not wake a thread blocked in `accept`. This PR shuts the socket down first (`prismpath/agent/decider.py`). The median launch fell from 6.9 s to 1.9 s. The 0.39 s of `agent-sandbox-spike.md` was measured before the decider and the policy gate existed.
 - The agent profile compile runs on every launch and takes about 1.7 s. The bash profile is cached in the run home and the agent one is not (`launcher._policy_profile`). Caching it by image hash would bring a launch near 0.2 s. It is not done here, because the launcher is being changed by the Landlock work.
 
+## Gate
+
+With `PRISMPATH_REQUIRE_CORE_ORACLE=1` and the Lean oracle built, `prismpath/tests` and `integrations/governed_harness/tests` together gave 3645 passed and 43 skipped in 27 minutes, with `test_agent_adversary.py` at 4 passed. The decider change is covered by `test_agent_decider.py` in the same run.
+
 ## Left open
 
 - Cache the agent profile by image hash (about 1.7 s per launch).
