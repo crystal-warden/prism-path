@@ -11,7 +11,7 @@
   "zone": "protected",
   "expect": {
    "answer": "ask",
-   "cause_code": 131
+   "cause_code": 132
   }
  },
  {
@@ -26,7 +26,7 @@
   "zone": "unknown",
   "expect": {
    "answer": "ask",
-   "cause_code": 131
+   "cause_code": 132
   }
  },
  {
@@ -57,7 +57,7 @@
   "zone": "protected",
   "expect": {
    "answer": "ask",
-   "cause_code": 131
+   "cause_code": 132
   }
  },
  {
@@ -87,7 +87,7 @@
   "zone": "protected",
   "expect": {
    "answer": "ask",
-   "cause_code": 131
+   "cause_code": 132
   }
  },
  {

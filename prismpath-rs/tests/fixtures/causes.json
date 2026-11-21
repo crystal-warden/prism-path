@@ -1,7 +1,7 @@
 {
  "version": 1,
  "comment": "FROZEN. The cause registry of prismpath.kernel.causes: every row, its hash, the engine stop mapping and the lookups a consumer must answer. prismpath-rs/src/causes.rs is generated from the same registry and prismpath-rs/tests/test_causes.rs replays this file. Appending a row regenerates it.",
- "registry_sha256": "6b27bfe2bc5f6d80da185f498066548f60fdc7b8f09e96cf9d6bc812584d7b4d",
+ "registry_sha256": "24d56410c08b1e0514562ce5a56e8367a7271bf9b23110ac08b923c44618eb0c",
  "registry": [
   {
    "code": 1,
@@ -581,6 +581,12 @@
   },
   {
    "code": 131,
+   "name": "gateway:request-refused",
+   "class": "routing",
+   "description": "an HTTP request to a resource behind a PrismPath gateway that the gateway's policy refuses, or that the gateway cannot read, decide or receipt (a request it cannot read is never forwarded); answered with a 403 and not forwarded"
+  },
+  {
+   "code": 132,
    "name": "agent:zone-asked",
    "class": "routing",
    "description": "an agent call that would change a file that reaches code in one of the owner's zones, or whose reach is not known (no zone information point answered, or the file is not one it can read), with none of the earlier refusals holding, under every starter policy; escalated and not run"

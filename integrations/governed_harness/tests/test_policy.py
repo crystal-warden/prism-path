@@ -58,7 +58,7 @@ def test_the_lean_port_accepts_the_image_and_every_target_names_a_registered_cau
         if kind != "allow":
             assert causes.code(cause) == code and causes.cause_class(code) == "routing"
             seen.add(cause)
-    assert seen == {name for code, name, _k, _d in causes._REGISTRY if 104 <= code <= 113 or code in (128, 130, 131)}
+    assert seen == {name for code, name, _k, _d in causes._REGISTRY if 104 <= code <= 113 or code in (128, 130, 132)}
 
 
 def test_the_reading_fields_are_the_policy_fields(agent_policy):

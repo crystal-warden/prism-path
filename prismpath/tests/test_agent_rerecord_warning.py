@@ -28,7 +28,7 @@ OLD = sorted((Path(__file__).parent / "fixtures" / "agent_old_starters").glob("*
 # the three recorded between the control-file rule and the connect rule (commit ccf2f60): they have path_control and
 # refuse its changes, and bound classifier_version to 1
 OLD_NET = [p for p in OLD if "ccf2f60" in p.name]
-OLD_ZONE = [p for p in OLD if "2ae3627" in p.name]       # the three from before the zone rule (cause 131)
+OLD_ZONE = [p for p in OLD if "2ae3627" in p.name]       # the three from before the zone rule (cause 132)
 OLD_CONTROL = [p for p in OLD if "ccf2f60" not in p.name and "2ae3627" not in p.name]
 
 
@@ -77,7 +77,7 @@ def test_a_starter_from_before_the_connect_rule_still_refuses_control_changes_an
 def test_a_starter_from_before_the_zone_rule_is_named_and_has_no_zone_field(path):
     image = _image(path)
     name, what = older_starter_of(image)
-    assert name == path.name.split("-")[0] and "before the zone rule (cause 131" in what
+    assert name == path.name.split("-")[0] and "before the zone rule (cause 132" in what
     assert older_date(image) == "2026-11-21"
     assert "zone_reach" not in Policy(image).doc["fields"]
     assert control_check(image) == {"refuses_control_changes": True}

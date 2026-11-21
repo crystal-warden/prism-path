@@ -109,9 +109,9 @@ def build_calls(thresholds: Dict[str, Any], lock: str) -> Dict[str, Any]:
     floor = json.loads(FLOOR_SOURCE.read_text())
     rules = floor["rules"]
     assert all(rule["target"].startswith("refuse_") for rule in rules[:FLOOR_REFUSALS])
-    assert [rule["target"] for rule in rules[FLOOR_REFUSALS:]] == ["escalate_131", "allow", "escalate_113", "allow", "allow",
+    assert [rule["target"] for rule in rules[FLOOR_REFUSALS:]] == ["escalate_132", "allow", "escalate_113", "allow", "allow",
                                                                     "allow", "allow"]
-    # the floor's zone question (cause 131) comes before its allows, so a call the floor allows is one that reads no zone
+    # the floor's zone question (cause 132) comes before its allows, so a call the floor allows is one that reads no zone
     zone_asked = rules[FLOOR_REFUSALS]["when"]
     allow_push, allow_rest = rules[FLOOR_REFUSALS + 1]["when"], [rule["when"] for rule in rules[FLOOR_REFUSALS + 3:]]
     floor_allows = ["and", ["not", copy.deepcopy(zone_asked)],

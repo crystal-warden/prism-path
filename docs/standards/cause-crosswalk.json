@@ -1998,6 +1998,29 @@
    }
   },
   "131": {
+   "name": "gateway:request-refused",
+   "class": "routing",
+   "kind": "security-control",
+   "owasp_asi": {
+    "ids": [
+     "ASI03"
+    ],
+    "rationale": "A request to a protected resource is refused unless its policy allows the reading of that request, whoever the client is, so a worker's access to the resource does not rest on the worker."
+   },
+   "mitre_atlas": {
+    "ids": [
+     "AML.T0053"
+    ],
+    "rationale": "The technique is an agent using a tool or service it was given in a way nobody intended; the gateway refuses at the resource, it does not inspect the agent."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-862"
+    ],
+    "rationale": "Nearest entry: access to a resource without an authorization check; the gateway makes the check at the resource for every request, it does not decide who the caller is."
+   }
+  },
+  "132": {
    "name": "agent:zone-asked",
    "class": "routing",
    "kind": "security-control",

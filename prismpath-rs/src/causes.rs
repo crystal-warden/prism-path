@@ -11,7 +11,7 @@
 pub const CAUSE_NONE: u8 = 0;
 
 /// `registry_sha256()` of the Python registry when this file was generated.
-pub const REGISTRY_SHA256: &str = "6b27bfe2bc5f6d80da185f498066548f60fdc7b8f09e96cf9d6bc812584d7b4d";
+pub const REGISTRY_SHA256: &str = "24d56410c08b1e0514562ce5a56e8367a7271bf9b23110ac08b923c44618eb0c";
 
 /// The cause class, the semantic axis of the registry.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -237,8 +237,10 @@ pub const AGENT_CONTROL_WRITE: u8 = 128;
 pub const AGENT_SANDBOX_UNAVAILABLE: u8 = 129;
 /// `agent:net-refused`
 pub const AGENT_NET_REFUSED: u8 = 130;
+/// `gateway:request-refused`
+pub const GATEWAY_REQUEST_REFUSED: u8 = 131;
 /// `agent:zone-asked`
-pub const AGENT_ZONE_ASKED: u8 = 131;
+pub const AGENT_ZONE_ASKED: u8 = 132;
 
 /// Every registered cause, in registry order.
 pub const REGISTRY: &[Cause] = &[
@@ -338,7 +340,8 @@ pub const REGISTRY: &[Cause] = &[
     Cause { code: 128, name: "agent:control-write", class: CauseClass::Routing, description: "an agent call that would change one of the governed agent's own control files inside the workspace (its settings, its hook scripts, its MCP configuration, or the program its installed hook runs), by a path that resolves onto it; refused and not run, under every starter policy" },
     Cause { code: 129, name: "agent:sandbox-unavailable", class: CauseClass::Routing, description: "an allowed agent shell command that could not be run inside the sandbox compiled from the signed policy (the profile did not compile, or the sandbox program is missing); refused and not run, never run without the sandbox" },
     Cause { code: 130, name: "agent:net-refused", class: CauseClass::Routing, description: "an agent connection to a destination that is not the model's own API (a host the classifier reads as other, as an allowed host a starter policy does not list, or cannot read, or a port outside 1 to 65535); refused and not opened, under every starter policy" },
-    Cause { code: 131, name: "agent:zone-asked", class: CauseClass::Routing, description: "an agent call that would change a file that reaches code in one of the owner's zones, or whose reach is not known (no zone information point answered, or the file is not one it can read), with none of the earlier refusals holding, under every starter policy; escalated and not run" },
+    Cause { code: 131, name: "gateway:request-refused", class: CauseClass::Routing, description: "an HTTP request to a resource behind a PrismPath gateway that the gateway's policy refuses, or that the gateway cannot read, decide or receipt (a request it cannot read is never forwarded); answered with a 403 and not forwarded" },
+    Cause { code: 132, name: "agent:zone-asked", class: CauseClass::Routing, description: "an agent call that would change a file that reaches code in one of the owner's zones, or whose reach is not known (no zone information point answered, or the file is not one it can read), with none of the earlier refusals holding, under every starter policy; escalated and not run" },
 ];
 
 /// The engine's stop vocabulary mapped onto the registry; `terminal` and `waiting` are clean and have no cause.

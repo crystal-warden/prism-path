@@ -5,8 +5,8 @@ import Classifier.Control
 # The network: what a `connect` reads as, and the policies that refuse the rest
 
 The sandboxed agent reaches the network only through a proxy that asks the policy about each connection. The
-classifier reads that request, a `connect` call with a `host` and a `port`, into `net_dest`
-(docs/design/agent-sandbox-plan.md, section 3). The host is read as text, by `Classify.hostOk` and
+classifier reads that request, a `connect` call with a `host` and a `port`, into `net_dest`.
+The host is read as text, by `Classify.hostOk` and
 `Classify.netDestOf`, and held to the Python by `formal/diff/classifier_diff.py`:
 
 * `model_api`: a host of the constant `MODEL_API` table, on port 443.

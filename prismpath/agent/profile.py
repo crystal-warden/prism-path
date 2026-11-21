@@ -18,7 +18,7 @@ capability is switched on only if some allowed reading needs it:
                           (or "unknown" for either, which could be anything). A git push is not counted: the
                           starters allow a push to a remote the owner named, so counting it would give every
                           starter a network. A push in the sandbox fails for want of one, which is the sandbox
-                          being stricter than the oracle, the safe direction (plan WP4 lists such cases).
+                          being stricter than the oracle, the safe direction.
 
 Nothing here decides a reading itself: the allow set is the set of readings the reference decides `allow`.
 

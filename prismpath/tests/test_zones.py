@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Zones (prismpath/agent/zones.py): the reading field `zone_reach`, the starters' rule about it
-(cause 131), the signed zone file and the Context Cloud adapter.
+(cause 132), the signed zone file and the Context Cloud adapter.
 
 The adapter is tested twice. Against a stand-in `contextcloud` program and a small index built here (always), and against
 the real Context Cloud and the PyJWT demo index at ~/contextcloud-demo when they exist (skipped otherwise). The proof
@@ -121,12 +121,12 @@ def _decide(name, reading):
 
 
 @pytest.mark.parametrize("name", sorted(STARTERS))
-def test_a_write_that_reaches_a_zone_or_whose_reach_is_unknown_asks_with_cause_131(name):
+def test_a_write_that_reaches_a_zone_or_whose_reach_is_unknown_asks_with_cause_132(name):
     for answer in ("protected", "unknown"):
         decision = _decide(name, _read(zones.fixed(answer), _call("write_file", path="src/a.py", content="")))
-        assert (decision.kind, decision.cause_code) == ("escalate", 131), (name, answer)
+        assert (decision.kind, decision.cause_code) == ("escalate", 132), (name, answer)
         decision = _decide(name, _read(zones.fixed(answer), _call("delete_path", path="src/a.py")))
-        assert (decision.kind, decision.cause_code) == ("escalate", 131), (name, answer)
+        assert (decision.kind, decision.cause_code) == ("escalate", 132), (name, answer)
 
 
 @pytest.mark.parametrize("name,verdict", [("strict", ("allow", None)), ("default", ("allow", None)),
@@ -144,7 +144,7 @@ def test_a_file_changing_command_keeps_its_old_verdict_unless_it_reaches_a_zone(
     assert (decision.kind, decision.cause_code) == none_verdict
     decision = _decide(name, _read(zones.fixed("protected"), rm))
     # strict refuses every file changing command, with or without a zone: its rule never turns a refusal into a question
-    assert (decision.kind, decision.cause_code) == (("refuse", 112) if name == "strict" else ("escalate", 131))
+    assert (decision.kind, decision.cause_code) == (("refuse", 112) if name == "strict" else ("escalate", 132))
 
 
 @pytest.mark.parametrize("name", sorted(STARTERS))
@@ -267,7 +267,7 @@ def test_the_hook_asks_about_every_write_when_a_zone_is_declared_and_context_clo
     result = claude_code.evaluate(hook, {"CLAUDE_PROJECT_DIR": str(project)}, policy,
                                   lambda ws: zones.information_point(home, image, Path(ws), os.environ))
     assert result.reading["zone_reach"] == "unknown"
-    assert (result.decision.kind, result.decision.cause_code) == ("escalate", 131)
+    assert (result.decision.kind, result.decision.cause_code) == ("escalate", 132)
     assert result.answer["hookSpecificOutput"]["permissionDecision"] == "ask"
     # the same write with no zone declared at all is what it was
     result = claude_code.evaluate(hook, {"CLAUDE_PROJECT_DIR": str(project)}, policy)
@@ -431,7 +431,7 @@ def test_the_starters_ask_about_a_write_that_reaches_a_zone_and_leave_the_others
     for name in sorted(STARTERS):
         reaches = _decide(name, classifier.classify(_call("write_file", path="pkg/b.py", content=""), config))
         quiet = _decide(name, classifier.classify(_call("write_file", path="pkg/a.py", content=""), config))
-        assert (reaches.kind, reaches.cause_code) == ("escalate", 131), name
+        assert (reaches.kind, reaches.cause_code) == ("escalate", 132), name
         assert (quiet.kind, quiet.cause_code) == (("escalate", 127) if name == "review" else ("allow", None)), name
 
 
@@ -484,8 +484,8 @@ def test_an_edit_that_reaches_hmacalgorithm_verify_asks_and_one_that_does_not_ke
         defines = _decide(name, classifier.classify(_call("write_file", path="jwt/algorithms.py", content=""), config))
         reaches = _decide(name, classifier.classify(_call("write_file", path="jwt/api_jwt.py", content=""), config))
         quiet = _decide(name, classifier.classify(_call("write_file", path="jwt/utils.py", content=""), config))
-        assert (defines.kind, defines.cause_code) == ("escalate", 131)       # HMACAlgorithm.verify is defined here
-        assert (reaches.kind, reaches.cause_code) == ("escalate", 131)       # PyJWT.decode reaches it through PyJWS.decode
+        assert (defines.kind, defines.cause_code) == ("escalate", 132)       # HMACAlgorithm.verify is defined here
+        assert (reaches.kind, reaches.cause_code) == ("escalate", 132)       # PyJWT.decode reaches it through PyJWS.decode
         assert (quiet.kind, quiet.cause_code) == ("allow", None)             # the old verdict
     assert _read(point, _call("write_file", path="jwt/algorithms.py", content=""))["zone_reach"] in ("unknown", "protected")
 

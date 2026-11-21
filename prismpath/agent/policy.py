@@ -93,11 +93,11 @@ OLDER_STARTERS = {
     # The three that followed it, recorded by `init` from 2026-11-20 until the zone rule shipped. They read every field
     # of classifier version 2 and refuse what the connect rule refuses, but they have no `zone_reach` field, so a change
     # to a file the owner's zone file protects is not asked about, and the zone file is never read for them.
-    "b64f0e29805388f5": ("default", "the agent_default from before the zone rule (cause 131), which does not ask about a "
+    "b64f0e29805388f5": ("default", "the agent_default from before the zone rule (cause 132), which does not ask about a "
                                     "change that reaches the owner's zones"),
-    "4cb122afd5c105de": ("review", "the agent_review from before the zone rule (cause 131), which does not ask about a "
+    "4cb122afd5c105de": ("review", "the agent_review from before the zone rule (cause 132), which does not ask about a "
                                    "change that reaches the owner's zones"),
-    "0a079f267aab636c": ("strict", "the agent_rules from before the zone rule (cause 131), which does not ask about a "
+    "0a079f267aab636c": ("strict", "the agent_rules from before the zone rule (cause 132), which does not ask about a "
                                    "change that reaches the owner's zones"),
 }
 RULE_DATE = "2026-11-19"          # the day the control-file rule shipped: the first four older images are "from before" it

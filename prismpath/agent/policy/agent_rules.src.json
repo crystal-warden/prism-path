@@ -48,7 +48,7 @@
     {"target": "refuse_112",
      "when": ["or", ["cmp", "command_class", "==", ["str", "mutating"]],
                     ["cmp", "git_op", "==", ["str", "mutating"]]]},
-    {"target": "escalate_131",
+    {"target": "escalate_132",
      "when": ["and", ["in", "tool", [["str", "write_file"], ["str", "delete_path"]]],
                      ["in", "zone_reach", [["str", "protected"], ["str", "unknown"]]]]},
     {"target": "allow",

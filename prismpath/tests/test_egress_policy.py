@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
-"""The compile and the proxy read the policy (agent-sandbox-plan, WP7).
+"""The compile and the proxy read the policy.
 
 `compile_profile(image, role)` gives the agent role a `net` state from the image's allow set, and the egress proxy
 decides each CONNECT by classifying it into a connect reading and deciding it under the same attested image,

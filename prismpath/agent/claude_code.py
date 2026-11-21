@@ -526,8 +526,8 @@ _KIND_TO_PERMISSION = {"allow": "allow", "refuse": "deny", "escalate": "ask"}
 def hook_answer(decision: Decision, updated_input: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """The PreToolUse hook's JSON answer to one decision. A refusal's reason names the registered cause and
     holds RECEIPT_PLACEHOLDER for the caller to fill (fill_receipt); an allow carries no reason.
-    `updated_input`, for an allow or a question (a person's approval then runs the rewritten call, hook-rewrite-note.md), is the whole tool input the call is to run with instead of the one
-    the model sent (`updatedInput`, docs/design/hook-rewrite-note.md); a refusal never carries it."""
+    `updated_input`, for an allow or a question (a person's approval then runs the rewritten call), is the whole tool input the call is to run with instead of the one
+    the model sent (`updatedInput`); a refusal never carries it."""
     permission = _KIND_TO_PERMISSION[decision.kind]
     output: Dict[str, Any] = {"hookEventName": "PreToolUse", "permissionDecision": permission}
     if decision.kind == "refuse":
