@@ -640,7 +640,7 @@ def outcome_line(c: Dict[str, int]) -> str:
     """One line of what became of the calls: `allowed 5 (4 ran, 1 no outcome); asked 2 (1 approved and ran, 1 no
     outcome); refused 3`. A call still waiting for its outcome shows as no outcome."""
     return (f"allowed {c['allowed']} ({c['allowed_ran']} ran, {c['allowed_no_outcome']} no outcome); "
-            f"asked {c['asked']} ({c['asked_approved']} approved and ran, {c['asked_no_outcome']} no outcome); "
+            f"asked {c['asked']} ({c['asked_approved']} approved and ran, {c['asked_failed']} failed or interrupted, {c['asked_no_outcome']} no outcome); "
             f"refused {c['refused']}" + (f"; {c['unbound']} outcome events could not be bound" if c.get("unbound") else ""))
 
 

@@ -179,7 +179,7 @@ def real_outcomes(lines: List[Dict[str, Any]]) -> Dict[int, str]:
 def outcome_counts(entries: List[Dict[str, Any]], lines: List[Dict[str, Any]]) -> Dict[str, int]:
     done = real_outcomes(lines)
     counts = {"allowed": 0, "allowed_ran": 0, "allowed_no_outcome": 0, "asked": 0, "asked_approved": 0,
-              "asked_no_outcome": 0, "refused": 0, "failed": 0,
+              "asked_failed": 0, "asked_no_outcome": 0, "refused": 0, "failed": 0,
               "unbound": sum(1 for l in lines if l["outcome"] == "unbound")}
     for entry in entries:
         kind = receipt_kind(entry["receipt"])
@@ -189,7 +189,10 @@ def outcome_counts(entries: List[Dict[str, Any]], lines: List[Dict[str, Any]]) -
         key, ran = ("allowed", "allowed_ran") if kind == "allow" else ("asked", "asked_approved")
         counts[key] += 1
         if entry["i"] in done:
-            counts[ran] += 1
+            if done[entry["i"]] == "failed" and key == "asked":
+                counts["asked_failed"] += 1         # a call the person approved that did not run to the end is not an approval that ran
+            else:
+                counts[ran] += 1
             counts["failed"] += done[entry["i"]] == "failed"
         else:
             counts[key + "_no_outcome"] += 1
