@@ -1,0 +1,402 @@
+{
+ "recorded": "2026-11-21, Claude Code 2.1.326, headless (claude -p, Sonnet), a throwaway git workspace; prismpath agent init (default starter) on main bcd4322, each raw hook input saved before the hook read it",
+ "placeholders": "@WS@ the workspace, @CONFIG@ the agent config directory, @HOME@ the home directory, @TMP@ the Claude temporary directory; session, prompt, transcript, scratchpad and tool response values replaced",
+ "inputs": [
+  {
+   "id": "live-1",
+   "input": {
+    "session_id": "@SESSION@",
+    "transcript_path": "@TRANSCRIPT_PATH@",
+    "cwd": "@WS@",
+    "scratchpad_dir": "@SCRATCHPAD_DIR@",
+    "prompt_id": "@PROMPT@",
+    "permission_mode": "acceptEdits",
+    "effort": {
+     "level": "medium"
+    },
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Read",
+    "tool_input": {
+     "file_path": "@WS@/notes.txt"
+    },
+    "tool_use_id": "toolu_01TC7UGdhiC8K9Evmw95Bs5s"
+   },
+   "live_answer": "allow",
+   "expect": "allow"
+  },
+  {
+   "id": "live-2",
+   "input": {
+    "session_id": "@SESSION@",
+    "transcript_path": "@TRANSCRIPT_PATH@",
+    "cwd": "@WS@",
+    "scratchpad_dir": "@SCRATCHPAD_DIR@",
+    "prompt_id": "@PROMPT@",
+    "permission_mode": "acceptEdits",
+    "effort": {
+     "level": "medium"
+    },
+    "hook_event_name": "PostToolUse",
+    "tool_name": "Read",
+    "tool_input": {
+     "file_path": "@WS@/notes.txt"
+    },
+    "tool_response": "@RESPONSE@",
+    "tool_use_id": "toolu_01TC7UGdhiC8K9Evmw95Bs5s",
+    "duration_ms": 5
+   }
+  },
+  {
+   "id": "live-3",
+   "input": {
+    "session_id": "@SESSION@",
+    "transcript_path": "@TRANSCRIPT_PATH@",
+    "cwd": "@WS@",
+    "scratchpad_dir": "@SCRATCHPAD_DIR@",
+    "prompt_id": "@PROMPT@",
+    "permission_mode": "acceptEdits",
+    "effort": {
+     "level": "medium"
+    },
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Glob",
+    "tool_input": {
+     "pattern": "*.py"
+    },
+    "tool_use_id": "toolu_01HYsKd34Y57MMPvy8mJ6Faz"
+   },
+   "live_answer": "allow",
+   "expect": "allow"
+  },
+  {
+   "id": "live-4",
+   "input": {
+    "session_id": "@SESSION@",
+    "transcript_path": "@TRANSCRIPT_PATH@",
+    "cwd": "@WS@",
+    "scratchpad_dir": "@SCRATCHPAD_DIR@",
+    "prompt_id": "@PROMPT@",
+    "permission_mode": "acceptEdits",
+    "effort": {
+     "level": "medium"
+    },
+    "hook_event_name": "PostToolUse",
+    "tool_name": "Glob",
+    "tool_input": {
+     "pattern": "*.py"
+    },
+    "tool_response": "@RESPONSE@",
+    "tool_use_id": "toolu_01HYsKd34Y57MMPvy8mJ6Faz",
+    "duration_ms": 6
+   }
+  },
+  {
+   "id": "live-5",
+   "input": {
+    "session_id": "@SESSION@",
+    "transcript_path": "@TRANSCRIPT_PATH@",
+    "cwd": "@WS@",
+    "scratchpad_dir": "@SCRATCHPAD_DIR@",
+    "prompt_id": "@PROMPT@",
+    "permission_mode": "acceptEdits",
+    "effort": {
+     "level": "medium"
+    },
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Grep",
+    "tool_input": {
+     "pattern": "return",
+     "path": "@WS@"
+    },
+    "tool_use_id": "toolu_01J8y1DErdx2QMPWnTjesXHb"
+   },
+   "live_answer": "allow",
+   "expect": "allow"
+  },
+  {
+   "id": "live-6",
+   "input": {
+    "session_id": "@SESSION@",
+    "transcript_path": "@TRANSCRIPT_PATH@",
+    "cwd": "@WS@",
+    "scratchpad_dir": "@SCRATCHPAD_DIR@",
+    "prompt_id": "@PROMPT@",
+    "permission_mode": "acceptEdits",
+    "effort": {
+     "level": "medium"
+    },
+    "hook_event_name": "PostToolUse",
+    "tool_name": "Grep",
+    "tool_input": {
+     "pattern": "return",
+     "path": "@WS@"
+    },
+    "tool_response": "@RESPONSE@",
+    "tool_use_id": "toolu_01J8y1DErdx2QMPWnTjesXHb",
+    "duration_ms": 8
+   }
+  },
+  {
+   "id": "live-7",
+   "input": {
+    "session_id": "@SESSION@",
+    "transcript_path": "@TRANSCRIPT_PATH@",
+    "cwd": "@WS@",
+    "scratchpad_dir": "@SCRATCHPAD_DIR@",
+    "prompt_id": "@PROMPT@",
+    "permission_mode": "acceptEdits",
+    "effort": {
+     "level": "medium"
+    },
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "git status --short"
+    },
+    "tool_use_id": "toolu_01NAqh6qt97x7G2xKefbVVy3"
+   },
+   "live_answer": "allow",
+   "expect": "allow"
+  },
+  {
+   "id": "live-8",
+   "input": {
+    "session_id": "@SESSION@",
+    "transcript_path": "@TRANSCRIPT_PATH@",
+    "cwd": "@WS@",
+    "scratchpad_dir": "@SCRATCHPAD_DIR@",
+    "prompt_id": "@PROMPT@",
+    "permission_mode": "acceptEdits",
+    "effort": {
+     "level": "medium"
+    },
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "wc -l notes.txt calc.py"
+    },
+    "tool_use_id": "toolu_01JUB8RzUTFVLX2RE7p77p4L"
+   },
+   "live_answer": "allow",
+   "expect": "allow"
+  },
+  {
+   "id": "live-9",
+   "input": {
+    "session_id": "@SESSION@",
+    "transcript_path": "@TRANSCRIPT_PATH@",
+    "cwd": "@WS@",
+    "scratchpad_dir": "@SCRATCHPAD_DIR@",
+    "prompt_id": "@PROMPT@",
+    "permission_mode": "acceptEdits",
+    "effort": {
+     "level": "medium"
+    },
+    "hook_event_name": "PostToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "@HOME@/cwprojects/prismpath/.venv/bin/python -I @HOME@/cwprojects/prismpath/prismpath/agent/sandbox_exec.py --workspace @WS@ --cwd @WS@ --profile '{\"format\":\"prismpath.profile/1\",\"host_write\":false,\"max_processes\":64,\"network\":false,\"ro_mounts\":[\"/usr\"],\"rw_path\":\"workspace\",\"timeout_s\":30}' --timeout 120 --backend bwrap --observe-run @CONFIG@/prismpath/agent/runs/eacab2cb-7feb-431a-af7a-82e72d708144 --observe-session eacab2cb-7feb-431a-af7a-82e72d708144 --observe-receipt 3 --observe-image b64f0e29805388f59b45a571bea14aba619d0bb1014b953a11c112d144d14d35 --observe-profile 767dd3c84cbb5ec504548e158571d52e7c217a530b8f43350305e14856010595 -- 'git status --short'"
+    },
+    "tool_response": "@RESPONSE@",
+    "tool_use_id": "toolu_01NAqh6qt97x7G2xKefbVVy3",
+    "duration_ms": 117
+   }
+  },
+  {
+   "id": "live-10",
+   "input": {
+    "session_id": "@SESSION@",
+    "transcript_path": "@TRANSCRIPT_PATH@",
+    "cwd": "@WS@",
+    "scratchpad_dir": "@SCRATCHPAD_DIR@",
+    "prompt_id": "@PROMPT@",
+    "permission_mode": "acceptEdits",
+    "effort": {
+     "level": "medium"
+    },
+    "hook_event_name": "PostToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "@HOME@/cwprojects/prismpath/.venv/bin/python -I @HOME@/cwprojects/prismpath/prismpath/agent/sandbox_exec.py --workspace @WS@ --cwd @WS@ --profile '{\"format\":\"prismpath.profile/1\",\"host_write\":false,\"max_processes\":64,\"network\":false,\"ro_mounts\":[\"/usr\"],\"rw_path\":\"workspace\",\"timeout_s\":30}' --timeout 120 --backend bwrap --observe-run @CONFIG@/prismpath/agent/runs/eacab2cb-7feb-431a-af7a-82e72d708144 --observe-session eacab2cb-7feb-431a-af7a-82e72d708144 --observe-receipt 4 --observe-image b64f0e29805388f59b45a571bea14aba619d0bb1014b953a11c112d144d14d35 --observe-profile 767dd3c84cbb5ec504548e158571d52e7c217a530b8f43350305e14856010595 -- 'wc -l notes.txt calc.py'"
+    },
+    "tool_response": "@RESPONSE@",
+    "tool_use_id": "toolu_01JUB8RzUTFVLX2RE7p77p4L",
+    "duration_ms": 55
+   }
+  },
+  {
+   "id": "live-11",
+   "input": {
+    "session_id": "@SESSION@",
+    "transcript_path": "@TRANSCRIPT_PATH@",
+    "cwd": "@WS@",
+    "scratchpad_dir": "@SCRATCHPAD_DIR@",
+    "prompt_id": "@PROMPT@",
+    "permission_mode": "acceptEdits",
+    "effort": {
+     "level": "medium"
+    },
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Write",
+    "tool_input": {
+     "file_path": "@WS@/todo.txt",
+     "content": "buy milk\n"
+    },
+    "tool_use_id": "toolu_01RX2BRwiuygQoXim3niX6ar"
+   },
+   "live_answer": "allow",
+   "expect": "allow"
+  },
+  {
+   "id": "live-12",
+   "input": {
+    "session_id": "@SESSION@",
+    "transcript_path": "@TRANSCRIPT_PATH@",
+    "cwd": "@WS@",
+    "scratchpad_dir": "@SCRATCHPAD_DIR@",
+    "prompt_id": "@PROMPT@",
+    "permission_mode": "acceptEdits",
+    "effort": {
+     "level": "medium"
+    },
+    "hook_event_name": "PostToolUse",
+    "tool_name": "Write",
+    "tool_input": {
+     "file_path": "@WS@/todo.txt",
+     "content": "buy milk\n"
+    },
+    "tool_response": "@RESPONSE@",
+    "tool_use_id": "toolu_01RX2BRwiuygQoXim3niX6ar",
+    "duration_ms": 5
+   }
+  },
+  {
+   "id": "live-13",
+   "input": {
+    "session_id": "@SESSION@",
+    "transcript_path": "@TRANSCRIPT_PATH@",
+    "cwd": "@WS@",
+    "scratchpad_dir": "@SCRATCHPAD_DIR@",
+    "prompt_id": "@PROMPT@",
+    "permission_mode": "acceptEdits",
+    "effort": {
+     "level": "medium"
+    },
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Edit",
+    "tool_input": {
+     "file_path": "@WS@/notes.txt",
+     "old_string": "hello",
+     "new_string": "hi",
+     "replace_all": false
+    },
+    "tool_use_id": "toolu_01GXhtZbkR28Az29GaECzZxK"
+   },
+   "live_answer": "allow",
+   "expect": "allow"
+  },
+  {
+   "id": "live-14",
+   "input": {
+    "session_id": "@SESSION@",
+    "transcript_path": "@TRANSCRIPT_PATH@",
+    "cwd": "@WS@",
+    "scratchpad_dir": "@SCRATCHPAD_DIR@",
+    "prompt_id": "@PROMPT@",
+    "permission_mode": "acceptEdits",
+    "effort": {
+     "level": "medium"
+    },
+    "hook_event_name": "PostToolUse",
+    "tool_name": "Edit",
+    "tool_input": {
+     "file_path": "@WS@/notes.txt",
+     "old_string": "hello",
+     "new_string": "hi",
+     "replace_all": false
+    },
+    "tool_response": "@RESPONSE@",
+    "tool_use_id": "toolu_01GXhtZbkR28Az29GaECzZxK",
+    "duration_ms": 5
+   }
+  },
+  {
+   "id": "live-15",
+   "input": {
+    "session_id": "@SESSION@",
+    "transcript_path": "@TRANSCRIPT_PATH@",
+    "cwd": "@WS@",
+    "scratchpad_dir": "@SCRATCHPAD_DIR@",
+    "prompt_id": "@PROMPT@",
+    "permission_mode": "acceptEdits",
+    "effort": {
+     "level": "medium"
+    },
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Read",
+    "tool_input": {
+     "file_path": "/etc/hostname"
+    },
+    "tool_use_id": "toolu_012fsjLdm55tXRcd4Nr6Za2X"
+   },
+   "live_answer": "deny",
+   "expect": "deny"
+  },
+  {
+   "id": "live-16",
+   "input": {
+    "session_id": "@SESSION@",
+    "transcript_path": "@TRANSCRIPT_PATH@",
+    "cwd": "@WS@",
+    "scratchpad_dir": "@SCRATCHPAD_DIR@",
+    "prompt_id": "@PROMPT@",
+    "permission_mode": "acceptEdits",
+    "effort": {
+     "level": "medium"
+    },
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "sed -n 1p notes.txt"
+    },
+    "tool_use_id": "toolu_0162fH5rgmpYZ7nzngJHupTH"
+   },
+   "live_answer": "allow",
+   "expect": "allow"
+  },
+  {
+   "id": "live-17",
+   "input": {
+    "session_id": "@SESSION@",
+    "transcript_path": "@TRANSCRIPT_PATH@",
+    "cwd": "@WS@",
+    "scratchpad_dir": "@SCRATCHPAD_DIR@",
+    "prompt_id": "@PROMPT@",
+    "permission_mode": "acceptEdits",
+    "effort": {
+     "level": "medium"
+    },
+    "hook_event_name": "PostToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "@HOME@/cwprojects/prismpath/.venv/bin/python -I @HOME@/cwprojects/prismpath/prismpath/agent/sandbox_exec.py --workspace @WS@ --cwd @WS@ --profile '{\"format\":\"prismpath.profile/1\",\"host_write\":false,\"max_processes\":64,\"network\":false,\"ro_mounts\":[\"/usr\"],\"rw_path\":\"workspace\",\"timeout_s\":30}' --timeout 120 --backend bwrap --observe-run @CONFIG@/prismpath/agent/runs/eacab2cb-7feb-431a-af7a-82e72d708144 --observe-session eacab2cb-7feb-431a-af7a-82e72d708144 --observe-receipt 8 --observe-image b64f0e29805388f59b45a571bea14aba619d0bb1014b953a11c112d144d14d35 --observe-profile 767dd3c84cbb5ec504548e158571d52e7c217a530b8f43350305e14856010595 -- 'sed -n 1p notes.txt'"
+    },
+    "tool_response": "@RESPONSE@",
+    "tool_use_id": "toolu_0162fH5rgmpYZ7nzngJHupTH",
+    "duration_ms": 61
+   }
+  },
+  {
+   "id": "live-18",
+   "input": {
+    "session_id": "@SESSION@",
+    "transcript_path": "@TRANSCRIPT_PATH@",
+    "cwd": "@WS@",
+    "scratchpad_dir": "@SCRATCHPAD_DIR@",
+    "prompt_id": "@PROMPT@",
+    "hook_event_name": "SessionEnd",
+    "reason": "other"
+   }
+  }
+ ]
+}
