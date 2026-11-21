@@ -1,7 +1,7 @@
 {
  "version": 1,
  "comment": "FROZEN. The cause registry of prismpath.kernel.causes: every row, its hash, the engine stop mapping and the lookups a consumer must answer. prismpath-rs/src/causes.rs is generated from the same registry and prismpath-rs/tests/test_causes.rs replays this file. Appending a row regenerates it.",
- "registry_sha256": "9471482836236670c8986c40dace5b28261f1242cab7cbaecc135e756f07f58e",
+ "registry_sha256": "916930af9874ad921b2211e2281c75a845e2e24acb55790f9a72105817a38f24",
  "registry": [
   {
    "code": 1,
@@ -578,6 +578,12 @@
    "name": "agent:net-refused",
    "class": "routing",
    "description": "an agent connection to a destination that is not the model's own API (a host the classifier reads as other, as an allowed host a starter policy does not list, or cannot read, or a port outside 1 to 65535); refused and not opened, under every starter policy"
+  },
+  {
+   "code": 131,
+   "name": "gateway:request-refused",
+   "class": "routing",
+   "description": "an HTTP request to a resource behind a PrismPath gateway that the gateway's policy refuses, or that the gateway cannot read, decide or receipt (a request it cannot read is never forwarded); answered with a 403 and not forwarded"
   }
  ],
  "engine_stop_to_cause": {

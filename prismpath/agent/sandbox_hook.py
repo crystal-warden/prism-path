@@ -79,6 +79,7 @@ class Nested:
     socket: str
     available: bool = True
     reason: str = ""
+    backend: str = "bwrap"      # the per call sandbox the launcher found to work here: bubblewrap, else Landlock
 
 
 def _sha256_hex(data: bytes) -> str:
@@ -119,13 +120,15 @@ def profile_for(home: Path, image: bytes):
 
 def rewrite_command(command: str, workspace: str, cwd: str, profile, python: Optional[str] = None,
                     timeout_s: Optional[int] = None, observe: Optional[Mapping[str, Any]] = None,
-                    runner: Optional[str] = None) -> str:
+                    runner: Optional[str] = None, backend: Optional[str] = None) -> str:
     """The shell command that runs `command` under the sandbox with `profile`."""
     python = python or sys.executable
     parts = [python, "-I", str(runner or RUNNER), "--workspace", workspace, "--cwd", cwd,
              "--profile", json.dumps(profile.to_object(), sort_keys=True, separators=(",", ":"))]
     if timeout_s is not None:
         parts += ["--timeout", str(int(timeout_s))]
+    if backend:     # nested: the launcher measured which per call sandbox works inside, and the runner holds to it
+        parts += ["--backend", backend]
     if observe:     # where the runner records what the command showed, bound to the call's receipt (observe.py)
         from prismpath.agent import observe as observe_module
         if "socket" in observe:     # nested: the run directory is outside, so the decider records it
@@ -139,14 +142,15 @@ def rewrite_command(command: str, workspace: str, cwd: str, profile, python: Opt
 
 
 def sandbox_input(hook_input: Mapping[str, Any], workspace: str, profile, python: Optional[str] = None,
-                  observe: Optional[Mapping[str, Any]] = None, runner: Optional[str] = None) -> Dict[str, Any]:
+                  observe: Optional[Mapping[str, Any]] = None, runner: Optional[str] = None,
+                  backend: Optional[str] = None) -> Dict[str, Any]:
     """`updatedInput` for an allowed Bash call: the original tool input, whole, with only `command` replaced."""
     tool_input = hook_input.get("tool_input")
     if not isinstance(tool_input, dict) or not isinstance(tool_input.get("command"), str):
         raise SandboxRefused("the Bash call has no command to sandbox")
     cwd = hook_input.get("cwd") if isinstance(hook_input.get("cwd"), str) and hook_input.get("cwd") else workspace
     out = dict(tool_input)
-    out["command"] = rewrite_command(tool_input["command"], workspace, cwd, profile, python, call_timeout_s(tool_input), observe, runner)
+    out["command"] = rewrite_command(tool_input["command"], workspace, cwd, profile, python, call_timeout_s(tool_input), observe, runner, backend)
     return out
 
 

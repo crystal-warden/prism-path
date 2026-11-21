@@ -167,6 +167,9 @@ _REGISTRY: Tuple[Tuple[int, str, str, str], ...] = (
     # -- the egress of the sandboxed agent (prismpath/agent/classifier.py `net_dest`, every starter): a connection the
     # agent asks the proxy to open to anything but the model's own API is refused, so a destination is never reached on a guess.
     (130, "agent:net-refused",           "routing",   "an agent connection to a destination that is not the model's own API (a host the classifier reads as other, as an allowed host a starter policy does not list, or cannot read, or a port outside 1 to 65535); refused and not opened, under every starter policy"),
+    # -- the gateway in front of a resource (prismpath/gateway): an HTTP request to a service behind a PrismPath
+    # gateway that its policy does not allow is refused with a 403, whoever sent it and by whatever client.
+    (131, "gateway:request-refused",     "routing",   "an HTTP request to a resource behind a PrismPath gateway that the gateway's policy refuses, or that the gateway cannot read, decide or receipt (a request it cannot read is never forwarded); answered with a 403 and not forwarded"),
 )
 
 CODES: Dict[int, Tuple[str, str, str]] = {cause_code: (canonical_name, class_name, description)
