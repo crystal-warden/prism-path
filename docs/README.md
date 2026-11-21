@@ -36,7 +36,6 @@ solved routing", "logic as data is a rules engine"), answered with the concessio
 | [operator.md](guides/operator.md) | the operator's day: Mission Control, swap and attest, short lived policy changes that expire by construction, reading the trail |
 | [governed-agent.md](guides/governed-agent.md) | govern Claude Code in ten minutes: `prismpath agent init`, four decisions with their causes and receipts, `status`, `verify` and the tamper demo, and what it does and does not protect |
 | [mission-control-api.md](guides/mission-control-api.md) | the Mission Control API: observe, control, events, prove |
-| [reproduce.md](guides/reproduce.md) | reproducing the formal proofs, differential harnesses, and frozen conformance suites from a fresh clone (`tools/reproduce.sh`) |
 
 ## design/: how and why it is built
 
@@ -67,7 +66,6 @@ committed artifact is [`tools/arch_scorecard.json`](../tools/arch_scorecard.json
 | [supporting-evidence.md](research/supporting-evidence.md) | the results ledger: every claim mapped to a measured result and its provenance, negative results included |
 | [paper-facet-figueroa-quantization.md](research/paper-facet-figueroa-quantization.md) | the Facet paper: Figueroa quantization, the decision sufficient wire, the measurements |
 | [bypass-measurement.md](research/bypass-measurement.md) | the pre registered protocol for measuring the safety floor's bypass rates, with its amendment trail |
-| [README.md](research/README.md) | **the index of research directions**: every direction that is not one of the three things on the front page, its status in the repository's own words, where it lives, and the ledger rows behind it |
 | [LEDGER_STANDARDS.md](research/LEDGER_STANDARDS.md) | the ledger's row schema, dating, versioning, and the fold procedure |
 
 ## What isn't here (and why)

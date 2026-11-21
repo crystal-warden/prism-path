@@ -83,7 +83,7 @@ def main(argv=None) -> int:
     parser.add_argument("--keep", action="store_true", help="keep the scratch directory and say where it is")
     args = parser.parse_args(argv)
     if not tools_present(args.fprime_venv):
-        print("no built PrismPathRef deployment or no F Prime tools venv: see integrations/fprime/README.md")
+        print("no built PrismPathRef deployment or no F Prime tools venv (pass --fprime-venv)")
         return 2
     venv_bin = args.fprime_venv / "bin"
 
