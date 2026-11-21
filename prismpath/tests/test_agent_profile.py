@@ -65,7 +65,7 @@ def test_a_push_to_an_allowed_remote_is_allowed_but_gives_no_network():
     policy = Policy(image("default"))
     reading = {"classifier_version": 2, "net_dest": "none", "proc_class": "none", "command_class": "none", "git_op": "push", "kill_by_pattern": False,
                "path_control": False, "path_glob": False, "path_in_toolchain": False, "path_scope": "none", "path_symlink": False,
-               "path_traversal": False, "remote_class": "allowed", "tool": "git"}
+               "path_traversal": False, "remote_class": "allowed", "tool": "git", "zone_reach": "none"}
     assert policy.decide(policy.reading_bytes(reading)).runs
     assert not compile_profile(image("default")).network
 
