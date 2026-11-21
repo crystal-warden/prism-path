@@ -72,6 +72,10 @@ class Decider:
         server, self._server = self._server, None
         if server is not None:
             try:
+                server.shutdown(socket.SHUT_RDWR)    # wakes the accept loop; close alone leaves it blocked until the join times out
+            except OSError:
+                pass
+            try:
                 server.close()
             except OSError:
                 pass
