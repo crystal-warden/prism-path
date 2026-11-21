@@ -333,13 +333,15 @@ def test_under_the_launcher_the_client_gets_decisions_the_sandbox_cannot_read_th
         return json.loads(text)["hookSpecificOutput"] if text.strip() != "{}" else {}
     assert answer(0)["permissionDecision"] == "allow"
     shell = answer(1)
+    from prismpath.agent import landlock
     from prismpath.tests.test_agent_nested import NESTING
-    if NESTING:
+    per_call = NESTING or landlock.available()
+    if per_call:
         assert shell["permissionDecision"] == "allow" and shell["updatedInput"]["command"].startswith(
             f"{launcher.HOOK_PYTHON} -I {launcher.RUNNER_IN} ")
-    else:   # a host that forbids the nested sandbox: every shell command is refused, never run under the outer one
+    else:   # a host with no per call backend (no nested bwrap, no Landlock): every shell command is refused, never run under the outer one
         assert shell["permissionDecision"] == "deny" and "129" in shell["permissionDecisionReason"]
-    shift = 0 if NESTING else 1     # the 129 refusal writes no receipt, so later receipts are numbered one lower
+    shift = 0 if per_call else 1     # the 129 refusal writes no receipt, so later receipts are numbered one lower
     assert answer(2)["permissionDecision"] == "deny" and f"Receipt {2 - shift} of session ls1" in answer(2)["permissionDecisionReason"]
     assert answer(3)["permissionDecision"] == "deny" and f"Receipt {3 - shift} of session ls1" in answer(3)["permissionDecisionReason"]
     assert json.loads(out["decisions"][4][1]) == {}                                    # SessionEnd sealed the run
