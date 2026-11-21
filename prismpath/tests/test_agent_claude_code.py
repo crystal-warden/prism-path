@@ -128,6 +128,9 @@ def test_tool_mapping(world):
         call = _call(name, {"file_path": "a.txt", "content": "SECRET"}, world).call
         assert call == {"tool": "write_file", "args": {"path": ws + "/a.txt", "content": ""}}   # content is not read
     assert _call("Glob", {"pattern": "*.py", "path": "src"}, world).call == {"tool": "list_dir", "args": {"path": ws + "/src/*.py"}}
+    assert _call("Glob", {"pattern": "~/*"}, world).call == {"tool": "list_dir", "args": {"path": "~/*"}}
+    assert _call("Read", {"file_path": "~/.ssh/config"}, world).call == {"tool": "read_file", "args": {"path": "~/.ssh/config"}}
+    assert _call("Read", {"file_path": "foo/~bar"}, world).call == {"tool": "read_file", "args": {"path": ws + "/foo/~bar"}}
     assert _call("Grep", {"pattern": "a(b", "path": "src"}, world).call == {"tool": "list_dir", "args": {"path": ws + "/src"}}
     assert _call("LS", {"path": "src"}, world).call == {"tool": "list_dir", "args": {"path": ws + "/src"}}
     assert _call("Bash", {"command": "grep -n 'a b' f"}, world).call == {

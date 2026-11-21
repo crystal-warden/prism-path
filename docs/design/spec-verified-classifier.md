@@ -26,6 +26,7 @@ which are read off the disk:
 | `kill_by_pattern`: pkill and killall, a kill not by process id, `xargs kill`, a kill inside the argument of a program that runs programs | whether it passes through a symbolic link (`path_symlink`) |
 | `git_op` and `remote_class`: every subcommand set, the listing forms of tag and branch, the unsafe options, the remote of a push | for a Bash command: whether `cwd` is inside the workspace, whether it is the workspace, and whether a bare word names something in `cwd` |
 | `path_glob`, `path_traversal`, and the syntactic check of a path (non empty, no NUL, at most 4096 characters, else scope `unknown`) | whether it resolves, or normalizes, onto one of the agent's own control files (`path_control`, section 4.3) |
+| a home path (first component `~` or `~user`) is outside the workspace, never expanded, never a glob by itself | |
 | which paths a call names, and how their facts merge (the worst scope, any flag) | |
 | the Claude Code mapping: Read, Write, Edit, MultiEdit, NotebookEdit, Glob, Grep, LS, Bash; the workspace from `CLAUDE_PROJECT_DIR` or `cwd`; relative paths against `cwd`; the `/workspace` spelling | |
 | the MCP mapping: the classifier's own tools and the reference filesystem server's | |
@@ -280,6 +281,20 @@ route. The reading of a host is text, held to the Lean by the differential harne
 trailing and leading dots, userinfo, ports and paths in the host, IP literals in every form, labels at and past their
 limits, non ASCII) and ports (0, 65535, 65536, negatives, past 2 to the 53rd, a bool, a float, a string).
 
+### 4.5 Home paths in the file tools
+
+A path argument of Read, Write, Edit, MultiEdit, NotebookEdit, Glob (path and pattern), Grep and the filesystem
+server's tools whose first component is `~` or `~user` is read as outside the workspace (`path_scope` outside, cause
+111), the same as the Bash scan reads a `~` token. The hook maps such a path to the call as it is written, where it
+used to map it to unknown (asked, cause 124). The classifier never expands `~`, so the rule does not depend on what
+`HOME` is. One rule was chosen, always outside. Reading `~` against `HOME` when `HOME` is inside the workspace would
+make a reading depend on an environment variable that the hook, the sandbox and the tool may not share, and the Bash
+scan already reads `~` as outside with no such exception, so the two cannot disagree. A `~` that is not the first
+component (`foo/~bar`) is an ordinary name. A leading `~` no longer sets `path_glob`, since it is a home path and not
+a pattern, which also lets a write to `~/x` refuse with 111 and not 108. Claude Code's hooks document says it expands
+`~` in `file_path` of Read, Write and Edit before the hook runs, so the hook should not see one there. Its Glob and
+Grep `path` fields are not documented as expanded, and the classifier does not rely on either.
+
 ## 5. What is proven
 
 Every theorem is in `formal/Classifier/Theorems.lean`, builds with no unfinished proof, and depends on the
@@ -298,6 +313,7 @@ standard axioms at most (`Axioms.lean` enforces it at every build).
 | `privilege_unknown`, `url_network`, `workspace_program_mutating` | a privilege program is unknown; a URL in any argument is network (but for privilege, git and workspace programs); a program named by a path outside the system directories is mutating |
 | `classify_traversal` | **a path with a `..` component has path_traversal**: every path a call names with a `..` component gives `path_traversal`, or the unknown scope when the path fails the syntactic check |
 | `classify_glob`, `isGlob_of_char` | **a glob character gives path_glob**, in the same sense |
+| `pathFacts_home`, `classify_home` | **a home path reads as outside the workspace**: a named path whose first component is `~` or `~user` gives scope outside (or unknown when it fails the syntactic check), whatever the disk says and whatever `HOME` is. A `~` that is not the first component is an ordinary name |
 | `path_tool_plan`, `write_plan`, `run_command_plan`, `pathLike_mem` | which paths a call names: a path tool its path; a command that is not git every argument that is not an option, and every argument after `--` |
 | `kill_pkill`, `kill_not_by_pid`, `kill_xargs`, `kill_wrapped`, `argKills_word`, `argKills_inner`, `innerKill_of` | **kill by pattern is detected for every listed form**: pkill or killall by any path; kill whose targets are not all process ids; `xargs ... kill`; a pkill or killall word, or a kill not by process id, inside an argument of a program that runs programs |
 | `killArgsByPid_sound` | a kill read as not by pattern names one or more positive process ids, after at most one signal |
@@ -325,10 +341,10 @@ reading reads a number's value; a call with a lone surrogate reaches it as outsi
 
 The generator writes direct classifier calls, Claude Code hook inputs and MCP params: every program set, path
 spellings of programs, every git subcommand and listing flag, every kill form with Unicode around and inside the
-kill words, URLs, `..`, globs, `/workspace`, quoting of every kind, shell operators, tilde and brace words, non
+kill words, URLs, `..`, globs, home paths (`~`, `~/x`, `~root/x`, `foo/~bar`), `/workspace`, quoting of every kind, shell operators, tilde and brace words, non
 ASCII and control characters, lone surrogates, wrong types, missing and extra keys, long paths and long argvs.
 
-Result: 174 recorded calls, 0 disagreements; 20,000 generated calls (seed 1), 0 disagreements; 100,000 (seed 2),
+Result: 219 recorded calls, 0 disagreements; 20,000 generated calls (seed 1), 0 disagreements; 100,000 (seed 2),
 0 disagreements. The harness was checked to see the Python change: dropping `ls` from `READ_ONLY`, allowing `~`
 in plain words or `!` in quotes, Unicode `\d` in the signal, a Unicode `\b` around pkill, Unicode digits as
 process ids, or a 4097 character path limit each gives disagreements on the 20,000 run, and so does breaking the
