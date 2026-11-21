@@ -34,8 +34,9 @@ class FakeLoader:
         self.calls = []
         self.rc = rc
 
-    def __call__(self, argv, capture_output=True, text=True):
+    def __call__(self, argv, capture_output=True, text=True, env=None):
         self.calls.append(argv)
+        self.env = env
         class LoadResult:
             returncode = self.rc
             stdout = "OK: hot-swapped\n"

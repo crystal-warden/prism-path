@@ -29,9 +29,14 @@ table is a snapshot the owner resolves, and it is signed into the edge with the 
     `other` and `unknown` are never passed even when the image allows them, as the proxy refuses them (`profile-net`).
 
 Scope. The program passes a packet it does not govern. With `sources` given, only packets from those IPv4 addresses are
-decided and every other source (the household) passes untouched; with none, every packet is decided. IPv6, ARP, a
-VLAN tagged frame, a frame with a short IPv4 header and any non IPv4 ethertype PASS in the program and are not decided
-here, so the owner keeps IPv6 off the governed segment or filters it elsewhere. A packet source is an address, not an
+decided and every other source (the household) passes untouched; with none, every packet is decided. The edge is
+CLOSED to what it cannot classify. The table holds IPv4 addresses only (an IPv6 address in the destination table is
+refused), so every IPv6 frame is dropped, as is a VLAN tagged frame (802.1Q or 802.1ad, the tag hides the ethertype),
+any other ethertype and a frame with a cut off or malformed IPv4 header. The program counts each by reason
+(`refused_map`, shown by `loader netstats`) and drops it because the table names a drop node: an observe only table
+passes them, so a mirror attach changes nothing. ARP is the one exception, counted and passed, because a segment
+cannot resolve a neighbour without it and it carries no routable payload. Nothing else is passed undecided. Allowing
+IPv6 destinations needs 128 bit fields the eight register ABI does not have, so it is not offered. A packet source is an address, not an
 identity, so a host that sets another host's address is read as that host.
 
 The table. Four nodes in a fixed order, `edge allow pass drop`, so the `drop` node is index 3 whichever policy compiled
@@ -43,6 +48,11 @@ An address constant is the s32 bit pattern the front end puts in the register (`
 above 128.0.0.0 is a negative constant that net_compile would refuse in a hand written flow (`bit_pattern_constants`).
 An ordering on an address is still refused. Only equality and membership are used on addresses.
 
+The owner's destination table is signed by the owner's authority key (`sign_destinations`, the Ed25519 signing of
+`policy_pack`), and `compile` refuses a table that is unsigned, signed by another key, revoked or edited after signing.
+The signed table travels in the edge directory (`edge.dests.json`), the signed flow names its canonical hash, and every
+check below and the attach gate refuse an edge whose carried table does not verify.
+
 The signed table. The compile writes the table, the names sidecar, the flow it was compiled from and a summary. The
 flow names the SHA-256 of the source image and of the destination table and the governed sources, and `policy_pack`
 signs the table with the flow's own SHA-256 (`flow_sha256`) and the flow's field dictionary in the manifest, so the
@@ -50,10 +60,15 @@ signature covers the image hash by way of the flow. `verify` is the dry run: the
 version floor through `net_swap.preload_swap(dry_run=True)`, then the flow against the manifest, the table recompiled
 from the flow byte for byte, the names file against the flow, optionally the whole projection recompiled from the image
 and destination table, and the loader's own parser (`ppt_image.c`, through `formal/diff/ebpf_batch.c`). It loads nothing.
+`attach` is the first load: the same gates (the pack, the envelope, the version floor, the flow, the recompiled table and
+the signed destination table), then `loader netattach` handed the SHA-256 of the verified table. The loader refuses
+`netattach` and `netupdate` without it, so the table loaded is the table checked.
 
-    net_from_policy.py compile IMAGE DESTS OUT_DIR [--source IPV4 ...]
+    net_from_policy.py sign-dests DESTS --priv KEY --pub KEY [--version N]
+    net_from_policy.py compile IMAGE DESTS OUT_DIR --pub KEY [--source IPV4 ...]
     net_from_policy.py sign OUT_DIR --priv KEY --pub KEY --envelope-id ID --version N
     net_from_policy.py verify OUT_DIR --pub KEY [--envelope BASE] [--state DIR] [--image IMAGE --dests DESTS]
+    net_from_policy.py attach OUT_DIR IFACE --pub KEY [--envelope BASE] [--state DIR] [--loader PATH] [--dry-run]
     net_from_policy.py resolve HOST [HOST ...]       # the owner's one lookup, prints addresses (needs a network)
 """
 from __future__ import annotations
@@ -69,6 +84,7 @@ import struct
 import subprocess
 import sys
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
@@ -85,11 +101,14 @@ from prismpath.agent import classifier  # noqa: E402
 from prismpath.agent.egress_policy import PROXY_CLASSES  # noqa: E402
 from prismpath.agent.policy import Policy  # noqa: E402
 from prismpath.agent.profile import ProfileError, compile_profile  # noqa: E402
+from prismpath import canon  # noqa: E402
 from prismpath.hotswap import policy_pack as pp  # noqa: E402
 from prismpath.kernel import canon2  # noqa: E402
 from prismpath.kernel.parser import parse  # noqa: E402
 
 DEST_FORMAT = "prismpath.net_dests/1"
+DEST_PACK_FORMAT = "prismpath.net_dests_pack/1"   # the detached signed manifest beside a destination table
+DEST_COPY = "edge.dests.json"                     # the signed table an edge directory carries, with its .manifest.json/.sig
 EDGE_PORT = classifier.MODEL_API_PORT
 TCP = 6
 MAX_ADDRESSES_PER_HOST = 16
@@ -179,6 +198,14 @@ class Destinations:
         except json.JSONDecodeError as error:
             raise DestinationError(f"{path} is not JSON: {error}") from None
 
+    @classmethod
+    def load_signed(cls, path, pubkeys: Sequence[str], revoked: frozenset = frozenset()) -> "Destinations":
+        """The table at `path` if the owner's authority key signed it, else DestinationError naming the reason."""
+        reasons, table, _manifest = verify_destinations(path, pubkeys, revoked)
+        if table is None:
+            raise DestinationError(f"{path} is not a table the owner signed: {', '.join(reasons)}")
+        return table
+
     def to_object(self) -> dict:
         obj: dict = {"format": DEST_FORMAT}
         for name in CLASSES:
@@ -202,6 +229,80 @@ class Destinations:
 
     def addresses(self) -> List[int]:
         return sorted({a for name in CLASSES for addresses in getattr(self, name).values() for a in addresses})
+
+
+# ------------------------------------------------------------------ the signed destination table
+def _dest_manifest_paths(path) -> Tuple[str, str]:
+    return str(path) + ".manifest.json", str(path) + ".manifest.sig"
+
+
+def sign_destinations(path, priv_path: str, pub_path: str, version: int = 1) -> dict:
+    """Sign the owner's destination table with the owner's authority key, the Ed25519 signing the policy packs and
+    flow authorizations use (`policy_pack`: canon/2 manifest, `signed_bytes`, `key_id` the key's SHA-256). Writes
+    `<path>.manifest.json` and `<path>.manifest.sig`. The manifest names the SHA-256 of the file's bytes and of the
+    table's canonical form, which is the hash the compiled edge flow carries. A table the edge cannot use is not signed."""
+    destinations = Destinations.load(path)
+    if int(version) < 1:
+        raise ValueError("the version must be a positive integer")
+    _Priv, _Pub, ser, _Inv = pp._ed25519()
+    _pub, key_id = pp.load_public(pub_path)
+    private_key = pp._load_private(priv_path)
+    if pp.sha256_hex(private_key.public_key().public_bytes(ser.Encoding.Raw, ser.PublicFormat.Raw)) != key_id:
+        raise ValueError(f"{priv_path} is not the private half of {pub_path}")
+    manifest = {"format": DEST_PACK_FORMAT, canon.ENCODING_KEY: canon.CANON2,
+                "file_sha256": pp.sha256_hex(Path(path).read_bytes()), "destinations_sha256": destinations.sha256(),
+                "version": int(version), "key_id": key_id,
+                "created": datetime.now(timezone.utc).isoformat(timespec="seconds")}
+    json_path, sig_path = _dest_manifest_paths(path)
+    pp.write_signed_document(json_path, manifest)
+    Path(sig_path).write_bytes(private_key.sign(pp.signed_bytes(manifest)))
+    return manifest
+
+
+def verify_destinations(path, pubkeys: Sequence[str], revoked: frozenset = frozenset()
+                        ) -> Tuple[List[str], Optional["Destinations"], Optional[dict]]:
+    """(reasons, table, manifest) for a signed destination table. The first refusal is the only one reported, in the
+    order a reader asks: is it signed, by a trusted unrevoked key, does the manifest name that key, is the file the one
+    signed, is it a table the edge can use. An unsigned, wrongly signed or edited table gives reasons and no table."""
+    _Priv, _Pub, _ser, InvalidSignature = pp._ed25519()
+    json_path, sig_path = _dest_manifest_paths(path)
+    if not Path(path).is_file() or not Path(json_path).is_file() or not Path(sig_path).is_file():
+        return ["dests:unsigned"], None, None
+    try:
+        manifest = canon.loads_document(Path(json_path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):                       # not canon/2, not JSON, not UTF-8
+        return ["dests:bad-manifest"], None, None
+    if not isinstance(manifest, dict) or manifest.get("format") != DEST_PACK_FORMAT:
+        return ["dests:bad-manifest"], None, None
+    try:
+        payload, signature = pp.signed_bytes(manifest), Path(sig_path).read_bytes()
+    except (canon.CanonicalError, OSError):
+        return ["dests:bad-manifest"], None, manifest
+    signer = None
+    for key_path in pubkeys:
+        public_key, key_id = pp.load_public(key_path)
+        try:
+            public_key.verify(signature, payload)
+            signer = key_id
+            break
+        except InvalidSignature:
+            continue
+    if signer is None:
+        return ["dests:sig-invalid"], None, manifest
+    if signer in revoked:
+        return ["dests:revoked-key"], None, manifest
+    if manifest.get("key_id") != signer:
+        return ["dests:key-id-mismatch"], None, manifest
+    raw = Path(path).read_bytes()
+    if pp.sha256_hex(raw) != manifest.get("file_sha256"):
+        return ["dests:tampered"], None, manifest
+    try:
+        destinations = Destinations.from_object(json.loads(raw.decode("utf-8")))
+    except (DestinationError, ValueError):
+        return ["dests:invalid"], None, manifest
+    if destinations.sha256() != manifest.get("destinations_sha256"):
+        return ["dests:tampered"], None, manifest
+    return [], destinations, manifest
 
 
 def resolve(hosts: Iterable[str], lookup: Callable[[str], Iterable[str]] = None) -> Dict[str, List[str]]:
@@ -353,10 +454,16 @@ def project(image, destinations: Destinations, sources: Sequence[str] = ()) -> E
     return Edge(table, names, flow, image_sha, dests_sha, governed, tuple(allowed), report)
 
 
-def write_edge(out_dir, edge: Edge) -> Dict[str, str]:
-    """Write `edge.ppt`, `edge.names`, `edge.flow.md` and `edge.json` (the summary). Nothing is signed here."""
+def write_edge(out_dir, edge: Edge, signed_destinations: Optional[str] = None) -> Dict[str, str]:
+    """Write `edge.ppt`, `edge.names`, `edge.flow.md` and `edge.json` (the summary). The table itself is signed by `sign`.
+    With `signed_destinations` (the path of the owner's signed table) the table and its manifest and signature are copied
+    in as `edge.dests.json`, so the directory carries the signature the loader's gate checks."""
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
+    if signed_destinations:
+        for source, target in zip((str(signed_destinations), *_dest_manifest_paths(signed_destinations)),
+                                  (DEST_COPY, *_dest_manifest_paths(DEST_COPY))):
+            shutil.copyfile(source, out / target)
     (out / "edge.ppt").write_bytes(edge.ppt)
     (out / "edge.names").write_text(edge.names_text())
     (out / "edge.flow.md").write_text(edge.flow, encoding="utf-8")
@@ -398,14 +505,29 @@ def build_evaluator(out_dir) -> Path:
     return binary
 
 
+ETHERTYPES = {0x0800: "ipv4", 0x86DD: "ipv6", 0x8100: "vlan", 0x88A8: "vlan", 0x0806: "arp"}
+
+
+def refusal(raw: bytes) -> Optional[str]:
+    """Why `ppt_net.bpf.c` does not classify a frame, or None when it reads it: `ipv6`, `vlan` (802.1Q or 802.1ad),
+    `arp`, `ethertype` (any other), `short` (less than an Ethernet header, or an IPv4 header cut off) and `ip-header`
+    (an IPv4 header length below 20). Written from the layouts, independently of the C (`refuse` there counts the same
+    reasons). An enforcing table drops all of these but `arp`, which is counted and passed; an observing one passes all."""
+    if len(raw) < 14:
+        return "short"
+    kind = ETHERTYPES.get(struct.unpack_from("!H", raw, 12)[0], "ethertype")
+    if kind != "ipv4":
+        return kind
+    if len(raw) < 14 + 20:
+        return "short"
+    return "ip-header" if (raw[14] & 0x0F) * 4 < 20 else None
+
+
 def front_end(raw: bytes) -> Optional[Dict[str, int]]:
-    """The reading `ppt_net.bpf.c` builds from a frame, or None where the program passes the frame undecided: not IPv4,
-    a frame shorter than an Ethernet and a minimal IPv4 header, or an IPv4 header length below 20. The rest is
-    `net_cert.canonical_reading`, written independently of the C from the header layouts."""
+    """The reading `ppt_net.bpf.c` builds from a frame, or None where it classifies nothing (`refusal` says why).
+    The rest is `net_cert.canonical_reading`, written independently of the C from the header layouts."""
     import net_cert
-    if len(raw) < 14 + 20 or struct.unpack_from("!H", raw, 12)[0] != 0x0800 or (raw[14] & 0x0F) * 4 < 20:
-        return None
-    return net_cert.canonical_reading(raw)
+    return None if refusal(raw) else net_cert.canonical_reading(raw)
 
 
 def registers(table: bytes, reading: Dict[str, int]) -> bytes:
@@ -439,14 +561,15 @@ def parser_accepts(binary: Path, table: bytes) -> None:
 
 def decide_frames(binary: Path, table: bytes, names: Sequence[str], frames: Sequence[bytes]) -> List[str]:
     """What `ppt_net_prog` does with each frame, by the evaluator's own text: `allow` (the allow node, XDP_PASS),
-    `pass` (the pass node, XDP_PASS), `drop` (XDP_DROP), `unseen` (the program passes the frame before it reads a
-    reading) or `nomatch` (the evaluator matched no edge, which the program passes). Raises when the loader's parser
-    refuses the table."""
+    `pass` (the pass node, XDP_PASS), `drop` (XDP_DROP) or `nomatch` (the evaluator matched no edge, which the program
+    passes). A frame the front end does not classify (`refusal`) is `drop` when the table enforces, that is names a drop
+    node, and `pass` when it only observes, except `arp`, which always passes; Raises when the loader's parser refuses the table."""
     parser_accepts(binary, table)
     cases, order = [], []
+    closed = bool(drop_mask_nodes(names))
     for raw in frames:
         reading = front_end(raw)
-        order.append(reading is not None)
+        order.append(None if reading is not None else refusal(raw))
         if reading is not None:
             cases.append(registers(table, reading))
     data = b"case 0 %d\n%d\n" % (len(cases), len(table)) + table + b"\n"
@@ -458,9 +581,9 @@ def decide_frames(binary: Path, table: bytes, names: Sequence[str], frames: Sequ
         raise ProjectionError(f"the loader's parser or the evaluator refused the table: {line} {done.stderr.decode()[-300:]}")
     masked = set(drop_mask_nodes(names))
     results, answers = [], iter(rows)
-    for seen in order:
-        if not seen:
-            results.append("unseen")
+    for why in order:
+        if why:
+            results.append("pass" if why == "arp" or not closed else "drop")
             continue
         row = next(answers).split()
         if row[0] != "m":
@@ -477,36 +600,22 @@ def parse_flow_header(flow: str) -> Optional[Tuple[str, str]]:
     return (found.group(1), found.group(2)) if found else None
 
 
-def verify(out_dir, pubkeys: Sequence[str], envelope_base: Optional[str] = None, state_dir: Optional[str] = None,
-           image: Optional[bytes] = None, destinations: Optional[Destinations] = None,
-           evaluator: Optional[Path] = None, allow_unsigned: bool = False) -> dict:
-    """Validate an edge directory without loading it: nothing here calls the loader or the kernel.
+def edge_checks(out_dir, pubkeys: Sequence[str], revoked: frozenset = frozenset(), image: Optional[bytes] = None,
+                destinations: Optional[Destinations] = None, allow_unsigned: bool = False) -> Tuple[List[str], dict]:
+    """What an edge directory must be beyond its pack signature (reasons, info), all host side, nothing loaded:
 
-    1. the signed pack, the envelope and the version floor, by `net_swap.preload_swap(dry_run=True)`;
-    2. the flow against the manifest's `flow_sha256`, the table recompiled from the flow (it must be byte for byte
-       the signed table), the names file against the nodes, and the flow's source image hash against `image`;
-    3. with `image` and `destinations`, the whole projection recompiled and compared;
-    4. the loader's own parser (`ppt_image.c`) on the table, through the evaluator.
-    Returns {"ok", "reasons", ...}; a reason is a short code."""
+    * the flow against the manifest's `flow_sha256`, the table recompiled from the flow (byte for byte the signed
+      table), the names file against the nodes, and the flow's source image hash against `image`;
+    * the destination table the directory carries (`edge.dests.json`) signed by the owner's authority key, its canonical
+      hash the one the signed flow names, and, with `destinations`, the same as the one given;
+    * with `image`, the whole projection recompiled from the image and the carried table, compared with the table."""
     out = Path(out_dir)
     ppt_path, reasons, info = out / "edge.ppt", [], {}
     try:
         table, flow = ppt_path.read_bytes(), (out / "edge.flow.md").read_text(encoding="utf-8")
         names_text = (out / "edge.names").read_text()
     except OSError as error:
-        return {"ok": False, "reasons": [f"edge:unreadable:{error.errno}"]}
-    if state_dir is None:
-        import tempfile
-        state_dir = tempfile.mkdtemp(prefix="net-edge-dry-run-")
-    try:
-        gate = net_swap.preload_swap(str(ppt_path), "dry-run", list(pubkeys), envelope_base, state_dir,
-                                     allow_unsigned=allow_unsigned, dry_run=True)
-    except RuntimeError as error:                       # no `cryptography`: loud absence
-        return {"ok": False, "reasons": [f"signing:unavailable:{error}"]}
-    if not gate["ok"]:
-        reasons.extend(gate["reasons"])
-    else:
-        info.update({"version": gate.get("version"), "unsigned": gate.get("unsigned")})
+        return [f"edge:unreadable:{error.errno}"], info
     if not allow_unsigned:
         manifest = _manifest(ppt_path)
         if manifest is None or manifest.get("flow_sha256") != pp.sha256_hex(flow.encode("utf-8")):
@@ -527,17 +636,83 @@ def verify(out_dir, pubkeys: Sequence[str], envelope_base: Optional[str] = None,
         info["source_image_sha256"], info["destinations_sha256"] = header
         if image is not None and image_sha256(image) != header[0]:
             reasons.append("image:not-the-source")
-        if destinations is not None and destinations.sha256() != header[1]:
+    dest_reasons, carried, dest_manifest = verify_destinations(out / DEST_COPY, pubkeys, revoked)
+    reasons.extend(dest_reasons)
+    if carried is not None:
+        info["destinations_key_id"] = dest_manifest.get("key_id")
+        if header is not None and carried.sha256() != header[1]:
+            reasons.append("destinations:not-the-flows")
+        if destinations is not None and destinations.sha256() != carried.sha256():
             reasons.append("destinations:not-the-source")
-    if image is not None and destinations is not None and not reasons:
-        sources = [address_text(a) for a in _flow_sources(flow)]
+    if image is not None and carried is not None and not reasons:
         try:
-            again = project(image, destinations, sources)
+            again = project(image, carried, [address_text(a) for a in _flow_sources(flow)])
         except (ProjectionError, DestinationError) as error:
             reasons.append(f"projection:{type(error).__name__}")
         else:
             if again.ppt != table:
                 reasons.append("table:not-the-projection-of-the-image")
+    return reasons, info
+
+
+def edge_check(out_dir, pubkeys: Sequence[str], revoked_path: Optional[str] = None, ppt_path: Optional[str] = None
+               ) -> Callable[[bytes], List[str]]:
+    """`net_swap.preload_swap`'s `extra_checks` entry for an edge directory: the table about to be loaded must be the
+    directory's `edge.ppt`, and `edge_checks` must find nothing wrong with it, the signed destination table included."""
+    def check(image: bytes) -> List[str]:
+        if image != (Path(out_dir) / "edge.ppt").read_bytes():
+            return ["edge:not-the-directorys-table"]
+        return edge_checks(out_dir, pubkeys, pp.load_revoked(revoked_path))[0]
+    return check
+
+
+def attach(out_dir, iface: str, pubkeys: Sequence[str], envelope_base: Optional[str] = None, state_dir: Optional[str] = None,
+           revoked_path: Optional[str] = None, loader: str = "./loader", run: Callable = subprocess.run,
+           dry_run: bool = False) -> dict:
+    """The first attach of an edge directory: the pack signature, the envelope and the version floor, the flow, the table
+    recompiled from it and the owner's signed destination table (`edge_checks`), and only then `loader netattach` with the
+    SHA-256 of the verified table, which the loader insists on. Anything else loads nothing. `dry_run` stops before the
+    loader."""
+    if state_dir is None:
+        import tempfile
+        state_dir = tempfile.mkdtemp(prefix="net-edge-attach-")
+    out = Path(out_dir)
+    return net_swap.preload_swap(str(out / "edge.ppt"), iface, list(pubkeys), envelope_base, state_dir,
+                                 revoked_path=revoked_path, loader=loader, run=run, dry_run=dry_run, action="attach",
+                                 names_path=str(out / "edge.names"),
+                                 extra_checks=[edge_check(out, pubkeys, revoked_path)])
+
+
+def verify(out_dir, pubkeys: Sequence[str], envelope_base: Optional[str] = None, state_dir: Optional[str] = None,
+           image: Optional[bytes] = None, destinations: Optional[Destinations] = None,
+           evaluator: Optional[Path] = None, allow_unsigned: bool = False, revoked_path: Optional[str] = None) -> dict:
+    """Validate an edge directory without loading it: nothing here calls the loader or the kernel.
+
+    1. the signed pack, the envelope and the version floor, by `net_swap.preload_swap(dry_run=True)`;
+    2. `edge_checks`: the flow, the recompiled table, the names, the source image and the owner's signed destination table;
+    3. the loader's own parser (`ppt_image.c`) on the table, through the evaluator.
+    Returns {"ok", "reasons", ...}; a reason is a short code."""
+    out = Path(out_dir)
+    ppt_path, reasons, info = out / "edge.ppt", [], {}
+    try:
+        table = ppt_path.read_bytes()
+    except OSError as error:
+        return {"ok": False, "reasons": [f"edge:unreadable:{error.errno}"]}
+    if state_dir is None:
+        import tempfile
+        state_dir = tempfile.mkdtemp(prefix="net-edge-dry-run-")
+    try:
+        gate = net_swap.preload_swap(str(ppt_path), "dry-run", list(pubkeys), envelope_base, state_dir,
+                                     allow_unsigned=allow_unsigned, revoked_path=revoked_path, dry_run=True)
+    except RuntimeError as error:                       # no `cryptography`: loud absence
+        return {"ok": False, "reasons": [f"signing:unavailable:{error}"]}
+    if not gate["ok"]:
+        reasons.extend(gate["reasons"])
+    else:
+        info.update({"version": gate.get("version"), "unsigned": gate.get("unsigned")})
+    found, more = edge_checks(out, pubkeys, pp.load_revoked(revoked_path), image, destinations, allow_unsigned)
+    reasons.extend(found)
+    info.update(more)
     try:
         binary = evaluator or build_evaluator(Path(state_dir) / "build")
         parser_accepts(binary, table)
@@ -567,9 +742,16 @@ def main(argv=None) -> int:
     sub = ap.add_subparsers(dest="verb", required=True)
     c = sub.add_parser("compile")
     c.add_argument("image")
-    c.add_argument("dests")
+    c.add_argument("dests", help="the owner's destination table, signed by `sign-dests`; an unsigned or edited one is refused")
     c.add_argument("out")
+    c.add_argument("--pub", nargs="+", required=True, help="the owner's authority public key(s) the table must be signed by")
+    c.add_argument("--revoked", help="revocation list JSON")
     c.add_argument("--source", action="append", default=[], help="a governed IPv4 source (repeat); none = every source")
+    sd = sub.add_parser("sign-dests")
+    sd.add_argument("dests")
+    sd.add_argument("--priv", required=True)
+    sd.add_argument("--pub", required=True)
+    sd.add_argument("--version", type=int, default=1)
     s = sub.add_parser("sign")
     s.add_argument("out")
     s.add_argument("--priv", required=True)
@@ -584,13 +766,31 @@ def main(argv=None) -> int:
     v.add_argument("--state")
     v.add_argument("--image")
     v.add_argument("--dests")
+    v.add_argument("--revoked")
+    a = sub.add_parser("attach")
+    a.add_argument("out")
+    a.add_argument("iface")
+    a.add_argument("--pub", nargs="+", required=True)
+    a.add_argument("--envelope")
+    a.add_argument("--state")
+    a.add_argument("--revoked")
+    a.add_argument("--loader", default="./loader")
+    a.add_argument("--dry-run", action="store_true")
     r = sub.add_parser("resolve")
     r.add_argument("hosts", nargs="+")
     args = ap.parse_args(argv)
     try:
         if args.verb == "compile":
-            edge = project(Path(args.image).read_bytes(), Destinations.load(args.dests), args.source)
-            print(json.dumps({"written": write_edge(args.out, edge), "report": edge.report}, indent=1))
+            revoked = pp.load_revoked(args.revoked)
+            edge = project(Path(args.image).read_bytes(), Destinations.load_signed(args.dests, args.pub, revoked), args.source)
+            print(json.dumps({"written": write_edge(args.out, edge, args.dests), "report": edge.report}, indent=1))
+        elif args.verb == "sign-dests":
+            manifest = sign_destinations(args.dests, args.priv, args.pub, args.version)
+            print(json.dumps({"destinations_sha256": manifest["destinations_sha256"], "key_id": manifest["key_id"]}, indent=1))
+        elif args.verb == "attach":
+            result = attach(args.out, args.iface, args.pub, args.envelope, args.state, args.revoked, args.loader, dry_run=args.dry_run)
+            print(json.dumps(result, indent=1))
+            return 0 if result.get("ok") else 1
         elif args.verb == "sign":
             manifest = sign(args.out, args.priv, args.pub, args.envelope_id, args.version, args.envelope_dir)
             print(json.dumps({"image_sha256": manifest["image_sha256"], "flow_sha256": manifest["flow_sha256"],
@@ -598,7 +798,8 @@ def main(argv=None) -> int:
         elif args.verb == "verify":
             image = Policy(Path(args.image).read_bytes()) if args.image else None
             dests = Destinations.load(args.dests) if args.dests else None
-            result = verify(args.out, args.pub, args.envelope, args.state, image.image if image else None, dests)
+            result = verify(args.out, args.pub, args.envelope, args.state, image.image if image else None, dests,
+                            revoked_path=args.revoked)
             print(json.dumps(result, indent=1))
             return 0 if result["ok"] else 1
         else:
