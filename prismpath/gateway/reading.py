@@ -26,9 +26,9 @@ The route table is the owner's. `{"routes": [{"match": "/admin/*", "class": "adm
 that matches wins; `/x/*` matches `/x` and everything below it, and an entry without `*` matches that path only.
 Matching ignores case, since many servers do. A path no entry matches is `other`.
 
-Grants are not built yet (package R5): a request without the grant header reads `none`, and any request that
-carries one reads `invalid`, since nothing here can verify a signed grant. `valid` and `expired` are in the
-reading so a policy can be written against them now.
+The grant is read by grants.py against the gateway's authority key, policy and revocation list, and covers a
+path class and a method class. Without a verifier (a reading taken outside a gateway) a request with the grant
+header reads `invalid`, since nothing can verify it.
 """
 from __future__ import annotations
 
@@ -168,7 +168,7 @@ def body_class(length: Optional[int]) -> str:
 
 
 def grant_state(values: Sequence[str]) -> str:
-    """STUB (package R5): none without the header, invalid with it, since no grant can be verified yet."""
+    """The grant of a request read without a verifier: none without the header, invalid with it."""
     return "none" if not values else "invalid"
 
 
@@ -178,11 +178,24 @@ UNREADABLE: Dict[str, object] = {
 
 
 def read_request(method: Optional[str], target: Optional[str], headers: Mapping[str, Sequence[str]],
-                 routes: Routes, body_length: Optional[int]) -> Dict[str, object]:
+                 routes: Routes, body_length: Optional[int], grants=None) -> Dict[str, object]:
     """The reading of a request. `headers` maps a lower case name to every value sent under it; `body_length` is
-    the length of the body the proxy actually holds (None when it could not take it)."""
+    the length of the body the proxy actually holds (None when it could not take it); `grants` is the gateway's
+    grants.Verifier, or None."""
+    return read(method, target, headers, routes, body_length, grants)[0]
+
+
+def read(method: Optional[str], target: Optional[str], headers: Mapping[str, Sequence[str]],
+         routes: Routes, body_length: Optional[int], grants=None) -> Tuple[Dict[str, object], Optional[Dict[str, str]]]:
+    """(reading, grant record) of a request; the record is what the receipt's journal line keeps of the grant."""
     path, query = split_target(target)
-    return {"http_reading_version": READING_VERSION, "method_class": method_class(method),
-            "path_class": "unknown" if path is None else routes.classify(path),
-            "body_class": body_class(body_length), "content_class": content_class(headers.get("content-type", ())),
-            "query": query, "grant": grant_state(headers.get(GRANT_HEADER.lower(), ()))}
+    methods = method_class(method)
+    paths = "unknown" if path is None else routes.classify(path)
+    values = headers.get(GRANT_HEADER.lower(), ())
+    if grants is None:
+        grant, record = grant_state(values), None
+    else:
+        grant, record = grants.read(values, paths, methods)
+    return ({"http_reading_version": READING_VERSION, "method_class": methods, "path_class": paths,
+             "body_class": body_class(body_length), "content_class": content_class(headers.get("content-type", ())),
+             "query": query, "grant": grant}, record)
