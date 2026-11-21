@@ -24,18 +24,33 @@ FAKE = Path(__file__).resolve().parent / "fixtures" / "mcp_fake_server.py"
 RULES = policymod.POLICY_PATH          # agent_rules: unknown refuses (104), a push escalates (113)
 
 
+def make_home(path, policy=RULES):
+    """An agent directory as `agent init` leaves it: both key pairs, and `policy` recorded with its attestation."""
+    from prismpath.agent import commands
+    commands._make_dir(path)
+    for role in commands.KEY_ROLES:
+        commands._ensure_key(path, role)
+    image = policymod.Policy.load(policy).image
+    (path / commands.POLICY_FILE).write_bytes(image)
+    (path / commands.ATTESTATION_FILE).write_bytes(commands._attestation(path, image))
+    return path
+
+
 class Client:
     """The proxy as a child process, with its answers collected by id."""
 
-    def __init__(self, tmp_path, policy=RULES, session="s1", keys=None):
+    def __init__(self, tmp_path, policy=RULES, session="s1", keys=None, home=None, explicit=False):
+        home = home or make_home(tmp_path / "agenthome", policy)
         self.log = tmp_path / "server"
         self.log.mkdir(exist_ok=True)
         self.workspace = tmp_path / "ws"
         self.workspace.mkdir(exist_ok=True)
         self.runs, self.session = tmp_path / "runs", session
         env = dict(os.environ, PYTHONPATH=str(ROOT) + os.pathsep + os.environ.get("PYTHONPATH", ""))
-        cmd = [sys.executable, "-m", "prismpath.agent.mcp_proxy", "--policy", str(policy), "--runs", str(self.runs),
+        cmd = [sys.executable, "-m", "prismpath.agent.mcp_proxy", "--home", str(home), "--runs", str(self.runs),
                "--session", session, "--workspace", str(self.workspace)]
+        if explicit:
+            cmd += ["--policy", str(policy)]
         if keys is not None:
             cmd += ["--keys", str(keys)]
         cmd += ["--", sys.executable, str(FAKE), str(self.log)]
@@ -149,10 +164,7 @@ def test_a_proxy_answer_carries_result_type_in_the_2026_era(client):
     client.close()
 
 
-def test_a_policy_that_does_not_load_refuses_every_call_and_relays_the_rest(tmp_path):
-    bad = tmp_path / "bad.core.json"
-    bad.write_bytes(b'{"format": "not a policy"}')
-    c = Client(tmp_path, policy=bad)
+def _refused_everything(c):
     try:
         c.send_bytes(INIT)
         assert c.recv()["id"] == 0
@@ -162,13 +174,33 @@ def test_a_policy_that_does_not_load_refuses_every_call_and_relays_the_rest(tmp_
     finally:
         c.close()
     assert c.calls() == []
-    (tmp_path / "m").mkdir()
-    missing = Client(tmp_path / "m", policy=tmp_path / "absent.core.json")
+
+
+def test_no_recorded_policy_refuses_every_call_and_relays_the_rest(tmp_path):
+    _refused_everything(Client(tmp_path, home=tmp_path / "empty"))
+
+
+def test_a_policy_that_does_not_verify_refuses_every_call(tmp_path):
+    home = make_home(tmp_path / "agenthome")
+    from prismpath.agent import commands
+    image = (home / commands.POLICY_FILE).read_bytes()
+    (home / commands.POLICY_FILE).write_bytes(image + b" ")     # no longer the attested bytes
+    _refused_everything(Client(tmp_path, home=home))
+
+
+def test_an_explicit_policy_that_is_not_the_recorded_one_is_refused(tmp_path):
+    other = policymod.HERE / "policy" / "agent_default.core.json"
+    assert policymod.Policy.load(other).image != policymod.Policy.load(RULES).image
+    _refused_everything(Client(tmp_path, policy=other, home=make_home(tmp_path / "agenthome", RULES), explicit=True))
+
+
+def test_an_explicit_policy_that_is_the_recorded_one_is_used(tmp_path):
+    c = Client(tmp_path, explicit=True)
     try:
-        assert "the policy could not be loaded" in _text(missing.call(1, "list_dir", {"path": "."}))
+        assert c.call(1, "list_dir", {"path": "."})["result"].get("isError") is not True
+        assert c.call(2, "read_file", {"path": "/etc/passwd"})["result"]["isError"] is True
     finally:
-        missing.close()
-    assert missing.calls() == []
+        c.close()
 
 
 def test_receipts_are_in_the_run_and_it_verifies_with_both_keys_pinned(tmp_path):
@@ -275,7 +307,7 @@ def test_a_batch_is_split_into_what_runs_and_what_is_withheld(client):
 
 # ------------------------------------------------------------------ in process: receipts fail closed
 def _proxy(tmp_path, run_append=None):
-    gov = mcp_proxy.Governor(RULES, tmp_path / "runs", "s", tmp_path, str(tmp_path))
+    gov = mcp_proxy.Governor(make_home(tmp_path / "agenthome"), tmp_path / "runs", "s", tmp_path, str(tmp_path))
     if run_append is not None:
         gov.run.append = run_append
     child, out = io.BytesIO(), io.BytesIO()
@@ -301,16 +333,13 @@ def test_a_decision_failure_refuses(tmp_path, monkeypatch):
 
 def test_a_run_that_cannot_be_opened_refuses(tmp_path):
     RunStore(tmp_path / "runs").open("s", b"another image")
-    gov = mcp_proxy.Governor(RULES, tmp_path / "runs", "s", tmp_path, str(tmp_path))
+    gov = mcp_proxy.Governor(make_home(tmp_path / "agenthome"), tmp_path / "runs", "s", tmp_path, str(tmp_path))
     assert gov.failure and "run could not be opened" in gov.failure
     assert gov.decide({"name": "list_dir", "arguments": {}}).kind == "refuse"
 
 
-def test_the_default_policy_is_agent_default_when_shipped_else_agent_rules():
-    path = mcp_proxy.default_policy_path()
-    shipped = policymod.HERE / "policy" / "agent_default.core.json"
-    assert path == (shipped if shipped.exists() else policymod.POLICY_PATH)
-    policymod.Policy.load(path)
+def test_the_proxy_has_no_unattested_default_policy():
+    assert not hasattr(mcp_proxy, "default_policy_path")
 
 
 # ------------------------------------------------------------------ the mapping
