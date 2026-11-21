@@ -8,6 +8,10 @@ spec stable.
 
 ## [Unreleased]
 
+### Fixed: file tool paths that start with `~` refuse as outside the workspace (2026-11-20)
+
+- **A path whose first component is `~` or `~user` reads as outside the workspace** for Read, Write, Edit, MultiEdit, NotebookEdit, Glob, Grep and the filesystem server's tools, so the agent's own Read of `~/.ssh/config` refuses with cause 111 where it was asked with 124. The rule is always outside, whatever `HOME` is, as the Bash scan already reads it. A `~` that is not the first component is an ordinary name, and a leading `~` no longer sets `path_glob`. Proved in Lean (`pathFacts_home`, `classify_home`), covered by the oracle, the differential harness and four recorded hook inputs.
+
 ### Added: the compile and the egress proxy read the policy (2026-11-20)
 
 - **`compile_profile(image, role)` takes a role, `bash` or `agent`.** The agent role derives `net` from the allow set (`proxy_model` when an allowed connect reads `model_api`, `proxy_allow` when one reads `allowed_host`, `none` otherwise) and keeps the fixed mounts. A profile that carries `net` is `prismpath.profile/2`; one with none (the bash role, and the starters' profile, hash 767dd3c8) keeps its `prismpath.profile/1` bytes.

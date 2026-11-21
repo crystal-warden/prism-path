@@ -91,7 +91,8 @@ def absolute (raw : Option J) (cwd : Str) : Option Str :=
   match raw with
   | some (.str s) =>
     let r := s.toList
-    if r.isEmpty || startsWith r (lit "~") then none
+    if r.isEmpty then none
+    else if startsWith r (lit "~") then some r
     else if startsWith r (lit "/") then some (spell r)
     else some (spell (join cwd r))
   | _ => none
@@ -181,8 +182,9 @@ where
       match get? ti "pattern" with
       | some (.str ps) =>
         let pat := ps.toList
-        if pat.isEmpty || startsWith pat (lit "~") then unknownCall
-        else pathCall "list_dir" (if startsWith pat (lit "/") then spell pat else rstripSlash baseAbs ++ ['/'] ++ pat)
+        if pat.isEmpty then unknownCall
+        else pathCall "list_dir" (if startsWith pat (lit "~") then pat
+          else if startsWith pat (lit "/") then spell pat else rstripSlash baseAbs ++ ['/'] ++ pat)
       | _ => unknownCall
     else pathCall "list_dir" baseAbs
 
@@ -262,7 +264,8 @@ def mcpHostPath (raw : Option J) (serverCwd : Str) : Option Str :=
   match raw with
   | some (.str s) =>
     let r := s.toList
-    if r.isEmpty || startsWith r (lit "~") then none
+    if r.isEmpty then none
+    else if startsWith r (lit "~") then some r
     else if startsWith r (lit "/") then some (spell r)
     else some (spell (join serverCwd r))
   | _ => none
