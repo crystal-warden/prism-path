@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
-"""The decider of `prismpath agent run` (agent-sandbox-plan, section 4 and WP5).
+"""The decider of `prismpath agent run`.
 
 It runs in the launcher process, outside the sandbox, on a unix socket the launcher binds into the sandbox. The
 thin hook client inside (`hook_client.py`) sends it one hook input per connection and reads one answer. The
@@ -13,7 +13,7 @@ inside the outer sandbox, so the decider is given a `sandbox_hook.Nested`: the r
 and a runner the launcher bound read only, the per call sandbox runs nested in the outer one with the bash role
 profile, and the receipt carries that profile's hash. The runner reports what the command showed over this same
 socket (`observe.send`), because the run directory is outside. Where nesting is unavailable the answer is a deny with
-cause 129 (WP8).
+cause 129.
 
 Bounds. One request is read to EOF within `read_timeout_s` and at most `max_input` bytes, else it is answered
 with a deny and nothing is decided. At most `max_connections` are served at once and decisions are taken one at
@@ -71,6 +71,10 @@ class Decider:
         self._closed = True
         server, self._server = self._server, None
         if server is not None:
+            try:
+                server.shutdown(socket.SHUT_RDWR)    # wakes the accept loop; close alone leaves it blocked until the join times out
+            except OSError:
+                pass
             try:
                 server.close()
             except OSError:

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
-"""The Landlock backend of the per call sandbox (agent-sandbox-plan, sections 4 to 6): the same profile, applied by the
+"""The Landlock backend of the per call sandbox: the same profile, applied by the
 kernel to one process instead of by a mount namespace.
 
 Why it exists. bubblewrap needs a user namespace, and on Ubuntu 24.04 an AppArmor setting forbids a bwrap inside a bwrap,

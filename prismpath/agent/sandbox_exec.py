@@ -58,7 +58,7 @@ MODEL_SOCKET_IN = "/tmp/.pp-model.sock"     # the fixed local model route's sock
 PROXY_SOCKET_IN = "/tmp/.pp-egress.sock"    # where the proxy's unix socket appears inside; a bind mount cannot be unlinked from inside
 RELAY = "/usr/bin/socat"
 SHELL = "/usr/bin/bash"
-BACKENDS = ("bwrap", "landlock")        # in the order the runner prefers them (agent-sandbox-plan, section 6)
+BACKENDS = ("bwrap", "landlock")        # in the order the runner prefers them
 
 
 class SandboxUnavailable(RuntimeError):

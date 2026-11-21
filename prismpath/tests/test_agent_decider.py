@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
-"""The decider and the thin hook client (agent-sandbox-plan, WP5).
+"""The decider and the thin hook client.
 
 Host side: every recorded hook input goes through the client and a decider and gets the answer and the receipt
 that `prismpath agent hook` gives, The client fails closed, and the

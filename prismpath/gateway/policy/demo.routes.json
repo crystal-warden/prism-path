@@ -1,0 +1,4 @@
+{"routes": [
+  {"match": "/admin/*", "class": "admin"},
+  {"match": "/api/orders/*", "class": "orders"}
+]}

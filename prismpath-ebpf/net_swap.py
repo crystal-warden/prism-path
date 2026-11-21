@@ -47,10 +47,11 @@ def _write_version(path: str, v: int) -> None:
 
 def preload_swap(ppt_path: str, iface: str, pubkey_paths: List[str], envelope_base: Optional[str],
                  state_dir: str, *, allow_unsigned: bool = False, revoked_path: Optional[str] = None,
-                 loader: str = "./loader", run: Callable = subprocess.run) -> dict:
+                 loader: str = "./loader", run: Callable = subprocess.run, dry_run: bool = False) -> dict:
     """Verify (sig -> envelope -> version) on the host, then exec `loader <ppt> netupdate <iface>`.
     Returns {ok, ...}; the kernel loader is reached only on full verification success. Every
-    outcome is one audit row."""
+    outcome is one audit row. `dry_run` runs every gate and stops where the loader would be called: no
+    loader, no kernel, no version floor written, and one `swap_dry_run` audit row."""
     os.makedirs(state_dir, exist_ok=True)
     audit = AuditLog(os.path.join(state_dir, "net_swaps.log"))
     vpath = os.path.join(state_dir, "active_version")
@@ -87,6 +88,11 @@ def preload_swap(ppt_path: str, iface: str, pubkey_paths: List[str], envelope_ba
         if version <= stored:
             return _reject(audit, to_hash, [f"version:not-monotonic:{version}<={stored}"])
 
+    if dry_run:
+        audit.append("net_swap", "swap_dry_run", {"to_hash": to_hash, "version": version, "key_id": key_id,
+                                                  "unsigned": unsigned, "iface": iface, "result": "verified"})
+        return {"ok": True, "dry_run": True, "active": to_hash, "version": version, "unsigned": unsigned}
+
     # Verified. Now, and only now, touch the kernel.
     r = run([loader, ppt_path, "netupdate", iface], capture_output=True, text=True)
     if r.returncode != 0:
@@ -118,11 +124,13 @@ def main(argv=None) -> int:
     ap.add_argument("--revoked", help="revocation list JSON")
     ap.add_argument("--loader", default="./loader", help="path to the kernel loader binary")
     ap.add_argument("--allow-unsigned", dest="allow_unsigned", action="store_true")
+    ap.add_argument("--dry-run", dest="dry_run", action="store_true",
+                    help="run every gate, then stop before the loader (nothing is loaded or recorded as active)")
     args = ap.parse_args(argv)
     try:
         res = preload_swap(args.ppt, args.iface, args.pub, args.envelope, args.state,
                            allow_unsigned=args.allow_unsigned, revoked_path=args.revoked,
-                           loader=args.loader)
+                           loader=args.loader, dry_run=args.dry_run)
     except RuntimeError as e:                              # loud absence (no cryptography)
         print(str(e), file=sys.stderr)
         return 2

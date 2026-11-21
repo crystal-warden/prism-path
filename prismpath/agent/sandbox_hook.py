@@ -9,7 +9,7 @@ The hook decides a call under the active attested image. For an allowed Bash cal
      a cache entry is used only when it parses, names this image and its profile hashes to the hash it records,
      and is otherwise recompiled;
   2. answers `allow` with `updatedInput`, the whole tool input with `command` replaced by a command that runs the
-     original under `prismpath/agent/sandbox_exec.py` (docs/design/hook-rewrite-note.md: `updatedInput` replaces the
+     original under `prismpath/agent/sandbox_exec.py` (`updatedInput` replaces the
      whole object, so every other field is carried over unchanged);
   3. returns the profile's hash for the receipt.
 
@@ -68,8 +68,7 @@ class SandboxRefused(Exception):
 
 @dataclass(frozen=True)
 class Nested:
-    """Where the per call sandbox runs: inside the outer agent sandbox of `prismpath agent run` (agent-sandbox-plan,
-    section 4 and WP8). The host interpreter and the host checkout do not exist there, so the rewrite names the
+    """Where the per call sandbox runs: inside the outer agent sandbox of `prismpath agent run`. The host interpreter and the host checkout do not exist there, so the rewrite names the
     system interpreter (under the read only system prefix) and a runner that the launcher bound read only, and the
     runner reaches the launcher's decider over `socket` to record what the command showed. `available` is what the
     launcher measured at start by running this very runner nested once; when it is false every shell command is

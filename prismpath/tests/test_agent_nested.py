@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
-"""WP8 of docs/design/agent-sandbox-plan.md: the per call sandbox nested inside the outer agent sandbox, and the
+"""The per call sandbox nested inside the outer agent sandbox, and the
 table of section 4, where the hook, the per call sandbox and the outer sandbox can disagree.
 
 Under `prismpath agent run` a stand-in program plays Claude Code. It runs the staged hook command for each recorded
@@ -11,7 +11,7 @@ the credential is a fake file this test writes. Paths the sandbox must see are u
 The stricter layer wins, and each case that the inner layer stops is recorded as an observation bound to the
 receipt. One case is a known gap that no layer closes yet: the agent's own file tool can read the staged model
 credential, because the outer sandbox mounts it for the agent itself. `KNOWN_GAP_CREDENTIAL_READ` says so, and the test
-asserts the gap is there. A later fix (agent-sandbox-plan, section 2.3 and question 1) must flip it, and the test
+asserts the gap is there. A later fix must flip it, and the test
 then fails until the constant and the plan change with it."""
 import hashlib
 import json
@@ -63,7 +63,7 @@ SANDBOX_CODE = causes.code("agent:sandbox-unavailable")
 CREDENTIAL_TEXT = "FAKE-CREDENTIAL-NOT-A-KEY"
 CREDENTIAL_IN = f"{launcher.CONFIG_IN}/{launcher.CREDENTIAL_NAME}"
 
-# The known gap of agent-sandbox-plan section 4 and question 1. True while the outer sandbox mounts the model
+# The known gap. True while the outer sandbox mounts the model
 # credential for the agent's own use, so the agent's own Read tool can read it and only the hook stops that call.
 KNOWN_GAP_CREDENTIAL_READ = True
 
@@ -294,7 +294,7 @@ def test_a_profile_that_shows_the_host_is_refused_nested_because_the_view_would_
 @needs_bwrap
 @needs_socat
 def test_the_disagreement_table_the_stricter_layer_wins_and_the_known_gap_is_asserted(arena):
-    """Each row of agent-sandbox-plan section 4, run under the launcher with the stand-in playing Claude Code."""
+    """Each row of the disagreement table, run under the launcher with the stand-in playing Claude Code."""
     sess = "table"
     ws, ssh = arena["ws"], arena["ssh"]
     steps = _launch(arena, [
@@ -333,7 +333,7 @@ def test_the_disagreement_table_the_stricter_layer_wins_and_the_known_gap_is_ass
     gap = by["read-credential"]["direct_read"] == f"read: {CREDENTIAL_TEXT}"
     assert gap is KNOWN_GAP_CREDENTIAL_READ, (
         "the outer sandbox no longer lets the agent's own file tool read the staged credential: the known gap is "
-        "closed, so flip KNOWN_GAP_CREDENTIAL_READ and update section 4 of docs/design/agent-sandbox-plan.md")
+        "closed, so flip KNOWN_GAP_CREDENTIAL_READ")
     if not NESTING and not landlock.available():
         # a host with no per call backend (no nested bwrap, no Landlock): every shell row is refused with cause 129, never run under the outer
         # profile alone, and the run still verifies; the file tool rows above hold either way

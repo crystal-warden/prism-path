@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
-"""The Landlock backend of the per call sandbox (prismpath/agent/landlock.py, agent-sandbox-plan sections 4 to 6).
+"""The Landlock backend of the per call sandbox (prismpath/agent/landlock.py).
 
 The claim under test is that the choice of backend never widens anything: bubblewrap and Landlock deny the same
 accesses from the adversary cases of WP5 and WP8 (a decoy outside the workspace, a write outside, the fake model

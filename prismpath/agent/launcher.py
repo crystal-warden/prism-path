@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
-"""`prismpath agent run -- PROGRAM [ARGS]`: the whole agent under the sandbox (agent-sandbox-plan, WP4).
+"""`prismpath agent run -- PROGRAM [ARGS]`: the whole agent under the sandbox.
 
 Linux only, non interactive. The launcher stays outside, trusted. It
 
@@ -60,7 +60,7 @@ CREDENTIAL_NAME = ".credentials.json"
 HOOK_CLIENT_NAME = "pp-hook.py"
 DECIDER_SOCKET_IN = "/tmp/.pp-decider.sock"     # inside the sandbox; /tmp is a private tmpfs there
 HOOK_PYTHON = "/usr/bin/python3"                # must exist inside: the system prefix is bound read only
-PACKAGE_IN = "/opt/pp"                          # the prismpath package, bound read only, for the per call runner (WP8)
+PACKAGE_IN = "/opt/pp"                          # the prismpath package, bound read only, for the per call runner
 RUNNER_IN = f"{PACKAGE_IN}/prismpath/agent/sandbox_exec.py"
 PROBE_TIMEOUT_S = 30
 BACKENDS = sandbox_exec.BACKENDS     # the per call backends, in order of preference; a test narrows it to force one
@@ -277,7 +277,7 @@ def probe_nested(outer: Callable, workspace: Path) -> sandbox_hook.Nested:
     A host that forbids nested user namespaces (an AppArmor restriction, `user.max_user_namespaces`) fails the bubblewrap
     probe and, where Landlock works, runs the call under Landlock instead. A host where neither works, or a system
     interpreter too old for the package, shows up here and not as a failed call later, and the decider then denies every
-    shell command with cause 129 (agent-sandbox-plan, question 4: the stricter answer, never the outer profile alone)."""
+    shell command with cause 129: the stricter answer, never the outer profile alone."""
     reasons = []
     for backend in BACKENDS:
         probe = [HOOK_PYTHON, "-I", RUNNER_IN, "--workspace", str(workspace), "--backend", backend, "--profile",
