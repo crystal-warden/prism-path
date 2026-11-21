@@ -13,80 +13,19 @@ readings, a bit run left over that is not zero padding, or a symbol outside its 
 
 What it cannot catch is a bit flip that still decodes to valid symbols. The stream carries no integrity
 check of its own. That is the epoch's Merkle root (PROTOCOL.md 2.4), which this module does not touch.
+
+This is the baseline of docs/research/facet-model-reading.md (condition C). The server that fixes what it found
+is `prismpath/telemetry/facet_mcp.py`; the Policy codec here is that module's.
 """
 from __future__ import annotations
 
-import hashlib
 import json
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
-from prismpath.kernel import core_render
-from prismpath.kernel.parser import parse
-from prismpath.telemetry import packed, quantizer, wire
-from prismpath.telemetry import zeckendorf as zeck
+from prismpath.telemetry import quantizer
+from prismpath.telemetry.facet_mcp import Policy, Refused, _label  # noqa: F401  the shared codec; this file is the 2026-11-20 baseline
 
 FORMAT = "facet/1"
-
-
-class Refused(Exception):
-    """A refusal the tool reports to the model as an error, never a best effort decode."""
-
-
-def _label(part, cell: dict) -> str:
-    if cell.get("absent"):
-        return "absent (field not sent)"
-    if part.kind == "boolean":
-        return "true" if cell["rep"] else "false"
-    if part.kind == "categorical":
-        c = cell["const"]
-        return "any other value" if c == quantizer.OTHER_CELL else f"the string {c!r}"
-    lo, hi = cell["lo"], cell["hi"]
-    if lo is None:
-        return f"{hi} or less"
-    if hi is None:
-        return f"{lo} or more"
-    return f"exactly {lo}" if lo == hi else f"{lo} to {hi}"
-
-
-class Policy:
-    def __init__(self, path: str, decision_node: Optional[str] = None):
-        raw = open(path, encoding="utf-8").read()
-        self.path = path
-        self.sha256 = hashlib.sha256(raw.encode("utf-8")).hexdigest()
-        self.text = core_render.render(json.loads(raw)) if path.endswith(".core.json") else raw
-        self.graph = parse(self.text)
-        self.parts = quantizer.build_partitions(self.graph)
-        self.order = sorted(self.parts)
-        nodes = wire.decision_nodes(self.graph)
-        self.node = decision_node or max(
-            nodes, key=lambda n: len(self.graph.nodes[n].edges))
-        self.targets = sorted({t for t, _ in self.graph.nodes[self.node].edges})
-
-    def decision(self, reading: Dict[str, Any]) -> Optional[str]:
-        return wire.route_node(self.graph, self.node, reading)
-
-    def encode(self, readings: List[Dict[str, Any]]) -> bytes:
-        return packed.pack("".join(wire.encode_reading(self.parts, r) for r in readings))
-
-    def symbols(self, data: bytes) -> List[Dict[str, int]]:
-        """Bytes -> one {field: cell index} per reading, or Refused."""
-        ints, tail = zeck.decode_stream_tail(packed.unpack(data))
-        n = len(self.order)
-        if "1" in tail:
-            raise Refused("codebook mismatch: the stream ends inside a code word that is not zero padding")
-        if not ints or len(ints) % n:
-            raise Refused(f"codebook mismatch: {len(ints)} symbols is not a whole number of readings "
-                          f"of {n} fields")
-        rows = []
-        for i in range(0, len(ints), n):
-            row = {}
-            for f, v in zip(self.order, ints[i:i + n]):
-                if not 1 <= v <= self.parts[f].n:
-                    raise Refused(f"codebook mismatch: symbol {v} is outside field {f!r}, "
-                                  f"which has {self.parts[f].n} cells")
-                row[f] = v - 1
-            rows.append(row)
-        return rows
 
 
 class FacetServer:
