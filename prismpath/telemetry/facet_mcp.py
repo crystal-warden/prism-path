@@ -5,7 +5,7 @@
     python -m prismpath.telemetry.facet_mcp --registry DIR --authority-pub PUB [--authority-pub PUB ...]
                                             [--revoked LIST] [--pin POLICY_SHA256]
 
-Three tools (`prismpath/telemetry/README_FACET_MCP.md` says how a client calls them):
+Three tools:
 
     facet_describe(policy_hash)                      the codebook in words, each cell with its index
     facet_decode(stream_hex, policy_hash, ...)       each reading as cell indices and the policy's decision
