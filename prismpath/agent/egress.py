@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
-"""An HTTP CONNECT proxy on a unix socket, the one door out of the agent sandbox (agent-sandbox-plan, 2 and 5).
+"""An HTTP CONNECT proxy on a unix socket, the one door out of the agent sandbox.
 
     EgressProxy(socket_path, log_path, gate=policy_gate).start()
 
