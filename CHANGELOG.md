@@ -16,9 +16,13 @@ spec stable.
 - **A PostToolUse outcome finds its receipt by `tool_use_id` from the end of the journal** instead of validating every line each time.
 - **The Lean oracle cases of the egress and edge table tests run in CI** (the `formal` workflow), the launcher shell child tests run wherever a per call backend works (Landlock included), and a test fails when a source file names a `docs/` path that does not exist.
 
+### Added: hook inputs recorded from a real Claude Code session (2026-11-21)
+
+- **`prismpath/tests/fixtures/claude_code_live_2026-11-21.json` holds the 18 hook inputs Claude Code 2.1.326 sent to `prismpath agent hook` in a headless session** (PreToolUse for Read, Glob, Grep, Bash, Write and Edit, PostToolUse for each call that ran, SessionEnd), with paths and ids replaced. `test_agent_claude_code_live.py` answers each PreToolUse input again and requires the live answer. The real inputs carry fields the written fixtures do not (`session_id`, `transcript_path`, `permission_mode`, `tool_use_id`, `prompt_id`, `scratchpad_dir`, `effort`). The hook inputs in `claude_code_hooks.json` are written in that shape, not recorded, and the spec and this changelog now call them written. The same session gave 9 receipts that replay with no disagreement and 11 outcome records bound to them.
+
 ### Fixed: file tool paths that start with `~` refuse as outside the workspace (2026-11-20)
 
-- **A path whose first component is `~` or `~user` reads as outside the workspace** for Read, Write, Edit, MultiEdit, NotebookEdit, Glob, Grep and the filesystem server's tools, so the agent's own Read of `~/.ssh/config` refuses with cause 111 where it was asked with 124. The rule is always outside, whatever `HOME` is, as the Bash scan already reads it. A `~` that is not the first component is an ordinary name, and a leading `~` no longer sets `path_glob`. Proved in Lean (`pathFacts_home`, `classify_home`), covered by the oracle, the differential harness and four recorded hook inputs.
+- **A path whose first component is `~` or `~user` reads as outside the workspace** for Read, Write, Edit, MultiEdit, NotebookEdit, Glob, Grep and the filesystem server's tools, so the agent's own Read of `~/.ssh/config` refuses with cause 111 where it was asked with 124. The rule is always outside, whatever `HOME` is, as the Bash scan already reads it. A `~` that is not the first component is an ordinary name, and a leading `~` no longer sets `path_glob`. Proved in Lean (`pathFacts_home`, `classify_home`), covered by the oracle, the differential harness and four written hook inputs.
 
 ### Added: gateway grants (2026-11-21)
 
@@ -87,7 +91,7 @@ spec stable.
   or `.pth` file was never loaded. Run `prismpath agent init` again to rewrite an installed hook.
 - The Lean model proves the scan's control rule (`scan_control`, `scan_control_refused` in `ScanTheorems.lean`); the
   differential harness covers redirections and the new paths (0 disagreements in 20,000 generated cases), and the
-  recorded hook inputs are now 161.
+  written hook inputs are now 161.
 
 ### Added: a warning for a policy recorded before the control-file rule (2026-11-20)
 
@@ -111,7 +115,7 @@ spec stable.
 - The Lean model of the classifier carries the field and proves the rule (`formal/Classifier/Control.lean`): a control
   path reads control, and under every `controlSafe` policy, which the oracle checks on each shipped image, a change
   that names one is refused (`control_refused` in the oracle's `--policy` output). The differential harness and the
-  recorded hook inputs (now 132) cover it, and the refusals are receipted like any other, so they are observations a
+  written hook inputs (now 132) cover it, and the refusals are receipted like any other, so they are observations a
   later policy proposal may read; they never change the policy on their own.
 
 ### Added: a rule table for the installed policy (2026-11-19)
@@ -174,13 +178,13 @@ The detailed entries follow.
   core's boundary accepts every reading under the three agent policies. No unfinished proof, standard axioms
   only, enforced at build (docs/design/spec-verified-classifier.md).
 - **`lake exe classifier-oracle`** and **`formal/diff/classifier_diff.py`** hold the Python to the model over the
-  120 recorded hook inputs, the 51 adversary probes and 20,000 generated calls: no disagreement. The formal
+  120 written hook inputs, the 51 adversary probes and 20,000 generated calls: no disagreement. The formal
   workflow runs it, and `tools/reproduce.sh` has the step `classifier-diff`.
 - **Behaviour change (owner decision).** A Bash command is split by a plain word grammar instead of `shlex`:
   plain words and quoted text, nothing else, so a backslash, an unquoted `~ { # ! ^`, any control or non ASCII
   character reads unknown and is asked about under `agent_default`. Signals, process ids, the pkill word
   boundary and `git tag -nN` are read in ASCII, the stricter reading. A call holding a lone surrogate reads
-  unknown. No recorded hook input or adversary probe changed answer; on 20,000 generated commands 1,177 moved to
+  unknown. No written hook input or adversary probe changed answer; on 20,000 generated commands 1,177 moved to
   ask (124). The classifier's disk reads are now one function (`classifier.disk_facts`), the mapping's three
   (`claude_code._inside`, `_same_dir`, `_exists`).
 - **Hazards outside the grammar stay refused (owner decision).** A Bash command that reads unknown is scanned on its
@@ -188,7 +192,7 @@ The detailed entries follow.
   word or a URL scheme, a token outside the workspace, a `..` or a `.toolchain` component sets the reading fields
   the refusal rules fire on; nothing found leaves it asking. Proved: each rule as stated, and under every shipped
   agent policy the scan only ever adds refusals. Of the 605 generated commands the grammar alone moved from refuse
-  to ask, 529 are refused again; no command outside the grammar is allowed. Recorded inputs `kill-3`,
+  to ask, 529 are refused again; no command outside the grammar is allowed. Written inputs `kill-3`,
   `shell-tilde` and `shell-brace` now refuse (105, 106, 111) where they asked.
 
 ### Added: three starter policies for the governed agent (2026-11-16)
