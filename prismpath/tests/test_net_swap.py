@@ -106,3 +106,17 @@ def test_unsigned_requires_flag_and_is_stamped(env):
     swap_result = ns.preload_swap(env["ppt"], "lo", [env["keys"]["public"]], env["envbase"],
                         env["state"], allow_unsigned=True, run=loader2)
     assert swap_result["ok"] and swap_result["unsigned"] is True and len(loader2.calls) == 1
+
+
+def test_a_dry_run_runs_every_gate_and_never_reaches_the_loader_or_moves_the_floor(env):
+    loader = FakeLoader()
+    result = _swap(env, loader, dry_run=True)
+    assert result["ok"] and result["dry_run"] and result["version"] == 1 and loader.calls == []
+    assert not (Path(env["state"]) / "active_version").exists()
+    assert _swap(env, loader, dry_run=True)["ok"]                        # the floor did not move, so it repeats
+    audit = ns.AuditLog(str(Path(env["state"]) / "net_swaps.log"))
+    assert [event["action"] for event in audit.events] == ["swap_dry_run", "swap_dry_run"]
+    raw = bytearray(Path(env["ppt"]).read_bytes()); raw[-1] ^= 1
+    Path(env["ppt"]).write_bytes(bytes(raw))
+    refused = _swap(env, loader, dry_run=True)                           # a gate that refuses still refuses a dry run
+    assert not refused["ok"] and refused["reasons"] == ["image:sha256-mismatch"] and loader.calls == []

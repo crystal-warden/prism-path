@@ -8,6 +8,14 @@ spec stable.
 
 ## [Unreleased]
 
+### Added: the gateway, the first enforcement point in front of a resource (2026-11-20)
+
+- **`prismpath gateway --upstream URL --listen ADDR` is an HTTP reverse proxy that decides every request with the core under an attested policy and receipts the decision before the service sees it.** A request is read into the fields `method_class`, `path_class` (from the owner's route table), `body_class`, `content_class`, `query` and `grant`, in the canon/2 form the agent classifier's readings use, without asking who sent it, so a curl, a script and a model get the same decision. What it cannot read reads `unknown` and is refused, nothing is forwarded without a durable receipt, a missing or unattested policy refuses every request, and sizes and times are bounded. A refusal is a 403 with the new cause 131 `gateway:request-refused`; `gateway init`, `verify` and `rules` record the policy, verify the run and count rule hits. The demo policy `prismpath/gateway/policy/demo.rules.md` compiles to its attested image; grants are a stub until a later package.
+### Added: the network edge is compiled from the signed agent policy (2026-11-20)
+
+- **`prismpath-ebpf/net_from_policy.py` projects the signed image's connect allow set onto the table `ppt_net.bpf.c` loads.** The edge passes TCP to port 443 at the addresses of the owner's destination table (`prismpath.net_dests/1`, host to IPv4 addresses) for each class the image allows and the agent profile's proxy state covers, for the sources it governs, and drops the rest. An address shared by an allowed and a refused name is dropped and reported, a name that moves is not followed until the owner compiles and signs a new table, and `other` and `unknown` are never passed. The node order is fixed so the loader's drop mask index never moves.
+- **The table is signed with its flow.** The flow names the source image hash, `policy_pack` signs the table with the flow's hash, and `verify` is a dry run (pack signature, envelope, version floor, the table recompiled from the flow and from the image, the loader's own parser) that loads nothing. `net_swap.py` gains `--dry-run`, and `net_compile.address_refusals` takes `bit_pattern_constants` so a destination at or above 128.0.0.0 is named by the value the front end puts in the register. `prismpath/tests/test_net_from_policy.py` holds the table, run through the userspace C evaluator, to the Lean oracle over a packet corpus.
+
 ### Added: the compile and the egress proxy read the policy (2026-11-20)
 
 - **`compile_profile(image, role)` takes a role, `bash` or `agent`.** The agent role derives `net` from the allow set (`proxy_model` when an allowed connect reads `model_api`, `proxy_allow` when one reads `allowed_host`, `none` otherwise) and keeps the fixed mounts. A profile that carries `net` is `prismpath.profile/2`; one with none (the bash role, and the starters' profile, hash 767dd3c8) keeps its `prismpath.profile/1` bytes.

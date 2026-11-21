@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
-"""The hook client that runs INSIDE the agent sandbox (agent-sandbox-plan, WP5).
+"""The hook client that runs INSIDE the agent sandbox.
 
 Claude Code runs the hook command as a child of the sandboxed agent, so the hook cannot hold the keys, the
 policy or the run directory. This file is the whole hook there: it reads the hook input on stdin, sends it to
