@@ -66,12 +66,19 @@ def post(body, timeout=1500):
 
 
 NATIVE = re.compile(r"<\|tool_call>call:(\w+)\{(.*?)\}<tool_call\|>", re.S)
-NATIVE_ARG = re.compile(r'(\w+):<\|"\|>(.*?)<\|"\|>', re.S)
+NATIVE_ARG = re.compile(r'(\w+):(?:<\|"\|>(.*?)<\|"\|>|(-?\d+|true|false))', re.S)
+
+
+def native_args(text):
+    """Gemma's native call arguments: strings between <|"|> marks, bare integers and booleans."""
+    out = {}
+    for key, string, bare in NATIVE_ARG.findall(text):
+        out[key] = string if bare == "" and (string or f"{key}:<|\"|>" in text) else json.loads(bare)
+    return out
 
 
 def native_calls(content):
-    return [{"function": {"name": m.group(1),
-                          "arguments": json.dumps({k: v for k, v in NATIVE_ARG.findall(m.group(2))})}}
+    return [{"function": {"name": m.group(1), "arguments": json.dumps(native_args(m.group(2)))}}
             for m in NATIVE.finditer(content)]
 
 
