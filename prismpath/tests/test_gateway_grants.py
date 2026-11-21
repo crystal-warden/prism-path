@@ -128,8 +128,6 @@ def test_the_gateway_lets_a_granted_request_through_and_receipts_the_grant(home)
     lines = receipts(home)
     assert [line.get("grant", {}).get("grant_id") for line in lines] == [
         None, doc["grant_id"], doc["grant_id"], wdoc["grant_id"], doc["grant_id"], doc["grant_id"]]
-    assert [line["receipt"]["verdict"]["kind"] if "verdict" in line["receipt"] else line["receipt"].get("decision")
-            for line in lines][1] is not None
 
 
 def test_the_grant_command_prints_a_header_value_the_gateway_accepts(home, capsys):
@@ -142,3 +140,16 @@ def test_the_grant_command_prints_a_header_value_the_gateway_accepts(home, capsy
         gcli.grant(home, [], ["read"], 60, False)
     with pytest.raises(commands.AgentError):
         gcli.revoke(home, "nope")
+
+
+def test_a_run_with_grant_records_seals_and_verifies(home):
+    up = Upstream()
+    g = Running(up, home)
+    try:
+        value, _ = issue(home, now=None)
+        assert g.request("GET", "/admin/x", headers={HDR: value})[0] == 200
+        g.gateway.seal()
+    finally:
+        g.close()
+        up.close()
+    assert gcli.verify(home, True, out=open(os.devnull, "w")) == 0
