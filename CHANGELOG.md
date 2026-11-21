@@ -8,6 +8,10 @@ spec stable.
 
 ## [Unreleased]
 
+### Added: the gateway, the first enforcement point in front of a resource (2026-11-20)
+
+- **`prismpath gateway --upstream URL --listen ADDR` is an HTTP reverse proxy that decides every request with the core under an attested policy and receipts the decision before the service sees it.** A request is read into the fields `method_class`, `path_class` (from the owner's route table), `body_class`, `content_class`, `query` and `grant`, in the canon/2 form the agent classifier's readings use, without asking who sent it, so a curl, a script and a model get the same decision. What it cannot read reads `unknown` and is refused, nothing is forwarded without a durable receipt, a missing or unattested policy refuses every request, and sizes and times are bounded. A refusal is a 403 with the new cause 131 `gateway:request-refused`; `gateway init`, `verify` and `rules` record the policy, verify the run and count rule hits. The demo policy `prismpath/gateway/policy/demo.rules.md` compiles to its attested image; grants are a stub until a later package.
+
 ### Added: the compile and the egress proxy read the policy (2026-11-20)
 
 - **`compile_profile(image, role)` takes a role, `bash` or `agent`.** The agent role derives `net` from the allow set (`proxy_model` when an allowed connect reads `model_api`, `proxy_allow` when one reads `allowed_host`, `none` otherwise) and keeps the fixed mounts. A profile that carries `net` is `prismpath.profile/2`; one with none (the bash role, and the starters' profile, hash 767dd3c8) keeps its `prismpath.profile/1` bytes.
