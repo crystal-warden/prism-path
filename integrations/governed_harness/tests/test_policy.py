@@ -78,14 +78,14 @@ def _want(reading):
 
 
 def test_every_reading_decides_as_the_owner_rules_say(agent_policy):
-    """The whole field space the classifier gives, 483,840 readings, through the reference: the image and the rules agree."""
+    """The whole field space the classifier gives, 870,912 readings, through the reference: the image and the rules agree."""
     disagree, count = [], 0
     for reading in field_space():
         count += 1
         decision = agent_policy.decide(agent_policy.reading_bytes(reading))
         if (decision.kind, decision.cause) != _want(reading):
             disagree.append((reading, decision))
-    assert count == (6 + 4 + 5) * 4 * 6 * 7 * 3 * 2 ** 6
+    assert count == (10 + 12 + 5) * 4 * 6 * 7 * 3 * 2 ** 6
     assert disagree == []
 
 

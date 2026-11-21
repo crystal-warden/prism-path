@@ -15,7 +15,7 @@ with its semantic fields zeroed (status disabled, lock "none", harm 0, class unk
   6. the Lean oracle (`core-oracle --batch`) gives the reference's verdict on every r and every zeroed r.
 
 THE FIELD SPACE. The floor's fourteen fields are enumerated in full over the readings the classifier can give, as the harness's own
-exhaustive check does ((6 + 4 + 5) tool, net_dest and proc_class combinations x 4 x 6 x 7 x 3 x 2^6 = 483,840). Of the semantic fields, `intent_class` is enumerated in full
+exhaustive check does ((10 + 12 + 5) tool, net_dest, proc_class and zone_reach combinations x 4 x 6 x 7 x 3 x 2^6 = 870,912). Of the semantic fields, `intent_class` is enumerated in full
 (7 values) and `semantic_status` too (2). `harm_bp` (0..10000), `intent_margin_bp` (0..10000) and
 `semantic_lock` (any string) and `probing_count` (0..1000) are enumerated by their classes, and that is exhaustive, not a sample,
 because the check first AUDITS the image: it walks every condition of every rule and requires that the
@@ -24,7 +24,7 @@ only atoms on those fields are `harm_bp >= T_h`, `intent_margin_bp >= T_m`, `sem
 decision is a function of the truth values of its atoms taken in rule order, so two readings that agree on
 every other field and on which side of each of those three atoms they fall are decided identically. The
 classes are represented by the values on each side of the boundary (T_h - 1 and T_h, T_m - 1 and T_m, L
-and "other", N - 1 and N), so 483,840 x 7 x 2 x 2 x 2 x 2 x 2 = 108,380,160 readings cover the whole space. A boundary sweep
+and "other", N - 1 and N), so 870,912 x 7 x 2 x 2 x 2 x 2 x 2 = 195,084,288 readings cover the whole space. A boundary sweep
 then decides every value 0..10000 of harm_bp and of intent_margin_bp, and 0..1000 of probing_count, at each of
 the floor's allow rules,
 and the response image is enumerated in full (every harm_bp value, both statuses, two locks).
@@ -134,7 +134,7 @@ def _init():
     _STATE["lock"] = intent_policy.lock_id()
 
 
-ORACLE_BATCH = 16384       # readings per oracle process: one process on all 483,840 holds gigabytes
+ORACLE_BATCH = 16384       # readings per oracle process: one process on all 870,912 holds gigabytes
 
 
 def _oracle_verdicts(image: bytes, readings: List[bytes]) -> List[Dict[str, Any]]:
@@ -157,7 +157,7 @@ def _same(lean, mine) -> bool:
 
 
 def check_floor() -> Dict[str, Any]:
-    """Claim 1 and the Lean oracle on every zeroed reading (the floor, 483,840 readings)."""
+    """Claim 1 and the Lean oracle on every zeroed reading (the floor, 870,912 readings)."""
     calls, harness, = _STATE["calls"], _STATE["harness"]
     readings, raws, problems = [], [], []
     for floor in floor_space():
