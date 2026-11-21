@@ -14,7 +14,7 @@ A call that changes files names paths. The classifier asks an information point 
 
 The point is an observation, like the disk, and is outside the proof: what is proved is proved for every function
 `zone` can be. The answer of Context Cloud and the zone file that lists the protected names are the adapter's
-(docs/design/zones-plan.md, sections 3 and 9).
+(prismpath/agent/zones.py).
 
 What is proved, in claims kept apart:
 

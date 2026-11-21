@@ -302,7 +302,7 @@ def run(out: Path, workers: int) -> Dict[str, Any]:
                         and report["responses"]["problems"] == 0 and report["responses"]["lean_disagreements"] == 0
                         and report["boundary_sweep"]["problems"] == 0
                         and report["boundary_sweep"]["lean_disagreements"] == 0
-                        and totals["readings"] == 483840 * len(combos) == totals["lean_decided"]
+                        and totals["readings"] == 870912 * len(combos) == totals["lean_decided"]
                         and all(totals[key] == 0 for key in ("union_violations", "inactive_changed",
                                                               "wrong_vs_second_reading", "lean_disagreements")))
     out.mkdir(parents=True, exist_ok=True)

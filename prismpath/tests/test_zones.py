@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
-"""Zones (prismpath/agent/zones.py, docs/design/zones-plan.md): the reading field `zone_reach`, the starters' rule about it
+"""Zones (prismpath/agent/zones.py): the reading field `zone_reach`, the starters' rule about it
 (cause 131), the signed zone file and the Context Cloud adapter.
 
 The adapter is tested twice. Against a stand-in `contextcloud` program and a small index built here (always), and against

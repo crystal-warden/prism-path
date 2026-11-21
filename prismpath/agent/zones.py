@@ -3,7 +3,7 @@
 A firewall groups addresses into zones and sets rules between them. Here the zones are the owner's protected
 functions, classes and modules (token checks, payments), and a call that changes files gets the reading field
 `zone_reach` (prismpath/agent/classifier.py): `none`, `protected` or `unknown`. The policy asks about a change that
-reaches a zone, or whose reach is not known, and leaves a change that does not as it was (docs/design/zones-plan.md).
+reaches a zone, or whose reach is not known, and leaves a change that does not as it was.
 The rule protects the resource, whatever the worker that changes it is.
 
 Where the fact comes from. The classifier asks an INFORMATION POINT, an object with `reach(raw_path, config)` that
@@ -25,7 +25,7 @@ the file reaches the protected set with certainty `certain` or `likely`; `unknow
 file of the index, the index holds a different version of it (a stale index), a lookup fails or times out, or Context
 Cloud says `unknown`; `none` only when every function of the file answered `no`. The file is the unit because a
 write names a file and not a line. Code at module level (outside every function) is not a function in Context
-Cloud's index, so a change to it is read by the file's functions only (docs/design/zones-plan.md, section 9).
+Cloud's index, so a change to it is read by the file's functions only.
 """
 from __future__ import annotations
 

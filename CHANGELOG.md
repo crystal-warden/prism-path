@@ -8,6 +8,13 @@ spec stable.
 
 ## [Unreleased]
 
+### Added: zones, the owner's protected code (2026-11-20)
+
+- **The classifier reads `zone_reach` (`none`, `protected`, `unknown`) for every call that changes files.** It asks a zone information point once for each path the call names and joins the answers. With no point, or with no path to ask about, a changing call reads `unknown`. A call that changes no file reads `none`. The field is not part of the classifier version, and the three starters from before it are named as older.
+- **Every starter asks with the new cause 131 `agent:zone-asked` about a file change whose `zone_reach` is `protected` or `unknown`.** It comes after every refusal, and strict applies it to the file tools only, so it never turns a refusal into a question.
+- **`prismpath agent zones set|status|warm`.** The owner lists the protected names in a zone file that is signed with the policy's authority key and bound to the recorded policy and the project. A declared zone file that does not verify, or with no Context Cloud or index, reads `unknown`. With no zone file nothing is protected. The Context Cloud adapter runs `contextcloud reaches --json` for each function of the file, checks the index holds the file's current version, and caches each fact.
+- **The Lean model proves the rule** (`Zone.lean`): `zoneOf_none_iff`, `zoneOf_absent`, `zoneOf_protected`, `zone_not_allowed`, `allowed_change_every_path_none`, `absent_point_not_allowed` and `protected_not_allowed`. The oracle's `--policy` mode prints `zone_asked`, and the differential harness gives each case a seeded point.
+
 ### Added: the compile and the egress proxy read the policy (2026-11-20)
 
 - **`compile_profile(image, role)` takes a role, `bash` or `agent`.** The agent role derives `net` from the allow set (`proxy_model` when an allowed connect reads `model_api`, `proxy_allow` when one reads `allowed_host`, `none` otherwise) and keeps the fixed mounts. A profile that carries `net` is `prismpath.profile/2`; one with none (the bash role, and the starters' profile, hash 767dd3c8) keeps its `prismpath.profile/1` bytes.
