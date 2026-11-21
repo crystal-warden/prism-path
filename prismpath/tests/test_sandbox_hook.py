@@ -129,7 +129,7 @@ def test_the_receipt_line_carries_the_profile_hash_and_the_run_still_verifies(wo
     run = RunStore(_agent_dir(home) / "runs").get("s1")
     lines = [json.loads(line) for line in (run.dir / "journal.jsonl").read_text().splitlines()]
     image = (_agent_dir(home) / "policy.core.json").read_bytes()
-    assert lines[0]["sandbox"] == {"profile_sha256": profile_module.compile_profile(image).hash()}
+    assert lines[0]["sandbox"] == {"profile_sha256": profile_module.compile_profile(image).hash(), "backend": "bwrap"}
     assert "sandbox" not in lines[1]                        # the refused call has no profile
     done = _cli(home, "agent", "verify")
     assert done.returncode == 0, done.stdout + done.stderr
