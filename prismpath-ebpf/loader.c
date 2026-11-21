@@ -39,6 +39,7 @@
 #define PIN_PATH "/sys/fs/bpf/ppt_result"   /* result_map pin: read back the in-kernel verdict */
 #define NET_VERDICT_PIN "/sys/fs/bpf/ppt_net_verdict"  /* real-packet per-target histogram */
 #define NET_RESULT_PIN  "/sys/fs/bpf/ppt_net_result"   /* real-packet last-verdict + pkt_count */
+#define NET_REFUSED_PIN "/sys/fs/bpf/ppt_net_refused"  /* real-packet frames the front end could not read, by reason */
 #define SEL_STATE_PIN   "/sys/fs/bpf/ppt_sel_state"     /* resident selector posture, persists across loads */
 #define SEL_RESULT_PIN  "/sys/fs/bpf/ppt_sel_result"    /* selector last-decision + pkt_count */
 #define SEL_RECEIPT_PIN "/sys/fs/bpf/ppt_sel_receipts"  /* selector audit-receipt ringbuf (drainable) */
@@ -526,7 +527,40 @@ static void config_set_drop_mask(struct bpf_object *obj, const char *names_path,
     else printf("[loader] observe-only (no drop/block node in this flow)\n");
 }
 
+/* The verified-table gate of netattach and netupdate. The signature checks are the host's (net_swap.py, which
+ * holds the keys): it verifies the pack, the envelope, the version floor and the signed destination table, and
+ * only then runs this loader with PPT_NET_VERIFIED_SHA256 set to the SHA-256 of the exact table it verified.
+ * The loader hashes the file it is about to load and refuses unless the two agree, so a table that was not the
+ * one verified, or a bare invocation, loads nothing. PPT_NET_ALLOW_UNVERIFIED=1 is the operator's explicit
+ * bypass for the observe-only demos and says so on stderr. */
+static int net_gate(const char *ppt_path, const char *verb) {
+    const char *bypass = getenv("PPT_NET_ALLOW_UNVERIFIED");
+    if (bypass && strcmp(bypass, "1") == 0) {
+        fprintf(stderr, "warning: %s loading %s UNVERIFIED (PPT_NET_ALLOW_UNVERIFIED=1)\n", verb, ppt_path);
+        return 0;
+    }
+    const char *want = getenv("PPT_NET_VERIFIED_SHA256");
+    long len = 0; uint8_t *bytes = read_file(ppt_path, &len);
+    if (!want || !bytes) {
+        fprintf(stderr, "error: %s refuses %s: no verified table. Run it through net_swap.py (--attach or a swap), "
+                        "which checks the signatures first.\n", verb, ppt_path);
+        free(bytes);
+        return 2;
+    }
+    uint8_t digest[SHA256_DIGEST_LENGTH];
+    SHA256(bytes, (size_t)len, digest);
+    free(bytes);
+    char hex[2 * SHA256_DIGEST_LENGTH + 1];
+    for (int i = 0; i < SHA256_DIGEST_LENGTH; i++) snprintf(hex + 2 * i, 3, "%02x", digest[i]);
+    if (strcmp(hex, want) != 0) {
+        fprintf(stderr, "error: %s refuses %s: its sha256 %s is not the verified table %s.\n", verb, ppt_path, hex, want);
+        return 2;
+    }
+    return 0;
+}
+
 static int net_attach(const char *ppt_path, const char *ifname, const char *names_path) {
+    if (net_gate(ppt_path, "netattach")) return 2;
     Image im; load_image(ppt_path, &im);
     unsigned int ifindex = if_nametoindex(ifname);
     if (ifindex == 0) { fprintf(stderr, "error: no such interface %s\n", ifname); return 2; }
@@ -550,8 +584,10 @@ static int net_attach(const char *ppt_path, const char *ifname, const char *name
         fprintf(stderr, "error: ppt_net program/maps not found.\n");
         bpf_object__close(obj); return -1;
     }
-    unlink(NET_VERDICT_PIN); unlink(NET_RESULT_PIN);
-    if (bpf_map__pin(vmap, NET_VERDICT_PIN) || bpf_map__pin(rmap, NET_RESULT_PIN)) {
+    struct bpf_map *fmap = bpf_object__find_map_by_name(obj, "refused_map");
+    unlink(NET_VERDICT_PIN); unlink(NET_RESULT_PIN); unlink(NET_REFUSED_PIN);
+    if (bpf_map__pin(vmap, NET_VERDICT_PIN) || bpf_map__pin(rmap, NET_RESULT_PIN) ||
+        (fmap && bpf_map__pin(fmap, NET_REFUSED_PIN))) {
         fprintf(stderr, "warning: could not pin net maps (netstats may not find them)\n");
     }
     /* zero the histogram so counts reflect this attach only */
@@ -597,6 +633,17 @@ static int net_stats(char **names, int n_names) {
     }
     printf("  ----\n  total classified: %llu packets  (result_map pkt_count=%llu)\n",
            (unsigned long long)total, (unsigned long long)res.pkt_count);
+    /* frames the front end could not read: dropped when the table enforces, passed when it only observes */
+    static const char *const refused_names[] = {"ipv6", "vlan", "other ethertype", "short frame", "bad ip header", "arp (passed)"};
+    int ffd = bpf_obj_get(NET_REFUSED_PIN);
+    if (ffd >= 0) {
+        for (__u32 kind = 0; kind < sizeof(refused_names) / sizeof(refused_names[0]); kind++) {
+            __u64 count = 0;
+            if (bpf_map_lookup_elem(ffd, &kind, &count) == 0 && count)
+                printf("  unclassified %-16s %llu\n", refused_names[kind], (unsigned long long)count);
+        }
+        close(ffd);
+    }
     return 0;
 }
 
@@ -726,6 +773,7 @@ static int write_bank(const struct net_maps *maps, __u32 bank, const Image *im) 
  * single atomic store: the packet after the flip routes by the new policy, and no packet ever
  * observes a torn table. */
 static int net_update(const char *new_ppt, const char *ifname) {
+    if (net_gate(new_ppt, "netupdate")) return 2;
     unsigned int ifindex = if_nametoindex(ifname);
     if (!ifindex) { fprintf(stderr, "error: no such interface %s\n", ifname); return 2; }
     __u32 prog_id = 0;
@@ -909,7 +957,7 @@ static int net_detach(const char *ifname) {
     unsigned int ifindex = if_nametoindex(ifname);
     if (ifindex == 0) { fprintf(stderr, "error: no such interface %s\n", ifname); return 2; }
     int err = bpf_xdp_detach(ifindex, XDP_FLAGS_SKB_MODE, NULL);
-    unlink(NET_VERDICT_PIN); unlink(NET_RESULT_PIN);
+    unlink(NET_VERDICT_PIN); unlink(NET_RESULT_PIN); unlink(NET_REFUSED_PIN);
     if (err) fprintf(stderr, "warning: detach returned %d\n", err);
     else printf("OK: ppt_net detached from %s, pins removed.\n", ifname);
     return err ? 1 : 0;
@@ -1020,6 +1068,11 @@ static int cmd_netupdate(int argc, char **argv) {
     return net_update(argv[1], argv[3]);
 }
 
+static int cmd_netverify(int argc, char **argv) {
+    (void)argc;
+    return net_gate(argv[1], "netverify");
+}
+
 static int cmd_netstorm(int argc, char **argv) {
     (void)argc;
     return net_storm(argv[1], argv[3]);
@@ -1062,6 +1115,8 @@ static const struct loader_command LOADER_COMMANDS[] = {
       cmd_netbench, "<image.ppt> netbench                 (per packet latency of the real packet path; root)" },
     { "netupdate", 4, "error: 'netupdate' needs root / CAP_BPF.\n",
       cmd_netupdate, "<new.ppt> netupdate <iface>          (hot swap the live policy, atomic bank flip; root)" },
+    { "netverify", 3, NULL,
+      cmd_netverify, "<image.ppt> netverify                (the gate netattach and netupdate apply: exit 0 only for the verified table)" },
     { "netstorm", 4, "error: 'netstorm' needs root / CAP_BPF.\n",
       cmd_netstorm, "<a.ppt> netstorm <b.ppt>             (bank flip atomicity under a swap storm; root)" },
     { "help", 3, NULL,
