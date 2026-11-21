@@ -8,6 +8,10 @@ spec stable.
 
 ## [Unreleased]
 
+### Changed: the Rust Facet encoder writes codes straight into words (2026-11-21)
+
+- **`prismpath-telemetry-rs` builds each Fibonacci code as an integer (a compile-time table for 1 to 255, a search over a fixed table above) and packs it with a `BitWriter`, instead of building a string of `0` and `1` characters and walking it.** `zeckendorf::encode`, `encode_stream`, `packed::pack` and `packed::encode` give the same bytes as before and are held to the old string algorithms by `tests/test_fast_encode.rs`. Acceptance checks a value without copying it (`quantizer::accept_check`, `prismpath_rs::field_definitions::check_canonical`), since the accepted value compares as the value given. `wire::Encoder` sorts the field order once and writes a reading's packed bytes directly: `encode_packed_into` takes the HashMap reading `encode_reading` takes, with the same refusals, `encode_row_into` takes one value per field in wire order, and `encode_symbols_packed` takes cell symbols. On 1M readings of the fusion policy the shipped path went from 1.5M to 2.0M readings per second, the encoder takes 7.6M (HashMap) and 12M (row), and code and pack alone about 45M; on the 12 field agent policy 0.53M, 0.68M, 2.7M, 4.7M and about 22M.
+
 ### Fixed: programs the classifier read as read only could write files or run commands (2026-11-21)
 
 - **What was wrong.** `sed`, `sort`, `uniq`, `xxd` and `tree` were on the classifier's read only list, and only the
