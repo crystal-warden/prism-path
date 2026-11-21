@@ -29,8 +29,11 @@ ADDRESS_FIELDS = ("src_ip", "dst_ip")
 ORDERING_OPS = (pc.OP_LT, pc.OP_LE, pc.OP_GT, pc.OP_GE)
 
 
-def address_refusals(img):
-    """Every atom the kernel front end cannot decide faithfully, as (field, reason)."""
+def address_refusals(img, bit_pattern_constants=False):
+    """Every atom the kernel front end cannot decide faithfully, as (field, reason). A table compiled from a
+    destination list (net_from_policy.py) names an address at or above 128.0.0.0 by its s32 bit pattern, the
+    value the front end puts in the register, and passes `bit_pattern_constants=True` so those constants are
+    not refused. An ordering on an address is refused either way."""
     slot_name = {slot: name for name, slot in img.fields.items()}
     refusals = []
     for field_index, op, ty, val in img.atoms:
@@ -40,7 +43,7 @@ def address_refusals(img):
         if op in ORDERING_OPS:
             refusals.append((name, "an ordering on an address: the register holds the bit pattern, which "
                                    "reads negative from 128.0.0.0 up"))
-        elif ty == pc.TY_INT and val < 0:
+        elif ty == pc.TY_INT and val < 0 and not bit_pattern_constants:
             refusals.append((name, f"the negative constant {val}: no address is negative, and it would equal "
                                    f"the bit pattern of one"))
     return refusals
