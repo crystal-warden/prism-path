@@ -84,7 +84,7 @@ class Gateway:
         self.timeout, self.deadline, self.upstream_timeout = timeout, deadline, upstream_timeout
         self.max_response, self.max_connections = max_response, max_connections
         self.lock = threading.Lock()
-        self.policy = self.run = None
+        self.policy = self.run = self.grants = None
         self.failure: Optional[str] = None
         try:
             from prismpath.agent import commands
@@ -93,12 +93,15 @@ class Gateway:
                 raise commands.AgentError(f"the recorded policy's fields {policy.fields} are not the gateway reading's "
                                           f"{sorted(rd.FIELDS)}")
             self.policy = policy
+            from . import grants
+            self.grants = grants.Verifier(commands._key_paths(self.home, "authority")[1].read_bytes(),
+                                          commands._sha256_hex(policy.image), self.home / grants.REVOKED_FILE)
             self.run = store.open(self.session, policy.image)
         except Exception as exc:   # noqa: BLE001 - nothing can be decided, so everything is refused
             self.failure = f"the policy could not be loaded or the run opened ({type(exc).__name__}: {exc})"
 
     # ------------------------------------------------------------------ decide
-    def decide(self, reading: Dict[str, Any]) -> Outcome:
+    def decide(self, reading: Dict[str, Any], grant: Optional[Dict[str, str]] = None) -> Outcome:
         if self.failure:
             return Outcome("refuse", failure=self.failure)
         try:
@@ -108,7 +111,7 @@ class Gateway:
             return Outcome("refuse", failure=f"the request could not be decided ({type(exc).__name__}: {exc})")
         try:
             with self.lock:
-                index = self.run.append(raw, decision.verdict)
+                index = self.run.append(raw, decision.verdict, grant=grant)
         except Exception as exc:   # noqa: BLE001 - never forward a request whose receipt is not durable
             return Outcome("refuse", failure=f"its receipt could not be written ({type(exc).__name__}: {exc})")
         return Outcome(decision.kind, decision.cause, decision.cause_code, index)
@@ -302,10 +305,10 @@ class _Handler(BaseHTTPRequestHandler):
             else:
                 body = taken
         try:
-            reading = rd.read_request(self.command, self.path, headers, gateway.routes, held)
+            reading, grant = rd.read(self.command, self.path, headers, gateway.routes, held, gateway.grants)
         except Exception:   # noqa: BLE001 - a request that cannot be read is unknown, never forwarded
-            reading = dict(rd.UNREADABLE)
-        outcome = gateway.decide(reading)
+            reading, grant = dict(rd.UNREADABLE), None
+        outcome = gateway.decide(reading, grant)
         if outcome.kind == "allow" and (held is None or length is None or length > rd.MAX_BODY):
             outcome = Outcome("refuse", failure="its body could not be taken whole")     # belt and braces: the policy refused these
         if outcome.kind != "allow":

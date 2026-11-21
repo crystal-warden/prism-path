@@ -30,9 +30,9 @@ DEMO_ROUTES = HERE / "policy" / "demo.routes.json"
 def add_parser(subparsers) -> None:
     gateway = subparsers.add_parser(
         'gateway', help='Protect a resource: an HTTP reverse proxy that has the core decide every request under an '
-                        'attested policy and receipts the decision, whoever the client is (serve, init, verify, rules)')
-    gateway.add_argument('action', nargs='?', choices=('serve', 'init', 'verify', 'rules'), default='serve',
-                         help='serve (the default), init, verify or rules')
+                        'attested policy and receipts the decision, whoever the client is (serve, init, verify, rules, grant, revoke)')
+    gateway.add_argument('action', nargs='?', choices=('serve', 'init', 'verify', 'rules', 'grant', 'revoke'),
+                         default='serve', help='serve (the default), init, verify, rules, grant or revoke')
     gateway.add_argument('--home', default=None, help='the gateway home (default <config>/prismpath/gateway)')
     gateway.add_argument('--upstream', default=None, metavar='URL', help='serve: the one service, http://HOST[:PORT]')
     gateway.add_argument('--listen', default='127.0.0.1:8080', metavar='ADDR', help='serve: HOST:PORT (default 127.0.0.1:8080)')
@@ -47,6 +47,12 @@ def add_parser(subparsers) -> None:
     gateway.add_argument('--max-response', type=int, default=8 * 1024 * 1024, help='serve: bytes of the service\'s answer held')
     gateway.add_argument('--max-connections', type=int, default=64, help='serve: connections served at once')
     gateway.add_argument('--policy', default=None, metavar='FILE', help='init: the policy to record (.core.json or .rules.md; default the demo)')
+    gateway.add_argument('--path-class', action='append', default=[], metavar='CLASS',
+                         help='grant: a route class the grant covers (repeat for more)')
+    gateway.add_argument('--method-class', action='append', default=[], metavar='CLASS',
+                         help='grant: a method class the grant covers, read, write, delete or other (repeat for more)')
+    gateway.add_argument('--ttl', type=int, default=3600, help='grant: seconds the grant lasts (default 3600)')
+    gateway.add_argument('--grant-id', default=None, metavar='ID', help='revoke: the id of the grant to revoke')
     gateway.add_argument('--json', action='store_true', help='machine readable output')
     gateway.set_defaults(func=gateway_cmd)
 
@@ -159,6 +165,44 @@ def rules(home: Path, as_json: bool, out=None) -> int:
     return 0
 
 
+def grant(home: Path, path_classes, method_classes, ttl: int, as_json: bool, out=None) -> int:
+    """Sign a grant under the recorded policy and print the header value a client sends."""
+    from prismpath.agent import commands
+    from prismpath.gateway import grants
+    out = out or sys.stdout
+    policy, _store = commands.load_checked(home)
+    try:
+        value, doc = grants.issue(home, commands._sha256_hex(policy.image), path_classes, method_classes, ttl)
+    except grants.GrantError as exc:
+        raise commands.AgentError(str(exc))
+    if as_json:
+        print(json.dumps({"header": grants_header(), "value": value, "grant": doc}, sort_keys=True), file=out)
+    else:
+        print(f"grant {doc['grant_id']}: {', '.join(doc['method_classes'])} on {', '.join(doc['path_classes'])} until "
+              f"{doc['expires']} (Unix seconds)", file=sys.stderr)
+        print(value, file=out)
+    return 0
+
+
+def grants_header() -> str:
+    from prismpath.gateway import reading
+    return reading.GRANT_HEADER
+
+
+def revoke(home: Path, grant_id: Optional[str], out=None) -> int:
+    from prismpath.agent import commands
+    from prismpath.gateway import grants
+    out = out or sys.stdout
+    if not grant_id:
+        raise commands.AgentError("name the grant with --grant-id ID")
+    try:
+        added = grants.revoke(home, grant_id)
+    except grants.GrantError as exc:
+        raise commands.AgentError(str(exc))
+    print(f"grant {grant_id} {'revoked' if added else 'was already revoked'}; the next request that presents it is refused", file=out)
+    return 0
+
+
 def gateway_cmd(args) -> int:
     from prismpath.agent import commands
     try:
@@ -168,6 +212,10 @@ def gateway_cmd(args) -> int:
             return verify(_home(args), args.json)
         if args.action == 'rules':
             return rules(_home(args), args.json)
+        if args.action == 'grant':
+            return grant(_home(args), args.path_class, args.method_class, args.ttl, args.json)
+        if args.action == 'revoke':
+            return revoke(_home(args), args.grant_id)
         return serve(args)
     except commands.AgentError as exc:
         print(f"prismpath gateway: {exc}", file=sys.stderr)

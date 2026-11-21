@@ -102,9 +102,9 @@ def test_body_class(lengths, te, length, cls):
     assert rd.body_class(length) == cls
 
 
-def test_grant_is_a_stub():
+def test_a_grant_read_without_a_verifier():
     assert rd.grant_state([]) == "none"
-    assert rd.grant_state(["anything signed"]) == "invalid"      # no grant can be verified until R5
+    assert rd.grant_state(["anything signed"]) == "invalid"      # outside a gateway nothing can verify it
     assert rd.grant_state(["a", "b"]) == "invalid"
 
 
@@ -130,7 +130,9 @@ def test_demo_policy_decides_the_readings_it_is_written_for():
     assert kind() == ("allow", None)
     assert kind(path_class="orders") == ("allow", None)
     assert kind(path_class="admin") == ("refuse", 131)
-    assert kind(path_class="admin", grant="valid") == ("refuse", 131)          # no rule allows admin at all yet
+    assert kind(path_class="admin", grant="valid") == ("allow", None)          # a valid grant reads admin
+    assert kind(path_class="admin", grant="expired") == ("refuse", 131)
+    assert kind(path_class="admin", method_class="delete", grant="valid") == ("refuse", 131)
     assert kind(method_class="write", path_class="orders", body_class="small", content_class="json") == ("refuse", 131)
     assert kind(method_class="write", path_class="orders", body_class="small", content_class="json", grant="valid") == ("allow", None)
     assert kind(method_class="write", path_class="orders", body_class="small", content_class="form", grant="valid") == ("refuse", 131)
@@ -253,7 +255,7 @@ def receipts(home, session="t1"):
 def test_allowed_request_reaches_the_upstream_and_the_answer_comes_back(gw, upstream, home):
     status, headers, body = gw.request("GET", "/api/orders/7?x=1", headers={
         "Accept": "text/plain", "Cookie": "s=1", "Authorization": "Bearer x", "X-PrismPath-Grant": "g", "X-Other": "1"})
-    assert (status, body) == (403, body)      # a grant header, which cannot verify yet, is refused
+    assert (status, body) == (403, body)      # a grant header that is not a signed grant is refused
     assert upstream.seen == []
     status, headers, body = gw.request("GET", "/api/orders/7?x=1", headers={
         "Accept": "text/plain", "Cookie": "s=1", "Authorization": "Bearer x", "X-Other": "1", "User-Agent": "ua"})
@@ -339,7 +341,7 @@ def test_rules_report_counts_hits(gw, home):
     assert gcli.rules(home, True, out=Sink()) == 0
     doc = json.loads("".join(data))
     hits = {r["rule"]: r["hits"] for r in doc["rules"]}
-    assert hits[5] == 2 and hits[2] == 1 and doc["receipts"]["counted"] == 3
+    assert hits[6] == 2 and hits[2] == 1 and doc["receipts"]["counted"] == 3      # rule 6: a read of another path
 
 
 # ---------------------------------------------------------------------------------------------- fail closed

@@ -6,7 +6,8 @@ Each hook call of an agent is a separate short-lived process, so the receipts of
 a run directory, one per session id under a root the caller names (`RunStore`). A run holds:
 
   * `image.bin`: the policy image of the session, written once; a later call with other bytes is refused;
-  * `journal.jsonl`: the open part. One canon/2 line per decided reading, `{"i", "reading" (hex), "receipt"}`,
+  * `journal.jsonl`: the open part. One canon/2 line per decided reading, `{"i", "reading" (hex), "receipt"}`
+    (and the `sandbox` profile hash of an allowed shell call or the `grant` a gateway request presented),
     where `receipt` is exactly the `prismpath.core-receipt/1` that `evidence.EpisodeRun.record` writes;
   * `lock`: the lock file every operation takes exclusively (`fcntl.flock`);
   * `journal.prefix`: the validated-prefix record that keeps an append's cost independent of the run's length;
@@ -86,6 +87,26 @@ OBSERVATIONS = "observations.jsonl"
 LOCK = "lock"
 _SAFE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 
+
+
+_HEX64 = re.compile(r"[0-9a-f]{64}")
+_GRANT_ID = re.compile(r"[0-9a-f]{32}")
+
+
+def _extras_ok(entry: Dict[str, Any]) -> bool:
+    """A journal line holds `i`, `reading` and `receipt`, and at most a sandbox profile hash and a grant record."""
+    extra = set(entry) - {"i", "reading", "receipt"}
+    if not {"i", "reading", "receipt"} <= set(entry) or not extra <= {"sandbox", "grant"}:
+        return False
+    sandbox, grant = entry.get("sandbox"), entry.get("grant")
+    if "sandbox" in entry and not (isinstance(sandbox, dict) and set(sandbox) == {"profile_sha256"}
+                                   and _HEX64.fullmatch(str(sandbox["profile_sha256"]))):
+        return False
+    if "grant" in entry and not (isinstance(grant, dict) and set(grant) == {"grant_id", "grant_sha256"}
+                                 and _GRANT_ID.fullmatch(str(grant["grant_id"]))
+                                 and _HEX64.fullmatch(str(grant["grant_sha256"]))):
+        return False
+    return True
 
 class RunError(Exception):
     """The run store cannot do what was asked (no lock available, other image, no such run)."""
@@ -251,10 +272,7 @@ class Run:
                       and receipt["case"] == self.session and receipt["reading"] == n
                       and receipt["reading_sha256"] == core_evidence.sha256_hex(reading)
                       and receipt["image_sha256"] == image_sha
-                      and set(entry) in ({"i", "reading", "receipt"}, {"i", "reading", "receipt", "sandbox"})
-                      and ("sandbox" not in entry or (isinstance(entry["sandbox"], dict)
-                                                      and set(entry["sandbox"]) == {"profile_sha256"}
-                                                      and re.fullmatch(r"[0-9a-f]{64}", str(entry["sandbox"]["profile_sha256"])))))
+                      and _extras_ok(entry))
             except Exception:
                 ok = False
             if not ok:
@@ -272,11 +290,12 @@ class Run:
         return self._scan(full=True)[1]
 
     def append(self, reading: bytes, verdict: Dict[str, Any], decider: str = DECIDER,
-               sandbox_profile: Optional[str] = None) -> int:
+               sandbox_profile: Optional[str] = None, grant: Optional[Dict[str, str]] = None) -> int:
         """Record one decided reading as the next receipt, durably, and return its index. `sandbox_profile` is the
         SHA-256 of the sandbox profile the allowed call was rewritten to run under; it is kept on the journal
         line beside the receipt (the receipt is exactly `prismpath.core-receipt/1`, which has no such field),
-        so it is bound to the line by the journal's own check and is not part of the sealed root."""
+        so it is bound to the line by the journal's own check and is not part of the sealed root. `grant` is the
+        `{"grant_id", "grant_sha256"}` of the grant a gateway request presented, kept on the line the same way."""
         with _locked(self.dir / LOCK):
             n = self._scan(full=False)[0]
             image = (self.dir / IMAGE).read_bytes()
@@ -287,6 +306,10 @@ class Run:
             entry = {"i": n, "reading": reading.hex(), "receipt": receipt}
             if sandbox_profile is not None:
                 entry["sandbox"] = {"profile_sha256": sandbox_profile}
+            if grant is not None:
+                entry["grant"] = {"grant_id": grant["grant_id"], "grant_sha256": grant["grant_sha256"]}
+            if not _extras_ok(entry):
+                raise RunError(f"session {self.session}: a journal line's sandbox or grant record is malformed")
             line = canon2.dumps(entry) + b"\n"
             path = self.dir / JOURNAL
             new = not path.exists()
