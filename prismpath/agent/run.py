@@ -7,8 +7,12 @@ a run directory, one per session id under a root the caller names (`RunStore`). 
 
   * `image.bin`: the policy image of the session, written once; a later call with other bytes is refused;
   * `journal.jsonl`: the open part. One canon/2 line per decided reading, `{"i", "reading" (hex), "receipt"}`
-    (and the `sandbox` profile hash of an allowed shell call or the `grant` a gateway request presented),
-    where `receipt` is exactly the `prismpath.core-receipt/1` that `evidence.EpisodeRun.record` writes;
+    where `receipt` is exactly the `prismpath.core-receipt/1` that `evidence.EpisodeRun.record` writes. A line may
+    carry extras beside them: `sandbox` (the profile hash and backend of an allowed shell call), `tool_use_id` (the
+    id Claude Code gave the call), `grant` (the grant a gateway request presented), `routes_sha256` (the digest of
+    the gateway's route table) and `hosts_sha256` (the digest of the egress proxy's allowed host list). The journal check binds the
+    extras to their line (`_extras_ok` and the line's own canon/2 bytes), and the sealed root does not: it covers
+    only the receipts, so an extra is evidence of the journal and not of the signed root;
   * `lock`: the lock file every operation takes exclusively (`fcntl.flock`);
   * `journal.prefix`: the validated-prefix record that keeps an append's cost independent of the run's length;
   * after a seal, the files `core_evidence.verify` reads, in the layout of `prismpath.agent.evidence`:
@@ -103,12 +107,18 @@ _SAFE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 
 
 _HEX64 = re.compile(r"[0-9a-f]{64}")
+# Digests of a launcher or server argument that is not part of the signed policy: the gateway's route table
+# (`routes_sha256`) and the egress proxy's allowed host list (`hosts_sha256`).
+BOUND_DIGESTS = ("routes_sha256", "hosts_sha256")
 _GRANT_ID = re.compile(r"[0-9a-f]{32}")
 
 
 def _extras_ok(entry: Dict[str, Any]) -> bool:
-    """A journal line holds `i`, `reading` and `receipt`, and at most a sandbox record, a tool_use_id and a grant."""
-    if not {"i", "reading", "receipt"} <= set(entry) <= {"i", "reading", "receipt", "sandbox", "tool_use_id", "grant"}:
+    """A journal line holds `i`, `reading` and `receipt`, and at most a sandbox record, a tool_use_id, a grant, and the
+    digest of the gateway's route table or of the egress proxy's allowed host list the line was decided under."""
+    if not {"i", "reading", "receipt"} <= set(entry) <= {"i", "reading", "receipt", "sandbox", "tool_use_id", "grant", *BOUND_DIGESTS}:
+        return False
+    if any(key in entry and not _HEX64.fullmatch(str(entry[key])) for key in BOUND_DIGESTS):
         return False
     sandbox, grant = entry.get("sandbox"), entry.get("grant")
     if "sandbox" in entry and not (isinstance(sandbox, dict)
@@ -169,7 +179,7 @@ def real_outcomes(lines: List[Dict[str, Any]]) -> Dict[int, str]:
 def outcome_counts(entries: List[Dict[str, Any]], lines: List[Dict[str, Any]]) -> Dict[str, int]:
     done = real_outcomes(lines)
     counts = {"allowed": 0, "allowed_ran": 0, "allowed_no_outcome": 0, "asked": 0, "asked_approved": 0,
-              "asked_no_outcome": 0, "refused": 0, "failed": 0,
+              "asked_failed": 0, "asked_no_outcome": 0, "refused": 0, "failed": 0,
               "unbound": sum(1 for l in lines if l["outcome"] == "unbound")}
     for entry in entries:
         kind = receipt_kind(entry["receipt"])
@@ -179,7 +189,10 @@ def outcome_counts(entries: List[Dict[str, Any]], lines: List[Dict[str, Any]]) -
         key, ran = ("allowed", "allowed_ran") if kind == "allow" else ("asked", "asked_approved")
         counts[key] += 1
         if entry["i"] in done:
-            counts[ran] += 1
+            if done[entry["i"]] == "failed" and key == "asked":
+                counts["asked_failed"] += 1         # a call the person approved that did not run to the end is not an approval that ran
+            else:
+                counts[ran] += 1
             counts["failed"] += done[entry["i"]] == "failed"
         else:
             counts[key + "_no_outcome"] += 1
@@ -354,9 +367,39 @@ class Run:
         """Every complete journal line, parsed and validated, after dropping a torn tail. Call with the lock held."""
         return self._scan(full=True)[1]
 
+    def _last_entry_with_tool_use_id(self, tool_use_id: str) -> Optional[Dict[str, Any]]:
+        """The latest journal line that carries `tool_use_id`, or None. Call with the lock held.
+
+        The cost does not grow with the run: `_scan(full=False)` validates only what was appended since the
+        prefix record, and the journal is then read backwards in blocks, a line at a time, parsing only a line that
+        holds the id (Claude Code answers a call a moment after it was decided, so the line is near the end). Lines
+        the prefix record covers are trusted here as they are on append; `seal` and `verify` still validate them all."""
+        self._scan(full=False)
+        path = self.dir / JOURNAL
+        if not path.exists():
+            return None
+        needle = b'"tool_use_id":' + canon2.dumps(tool_use_id)
+        with open(path, "rb") as handle:
+            position = handle.seek(0, os.SEEK_END)
+            tail = b""
+            while position > 0:
+                step = min(65536, position)
+                position -= step
+                handle.seek(position)
+                tail = handle.read(step) + tail
+                parts = tail.split(b"\n")
+                tail = parts[0] if position > 0 else b""        # a partial first line waits for the next block
+                for line in reversed(parts[1:] if position > 0 else parts):
+                    if needle in line:
+                        entry = canon2.loads(line)
+                        if entry.get("tool_use_id") == tool_use_id and _extras_ok(entry):
+                            return entry
+        return None
+
     def append(self, reading: bytes, verdict: Dict[str, Any], decider: str = DECIDER,
                sandbox_profile: Optional[str] = None, sandbox_backend: Optional[str] = None,
-               tool_use_id: Optional[str] = None, grant: Optional[Dict[str, str]] = None) -> int:
+               tool_use_id: Optional[str] = None, grant: Optional[Dict[str, str]] = None,
+               routes_sha256: Optional[str] = None, hosts_sha256: Optional[str] = None) -> int:
         """Record one decided reading as the next receipt, durably, and return its index. `sandbox_profile` is the
         SHA-256 of the sandbox profile the allowed call was rewritten to run under; it is kept on the journal
         line beside the receipt (the receipt is exactly `prismpath.core-receipt/1`, which has no such field),
@@ -365,7 +408,9 @@ class Run:
         none was written before the backend was recorded and means bwrap. `tool_use_id`, the id Claude Code gave the
         call, is kept the same way (an optional key of the line, never in the receipt), so the PostToolUse outcome of
         that call can be bound to this receipt (`Run.outcome_of_hook`). A value that is not shaped like an id is left
-        off. `grant` is the `{"grant_id", "grant_sha256"}` of the grant a gateway request presented, kept the same way."""
+        off. `grant` is the `{"grant_id", "grant_sha256"}` of the grant a gateway request presented, kept the same way.
+        `routes_sha256` and `hosts_sha256` are the digests of the gateway's route table and of the egress proxy's allowed
+        host list, kept the same way, so that `verify` reports which table or list the receipts were decided under."""
         with _locked(self.dir / LOCK):
             n = self._scan(full=False)[0]
             image = (self.dir / IMAGE).read_bytes()
@@ -382,6 +427,9 @@ class Run:
                 entry["tool_use_id"] = tool_use_id
             if grant is not None:
                 entry["grant"] = {"grant_id": grant["grant_id"], "grant_sha256": grant["grant_sha256"]}
+            for key, value in (("routes_sha256", routes_sha256), ("hosts_sha256", hosts_sha256)):
+                if value is not None:
+                    entry[key] = value
             if not _extras_ok(entry):
                 raise RunError(f"session {self.session}: a journal line's sandbox or grant record is malformed")
             line = canon2.dumps(entry) + b"\n"
@@ -588,11 +636,10 @@ class Run:
             if not valid_tool_use_id(tool_use_id):
                 unbound = "no-tool-use-id"
             else:
-                matches = [e for e in self._entries() if e.get("tool_use_id") == tool_use_id]
-                if not matches:
+                target = self._last_entry_with_tool_use_id(tool_use_id)
+                if target is None:
                     unbound = "no-receipt"
                 else:
-                    target = matches[-1]
                     if receipt_kind(target["receipt"]) == "refuse":
                         unbound = "receipt-was-a-refusal"
                     elif any(l.get("receipt") == target["i"] and l["source"] == "hook" for l in lines):
@@ -709,6 +756,14 @@ class Run:
             return len(lines)
 
     # ------------------------------------------------------------------ seal
+    def bound_digests(self) -> Dict[str, List[str]]:
+        """The distinct route table and allowed host list digests the journal's lines carry, each sorted. One value
+        is a run decided under one table or list, none is a run that recorded none (an agent run has no route table),
+        and more than one is a run that was resumed under another."""
+        with _locked(self.dir / LOCK):
+            entries = self._entries()
+        return {key: sorted({e[key] for e in entries if key in e}) for key in BOUND_DIGESTS}
+
     def summary(self) -> Dict[str, Any]:
         """The receipt count, whether the run is open, and how its seal stands against the journal, every
         journal line validated: `unsealed` (no seal file yet), `partial` (some seal files and not all, a first
@@ -798,6 +853,7 @@ class Run:
                                           pin_instance=Path(keys) / "instance.pub", replay=replay)
         result["observations"] = self.verify_observations()      # raises RunCorrupt on a damaged or unbound one
         result["outcomes"] = self.verify_outcomes()               # the same for the outcomes file
+        result["bound"] = self.bound_digests()                    # the route table and host list digests, outside the root
         return result
 
 

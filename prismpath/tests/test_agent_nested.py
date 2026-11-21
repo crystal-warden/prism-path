@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """The per call sandbox nested inside the outer agent sandbox, and the
-table of section 4, where the hook, the per call sandbox and the outer sandbox can disagree.
+table of cases where the hook, the per call sandbox and the outer sandbox can disagree.
 
 Under `prismpath agent run` a stand-in program plays Claude Code. It runs the staged hook command for each recorded
 input, then runs what the answer says, as Claude Code would (`bash -c` of the rewritten command), and its own
@@ -12,7 +12,7 @@ The stricter layer wins, and each case that the inner layer stops is recorded as
 receipt. One case is a known gap that no layer closes yet: the agent's own file tool can read the staged model
 credential, because the outer sandbox mounts it for the agent itself. `KNOWN_GAP_CREDENTIAL_READ` says so, and the test
 asserts the gap is there. A later fix must flip it, and the test
-then fails until the constant and the plan change with it."""
+then fails until the constant changes with it."""
 import hashlib
 import json
 import os
@@ -39,7 +39,7 @@ def _nesting_works():
     """Whether this host lets a bwrap sandbox start a second one inside it. Ubuntu 24.04's AppArmor setting (GitHub's
     runners among them) forbids the nested user namespace. There the launcher runs the per call sandbox under Landlock
     instead (test_landlock_backend.py), and denies every shell command with cause 129 only where Landlock is missing
-    too. The tests that need a nested bwrap skip here, and the Landlock ones run in its place."""
+    too. The tests that need a nested bwrap itself skip here, and the ones that need any per call backend run under Landlock."""
     import subprocess
     from prismpath.agent import sandbox_exec as _se
     if not os.access(_se.BWRAP, os.X_OK):
@@ -56,6 +56,10 @@ def _nesting_works():
 
 
 NESTING = _nesting_works()
+# A per call backend works here when a bwrap can nest or Landlock is available; the launcher runs a shell call under whichever.
+PER_CALL_BACKEND = NESTING or landlock.available()
+needs_per_call_backend = pytest.mark.skipif(not PER_CALL_BACKEND, reason="neither a nested bubblewrap nor Landlock works here, "
+                                                                      "so the launcher denies shell commands with cause 129")
 needs_nesting = pytest.mark.skipif(not NESTING, reason="this host forbids a sandbox inside a sandbox (nested user "
                                                      "namespaces); the launcher denies shell commands there with cause 129")
 
@@ -171,7 +175,7 @@ def _file(arena, tool, path, session, **extra):
 # ------------------------------------------------------------------------- the nested per call sandbox
 @needs_bwrap
 @needs_socat
-@needs_nesting
+@needs_per_call_backend
 def test_a_rewritten_call_runs_nested_and_the_inner_layer_stops_and_records_what_the_outer_one_allows(arena):
     sess = "nest1"
     steps = _launch(arena, [
@@ -205,7 +209,10 @@ def test_a_rewritten_call_runs_nested_and_the_inner_layer_stops_and_records_what
     (outcome,) = run.outcomes()                       # the runner finishing the command is an outcome of the same receipt
     assert outcome["source"] == "runner" and outcome["receipt"] == 0 and outcome["decision"] == "allow"
     kinds = {s["kind"] for s in obs["observed"]["signals"]}
-    assert {"path-absent", "network-unreachable"} <= kinds and obs["observed"]["method"] == "stderr-pattern"
+    backend = entries[0]["sandbox"].get("backend", "bwrap")
+    # bubblewrap hides the paths and the network, so they are absent or unreachable; Landlock refuses them with an access error
+    expected = {"path-absent", "network-unreachable"} if backend == "bwrap" else {"access-denied"}
+    assert expected <= kinds and obs["observed"]["method"] == "stderr-pattern", (backend, kinds)
     done = cli_tests._cli(arena["home"], "agent", "verify", "--json")
     report = json.loads(done.stdout)
     assert done.returncode == 0 and report["verified"] is True and report["runs"][0]["observations"] == 1 and report["runs"][0]["outcomes"] == 1
@@ -213,7 +220,7 @@ def test_a_rewritten_call_runs_nested_and_the_inner_layer_stops_and_records_what
 
 @needs_bwrap
 @needs_socat
-@needs_nesting
+@needs_per_call_backend
 def test_the_rewrite_cannot_be_walked_around_a_forged_observation_is_refused_and_a_clean_call_records_none(arena):
     sess = "nest2"
     steps = _launch(arena, [{"name": "ls", "input": _bash(arena, "ls src", sess)}], arena["credential"])
@@ -266,7 +273,7 @@ def test_where_nesting_is_unavailable_every_shell_command_is_denied_with_cause_1
 
 @needs_bwrap
 @needs_socat
-@needs_nesting
+@needs_per_call_backend
 def test_the_real_probe_finds_nesting_available_here_and_a_broken_runner_makes_it_unavailable(arena, monkeypatch):
     seen = {}
     real = launcher.probe_nested
@@ -293,7 +300,7 @@ def test_a_profile_that_shows_the_host_is_refused_nested_because_the_view_would_
     assert sandbox_hook.sandbox_profile_for_call(_bash(arena, "ls", "x"), Path(arena["home"]), b"") is wide    # not nested: as before
 
 
-# ----------------------------------------------------------------------------------- the section 4 table
+# ------------------------------------------------------------------------------- the disagreement table
 @needs_bwrap
 @needs_socat
 def test_the_disagreement_table_the_stricter_layer_wins_and_the_known_gap_is_asserted(arena):
@@ -337,7 +344,7 @@ def test_the_disagreement_table_the_stricter_layer_wins_and_the_known_gap_is_ass
     assert gap is KNOWN_GAP_CREDENTIAL_READ, (
         "the outer sandbox no longer lets the agent's own file tool read the staged credential: the known gap is "
         "closed, so flip KNOWN_GAP_CREDENTIAL_READ")
-    if not NESTING and not landlock.available():
+    if not PER_CALL_BACKEND:
         # a host with no per call backend (no nested bwrap, no Landlock): every shell row is refused with cause 129, never run under the outer
         # profile alone, and the run still verifies; the file tool rows above hold either way
         for name in ("ask", "allow-allow", "allow-blocked"):

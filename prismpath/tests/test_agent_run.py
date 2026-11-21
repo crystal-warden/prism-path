@@ -193,6 +193,58 @@ def test_an_append_to_a_5000_receipt_run_costs_what_an_append_to_a_new_run_costs
     assert ms < 25                                   # a full validation of 5000 lines took about 700 ms
 
 
+def test_an_outcome_finds_its_receipt_by_tool_use_id_without_validating_the_whole_journal(tmp_path, monkeypatch):
+    run, raw, verdict = _big_run(tmp_path, 5000)
+    first = run.append(raw, verdict, tool_use_id="toolu_first")      # validates the journal once, then the record holds
+    run.append(raw, verdict, tool_use_id="toolu_dup")
+    run.append(raw, verdict)                                          # a line with no id
+    last = run.append(raw, verdict, tool_use_id="toolu_dup")          # the same id again: the later receipt is the one found
+    monkeypatch.setattr(runmod.Run, "_entries", lambda self: pytest.fail("a full rescan of the journal"))
+    start = time.perf_counter()
+    got = run.outcome_of_hook("toolu_last", "PostToolUse", "Read")
+    assert got["outcome"] == "unbound" and got["reason"] == "no-receipt"          # an id no receipt has, found by a backward read
+    got = run.outcome_of_hook("toolu_dup", "PostToolUse", "Read")
+    assert got["outcome"] == "ran" and got["receipt"] == last and got["tool_use_id"] == "toolu_dup"
+    got = run.outcome_of_hook("toolu_first", "PostToolUseFailure", "Read", "exit-nonzero")
+    assert got["outcome"] == "failed" and got["receipt"] == first            # an old receipt is found as well
+    assert run.outcome_of_hook("toolu_first", "PostToolUse", "Read")["reason"] == "duplicate"
+    assert run.outcome_of_hook(None, "PostToolUse", "Read")["reason"] == "no-tool-use-id"
+    assert (time.perf_counter() - start) < 1.0                       # a full validation of 5000 lines took about 700 ms each
+    monkeypatch.undo()
+    assert run.verify_outcomes() == 5
+
+
+def test_an_outcome_reads_a_receipt_appended_after_the_prefix_record_was_written(tmp_path):
+    from prismpath.kernel import canon2
+    run, raw, verdict = _big_run(tmp_path, 50)
+    run.append(raw, verdict)
+    path = run.dir / runmod.JOURNAL
+    n = run.append(raw, verdict)
+    before = (run.dir / runmod.PREFIX).read_bytes()
+    line = canon2.loads(path.read_bytes().split(b"\n")[-2])
+    line.update(i=n + 1)
+    line["receipt"].update(idx=n + 1, reading=n + 1)
+    line["tool_use_id"] = "toolu_late"
+    with open(path, "ab") as handle:                                  # a line a crashed append wrote before its record
+        handle.write(canon2.dumps(line) + b"\n")
+    assert (run.dir / runmod.PREFIX).read_bytes() == before
+    got = run.outcome_of_hook("toolu_late", "PostToolUse", "Read")
+    assert got["outcome"] == "ran" and got["receipt"] == n + 1
+    path.write_bytes(path.read_bytes()[:-1])                          # a torn tail is dropped, never matched
+    assert run.outcome_of_hook("toolu_late", "PostToolUse", "Read")["outcome"] == "unbound"
+
+
+def test_a_route_table_and_an_allowed_host_list_digest_are_kept_on_the_line_and_reported(tmp_path):
+    run, raw, verdict = _big_run(tmp_path, 3)
+    run.append(raw, verdict, routes_sha256="a" * 64)
+    run.append(raw, verdict, hosts_sha256="b" * 64)
+    assert run.bound_digests() == {"routes_sha256": ["a" * 64], "hosts_sha256": ["b" * 64]}
+    with pytest.raises(runmod.RunError):
+        run.append(raw, verdict, routes_sha256="not-a-digest")
+    run.append(raw, verdict, routes_sha256="c" * 64)
+    assert run.bound_digests()["routes_sha256"] == ["a" * 64, "c" * 64]      # a run resumed under another table says so
+
+
 def test_a_tampered_prefix_the_append_did_not_read_is_refused_at_the_seal(tmp_path):
     run, raw, verdict = _big_run(tmp_path, 5000)
     run.append(raw, verdict)

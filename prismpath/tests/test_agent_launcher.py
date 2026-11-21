@@ -230,6 +230,21 @@ def test_the_stand_in_reaches_the_stub_through_the_proxy_and_is_confined(world, 
 @needs_bwrap
 @needs_socat
 @needs_openssl
+def test_without_an_egress_log_path_the_log_is_kept_in_the_egress_run_directory(world, stub):
+    code, _out, _log = _launch(world, stub, egress_log=None)
+    assert code == 7
+    _policy, store = commands.load_checked(commands.config_dir())
+    egress_run = max((r for r in store.runs() if r.session.startswith("egress-") and (r.dir / launcher.EGRESS_LOG_NAME).exists()),
+                     key=lambda r: r.session)
+    kept = egress_run.dir / launcher.EGRESS_LOG_NAME
+    decisions = [(json.loads(line)["host"], json.loads(line)["decision"]) for line in kept.read_text().splitlines()]
+    assert ("evil.example:443", "refuse") in decisions
+    assert egress_run.verify(commands.config_dir())["disagree"] == 0          # the extra file does not disturb the seal
+
+
+@needs_bwrap
+@needs_socat
+@needs_openssl
 def test_existing_control_paths_are_read_only_and_kept(world, stub):
     workspace, _stages, _root = world
     (workspace / ".claude").mkdir()

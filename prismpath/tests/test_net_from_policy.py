@@ -71,6 +71,8 @@ ALL_IMAGES["allow_every_connect"] = canon2.dumps({**canon2.loads(starter_path("d
 @pytest.fixture(scope="module")
 def evaluator(tmp_path_factory):
     if not shutil.which("cc"):
+        if os.environ.get("PRISMPATH_REQUIRE_CORE_ORACLE"):
+            pytest.fail("PRISMPATH_REQUIRE_CORE_ORACLE is set and there is no C compiler (cc) for the evaluator")
         pytest.skip("no C compiler")
     return nf.build_evaluator(tmp_path_factory.mktemp("edge_eval"))
 
