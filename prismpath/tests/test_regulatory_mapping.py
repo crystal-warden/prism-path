@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
-"""The regulatory mapping referee (docs/standards/crosswalks/, docs/standards/regulatory-mapping.md).
+"""The regulatory mapping referee (docs/standards/crosswalks/).
 
 The crosswalks map the evidence PrismPath produces onto provisions and controls. Every evidence id and
 every target id must be in a pinned list, every edge must say what it does not satisfy, and every edge

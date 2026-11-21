@@ -2,7 +2,7 @@
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """A stdio MCP proxy that decides every `tools/call` against the signed agent policy before the server sees it.
 
-    python -m prismpath.agent.mcp_proxy [--policy P] [--runs DIR] [--session ID] [--keys DIR] -- SERVER ARGS...
+    python -m prismpath.agent.mcp_proxy [--home DIR] [--policy P] [--runs DIR] [--session ID] [--keys DIR] -- SERVER ARGS...
 
 The proxy starts the downstream MCP server command as a child process and relays newline delimited JSON-RPC
 between its own standard streams (the client) and the child's. The child's standard error is the proxy's.
@@ -51,11 +51,12 @@ Workspace. Paths are classified against `--workspace` (default: the proxy's work
 classifier's toolchain directories (classifier.Config.for_workspace); the child is started in the proxy's
 working directory, which is where a filesystem server's relative path points.
 
-Policy. `--policy` names a `prismpath.core/1` image; by default it is `policy/agent_default.core.json` when
-the package ships it (the default policy of the Claude Code adapter, which escalates what the classifier
-cannot read) and `policy/agent_rules.core.json` otherwise, which refuses it with cause 104. Runs are kept
-under `--runs` (default `$XDG_CONFIG_HOME/prismpath/agent/runs`), one per `--session` (default a fresh id
-printed on standard error). With `--keys` the run is sealed when the proxy ends; `Run.verify` seals an open
+Policy. The proxy decides under the policy `prismpath agent init` recorded, checked as the hook checks it
+(`commands.load_checked`: both key pairs, key separation, the attestation under the authority key). With none, or
+one that does not verify, every call is refused. `--policy` may name an image only when it is byte for byte the
+recorded, attested one; any other image is refused, never loaded unattested. `--home` names the agent directory
+(default the platform's `prismpath/agent`). Runs are kept under `--runs` (default the recorded `runs` directory),
+one per `--session` (default a fresh id printed on standard error). With `--keys` the run is sealed when the proxy ends; `Run.verify` seals an open
 run in any case.
 """
 from __future__ import annotations
@@ -79,16 +80,6 @@ from .run import RunStore
 PROTOCOL_VERSION = "2026-07-28"
 META_VERSION = "io.modelcontextprotocol/protocolVersion"
 PARSE_ERROR, INVALID_REQUEST = -32700, -32600
-
-
-def default_policy_path() -> Path:
-    path = getattr(policymod, "DEFAULT_POLICY_PATH", policymod.HERE / "policy" / "agent_default.core.json")
-    return Path(path) if Path(path).exists() else policymod.POLICY_PATH
-
-
-def default_runs_root() -> Path:
-    base = os.environ.get("XDG_CONFIG_HOME") or os.path.join(os.path.expanduser("~"), ".config")
-    return Path(base) / "prismpath" / "agent" / "runs"
 
 
 class _Repeated(ValueError):
@@ -121,18 +112,24 @@ class Outcome:
 class Governor:
     """The decision and the receipt of one `tools/call`, against one policy and one run."""
 
-    def __init__(self, policy_path: Path, runs: Path, session: str, workspace: Path, server_cwd: str):
+    def __init__(self, home: Path, runs: Optional[Path], session: str, workspace: Path, server_cwd: str,
+                 policy_path: Optional[Path] = None):
         self.session, self.server_cwd = session, server_cwd
         self.failure: Optional[str] = None
         self.policy = self.run = self.config = None
+        store = None
         try:
+            from prismpath.agent import commands
             self.config = classifier.Config.for_workspace(workspace)
-            self.policy = policymod.Policy.load(policy_path)
-        except Exception as exc:   # noqa: BLE001 - a policy that does not load refuses every call
+            self.policy, store = commands.load_checked(home)
+            if policy_path is not None and policymod.Policy.load(policy_path).image != self.policy.image:
+                raise ValueError(f"{policy_path} is not the recorded, attested policy")
+        except Exception as exc:   # noqa: BLE001 - a policy that does not load or verify refuses every call
+            self.policy = None
             self.failure = f"the policy could not be loaded ({type(exc).__name__}: {exc})"
             return
         try:
-            self.run = RunStore(runs).open(session, self.policy.image)
+            self.run = (RunStore(runs) if runs is not None else store).open(session, self.policy.image)
         except Exception as exc:   # noqa: BLE001
             self.failure = f"the run could not be opened ({type(exc).__name__}: {exc})"
 
@@ -305,7 +302,9 @@ def serve(command: Sequence[str], governor: Governor, client_in: BinaryIO, clien
 def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m prismpath.agent.mcp_proxy",
                                      description="Decide every MCP tools/call against the signed agent policy.")
-    parser.add_argument("--policy", type=Path, default=None, help="the prismpath.core/1 policy image")
+    parser.add_argument("--policy", type=Path, default=None,
+                        help="a prismpath.core/1 image, accepted only when it is the recorded, attested policy")
+    parser.add_argument("--home", type=Path, default=None, help="the agent directory (default: the platform's)")
     parser.add_argument("--runs", type=Path, default=None, help="the directory of runs, one per session")
     parser.add_argument("--session", default=None, help="the session id of this proxy's run")
     parser.add_argument("--workspace", type=Path, default=None, help="the workspace paths are classified against")
@@ -318,8 +317,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     session = args.session or f"mcp-{time.strftime('%Y%m%dT%H%M%S')}-{uuid.uuid4().hex[:8]}"
     if not args.session:
         sys.stderr.write(f"prismpath mcp proxy: session {session}\n")
-    governor = Governor(args.policy or default_policy_path(), args.runs or default_runs_root(), session,
-                        args.workspace or Path.cwd(), os.getcwd())
+    from prismpath.agent import commands
+    governor = Governor(args.home or commands.config_dir(), args.runs, session, args.workspace or Path.cwd(),
+                        os.getcwd(), args.policy)
     if governor.failure:
         sys.stderr.write(f"prismpath mcp proxy: every tools/call will be refused: {governor.failure}\n")
     return serve(command, governor, sys.stdin.buffer, sys.stdout.buffer, args.keys)

@@ -1,7 +1,7 @@
 {
  "format": "prismpath.core/1",
  "fields": {
-  "classifier_version": "int min=2 max=2",
+  "classifier_version": "int min=3 max=3",
   "tool": "category",
   "zone_reach": "category",
   "path_scope": "category",

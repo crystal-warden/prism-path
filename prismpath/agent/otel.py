@@ -4,7 +4,7 @@
 
 OpenTelemetry's GenAI semantic conventions (open-telemetry/semantic-conventions-genai, every attribute at status
 Development) describe a tool call (`gen_ai.tool.name`, `gen_ai.tool.call.id`) but have no attribute for whether a
-policy allowed it, refused it or sent it to a person, or why. docs/standards/otel-decision-attributes.md proposes
+policy allowed it, refused it or sent it to a person, or why. This module proposes
 attributes for that, carrying PrismPath's registered cause codes; this module produces them as a plain dict, so a
 caller adds them to the span or event its own OpenTelemetry SDK makes. It imports no OpenTelemetry package.
 

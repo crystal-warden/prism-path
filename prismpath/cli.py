@@ -421,10 +421,10 @@ def _add_operator_commands(subparsers) -> None:
                            help='copy this one file into the sandbox as its Claude credential (off unless given; '
                                 'PrismPath never looks for a login of its own)')
     agent_run.add_argument('--egress-log', default=None, metavar='FILE',
-                           help='keep the proxy\'s log of every connection attempt here (default: under the agent config directory)')
+                           help='keep the proxy\'s log of every connection attempt here (default: in the run directory of the egress run, beside its receipts)')
     agent_run.add_argument('--max-processes', type=int, default=None, help='the process limit inside the sandbox')
     agent_run.add_argument('--allow-host', action='append', default=None, metavar='HOST',
-                           help='a host name the policy may allow on port 443 (net_dest allowed_host); repeatable')
+                           help='a host name the policy may allow on port 443 (net_dest allowed_host); repeatable. The digest of the sorted list is recorded with the run')
     agent_run.add_argument('--local-model', default=None, metavar='http://HOST:PORT',
                            help='a fixed route to one local model server: the sandbox reaches only that host and port, '
                                 'at 127.0.0.1:PORT inside, and each use is logged (a separate route, not a proxy exception)')
