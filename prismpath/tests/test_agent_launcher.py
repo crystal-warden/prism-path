@@ -209,7 +209,7 @@ def test_the_stand_in_reaches_the_stub_through_the_proxy_and_is_confined(world, 
     assert out["env"] == {"HOME": "/home/agent", "CLAUDE_CONFIG_DIR": "/home/agent/.claude", "DISABLE_AUTOUPDATER": "1",
                           "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1", "ENABLE_CLAUDEAI_MCP_SERVERS": "false"}
     hooks = out["settings"]["hooks"]
-    assert set(hooks) == {"PreToolUse", "SessionEnd"}
+    assert set(hooks) == {"PreToolUse", "SessionEnd", "PostToolUse", "PostToolUseFailure"}
     assert all(h["command"] == launcher.client_hook_command() for event in hooks.values() for g in event for h in g["hooks"])
     decisions = [(json.loads(line)["host"], json.loads(line)["decision"]) for line in log.read_text().splitlines()]
     assert ("api.anthropic.com", "allow") in decisions and ("evil.example:443", "refuse") in decisions
