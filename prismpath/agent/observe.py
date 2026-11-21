@@ -25,6 +25,10 @@ exists and hashes to the recorded value, and that the image and profile hashes a
 journal line's. The file is not under the signed Merkle root, so a whole line removed from the end cannot be
 detected, and a rewritten file that is internally consistent cannot be told from the original except by the
 receipts it names. A later format may seal its head into the root statement.
+
+Outcomes are the same kind of record, kept the same way, in `outcomes.jsonl` (`Run.outcome_of_runner`, and
+`Run.outcome_of_hook` for the PostToolUse hooks): the runner reporting that a command finished is an outcome of
+its receipt whether or not the command showed anything.
 """
 from __future__ import annotations
 
@@ -76,14 +80,16 @@ def observed(returncode: int, stderr: bytes, timed_out: bool = False) -> Optiona
 def record(run_dir: str, session: str, receipt: int, image_sha256: str, profile_sha256: str,
            returncode: int, stderr: bytes, timed_out: bool = False) -> Optional[int]:
     """Record the observation of one finished command on the run, bound to the receipt `receipt` of the allowed
-    call. Returns its sequence number, or None when there was nothing to record. Imported late so a command
-    that shows nothing does not pay for the run store."""
-    body = observed(returncode, stderr, timed_out)
-    if body is None:
-        return None
+    call, and the fact that the runner finished it as an outcome of that receipt (Run.outcome_of_runner, which is
+    read only like an observation). Returns the observation's sequence number, or None when there was nothing to
+    observe. Imported late so a command pays for the run store only when it runs."""
     from pathlib import Path
     from prismpath.agent.run import Run
-    return Run(Path(run_dir), session).observe(receipt, image_sha256, profile_sha256, body)
+    run = Run(Path(run_dir), session)
+    body = observed(returncode, stderr, timed_out)
+    number = run.observe(receipt, image_sha256, profile_sha256, body) if body is not None else None
+    run.outcome_of_runner(receipt, image_sha256, profile_sha256, returncode, timed_out)
+    return number
 
 
 def argv(run_dir: str, session: str, receipt: int, image_sha256: str, profile_sha256: str) -> Sequence[str]:
