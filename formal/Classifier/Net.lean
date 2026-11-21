@@ -44,13 +44,13 @@ def netBad (r : Reading) : Bool :=
 /-- Under `p`, every reading that `netBad` holds of is refused. -/
 def netSafe (p : Core.Checked) : Bool :=
   allTools.all fun t => allScopes.all fun s => allCmds.all fun c => allGitOps.all fun g =>
-  allRemotes.all fun rc => allNetDests.all fun nd => allProcClasses.all fun pc =>
+  allRemotes.all fun rc => allNetDests.all fun nd => allProcClasses.all fun pc => allZones.all fun zr =>
   bools.all fun k => bools.all fun tc => bools.all fun ctl => bools.all fun gl => bools.all fun tr =>
   bools.all fun sy =>
     let r : Reading :=
       { tool := t, pathScope := s, pathInToolchain := tc, pathControl := ctl, pathGlob := gl, pathTraversal := tr,
         pathSymlink := sy, commandClass := c, killByPattern := k, gitOp := g, remoteClass := rc, netDest := nd,
-        procClass := pc }
+        procClass := pc, zoneReach := zr }
     !netBad r || isRefusal (Core.decideReading p (.ok r.json))
 
 /-- **Under a `netSafe` policy, a reading that `netBad` holds of is refused.** -/
@@ -58,7 +58,7 @@ theorem net_refused {p : Core.Checked} (hp : netSafe p = true) {r : Reading} (hb
     isRefusal (Core.decideReading p (.ok r.json)) = true := by
   simp only [netSafe, List.all_eq_true] at hp
   have := hp r.tool (tool_mem _) r.pathScope (scope_mem _) r.commandClass (cmd_mem _) r.gitOp (gitop_mem _)
-    r.remoteClass (remote_mem _) r.netDest (netdest_mem _) r.procClass (procclass_mem _) r.killByPattern (bool_mem _)
+    r.remoteClass (remote_mem _) r.netDest (netdest_mem _) r.procClass (procclass_mem _) r.zoneReach (zone_mem _) r.killByPattern (bool_mem _)
     r.pathInToolchain (bool_mem _) r.pathControl (bool_mem _) r.pathGlob (bool_mem _) r.pathTraversal (bool_mem _)
     r.pathSymlink (bool_mem _)
   cases r

@@ -41,17 +41,18 @@ def allGitOps : List GitOp := [.none, .local_read, .local_write, .mutating, .pus
 def allRemotes : List Remote := [.none, .allowed, .other]
 def allNetDests : List NetDest := [.none, .model_api, .allowed_host, .other, .unknown]
 def allProcClasses : List ProcClass := [.none, .single, .tree, .unknown]
+def allZones : List Zone := [.none, .protectedZ, .unknown]
 
 /-- Under `p`, every change that names a control file is refused: every reading with `path_control`, one per
 combination of the other fields, decided by the core. -/
 def controlSafe (p : Core.Checked) : Bool :=
   allTools.all fun t => allScopes.all fun s => allCmds.all fun c => allGitOps.all fun g =>
-  allRemotes.all fun rc => allNetDests.all fun nd => allProcClasses.all fun pc =>
+  allRemotes.all fun rc => allNetDests.all fun nd => allProcClasses.all fun pc => allZones.all fun zr =>
   bools.all fun k => bools.all fun tc => bools.all fun gl => bools.all fun tr => bools.all fun sy =>
     let r : Reading :=
       { tool := t, pathScope := s, pathInToolchain := tc, pathControl := true, pathGlob := gl, pathTraversal := tr,
         pathSymlink := sy, commandClass := c, killByPattern := k, gitOp := g, remoteClass := rc, netDest := nd,
-        procClass := pc }
+        procClass := pc, zoneReach := zr }
     !isChange r || isRefusal (Core.decideReading p (.ok r.json))
 
 theorem tool_mem (t : Tool) : t ∈ allTools := by cases t <;> simp [allTools]
@@ -61,6 +62,7 @@ theorem gitop_mem (t : GitOp) : t ∈ allGitOps := by cases t <;> simp [allGitOp
 theorem remote_mem (t : Remote) : t ∈ allRemotes := by cases t <;> simp [allRemotes]
 theorem netdest_mem (t : NetDest) : t ∈ allNetDests := by cases t <;> simp [allNetDests]
 theorem procclass_mem (t : ProcClass) : t ∈ allProcClasses := by cases t <;> simp [allProcClasses]
+theorem zone_mem (t : Zone) : t ∈ allZones := by cases t <;> simp [allZones]
 theorem bool_mem (b : Bool) : b ∈ bools := by cases b <;> simp [bools]
 
 /-- **Under a `controlSafe` policy, a change that reads `path_control` is refused.** -/
@@ -68,7 +70,7 @@ theorem control_refused {p : Core.Checked} (hp : controlSafe p = true) {r : Read
     (hch : isChange r = true) : isRefusal (Core.decideReading p (.ok r.json)) = true := by
   simp only [controlSafe, List.all_eq_true] at hp
   have := hp r.tool (tool_mem _) r.pathScope (scope_mem _) r.commandClass (cmd_mem _) r.gitOp (gitop_mem _)
-    r.remoteClass (remote_mem _) r.netDest (netdest_mem _) r.procClass (procclass_mem _) r.killByPattern (bool_mem _)
+    r.remoteClass (remote_mem _) r.netDest (netdest_mem _) r.procClass (procclass_mem _) r.zoneReach (zone_mem _) r.killByPattern (bool_mem _)
     r.pathInToolchain (bool_mem _) r.pathGlob (bool_mem _) r.pathTraversal (bool_mem _) r.pathSymlink (bool_mem _)
   cases r
   simp_all

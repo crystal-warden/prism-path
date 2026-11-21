@@ -5,6 +5,7 @@ import Classifier.Theorems
 import Classifier.ScanTheorems
 import Classifier.Control
 import Classifier.Net
+import Classifier.Zone
 /-!
 # The classifier's axiom audit
 
@@ -172,3 +173,19 @@ elab "#assert_standard_axioms " id:ident : command => do
 #assert_standard_axioms Classifier.connect_bad
 #assert_standard_axioms Classifier.connect_other_refused
 #assert_standard_axioms Classifier.connect_unreadable_refused
+#assert_standard_axioms Classifier.zone_mem
+#assert_standard_axioms Classifier.zoneJoin_eq_none
+#assert_standard_axioms Classifier.zoneJoin_protected
+#assert_standard_axioms Classifier.zoneOf_none_iff
+#assert_standard_axioms Classifier.zoneOf_not_changing
+#assert_standard_axioms Classifier.zoneOf_absent
+#assert_standard_axioms Classifier.zoneOf_protected
+#assert_standard_axioms Classifier.changing_tool
+#assert_standard_axioms Classifier.classifyZ_only_zone
+#assert_standard_axioms Classifier.classifyZ_changing
+#assert_standard_axioms Classifier.zone_not_allowed
+#assert_standard_axioms Classifier.allowed_change_every_path_none
+#assert_standard_axioms Classifier.absent_point_not_allowed
+#assert_standard_axioms Classifier.protected_not_allowed
+#assert_standard_axioms Classifier.hookReadingZ_known
+#assert_standard_axioms Classifier.hookReadingZ_unknown
