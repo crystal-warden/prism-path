@@ -5,7 +5,7 @@
 An observation is evidence about the worker. It changes what the system knows and never what it is permitted
 to do: nothing in this file, or in the code that reads an observation, edits a policy, a profile, a rule or
 any decision, and `prismpath agent rules` does not count an observation as a rule hit. Only a signed policy
-widens or narrows what runs (docs/design/enforcement-points-plan.md section 3, NORTH-STAR.md).
+widens or narrows what runs.
 
 How it is observed, and what that can and cannot show. bubblewrap reports no denied open and no refused
 connect, and seccomp or Landlock audit needs privilege or a kernel facility this does not rely on. The runner

@@ -88,7 +88,10 @@ def talk(proxy, request, read_all=True, timeout=5):
     client.settimeout(timeout)
     client.connect(proxy.socket_path)
     if request:
-        client.sendall(request)
+        try:
+            client.sendall(request)
+        except (BrokenPipeError, ConnectionResetError):
+            pass    # the proxy may answer (a 503 over the limit) and close before the request is all sent
     return client
 
 

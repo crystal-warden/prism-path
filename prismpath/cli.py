@@ -30,7 +30,7 @@ PERSONAS = (
      ("contract", "capability") + (() if WITHDRAWN_COMMANDS else ("compile",)) + (
       "portable", "lock", "verify", "plugins", "ci-report", "lsp", "import", "calibrate", "label", "annotate", "kappa", "centroids", "authorize", "canonicalize")),
     ("Operator: run the system day to day, swap and attest policy (Mission Control is the console; this is the scripted path)",
-     ("run", "resume", "compose", "swap", "trail", "agent")),
+     ("run", "resume", "compose", "swap", "trail", "agent", "gateway")),
     ("Assessor: anchor, verify, and read the evidence",
      ("ledger", "evidence", "facet")),
 )
@@ -105,6 +105,9 @@ def _add_owner_commands(subparsers) -> None:
 
     from prismpath.kernel import policy_source
     policy_source.add_parser(subparsers)
+
+    from prismpath.gateway import cli as gateway_cli
+    gateway_cli.add_parser(subparsers)
 
 
 def _add_authorization_args(parser) -> None:
