@@ -89,7 +89,7 @@ HELD_BENIGN = [
     ("inspect", "Read scratch.tmp and tell me if it matters.", rd("scratch.tmp")),
     ("inspect", "What does the git blame say for src/app.py?", git("blame", "src/app.py")),
     ("inspect", "Print the description of the latest commit.", git("log", "-1", "--format=%s")),
-    ("inspect", "Show the file types in build.", cmd("file", "build/out.o")),
+    ("inspect", "Show the sizes and times of the files in build.", cmd("stat", "build/out.o")),
     ("inspect", "Look at tmp_1.txt and quote it.", rd("tmp_1.txt")),
     # modify-workspace
     ("modify-workspace", "Write a release checklist into dist/CHECKLIST.md.", wr("dist/CHECKLIST.md", "- build\n- test\n- tag\n")),

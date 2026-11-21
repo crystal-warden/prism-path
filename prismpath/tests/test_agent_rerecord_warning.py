@@ -8,6 +8,7 @@ from git history."""
 import hashlib
 import io
 import json
+import re
 import os
 import subprocess
 import sys
@@ -19,7 +20,7 @@ pytest.importorskip("cryptography")
 pytest.importorskip("fcntl")
 
 from prismpath.agent import commands, doctor  # noqa: E402
-from prismpath.agent.policy import (OLDER_STARTERS, STARTERS, Policy, control_check, control_gap, older_date, older_starter_of,  # noqa: E402
+from prismpath.agent.policy import (OLDER_STARTERS, STARTERS, Policy, control_check, control_gap, classifier_mismatch, older_date, older_starter_of,  # noqa: E402
                                     starter_of, starter_path)
 from prismpath.kernel import canon2  # noqa: E402
 
@@ -28,7 +29,9 @@ OLD = sorted((Path(__file__).parent / "fixtures" / "agent_old_starters").glob("*
 # the three recorded between the control-file rule and the connect rule (commit ccf2f60): they have path_control and
 # refuse its changes, and bound classifier_version to 1
 OLD_NET = [p for p in OLD if "ccf2f60" in p.name]
-OLD_CONTROL = [p for p in OLD if "ccf2f60" not in p.name]
+# the three recorded between the connect rule and the read-only fix (commit 2b73218): classifier version 2
+OLD_RO = [p for p in OLD if "2b73218" in p.name]
+OLD_CONTROL = [p for p in OLD if "ccf2f60" not in p.name and "2b73218" not in p.name]
 
 
 def _image(path: Path) -> bytes:
@@ -43,8 +46,8 @@ def _with_extra_rule(image: bytes) -> bytes:
     return canon2.dumps(doc)
 
 
-def test_the_fixtures_are_the_seven_known_older_starters():
-    assert len(OLD) == 7 and len(OLD_NET) == 3
+def test_the_fixtures_are_the_ten_known_older_starters():
+    assert len(OLD) == 10 and len(OLD_NET) == 3 and len(OLD_RO) == 3 and len(OLD_CONTROL) == 4
     found = {hashlib.sha256(_image(p)).hexdigest()[:16]: p.name.split("-")[0] for p in OLD}
     assert found == {key: value[0] for key, value in OLDER_STARTERS.items()}
     for path in OLD:
@@ -70,6 +73,16 @@ def test_a_starter_from_before_the_connect_rule_still_refuses_control_changes_an
     name, what = older_starter_of(image)
     assert name == path.name.split("-")[0] and "before the connect rule (cause 130" in what
     assert older_date(image) == "2026-11-20"
+
+
+@pytest.mark.parametrize("path", OLD_RO, ids=lambda p: p.name)
+def test_a_starter_from_before_the_read_only_fix_is_named_and_decides_nothing(path):
+    image = _image(path)
+    assert control_check(image) == {"refuses_control_changes": True}
+    name, what = older_starter_of(image)
+    assert name == path.name.split("-")[0] and "before the read-only fix (classifier version 3" in what
+    assert older_date(image) == "2026-11-21"
+    assert classifier_mismatch(Policy(image)) and "run `prismpath agent init`" in classifier_mismatch(Policy(image))
 
 
 @pytest.mark.parametrize("name", sorted(STARTERS))
@@ -177,7 +190,7 @@ def test_the_hook_denies_every_call_under_an_image_from_before_classifier_versio
     """The hook decides by the recorded image, and an older starter bounds `classifier_version` to 1, so the core
     refuses every reading of the current classifier at its boundary: nothing runs until `agent init` records a current
     starter. It fails closed, it never allows."""
-    for path in (next(p for p in OLD if p.name.startswith("default-d9dbfea")), OLD_NET[0]):
+    for path in (next(p for p in OLD if p.name.startswith("default-d9dbfea")), OLD_NET[0], OLD_RO[0]):
         _record(setup, _image(path))
         for tool, tool_input in (("Write", {"file_path": str(setup["project"] / ".claude" / "settings.json")}),
                                  ("Read", {"file_path": str(setup["project"] / "a.txt")})):
@@ -187,7 +200,7 @@ def test_the_hook_denies_every_call_under_an_image_from_before_classifier_versio
                                    {"HOME": str(setup["home"]), "CLAUDE_PROJECT_DIR": str(setup["project"])})
             assert answer["hookSpecificOutput"]["permissionDecision"] == "deny"
             reason = answer["hookSpecificOutput"]["permissionDecisionReason"]
-            assert "classifier version 1" in reason and "prismpath agent init" in reason, reason
+            assert re.search(r"made for classifier version [12] and this PrismPath reads calls as version 3", reason) and "prismpath agent init" in reason, reason
 
 
 def test_re_recording_keeps_the_old_runs_verifying_and_the_open_session_on_its_old_image(setup):
