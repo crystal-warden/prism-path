@@ -41,7 +41,7 @@ jobs:
           set -o pipefail
           python -m pytest prismpath/tests/test_sandbox_exec.py prismpath/tests/test_sandbox_net.py -q -rs | tee /tmp/sb.txt
           ! grep -q "SKIPPED" /tmp/sb.txt
-      # The Landlock backend of the per call sandbox (docs/design/agent-sandbox-plan.md, section 6) is the path a shell command
+      # The Landlock backend of the per call sandbox is the path a shell command
       # takes under `prismpath agent run` on this runner, where Ubuntu 24.04's AppArmor setting forbids a bwrap inside a bwrap.
       # PRISMPATH_REQUIRE_LANDLOCK=1 makes a kernel without Landlock fail the tests, and the log is searched as well, so a
       # Landlock test that was skipped is as red as one that failed. (The bubblewrap-nested tests of the same file skip on
@@ -56,7 +56,16 @@ jobs:
           ! grep -i "SKIPPED" /tmp/ll.txt | grep -i "no Landlock"
           grep -q "test_where_nesting_is_forced_off_the_call_runs_under_landlock_and_every_adversary_case_is_stopped PASSED" /tmp/ll.txt
           grep -q "test_landlock_stops_every_adversary_case_and_still_works_inside_the_workspace PASSED" /tmp/ll.txt
-      # The sandbox security + robustness gate. Exits non-zero on ANY code execution or uncaught
+      # The launcher's shell child tests (the nested table, the adversary set) run under whichever per call backend works, so
+      # on this runner they run under Landlock. A skip for want of any backend would leave them unchecked, so it fails here.
+      - name: The per call backend tests of the launcher ran rather than skipped
+        env:
+          PRISMPATH_REQUIRE_LANDLOCK: "1"
+        run: |
+          set -o pipefail
+          python -m pytest prismpath/tests/test_agent_nested.py prismpath/tests/test_agent_adversary.py -q -rs | tee /tmp/pc.txt
+          ! grep -i "SKIPPED" /tmp/pc.txt | grep -i "neither a nested bubblewrap nor Landlock"
+ Exits non-zero on ANY code execution or uncaught
       # crash across ~23k adversarial + random predicate inputs. This is the check that guards the
       # "a `when` predicate cannot execute code, and cannot crash a run" claim in the papers.
       - name: Fuzz the predicate sandbox

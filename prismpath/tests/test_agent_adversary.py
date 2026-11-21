@@ -8,7 +8,7 @@ program plays Claude Code (no Claude, no real login, no model). It makes the sam
   as the agent, in its own process, the way Claude's Read, Write and Edit tools and its own HTTP client run;
   as a shell child, `python3 probe.py <attempt>` run through `bash -c`, as the Bash tool does.
 
-The attempts are the plan's list: read a decoy secret, write outside the workspace, edit a control file
+The attempts are: read a decoy secret, write outside the workspace, edit a control file
 (`.claude/settings.json`), connect to a host that is not the model, a raw connect that ignores HTTPS_PROXY, and a
 fork past the process limit. Two more are about the model route itself: read the staged model credential (the
 known gap) and send it out through the allowed host (a data path, not a bug).
@@ -47,7 +47,7 @@ from prismpath.agent import commands, launcher, run as run_module  # noqa: E402
 from prismpath.tests import test_agent_cli as cli_tests  # noqa: E402
 from prismpath.tests.test_agent_decider import world, _no_real_config_dir  # noqa: E402,F401
 from prismpath.tests.test_agent_launcher import needs_socat  # noqa: E402
-from prismpath.tests.test_agent_nested import NESTING, needs_nesting  # noqa: E402,F401
+from prismpath.tests.test_agent_nested import NESTING, PER_CALL_BACKEND, needs_nesting  # noqa: E402,F401
 from prismpath.tests.test_sandbox_adversary import RUN_SCRIPT, _install, _outside_address  # noqa: E402
 from prismpath.tests.test_sandbox_exec import needs_bwrap  # noqa: E402
 
@@ -412,8 +412,8 @@ def test_each_attempt_by_a_shell_child_hook_alone_outer_only_and_nested(results,
     # cannot see inside would otherwise reach.
     for name in ATTEMPTS:
         assert _reached(host[f"shell:{name}"], "nested") is False, (name, host[f"shell:{name}"]["nested"])
-    if not NESTING:
-        pytest.skip("this host forbids a sandbox inside a sandbox; the launcher denies shell commands with cause 129 there")
+    if not PER_CALL_BACKEND:
+        pytest.skip("neither a nested bubblewrap nor Landlock works here; the launcher denies shell commands with cause 129")
     for name in ATTEMPTS:
         row = launched[f"shell:{name}"]
         assert row["verdict"] == "allow" and "nested" in row, (name, row)
@@ -424,7 +424,10 @@ def test_each_attempt_by_a_shell_child_hook_alone_outer_only_and_nested(results,
     home = cli_tests._agent_dir(arena["home"])
     run = run_module.RunStore(home / commands.RUNS_DIR).get("adv-launch")
     kinds = {s["kind"] for obs in run.observations() for s in obs["observed"]["signals"]}
-    assert "process-limit" in kinds and "path-absent" in kinds and "network-unreachable" in kinds, kinds
+    backends = {e.get("sandbox", {}).get("backend", "bwrap") for e in run._entries() if "sandbox" in e}
+    # bubblewrap's missing network reads as unreachable; Landlock's refused connect is an access error, as its refused paths are
+    refused_connect = "network-unreachable" if backends == {"bwrap"} else "access-denied"
+    assert "process-limit" in kinds and "path-absent" in kinds and refused_connect in kinds, (backends, kinds)
     done = cli_tests._cli(arena["home"], "agent", "verify", "--json")
     assert done.returncode == 0 and json.loads(done.stdout)["verified"] is True, done.stdout
 
@@ -438,7 +441,7 @@ def test_the_known_gaps_the_credential_is_readable_by_the_agent_and_the_model_ho
     assert row["verdict"] == "deny" and _reached(row) is True, row
     # and a shell child under the outer sandbox alone does as well, which is why the per call sandbox exists
     assert _reached(launched["shell:read_credential"]) is True
-    if NESTING:
+    if PER_CALL_BACKEND:
         assert _reached(launched["shell:read_credential"], "nested") is False
     # the allowed host carries whatever the agent sends it: the credential went through the proxy to the model host stub
     assert _reached(launched["agent:exfil_via_model_host"]) is True
@@ -448,7 +451,7 @@ def test_the_known_gaps_the_credential_is_readable_by_the_agent_and_the_model_ho
             break
         time.sleep(0.1)
     assert CREDENTIAL_TEXT.encode() in arena["capture"].data
-    if NESTING:
+    if PER_CALL_BACKEND:
         # a nested shell child has no proxy socket to the model host and no credential to send
         assert _reached(launched["shell:exfil_via_model_host"], "nested") is False
 
