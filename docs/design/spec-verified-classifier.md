@@ -344,7 +344,7 @@ spellings of programs, every git subcommand and listing flag, every kill form wi
 kill words, URLs, `..`, globs, home paths (`~`, `~/x`, `~root/x`, `foo/~bar`), `/workspace`, quoting of every kind, shell operators, tilde and brace words, non
 ASCII and control characters, lone surrogates, wrong types, missing and extra keys, long paths and long argvs.
 
-Result: 174 recorded calls, 0 disagreements; 20,000 generated calls (seed 1), 0 disagreements; 100,000 (seed 2),
+Result: 219 recorded calls, 0 disagreements; 20,000 generated calls (seed 1), 0 disagreements; 100,000 (seed 2),
 0 disagreements. The harness was checked to see the Python change: dropping `ls` from `READ_ONLY`, allowing `~`
 in plain words or `!` in quotes, Unicode `\d` in the signal, a Unicode `\b` around pkill, Unicode digits as
 process ids, or a 4097 character path limit each gives disagreements on the 20,000 run, and so does breaking the
