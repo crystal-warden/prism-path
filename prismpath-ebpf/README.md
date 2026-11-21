@@ -287,7 +287,7 @@ of them; this one passes all 90, with no latency change measurable above run to 
 Loader modes: `netattach <ppt> <iface>` (populate table + attach XDP in SKB mode + pin the histogram),
 `netstats [names]` (read the per-target histogram), `netdetach <iface>`, `netbench <ppt>` (per packet
 latency via `BPF_PROG_TEST_RUN`), `netupdate <new.ppt> <iface>` (live policy hot swap; below),
-`netcert <frames.bin>` (front end conformance, above).
+`netcert <frames.bin>` (front end conformance, above), `netverify <ppt>` (the gate `netattach` and `netupdate` apply: they load only the table whose SHA-256 the host's `net_swap.py` passed in `PPT_NET_VERIFIED_SHA256`). A table that names a drop node also drops the frames the front end cannot classify (IPv6, VLAN tags, other ethertypes, a malformed IPv4 header) and counts them by reason in `netstats`; ARP is counted and passed, and an observe only table passes all of them.
 
 - **Live traffic:** attached observe only on `span0` (the gretap mirroring all home traffic), the
   `net_triage` table (ssh/dns/http/https/icmp/jumbo/other) classified **7,491 real packets in kernel**
