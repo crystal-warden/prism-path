@@ -83,6 +83,19 @@ TORN = "journal.torn"
 PREFIX = "journal.prefix"
 IMAGE = "image.bin"
 OBSERVATIONS = "observations.jsonl"
+OUTCOMES = "outcomes.jsonl"
+OUTCOME_FORMAT = "prismpath.outcome/1"
+MAX_UNBOUND_OUTCOMES = 256
+MAX_TOOL_NAME = 128
+HOOK_EVENTS = ("PostToolUse", "PostToolUseFailure")
+OUTCOME_SOURCES = ("hook", "runner", "session-end")
+NO_OUTCOME = {"allow": "no outcome", "escalate": "no outcome (declined or not run)"}
+OUTCOME_CLASSES = ("ran", "failed", *NO_OUTCOME.values())
+UNBOUND_REASONS = ("no-tool-use-id", "no-receipt", "receipt-was-a-refusal", "duplicate")
+_BOUND_KEYS = {"format", "i", "source", "event", "tool", "outcome", "decision", "receipt", "receipt_sha256", "prev", "sha256"}
+_UNBOUND_KEYS = {"format", "i", "source", "event", "tool", "outcome", "reason", "prev", "sha256"}
+_OPTIONAL_OUTCOME_KEYS = {"tool_use_id", "failure"}
+_TOOL_USE_ID = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
 LOCK = "lock"
 _SAFE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 
@@ -98,6 +111,54 @@ class RunCorrupt(RunError):
 def observe_format() -> str:
     from prismpath.agent import observe
     return observe.FORMAT
+
+
+def valid_tool_use_id(value: Any) -> bool:
+    """Whether `value` is shaped like a Claude Code tool_use_id (`toolu_01ABC...`): 1 to 128 of letters, digits, `_`, `-`."""
+    return isinstance(value, str) and _TOOL_USE_ID.match(value) is not None
+
+
+def receipt_kind(receipt: Dict[str, Any]) -> str:
+    """`allow`, `escalate` or `refuse`, which is what the receipt's decision says the hook answered
+    (`allow`, `ask` or `deny`)."""
+    if receipt.get("decision") != "route":
+        return "refuse"
+    target = receipt.get("target")
+    return "allow" if target == "allow" else "escalate" if isinstance(target, str) and target.startswith("escalate_") else "refuse"
+
+
+def _clean_tool(tool: Any) -> str:
+    """A tool name as it may be kept: printable, no spaces, at most MAX_TOOL_NAME characters; anything else is empty."""
+    return tool if isinstance(tool, str) and re.fullmatch(r"[A-Za-z0-9_.:-]{1,%d}" % MAX_TOOL_NAME, tool) else ""
+
+
+def real_outcomes(lines: List[Dict[str, Any]]) -> Dict[int, str]:
+    """Receipt index to `ran` or `failed` from the bound outcome lines a hook or the runner wrote (the hook's wins)."""
+    out: Dict[int, str] = {}
+    for line in sorted(lines, key=lambda l: l["source"] != "runner"):      # the runner first, then the hook over it
+        if line["outcome"] in ("ran", "failed"):
+            out[line["receipt"]] = line["outcome"]
+    return out
+
+
+def outcome_counts(entries: List[Dict[str, Any]], lines: List[Dict[str, Any]]) -> Dict[str, int]:
+    done = real_outcomes(lines)
+    counts = {"allowed": 0, "allowed_ran": 0, "allowed_no_outcome": 0, "asked": 0, "asked_approved": 0,
+              "asked_no_outcome": 0, "refused": 0, "failed": 0,
+              "unbound": sum(1 for l in lines if l["outcome"] == "unbound")}
+    for entry in entries:
+        kind = receipt_kind(entry["receipt"])
+        if kind == "refuse":
+            counts["refused"] += 1
+            continue
+        key, ran = ("allowed", "allowed_ran") if kind == "allow" else ("asked", "asked_approved")
+        counts[key] += 1
+        if entry["i"] in done:
+            counts[ran] += 1
+            counts["failed"] += done[entry["i"]] == "failed"
+        else:
+            counts[key + "_no_outcome"] += 1
+    return counts
 
 
 def run_dir_name(session: str) -> str:
@@ -251,10 +312,12 @@ class Run:
                       and receipt["case"] == self.session and receipt["reading"] == n
                       and receipt["reading_sha256"] == core_evidence.sha256_hex(reading)
                       and receipt["image_sha256"] == image_sha
-                      and set(entry) in ({"i", "reading", "receipt"}, {"i", "reading", "receipt", "sandbox"})
+                      and {"i", "reading", "receipt"} <= set(entry) <= {"i", "reading", "receipt", "sandbox", "tool_use_id"}
+                      and ("tool_use_id" not in entry or valid_tool_use_id(entry["tool_use_id"]))
                       and ("sandbox" not in entry or (isinstance(entry["sandbox"], dict)
-                                                      and set(entry["sandbox"]) == {"profile_sha256"}
-                                                      and re.fullmatch(r"[0-9a-f]{64}", str(entry["sandbox"]["profile_sha256"])))))
+                                                      and set(entry["sandbox"]) in ({"profile_sha256"}, {"profile_sha256", "backend"})
+                                                      and re.fullmatch(r"[0-9a-f]{64}", str(entry["sandbox"]["profile_sha256"]))
+                                                      and entry["sandbox"].get("backend", "bwrap") in ("bwrap", "landlock"))))
             except Exception:
                 ok = False
             if not ok:
@@ -272,11 +335,17 @@ class Run:
         return self._scan(full=True)[1]
 
     def append(self, reading: bytes, verdict: Dict[str, Any], decider: str = DECIDER,
-               sandbox_profile: Optional[str] = None) -> int:
+               sandbox_profile: Optional[str] = None, sandbox_backend: Optional[str] = None,
+               tool_use_id: Optional[str] = None) -> int:
         """Record one decided reading as the next receipt, durably, and return its index. `sandbox_profile` is the
         SHA-256 of the sandbox profile the allowed call was rewritten to run under; it is kept on the journal
         line beside the receipt (the receipt is exactly `prismpath.core-receipt/1`, which has no such field),
-        so it is bound to the line by the journal's own check and is not part of the sealed root."""
+        so it is bound to the line by the journal's own check and is not part of the sealed root. `sandbox_backend`
+        (`bwrap` or `landlock`) is the per call sandbox the hook had the call rewritten to run in; a line that has
+        none was written before the backend was recorded and means bwrap. `tool_use_id`, the id Claude Code gave the
+        call, is kept the same way (an optional key of the line, never in the receipt), so the PostToolUse outcome of
+        that call can be bound to this receipt (`Run.outcome_of_hook`). A value that is not shaped like an id is left
+        off."""
         with _locked(self.dir / LOCK):
             n = self._scan(full=False)[0]
             image = (self.dir / IMAGE).read_bytes()
@@ -287,6 +356,10 @@ class Run:
             entry = {"i": n, "reading": reading.hex(), "receipt": receipt}
             if sandbox_profile is not None:
                 entry["sandbox"] = {"profile_sha256": sandbox_profile}
+                if sandbox_backend is not None:
+                    entry["sandbox"]["backend"] = sandbox_backend
+            if valid_tool_use_id(tool_use_id):
+                entry["tool_use_id"] = tool_use_id
             line = canon2.dumps(entry) + b"\n"
             path = self.dir / JOURNAL
             new = not path.exists()
@@ -316,7 +389,7 @@ class Run:
             entries = self._entries()
             if not isinstance(receipt, int) or isinstance(receipt, bool) or not 0 <= receipt < len(entries):
                 raise RunError(f"session {self.session}: there is no receipt {receipt} to bind an observation to")
-            self._check_binding(entries[receipt], image_sha256, profile_sha256)
+            self._check_binding(entries[receipt], image_sha256, profile_sha256, observed)
             lines = self._observation_lines()
             prev = lines[-1]["sha256"] if lines else ""
             entry = {"format": observe_format(), "i": len(lines), "receipt": receipt,
@@ -339,11 +412,15 @@ class Run:
             return entry["i"]
 
     @staticmethod
-    def _check_binding(journal_entry: Dict[str, Any], image_sha256: str, profile_sha256: str) -> None:
+    def _check_binding(journal_entry: Dict[str, Any], image_sha256: str, profile_sha256: str,
+                       observed: Optional[Dict[str, Any]] = None) -> None:
         if journal_entry["receipt"]["image_sha256"] != image_sha256:
             raise RunError("the observation's image hash is not the receipt's")
         if journal_entry.get("sandbox", {}).get("profile_sha256") != profile_sha256:
             raise RunError("the observation's profile hash is not the one the receipt's call was sandboxed under")
+        claimed = (observed or {}).get("backend")
+        if claimed is not None and claimed != journal_entry["sandbox"].get("backend", "bwrap"):
+            raise RunError("the observation names a per call sandbox other than the one the receipt's call was rewritten to use")
 
     def _observation_lines(self) -> List[Dict[str, Any]]:
         """The observation lines, each checked for its own hash, its place in the chain and its format. Call with
@@ -393,11 +470,218 @@ class Run:
                 if not isinstance(n, int) or isinstance(n, bool) or not 0 <= n < len(entries):
                     raise RunCorrupt(f"session {self.session}: observation {line['i']} names receipt {n}, which does not exist")
                 try:
-                    self._check_binding(entries[n], line["image_sha256"], line["profile_sha256"])
+                    self._check_binding(entries[n], line["image_sha256"], line["profile_sha256"], line.get("observed"))
                 except RunError as exc:
                     raise RunCorrupt(f"session {self.session}: observation {line['i']}: {exc}") from exc
                 if line["receipt_sha256"] != core_evidence.sha256_hex(canon2.dumps(entries[n]["receipt"])):
                     raise RunCorrupt(f"session {self.session}: observation {line['i']} is not about the receipt it names")
+            return len(lines)
+
+    # ------------------------------------------------------------------ outcomes
+    def _outcome_lines(self) -> List[Dict[str, Any]]:
+        """The outcome lines, each checked for its own hash, its place in the chain, its format and its shape. Call
+        with the lock held. Raises RunCorrupt. (Whether each is bound to the journal is `verify_outcomes`.)"""
+        path = self.dir / OUTCOMES
+        if not path.exists():
+            return []
+        data = path.read_bytes()
+        if data and not data.endswith(b"\n"):
+            raise RunCorrupt(f"session {self.session}: the outcomes file ends in a line that was not finished")
+        out: List[Dict[str, Any]] = []
+        prev = ""
+        for n, line in enumerate(data.split(b"\n")[:-1]):
+            try:
+                entry = canon2.loads(line)
+                body = {k: v for k, v in entry.items() if k != "sha256"}
+                keys = set(entry)
+                bound = entry["outcome"] != "unbound"
+                required = _BOUND_KEYS if bound else _UNBOUND_KEYS
+                ok = (canon2.dumps(entry) == line and entry["format"] == OUTCOME_FORMAT and entry["i"] == n
+                      and entry["prev"] == prev and entry["sha256"] == core_evidence.sha256_hex(canon2.dumps(body))
+                      and required <= keys <= required | _OPTIONAL_OUTCOME_KEYS
+                      and entry["source"] in OUTCOME_SOURCES and entry["outcome"] in OUTCOME_CLASSES + ("unbound",)
+                      and isinstance(entry["tool"], str) and len(entry["tool"]) <= MAX_TOOL_NAME
+                      and ("tool_use_id" not in entry or valid_tool_use_id(entry["tool_use_id"]))
+                      and (bound or entry["reason"] in UNBOUND_REASONS))
+            except Exception:
+                ok = False
+            if not ok:
+                raise RunCorrupt(f"session {self.session}: outcome {n} is damaged")
+            prev = entry["sha256"]
+            out.append(entry)
+        return out
+
+    def _add_outcome(self, lines: List[Dict[str, Any]], fields: Dict[str, Any]) -> Dict[str, Any]:
+        """Append one outcome line after `lines` (the lines already there). Call with the lock held."""
+        entry = {"format": OUTCOME_FORMAT, "i": len(lines), **fields, "prev": lines[-1]["sha256"] if lines else ""}
+        entry["sha256"] = core_evidence.sha256_hex(canon2.dumps(entry))
+        data = canon2.dumps(entry) + b"\n"
+        path = self.dir / OUTCOMES
+        new = not path.exists()
+        fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+        try:
+            view = memoryview(data)
+            while view:
+                view = view[os.write(fd, view):]
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+        if new:
+            _fsync_dir(self.dir)
+        lines.append(entry)
+        return entry
+
+    @staticmethod
+    def _bound_fields(journal_entry: Dict[str, Any], source: str, event: str, tool: str, outcome: str,
+                      failure: Optional[str] = None) -> Dict[str, Any]:
+        receipt = journal_entry["receipt"]
+        fields: Dict[str, Any] = {"source": source, "event": event, "tool": _clean_tool(tool), "outcome": outcome,
+                                  "decision": receipt_kind(receipt), "receipt": journal_entry["i"],
+                                  "receipt_sha256": core_evidence.sha256_hex(canon2.dumps(receipt))}
+        if "tool_use_id" in journal_entry:
+            fields["tool_use_id"] = journal_entry["tool_use_id"]
+        if failure:
+            fields["failure"] = failure
+        return fields
+
+    def outcome_of_hook(self, tool_use_id: Any, event: str, tool: Any, failure: Optional[str] = None) -> Dict[str, Any]:
+        """Record what a PostToolUse (`ran`) or PostToolUseFailure (`failed`, with `failure`, a class and never the
+        error text) event says about the call whose receipt carries `tool_use_id`. Returns the line written, or
+        None when an unbound one would pass the cap.
+
+        An outcome is a record that an allowed call, or a call the person was asked about, did or did not run. It
+        is never a decision and nothing that decides reads it. It is kept in its own hash-chained file, not in the
+        journal and not under the signed root, so `core-receipt/1` and the root statement are unchanged. It fails
+        open: an event that cannot be bound (no id, no receipt with that id, a receipt that was a refusal, a
+        second outcome for one receipt) is recorded as `unbound` with the reason and changes nothing. What the
+        tool returned is not kept, only the class of the outcome, the tool's name and the receipt's index."""
+        if event not in HOOK_EVENTS:
+            raise RunError(f"{event!r} is not an outcome event")
+        with _locked(self.dir / LOCK):
+            lines = self._outcome_lines()
+            unbound: Optional[str] = None
+            target = None
+            if not valid_tool_use_id(tool_use_id):
+                unbound = "no-tool-use-id"
+            else:
+                matches = [e for e in self._entries() if e.get("tool_use_id") == tool_use_id]
+                if not matches:
+                    unbound = "no-receipt"
+                else:
+                    target = matches[-1]
+                    if receipt_kind(target["receipt"]) == "refuse":
+                        unbound = "receipt-was-a-refusal"
+                    elif any(l.get("receipt") == target["i"] and l["source"] == "hook" for l in lines):
+                        unbound = "duplicate"
+            if unbound is not None:
+                if sum(1 for l in lines if l["outcome"] == "unbound") >= MAX_UNBOUND_OUTCOMES:
+                    return None
+                fields: Dict[str, Any] = {"source": "hook", "event": event, "tool": _clean_tool(tool),
+                                          "outcome": "unbound", "reason": unbound}
+                if valid_tool_use_id(tool_use_id):
+                    fields["tool_use_id"] = tool_use_id
+                return self._add_outcome(lines, fields)
+            return self._add_outcome(lines, self._bound_fields(
+                target, "hook", event, tool, "ran" if event == "PostToolUse" else "failed", failure))
+
+    def outcome_of_runner(self, receipt: int, image_sha256: str, profile_sha256: str, returncode: int,
+                          timed_out: bool = False) -> Optional[Dict[str, Any]]:
+        """Record that the per call sandbox's runner finished the allowed (or approved) shell command of `receipt`:
+        `ran` for exit status 0, `failed` otherwise or at the time limit. Bound the way an observation is (the
+        receipt exists, the image and profile hashes are its), and refused the same way. A second report for one
+        receipt is dropped. Like every outcome it is a claim of the process that sent it, read by nothing that decides."""
+        with _locked(self.dir / LOCK):
+            entries = self._entries()
+            if not isinstance(receipt, int) or isinstance(receipt, bool) or not 0 <= receipt < len(entries):
+                raise RunError(f"session {self.session}: there is no receipt {receipt} to bind an outcome to")
+            self._check_binding(entries[receipt], image_sha256, profile_sha256)
+            if receipt_kind(entries[receipt]["receipt"]) == "refuse":
+                raise RunError(f"session {self.session}: receipt {receipt} is a refusal, which does not run")
+            lines = self._outcome_lines()
+            if any(l.get("receipt") == receipt and l["source"] == "runner" for l in lines):
+                return None
+            failed = bool(timed_out) or returncode != 0
+            failure = "timed-out" if timed_out else "exit-nonzero" if failed else None
+            return self._add_outcome(lines, self._bound_fields(
+                entries[receipt], "runner", "runner", "Bash", "failed" if failed else "ran", failure))
+
+    def infer_outcomes(self) -> int:
+        """At the end of a session, record every allowed receipt that has no outcome as `no outcome` and every
+        escalated one as `no outcome (declined or not run)`: a question the person declined and one that was
+        approved and never ran look the same from here. Returns how many were recorded. A receipt that already has
+        an outcome line of any kind is left alone, so a second end hook adds only the receipts since."""
+        with _locked(self.dir / LOCK):
+            entries = self._entries()
+            lines = self._outcome_lines()
+            have = {l["receipt"] for l in lines if l["outcome"] != "unbound"}
+            added = 0
+            for entry in entries:
+                kind = receipt_kind(entry["receipt"])
+                if kind != "refuse" and entry["i"] not in have:
+                    self._add_outcome(lines, self._bound_fields(
+                        entry, "session-end", "SessionEnd", "", NO_OUTCOME[kind]))
+                    added += 1
+            return added
+
+    def outcomes(self) -> List[Dict[str, Any]]:
+        """Every outcome line of the run, as written."""
+        with _locked(self.dir / LOCK):
+            return self._outcome_lines()
+
+    def outcome_map(self) -> Dict[int, str]:
+        """Receipt index to `ran` or `failed`, for each receipt with an outcome a hook or the runner reported. The
+        `no outcome` lines the end of a session writes are not outcomes and are not in it."""
+        with _locked(self.dir / LOCK):
+            return real_outcomes(self._outcome_lines())
+
+    def outcome_counts(self) -> Dict[str, int]:
+        """Totals over the receipts of this run: allowed, how many of them ran (an outcome was reported) and how many
+        have no outcome, asked, how many were approved (ran) and how many have no outcome, refused, how many outcomes
+        failed, and how many events could not be bound. A call still waiting for its outcome counts as having none."""
+        with _locked(self.dir / LOCK):
+            entries = self._entries()
+            lines = self._outcome_lines()
+        return outcome_counts(entries, lines)
+
+    def verify_outcomes(self) -> int:
+        """Check every outcome line against the journal and return how many there are: each hashes to itself, the
+        chain holds, and each bound one names a receipt that exists, hashes to the recorded value, was an allow or
+        an ask (the recorded decision), carries the journal line's tool_use_id (or none where the line has none),
+        and is the only one of its source for that receipt; an outcome class fits its source. Raises RunCorrupt
+        otherwise. The file is not under the signed root, so a cut tail cannot be told from a file that never had
+        more lines."""
+        with _locked(self.dir / LOCK):
+            lines = self._outcome_lines()
+            if not lines:
+                return 0
+            entries = self._entries()
+            seen = set()
+            unbound = 0
+            for line in lines:
+                where = f"session {self.session}: outcome {line['i']}"
+                if line["outcome"] == "unbound":
+                    unbound += 1
+                    if unbound > MAX_UNBOUND_OUTCOMES:
+                        raise RunCorrupt(f"{where} is past the cap on unbound events")
+                    continue
+                n = line["receipt"]
+                if not isinstance(n, int) or isinstance(n, bool) or not 0 <= n < len(entries):
+                    raise RunCorrupt(f"{where} names receipt {n}, which does not exist")
+                journal, receipt = entries[n], entries[n]["receipt"]
+                if line["receipt_sha256"] != core_evidence.sha256_hex(canon2.dumps(receipt)):
+                    raise RunCorrupt(f"{where} is not about the receipt it names")
+                kind = receipt_kind(receipt)
+                if kind == "refuse" or line["decision"] != kind:
+                    raise RunCorrupt(f"{where} does not match the decision of the receipt it names")
+                if line.get("tool_use_id") != journal.get("tool_use_id"):
+                    raise RunCorrupt(f"{where} carries a tool_use_id that is not the receipt's")
+                if (line["source"] == "session-end") != (line["outcome"] in NO_OUTCOME.values()):
+                    raise RunCorrupt(f"{where} has an outcome that does not fit its source")
+                if line["source"] == "session-end" and line["outcome"] != NO_OUTCOME[kind]:
+                    raise RunCorrupt(f"{where} has a no outcome line that does not fit the decision")
+                if (line["source"], n) in seen:
+                    raise RunCorrupt(f"{where} is a second {line['source']} outcome for receipt {n}")
+                seen.add((line["source"], n))
             return len(lines)
 
     # ------------------------------------------------------------------ seal
@@ -489,6 +773,7 @@ class Run:
             result = core_evidence.verify(self.dir, sample=None, pin_authority=Path(keys) / "authority.pub",
                                           pin_instance=Path(keys) / "instance.pub", replay=replay)
         result["observations"] = self.verify_observations()      # raises RunCorrupt on a damaged or unbound one
+        result["outcomes"] = self.verify_outcomes()               # the same for the outcomes file
         return result
 
 

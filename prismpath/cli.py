@@ -348,7 +348,7 @@ def _add_operator_commands(subparsers) -> None:
 
     agent_parser = subparsers.add_parser(
         'agent', help='Govern a Claude Code session: keys and the signed default policy (init), the PreToolUse '
-                      'hook (hook), the sealed and verified runs of receipts (verify), what is set up (status), the rules with their hits (rules)')
+                      'hook (hook), the sealed and verified runs of receipts (verify), what is set up (status), the rules with their hits and outcomes (rules), approved asks to consider signing (approvals)')
     agent_sub = agent_parser.add_subparsers(dest='agent_action', metavar='<action>', required=True)
     agent_init = agent_sub.add_parser(
         'init', help='make the authority and instance keys in the user config directory, record the signed '
@@ -381,6 +381,14 @@ def _add_operator_commands(subparsers) -> None:
                       'reading can reach; it changes nothing')
     agent_rules.add_argument('--since', default=None, metavar='ISO_TIME',
                              help='count only runs whose time is at or after this ISO 8601 time')
+    agent_approvals = agent_sub.add_parser(
+        'approvals', help='the escalate rules whose asks were approved (and the call ran) at least N times, with counts '
+                          'and example readings as classes only: candidates for the owner to sign into the policy; '
+                          'it changes nothing and adopts nothing')
+    agent_approvals.add_argument('--min', type=int, default=3, metavar='N',
+                                 help='list a rule approved at least this many times (default 3)')
+    agent_approvals.add_argument('--since', default=None, metavar='ISO_TIME',
+                                 help='count only runs whose time is at or after this ISO 8601 time')
     agent_doctor = agent_sub.add_parser(
         'doctor', help='check the whole setup (key modes and pairs, the policy, the hook entries and their '
                        'interpreter, a timed dry run, the runs, free disk) and print ok, warn or fail with the '
@@ -401,7 +409,7 @@ def _add_operator_commands(subparsers) -> None:
                              help='set: a file with one protected name per line')
     agent_zones.add_argument('--index', default=None, metavar='FILE',
                              help='set: the Context Cloud index (default .contextcloud/index.sqlite in the project)')
-    for sub in (agent_init, agent_hook, agent_verify, agent_status, agent_doctor, agent_rules, agent_zones):
+    for sub in (agent_init, agent_hook, agent_verify, agent_status, agent_doctor, agent_rules, agent_approvals, agent_zones):
         sub.add_argument('--json', action='store_true', help='machine readable output')
     agent_run = agent_sub.add_parser(
         'run', help='run a program as the agent under the sandbox (Linux, bubblewrap and socat): the workspace is '
@@ -582,6 +590,12 @@ def agent_cmd(args) -> int:
         if args.agent_action == 'zones':
             return commands.zones_cmd(args.zones_action, project, args.protected, args.protected_file, args.index,
                                       args.json)
+        if args.agent_action == 'approvals':
+            from prismpath.agent import rules as agent_rules_report
+            try:
+                return agent_rules_report.approvals_command(args.since, args.min, args.json)
+            except agent_rules_report.RulesError as exc:
+                raise CliError(str(exc))
         if args.agent_action == 'doctor':
             from prismpath.agent import doctor
             return doctor.doctor(project, args.json)
