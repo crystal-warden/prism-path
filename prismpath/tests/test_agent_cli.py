@@ -257,7 +257,7 @@ def test_the_hook_fails_closed(world):
     _init(world)
     assert _hook(home, good)["hookSpecificOutput"]["permissionDecision"] == "allow"
     for garbage in (b"", b"not json", b"\xff\xfe", b"[1, 2]", b'{"hook_event_name": "PreToolUse"}',
-                    json.dumps({**good, "hook_event_name": "PostToolUse"}).encode()):
+                    json.dumps({**good, "hook_event_name": "PostCompact"}).encode()):
         _assert_hook_error(_hook(home, garbage))
     agent = _agent_dir(home)
     for name, damage in (("instance.key", lambda b: b"-----BEGIN PRIVATE KEY-----\nbroken\n"),
