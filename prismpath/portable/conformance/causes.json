@@ -1,7 +1,7 @@
 {
  "version": 1,
  "comment": "FROZEN. The cause registry of prismpath.kernel.causes: every row, its hash, the engine stop mapping and the lookups a consumer must answer. prismpath-rs/src/causes.rs is generated from the same registry and prismpath-rs/tests/test_causes.rs replays this file. Appending a row regenerates it.",
- "registry_sha256": "9111521f734c145606f0fc871b720dc2f34bb78dee9ed06046b3ac58f4e36bcd",
+ "registry_sha256": "dbd8fde7d3f8a90aa98fdf6faa4e7bf5d87ef662d942398644f4aa0610d68631",
  "registry": [
   {
    "code": 1,
@@ -602,6 +602,156 @@
    "name": "agent:session-shell-asked",
    "class": "routing",
    "description": "an agent shell command that would run without asking (a read only command or a local git operation inside the workspace), in a session that already ran many shell commands or whose history could not be read, with none of the earlier refusals holding, under the session starter policy; escalated and not run"
+  },
+  {
+   "code": 135,
+   "name": "dist:bad-format",
+   "class": "authority",
+   "description": "a sealed envelope, a distribution envelope or a trust body that does not read as its format (a missing or extra member, a value outside its form, an unknown artifact or target kind, a wrong container); refused and nothing staged"
+  },
+  {
+   "code": 136,
+   "name": "dist:unknown-key",
+   "class": "authority",
+   "description": "a distribution envelope with no signature by a key the trust store holds, or fewer counting signatures than the threshold, or a trust store that cannot be read; refused and nothing staged"
+  },
+  {
+   "code": 137,
+   "name": "dist:target-mismatch",
+   "class": "authority",
+   "description": "a distribution envelope that is not for this enforcement point's target kind, for an artifact its kind uses, or for its stream; refused and nothing staged"
+  },
+  {
+   "code": 138,
+   "name": "dist:body-mismatch",
+   "class": "authority",
+   "description": "a distributed body or a fetched blob whose size or SHA-256 is not the one its envelope or its request names; refused and nothing staged"
+  },
+  {
+   "code": 139,
+   "name": "dist:seq-replay",
+   "class": "authority",
+   "description": "a distribution envelope whose seq is below the stream's floor, or at the floor with an envelope id not committed there, or below the staged seq; refused and nothing staged"
+  },
+  {
+   "code": 140,
+   "name": "dist:not-yet-valid",
+   "class": "authority",
+   "description": "a distribution envelope read when the enforcement point's time is more than the allowed skew before its not_before; refused and nothing staged"
+  },
+  {
+   "code": 141,
+   "name": "dist:expired",
+   "class": "authority",
+   "description": "a distribution envelope read when the enforcement point's time is at or past its expires, or an active release whose envelope expired; refused, or the release lapses"
+  },
+  {
+   "code": 142,
+   "name": "dist:revoked",
+   "class": "authority",
+   "description": "a distribution envelope whose id or policy hash is on the signed revocation list, or whose seq a revocation's floor has passed; refused, or the active release lapses"
+  },
+  {
+   "code": 143,
+   "name": "dist:widening-unsigned",
+   "class": "authority",
+   "description": "a release that allows more than the active one, or cannot be shown not to, without a covering signed widening statement, or whose signer said it does not widen when it does; refused and nothing staged"
+  },
+  {
+   "code": 144,
+   "name": "dist:trust-replay",
+   "class": "authority",
+   "description": "a revocation list or a key rotation whose seq is not above the enforcement point's trust sequence; refused and the trust store unchanged"
+  },
+  {
+   "code": 145,
+   "name": "dist:rotation-invalid",
+   "class": "authority",
+   "description": "a key rotation without a valid signature by the key it adds, or that retires an unknown key, or adds the enforcement point's own instance key or a revoked key; refused and the trust store unchanged"
+  },
+  {
+   "code": 146,
+   "name": "dist:legacy-refused",
+   "class": "authority",
+   "description": "an older signed form (a ppt-pack/1 pack, a core image attestation, a signed destination table, a grant, a cFS table signature or a mesh message) where a distribution envelope is required; refused"
+  },
+  {
+   "code": 147,
+   "name": "dist:hatch-refused",
+   "class": "authority",
+   "description": "an escape hatch that would skip a check, asked for in a production build; refused and the check runs"
+  },
+  {
+   "code": 148,
+   "name": "dist:too-large",
+   "class": "envelope",
+   "description": "a distribution envelope, a body or a revocation list beyond the bound the enforcement point sets for it; refused and nothing staged"
+  },
+  {
+   "code": 149,
+   "name": "dist:derived-mismatch",
+   "class": "envelope",
+   "description": "a distributed artifact derived from the policy (an edge table, a sandbox profile) that is not byte for byte what the enforcement point compiles from the staged policy; refused and nothing staged"
+  },
+  {
+   "code": 150,
+   "name": "dist:frame-invalid",
+   "class": "wire",
+   "description": "a distribution frame or chunk outside its offered transfer, a chunk with no offer, or an assembled part whose hash is not the offered one; the transfer is dropped"
+  },
+  {
+   "code": 151,
+   "name": "dist:not-staged",
+   "class": "state",
+   "description": "a commit that names no staged release; answered with a state record and nothing changes"
+  },
+  {
+   "code": 152,
+   "name": "dist:incomplete",
+   "class": "state",
+   "description": "a release that lacks an artifact its target kind needs, or whose envelopes disagree on stream, seq or policy; not committed and the active release stays"
+  },
+  {
+   "code": 153,
+   "name": "dist:policy-lapsed",
+   "class": "state",
+   "description": "a decision asked of an enforcement point that has no active release (it lapsed at expiry or by revocation, or none was ever committed); refused"
+  },
+  {
+   "code": 154,
+   "name": "dist:floor-lost",
+   "class": "state",
+   "description": "the enforcement point's floor cannot be read, so it is locked, admits no release and decides nothing until it is provisioned again"
+  },
+  {
+   "code": 155,
+   "name": "fleet:state-invalid",
+   "class": "wire",
+   "description": "a state record that does not read, is from no enrolled enforcement point, is not signed by its enrolled instance key, or carries the hold bit from a target that has no hold setting; filed by the controller"
+  },
+  {
+   "code": 156,
+   "name": "fleet:state-replay",
+   "class": "wire",
+   "description": "a state record whose counter is not above the last one the controller accepted from that enforcement point; filed by the controller"
+  },
+  {
+   "code": 157,
+   "name": "fleet:policy-mismatch",
+   "class": "wire",
+   "description": "an enforcement point reports a policy hash, a seq or a Facet preamble other than the one the controller expects for it; filed by the controller"
+  },
+  {
+   "code": 158,
+   "name": "fleet:silent",
+   "class": "wire",
+   "description": "no accepted state record from an enforcement point for three heartbeat intervals; filed by the controller"
+  },
+  {
+   "code": 159,
+   "name": "dist:held",
+   "class": "state",
+   "description": "an enforcement point deciding under an expired release because its deployment chose to hold at expiry, or an action refused because of that hold; marked in every state record and receipt while it lasts"
   }
  ],
  "engine_stop_to_cause": {

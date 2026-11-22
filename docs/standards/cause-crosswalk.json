@@ -2088,6 +2088,509 @@
     ],
     "rationale": "Nearest entry: an unbounded allocation of a resource, here shell runs; the cause bounds what runs without asking, it does not limit what the person approves."
    }
+  },
+  "135": {
+   "name": "dist:bad-format",
+   "class": "authority",
+   "kind": "security-control",
+   "owasp_asi": {
+    "ids": [
+     "ASI04"
+    ],
+    "rationale": "A distributed artifact whose envelope does not read is not one the authority can be shown to have signed."
+   },
+   "mitre_atlas": {
+    "ids": [
+     "AML.T0010.001"
+    ],
+    "rationale": "A malformed or substituted envelope is refused before any trust is placed in the artifact it names."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-347"
+    ],
+    "rationale": "Nearest entry. The envelope is refused before its signature is relied on, because only the exact signed form counts."
+   }
+  },
+  "136": {
+   "name": "dist:unknown-key",
+   "class": "authority",
+   "kind": "security-control",
+   "owasp_asi": {
+    "ids": [
+     "ASI04"
+    ],
+    "rationale": "An artifact with no signature by a key the enforcement point trusts carries no authority to run."
+   },
+   "mitre_atlas": {
+    "ids": [
+     "AML.T0010.001"
+    ],
+    "rationale": "An artifact signed by a key the trust store does not hold is the substituted artifact the signature check refuses."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-347"
+    ],
+    "rationale": "No signature by a trusted key verifies, so the artifact is not accepted."
+   }
+  },
+  "137": {
+   "name": "dist:target-mismatch",
+   "class": "authority",
+   "kind": "security-control",
+   "owasp_asi": {
+    "ids": [
+     "ASI04"
+    ],
+    "rationale": "A signed artifact meant for another kind of enforcement point, artifact or stream is not the policy the authority chose for this one."
+   },
+   "mitre_atlas": {
+    "ids": [
+     "AML.T0010.001"
+    ],
+    "rationale": "A genuine artifact moved to a place it was not signed for is a substitution the target check refuses."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-347"
+    ],
+    "rationale": "Nearest entry. The signature verifies but does not cover this enforcement point, so it is not relied on here."
+   }
+  },
+  "138": {
+   "name": "dist:body-mismatch",
+   "class": "authority",
+   "kind": "security-control",
+   "owasp_asi": {
+    "ids": [
+     "ASI04"
+    ],
+    "rationale": "A body that is not the one the signed envelope names is not the artifact the authority signed."
+   },
+   "mitre_atlas": {
+    "ids": [
+     "AML.T0010.001"
+    ],
+    "rationale": "A modified or swapped body is the supply chain compromise the hash bound by the signature refuses."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-347"
+    ],
+    "rationale": "The signed hash does not cover the bytes given, so the signature does not verify them."
+   }
+  },
+  "139": {
+   "name": "dist:seq-replay",
+   "class": "authority",
+   "kind": "security-control",
+   "owasp_asi": {
+    "ids": [
+     "ASI04"
+    ],
+    "rationale": "Replaying an older signed release reinstates rules the authority has since replaced."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "ATLAS has no rollback technique. T0081 concerns an agent's own configuration, not the policy that governs it."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-1328",
+     "CWE-294"
+    ],
+    "rationale": "A floor on the stream stops an older valid release being accepted again."
+   }
+  },
+  "140": {
+   "name": "dist:not-yet-valid",
+   "class": "authority",
+   "kind": "security-control",
+   "owasp_asi": {
+    "ids": [
+     "ASI04"
+    ],
+    "rationale": "A release used before the time the authority set for it runs a policy that was not yet meant to run."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "ATLAS has no rollback technique. T0081 concerns an agent's own configuration, not the policy that governs it."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-294"
+    ],
+    "rationale": "Nearest entry. A valid envelope presented outside the window its signer gave it is refused."
+   }
+  },
+  "141": {
+   "name": "dist:expired",
+   "class": "authority",
+   "kind": "security-control",
+   "owasp_asi": {
+    "ids": [
+     "ASI04"
+    ],
+    "rationale": "A release used after its expiry keeps a policy the authority stopped renewing."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "ATLAS has no rollback technique. T0081 concerns an agent's own configuration, not the policy that governs it."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-294"
+    ],
+    "rationale": "A once valid envelope presented again after its lifetime is refused."
+   }
+  },
+  "142": {
+   "name": "dist:revoked",
+   "class": "authority",
+   "kind": "security-control",
+   "owasp_asi": {
+    "ids": [
+     "ASI04"
+    ],
+    "rationale": "A release the authority revoked by its id or its policy hash no longer carries authority to run."
+   },
+   "mitre_atlas": {
+    "ids": [
+     "AML.T0010.001"
+    ],
+    "rationale": "A withdrawn artifact put back in front of an enforcement point is the substitution the revocation list refuses."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-347"
+    ],
+    "rationale": "Nearest entry. The signature verifies but the signed revocation list withdraws it, so it is not relied on."
+   }
+  },
+  "143": {
+   "name": "dist:widening-unsigned",
+   "class": "authority",
+   "kind": "security-control",
+   "owasp_asi": {
+    "ids": [
+     "ASI04"
+    ],
+    "rationale": "A release that allows more than the active one runs only with the authority's separate signed widening statement, so no widening is silent."
+   },
+   "mitre_atlas": {
+    "ids": [
+     "AML.T0010.001"
+    ],
+    "rationale": "A permissive policy slipped in as an ordinary update is refused without the signed statement."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-347"
+    ],
+    "rationale": "Nearest entry. The release's own signature is not enough for a widening, and the missing signed statement refuses it."
+   }
+  },
+  "144": {
+   "name": "dist:trust-replay",
+   "class": "authority",
+   "kind": "security-control",
+   "owasp_asi": {
+    "ids": [
+     "ASI04"
+    ],
+    "rationale": "Replaying an older revocation list or rotation would undo trust decisions the authority has since made."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "ATLAS has no rollback technique. T0081 concerns an agent's own configuration, not the policy that governs it."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-1328",
+     "CWE-294"
+    ],
+    "rationale": "The trust sequence stops an older valid trust statement being accepted again."
+   }
+  },
+  "145": {
+   "name": "dist:rotation-invalid",
+   "class": "authority",
+   "kind": "security-control",
+   "owasp_asi": {
+    "ids": [
+     "ASI04"
+    ],
+    "rationale": "A key rotation that the new key did not sign, or that names a key it may not, would hand authority to a key no one proved control of."
+   },
+   "mitre_atlas": {
+    "ids": [
+     "AML.T0010.001"
+    ],
+    "rationale": "A forged or confused rotation would install an attacker's key as an authority key."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-347"
+    ],
+    "rationale": "The rotation lacks the new key's valid signature or names a key it may not, so it is not accepted."
+   }
+  },
+  "146": {
+   "name": "dist:legacy-refused",
+   "class": "authority",
+   "kind": "security-control",
+   "owasp_asi": {
+    "ids": [
+     "ASI04"
+    ],
+    "rationale": "An older signed form would bypass the floor, the expiry and the revocation the distribution envelope carries."
+   },
+   "mitre_atlas": {
+    "ids": [
+     "AML.T0010.001"
+    ],
+    "rationale": "Presenting an artifact in an older form to skip the newer checks is a substitution the enforcement point refuses."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-347"
+    ],
+    "rationale": "Nearest entry. The older form's signature is not relied on where the distribution envelope's verification is required."
+   }
+  },
+  "147": {
+   "name": "dist:hatch-refused",
+   "class": "authority",
+   "kind": "security-control",
+   "owasp_asi": {
+    "ids": [
+     "ASI04"
+    ],
+    "rationale": "A switch that skips a check would let an unsigned or unverified policy run in a production build."
+   },
+   "mitre_atlas": {
+    "ids": [
+     "AML.T0010.001"
+    ],
+    "rationale": "Turning off a signature check is how a tampered artifact would be introduced, so a production build refuses it."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-347"
+    ],
+    "rationale": "The signature verification stays on, since a production build refuses the switch that would skip it."
+   }
+  },
+  "148": {
+   "name": "dist:too-large",
+   "class": "envelope",
+   "kind": "internal",
+   "owasp_asi": {
+    "ids": [],
+    "none": "An envelope, a body or a list beyond its bound is refused by an admission bound. No agent behaviour is involved."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "Size bounds on a distributed artifact are not an adversary technique in the ATLAS catalogue."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-770"
+    ],
+    "rationale": "Resources are bounded by a fixed maximum instead of being allocated without limit."
+   }
+  },
+  "149": {
+   "name": "dist:derived-mismatch",
+   "class": "envelope",
+   "kind": "internal",
+   "owasp_asi": {
+    "ids": [],
+    "none": "A derived artifact that is not what the enforcement point compiles from the policy is refused at admission. No agent behaviour is involved."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "Checking a derived artifact against its source is not an adversary technique in the ATLAS catalogue."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-345"
+    ],
+    "rationale": "The derived artifact is accepted only when it is the one the enforcement point compiles from the signed policy itself."
+   }
+  },
+  "150": {
+   "name": "dist:frame-invalid",
+   "class": "wire",
+   "kind": "internal",
+   "owasp_asi": {
+    "ids": [],
+    "none": "A frame or chunk outside its transfer is a transport refusal. No agent behaviour is involved."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "Not an adversary technique."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-20"
+    ],
+    "rationale": "A chunk outside its offered lengths, or a part that does not hash to its offer, is rejected."
+   }
+  },
+  "151": {
+   "name": "dist:not-staged",
+   "class": "state",
+   "kind": "internal",
+   "owasp_asi": {
+    "ids": [],
+    "none": "A transition of the enforcement point's own state that the design handles by failing closed. It records a condition, not a weakness or an attack."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "A transition of the enforcement point's own state that the design handles by failing closed. It records a condition, not a weakness or an attack."
+   },
+   "cwe": {
+    "ids": [],
+    "none": "A transition of the enforcement point's own state that the design handles by failing closed. It records a condition, not a weakness or an attack."
+   }
+  },
+  "152": {
+   "name": "dist:incomplete",
+   "class": "state",
+   "kind": "internal",
+   "owasp_asi": {
+    "ids": [],
+    "none": "A transition of the enforcement point's own state that the design handles by failing closed. It records a condition, not a weakness or an attack."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "A transition of the enforcement point's own state that the design handles by failing closed. It records a condition, not a weakness or an attack."
+   },
+   "cwe": {
+    "ids": [],
+    "none": "A transition of the enforcement point's own state that the design handles by failing closed. It records a condition, not a weakness or an attack."
+   }
+  },
+  "153": {
+   "name": "dist:policy-lapsed",
+   "class": "state",
+   "kind": "internal",
+   "owasp_asi": {
+    "ids": [],
+    "none": "A transition of the enforcement point's own state that the design handles by failing closed. It records a condition, not a weakness or an attack."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "A transition of the enforcement point's own state that the design handles by failing closed. It records a condition, not a weakness or an attack."
+   },
+   "cwe": {
+    "ids": [],
+    "none": "A transition of the enforcement point's own state that the design handles by failing closed. It records a condition, not a weakness or an attack."
+   }
+  },
+  "154": {
+   "name": "dist:floor-lost",
+   "class": "state",
+   "kind": "internal",
+   "owasp_asi": {
+    "ids": [],
+    "none": "A transition of the enforcement point's own state that the design handles by failing closed. It records a condition, not a weakness or an attack."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "A transition of the enforcement point's own state that the design handles by failing closed. It records a condition, not a weakness or an attack."
+   },
+   "cwe": {
+    "ids": [],
+    "none": "A transition of the enforcement point's own state that the design handles by failing closed. It records a condition, not a weakness or an attack."
+   }
+  },
+  "155": {
+   "name": "fleet:state-invalid",
+   "class": "wire",
+   "kind": "internal",
+   "owasp_asi": {
+    "ids": [],
+    "none": "A finding the controller files about what an enforcement point reported. It refuses no request and decides nothing, and a compromised enforcement point can lie in its record, which is out of scope."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "A fleet health finding, not an adversary technique in the ATLAS catalogue."
+   },
+   "cwe": {
+    "ids": [],
+    "none": "The controller files the finding and changes nothing at the enforcement point, so no weakness entry describes it."
+   }
+  },
+  "156": {
+   "name": "fleet:state-replay",
+   "class": "wire",
+   "kind": "internal",
+   "owasp_asi": {
+    "ids": [],
+    "none": "A finding the controller files about what an enforcement point reported. It refuses no request and decides nothing, and a compromised enforcement point can lie in its record, which is out of scope."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "A fleet health finding, not an adversary technique in the ATLAS catalogue."
+   },
+   "cwe": {
+    "ids": [],
+    "none": "The controller files the finding and changes nothing at the enforcement point, so no weakness entry describes it."
+   }
+  },
+  "157": {
+   "name": "fleet:policy-mismatch",
+   "class": "wire",
+   "kind": "internal",
+   "owasp_asi": {
+    "ids": [],
+    "none": "A finding the controller files about what an enforcement point reported. It refuses no request and decides nothing, and a compromised enforcement point can lie in its record, which is out of scope."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "A fleet health finding, not an adversary technique in the ATLAS catalogue."
+   },
+   "cwe": {
+    "ids": [],
+    "none": "The controller files the finding and changes nothing at the enforcement point, so no weakness entry describes it."
+   }
+  },
+  "158": {
+   "name": "fleet:silent",
+   "class": "wire",
+   "kind": "internal",
+   "owasp_asi": {
+    "ids": [],
+    "none": "A finding the controller files about what an enforcement point reported. It refuses no request and decides nothing, and a compromised enforcement point can lie in its record, which is out of scope."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "A fleet health finding, not an adversary technique in the ATLAS catalogue."
+   },
+   "cwe": {
+    "ids": [],
+    "none": "The controller files the finding and changes nothing at the enforcement point, so no weakness entry describes it."
+   }
+  },
+  "159": {
+   "name": "dist:held",
+   "class": "state",
+   "kind": "internal",
+   "owasp_asi": {
+    "ids": [],
+    "none": "A deployment's chosen response to expiry, marked in every record the enforcement point signs. It records a condition, not a weakness or an attack."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "A deployment's chosen response to expiry, marked in every record the enforcement point signs. It records a condition, not a weakness or an attack."
+   },
+   "cwe": {
+    "ids": [],
+    "none": "A deployment's chosen response to expiry, marked in every record the enforcement point signs. It records a condition, not a weakness or an attack."
+   }
   }
  }
 }

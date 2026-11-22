@@ -13,7 +13,7 @@ spelling of its refusals (`Core.Refusal.code`, `Core.Refusal.cause`) is proved t
 namespace Core
 
 /-- `registry_sha256()` of the Python registry when this file was generated. -/
-def causeRegistrySha256 : String := "9111521f734c145606f0fc871b720dc2f34bb78dee9ed06046b3ac58f4e36bcd"
+def causeRegistrySha256 : String := "dbd8fde7d3f8a90aa98fdf6faa4e7bf5d87ef662d942398644f4aa0610d68631"
 
 /-- Every registered (code, canonical name), in registry order. -/
 def causeRegistry : List (Nat × String) := [
@@ -116,7 +116,32 @@ def causeRegistry : List (Nat × String) := [
   (131, "gateway:request-refused"),
   (132, "agent:zone-asked"),
   (133, "agent:session-change-asked"),
-  (134, "agent:session-shell-asked")
+  (134, "agent:session-shell-asked"),
+  (135, "dist:bad-format"),
+  (136, "dist:unknown-key"),
+  (137, "dist:target-mismatch"),
+  (138, "dist:body-mismatch"),
+  (139, "dist:seq-replay"),
+  (140, "dist:not-yet-valid"),
+  (141, "dist:expired"),
+  (142, "dist:revoked"),
+  (143, "dist:widening-unsigned"),
+  (144, "dist:trust-replay"),
+  (145, "dist:rotation-invalid"),
+  (146, "dist:legacy-refused"),
+  (147, "dist:hatch-refused"),
+  (148, "dist:too-large"),
+  (149, "dist:derived-mismatch"),
+  (150, "dist:frame-invalid"),
+  (151, "dist:not-staged"),
+  (152, "dist:incomplete"),
+  (153, "dist:policy-lapsed"),
+  (154, "dist:floor-lost"),
+  (155, "fleet:state-invalid"),
+  (156, "fleet:state-replay"),
+  (157, "fleet:policy-mismatch"),
+  (158, "fleet:silent"),
+  (159, "dist:held")
 ]
 
 end Core
