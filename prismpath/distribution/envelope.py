@@ -5,11 +5,15 @@ artifact body by hash, the bytes a signature covers, and the sealed envelope, on
 transport.
 
 `build` writes an envelope and refuses one a reader would refuse. `read` is the reader of E1, E2, E5 and E8
-and raises `Refused` with the registered cause. `seal` and `unseal` are the container of S2, and
-`envelope_id` is E3. Nothing here decides whether an envelope is trusted. That is `verify.verify`.
+and raises `Refused` with the registered cause. `release_id` is E10 and `envelope_id` E3. `signed_message`
+is the DSSE pre-authentication encoding a signature covers (S1). `seal` and `unseal` are the container of
+S2, signatures first, and `to_dsse` and `from_dsse` its lossless map to a DSSE JSON envelope (S7). Nothing
+here decides whether an envelope is trusted. That is `verify.verify`.
 """
 from __future__ import annotations
 
+import base64
+import binascii
 import struct
 from dataclasses import dataclass
 from typing import Any, Iterable, List, Mapping, Optional, Sequence, Tuple
@@ -19,7 +23,7 @@ from prismpath.distribution import kinds
 from prismpath.distribution.kinds import BAD_FORMAT, MAX_SEQ, Refused, is_hex64, is_int, is_stream, load_canonical
 
 FORMAT = "prismpath.dist/1"
-DOMAIN = FORMAT.encode("ascii") + b"\x00"          # S1: the 17 bytes before the envelope bytes
+PAYLOAD_TYPE = "application/vnd.prismpath.dist+json"   # S1, S7
 MAGIC = b"PPDE"
 CONTAINER_VERSION = 1
 MAX_ENVELOPE = 2048                                # E6
@@ -29,10 +33,12 @@ TRUST_STREAM = "@trust"
 ZERO_HASH = "0" * 64
 KEY_ID_SIZE, SIGNATURE_SIZE = 32, 64
 ENTRY_SIZE = KEY_ID_SIZE + SIGNATURE_SIZE
-_HEADER = struct.Struct("<4sBH")                   # magic, container version, n
+_HEADER = struct.Struct("<4sBB")                   # magic, container version, k
+_LENGTH = struct.Struct("<H")                      # n, after the k entries
+MAX_SEALED = _HEADER.size + ENTRY_SIZE * MAX_ENTRIES + _LENGTH.size + MAX_ENVELOPE   # 2,440 bytes (B9)
 
 MEMBERS = frozenset({"artifact", "body_sha256", "body_size", "encoding", "expires", "format", "meta",
-                     "not_before", "policy_sha256", "replaces", "seq", "stream", "targets", "widens"})
+                     "not_before", "policy_sha256", "release", "replaces", "seq", "stream", "targets", "widens"})
 
 
 def _require(condition: bool, detail: str, cause: str = BAD_FORMAT) -> None:
@@ -43,6 +49,14 @@ def _require(condition: bool, detail: str, cause: str = BAD_FORMAT) -> None:
 def key_id(public_raw: bytes) -> str:
     """K: the key id is the SHA-256 of the 32 raw public bytes, in lower case hex."""
     return canon.sha256_hex(bytes(public_raw))
+
+
+def release_id(artifacts: Iterable[Tuple[str, str]]) -> str:
+    """E10: the SHA-256 of the canon/2 bytes of the sorted `[artifact, body_sha256]` pairs of every artifact in
+    the release. The signer computes it over the whole release."""
+    pairs = sorted([str(artifact), str(body_sha256)] for artifact, body_sha256 in artifacts)
+    _require(bool(pairs) and len({pair[0] for pair in pairs}) == len(pairs), "a release names each artifact once")
+    return canon.sha256_hex(canon.canon2_bytes(pairs))
 
 
 def envelope_id(envelope_bytes: bytes) -> str:
@@ -60,6 +74,7 @@ class Envelope:
     meta: Mapping[str, Any]
     not_before: int
     policy_sha256: str
+    release: str
     replaces: str
     seq: int
     stream: str
@@ -108,7 +123,7 @@ def read(envelope_bytes: bytes) -> Envelope:
     _require(isinstance(targets, list) and targets and all(target in kinds.TARGET_KINDS for target in targets),
              "targets empty or naming an unknown target kind")                             # E8
     _require(targets == sorted(set(targets)), "targets not sorted or repeated")
-    _require(is_hex64(doc["body_sha256"]) and is_hex64(doc["policy_sha256"]), "a hash member")
+    _require(all(is_hex64(doc[name]) for name in ("body_sha256", "policy_sha256", "release")), "a hash member")
     _require(doc["replaces"] == "" or is_hex64(doc["replaces"]), "replaces")
     _require(is_int(doc["body_size"], 0, MAX_BODY), "body_size")
     _require(is_int(doc["seq"], 1, MAX_SEQ), "seq")
@@ -117,7 +132,8 @@ def read(envelope_bytes: bytes) -> Envelope:
     stream = doc["stream"]
     trust = artifact in kinds.TRUST_ARTIFACTS
     _require(is_stream(stream) or stream == TRUST_STREAM, "stream")
-    _require(stream != TRUST_STREAM or doc["policy_sha256"] == ZERO_HASH, "a @trust envelope's policy_sha256 is 64 zeros")
+    _require(stream != TRUST_STREAM or doc["policy_sha256"] == doc["release"] == ZERO_HASH,
+             "a @trust envelope's policy_sha256 and release are 64 zeros")
     if trust:
         _require(doc["expires"] == 0, "a trust kind's expires is 0")                       # E5, X4
     else:
@@ -125,19 +141,20 @@ def read(envelope_bytes: bytes) -> Envelope:
     _check_meta(artifact, doc["meta"])
     return Envelope(artifact=artifact, body_sha256=doc["body_sha256"], body_size=doc["body_size"],
                     expires=doc["expires"], meta=doc["meta"], not_before=doc["not_before"],
-                    policy_sha256=doc["policy_sha256"], replaces=doc["replaces"], seq=doc["seq"], stream=stream,
+                    policy_sha256=doc["policy_sha256"], release=doc["release"], replaces=doc["replaces"], seq=doc["seq"], stream=stream,
                     targets=tuple(targets), widens=doc["widens"], raw=raw)
 
 
-def build(artifact: str, body: bytes, *, stream: str, seq: int, policy_sha256: str, targets: Sequence[str],
-          not_before: int, expires: int, replaces: str = "", widens: bool = False,
+def build(artifact: str, body: bytes, *, stream: str, seq: int, policy_sha256: str, release: str,
+          targets: Sequence[str], not_before: int, expires: int, replaces: str = "", widens: bool = False,
           meta: Optional[Mapping[str, Any]] = None) -> bytes:
-    """The canon/2 bytes of the envelope naming `body`. A writer refuses (`Refused`) every envelope `read`
-    would refuse, so nothing it writes is unreadable."""
+    """The canon/2 bytes of the envelope naming `body`, in the release `release` (`release_id`, or 64 zeros on
+    `@trust`). A writer refuses (`Refused`) every envelope `read` would refuse, so nothing it writes is
+    unreadable."""
     body = bytes(body)
     doc = {"artifact": artifact, "body_sha256": canon.sha256_hex(body), "body_size": len(body),
            canon.ENCODING_KEY: canon.CANON2, "expires": expires, "format": FORMAT, "meta": dict(meta or {}),
-           "not_before": not_before, "policy_sha256": policy_sha256, "replaces": replaces, "seq": seq,
+           "not_before": not_before, "policy_sha256": policy_sha256, "release": release, "replaces": replaces, "seq": seq,
            "stream": stream, "targets": sorted(targets), "widens": widens}
     try:
         raw = canon.canon2_bytes(doc)
@@ -148,8 +165,10 @@ def build(artifact: str, body: bytes, *, stream: str, seq: int, policy_sha256: s
 
 
 def signed_message(envelope_bytes: bytes) -> bytes:
-    """S1: what every signature covers, the domain and then the envelope bytes."""
-    return DOMAIN + bytes(envelope_bytes)
+    """S1: what every signature covers, the DSSE pre-authentication encoding of the envelope bytes with the
+    payload type `application/vnd.prismpath.dist+json` (`intoto.pae`)."""
+    from prismpath.ledgers.intoto import pae
+    return pae(PAYLOAD_TYPE, bytes(envelope_bytes))
 
 
 def seal(envelope_bytes: bytes, signers: Iterable[Any]) -> bytes:
@@ -172,31 +191,67 @@ def seal(envelope_bytes: bytes, signers: Iterable[Any]) -> bytes:
 
 
 def seal_entries(envelope_bytes: bytes, entries: Sequence[Tuple[str, bytes]]) -> bytes:
-    """The S2 byte layout of `envelope_bytes` and `entries` as given, (key id hex, 64 byte signature), with no
+    """The S2 byte layout of `entries` as given, (key id hex, 64 byte signature), then `envelope_bytes`, with no
     check. The writer's last step, and how a test writes a container `unseal` refuses."""
-    out = [_HEADER.pack(MAGIC, CONTAINER_VERSION, len(envelope_bytes)), bytes(envelope_bytes), bytes([len(entries)])]
+    out = [_HEADER.pack(MAGIC, CONTAINER_VERSION, len(entries))]
     out += [bytes.fromhex(kid) + bytes(signature) for kid, signature in entries]
+    out += [_LENGTH.pack(len(envelope_bytes)), bytes(envelope_bytes)]
     return b"".join(out)
 
 
 def unseal(sealed: bytes) -> Tuple[bytes, List[Tuple[str, bytes]]]:
     """S2: (envelope bytes, [(key id hex, signature)]) of a sealed envelope. Any other length, magic or
-    version, an unsorted or repeated key id, and zero or more than four entries are `dist:bad-format`."""
+    version, an unsorted or repeated key id, zero or more than four entries and an envelope length outside
+    1 to 2048 are `dist:bad-format`. Nothing past 2,440 bytes is read (B9)."""
     _require(isinstance(sealed, (bytes, bytearray)), "a sealed envelope is bytes")
     data = bytes(sealed)
-    _require(len(data) >= _HEADER.size + 1, "shorter than the header")
-    magic, version, size = _HEADER.unpack_from(data)
+    _require(_HEADER.size <= len(data) <= MAX_SEALED, f"a sealed envelope of {len(data)} bytes")
+    magic, version, count = _HEADER.unpack_from(data)
     _require(magic == MAGIC and version == CONTAINER_VERSION, "magic or container version")
-    _require(1 <= size <= MAX_ENVELOPE, f"an envelope length of {size}")
-    _require(len(data) >= _HEADER.size + size + 1, "shorter than its envelope")
-    count = data[_HEADER.size + size]
     _require(1 <= count <= MAX_ENTRIES, f"{count} entries")
-    start = _HEADER.size + size + 1
-    _require(len(data) == start + ENTRY_SIZE * count, "a length other than its entries")
+    start = _HEADER.size + ENTRY_SIZE * count
+    _require(len(data) >= start + _LENGTH.size, "shorter than its entries")
+    (size,) = _LENGTH.unpack_from(data, start)
+    _require(1 <= size <= MAX_ENVELOPE, f"an envelope length of {size}")
+    _require(len(data) == start + _LENGTH.size + size, "a length other than its envelope")
     entries = []
     for index in range(count):
-        entry = data[start + ENTRY_SIZE * index: start + ENTRY_SIZE * (index + 1)]
+        entry = data[_HEADER.size + ENTRY_SIZE * index: _HEADER.size + ENTRY_SIZE * (index + 1)]
         entries.append((entry[:KEY_ID_SIZE].hex(), entry[KEY_ID_SIZE:]))
     ids = [kid for kid, _signature in entries]
     _require(ids == sorted(set(ids)), "entries unsorted or a key id repeated")
-    return data[_HEADER.size:_HEADER.size + size], entries
+    return data[start + _LENGTH.size:], entries
+
+
+def to_dsse(sealed: bytes) -> dict:
+    """S7: the DSSE JSON envelope of a sealed envelope. `payload` is the envelope bytes in base64,
+    `payloadType` the one S1 signs, and each entry a `signatures` member with `keyid` in hex and `sig` in
+    base64. Any DSSE verifier that holds the authority public key can check it."""
+    envelope_bytes, entries = unseal(sealed)
+    return {"payload": base64.b64encode(envelope_bytes).decode("ascii"), "payloadType": PAYLOAD_TYPE,
+            "signatures": [{"keyid": kid, "sig": base64.b64encode(signature).decode("ascii")}
+                           for kid, signature in entries]}
+
+
+def from_dsse(doc: Mapping[str, Any]) -> bytes:
+    """S7: the sealed envelope a DSSE JSON envelope maps back to. The signature order of DSSE carries no
+    meaning, so the entries are sorted by key id. Anything `unseal` would refuse is `dist:bad-format`."""
+    _require(isinstance(doc, Mapping) and set(doc) == {"payload", "payloadType", "signatures"}, "DSSE members")
+    _require(doc["payloadType"] == PAYLOAD_TYPE, "DSSE payloadType")
+    signatures = doc["signatures"]
+    _require(isinstance(signatures, list), "DSSE signatures")
+    try:
+        envelope_bytes = base64.b64decode(doc["payload"], validate=True)
+        entries = []
+        for member in signatures:
+            _require(isinstance(member, Mapping) and set(member) == {"keyid", "sig"} and is_hex64(member["keyid"]),
+                     "a DSSE signature member")
+            signature = base64.b64decode(member["sig"], validate=True)
+            _require(len(signature) == SIGNATURE_SIZE, "a DSSE signature length")
+            entries.append((member["keyid"], signature))
+    except (binascii.Error, TypeError, ValueError):
+        raise Refused(BAD_FORMAT, "DSSE base64") from None
+    _require(1 <= len(envelope_bytes) <= MAX_ENVELOPE and 1 <= len(entries) <= MAX_ENTRIES, "DSSE sizes")
+    sealed = seal_entries(envelope_bytes, sorted(entries))
+    unseal(sealed)
+    return sealed

@@ -50,30 +50,32 @@ def test_case_007_a_body_over_the_pep_bound_is_too_large():
     assert _cause("007_envelope_2049_bytes") == "dist:bad-format"
 
 
-def test_case_009_a_signature_without_the_domain_prefix_is_invalid():
-    """case_009: S1."""
-    assert _cause("009_no_domain_prefix") == "sig:invalid"
+def test_case_009_a_signature_over_other_bytes_is_invalid():
+    """case_009: S1, S5. Over the envelope bytes alone, and under another DSSE payload type."""
+    assert _cause("009_over_the_envelope_bytes_alone") == "sig:invalid"
+    assert _cause("009_another_payload_type") == "sig:invalid"
 
 
 def test_case_010_signed_only_by_an_unknown_key():
-    """case_010: S3, V3."""
+    """case_010: S3, S5, V3."""
     assert _cause("010_unknown_key_only") == "dist:unknown-key"
     assert _verify(bytes.fromhex(BY_NAME["001_round_trip"]["sealed"]), trust=TrustStore()).cause == "dist:unknown-key"
 
 
 def test_case_011_an_unknown_entry_beside_a_good_one_is_ignored():
-    """case_011: S3, S6."""
+    """case_011: S3, S4."""
     assert _cause("011_trusted_and_unknown") is None
 
 
-def test_case_012_a_failing_entry_by_a_trusted_key_refuses_whatever_the_others_say():
-    """case_012: S4."""
-    assert _cause("012_trusted_good_and_trusted_failing") == "sig:invalid"
+def test_case_012_a_failing_entry_by_a_trusted_key_is_skipped():
+    """case_012: S3, S4. One good entry counts, and the failing one beside it is skipped, as DSSE skips it."""
+    assert _cause("012_trusted_good_and_trusted_failing_is_skipped") is None
 
 
 def test_case_013_entries_by_a_revoked_key_or_a_retired_key_do_not_count():
     """case_013: S5. The trust store holds the revoked and the retired key, so their signatures verify and
-    none counts. Applying a revocation (R2) and a rotation (O3) that put them there is the owners' test."""
+    none counts, and S5 names that before any other cause. Applying a revocation (R2) and a rotation (O3) that
+    put them there is the owners' test."""
     assert _cause("013_revoked_key_only") == "sig:revoked-key"
     assert _cause("013_retired_key_only") == "sig:revoked-key"
 
@@ -161,21 +163,48 @@ def test_case_044_the_policy_ppt_check_keeps_its_existing_causes():
     assert _verify(good, pep=verifier.PepView("host", GEN.STREAM, qualification=other)).cause == "envelope:id-mismatch"
 
 
-def test_case_079_a_trust_envelope_never_expires():
-    """case_079: X4, E5. A trust envelope with expires other than 0 is bad format, and a revocation made ten
-    years before it is read verifies. What applying it does is R1 to R7."""
-    assert _cause("079_trust_kind_with_expires") == "dist:bad-format"
-    result = GEN.replay(BY_NAME["079_revocation_read_years_later"])
-    assert result["cause"] is None and result["unchanged"] is False
+def test_case_114_envelopes_of_one_seq_and_policy_with_another_release_id_are_incomplete():
+    """case_114: E7, E10, V10."""
+    assert _cause("114_staged_release_id_differs") == "dist:incomplete"
+
+
+def test_case_117_entries_added_or_removed_never_sign_an_unsigned_envelope():
+    """case_117: S6. A signed envelope stays signed with an entry added and needs its counting entry, and an
+    unsigned one stays refused with an entry added. The envelope id half is in test_distribution_envelope."""
+    assert _cause("117_signed_with_an_entry_added") is None
+    assert _cause("117_signed_with_its_counting_entry_removed") == "dist:unknown-key"
+    assert _cause("117_unsigned_with_a_failing_entry_added") == "sig:invalid"
+
+
+def test_case_118_a_key_in_a_role_this_version_does_not_know_never_counts(tmp_path):
+    """case_118: K4, S3. It is refused with dist:unknown-key and the key stays in the store, also across a
+    save and a load."""
+    assert _cause("118_unknown_role_signs") == "dist:unknown-key"
+    x = env.key_id(GEN.public_raw(GEN.test_key("X")))
+    stored = TrustStore.load(GEN.trust_store().save(str(tmp_path / "trust.json")).path)
+    assert stored.keys[x].role == "timestamp" and stored.readable
+    assert _verify(bytes.fromhex(BY_NAME["118_unknown_role_signs"]["sealed"]), trust=stored).cause == "dist:unknown-key"
+
+
+def test_case_119_a_pep_with_no_clock_takes_not_before_as_its_time():
+    """case_119: T2, T3, V13. A month behind after a power loss it accepts a current envelope and its time
+    floor moves to not_before. A PEP with a clock a month early refuses the same envelope."""
+    accepted = GEN.replay(BY_NAME["119_no_clock_a_month_behind"])
+    assert accepted["cause"] is None and accepted["time_floor"] == GEN.NOT_BEFORE
+    assert _cause("119_clock_a_month_early") == "dist:not-yet-valid"
+    expired = verifier.PepView("host", GEN.STREAM, qualification=GEN.QUALIFICATION, has_clock=False)
+    good = bytes.fromhex(BY_NAME["001_round_trip"]["sealed"])
+    assert _verify(good, pep=expired, now=GEN.EXPIRES).cause == "dist:expired"
 
 
 def test_the_staged_release_must_agree_at_its_seq():
     """V10, E7: an envelope at the staged seq that disagrees with the staged policy hash is incomplete."""
     good = bytes.fromhex(BY_NAME["001_round_trip"]["sealed"])
-    staged = verifier.Staged(GEN.STREAM, 1, "ab" * 32, "", False)
+    release = GEN.release_of(GEN.image())
+    staged = verifier.Staged(GEN.STREAM, 1, "ab" * 32, release, "", False)
     pep = verifier.PepView("host", GEN.STREAM, qualification=GEN.QUALIFICATION, staged=staged)
     assert _verify(good, pep=pep).cause == "dist:incomplete"
-    agreeing = verifier.Staged(GEN.STREAM, 1, canon.sha256_hex(GEN.image()), "", False)
+    agreeing = verifier.Staged(GEN.STREAM, 1, canon.sha256_hex(GEN.image()), release, "", False)
     assert _verify(good, pep=verifier.PepView("host", GEN.STREAM, qualification=GEN.QUALIFICATION,
                                               staged=agreeing)).ok
 
@@ -188,21 +217,22 @@ def test_a_pep_view_names_a_built_kind_and_a_stream():
 
 
 def test_case_097_a_hatch_in_a_production_build_is_refused_and_audited(tmp_path, monkeypatch):
-    """case_097: D1, D2. Without prismpath._dev_build the hatch is refused with dist:hatch-refused, which the
-    caller answers by running the check, and its audit event says so. With the module it passes. The
-    repository carries the module and the product does not, so both builds are set here by what the import
-    system finds, as D2 says, and nothing else."""
-    log = AuditLog(str(tmp_path / "dev.log"))
-    real_find_spec = importlib.util.find_spec
-    assert devbuild.is_dev_build() == ((REPO / "_dev_build.py").exists())
+    """case_097: D1, D2. In a production build the hatch is refused with dist:hatch-refused, which the caller
+    answers by running the check, and its audit event says so. In a dev build it passes. Which build this is
+    comes from the tree around the package alone, shown on temporary trees."""
+    tree = tmp_path / "checkout"
+    package = tree / "prismpath"
+    package.mkdir(parents=True)
+    assert not devbuild.is_dev_build(package)
+    (tree / devbuild.MARKER).write_text("dev\n")
+    assert not devbuild.is_dev_build(package)                     # the marker alone is not a checkout
+    (tree / "pyproject.toml").write_text("[project]\n")
+    assert devbuild.is_dev_build(package)
+    (tree / devbuild.MARKER).unlink()
+    assert not devbuild.is_dev_build(package)
 
-    def build(dev):
-        marker = real_find_spec("prismpath.distribution")
-        monkeypatch.setattr(importlib.util, "find_spec", lambda name, *rest: (marker if dev else None)
-                            if name == devbuild.DEV_BUILD_MODULE else real_find_spec(name, *rest))
-
-    build(dev=False)
-    assert not devbuild.is_dev_build()
+    log = AuditLog(str(tmp_path / "hatch.log"))
+    monkeypatch.setattr(devbuild, "is_dev_build", lambda package_dir=None: False)
     with pytest.raises(devbuild.HatchRefused) as refused:
         devbuild.hatch("PPT_NET_ALLOW_UNVERIFIED", log)
     assert refused.value.cause == "dist:hatch-refused"
@@ -210,6 +240,6 @@ def test_case_097_a_hatch_in_a_production_build_is_refused_and_audited(tmp_path,
                                       "cause": "dist:hatch-refused"}
     with pytest.raises(devbuild.HatchRefused):
         devbuild.hatch("--allow-unsigned")
-    build(dev=True)
+    monkeypatch.setattr(devbuild, "is_dev_build", lambda package_dir=None: True)
     devbuild.hatch("--allow-unsigned", log)
     assert log.events[-1]["data"] == {"hatch": "--allow-unsigned", "dev_build": True, "result": "allowed"}

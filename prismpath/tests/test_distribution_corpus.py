@@ -54,3 +54,5 @@ def test_every_case_names_its_inputs_and_one_result():
     for case in CORPUS["cases"]:
         assert set(case) == {"case", "name", "runs_on", "trust", "pep", "now", "sealed", "body", "expect"}
         assert set(case["expect"]) == {"cause", "unchanged", "time_floor", "envelope_id"}
+    for vector in CORPUS["release_ids"]:
+        assert set(vector) == {"case", "name", "runs_on", "artifacts", "release"}

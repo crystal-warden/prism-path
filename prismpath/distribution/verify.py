@@ -32,10 +32,11 @@ class Floor:
 
 @dataclass(frozen=True)
 class Staged:
-    """What a staged release shares (E7): its stream, `seq`, policy hash, `replaces` and `widens`."""
+    """What a staged release shares (E7): its stream, `seq`, policy hash, release id, `replaces` and `widens`."""
     stream: str
     seq: int
     policy_sha256: str
+    release: str
     replaces: str
     widens: bool
 
@@ -43,8 +44,9 @@ class Staged:
 @dataclass(frozen=True)
 class PepView:
     """What the verifier needs of an enforcement point. `kind` must have a row in `kinds.TARGETS`.
-    `qualification` is the qualification envelope a `host` PEP admits images under, already verified, and
-    `body_bound` is the PEP's own bound on a body (E6)."""
+    `qualification` is the qualification envelope a `host` PEP admits images under, already verified,
+    `body_bound` is the PEP's own bound on a body (E6), and `has_clock` is False for a PEP with no real time
+    clock, whose `now` is its time floor plus its monotonic count (T2) and which never applies T3."""
     kind: str
     stream: str
     floor: Floor = field(default_factory=Floor)
@@ -52,6 +54,7 @@ class PepView:
     staged: Optional[Staged] = None
     qualification: Optional[dict] = None
     body_bound: int = env.MAX_BODY
+    has_clock: bool = True
 
     def __post_init__(self):
         if self.kind not in kinds.TARGETS:
@@ -63,8 +66,8 @@ class PepView:
 def _floor_check(envelope: env.Envelope, trust: TrustStore, pep: PepView) -> Optional[Verdict]:
     """V8. None to go on, or the verdict: a refusal, or an envelope at its floor that changes nothing."""
     envelope_id = envelope.envelope_id
-    if envelope.artifact in kinds.ON_TRUST_STREAM:                 # R1, O1: one trust sequence
-        if envelope.seq > trust.trust_seq:
+    if envelope.artifact in kinds.ON_TRUST_STREAM:                 # R1, O1: one trust sequence, no step skipped
+        if envelope.seq == trust.trust_seq + 1:
             return None
         if envelope.seq == trust.trust_seq and envelope_id == trust.trust_id:
             return Verdict(None, envelope, unchanged=True)
@@ -80,7 +83,7 @@ def _floor_check(envelope: env.Envelope, trust: TrustStore, pep: PepView) -> Opt
 def verify(sealed: bytes, body: bytes, *, trust: TrustStore, pep: PepView, now: int) -> Verdict:
     """V1: the sealed envelope and its body checked in the order V2 to V11 for `pep` at the PEP's clock
     reading `now` (Unix seconds). Returns the first failure's cause, or the accepted envelope."""
-    # V2: the container reads, and the envelope and body fit the bounds
+    # V2: the container reads, and the envelope and body fit the bounds (B9: nothing past either is read)
     try:
         envelope_bytes, entries = env.unseal(sealed)
     except Refused as refused:
@@ -89,7 +92,7 @@ def verify(sealed: bytes, body: bytes, *, trust: TrustStore, pep: PepView, now: 
     if len(body) > pep.body_bound:
         return Verdict("dist:too-large")
     # V3: the signatures, over the bytes as they came and before anything reads them (E9)
-    counted = trust.counting(entries, env.signed_message(envelope_bytes))
+    counted = trust.counting(entries, env.signed_message(envelope_bytes), kinds.AUTHORITY)   # K4: every kind's role
     if not counted.ok:
         return counted
     # V4: the envelope reads
@@ -101,11 +104,12 @@ def verify(sealed: bytes, body: bytes, *, trust: TrustStore, pep: PepView, now: 
     target = kinds.TARGETS[pep.kind]
     stream = env.TRUST_STREAM if envelope.artifact in kinds.ON_TRUST_STREAM else pep.stream
     if (pep.kind not in envelope.targets or envelope.stream != stream
-            or not (envelope.artifact in target.needs or envelope.artifact in kinds.TRUST_ARTIFACTS)):
+            or not (envelope.artifact in target.uses or envelope.artifact in kinds.TRUST_ARTIFACTS)):
         return Verdict("dist:target-mismatch", envelope)
-    # V6: time, against the larger of the clock and the time floor (T1, T3, T4; X4 a trust kind never expires)
+    # V6: time, against the larger of the clock and the time floor (T1, T3, T4; X4 a trust kind never expires).
+    # A PEP with no clock has no ground to call an envelope early (T3) and catches up by V13 (T2).
     time = max(now, trust.time_floor)
-    if envelope.not_before - time > SKEW:
+    if pep.has_clock and envelope.not_before - time > SKEW:
         return Verdict("dist:not-yet-valid", envelope)
     if envelope.expires and time >= envelope.expires:
         return Verdict("dist:expired", envelope)
@@ -128,8 +132,8 @@ def verify(sealed: bytes, body: bytes, *, trust: TrustStore, pep: PepView, now: 
     staged = pep.staged
     if (envelope.artifact not in kinds.ON_TRUST_STREAM and staged is not None
             and staged.stream == envelope.stream and staged.seq == envelope.seq
-            and (staged.policy_sha256, staged.replaces, staged.widens)
-            != (envelope.policy_sha256, envelope.replaces, envelope.widens)):
+            and (staged.policy_sha256, staged.release, staged.replaces, staged.widens)
+            != (envelope.policy_sha256, envelope.release, envelope.replaces, envelope.widens)):
         return refused("dist:incomplete")
     # V11: the artifact's own check
     cause = kinds.ARTIFACTS[envelope.artifact].check(envelope, body, pep)

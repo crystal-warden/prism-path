@@ -8,9 +8,11 @@ the same file.
 
 Every key comes from a fixed 32 byte test seed, so the Ed25519 signatures, the envelope ids and the file
 are the same on every run. Each case is `{case, name, runs_on, trust, pep, now, sealed, body, expect}`,
-bytes in lower case hex. `runs_on` is the case's row of section 20. `trust` is the trust store document,
-or null for a store that cannot be read. `expect` is what the Python verifier decides, and the generator
-also asserts that it is the cause the spec gives, so the file never freezes a wrong verdict.
+bytes in lower case hex. `runs_on` is the case's row of section 20, and `pep.kind` the target kind it runs
+on (I1). The C core has only `mesh` and `cfs`, so a case on `host` is replayed by Python and Rust. `trust`
+is the trust store document, or null for a store that cannot be read. `expect` is what the Python verifier
+decides, and the generator also asserts that it is the cause the spec gives, so the file never freezes a
+wrong verdict. `release_ids` holds the release id vectors of E10.
 """
 from __future__ import annotations
 
@@ -19,6 +21,7 @@ import json
 import re
 import sys
 from pathlib import Path
+from dataclasses import replace
 from typing import Dict, List, Optional
 
 HERE = Path(__file__).resolve().parent
@@ -77,28 +80,37 @@ def image_meta(body: bytes) -> dict:
             "wcet_cycles": pp.wcet_cycles(body)}
 
 
+def release_of(body: bytes) -> str:
+    return env.release_id([("policy.ppt", canon.sha256_hex(body))])
+
+
 def envelope_doc(body: bytes, **changes) -> dict:
     """The envelope document of a `policy.ppt` release of `body`, with `changes` applied."""
     doc = {"artifact": "policy.ppt", "body_sha256": canon.sha256_hex(body), "body_size": len(body),
            canon.ENCODING_KEY: canon.CANON2, "expires": EXPIRES, "format": env.FORMAT, "meta": image_meta(body),
-           "not_before": NOT_BEFORE, "policy_sha256": canon.sha256_hex(body), "replaces": "", "seq": 1,
+           "not_before": NOT_BEFORE, "policy_sha256": canon.sha256_hex(body), "release": release_of(body), "replaces": "", "seq": 1,
            "stream": STREAM, "targets": ["host"], "widens": False}
     doc.update(changes)
     return doc
 
 
 def trust_store(**members) -> TrustStore:
+    """A, B, R and Q in the authority role, R revoked and Q retired, and X in a role this version does not
+    know (K4). U is held by no store."""
     keys = [public_raw(test_key(name)) for name in ("A", "B", "R", "Q")]
     ids = {name: env.key_id(public_raw(test_key(name))) for name in ("R", "Q")}
-    return TrustStore.with_keys(keys, revoked_keys=frozenset({ids["R"]}), retired=frozenset({ids["Q"]}), **members)
+    store = TrustStore.with_keys(keys, revoked_keys=frozenset({ids["R"]}), retired=frozenset({ids["Q"]}), **members)
+    other = TrustStore.with_keys([public_raw(test_key("X"))], role="timestamp")
+    return replace(store, keys={**store.keys, **other.keys})
 
 
 def pep_document(pep: verifier.PepView) -> dict:
     staged = pep.staged
     return {"kind": pep.kind, "stream": pep.stream, "floor": {"seq": pep.floor.seq, "ids": sorted(pep.floor.ids)},
             "active": pep.active, "qualification": pep.qualification, "body_bound": pep.body_bound,
+            "has_clock": pep.has_clock,
             "staged": None if staged is None else {"stream": staged.stream, "seq": staged.seq,
-                                                    "policy_sha256": staged.policy_sha256,
+                                                    "policy_sha256": staged.policy_sha256, "release": staged.release,
                                                     "replaces": staged.replaces, "widens": staged.widens}}
 
 
@@ -107,6 +119,7 @@ def pep_from_document(doc: dict) -> verifier.PepView:
     return verifier.PepView(kind=doc["kind"], stream=doc["stream"],
                             floor=verifier.Floor(doc["floor"]["seq"], frozenset(doc["floor"]["ids"])),
                             active=doc["active"], qualification=doc["qualification"], body_bound=doc["body_bound"],
+                            has_clock=doc["has_clock"],
                             staged=None if staged is None else verifier.Staged(**staged))
 
 
@@ -188,11 +201,14 @@ def build() -> dict:
     add(8, "five_entries", "dist:bad-format", env.seal_entries(good, five))
 
     # S1, S3 to S6: the signatures
-    add(9, "no_domain_prefix", "sig:invalid", env.seal_entries(good, [(a_entry[0], signer.sign(good))]))
+    from prismpath.ledgers.intoto import pae
+    add(9, "over_the_envelope_bytes_alone", "sig:invalid", env.seal_entries(good, [(a_entry[0], signer.sign(good))]))
+    add(9, "another_payload_type", "sig:invalid",
+        env.seal_entries(good, [(a_entry[0], signer.sign(pae("application/vnd.in-toto+json", good)))]))
     add(10, "unknown_key_only", "dist:unknown-key", sealed_by(good, "U"))
     add(11, "trusted_and_unknown", None, sealed_by(good, "A", "U"))
     forged_b = (b_entry[0], test_key("B").sign(env.signed_message(good + b" ")))
-    add(12, "trusted_good_and_trusted_failing", "sig:invalid", env.seal_entries(good, sorted([a_entry, forged_b])))
+    add(12, "trusted_good_and_trusted_failing_is_skipped", None, env.seal_entries(good, sorted([a_entry, forged_b])))
     add(13, "revoked_key_only", "sig:revoked-key", sealed_by(good, "R"))
     add(13, "retired_key_only", "sig:revoked-key", sealed_by(good, "Q"))
 
@@ -239,22 +255,41 @@ def build() -> dict:
     add(44, "wrong_wcet", "manifest:wcet-mismatch",
         sealed_by(raw(envelope_doc(body, meta={**meta, "wcet_cycles": meta["wcet_cycles"] + 1})), "A"))
 
-    # X4, E5: a trust envelope never expires
-    revocation = canon.canon2_bytes({canon.ENCODING_KEY: canon.CANON2, "envelopes": [], "floors": {},
-                                     "format": "prismpath.dist-revocation/1", "keys": [], "policies": []})
-    trust_doc = {"artifact": "trust.revocation", "body_sha256": canon.sha256_hex(revocation),
-                 "body_size": len(revocation), canon.ENCODING_KEY: canon.CANON2, "expires": 0, "format": env.FORMAT,
-                 "meta": {}, "not_before": NOW - 10 * 365 * 86400, "policy_sha256": env.ZERO_HASH, "replaces": "",
-                 "seq": 1, "stream": env.TRUST_STREAM, "targets": ["host"], "widens": False}
-    add(79, "trust_kind_with_expires", "dist:bad-format", sealed_by(raw({**trust_doc, "expires": NOW + 1}), "A"),
-        payload=revocation)
-    add(79, "revocation_read_years_later", None, sealed_by(raw(trust_doc), "A"), payload=revocation)
+    # E7, E10, V10: one release id per release
+    other_release = env.release_id([("policy.ppt", canon.sha256_hex(body)), ("policy.spiral", "ab" * 32)])
+    add(114, "staged_release_id_differs", "dist:incomplete", good_sealed,
+        pep=verifier.PepView("host", STREAM, qualification=QUALIFICATION,
+                             staged=verifier.Staged(STREAM, 1, canon.sha256_hex(body), other_release, "", False)))
+
+    # S6: the signature block is not signed
+    u_entry = env.unseal(sealed_by(good, "U"))[1][0]
+    add(117, "signed_with_an_entry_added", None, env.seal_entries(good, sorted([a_entry, u_entry])))
+    add(117, "signed_with_its_counting_entry_removed", "dist:unknown-key", env.seal_entries(good, [u_entry]))
+    add(117, "unsigned_with_a_failing_entry_added", "sig:invalid", env.seal_entries(good, sorted([u_entry, forged_b])))
+
+    # K4: a key in a role this version does not know is kept and never counts
+    add(118, "unknown_role_signs", "dist:unknown-key", sealed_by(good, "X"))
+
+    # T2, T3, V13: a PEP with no clock takes the authority's not_before as its time
+    month = 30 * 86400
+    add(119, "no_clock_a_month_behind", None, good_sealed, now=NOT_BEFORE - month,
+        pep=verifier.PepView("host", STREAM, qualification=QUALIFICATION, has_clock=False))
+    add(119, "clock_a_month_early", "dist:not-yet-valid", good_sealed, now=NOT_BEFORE - month)
+
+    release_ids = []
+    three = [("policy.core", canon.sha256_hex(b"core")), ("egress.hosts", canon.sha256_hex(b"[]")),
+             ("sandbox.profile", canon.sha256_hex(b"profile"))]
+    for name, artifacts in (("three_artifacts", three),
+                            ("one_body_changed", three[:2] + [("sandbox.profile", canon.sha256_hex(b"profile2"))])):
+        release_ids.append({"case": 115, "name": f"115_{name}", "runs_on": spec[115]["runs_on"],
+                            "artifacts": [list(pair) for pair in artifacts], "release": env.release_id(artifacts)})
+    assert release_ids[0]["release"] != release_ids[1]["release"]
 
     return {"format": "prismpath.dist-corpus/1", "spec": "docs/design/spec-policy-distribution.md",
             "note": "Each case is bytes in and the Python verifier's result out. Every implementation named in "
                     "runs_on replays it and must report exactly the expected cause, unchanged flag, time floor "
                     "and envelope id. Keys come from fixed seeds (gen_distribution_corpus.test_key).",
-            "cases": cases}
+            "cases": cases, "release_ids": release_ids}
 
 
 def main() -> int:

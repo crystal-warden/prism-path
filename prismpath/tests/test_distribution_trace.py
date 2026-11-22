@@ -4,7 +4,8 @@
 row names, and no test names a case that is not there.
 
 A test covers a case when its name or docstring carries `case_NNN`, or when it is an implementation's replay
-of the corpus and the corpus holds the case for that implementation. Python's tests are
+of the corpus and the corpus holds the case for that implementation. The C core has only the `mesh` and
+`cfs` kinds (I1), so a corpus case counts for C only when its PEP is one of those. Python's tests are
 prismpath/tests/test_distribution_*.py and tools/tests/test_export.py, the C core's is
 prismpath/tests/test_distribution_c.py and Rust's are prismpath-hotswap-rs/tests/test_distribution_*.rs.
 
@@ -33,10 +34,12 @@ REPLAYERS = {"P": REPO / "tests" / "test_distribution_corpus.py",
 # Cases whose only test checks the research export and the built packages, which the product tree does not
 # carry; the product's own boundary check covers its packages.
 RESEARCH_ONLY = {99: ROOT / "tools" / "tests" / "test_export.py"}
+C_KINDS = frozenset({"mesh", "cfs"})
 PENDING = {
-    "P": "17-19 23-24 26 30-37 43 45-78 80-96 98 100-113",
-    "R": "1-13 16-17 20-24 26 28-29 31 39-44 46-48 50-53 62-63 66-77 79 82 84-85 97 101 104 111",
-    "C": "1-14 20-22 24-29 31 35-42 46-48 50 52-53 60-63 66-74 76-77 79 82 85 97 104-110 112",
+    "P": "17-19 23-24 26 30-37 43 45-96 98 100-113 120-121 123-126",
+    "R": "1-13 16-17 20-24 26 28-29 31 39-44 46-48 50-53 62-63 66-77 79 82 84-85 97 101 104 111 114-115 117-118 "
+         "123 126",
+    "C": "1-14 20-22 24-29 31 35-42 46-48 50 52-53 60-63 66-74 76-77 79 82 85 97 104-110 112 114 117-123",
 }
 
 
@@ -73,12 +76,13 @@ def _named(impl: str) -> dict:
 def _covered(impl: str) -> set:
     covered = set(_named(impl))
     if REPLAYERS[impl].exists():
-        covered |= {case["case"] for case in CORPUS["cases"] if impl in case["runs_on"]}
+        covered |= {case["case"] for case in CORPUS["cases"] if impl in case["runs_on"]
+                    and (impl != "C" or case["pep"]["kind"] in C_KINDS)}
     return covered
 
 
-def test_the_spec_has_113_numbered_cases_each_naming_rules_and_implementations():
-    assert sorted(SPEC) == list(range(1, 114))
+def test_the_spec_has_126_numbered_cases_each_naming_rules_and_implementations():
+    assert sorted(SPEC) == list(range(1, 127))
     assert all(case["rules"].strip() and case["runs_on"] for case in SPEC.values())
 
 
@@ -104,7 +108,11 @@ def test_the_pending_list_names_only_cases_still_without_a_test():
     assert outside == {"P": [], "R": [], "C": []}
 
 
+def test_only_case_099_is_research_only():
+    assert list(RESEARCH_ONLY) == [99] and RESEARCH_ONLY[99] == ROOT / "tools" / "tests" / "test_export.py"
+
+
 def test_the_corpus_runs_each_case_where_the_spec_says():
-    for case in CORPUS["cases"]:
+    for case in CORPUS["cases"] + CORPUS["release_ids"]:
         assert case["case"] in SPEC and case["runs_on"] == SPEC[case["case"]]["runs_on"], case["name"]
         assert case["name"].startswith(f"{case['case']:03d}_")

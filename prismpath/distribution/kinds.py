@@ -79,9 +79,20 @@ TARGET_KINDS = frozenset({"agent", "cfs", "gateway", "host", "mesh", "xdp"})
 
 @dataclass(frozen=True)
 class Target:
-    """A target kind: the artifacts it needs before it commits (C2) and whether it can decide larger (W1)."""
+    """A target kind: the artifacts it needs before it commits (C2), those it needs only when another
+    artifact of the release asks for them (`policy.spiral`, when the `policy.ppt` declares packing), and
+    whether it can decide larger (W1). `uses` is what V5 admits."""
     needs: FrozenSet[str]
     decides: bool
+    when_declared: FrozenSet[str] = frozenset()
+
+    @property
+    def uses(self) -> FrozenSet[str]:
+        return self.needs | self.when_declared
+
+
+ROLES = frozenset({"authority"})                    # K4: the key roles this version knows
+AUTHORITY = "authority"
 
 
 @dataclass(frozen=True)
@@ -91,6 +102,7 @@ class Artifact:
     meta_required: FrozenSet[str] = frozenset()
     meta_optional: FrozenSet[str] = frozenset()
     check: Optional[Callable[[Any, bytes, Any], Optional[str]]] = None
+    role: str = AUTHORITY                          # K4: every artifact kind needs the authority in this version
 
 
 # ------------------------------------------------------------------ the artifact checks (V11)
@@ -118,6 +130,13 @@ def check_policy_ppt(envelope, body: bytes, pep) -> Optional[str]:
     ok, reasons = policy_pack.check_envelope({"envelope_id": meta["qualification"], "fields": meta["fields"]},
                                              body, pep.qualification)
     return None if ok else _first_cause(reasons)
+
+
+def check_policy_spiral(_envelope, _body: bytes, _pep) -> Optional[str]:
+    """`policy.spiral` has no check of its own when it is verified. Its SHA-256 is held against the
+    `sidecar_sha256` of the staged `policy.ppt` envelope's `meta.packing` when the release commits (C2), with
+    `spiral:sidecar-missing` and `spiral:sidecar-hash-mismatch`, by the host's adapter."""
+    return None
 
 
 def _trust_body(body: bytes, form: str, members: FrozenSet[str]) -> dict:
@@ -183,6 +202,7 @@ ARTIFACTS: Dict[str, Artifact] = {
     "policy.core": Artifact(),
     "policy.ppt": Artifact(frozenset({"fields", "counts", "wcet_cycles", "qualification"}),
                            frozenset({"packing", "flow_sha256", "overlay_of"}), check_policy_ppt),
+    "policy.spiral": Artifact(check=check_policy_spiral),
     "sandbox.profile": Artifact(frozenset({"compiler"})),
     "egress.hosts": Artifact(),
     "gateway.routes": Artifact(),
@@ -198,9 +218,10 @@ TRUST_ARTIFACTS = frozenset({"trust.widening", "trust.revocation", "trust.rotati
 ON_TRUST_STREAM = frozenset({"trust.revocation", "trust.rotation"})     # R1, O1: they travel on `@trust`
 
 TARGETS: Dict[str, Target] = {
-    "host": Target(needs=frozenset({"policy.ppt"}), decides=False),
+    "host": Target(needs=frozenset({"policy.ppt"}), decides=False, when_declared=frozenset({"policy.spiral"})),
 }
 
 assert set(TARGETS) <= TARGET_KINDS and TRUST_ARTIFACTS <= set(ARTIFACTS)
-assert all(target.needs <= set(ARTIFACTS) - TRUST_ARTIFACTS for target in TARGETS.values())
-assert all(ARTIFACTS[name].check is not None for target in TARGETS.values() for name in target.needs | TRUST_ARTIFACTS)
+assert all(target.uses <= set(ARTIFACTS) - TRUST_ARTIFACTS for target in TARGETS.values())
+assert all(ARTIFACTS[name].check is not None for target in TARGETS.values() for name in target.uses | TRUST_ARTIFACTS)
+assert all(artifact.role in ROLES for artifact in ARTIFACTS.values())
