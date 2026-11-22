@@ -28,6 +28,8 @@ SAMPLE = 400         # readings per population on every push
 
 
 def load(path):
+    if not (ROOT / path).is_file():         # the installed wheel carries the package, not the research policies
+        pytest.skip(f"{path} is not beside this package (an installed wheel)")
     raw = (ROOT / path).read_text(encoding="utf-8")
     return core_render.render(json.loads(raw)) if path.endswith(".core.json") else raw
 
@@ -217,6 +219,8 @@ def test_band_vectors_are_the_live_reference_and_rust_has_the_same_file(tmp_path
     spec.loader.exec_module(gen)
     committed = ROOT / "prismpath/telemetry/conformance/grouped_band.json"
     rust = ROOT / "prismpath-telemetry-rs/tests/fixtures/grouped_band.json"
+    if not rust.is_file():
+        pytest.skip("the Rust crate is not beside this package (an installed wheel)")
     assert rust.read_bytes() == committed.read_bytes()
     cases = []
     for number, path in enumerate(gen.POLICIES):
