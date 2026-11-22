@@ -12,6 +12,11 @@ spec stable.
 
 - **A node whose joint grid is over 300,000 cells now has a band tier and a signature tier.** `prismpath/telemetry/spiral_groups.py` finds the band by evaluating the policy once, so no grid is listed, and costs 5 to 7 bits a decision on the seven large policies. The signature tier groups the fields that rules read together, sends each group's class of rule residuals, and refines inside a class in Gray order, at 14 to 43 bits. `layout_for` returns the existing `SpiralLayout` for a node that fits, so every existing layout, sidecar and recorded stream is byte identical. A stream carries a 42 byte preamble naming the policy and the layout, and a decoder refuses another policy's or another layout's stream. PROTOCOL.md section 2.6.1 defines the profile.
 - **Decision preservation is proven and tested.** `formal/FQ/Signature.lean` proves that readings whose disjoint, covering field groups have equal signatures route alike. `test_spiral_groups.py` round trips the seven policies and checks every reading of a seeded sample of the uniform and boundary populations, and the full 64,484 reading populations run at the checkpoint. `prismpath-telemetry-rs` has the band tier, held to the Python bits by `conformance/grouped_band.json`. The signature tier is not ported to Rust yet.
+### Fixed: the in-toto export finds keys only where it is told to, and says when verify was unpinned (2026-11-22)
+
+- **`prismpath.ledgers.intoto` no longer patches `InstanceKey.__init__` or scans live objects for a private key.** A key comes from an argument, the environment variable or the run's key files.
+- **`verify` reports `pinned`, `pinned_authority` and `pinned_instance`.** A check without pins reads the run's own `instance.pub`, which says nothing about who made the run, so its report says `pinned: false` and `signed-unpinned`.
+- **A failed `import_envelopes` leaves the run directory as it was.** The roots file it restored is removed when verification fails, and a malformed envelope is a `Bad` error.
 
 ### Fixed: a cFS store that does not read no longer resets the version floor to 0 (2026-11-21)
 
