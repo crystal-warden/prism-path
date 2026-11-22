@@ -11,7 +11,8 @@ ROOT = Path(__file__).resolve().parents[2]
 SUFFIXES = (".py", ".lean", ".yml", ".yaml", ".rs")
 # Files that name a `docs/` path as the content of a fixture they build, and paths that are real but not tracked.
 FIXTURE_FILES = {"prismpath/tests/test_docs_health.py", "tools/tests/test_check_boundary.py",
-                 "integrations/governed_intent/cases_r2.py", "prismpath/tests/test_doc_references.py"}
+                 "integrations/governed_intent/cases_r2.py", "prismpath/tests/test_doc_references.py",
+                 "tools/tests/test_export.py"}
 NOT_TRACKED = {"docs/design/arch-scorecard.md",                   # written by tools/arch_guard.py, git ignored
                "docs/research/CLAIMS_detection_metrics.md"}       # optional, kept in the private lab repo
 REFERENCE = re.compile(r"(?<![A-Za-z0-9_./-])docs/[A-Za-z0-9_][A-Za-z0-9_./-]*")
