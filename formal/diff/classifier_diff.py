@@ -373,7 +373,8 @@ def _fill(value: Any, world: Dict[str, str]) -> Any:
 
 
 def recorded_cases(root: Path) -> List[Case]:
-    """The 161 recorded hook inputs, the 9 with a zone answer and the 51 adversary probes, on a real throwaway world."""
+    """Every written hook input (`FIXTURES`), those with a zone answer (`ZONE_FIXTURES`) and the adversary probes, on a
+    real throwaway world."""
     from integrations.governed_harness import adversary
     made = adversary.make_world(root / "world")
     world = {"ws": str(made["ws"].resolve()), "decoy": str(made["decoy"].resolve())}
