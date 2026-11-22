@@ -159,7 +159,7 @@ size.
 **E9.** A target kind whose own check does not read `meta`, which is `mesh` and `cfs`, reads the envelope
 with a strict scanner. The scanner accepts the members in canonical order and skips the value of `meta`
 after checking three things only. It is an object, it nests at most three levels, and it ends inside the
-envelope. Anything else is `dist:bad-format`. The member list of `meta` (E1) and the forms of E11 are not
+envelope. The `meta` object counts as level one, and each object or array inside it one level more. Anything else is `dist:bad-format`. The member list of `meta` (E1) and the forms of E11 are not
 checked on those kinds, because nothing there uses the members. Every other reader checks them, and so
 does the controller for every envelope it stores, whatever its targets (F1). The reference
 implementation reads an envelope for a `mesh` or `cfs` PEP the same way the scanner does, so the corpus
