@@ -10,7 +10,7 @@ from prismpath import canon  # noqa: E402
 from prismpath.distribution import state_record  # noqa: E402
 from prismpath.distribution.trust import TrustStore  # noqa: E402
 from prismpath.tests import _dist  # noqa: E402
-from prismpath.tests._dist import STREAM, rotation, seal, trust_statement  # noqa: E402
+from prismpath.tests._dist import rotation, seal, trust_statement  # noqa: E402
 
 OLD, NEW = _dist.image(5), _dist.image(7)
 H = canon.sha256_hex
