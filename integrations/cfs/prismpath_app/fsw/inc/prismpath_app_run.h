@@ -64,7 +64,7 @@ typedef struct
     uint32_t              CaseVersion;  /**< the open case's image version (its case id is v<version>) */
     uint8_t               CaseDigest[32];
     uint32_t              CaseReadings; /**< readings decided in the open case */
-    uint32_t              Spare;
+    uint32_t              FloorLost;    /**< 1 when the floor was lost and the response is PP_LOST_FLOOR_LOCK */
     uint64_t              ReceiptsLen;  /**< bytes of receipts.jsonl, cases.stream and images.jsonl written */
     uint64_t              StreamLen;
     uint64_t              ImagesLen;
@@ -73,6 +73,11 @@ typedef struct
 } PP_RunState_t;
 
 #define PP_RUN_MAGIC 0x50505253u /* "PPRS" */
+
+/** What a new run admits when the Critical Data Store held a state that did not read, so the version floor is lost
+ *  (PP_Run_LoseFloor). The mission chooses by PRISMPATH_APP_PLATFORM_LOST_FLOOR. */
+#define PP_LOST_FLOOR_LOCK    0 /**< no image, so every proposal is refused, until ground deletes the store */
+#define PP_LOST_FLOOR_MINIMUM 1 /**< every image from the mission's minimum version up */
 
 /** The run's files, by index. */
 enum
@@ -147,6 +152,12 @@ int PP_Run_CheckTable(const PP_RunState_t *State, const PP_RunKeys_t *Keys, cons
 
 /** Raise the floor to an accepted table's version and digest. */
 void PP_Run_Accept(PP_RunState_t *State, uint32_t Version, const uint8_t Digest[32]);
+
+/** Begin the floor of a new run whose store held a state that did not read (call after PP_Run_Init). Under
+ *  PP_LOST_FLOOR_LOCK the state is marked so that PP_Run_CheckTable refuses every table with the replay cause, and
+ *  the mark is saved with the state, so a later reset keeps it; only a new store (ground deletes it and restarts the
+ *  app) clears it. Under PP_LOST_FLOOR_MINIMUM the floor admits every image of MinVersion and up. */
+void PP_Run_LoseFloor(PP_RunState_t *State, int Response, uint32_t MinVersion);
 
 /**
  * Record one decision under the active table: open its case when it is not the open one (closing the one before),

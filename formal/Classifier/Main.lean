@@ -5,6 +5,7 @@ import Classifier.Control
 import Classifier.Shape
 import Classifier.Net
 import Classifier.Zone
+import Classifier.Session
 /-!
 # The classifier oracle
 
@@ -40,6 +41,14 @@ of the model's API nor on the owner's list is refused. And whether no change tha
 policy a change is allowed only when the information point answered `none` for every path it names. A case also carries
 `"zone": [[PATH, "none"|"protected"|"unknown"]...]`, the point's answers for the paths `Zone.zoneQueries` names, which the
 oracle asks for as `missing.zone` once the disk facts are known.
+
+`lake exe classifier-oracle --session IMAGE BASE` reads a policy image that defines the session fields (canon/2) and the
+stateless image it refines, and prints whether, over every reading and every state, the image's verdict is at least as
+restrictive as the base's on the reading without the fields, at most as restrictive as its own at the top state, and never a
+contract violation (`sessionRefines`, printed as `session_refines`), which `Session.session_restricts` and the theorems
+after it turn into: under that image a state only ever adds questions, and every safety theorem of the base holds in every
+state. The `--policy` mode is for images whose readings carry no session fields; on an image that defines them it says
+nothing, since every reading without them is refused at the boundary.
 
 Only this file does input and output; everything it prints is computed by the model's functions.
 -/
@@ -219,6 +228,18 @@ def main (args : List String) : IO UInt32 := do
         ",\"zone_asked\":" ++ (if zoneSafe c then "true" else "false") ++ "}")
     | .error _ => IO.println "{\"policy\":\"refused\"}"
     return 0
+  | ["--session", path, basePath] =>
+    let load (file : String) : IO (Option Core.Checked) := do
+      let raw ← IO.FS.readBinFile file
+      let img := if raw.size > 0 && raw.get! (raw.size - 1) == 10 then raw.extract 0 (raw.size - 1) else raw
+      match Core.loadPolicy (Core.readCanonical img) with
+      | .ok c => pure (some c)
+      | .error _ => pure none
+    match (← load path), (← load basePath) with
+    | some p, some base =>
+      IO.println ("{\"policy\":\"accepted\",\"session_refines\":" ++ (if sessionRefines p base then "true" else "false") ++ "}")
+    | _, _ => IO.println "{\"policy\":\"refused\"}"
+    return 0
   | _ =>
-    IO.eprintln "usage: classifier-oracle --batch < cases | classifier-oracle --policy IMAGE"
+    IO.eprintln "usage: classifier-oracle --batch < cases | classifier-oracle --policy IMAGE | classifier-oracle --session IMAGE BASE"
     return 2

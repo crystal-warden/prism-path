@@ -295,6 +295,56 @@ a pattern, which also lets a write to `~/x` refuse with 111 and not 108. Claude 
 `~` in `file_path` of Read, Write and Edit before the hook runs, so the hook should not see one there. Its Glob and
 Grep `path` fields are not documented as expanded, and the classifier does not rely on either.
 
+### 4.6 State across calls (`session_protected_changes`, `session_shell_runs`, causes 133 and 134)
+
+Every other field is read off one call. A policy that defines `session_protected_changes` (`none`, `some`) or
+`session_shell_runs` (`none`, `few`, `many`) is decided on a reading that also carries what the session already did, so a
+decision can depend on it without the core knowing: the core stays a pure function of (policy, reading), and the oracle,
+the differential and the receipts see a reading like any other. The classifier does not produce the fields and its
+version does not change. The decider (`prismpath/agent/session_state.py`) adds both fields, from the session's own
+journal, only for a policy that defines either, so every other policy decides on the readings it always did.
+
+- **Where the state comes from.** Only the receipts the decider appended, each checked against its reading and the policy
+  image when it was appended. `session_protected_changes` is `some` once a receipt that was not a
+  refusal is a change (a file tool, or a mutating command) whose `zone_reach` was anything but `none`.
+  `session_shell_runs` counts the receipts that were not refusals and read as `run_command`: none for 0, few below 20,
+  many from 20. A call that was asked about and declined counts like one that ran, since a count only restricts. An
+  outcome (what a hook event or the runner reports) is a claim and is never read.
+- **Which sessions.** Under the stdin hook the state is the Claude Code session's own. Under `prismpath agent run` it is
+  every session that launch decided calls for, which its decider keeps in order, so starting a new session inside one
+  launch (`/clear`) does not reset it. Any of those sessions that cannot be read makes the whole state `some` and `many`.
+- **Read incrementally.** The journal's validated-prefix record, which appends already trust, also keeps the two counts
+  of the lines it covers (`Run.session_counts`), so a call validates and counts only the lines appended since. A record
+  with no counts or counts of the wrong shape means the whole journal is read once. A line the record covers was
+  validated and counted when it was appended, so changing it later changes no count; `seal` and `verify` validate
+  every line. The counts agree with `session_state.derive` over the whole journal (tests/test_session_state.py).
+- **Fail safe.** A history that cannot be read reads as `some` and `many`: a line since the record that does not verify, a journal missing
+  where the run's other files show there was one, a run directory with no image, a torn tail (a writer killed inside an
+  append, so a call may have run with no receipt), or any error. A session with no run directory has not begun and reads
+  `none`, `none`. A reading handed to `Policy.reading_bytes` without the fields is given `some` and `many`, and the core
+  refuses a reading that lacks them (`route:contract-violation`), so no path decides a stateful policy on no state.
+- **Parallel calls.** The state is read with the receipt count, and the append names that count (`Run.append(expect=)`).
+  A receipt appended in between, which a second tool call of the same turn does, refuses the append and the call is
+  decided again on the new state, up to eight times, then denied.
+- **Same-turn ordering.** The state is what was decided, not what ran. When Claude Code asks about several calls of
+  one turn and runs them later, or runs an approved call after a later call was decided, the later call was decided
+  without the earlier one having run, and a call asked about and declined still counts. This is a limit of the hook,
+  which is told about a call before it runs and is not told the order calls run in; it only ever counts more.
+- **The `session` starter** is `agent_default` and two rules after every refusal, and nothing else
+  (`prismpath agent init --policy session`). 133 `agent:session-change-asked`: once the session made a protected change,
+  a change inside the workspace, a commit and a push to an allowed remote ask. 134 `agent:session-shell-asked`: once the
+  session ran many shell commands, a read only command or a local git operation inside the workspace asks. Each rule
+  names the readings the default allows, so a rule never turns a refusal into a question.
+- **What is proved** (`Session.lean`). `sessionRefines p base`, computed over every reading and the six states by the
+  oracle's `--session IMAGE BASE` mode (`session_refines`): the verdict of `p` is at least as restrictive as the
+  stateless `base`'s on the reading without the fields, at most as restrictive as its own at the top state, and never
+  a contract violation. `session_restricts` states it; `session_refused`, `session_not_allowed` and
+  `session_allowed_base_allowed` follow; `session_failsafe` says the top state, the one an unreadable history reads
+  as, is the most restrictive; and `session_zone_not_allowed`, `session_control_refused`, `session_net_refused`,
+  `session_scan_safe_reading` and `session_allowed_change_every_path_none` carry the zone, control, network and scan
+  theorems of the base to every state. Not proved: that the decider's state is the journal's (the derivation is Python,
+  tested), and that the journal holds every call (a call the hook was never asked about leaves no receipt).
+
 ## 5. What is proven
 
 Every theorem is in `formal/Classifier/Theorems.lean`, builds with no unfinished proof, and depends on the
@@ -321,7 +371,7 @@ standard axioms at most (`Axioms.lean` enforces it at every build).
 | `git_unsafe_unknown`, `git_push_remote` | an option that runs a program or moves the repository makes git unknown; a push is to an allowed remote only when its first remote word is allowed (`origin` by default) |
 | `classify_unknown_tool`, `hook_unknown_tool`, `mcp_unknown_tool` | an unknown classifier tool, Claude Code tool or MCP tool reads unknown |
 | `scan_kill`, `scan_network`, `scan_outside`, `scan_traversal`, `scan_toolchain`, `scan_glob`, `scan_long`, `scan_git`, `network_word_in_path_only`, `scan_none`, `hookReading_only_adds_refusals` | the hazard scan (section 4.1): each rule as stated, the path label, no evidence no change, and under every `scanSafe` policy the scan never allows and only adds refusals |
-| `reading_fields` | every reading holds the fourteen fields, in canonical order, with `classifier_version` 2 |
+| `reading_fields` | every reading holds the fifteen fields, in canonical order, with `classifier_version` 2 |
 | `accept_fits`, `boundary_accepts_every_reading`, `decide_never_contract` | **the core's boundary never refuses a classifier reading for its shape**: for a policy whose field definitions all fit, the system boundary accepts every reading, so the verdict is a route or no match, never `route:contract-violation`. The three shipped agent policies fit: the oracle's `--policy` mode computes it on each image and the harness requires it |
 
 ## 6. The oracle and the differential harness
@@ -334,8 +384,8 @@ theorems prove sufficient.
 `formal/diff/classifier_diff.py` runs every case through the Python and through the oracle. The Python's four
 disk functions are replaced for the run by a provider that records every fact asked; the facts go to the oracle,
 and a fact the oracle needs and the Python did not ask is observed and the case run again. The real disk
-provider (a throwaway workspace and decoy with links in and out) serves the 132 written hook inputs and the 51
-adversary probes (54 calls); a synthetic provider, each fact a seeded function of its key, serves the generated
+provider (a throwaway workspace and decoy with links in and out) serves every written hook input
+(`prismpath/tests/fixtures/claude_code_hooks.json` and the zone inputs beside it) and the 51 adversary probes (54 calls); a synthetic provider, each fact a seeded function of its key, serves the generated
 calls, so every combination of disk facts meets every text. Numbers reach the oracle as 0, since no part of the
 reading reads a number's value; a call with a lone surrogate reaches it as outside the domain.
 
