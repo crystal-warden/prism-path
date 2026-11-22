@@ -25,6 +25,7 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 
+pub mod dist;
 pub mod flow_authority;
 pub mod host;
 pub mod merkle;

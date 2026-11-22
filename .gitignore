@@ -3,6 +3,8 @@ __pycache__/
 *.egg-info/
 build/
 dist/
+# a source module named dist is not a build output
+!prismpath-hotswap-rs/src/dist/
 .pytest_cache/
 # the dev build marker (docs/design/spec-policy-distribution.md, D2): written only by `python tools/dev_build.py on`, never tracked
 .prismpath-dev-build
