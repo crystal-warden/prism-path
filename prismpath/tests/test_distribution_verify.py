@@ -216,8 +216,9 @@ def test_a_pep_view_names_a_built_kind_and_a_stream():
         verifier.PepView("host", env.TRUST_STREAM)
 
 
-def test_case_097_a_hatch_in_a_production_build_is_refused_and_audited(tmp_path, monkeypatch):
-    """case_097: D1, D2. In a production build the hatch is refused with dist:hatch-refused, which the caller
+def test_the_hatch_gate_refuses_in_a_production_build_and_audits(tmp_path, monkeypatch):
+    """D1, D2. The gate every escape hatch will pass (conformance case 97 is covered once the hatches go
+    through it). In a production build the hatch is refused with dist:hatch-refused, which the caller
     answers by running the check, and its audit event says so. In a dev build it passes. Which build this is
     comes from the tree around the package alone, shown on temporary trees."""
     tree = tmp_path / "checkout"
