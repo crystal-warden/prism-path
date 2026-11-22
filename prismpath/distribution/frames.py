@@ -337,16 +337,14 @@ class Assembler:
         return Assembled(current.offer.transfer, current.sealed_bytes, body)
 
 
-def admit_through_v8(verify: Callable[[bytes, bytes], object]) -> Admit:
-    """An `admit` for `Assembler` from the enforcement point's verifier, `verify(sealed, body)` answering a
-    `Verdict`. The sealed envelope is verified with no body, so V2 to V8 run as they will for the whole
-    release and V9's `dist:body-mismatch` is the only refusal that means the envelope passed them. An
-    envelope of an empty body is verified whole."""
+def admit_through_v8(through_v8: Callable[[bytes], object]) -> Admit:
+    """An `admit` for `Assembler` from the enforcement point's `verify.verify_through_v8`, bound to its trust store,
+    view and clock: `through_v8(sealed)` answers a `Verdict` of V2 to V8 with no body read (B9)."""
 
     def admit(sealed: bytes) -> Tuple[int, str, str]:
-        verdict = verify(sealed, b"")
+        verdict = through_v8(sealed)
+        if verdict.cause is not None:
+            raise Refused(verdict.cause)
         envelope = verdict.envelope
-        if verdict.cause is None or (verdict.cause == "dist:body-mismatch" and envelope.body_size > 0):
-            return envelope.body_size, envelope.body_sha256, envelope.artifact
-        raise Refused(verdict.cause)
+        return envelope.body_size, envelope.body_sha256, envelope.artifact
     return admit

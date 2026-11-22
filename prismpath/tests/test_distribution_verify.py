@@ -295,3 +295,18 @@ def test_a_kind_that_does_not_read_meta_only_bounds_it():
     assert env.read(canon.canon2_bytes(doc), reads_meta=False).meta == {"a": {"b": {}}}
     with pytest.raises(env.Refused):
         env.read(canon.canon2_bytes(doc))
+
+
+def test_verify_through_v8_stops_before_the_body_and_agrees_with_the_whole_verify():
+    """B9: V2 to V8 with no body read. Every corpus case refused before V9 gets the same cause, and one that
+    passes V8 comes back with its envelope, whose size and hash name the body to read."""
+    for case in CORPUS["cases"]:
+        whole = GEN.replay(case)
+        early = verifier.verify_through_v8(bytes.fromhex(case["sealed"]), trust=GEN.trust_from_document(case["trust"]),
+                                           pep=GEN.pep_from_document(case["pep"]), now=case["now"])
+        if early.cause is not None:
+            assert early.cause == whole["cause"], case["name"]
+        elif early.envelope is not None:
+            assert whole["cause"] not in {"dist:bad-format", "dist:unknown-key", "sig:invalid", "dist:target-mismatch",
+                                          "dist:not-yet-valid", "dist:expired", "dist:revoked", "dist:seq-replay"} \
+                or case["body"] == "", case["name"]           # dist:trust-replay may also come of R6 at V11

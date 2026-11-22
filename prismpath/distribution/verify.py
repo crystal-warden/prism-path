@@ -82,15 +82,29 @@ def _floor_check(envelope: env.Envelope, trust: TrustStore, pep: PepView) -> Opt
     return Verdict("dist:seq-replay", envelope)
 
 
-def verify(sealed: bytes, body: bytes, *, trust: TrustStore, pep: PepView, now: int) -> Verdict:
+def verify(sealed: bytes, body: bytes, *, trust: TrustStore, pep: PepView, now: int,
+           reads_meta: Optional[bool] = None) -> Verdict:
     """V1: the sealed envelope and its body checked in the order V2 to V11 for `pep` at the PEP's clock
-    reading `now` (Unix seconds). Returns the first failure's cause, or the accepted envelope."""
+    reading `now` (Unix seconds). Returns the first failure's cause, or the accepted envelope. `reads_meta` True
+    reads `meta` in full whatever the kind, as a controller always does (F1)."""
+    return _verify(sealed, bytes(body), trust, pep, now, reads_meta, through_v8=False)
+
+
+def verify_through_v8(sealed: bytes, *, trust: TrustStore, pep: PepView, now: int,
+                      reads_meta: Optional[bool] = None) -> Verdict:
+    """V2 to V8 of a sealed envelope whose body has not been read (B9): what a PEP checks before it fetches or
+    assembles the body. Returns the first failure's cause, or the envelope, whose `body_size` and `body_sha256`
+    then bound and name the body to read."""
+    return _verify(sealed, b"", trust, pep, now, reads_meta, through_v8=True)
+
+
+def _verify(sealed: bytes, body: bytes, trust: TrustStore, pep: PepView, now: int, reads_meta: Optional[bool],
+            *, through_v8: bool) -> Verdict:
     # V2: the container reads, and the envelope and body fit the bounds (B9: nothing past either is read)
     try:
         envelope_bytes, entries = env.unseal(sealed)
     except Refused as refused:
         return Verdict(refused.cause)
-    body = bytes(body)
     target = kinds.TARGETS[pep.kind]
     artifact_bound = min(pep.body_bound, target.body_bound)
     if len(body) > max(artifact_bound, target.trust_bound):
@@ -101,7 +115,7 @@ def verify(sealed: bytes, body: bytes, *, trust: TrustStore, pep: PepView, now: 
         return counted
     # V4: the envelope reads
     try:
-        envelope = env.read(envelope_bytes, reads_meta=kinds.TARGETS[pep.kind].reads_meta)
+        envelope = env.read(envelope_bytes, reads_meta=target.reads_meta if reads_meta is None else reads_meta)
     except Refused as refused:
         return Verdict(refused.cause)
     # V5: for this PEP's kind, an artifact its kind uses or a trust kind its machine applies, on its stream or
@@ -133,6 +147,8 @@ def verify(sealed: bytes, body: bytes, *, trust: TrustStore, pep: PepView, now: 
     floor = _floor_check(envelope, trust, pep)
     if floor is not None:
         return Verdict(floor.cause, envelope, unchanged=floor.unchanged, time_floor=time_floor)
+    if through_v8:
+        return Verdict(None, envelope, time_floor=time_floor)
     # V9: the body
     if len(body) != envelope.body_size or canon.sha256_hex(body) != envelope.body_sha256:
         return refused("dist:body-mismatch")
