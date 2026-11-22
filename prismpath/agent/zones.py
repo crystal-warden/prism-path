@@ -51,8 +51,16 @@ access to them (`os.access`). So on a host where one user runs the agent and own
 elsewhere writes through a read only bind), and the path must not go through a link. The executable (`$CONTEXTCLOUD`
 or the first `contextcloud` on the PATH) is tested the same way on its resolved real path: inside the project it is
 never trusted, outside it it is trusted where the sandbox holds, and otherwise by the permission rule on the file and
-its directory; it runs with the hook's config directory as its working directory, not the workspace. An index that
-cannot be examined is not trusted. Running as root counts as able to write.
+its directory; it runs, as the real path that was tested and not the name it was found by, with the hook's config directory as its
+working directory, not the workspace. The code that answers lives in Context Cloud's package, which an editable
+install may put inside the project, so `zones set` finds the program's real path and the real path of the
+`contextcloud` package directory (by running the program's own interpreter once, `-I`, outside the workspace) and
+records both in the signed zone document (`program`). At hook time, with nothing run, the program's real path must be
+the recorded one, and both it and the package directory get the test above (inside the project is never trusted); a
+zone document without them reads `unknown`. The package's files are not walked: its directory and the directory above
+are what the permission rule looks at. The cache (`zones-cache.json`) is read and written only where the sandbox holds
+(`_confined`), since otherwise the agent can write it. An index that cannot be examined is not trusted. Running as root
+counts as able to write.
 
 A path is `protected` when the file defines a protected name (or sits under a protected module), or any function of
 the file reaches the protected set with certainty `certain` or `likely`; `unknown` when the file is not a Python
@@ -131,7 +139,8 @@ def _sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def zone_document(protected: Iterable[str], project: Path, index: Optional[Path], policy_image: bytes) -> Dict[str, Any]:
+def zone_document(protected: Iterable[str], project: Path, index: Optional[Path], policy_image: bytes,
+                  program: Optional[Mapping[str, str]] = None) -> Dict[str, Any]:
     names = sorted({name for name in protected})
     if not names or len(names) > MAX_NAMES:
         raise ZoneError(f"a zone file names between 1 and {MAX_NAMES} protected names, not {len(names)}")
@@ -140,8 +149,44 @@ def zone_document(protected: Iterable[str], project: Path, index: Optional[Path]
             raise ZoneError(f"{name!r} is not a dotted name (no space, no comma, at most {MAX_NAME} characters)")
     project = Path(os.path.realpath(project))
     index = Path(os.path.realpath(index)) if index is not None else project / ".contextcloud" / "index.sqlite"
-    return {"format": ZONE_FORMAT, "index": str(index), "policy_sha256": _sha256(policy_image),
-            "project": str(project), "protected": names}
+    doc = {"format": ZONE_FORMAT, "index": str(index), "policy_sha256": _sha256(policy_image),
+           "project": str(project), "protected": names}
+    if program is not None:
+        doc["program"] = {"package": str(program["package"]), "path": str(program["path"])}
+    return doc
+
+
+def find_program(exe: str, home: Path, run=subprocess.run) -> Dict[str, str]:
+    """{"path", "package"}: the real path of the `contextcloud` program and of its package directory, found by running
+    the program's own interpreter once (`-I`, with the config directory as working directory, so nothing of the
+    workspace is imported). The interpreter is the shebang of the program, else the `python` beside it."""
+    real = os.path.realpath(exe)
+    interpreter = None
+    try:
+        with open(real, "rb") as handle:
+            first = handle.readline(512).decode("utf-8", "replace").strip()
+        if first.startswith("#!"):
+            words = first[2:].split()
+            if words and os.path.basename(words[0]) != "env":
+                interpreter = words[0]
+    except OSError as exc:
+        raise ZoneError(f"the Context Cloud program {real} cannot be read ({type(exc).__name__})") from exc
+    if interpreter is None:
+        for name in ("python", "python3"):
+            if os.access(os.path.join(os.path.dirname(real), name), os.X_OK):
+                interpreter = os.path.join(os.path.dirname(real), name)
+                break
+    if interpreter is None:
+        raise ZoneError(f"the interpreter of the Context Cloud program {real} cannot be found")
+    code = "import contextcloud, os; print(os.path.dirname(os.path.realpath(contextcloud.__file__)))"
+    try:
+        done = run([interpreter, "-I", "-c", code], capture_output=True, text=True, timeout=60, cwd=str(home))
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise ZoneError(f"the Context Cloud package could not be located ({type(exc).__name__})") from exc
+    package = done.stdout.strip()
+    if done.returncode != 0 or not package or not os.path.isabs(package):
+        raise ZoneError("the Context Cloud package could not be located: " + " ".join(done.stderr.split())[:200])
+    return {"path": real, "package": package}
 
 
 def sign(home: Path, doc: Dict[str, Any]) -> None:
@@ -305,6 +350,7 @@ class ContextCloudZones:
         self.zones_sha = _sha256(json.dumps(doc, sort_keys=True).encode())
         self.stats: Dict[str, Any] = {}
         self.host_write = host_write
+        self.real_exe = os.path.realpath(executable)
         self.why = self._distrust()
 
     # --- the index is a control path, and must not be one the agent could have written
@@ -356,12 +402,22 @@ class ContextCloudZones:
             return f"the index at {self.index} cannot be examined ({type(exc).__name__})"
 
     def _exe_distrust(self) -> str:
-        real = os.path.realpath(self.exe)
-        if self._within_project(Path(real)):
-            return f"the Context Cloud program {real} is inside the project, where the agent can change it"
+        """Why the program that answers cannot be trusted: it must be the one the zone document recorded, and it and
+        its package directory must pass the test (nothing is run)."""
+        recorded = self.doc.get("program")
+        if not isinstance(recorded, dict) or not isinstance(recorded.get("path"), str) \
+                or not isinstance(recorded.get("package"), str):
+            return "the zone file does not record the Context Cloud program and its package; run `prismpath agent zones set`"
+        real = self.real_exe
+        if recorded["path"] != real:
+            return f"the Context Cloud program is {real}, not the {recorded['path']} the zone file records; run `prismpath agent zones set`"
+        for what, path in (("program", real), ("package", os.path.realpath(recorded["package"]))):
+            if self._within_project(Path(path)):
+                return f"the Context Cloud {what} {path} is inside the project, where the agent can change it"
         if self._confined():
             return ""
-        mine = self._not_the_agents([real, os.path.dirname(real)])
+        mine = self._not_the_agents([real, os.path.dirname(real), os.path.realpath(recorded["package"]),
+                                     os.path.dirname(os.path.realpath(recorded["package"]))])
         return (f"the agent's user owns or can write {mine}, part of the Context Cloud program") if mine else ""
 
     # --- the index (read only: which functions a file holds, and the version of it that was indexed)
@@ -433,7 +489,7 @@ class ContextCloudZones:
 
     # --- one function
     def _function(self, name: str, timeout: float) -> str:
-        command = [self.exe, "reaches", name, "--json", "--no-color", "--index", str(self.index),
+        command = [self.real_exe, "reaches", name, "--json", "--no-color", "--index", str(self.index),
                    "--protected", ",".join(self.protected)]
         try:
             done = self._run(command, capture_output=True, text=True, timeout=max(timeout, 0.001), cwd=str(self.home))
@@ -476,7 +532,7 @@ class ContextCloudZones:
         if _covered(module, self.protected) or any(_covered(n, self.protected) for n in names):
             return "protected"                    # the file defines protected code, no lookup needed
         key = _sha256("|".join((self._index_signature(), self.zones_sha, indexed_sha, rel)).encode())
-        cached = None if self.host_write else self._cache_get(key)     # under host_write the agent can write the cache
+        cached = self._cache_get(key) if self._confined() else None      # elsewhere the agent can write the cache
         if cached is not None:
             self.stats.update(cached=True)
             return cached
@@ -501,7 +557,7 @@ class ContextCloudZones:
             return "unknown"
         else:
             fact = "none"
-        if not self.host_write:
+        if self._confined():
             self._cache_put(key, fact)
         return fact
 
@@ -528,7 +584,8 @@ def status(home: Path, policy_image: bytes, workspace: Path, env: Optional[Mappi
     if isinstance(point, _Fixed):
         return {"declared": True, "point": "unknown", "detail": point.why}
     out = {"declared": True, "point": "contextcloud", "protected": point.protected, "index": str(point.index),
-           "executable": point.exe, "control_paths": list(point.control_paths)}
+           "executable": point.exe, "control_paths": list(point.control_paths),
+           "checked": {"program": point.doc.get("program"), "index": str(point.index), "confined": point._confined()}}
     if point.why:
         out.update(point="unknown", detail=point.why)
     return out

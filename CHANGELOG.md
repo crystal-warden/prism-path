@@ -10,7 +10,7 @@ spec stable.
 
 ### Fixed: the zone index is a control path and an index the agent could have written reads unknown (2026-11-22)
 
-- **The zone index, `.contextcloud/` by default, can no longer be edited by the agent to claim that protected code reaches nothing.** The hook refuses a write or a mutating command onto it as a control write, both per call sandbox backends hold it read only, and the zones information point answers `unknown` for every path when the agent could have written the index or the Context Cloud program that reads it. `prismpath agent zones set` now rebuilds an existing index after the zone file is signed.
+- **The zone index, `.contextcloud/` by default, can no longer be edited by the agent to claim that protected code reaches nothing.** The hook refuses a write or a mutating command onto it as a control write, both per call sandbox backends hold it read only, and the zones information point answers `unknown` for every path when the agent could have written the index or the Context Cloud program that reads it. `prismpath agent zones set` now records the Context Cloud program and its package directory in the signed zone file, checks both again at hook time, and rebuilds an existing index after the zone file is signed.
 
 ### Added: the frame binding of policy distribution for broadcast media (2026-11-22)
 

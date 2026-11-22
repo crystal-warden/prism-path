@@ -684,7 +684,12 @@ def zones_cmd(action: str, project: Path, protected: Optional[List[str]], protec
             if protected_file:
                 names += [line.strip() for line in Path(protected_file).read_text(encoding="utf-8").split("\n")
                           if line.strip() and not line.strip().startswith("#")]
-            doc = zones.zone_document(names, project, Path(index) if index else None, image)
+            exe = zones.contextcloud_executable()
+            if exe is None:
+                raise zones.ZoneError("Context Cloud is not installed (no `contextcloud` on the PATH and no $CONTEXTCLOUD), "
+                                      "and `zones set` records where it is")
+            doc = zones.zone_document(names, project, Path(index) if index else None, image,
+                                      program=zones.find_program(exe, home))
             zones.rebuild_index_after_signing(home, doc, lambda: zones.sign(home, doc))
             result = {"recorded": True, "project": doc["project"], "index": doc["index"],
                       "protected": doc["protected"], "policy_sha256": doc["policy_sha256"]}

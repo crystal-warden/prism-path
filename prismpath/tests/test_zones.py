@@ -306,6 +306,8 @@ class World:
         self.answers = tmp_path / "answers.json"
         self.log = tmp_path / "calls.log"
         self.exe = tmp_path / "contextcloud"
+        self.pkg = tmp_path / "ccpackage"
+        self.pkg.mkdir()
         self.exe.write_text(FAKE.format(python=sys.executable))
         self.exe.chmod(self.exe.stat().st_mode | stat.S_IXUSR)
         self.answers.write_text("{}")
@@ -332,7 +334,8 @@ class World:
         return self.log.read_text().split() if self.log.exists() else []
 
     def point(self, protected=("pkg.secure.check",), budget=2.0):
-        doc = zones.zone_document(protected, self.project, self.index, self.image)
+        doc = zones.zone_document(protected, self.project, self.index, self.image,
+                                  program={"path": os.path.realpath(self.exe), "package": str(self.pkg)})
         return zones.ContextCloudZones(doc, self.home, str(self.exe), budget_s=budget)
 
     def config(self):
@@ -381,7 +384,8 @@ def test_the_adapter_never_reads_none_from_anything_it_cannot_check(world, tmp_p
     assert point.reach("../outside.py", cfg) == "unknown"                 # not inside the project
     assert point.reach("pkg/a.py", cfg) == "none"                         # and the one case that can be checked
     (tmp_path / "gone").write_text("")
-    broken = zones.ContextCloudZones(zones.zone_document(["pkg.x"], world.project, tmp_path / "no.sqlite", world.image),
+    broken = zones.ContextCloudZones(zones.zone_document(["pkg.x"], world.project, tmp_path / "no.sqlite", world.image,
+                                                         program={"path": os.path.realpath(world.exe), "package": str(world.pkg)}),
                                      world.home, str(world.exe))
     assert broken.reach("pkg/a.py", cfg) == "unknown"                     # no index at all
 
@@ -447,6 +451,7 @@ def test_the_zones_command_records_reports_and_warms(world, home, image, monkeyp
     world.add("pkg/b.py", "def g(): pass\n", ["g"])
     world.answer(pkg__b__g="certain")
     monkeypatch.setenv("CONTEXTCLOUD", str(world.exe))
+    monkeypatch.setattr(zones, "find_program", lambda exe, home, run=None: {"path": os.path.realpath(exe), "package": str(world.pkg)})
     saved = tmp_path / "saved-index.sqlite"
     saved.write_bytes(world.index.read_bytes())
     monkeypatch.setenv("FAKE_CC_INDEX_SRC", str(saved))
@@ -478,7 +483,7 @@ def demo(tmp_path, home, image, monkeypatch):
     index = tmp_path / "index.sqlite"
     index.write_bytes((DEMO / ".contextcloud" / "index.sqlite").read_bytes())
     names = [line.strip() for line in (DEMO / "protected.txt").read_text().split("\n") if line.strip()]
-    doc = zones.zone_document(names, DEMO / "pyjwt", index, image)
+    doc = zones.zone_document(names, DEMO / "pyjwt", index, image, program=zones.find_program(str(DEMO_CC), home))
     return zones.ContextCloudZones(doc, home, str(DEMO_CC)), classifier.Config.for_workspace(DEMO / "pyjwt")
 
 

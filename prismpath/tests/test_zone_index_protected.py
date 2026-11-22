@@ -65,11 +65,18 @@ class Project:
         self.exe = self.bin / "contextcloud"
         self.exe.write_text(f"#!{sys.executable}\nprint('{{\"certainty\": \"no\"}}')\n")
         self.exe.chmod(0o555)
+        self.pkg = self.bin / "ccpkg"
+        self.pkg.mkdir()
+        self.pkg.chmod(0o555)
         self.bin.chmod(0o555)
 
+    def doc(self, index=None, image=b"image", exe=None, package=None):
+        """A zone document that records the program and its package, as `zones set` does."""
+        record = {"path": os.path.realpath(exe or self.exe), "package": str(package or self.pkg)}
+        return zones.zone_document(["pkg.secure.check"], self.root, index or self.index, image, program=record)
+
     def point(self, image=b"image", index=None):
-        doc = zones.zone_document(["pkg.secure.check"], self.root, index or self.index, image)
-        return zones.ContextCloudZones(doc, self.home, str(self.exe), budget_s=5.0)
+        return zones.ContextCloudZones(self.doc(index, image), self.home, str(self.exe), budget_s=5.0)
 
     def config(self, point):
         return classifier.Config.for_workspace(self.root, zones=point)
@@ -79,7 +86,7 @@ class Project:
 def project(tmp_path):
     made = Project(tmp_path)
     yield made
-    for path in (made.bin, made.root / ".contextcloud", made.index, tmp_path / "outside", tmp_path / "outside" / "index.sqlite"):
+    for path in (made.bin, made.pkg, made.root / ".contextcloud", made.index, tmp_path / "outside", tmp_path / "outside" / "index.sqlite"):
         if path.exists():
             path.chmod(0o755 if path.is_dir() else 0o644)
 
@@ -252,7 +259,7 @@ def test_an_index_outside_the_project_is_trusted_under_the_sandbox_and_not_when_
     outside, target = _outside(project, tmp_path)
     point = project.point(index=target)
     assert point.why == "" and point.reach("pkg/caller.py", project.config(point)) == "none"
-    doc = zones.zone_document(["pkg.secure.check"], project.root, target, b"image")
+    doc = project.doc(target)
     writes_host = zones.ContextCloudZones(doc, project.home, str(project.exe), host_write=True)
     assert "owns or can write" in writes_host.why and writes_host.reach("pkg/caller.py", project.config(writes_host)) == "unknown"
     target.chmod(0o444)
@@ -288,7 +295,7 @@ def test_an_index_path_that_goes_through_a_link_is_not_trusted(project, tmp_path
     (real / "index.sqlite").write_bytes(project.index.read_bytes())
     link = tmp_path / "link"
     link.symlink_to(real)
-    doc = zones.zone_document(["pkg.secure.check"], project.root, real / "index.sqlite", b"image")
+    doc = project.doc(real / "index.sqlite")
     doc["index"] = str(link / "index.sqlite")                        # the signed document names a path through a link
     point = zones.ContextCloudZones(doc, project.home, str(project.exe))
     assert "link" in point.why and point.reach("pkg/caller.py", project.config(point)) == "unknown"
@@ -303,7 +310,7 @@ def _signed_world(project, tmp_path):
     for role in commands.KEY_ROLES:
         commands._ensure_key(home, role)
     image = sp("default").read_bytes().rstrip(b"\n")
-    zones.sign(home, zones.zone_document(["pkg.secure.check"], project.root, None, image))
+    zones.sign(home, zones.zone_document(["pkg.secure.check"], project.root, None, image, program={"path": str(project.exe), "package": str(project.pkg)}))
     return home, image
 
 
@@ -376,7 +383,7 @@ def test_3_an_existing_wal_with_another_hard_link_is_untrusted(project):
 
 
 def test_4_under_host_write_an_inner_directory_is_not_trusted_and_the_cache_is_not_read(project, other_user):
-    doc = zones.zone_document(["pkg.secure.check"], project.root, None, b"image")
+    doc = project.doc()
     point = zones.ContextCloudZones(doc, project.home, str(project.exe), host_write=True)
     assert "owns or can write" in point.why and point.reach("pkg/caller.py", project.config(point)) == "unknown"
     trusted = zones.ContextCloudZones(doc, project.home, str(project.exe))
@@ -402,14 +409,14 @@ def test_6_a_program_inside_the_project_is_never_trusted_and_runs_outside_the_wo
     inside = project.root / "venv-cc"
     inside.write_text(project.exe.read_text())
     inside.chmod(0o755)
-    doc = zones.zone_document(["pkg.secure.check"], project.root, None, b"image")
+    doc = project.doc(exe=inside)
     point = zones.ContextCloudZones(doc, project.home, str(inside))
     assert "inside the project" in point.why and point.reach("pkg/caller.py", project.config(point)) == "unknown"
     link = tmp_path / "linked-cc"
     link.symlink_to(inside)
     assert "inside the project" in zones.ContextCloudZones(doc, project.home, str(link)).why      # the real path is tested
     seen = {}
-    good = zones.ContextCloudZones(doc, project.home, str(project.exe))
+    good = zones.ContextCloudZones(project.doc(), project.home, str(project.exe))
 
     def run(command, **kwargs):
         seen.update(kwargs)
@@ -437,7 +444,7 @@ def test_7_zones_set_deletes_and_rebuilds_an_existing_index_after_signing(projec
     exe.write_text(f"#!{sys.executable}\nimport sys\nopen({str(rebuilt)!r}, 'w').write(' '.join(sys.argv[1:]))\nopen(sys.argv[sys.argv.index('--index') + 1], 'w').write('new')\n")
     exe.chmod(0o755)
     (project.root / ".contextcloud" / "index.sqlite-wal").write_text("forged")
-    doc = zones.zone_document(["pkg.secure.check"], project.root, None, image)
+    doc = zones.zone_document(["pkg.secure.check"], project.root, None, image, program={"path": str(project.exe), "package": str(project.pkg)})
     zones.rebuild_index_after_signing(home, doc, lambda: order.append("signed"), {"CONTEXTCLOUD": str(exe)})
     assert order == ["signed"] and project.index.read_text() == "new"
     assert not (project.root / ".contextcloud" / "index.sqlite-wal").exists()
@@ -446,7 +453,7 @@ def test_7_zones_set_deletes_and_rebuilds_an_existing_index_after_signing(projec
 
 def test_7_zones_set_refuses_an_existing_index_it_cannot_rebuild_and_records_nothing(project, tmp_path):
     home, image = _signed_world(project, tmp_path)
-    doc = zones.zone_document(["pkg.secure.check"], project.root, None, image)
+    doc = zones.zone_document(["pkg.secure.check"], project.root, None, image, program={"path": str(project.exe), "package": str(project.pkg)})
     recorded = []
     with pytest.raises(zones.ZoneError, match="cannot be trusted"):
         zones.rebuild_index_after_signing(home, doc, lambda: recorded.append(1), {"PATH": ""})
@@ -454,3 +461,99 @@ def test_7_zones_set_refuses_an_existing_index_it_cannot_rebuild_and_records_not
     project.index.unlink()
     zones.rebuild_index_after_signing(home, doc, lambda: recorded.append(1), {"PATH": ""})   # nothing to rebuild
     assert recorded == [1]
+
+
+# ------------------------------------------------------------------------------------------------ the second review
+def test_the_cache_follows_the_index_rule_so_a_planted_entry_is_not_used_without_a_sandbox(project, monkeypatch, other_user):
+    point = project.point()
+    assert point.reach("pkg/caller.py", project.config(point)) == "none"           # confined: asked, then cached
+    assert (project.home / zones.CACHE_FILE).exists()
+    _no_sandbox(monkeypatch)
+    project.index.chmod(0o444)
+    (project.root / ".contextcloud").chmod(0o555)
+    unconfined = project.point()
+    assert unconfined.why == "" and not unconfined._confined()                      # trusted by owner and mode, not by the sandbox
+    calls = []
+    unconfined._run = lambda *a, **k: calls.append(a) or (_ for _ in ()).throw(OSError("asked"))
+    assert unconfined.reach("pkg/caller.py", project.config(unconfined)) == "unknown" and calls    # the cache entry was not used
+    (project.home / zones.CACHE_FILE).unlink()
+    unconfined._run = lambda *a, **k: type("R", (), {"returncode": 0, "stdout": '{"certainty": "no"}'})()
+    assert unconfined.reach("pkg/caller.py", project.config(unconfined)) == "none"
+    assert not (project.home / zones.CACHE_FILE).exists()                           # and none was written
+
+
+def test_a_package_inside_the_project_reads_unknown(project):
+    inside = project.root / "vendor" / "contextcloud"
+    inside.mkdir(parents=True)
+    point = zones.ContextCloudZones(project.doc(package=inside), project.home, str(project.exe))
+    assert "package" in point.why and "inside the project" in point.why
+    assert point.reach("pkg/caller.py", project.config(point)) == "unknown"
+
+
+def test_recorded_paths_that_no_longer_match_the_program_read_unknown(project, tmp_path):
+    other = tmp_path / "other-cc"
+    other.write_text(project.exe.read_text())
+    other.chmod(0o755)
+    point = zones.ContextCloudZones(project.doc(), project.home, str(other))
+    assert "not the" in point.why and point.reach("pkg/caller.py", project.config(point)) == "unknown"
+
+
+def test_a_zone_document_without_the_program_reads_unknown(project):
+    doc = project.doc()
+    del doc["program"]
+    point = zones.ContextCloudZones(doc, project.home, str(project.exe))
+    assert "does not record" in point.why and point.reach("pkg/caller.py", project.config(point)) == "unknown"
+    doc["program"] = {"path": 3}
+    assert zones.ContextCloudZones(doc, project.home, str(project.exe)).why
+
+
+def test_a_package_of_a_host_without_a_sandbox_is_tested_by_owner_and_mode(project, monkeypatch, other_user):
+    _no_sandbox(monkeypatch)
+    project.index.chmod(0o444)
+    (project.root / ".contextcloud").chmod(0o555)
+    assert project.point().why == ""
+    project.pkg.chmod(0o755)
+    assert "part of the Context Cloud program" in project.point().why
+
+
+def test_zones_set_finds_the_program_and_package_with_the_programs_own_interpreter(tmp_path):
+    exe = tmp_path / "venv" / "bin" / "contextcloud"
+    exe.parent.mkdir(parents=True)
+    exe.write_text("#!/opt/venv/bin/python3\n")
+    seen = {}
+
+    def run(command, **kwargs):
+        seen.update(command=command, **kwargs)
+        return type("R", (), {"returncode": 0, "stdout": str(tmp_path / "site" / "contextcloud") + "\n", "stderr": ""})()
+    home = tmp_path / "config"
+    home.mkdir()
+    found = zones.find_program(str(exe), home, run=run)
+    assert found == {"path": str(exe), "package": str(tmp_path / "site" / "contextcloud")}
+    assert seen["command"][:2] == ["/opt/venv/bin/python3", "-I"] and seen["cwd"] == str(home)
+    exe.write_text("#!/usr/bin/env python3\n")                      # no shebang interpreter: the python beside the program
+    (exe.parent / "python").write_text("")
+    (exe.parent / "python").chmod(0o755)
+    zones.find_program(str(exe), home, run=run)
+    assert seen["command"][0] == str(exe.parent / "python")
+    with pytest.raises(zones.ZoneError):
+        zones.find_program(str(exe), home, run=lambda *a, **k: type("R", (), {"returncode": 1, "stdout": "", "stderr": "no module"})())
+
+
+def test_status_says_what_is_checked(project, tmp_path):
+    home, image = _signed_world(project, tmp_path)
+    report = zones.status(home, image, project.root, {"CONTEXTCLOUD": str(project.exe)})
+    assert report["point"] == "contextcloud" and report["checked"]["program"] == {"path": str(project.exe), "package": str(project.pkg)}
+    assert report["checked"]["confined"] is True and report["checked"]["index"] == str(project.index)
+    zones.sign(home, zones.zone_document(["pkg.secure.check"], project.root, None, image))      # no program recorded
+    bare = zones.status(home, image, project.root, {"CONTEXTCLOUD": str(project.exe)})
+    assert bare["point"] == "unknown" and "does not record" in bare["detail"]
+
+
+def test_the_program_that_runs_is_the_real_path_that_was_tested(project, tmp_path):
+    link = tmp_path / "cc-link"
+    link.symlink_to(project.exe)
+    point = zones.ContextCloudZones(project.doc(), project.home, str(link))
+    seen = []
+    point._run = lambda command, **k: seen.append(command[0]) or type("R", (), {"returncode": 0, "stdout": '{"certainty": "no"}'})()
+    assert point.reach("pkg/caller.py", project.config(point)) == "none"
+    assert seen == [os.path.realpath(project.exe)]
