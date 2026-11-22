@@ -156,9 +156,15 @@ size.
 
 **E8.** A reader ignores nothing. An unknown artifact kind or target kind is `dist:bad-format`.
 
-**E9.** A PEP on a constrained target reads the envelope with a strict scanner that accepts the members in
-canonical order and skips the value of `meta`. It runs the scanner only on bytes whose signature it has
-already checked (V3 comes before V4).
+**E9.** A target kind whose own check does not read `meta`, which is `mesh` and `cfs`, reads the envelope
+with a strict scanner. The scanner accepts the members in canonical order and skips the value of `meta`
+after checking three things only. It is an object, it nests at most three levels, and it ends inside the
+envelope. Anything else is `dist:bad-format`. The member list of `meta` (E1) and the forms of E11 are not
+checked on those kinds, because nothing there uses the members. Every other reader checks them, and so
+does the controller for every envelope it stores, whatever its targets (F1). The reference
+implementation reads an envelope for a `mesh` or `cfs` PEP the same way the scanner does, so the corpus
+gives one answer per kind. The scanner runs only on bytes whose signature has already been checked (V3
+comes before V4).
 
 **E10.** The release id is the SHA-256 of the canon/2 bytes of the array of `[artifact, body_sha256]`
 pairs of every artifact in the release other than a trust kind, sorted. A `trust.widening` envelope is
@@ -169,8 +175,8 @@ other bodies to use it. It requires the same `release` on every envelope it stag
 reports it (H1), and that is what stops a mix of artifacts that were never released together (TUF's mix
 and match, section 1.5.2).
 
-**E11.** Each `meta` member has a fixed form, and a reader checks the form when it reads the envelope
-(V4), before any check uses the member. Another form is `dist:bad-format`.
+**E11.** Each `meta` member has a fixed form, and a reader that uses `meta` (every kind but those of E9)
+checks the form when it reads the envelope (V4), before any check uses the member. Another form is `dist:bad-format`.
 
 | Artifact | Member | Form |
 |---|---|---|
@@ -727,7 +733,8 @@ A record with bit 5 from a target that has no HOLD setting is filed as `fleet:st
 
 **F1.** A controller holds no authority private key. It stores sealed envelopes and bodies and cannot make
 one. It runs the same verifier a PEP runs (V2 to V11, with the target taken from the envelope) before it
-offers anything, and refuses to store what does not verify.
+offers anything, and refuses to store what does not verify. It always reads `meta` in full (E1, E11),
+also for an envelope whose targets all skip it (E9).
 
 **F2.** A controller keeps, per PEP, the enrolled instance key, the target kind, the stream, the group,
 the expected policy hash and `seq`, the last accepted record and the open findings.
@@ -980,3 +987,4 @@ reports exactly the cause given, or none, and its state after is the one given.
 | 125 | A record with a type 1 extension whose `eat_nonce` matches, one with an unknown type, and one whose extension was changed after signing | read, skipped, `fleet:state-invalid` | H10 | P |
 | 126 | A `host` release whose `policy.ppt` declares `packing`, with no `policy.spiral`, with a wrong one and with the right one | `spiral:sidecar-missing`, `spiral:sidecar-hash-mismatch`, committed | V11, C2 | P R |
 | 127 | A `policy.ppt` envelope whose `fields` is a string, whose `counts` is an integer, whose `counts` lacks a member, whose `packing` has no `sidecar_sha256`, and a `ppt-pack/1` manifest whose `fields` is a string | `dist:bad-format` four times, then `manifest:bad-format`, and no check raises | E11, V4 | P R |
+| 128 | One signed `policy.ppt` envelope whose `counts` is an integer, read by a `mesh` PEP, by a `host` PEP and by the controller, then for the `mesh` PEP a `meta` that is a string, one nested four levels, and one that runs past the envelope | staged on `mesh`, `dist:bad-format` on `host`, refused by the controller, then `dist:bad-format` three times | E9, E11, F1 | P C |
