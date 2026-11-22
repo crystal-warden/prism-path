@@ -139,3 +139,41 @@ def test_case_079_a_trust_envelope_never_expires(point):
     assert _read(point, point.pep.stage(expiring, body)).cause == "dist:bad-format"
     lasting = env.seal(canon.canon2_bytes({**doc, "expires": 0}), [_dist.GEN.test_key("A")])
     assert _read(point, point.pep.stage(lasting, body)).event == "trust-applied"
+
+
+def test_a_death_between_saving_a_revocation_and_the_lapse_comes_back_lapsed(point, monkeypatch):
+    """R5, fail closed: the store is durable before the lapse, so a PEP killed between the two finds on restart
+    that the active release no longer stands, lapses it with dist:revoked and drops the staged one."""
+    point.commit(OLD, seq=1)
+    point.pep.stage(seal("policy.ppt", NEW, seq=2), NEW)
+
+    class Died(Exception):
+        pass
+
+    def die(*_args, **_kwargs):
+        raise Died()
+    monkeypatch.setattr(point.pep, "lapse", die)
+    with pytest.raises(Died):
+        point.revoke(1, policies=[H(OLD), H(NEW)])
+    monkeypatch.undo()
+    pep = point.open()
+    assert pep.trust.trust_seq == 1 and pep.state() == "no-policy" and pep.staged is None
+    assert pep.adapter.host.active()["active"] is None
+    sent = [_read(point, data) for data in pep.drain()]
+    assert ("lapsed", "dist:revoked") in [(record.event, record.cause) for record in sent]
+
+
+def test_the_periodic_check_lapses_a_release_that_no_longer_stands(point):
+    """R5, X1: tick and every entry point run the same test as a revocation, not only the expiry."""
+    point.commit(OLD, seq=1)
+    from dataclasses import replace
+    point.pep.trust = replace(point.pep.trust, revoked_policies=frozenset({H(OLD)}))
+    record = _read(point, point.pep.tick())
+    assert (record.event, record.cause, record.state) == ("lapsed", "dist:revoked", "no-policy")
+
+
+def test_a_state_record_reports_the_floor_a_revocation_raised(point):
+    """R4, H1: the floor in a record is the one V8 holds, the larger of the committed floor and the raised one."""
+    point.commit(OLD, seq=1)
+    assert _read(point, point.revoke(1, floors={STREAM: 7})).floor == 7
+    assert _read(point, point.pep.record("beat")).floor == 7 and point.pep.floor.seq == 1

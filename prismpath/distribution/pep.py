@@ -307,8 +307,9 @@ class Pep:
                     raise PepRefused(f"{path} holds the private half of a trusted authority key (K2)")
 
     def _recover(self) -> None:
-        """Finish or report an interrupted commit or rollback (C4), then make the runtime match what the
-        PEP holds and check expiry (X1)."""
+        """Finish or report an interrupted commit or rollback (C4), hold the staged and the active release to the
+        revocation test again (R5) and check expiry (X1), all before the runtime is made to match what the PEP
+        holds, so a release that fell while the PEP was down never runs again."""
         if self.pending is not None:
             target = self.pending.get("release")
             if self.active is not None and target is not None and self.active.document() == target:
@@ -318,12 +319,13 @@ class Pep:
                                                                          "result": "incomplete"})
                 self.store.remove("pending.json")
             self.pending = None
+        self._drop_fallen_staged()
+        self._check_active()
         cause = self.refusal()
         if cause is None:
             self.adapter.activate(self.active)
         else:
             self.adapter.deactivate(cause)
-        self._check_expiry()
 
     # ------------------------------------------------------------------ what the PEP is
     def state(self) -> str:
@@ -353,7 +355,7 @@ class Pep:
     def record(self, event: str, cause: Optional[str] = None) -> bytes:
         """A signed state record of the PEP as it is now (H1), after the expiry check every report comes
         after (X1)."""
-        self._check_expiry()
+        self._check_active()
         return self._record(event, cause)
 
     def drain(self) -> list:
@@ -374,13 +376,18 @@ class Pep:
             stream=state_record.stream_prefix(self.stream or ""),
             active_policy=state_record.prefix(active.policy_sha256 if active else None),
             active_release=state_record.prefix(active.release if active else None),
-            active_seq=active.seq if active else 0, floor=self.floor.seq,
+            active_seq=active.seq if active else 0, floor=self.reported_floor(),
             staged_release=state_record.prefix(staged.release if staged else None),
             staged_seq=staged.seq if staged else 0, trust_seq=self.trust.trust_seq if self.trust.readable else 0,
             staged=staged is not None, dev_build=devbuild.is_dev_build(), held=self.held)
         signed = state_record.build(record, self.instance_key)
         self.outbox.append(signed)
         return signed
+
+    def reported_floor(self) -> int:
+        """H1, R4: the floor V8 holds, the larger of the committed floor and the one a revocation raised."""
+        raised = self.trust.floors.get(self.stream, 0) if self.trust.readable and self.stream else 0
+        return max(self.floor.seq, raised)
 
     def see_epoch(self, epoch: int) -> None:
         """H9: keep the highest epoch id the controller sent. It changes nothing else."""
@@ -398,7 +405,7 @@ class Pep:
 
     def stage(self, sealed: bytes, body: bytes) -> bytes:
         """Verify one sealed envelope and its body and hold it (G1). Returns the stage-ack state record."""
-        self._check_expiry()
+        self._check_active()
         if self.locked:
             return self._refuse("dist:floor-lost")
         if not self.provisioned:
@@ -440,22 +447,29 @@ class Pep:
         self.trust = self.trust.apply_revocation(envelope, body).save()
         self.audit.append("distribution", "trust-applied", {"envelope_id": envelope.envelope_id, "seq": envelope.seq,
                                                            "artifact": envelope.artifact, "result": "applied"})
-        if self.staged is not None and not self._stands(self.staged):
-            self._drop_staged()
-        if self.active is not None and not self._stands(self.active):
-            self.lapse("dist:revoked")
+        self._drop_fallen_staged()
+        self._check_active()
         return self._record("trust-applied")
+
+    def _drop_fallen_staged(self) -> None:
+        """R5: a staged release that no longer stands is dropped."""
+        if self.staged is not None and self.trust.readable and not self._stands(self.staged):
+            self._drop_staged()
 
     def _stands(self, release: Release) -> bool:
         """R5: a release still stands when no envelope of it is listed by id or policy hash, its `seq` is not
-        below a floor a revocation raised, and every envelope of it still has a counting signature."""
+        below a floor a revocation raised, and every envelope of it is still signed by a held key that is not
+        revoked. A key that was only retired still holds up a release already active under it (O3)."""
         if release.seq < self.trust.floors.get(release.stream, 0):
             return False
         for held in release.held.values():
             if held.envelope_id in self.trust.revoked_envelopes or release.policy_sha256 in self.trust.revoked_policies:
                 return False
-            envelope_bytes, entries = env.unseal(self.store.get(held.sealed))
-            if not self.trust.counting(entries, env.signed_message(envelope_bytes), kinds.AUTHORITY).ok:
+            sealed = self.store.get(held.sealed)
+            if sealed is None:
+                return False
+            envelope_bytes, entries = env.unseal(sealed)
+            if not self.trust.holds_up(entries, env.signed_message(envelope_bytes), kinds.AUTHORITY):
                 return False
         return True
 
@@ -484,7 +498,7 @@ class Pep:
 
     def commit(self, stream: str, seq: int, policy_sha256: str) -> bytes:
         """Make the staged release named by `stream`, `seq` and `policy_sha256` active (C1 to C5)."""
-        self._check_expiry()
+        self._check_active()
         if self.locked:
             return self._refuse("dist:floor-lost")
         if not self.trust.readable:
@@ -538,7 +552,7 @@ class Pep:
     # ------------------------------------------------------------------ A1: abort
     def abort(self, stream: str, seq: int, policy_sha256: str) -> bytes:
         """Drop the staged release when the abort names it, and change nothing otherwise (A1)."""
-        self._check_expiry()
+        self._check_active()
         if self.staged is None or not self.staged.names(stream, seq, policy_sha256):
             return self._record("beat")
         self._drop_staged()
@@ -549,11 +563,18 @@ class Pep:
     def tick(self) -> Optional[bytes]:
         """X1: check the active release's expiry, at least once a minute. It lapses to `no-policy`, or under
         HOLD is held (X7). Returns the state record of a transition, None when nothing changed."""
-        return self._check_expiry()
+        return self._check_active()
 
-    def _check_expiry(self) -> Optional[bytes]:
-        if self.active is None or self.locked or not self.trust.readable:
+    def _check_active(self) -> Optional[bytes]:
+        """What every entry point and the periodic tick run first: an active release that no longer stands lapses
+        with `dist:revoked` (R5), and an expired one lapses or is held (X1, X7). A staged release is held to the
+        same test when a revocation is applied and at a restart, and again at its commit (C3)."""
+        if self.locked or not self.trust.readable:
             return None
+        if self.active is None:
+            return None
+        if not self._stands(self.active):
+            return self.lapse("dist:revoked")
         if self._still_valid(self.active, early=False) != "dist:expired":
             return None
         if self.expiry_response == HOLD:
@@ -584,7 +605,7 @@ class Pep:
         """One decision through the PEP, after the expiry check (X1). With no active release, or locked, it is
         refused with the cause of X3 and `under_release` is not called. Otherwise its answer is the decision,
         and the receipt carries the hold mark while the PEP is held (X7)."""
-        self._check_expiry()
+        self._check_active()
         cause = self.refusal()
         if cause is not None:
             return {"decision": None, "cause": cause, "mark": None}
@@ -596,7 +617,7 @@ class Pep:
         (X9), when an envelope of the kept release has expired or is revoked (RB2), and when the kept release
         may allow more than the active one without a widening statement that covers it (RB3). With no
         release kept there is nothing to return to, and `PepRefused` says so."""
-        self._check_expiry()
+        self._check_active()
         if self.held:
             return self._refuse("dist:held")
         if self.locked:

@@ -155,6 +155,22 @@ class TrustStore:
                        revoked_policies=self.revoked_policies | frozenset(listed["policies"]), floors=floors,
                        trust_seq=envelope.seq, trust_id=envelope.envelope_id)
 
+    def holds_up(self, entries: Sequence[Tuple[str, bytes]], message: bytes, role: str = kinds.AUTHORITY) -> bool:
+        """R5, O3: an entry by a key the store holds in `role`, not revoked, verifies. A retired key still holds up
+        a release already active under it, where it no longer counts for a new envelope (S5)."""
+        from prismpath.hotswap import policy_pack
+        _priv, Public, _ser, InvalidSignature = policy_pack._ed25519()
+        for kid, signature in entries:
+            key = self.keys.get(kid)
+            if key is None or key.role != role or kid in self.revoked_keys:
+                continue
+            try:
+                Public.from_public_bytes(key.public).verify(signature, message)
+                return True
+            except InvalidSignature:
+                continue
+        return False
+
     # ------------------------------------------------------------------ S3 to S5
     def counting(self, entries: Sequence[Tuple[str, bytes]], message: bytes, role: str = kinds.AUTHORITY) -> Verdict:
         """S3 to S5. An entry counts when its key id names a key the store holds in `role`, that key is neither
