@@ -279,3 +279,4 @@ def test_case_127_a_meta_member_of_another_form_is_refused_where_it_is_read(tmp_
         ok, reasons, _manifest = pp.verify_pack(str(ppt), [keys["public"]])
         assert (ok, reasons) == (False, ["manifest:bad-format"]), member
         assert pp.check_envelope(manifest, image, envelope) == (False, ["manifest:bad-format"])
+        assert pp.check_counts(manifest, image) == (["manifest:bad-format"] if member == "counts" else [])
