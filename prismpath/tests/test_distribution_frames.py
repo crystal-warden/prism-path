@@ -48,9 +48,9 @@ class Clock:
         return self.now
 
 
-def _assembler(ordered=False, clock=None, body_bound=env.MAX_BODY):
+def _assembler(ordered=False, clock=None, artifact_bound=env.MAX_BODY):
     return frames.Assembler(frames.admit_through_v8(_verify), clock=clock or Clock(), ordered=ordered,
-                            limit=LIMIT, body_bound=body_bound)
+                            limit=LIMIT, artifact_bound=artifact_bound)
 
 
 def _frames(transfer=7, sealed=SEALED, body=BODY):
@@ -119,7 +119,7 @@ def test_a_frame_that_does_not_read_is_frame_invalid(data):
     with pytest.raises(Refused) as refused:
         frames.decode(data)
     assert refused.value.cause == "dist:frame-invalid"
-    assert frames.Assembler(lambda sealed: (0, ""), clock=Clock()).receive(data) == frames.Dropped(None,
+    assert frames.Assembler(lambda sealed: (0, "", "policy.ppt"), clock=Clock()).receive(data) == frames.Dropped(None,
                                                                                                "dist:frame-invalid")
 
 
@@ -233,8 +233,10 @@ def test_no_body_is_read_for_an_envelope_that_fails_and_no_part_beyond_its_bound
     prefix = frames.hash_prefix(env.envelope_id(env.unseal(SEALED)[0]))
     too_long = frames.encode(frames.Offer(7, prefix, env.MAX_SEALED + 1, len(BODY)))
     assert _assembler().receive(too_long) == frames.Dropped(7, "dist:frame-invalid")
-    over_bound = frames.encode(frames.Offer(7, prefix, len(SEALED), len(BODY)))
-    assert _assembler(body_bound=len(BODY) - 1).receive(over_bound) == frames.Dropped(7, "dist:too-large")
+    over_both = frames.encode(frames.Offer(7, prefix, len(SEALED), 16385))
+    assert _assembler(artifact_bound=len(BODY) - 1).receive(over_both) == frames.Dropped(7, "dist:too-large")
+    small = _assembler(artifact_bound=len(BODY) - 1)                  # within the trust bound at the offer, and
+    assert frames.Dropped(7, "dist:too-large") in _feed(small, _frames())   # over the artifact's once admitted
     longer = [frames.encode(frames.Offer(7, prefix, len(SEALED), len(BODY) + 1), LIMIT)] + _frames()[1:]
     assert frames.Dropped(7, "dist:frame-invalid") in _feed(_assembler(), longer)
 
@@ -244,3 +246,17 @@ def test_control_frames_pass_through_to_the_enforcement_point():
     epoch = frames.Epoch(2, 41)
     assembler = _assembler()
     assert _feed(assembler, [frames.encode(commit, LIMIT), frames.encode(epoch, LIMIT)]) == [commit, epoch]
+
+
+def test_case_132_a_trust_body_offered_past_the_trust_bound_drops_the_transfer():
+    """case_132: E6, B9, the frame half. On a mesh node, whose artifact bound is 640 bytes, a body offered at 16,385
+    bytes is past both bounds and the transfer is dropped with dist:too-large before any part is read. A trust
+    bound below 16,384 bytes cannot be set."""
+    prefix = frames.hash_prefix(env.envelope_id(env.unseal(SEALED)[0]))
+    node = frames.Assembler(frames.admit_through_v8(_verify), clock=Clock(), limit=LIMIT, artifact_bound=640)
+    assert node.receive(frames.encode(frames.Offer(9, prefix, len(SEALED), 16385))) == frames.Dropped(9, "dist:too-large")
+    assert node.transfer is None
+    node.receive(frames.encode(frames.Offer(9, prefix, len(SEALED), 16384)))
+    assert node.transfer is not None
+    with pytest.raises(ValueError):
+        frames.Assembler(frames.admit_through_v8(_verify), clock=Clock(), trust_bound=16383)

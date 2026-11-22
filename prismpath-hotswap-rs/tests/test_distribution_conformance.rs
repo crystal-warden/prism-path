@@ -221,33 +221,33 @@ rust_cases! {
     case_117_unsigned_with_a_failing_entry_added => "117_unsigned_with_a_failing_entry_added",
     /// case_118: K4, S3.
     case_118_unknown_role_signs => "118_unknown_role_signs",
-    /// case_066: R1.
+    // case 66's verdict; applying the list is the Rust PEP's (PR 14), so it is not claimed here
     case_066_one_above_the_trust_sequence => "066_one_above_the_trust_sequence",
-    /// case_066: R1.
+    // case 66's verdict; applying the list is the Rust PEP's (PR 14), so it is not claimed here
     case_066_the_same_one_again => "066_the_same_one_again",
-    /// case_066: R1.
+    // case 66's verdict; applying the list is the Rust PEP's (PR 14), so it is not claimed here
     case_066_an_older_one => "066_an_older_one",
-    /// case_066: R1.
+    // case 66's verdict; applying the list is the Rust PEP's (PR 14), so it is not claimed here
     case_066_one_that_skips_a_number => "066_one_that_skips_a_number",
     /// case_067: R2.
     case_067_a_pack_signed_by_a_revoked_key => "067_a_pack_signed_by_a_revoked_key",
     /// case_068: R4, Q4.
     case_068_a_release_below_a_raised_floor => "068_a_release_below_a_raised_floor",
-    /// case_070: R6.
+    // case 70's verdict; applying the list is the Rust PEP's (PR 14), so it is not claimed here
     case_070_a_later_list_dropping_the_key => "070_a_later_list_dropping_the_key",
-    /// case_070: R6.
+    // case 70's verdict; applying the list is the Rust PEP's (PR 14), so it is not claimed here
     case_070_the_key_still_refused => "070_the_key_still_refused",
-    /// case_130: R6, R8.
+    // case 130's verdict; applying the list is the Rust PEP's (PR 14), so it is not claimed here
     case_130_a_floor_past_a_revoked_envelope => "130_a_floor_past_a_revoked_envelope",
-    /// case_130: R6, R8.
+    // case 130's verdict; applying the list is the Rust PEP's (PR 14), so it is not claimed here
     case_130_the_next_list_dropping_it => "130_the_next_list_dropping_it",
-    /// case_130: R6, R8.
+    // case 130's verdict; applying the list is the Rust PEP's (PR 14), so it is not claimed here
     case_130_the_envelope_again => "130_the_envelope_again",
     /// case_071: R7.
     case_071_sixty_five_entries => "071_sixty_five_entries",
-    /// case_079: X4, E5.
+    // case 79's verdict; applying the list is the Rust PEP's (PR 14), so it is not claimed here
     case_079_trust_kind_with_expires => "079_trust_kind_with_expires",
-    /// case_079: X4, E5.
+    // case 79's verdict; applying the list is the Rust PEP's (PR 14), so it is not claimed here
     case_079_revocation_read_years_later => "079_revocation_read_years_later",
 }
 

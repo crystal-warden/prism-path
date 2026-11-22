@@ -24,7 +24,7 @@ from dataclasses import dataclass
 from typing import Callable, Iterator, Optional, Tuple, Union
 
 from prismpath.distribution import envelope as env
-from prismpath.distribution.kinds import MAX_SEQ, Refused
+from prismpath.distribution.kinds import MAX_SEQ, TRUST_ARTIFACTS, TRUST_BOUND, Refused
 from prismpath.distribution.state_record import prefix as hash_prefix
 from prismpath.distribution.state_record import stream_prefix
 
@@ -204,7 +204,7 @@ class Dropped:
 Event = Union[Assembled, Dropped, State, Commit, Abort, Epoch]
 # admit(sealed) passes the sealed envelope through V8 and answers the signed (body_size, body_sha256), or
 # raises Refused with the verifier's cause
-Admit = Callable[[bytes], Tuple[int, str]]
+Admit = Callable[[bytes], Tuple[int, str, str]]              # (body_size, body_sha256, artifact)
 
 
 class _Part:
@@ -246,12 +246,18 @@ class Assembler:
     or None. It holds one transfer at a time (B7): a new offer replaces a transfer that is not whole, and a
     transfer that is not whole `timeout` seconds after its offer is dropped silently. `clock` is the PEP's
     monotonic clock in seconds. `admit` is the enforcement point's check of the sealed envelope through V8
-    (`admit_through_v8`). `body_bound` is the PEP's own bound on a body (E6), and `ordered` declares the
-    link ordered (B11)."""
+    (`admit_through_v8`). `artifact_bound` is the PEP's bound on the body of an artifact and `trust_bound` its
+    bound on a trust body, never below 16,384 bytes (E6). An offer longer than both is dropped at once, and once
+    the envelope is admitted its signed size is held to the bound of its artifact. `ordered` declares the link
+    ordered (B11)."""
 
-    def __init__(self, admit: Admit, *, clock: Callable[[], float], body_bound: int = env.MAX_BODY,
-                 ordered: bool = False, limit: int = ESPNOW_LIMIT, timeout: float = TIMEOUT):
-        self.admit, self.clock, self.body_bound = admit, clock, body_bound
+    def __init__(self, admit: Admit, *, clock: Callable[[], float], artifact_bound: int = env.MAX_BODY,
+                 trust_bound: int = TRUST_BOUND, ordered: bool = False, limit: int = ESPNOW_LIMIT,
+                 timeout: float = TIMEOUT):
+        if trust_bound < TRUST_BOUND:
+            raise ValueError(f"a trust bound is never below {TRUST_BOUND} bytes (E6)")
+        self.admit, self.clock = admit, clock
+        self.artifact_bound, self.trust_bound = artifact_bound, trust_bound
         self.ordered, self.limit, self.timeout = ordered, limit, timeout
         self.transfer: Optional[_Transfer] = None
 
@@ -285,7 +291,7 @@ class Assembler:
             return None                            # a repeated offer
         if not 1 <= offer.sealed_length <= env.MAX_SEALED:                                         # B9
             return self._drop(FRAME_INVALID, offer.transfer)
-        if offer.body_length > self.body_bound:                                                     # E6
+        if offer.body_length > max(self.artifact_bound, self.trust_bound):                          # E6
             return self._drop(TOO_LARGE, offer.transfer)
         self.transfer = _Transfer(offer, self.clock())
         return None
@@ -311,10 +317,12 @@ class Assembler:
         _require(hash_prefix(env.envelope_id(envelope_bytes)) == current.offer.envelope_prefix,
                  "an assembled sealed part whose envelope id is not the offered one")             # B6
         try:
-            body_size, body_sha256 = self.admit(sealed)
+            body_size, body_sha256, artifact = self.admit(sealed)
         except Refused as refused:
             return self._drop(refused.cause, chunk.transfer)
         _require(body_size == current.offer.body_length, "an offered body length that is not the signed one")
+        if body_size > (self.trust_bound if artifact in TRUST_ARTIFACTS else self.artifact_bound):          # E6
+            return self._drop(TOO_LARGE, chunk.transfer)
         current.sealed_bytes, current.body_sha256 = sealed, body_sha256
         current.body = _Part(body_size)
         return self._finish(current)
@@ -335,10 +343,10 @@ def admit_through_v8(verify: Callable[[bytes, bytes], object]) -> Admit:
     release and V9's `dist:body-mismatch` is the only refusal that means the envelope passed them. An
     envelope of an empty body is verified whole."""
 
-    def admit(sealed: bytes) -> Tuple[int, str]:
+    def admit(sealed: bytes) -> Tuple[int, str, str]:
         verdict = verify(sealed, b"")
         envelope = verdict.envelope
         if verdict.cause is None or (verdict.cause == "dist:body-mismatch" and envelope.body_size > 0):
-            return envelope.body_size, envelope.body_sha256
+            return envelope.body_size, envelope.body_sha256, envelope.artifact
         raise Refused(verdict.cause)
     return admit
