@@ -545,3 +545,82 @@ def _corpus_case(name):
     import json
     corpus = json.loads((_dist.REPO / "portable" / "conformance" / "distribution.json").read_text(encoding="utf-8"))
     return next(case for case in corpus["cases"] if case["name"] == name)
+
+
+class _Monotonic:
+    """A monotonic clock the test moves by hand, in seconds."""
+
+    def __init__(self):
+        self.now = 100.0
+
+    def __call__(self) -> float:
+        return self.now
+
+
+def _delayed(point):
+    monotonic = _Monotonic()
+    point.pep = Pep(str(point.state_dir), point.adapter(), point.key, point.clock, monotonic=monotonic)
+    return point.pep, monotonic
+
+
+def test_a_commit_with_a_delay_is_active_at_the_peps_time_plus_the_delay_and_not_before(point):
+    """B8 on the host (case 38 is the C core's). A commit with a delay of 120 milliseconds keeps the old
+    release until the PEP's own monotonic time passes the delay, then commits on the next entry point."""
+    point.commit(OLD)
+    pep, monotonic = _delayed(point)
+    pep.stage(seal("policy.ppt", NEW, seq=2), NEW)
+    record = _read(point, pep.commit(STREAM, 2, H(NEW), delay_ms=120))
+    assert record.event == "beat" and record.active_seq == 1 and record.staged and _host_active(pep) == H(OLD)
+    monotonic.now += 0.119
+    assert pep.tick() is None and pep.active.seq == 1 and _host_active(pep) == H(OLD)
+    monotonic.now += 0.001
+    pep.tick()
+    assert pep.active.seq == 2 and pep.floor.seq == 2 and _host_active(pep) == H(NEW) and pep.due is None
+    assert "committed" in _actions(pep)
+
+
+def test_a_delayed_commit_runs_its_checks_again_when_it_falls_due(point):
+    """B8 with C3. A staged release that expires inside the delay is dropped when the delay ends and never
+    becomes active, and the floor stays where it was."""
+    point.commit(OLD)
+    pep, monotonic = _delayed(point)
+    pep.stage(seal("policy.ppt", NEW, seq=2, expires=_dist.NOW + 10), NEW)
+    pep.commit(STREAM, 2, H(NEW), delay_ms=500)
+    point.clock.now = _dist.NOW + 10
+    monotonic.now += 1.0
+    pep.tick()
+    assert pep.active.seq == 1 and pep.floor.seq == 1 and _host_active(pep) == H(OLD)
+    assert pep.staged is None and pep.due is None
+
+
+def test_a_revocation_inside_the_delay_drops_the_release_before_it_falls_due(point):
+    """B8 with R5. A revocation of the staged envelope inside the delay drops it at once."""
+    point.commit(OLD)
+    pep, monotonic = _delayed(point)
+    point.pep = pep
+    pep.stage(seal("policy.ppt", NEW, seq=2), NEW)
+    pep.commit(STREAM, 2, H(NEW), delay_ms=500)
+    point.revoke(1, envelopes=sorted(pep.staged.envelope_ids))
+    monotonic.now += 1.0
+    pep.tick()
+    assert pep.active.seq == 1 and pep.staged is None and pep.due is None and _host_active(pep) == H(OLD)
+
+
+def test_an_abort_inside_the_delay_cancels_the_delayed_commit(point):
+    """B8 with A1. An abort that names the staged release drops it, so nothing flips when the time comes."""
+    point.commit(OLD)
+    pep, monotonic = _delayed(point)
+    pep.stage(seal("policy.ppt", NEW, seq=2), NEW)
+    pep.commit(STREAM, 2, H(NEW), delay_ms=50)
+    assert _read(point, pep.abort(STREAM, 2, H(NEW))).event == "aborted"
+    monotonic.now += 1.0
+    pep.tick()
+    assert pep.active.seq == 1 and _host_active(pep) == H(OLD) and pep.due is None
+
+
+def test_a_commit_delay_out_of_range_is_refused(point):
+    """B8: the delay is two bytes on the wire, 0 to 65535 milliseconds."""
+    point.pep.stage(seal("policy.ppt", NEW, seq=1), NEW)
+    for delay in (-1, 65536, 1.5, True):
+        with pytest.raises(ValueError):
+            point.pep.commit(STREAM, 1, H(NEW), delay_ms=delay)

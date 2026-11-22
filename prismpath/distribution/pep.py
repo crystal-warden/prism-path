@@ -31,6 +31,7 @@ provisioned again (P3).
 from __future__ import annotations
 
 import os
+import time as _time
 from dataclasses import dataclass, field, replace
 from typing import Any, Callable, Dict, FrozenSet, Iterable, Optional, Tuple
 
@@ -173,7 +174,8 @@ class Pep:
     target kind allows `hold`, and it is fixed for the life of the object (X10)."""
 
     def __init__(self, state_dir: str, adapter, instance_key, clock: Callable[[], int], *,
-                 expiry_response: str = REFUSE, has_clock: bool = True):
+                 expiry_response: str = REFUSE, has_clock: bool = True,
+                 monotonic: Callable[[], float] = _time.monotonic):
         target = kinds.TARGETS.get(adapter.kind)
         if target is None:
             raise PepRefused(f"no enforcement point of kind {adapter.kind!r} is built")
@@ -189,6 +191,8 @@ class Pep:
         self.audit = AuditLog(self.store.path("audit.log"), instance_key=instance_key, sign_appends=True)
         self.epoch = 0
         self.held = False
+        self.monotonic = monotonic
+        self.due: Optional[Tuple[str, int, str, float]] = None      # B8: a commit with a delay, and when it falls
         self.outbox: list = []
         self._load()
         self._check_setting()
@@ -519,9 +523,23 @@ class Pep:
                 return "dist:revoked"
         return None
 
-    def commit(self, stream: str, seq: int, policy_sha256: str) -> bytes:
-        """Make the staged release named by `stream`, `seq` and `policy_sha256` active (C1 to C5)."""
+    def commit(self, stream: str, seq: int, policy_sha256: str, delay_ms: int = 0) -> bytes:
+        """Make the staged release named by `stream`, `seq` and `policy_sha256` active (C1 to C5). With a delay
+        it becomes active at the PEP's own monotonic time plus the delay and not before (B8), so a group flips
+        together with no shared clock: the checks run now, and again when it falls due."""
         self._check_active()
+        if not kinds.is_int(delay_ms, 0, 65535):
+            raise ValueError("a commit delay is 0 to 65535 milliseconds")
+        if delay_ms:
+            cause = self._commit_refusal(stream, seq, policy_sha256)
+            if cause is not None:
+                return cause
+            self.due = (stream, seq, policy_sha256, self.monotonic() + delay_ms / 1000.0)
+            return self._record("beat")
+        return self._commit_now(stream, seq, policy_sha256)
+
+    def _commit_refusal(self, stream: str, seq: int, policy_sha256: str) -> Optional[bytes]:
+        """C1 to C3 without the flip: None when the named release may commit, else the refusal's record."""
         if self.locked:
             return self._refuse("dist:floor-lost")
         if not self.trust.readable:
@@ -529,6 +547,24 @@ class Pep:
         staged = self.staged
         if staged is None or not staged.names(stream, seq, policy_sha256):
             return self._record("refused", "dist:not-staged")        # C1: nothing changes
+        return None
+
+    def _fall_due(self) -> None:
+        """B8: a delayed commit whose time has come is made now, its checks run again."""
+        if self.due is None:
+            return
+        stream, seq, policy_sha256, when = self.due
+        if self.staged is None or not self.staged.names(stream, seq, policy_sha256):
+            self.due = None                                          # its release was dropped or replaced
+        elif self.monotonic() >= when:
+            self.due = None
+            self._commit_now(stream, seq, policy_sha256)
+
+    def _commit_now(self, stream: str, seq: int, policy_sha256: str) -> bytes:
+        cause = self._commit_refusal(stream, seq, policy_sha256)
+        if cause is not None:
+            return cause
+        staged = self.staged
         if not self.target.needs <= set(staged.held):
             return self._refuse("dist:incomplete", seq=seq)          # C2
         whole = {artifact: (staged.envelopes[artifact], staged.bodies[artifact]) for artifact in staged.held}
@@ -589,6 +625,10 @@ class Pep:
         return self._check_active()
 
     def _check_active(self) -> Optional[bytes]:
+        self._fall_due()
+        return self._check_ground()
+
+    def _check_ground(self) -> Optional[bytes]:
         """What every entry point and the periodic tick run first: an active release that no longer stands lapses
         with `dist:revoked` (R5), and an expired one lapses or is held (X1, X7). A staged release is held to the
         same test when a revocation is applied and at a restart, and again at its commit (C3)."""

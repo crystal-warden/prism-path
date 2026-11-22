@@ -41,7 +41,7 @@ def _verify(sealed, body):
 
 
 def _through_v8(sealed):
-    return verifier.verify_through_v8(sealed, trust=GEN.trust_store(),
+    return verifier.verify_envelope(sealed, trust=GEN.trust_store(),
                                       pep=verifier.PepView("host", GEN.STREAM, qualification=GEN.QUALIFICATION),
                                       now=GEN.NOW)
 

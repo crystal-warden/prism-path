@@ -90,7 +90,7 @@ def verify(sealed: bytes, body: bytes, *, trust: TrustStore, pep: PepView, now: 
     return _verify(sealed, bytes(body), trust, pep, now, reads_meta, through_v8=False)
 
 
-def verify_through_v8(sealed: bytes, *, trust: TrustStore, pep: PepView, now: int,
+def verify_envelope(sealed: bytes, *, trust: TrustStore, pep: PepView, now: int,
                       reads_meta: Optional[bool] = None) -> Verdict:
     """V2 to V8 of a sealed envelope whose body has not been read (B9): what a PEP checks before it fetches or
     assembles the body. Returns the first failure's cause, or the envelope, whose `body_size` and `body_sha256`

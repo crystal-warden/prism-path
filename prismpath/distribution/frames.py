@@ -338,7 +338,7 @@ class Assembler:
 
 
 def admit_through_v8(through_v8: Callable[[bytes], object]) -> Admit:
-    """An `admit` for `Assembler` from the enforcement point's `verify.verify_through_v8`, bound to its trust store,
+    """An `admit` for `Assembler` from the enforcement point's `verify.verify_envelope`, bound to its trust store,
     view and clock: `through_v8(sealed)` answers a `Verdict` of V2 to V8 with no body read (B9)."""
 
     def admit(sealed: bytes) -> Tuple[int, str, str]:

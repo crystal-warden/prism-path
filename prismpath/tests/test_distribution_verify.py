@@ -297,12 +297,12 @@ def test_a_kind_that_does_not_read_meta_only_bounds_it():
         env.read(canon.canon2_bytes(doc))
 
 
-def test_verify_through_v8_stops_before_the_body_and_agrees_with_the_whole_verify():
+def test_verify_envelope_stops_before_the_body_and_agrees_with_the_whole_verify():
     """B9: V2 to V8 with no body read. Every corpus case refused before V9 gets the same cause, and one that
     passes V8 comes back with its envelope, whose size and hash name the body to read."""
     for case in CORPUS["cases"]:
         whole = GEN.replay(case)
-        early = verifier.verify_through_v8(bytes.fromhex(case["sealed"]), trust=GEN.trust_from_document(case["trust"]),
+        early = verifier.verify_envelope(bytes.fromhex(case["sealed"]), trust=GEN.trust_from_document(case["trust"]),
                                            pep=GEN.pep_from_document(case["pep"]), now=case["now"])
         if early.cause is not None:
             assert early.cause == whole["cause"], case["name"]
