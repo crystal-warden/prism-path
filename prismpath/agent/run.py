@@ -69,6 +69,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from prismpath.agent import session_state
 from prismpath.kernel import canon2
 from prismpath.ledgers import core_evidence
 
@@ -113,6 +114,13 @@ BOUND_DIGESTS = ("routes_sha256", "hosts_sha256")
 _GRANT_ID = re.compile(r"[0-9a-f]{32}")
 
 
+def _counts_ok(state: Any) -> bool:
+    """A validated-prefix record's session counts are shaped like `session_state.ZERO`."""
+    return (isinstance(state, dict) and set(state) == set(session_state.ZERO)
+            and all(isinstance(v, int) and not isinstance(v, bool) and v >= 0 for v in state.values())
+            and state["changes"] in (0, 1))
+
+
 def _extras_ok(entry: Dict[str, Any]) -> bool:
     """A journal line holds `i`, `reading` and `receipt`, and at most a sandbox record, a tool_use_id, a grant, and the
     digest of the gateway's route table or of the egress proxy's allowed host list the line was decided under."""
@@ -141,6 +149,11 @@ class RunError(Exception):
 
 class RunCorrupt(RunError):
     """The journal is damaged somewhere a killed writer cannot have damaged it."""
+
+
+class RunStale(RunError):
+    """An append that named how many receipts the run held when its decision was made found another count: a receipt
+    was appended since (a parallel tool call), so the decision may rest on state that is no longer true."""
 
 
 def observe_format() -> str:
@@ -286,35 +299,45 @@ class Run:
         """The validated-prefix record, or None when it is absent or does not read."""
         try:
             record = canon2.loads((self.dir / PREFIX).read_bytes())
-            if (set(record) == {"bytes", "count", "last", "last_len"} and all(
+            if (set(record) - {"state"} == {"bytes", "count", "last", "last_len"} and all(
                     isinstance(record[k], int) and not isinstance(record[k], bool) for k in ("bytes", "count", "last_len"))
                     and isinstance(record["last"], str) and 0 < record["last_len"] <= record["bytes"]
-                    and record["count"] > 0):
+                    and record["count"] > 0 and ("state" not in record or _counts_ok(record["state"]))):
                 return record
         except Exception:   # noqa: BLE001 - a record that does not read is only a missed shortcut
             pass
         return None
 
-    def _write_prefix(self, length: int, count: int, last: bytes) -> None:
+    def _write_prefix(self, length: int, count: int, last: bytes, state: Optional[Dict[str, int]] = None) -> None:
         """Record that the first `length` bytes of the journal, `count` lines ending with `last`, were
-        validated. Not fsynced: the record is a shortcut, and a lost or stale one only means more is validated."""
+        validated, and, when known, the session counts of those lines (`session_state.step`). Not fsynced: the record
+        is a shortcut, and a lost or stale one only means more is validated, and a record with no counts only means
+        `session_counts` reads the whole journal once."""
+        record = {"bytes": length, "count": count, "last": core_evidence.sha256_hex(last), "last_len": len(last)}
+        if state is not None:
+            record["state"] = state
         tmp = self.dir / (PREFIX + ".tmp")
-        tmp.write_bytes(canon2.dumps({"bytes": length, "count": count, "last": core_evidence.sha256_hex(last),
-                                      "last_len": len(last)}))
+        tmp.write_bytes(canon2.dumps(record))
         os.replace(tmp, self.dir / PREFIX)
 
-    def _scan(self, full: bool):
-        """(count, entries) of the journal after dropping a torn tail. Call with the lock held.
+    def _scan(self, full: bool, with_state: bool = False):
+        """(count, entries) of the journal after dropping a torn tail, and with `with_state` the session counts of
+        every line as a third item (None when they are not known). Call with the lock held.
 
         With `full`, every line is validated and `entries` holds them all. Without it, the lines the
         validated-prefix record covers are trusted when the record still matches the file (the journal is
         at least that long and its last recorded line is the same bytes, on a line boundary), only the bytes
-        after it are validated, and `entries` holds only those. Any mismatch validates the whole journal."""
+        after it are validated, and `entries` holds only those. Any mismatch validates the whole journal.
+
+        The counts are carried the same way: from zero when the scan starts at the first line, from the record's
+        `state` when it starts after the record, and unknown when the record has none (one written before the counts
+        were kept) or a line's reading does not read, in which case the record is written without them."""
         path = self.dir / JOURNAL
         if not path.exists():
-            return 0, []
+            return (0, [], dict(session_state.ZERO)) if with_state else (0, [])
         image_sha = core_evidence.sha256_hex((self.dir / IMAGE).read_bytes())
         start, count, last = 0, 0, b""
+        state: Optional[Dict[str, int]] = dict(session_state.ZERO)
         with open(path, "rb") as handle:
             record = None if full else self._prefix()
             if record is not None and record["bytes"] <= os.fstat(handle.fileno()).st_size:
@@ -325,6 +348,7 @@ class Run:
                 if ((not at or chunk[:1] == b"\n") and line.endswith(b"\n")
                         and core_evidence.sha256_hex(line) == record["last"]):
                     start, count, last = record["bytes"], record["count"], line
+                    state = dict(record["state"]) if "state" in record else None
             handle.seek(start)
             data = handle.read()
         end = data.rfind(b"\n") + 1
@@ -356,16 +380,59 @@ class Run:
             if not ok:
                 raise RunCorrupt(f"session {self.session}: journal line {n} is damaged")
             entries.append(entry)
+            if state is not None:
+                try:
+                    state = session_state.step(state, entry)
+                except Exception:   # noqa: BLE001 - counts that cannot be kept are unknown, and read as restrictive
+                    state = None
         total = count + len(lines)
         if lines:
             last = lines[-1] + b"\n"
         if total and (lines or full):
-            self._write_prefix(start + end, total, last)
-        return total, entries
+            self._write_prefix(start + end, total, last, state)
+        return (total, entries, state) if with_state else (total, entries)
 
     def _entries(self) -> List[Dict[str, Any]]:
         """Every complete journal line, parsed and validated, after dropping a torn tail. Call with the lock held."""
         return self._scan(full=True)[1]
+
+    #: files a run holds only once it has a journal: a run that has one of them and no journal has lost it
+    _JOURNAL_FILES = (PREFIX, TORN, OBSERVATIONS, OUTCOMES, "receipts.jsonl", "run.json")
+
+    def snapshot(self) -> "tuple[int, List[Dict[str, Any]]]":
+        """`(count, entries)`: how many receipts the run holds and every journal line, each validated against its
+        reading and the image, read under the lock. A run with no journal and none of the files only a journal leaves
+        has none; one that has such a file and no journal is `RunCorrupt`. What a decision that depends on the session's
+        history reads (prismpath/agent/session_state.py)."""
+        with _locked(self.dir / LOCK):
+            if not (self.dir / IMAGE).exists():
+                raise RunError(f"no run for session {self.session}")
+            if not (self.dir / JOURNAL).exists():
+                if any((self.dir / name).exists() for name in self._JOURNAL_FILES):
+                    raise RunCorrupt(f"session {self.session}: the journal is missing")
+                return 0, []
+            return self._scan(full=True)
+
+    def session_counts(self) -> "tuple[int, Dict[str, int]]":
+        """`(count, counts)`: how many receipts the run holds and the session counts of all of them
+        (`session_state.step`), read under the lock like `snapshot` and with the same missing-journal rule, but
+        validating only the lines appended since the validated-prefix record, which keeps the counts of the lines it
+        covers. `session_state.derive` over `snapshot()` is the same answer (prismpath/tests/test_session_state.py).
+        The record is trusted as it is on append, and is in the run directory with the journal it describes, so
+        whoever could change it could change the journal; `seal` and `verify` still validate every line."""
+        with _locked(self.dir / LOCK):
+            if not (self.dir / IMAGE).exists():
+                raise RunError(f"no run for session {self.session}")
+            if not (self.dir / JOURNAL).exists():
+                if any((self.dir / name).exists() for name in self._JOURNAL_FILES):
+                    raise RunCorrupt(f"session {self.session}: the journal is missing")
+                return 0, dict(session_state.ZERO)
+            count, _entries, state = self._scan(full=False, with_state=True)
+            if state is None:
+                count, _entries, state = self._scan(full=True, with_state=True)
+            if state is None:
+                raise RunCorrupt(f"session {self.session}: a journal reading does not read as a reading")
+            return count, state
 
     def _last_entry_with_tool_use_id(self, tool_use_id: str) -> Optional[Dict[str, Any]]:
         """The latest journal line that carries `tool_use_id`, or None. Call with the lock held.
@@ -399,7 +466,8 @@ class Run:
     def append(self, reading: bytes, verdict: Dict[str, Any], decider: str = DECIDER,
                sandbox_profile: Optional[str] = None, sandbox_backend: Optional[str] = None,
                tool_use_id: Optional[str] = None, grant: Optional[Dict[str, str]] = None,
-               routes_sha256: Optional[str] = None, hosts_sha256: Optional[str] = None) -> int:
+               routes_sha256: Optional[str] = None, hosts_sha256: Optional[str] = None,
+               expect: Optional[int] = None) -> int:
         """Record one decided reading as the next receipt, durably, and return its index. `sandbox_profile` is the
         SHA-256 of the sandbox profile the allowed call was rewritten to run under; it is kept on the journal
         line beside the receipt (the receipt is exactly `prismpath.core-receipt/1`, which has no such field),
@@ -410,9 +478,13 @@ class Run:
         that call can be bound to this receipt (`Run.outcome_of_hook`). A value that is not shaped like an id is left
         off. `grant` is the `{"grant_id", "grant_sha256"}` of the grant a gateway request presented, kept the same way.
         `routes_sha256` and `hosts_sha256` are the digests of the gateway's route table and of the egress proxy's allowed
-        host list, kept the same way, so that `verify` reports which table or list the receipts were decided under."""
+        host list, kept the same way, so that `verify` reports which table or list the receipts were decided under.
+        `expect`, when given, is the number of receipts the caller's decision was made against (`snapshot`): the append
+        is refused with `RunStale`, writing nothing, when the run holds another number."""
         with _locked(self.dir / LOCK):
-            n = self._scan(full=False)[0]
+            n, _tail, counts = self._scan(full=False, with_state=True)
+            if expect is not None and n != expect:
+                raise RunStale(f"session {self.session}: the run holds {n} receipts, not the {expect} this decision was made against")
             image = (self.dir / IMAGE).read_bytes()
             receipt = {"format": core_evidence.RECEIPT_FORMAT, "idx": n, "case": self.session, "reading": n,
                        "image_sha256": core_evidence.sha256_hex(image),
@@ -446,7 +518,12 @@ class Run:
                 os.close(fd)
             if new:
                 _fsync_dir(self.dir)
-            self._write_prefix(length, n + 1, line)
+            if counts is not None:
+                try:
+                    counts = session_state.step(counts, entry)
+                except Exception:   # noqa: BLE001 - counts that cannot be kept are unknown, and read as restrictive
+                    counts = None
+            self._write_prefix(length, n + 1, line, counts)
             return n
 
     # ------------------------------------------------------------------ observations

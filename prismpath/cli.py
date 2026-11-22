@@ -357,10 +357,12 @@ def _add_operator_commands(subparsers) -> None:
     agent_init.add_argument('--project', default=None,
                             help='the project directory (default $CLAUDE_PROJECT_DIR, else the current directory)')
     agent_init.add_argument('--yes', action='store_true', help='write the settings change without asking')
-    agent_init.add_argument('--policy', choices=('strict', 'default', 'review'), default=None,
+    agent_init.add_argument('--policy', choices=('strict', 'default', 'review', 'session'), default=None,
                             help='the starter policy to record: strict refuses what it cannot read and shell '
                                  'commands that change files, default asks about those, review also asks about '
-                                 'every change inside the project (default: the one recorded, else default)')
+                                 'every change inside the project, session is default and also asks about later calls when '
+                                 'the session already changed protected code or ran many shell commands '
+                                 '(default: the one recorded, else default)')
     agent_hook = agent_sub.add_parser(
         'hook', help='what Claude Code runs: the hook JSON on stdin, the answer on stdout; any failure is a deny '
                      'with cause agent:hook-error, never an allow')

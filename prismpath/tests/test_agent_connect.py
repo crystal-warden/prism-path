@@ -100,7 +100,7 @@ def test_a_command_the_classifier_cannot_read_has_an_unknown_process_class_and_o
 
 # ------------------------------------------------------------------------------------------ the starters
 def _decide(policy, reading):
-    return policy.decide(canon2.dumps(reading))
+    return policy.decide(policy.reading_bytes(reading))
 
 
 @pytest.mark.parametrize("name", sorted(STARTERS))

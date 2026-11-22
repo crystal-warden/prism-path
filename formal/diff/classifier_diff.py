@@ -64,7 +64,12 @@ ORACLE = Path(os.environ.get("PRISMPATH_CLASSIFIER_ORACLE")
               or ROOT / "formal" / ".lake" / "build" / "bin" / "classifier-oracle")
 FIXTURES = ROOT / "prismpath" / "tests" / "fixtures" / "claude_code_hooks.json"
 ZONE_FIXTURES = ROOT / "prismpath" / "tests" / "fixtures" / "claude_code_zone_hooks.json"   # recorded inputs with a zone answer
-POLICIES = sorted((ROOT / "prismpath" / "agent" / "policy").glob("*.core.json"))
+_IMAGES = sorted((ROOT / "prismpath" / "agent" / "policy").glob("*.core.json"))
+# An image that defines a session field (prismpath/agent/session_state.py) is decided on readings that carry the fields, so
+# the stateless checks say nothing of it; it is held to the stateless starter it is made from instead (`check_session`).
+SESSION_BASES = {"agent_session.core.json": "agent_default.core.json"}
+POLICIES = [image for image in _IMAGES if image.name not in SESSION_BASES]
+SESSION_POLICIES = [(image, image.with_name(SESSION_BASES[image.name])) for image in _IMAGES if image.name in SESSION_BASES]
 EXACT = 2 ** 53 - 1
 
 _ORIGINAL = {"zone": classifier.zone_fact, "disk": classifier.disk_facts, "inside": claude_code._inside, "same": claude_code._same_dir,
@@ -305,6 +310,18 @@ def check_policies() -> List[str]:
         out = subprocess.run([str(ORACLE), "--policy", str(image)], capture_output=True, check=True, text=True)
         if json.loads(out.stdout) != {"policy": "accepted", "fits": True, "scan_refused": True, "control_refused": True,
                                     "net_refused": True, "zone_asked": True}:
+            bad.append(f"{image.name}: {out.stdout.strip()}")
+    return bad
+
+
+def check_session(pairs=None) -> List[str]:
+    """Every shipped image that reads the session's state refines the stateless starter it is made from: over every reading
+    and every state its verdict is at least as restrictive as the base's, at most as restrictive as its own at the top state,
+    and never a contract violation (Session.session_restricts), so every safety theorem of the base holds in every state."""
+    bad = []
+    for image, base in (SESSION_POLICIES if pairs is None else pairs):
+        out = subprocess.run([str(ORACLE), "--session", str(image), str(base)], capture_output=True, check=True, text=True)
+        if json.loads(out.stdout) != {"policy": "accepted", "session_refines": True}:
             bad.append(f"{image.name}: {out.stdout.strip()}")
     return bad
 
@@ -808,7 +825,7 @@ def main(argv=None) -> int:
     if not ORACLE.exists():
         print(f"the classifier oracle is not built ({ORACLE}); cd formal && lake build", file=sys.stderr)
         return 2
-    bad = check_policies()
+    bad = check_policies() + check_session()
     with tempfile.TemporaryDirectory() as tmp:
         recorded = [] if args.no_recorded else recorded_cases(Path(tmp))
         result_recorded = run(recorded) if recorded else None
@@ -821,7 +838,7 @@ def main(argv=None) -> int:
         print(f"  zone_reach of the changing calls: {dict(sorted(res['zones'].items()))}")
         for ident, diff in list(res["disagreements"].items())[:20]:
             print(f"  {ident}: {diff}")
-    print(f"policies: {len(POLICIES)} images, {len(bad)} with a definition some reading does not fit")
+    print(f"policies: {len(POLICIES)} images and {len(SESSION_POLICIES)} that read the session, {len(bad)} with a definition some reading does not fit or a state that relaxes")
     for line in bad:
         print("  " + line)
     total = len(result["disagreements"]) + (len(result_recorded["disagreements"]) if result_recorded else 0)
