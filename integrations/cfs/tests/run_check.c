@@ -246,6 +246,28 @@ int main(int argc, char **argv)
     Cds       = State;
     Cds.Magic = 0;
     CHECK(!PP_Run_StateValid(&Cds), "a state without its magic reads as valid");
+    Cds           = State;
+    Cds.FloorLost = 2u;
+    CHECK(!PP_Run_StateValid(&Cds), "a state with a lost floor mark other than 0 or 1 reads as valid");
+
+    /* a store that did not read: the floor is lost, and the mission's response decides what the new run admits */
+    PP_Run_Init(&Cds);
+    PP_Run_LoseFloor(&Cds, PP_LOST_FLOOR_LOCK, 1u);
+    CHECK(PP_Run_StateValid(&Cds), "a locked state is not valid");
+    CHECK(PP_Run_CheckTable(&Cds, &Keys, &Table, digest) == R_VERSION_REPLAY, "a locked floor admits the table");
+    PP_Run_Accept(&Cds, Table.Version, digest);
+    CHECK(PP_Run_CheckTable(&Cds, &Keys, &Table, digest) == R_VERSION_REPLAY, "accepting an image clears the lock");
+    for (i = 0; i < 3; i++)
+    {
+        uint32_t Min  = i == 0 ? 0u : (i == 1 ? Table.Version : Table.Version + 1u);
+        int      Want = i == 2 ? R_VERSION_REPLAY : 0;
+        PP_Run_Init(&Cds);
+        PP_Run_LoseFloor(&Cds, PP_LOST_FLOOR_MINIMUM, Min);
+        CHECK(PP_Run_StateValid(&Cds) && Cds.FloorLost == 0u, "a minimum floor state is not valid");
+        CHECK(PP_Run_CheckTable(&Cds, &Keys, &Table, digest) == Want, "minimum v%u: the v%u table got the wrong answer",
+              (unsigned)Min, (unsigned)Table.Version);
+    }
+    printf("lost floor: lock refuses, minimum admits from its version\n");
 
     CHECK(PP_Run_Seal(&State, &Io, &Keys, (uint64_t)strtoull(argv[6], NULL, 10)) == 0, "the seal failed");
     PP_Run_Root(&State, root);

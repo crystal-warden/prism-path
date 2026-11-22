@@ -137,7 +137,7 @@ int PP_Run_StateValid(const PP_RunState_t *State)
 {
     return State->Magic == PP_RUN_MAGIC && State->Size == (uint32_t)sizeof(*State) && State->CaseOpen <= 1u &&
            (State->CaseOpen == 0u || State->CaseCount > 0u) && (uint64_t)State->CaseReadings <= State->Acc.count &&
-           (State->Acc.count == 0u || State->CaseCount > 0u);
+           (State->Acc.count == 0u || State->CaseCount > 0u) && State->FloorLost <= 1u;
 }
 
 void PP_Run_SetInstanceSeed(PP_RunKeys_t *Keys, uint8_t Seed[32])
@@ -184,6 +184,10 @@ int PP_Run_CheckTable(const PP_RunState_t *State, const PP_RunKeys_t *Keys, cons
     {
         return R_SIG_INVALID;
     }
+    if (State->FloorLost != 0u)
+    {
+        return R_VERSION_REPLAY; /* the floor was lost: no image can be shown not to be an older one */
+    }
     if (State->FloorVersion != 0u &&
         (Table->Version < State->FloorVersion ||
          (Table->Version == State->FloorVersion && memcmp(Digest, State->FloorDigest, 32) != 0)))
@@ -197,6 +201,21 @@ void PP_Run_Accept(PP_RunState_t *State, uint32_t Version, const uint8_t Digest[
 {
     State->FloorVersion = Version;
     memcpy(State->FloorDigest, Digest, 32);
+}
+
+void PP_Run_LoseFloor(PP_RunState_t *State, int Response, uint32_t MinVersion)
+{
+    if (Response == PP_LOST_FLOOR_MINIMUM)
+    {
+        /* a floor one below the minimum, with a digest no image has, admits the minimum and every version above */
+        State->FloorVersion = MinVersion > 1u ? MinVersion - 1u : 0u;
+        memset(State->FloorDigest, 0, 32);
+        State->FloorLost = 0u;
+    }
+    else
+    {
+        State->FloorLost = 1u;
+    }
 }
 
 /* ----------------------------------------------------------------- the reading and the receipt */
