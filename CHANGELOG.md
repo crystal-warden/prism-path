@@ -8,6 +8,11 @@ spec stable.
 
 ## [Unreleased]
 
+### Added: signed revocation lists with a sequence, and fail toward expiry (2026-11-22)
+
+- **An enforcement point applies a signed `trust.revocation` as soon as it verifies, durably before it reports it.** A list is taken only at the trust sequence plus one, its keys, envelopes and policies are refused from then on, its floors raise the stream floors, and a later list never restores what an earlier one refused. A list over 64 entries or 16 streams is `dist:too-large`.
+- **A revocation that removes the ground of the active release lapses it to no policy with `dist:revoked`, and drops a staged release on the same test.** That ends a hold as well. A PEP that never hears of a revocation still stops at the release's expiry.
+
 ### Added: the enforcement point state machine for policy distribution, with the software host as its first target (2026-11-22)
 
 - **`prismpath.distribution.pep.Pep` stages, commits, aborts, rolls back and lapses at expiry, one machine for every Python target.** Its store under `<state>/dist/` is written in the commit order of the spec, so a death at any step leaves the old release or the new one and never a mix. A store it cannot read refuses every envelope and decides nothing.

@@ -271,6 +271,48 @@ def build_cases(kind: str, spec: Dict[int, dict]) -> List[dict]:
     add(44, "wrong_wcet", "manifest:wcet-mismatch",
         sealed_by(raw(kind_doc(body, meta={**meta, "wcet_cycles": meta["wcet_cycles"] + 1})), "A"))
 
+    # R1 to R7, X4: revocation lists, verified against the trust store a PEP holds
+    def revocation_body(**lists) -> bytes:
+        return canon.canon2_bytes({canon.ENCODING_KEY: canon.CANON2, "format": "prismpath.dist-revocation/1",
+                                   "envelopes": sorted(lists.get("envelopes", [])), "keys": sorted(lists.get("keys", [])),
+                                   "policies": sorted(lists.get("policies", [])), "floors": lists.get("floors", {})})
+
+    def revocation_doc(listed: bytes, seq: int, **changes) -> dict:
+        return {"artifact": "trust.revocation", "body_sha256": canon.sha256_hex(listed), "body_size": len(listed),
+                canon.ENCODING_KEY: canon.CANON2, "expires": 0, "format": env.FORMAT, "meta": {},
+                "not_before": NOT_BEFORE, "policy_sha256": env.ZERO_HASH, "release": env.ZERO_HASH, "replaces": "",
+                "seq": seq, "stream": env.TRUST_STREAM, "targets": [kind], "widens": False, **changes}
+
+    def applied(store: TrustStore, *steps) -> TrustStore:
+        for sealed, listed in steps:
+            store = store.apply_revocation(env.read(env.unseal(sealed)[0]), listed)
+        return store
+
+    b_id = env.key_id(public_raw(test_key("B")))
+    first = revocation_body(keys=[b_id])
+    first_sealed = sealed_by(raw(revocation_doc(first, 1)), "A")
+    empty = revocation_body()
+    second = (sealed_by(raw(revocation_doc(empty, 2)), "A"), empty)
+    after_first = applied(trust_store(), (first_sealed, first))
+    add(66, "one_above_the_trust_sequence", None, first_sealed, payload=first)
+    add(66, "the_same_one_again", None, first_sealed, payload=first, trust=after_first, unchanged=True)
+    add(66, "an_older_one", "dist:trust-replay", sealed_by(raw(revocation_doc(empty, 1)), "A"), payload=empty,
+        trust=applied(after_first, second))
+    add(66, "one_that_skips_a_number", "dist:trust-replay", sealed_by(raw(revocation_doc(empty, 3)), "A"),
+        payload=empty, trust=after_first)
+    add(67, "a_pack_signed_by_a_revoked_key", "sig:revoked-key", sealed_by(good, "B"), trust=after_first)
+    floored_store = applied(trust_store(), (sealed_by(raw(revocation_doc(revocation_body(floors={STREAM: 9}), 1)), "A"),
+                                            revocation_body(floors={STREAM: 9})))
+    add(68, "a_release_below_a_raised_floor", "dist:seq-replay", sealed_by(raw(kind_doc(body, seq=8)), "A"),
+        trust=floored_store)
+    add(70, "a_later_list_dropping_the_key", "sig:revoked-key", sealed_by(good, "B"), trust=applied(after_first, second))
+    many = revocation_body(envelopes=[canon.sha256_hex(bytes([index])) for index in range(65)])
+    add(71, "sixty_five_entries", "dist:too-large", sealed_by(raw(revocation_doc(many, 1)), "A"), payload=many)
+    add(79, "trust_kind_with_expires", "dist:bad-format",
+        sealed_by(raw(revocation_doc(empty, 1, expires=NOW + 1)), "A"), payload=empty)
+    add(79, "revocation_read_years_later", None,
+        sealed_by(raw(revocation_doc(empty, 1, not_before=NOW - 10 * 365 * 86400)), "A"), payload=empty)
+
     # E11, V4: every meta member of its form, read before any check uses it
     for name, changes in (("fields_a_string", {"fields": "x"}), ("counts_an_integer", {"counts": 7}),
                           ("counts_lacking_a_member", {"counts": {key: value for key, value in meta["counts"].items()

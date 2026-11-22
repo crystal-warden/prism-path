@@ -370,6 +370,11 @@ def test_case_107_a_mesh_node_on_hold_keeps_deciding_and_marks_everything(tmp_pa
     _dist.case_107_hold_keeps_deciding_and_marks_everything(*_mesh(tmp_path))
 
 
+def test_case_108_a_revocation_ends_a_mesh_node_s_hold(tmp_path):
+    """case_108: X8, R5, on a modelled mesh node."""
+    _dist.case_108_a_revocation_ends_a_hold(*_mesh(tmp_path))
+
+
 def test_case_110_a_held_mesh_node_never_widens(tmp_path):
     """case_110: X9, on a modelled mesh node."""
     _dist.case_110_a_held_pep_never_widens(*_mesh(tmp_path))
@@ -470,11 +475,12 @@ def test_the_older_path_stays_closed_when_the_floor_file_is_missing(point, tmp_p
 
 
 def test_no_record_is_refused_without_a_cause(point):
-    """H1: a verified trust statement is refused with dist:target-mismatch until its kind is applied, a
-    rollback with nothing kept is an error and no record, and a refused record always carries its cause."""
-    revocation = canon.canon2_bytes({canon.ENCODING_KEY: canon.CANON2, "envelopes": [], "floors": {},
-                                     "format": "prismpath.dist-revocation/1", "keys": [], "policies": []})
-    record = _read(point, point.pep.stage(seal("trust.revocation", revocation, stream="@trust"), revocation))
+    """H1, V5: a trust kind the target's machine does not apply (a rotation, until it does) is refused with
+    dist:target-mismatch, a rollback with nothing kept is an error and no record, and a refused record always
+    carries its cause."""
+    rotation = canon.canon2_bytes({canon.ENCODING_KEY: canon.CANON2, "format": "prismpath.dist-rotation/1",
+                                   "add": _dist.GEN.public_raw(_dist.GEN.test_key("B")).hex(), "retire": ""})
+    record = _read(point, point.pep.stage(seal("trust.rotation", rotation, stream="@trust"), rotation))
     assert (record.event, record.cause) == ("refused", "dist:target-mismatch")
     counter = point.pep.counter
     with pytest.raises(PepRefused):

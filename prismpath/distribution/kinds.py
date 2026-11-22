@@ -90,7 +90,7 @@ class Target:
     decides: bool
     when_declared: FrozenSet[str] = frozenset()
     expiry_hold: bool = False
-    applies: FrozenSet[str] = frozenset({"trust.widening"})
+    applies: FrozenSet[str] = frozenset({"trust.widening", "trust.revocation"})
     body_bound: int = 16777215
     checks: Any = None
 
@@ -208,13 +208,15 @@ def _sorted_hashes(value: Any) -> bool:
 
 
 REVOCATION_FORMAT = "prismpath.dist-revocation/1"
+REVOCATION_ENTRIES, REVOCATION_FLOORS = 64, 16       # section 10, R7
 ROTATION_FORMAT = "prismpath.dist-rotation/1"
 WIDENING_FORMAT = "prismpath.dist-widening/1"
 
 
 def read_revocation(body: bytes) -> dict:
     """Section 10: a revocation list, its `envelopes`, `keys` and `policies` sorted hash lists without
-    repeats and `floors` an object of stream names to a `seq`. `Refused` when it does not read."""
+    repeats and `floors` an object of stream names to a `seq`. `Refused` when it does not read, and with
+    `dist:too-large` when a list holds more than 64 entries or `floors` more than 16 streams (R7)."""
     doc = _trust_body(body, REVOCATION_FORMAT, frozenset({"encoding", "envelopes", "floors", "format", "keys",
                                                           "policies"}))
     if not all(_sorted_hashes(doc[name]) for name in ("envelopes", "keys", "policies")):
@@ -223,6 +225,9 @@ def read_revocation(body: bytes) -> dict:
     if not isinstance(floors, dict) or not all(is_stream(stream) and is_int(seq, 1, MAX_SEQ)
                                                for stream, seq in floors.items()):
         raise Refused(BAD_FORMAT, "revocation floors")
+    if any(len(doc[name]) > REVOCATION_ENTRIES for name in ("envelopes", "keys", "policies")) \
+            or len(floors) > REVOCATION_FLOORS:
+        raise Refused("dist:too-large", "a revocation list beyond 64 entries or 16 streams")       # R7
     return doc
 
 

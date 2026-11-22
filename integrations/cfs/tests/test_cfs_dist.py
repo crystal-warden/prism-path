@@ -80,6 +80,11 @@ def test_case_107_a_cfs_app_on_hold_keeps_deciding_and_marks_everything(tmp_path
     _dist.case_107_hold_keeps_deciding_and_marks_everything(*_cfs(tmp_path))
 
 
+def test_case_108_a_revocation_ends_a_cfs_app_s_hold(tmp_path):
+    """case_108: X8, R5, on a modelled cFS app."""
+    _dist.case_108_a_revocation_ends_a_hold(*_cfs(tmp_path))
+
+
 def test_case_110_a_held_cfs_app_never_widens(tmp_path):
     """case_110: X9, on a modelled cFS app."""
     _dist.case_110_a_held_pep_never_widens(*_cfs(tmp_path))

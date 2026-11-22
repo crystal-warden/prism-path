@@ -6,8 +6,9 @@ trust sequence, the threshold and the time floor (T1), and its durable file, a c
 `prismpath.dist-trust-store/1` (K1).
 
 `counting` is S3 to S5, which entries of a sealed envelope count and the one cause when too few do. A store
-that cannot be read refuses every envelope with `dist:unknown-key` (K1). The store changes only by provisioning, a rotation and a revocation
-(K3), applied by the code that owns them. Nothing here verifies any other part of an envelope.
+that cannot be read refuses every envelope with `dist:unknown-key` (K1). The store changes only by provisioning,
+a rotation and a revocation (K3). `apply_revocation` is the store after a verified revocation (R1 to R6). Nothing
+here verifies any other part of an envelope.
 """
 from __future__ import annotations
 
@@ -136,6 +137,23 @@ class TrustStore:
     def with_keys(cls, public_keys: Sequence[bytes], role: str = kinds.AUTHORITY, **members) -> "TrustStore":
         """A store holding `public_keys` (32 raw bytes each) in `role`, for provisioning and tests."""
         return cls(keys={canon.sha256_hex(bytes(raw)): Key(bytes(raw), role) for raw in public_keys}, **members)
+
+    # ------------------------------------------------------------------ R1 to R7: revocation
+    def apply_revocation(self, envelope, body: bytes) -> "TrustStore":
+        """The store after a verified `trust.revocation` (`envelope`, already through V2 to V11, so its `seq` is the
+        trust sequence plus one, R1). Its keys, envelopes and policies join what the store refuses and its floors
+        raise the store's (R2, R4). Nothing leaves: a later list that drops an entry restores no trust (R6). The
+        caller makes the result durable before it reports it (R3)."""
+        if envelope.artifact != "trust.revocation" or envelope.seq != self.trust_seq + 1:
+            raise ValueError("only a verified revocation at the next trust sequence is applied (R1)")
+        listed = kinds.read_revocation(body)
+        floors = dict(self.floors)
+        for stream, seq in listed["floors"].items():
+            floors[stream] = max(floors.get(stream, 0), seq)
+        return replace(self, revoked_keys=self.revoked_keys | frozenset(listed["keys"]),
+                       revoked_envelopes=self.revoked_envelopes | frozenset(listed["envelopes"]),
+                       revoked_policies=self.revoked_policies | frozenset(listed["policies"]), floors=floors,
+                       trust_seq=envelope.seq, trust_id=envelope.envelope_id)
 
     # ------------------------------------------------------------------ S3 to S5
     def counting(self, entries: Sequence[Tuple[str, bytes]], message: bytes, role: str = kinds.AUTHORITY) -> Verdict:

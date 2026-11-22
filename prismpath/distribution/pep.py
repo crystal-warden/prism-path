@@ -411,7 +411,9 @@ class Pep:
         if not verdict.ok:
             return self._refuse(verdict.cause, envelope_id=envelope_id)
         if verdict.unchanged:
-            return self._record("beat")                               # Q3: changes nothing, reports its state
+            return self._record("beat")                               # Q3, R1: changes nothing, reports its state
+        if envelope.artifact == "trust.revocation":
+            return self._apply_revocation(envelope, body)
         staged = self.staged
         if staged is not None and staged.stream == envelope.stream and envelope.seq < staged.seq:
             return self._refuse("dist:seq-replay", envelope_id=envelope_id)   # G2
@@ -429,6 +431,33 @@ class Pep:
                                                      "seq": envelope.seq, "release": envelope.release,
                                                      "result": "staged"})
         return self._record("staged")
+
+    # ------------------------------------------------------------------ B2, R1 to R6: a revocation
+    def _apply_revocation(self, envelope, body: bytes) -> bytes:
+        """Apply a verified revocation at once, durably before it is reported (B2, R3), then lapse the active
+        release and drop the staged one when the revocation removed the ground they stand on (R5). A held PEP
+        lapses the same way, which ends the hold (X8)."""
+        self.trust = self.trust.apply_revocation(envelope, body).save()
+        self.audit.append("distribution", "trust-applied", {"envelope_id": envelope.envelope_id, "seq": envelope.seq,
+                                                           "artifact": envelope.artifact, "result": "applied"})
+        if self.staged is not None and not self._stands(self.staged):
+            self._drop_staged()
+        if self.active is not None and not self._stands(self.active):
+            self.lapse("dist:revoked")
+        return self._record("trust-applied")
+
+    def _stands(self, release: Release) -> bool:
+        """R5: a release still stands when no envelope of it is listed by id or policy hash, its `seq` is not
+        below a floor a revocation raised, and every envelope of it still has a counting signature."""
+        if release.seq < self.trust.floors.get(release.stream, 0):
+            return False
+        for held in release.held.values():
+            if held.envelope_id in self.trust.revoked_envelopes or release.policy_sha256 in self.trust.revoked_policies:
+                return False
+            envelope_bytes, entries = env.unseal(self.store.get(held.sealed))
+            if not self.trust.counting(entries, env.signed_message(envelope_bytes), kinds.AUTHORITY).ok:
+                return False
+        return True
 
     # ------------------------------------------------------------------ C1 to C5: commit
     def _drop_staged(self) -> None:

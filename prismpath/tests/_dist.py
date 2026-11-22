@@ -63,6 +63,17 @@ def seal(artifact: str, body: bytes, *, seq: int = 1, signer: str = "A", release
     return env.seal(envelope_bytes, [GEN.test_key(signer)])
 
 
+def revocation(*, envelopes=(), keys=(), policies=(), floors=None) -> bytes:
+    """The canon/2 body of a revocation list (section 10)."""
+    return canon.canon2_bytes({canon.ENCODING_KEY: canon.CANON2, "format": "prismpath.dist-revocation/1",
+                               "envelopes": sorted(envelopes), "keys": sorted(keys), "policies": sorted(policies),
+                               "floors": dict(floors or {})})
+
+
+def key_id(name: str) -> str:
+    return env.key_id(GEN.public_raw(GEN.test_key(name)))
+
+
 def image(threshold: int = 5) -> bytes:
     from prismpath.kernel import ppt_compile
     return ppt_compile.compile_predicate(f"when x >= {threshold}").serialize()
@@ -108,6 +119,12 @@ class Point:
     def commit(self, body: bytes, seq: int = 1, **seal_args) -> bytes:
         self.pep.stage(self.seal(body, seq=seq, **seal_args), body)
         return self.pep.commit(STREAM, seq, seal_args.get("policy_sha256") or self.policy_of(body))
+
+    def revoke(self, seq: int, signer: str = "A", **lists) -> bytes:
+        """Stage the revocation list `lists` at trust sequence `seq`, which applies it (B2)."""
+        body = revocation(**lists)
+        return self.pep.stage(seal("trust.revocation", body, seq=seq, stream="@trust", signer=signer,
+                                   targets=(self.kind,)), body)
 
 
 @dataclass
@@ -184,6 +201,25 @@ def case_110_a_held_pep_never_widens(make: Callable[..., Point], bodies, decide:
     point.pep.stage(fresh, bodies[0])
     committed = _read(point, point.pep.commit(STREAM, 3, point.policy_of(bodies[0])))
     assert (committed.event, committed.held, committed.active_seq) == ("committed", False, 3)
+
+
+def case_108_a_revocation_ends_a_hold(make: Callable[..., Point], bodies, decide: Callable) -> None:
+    """X8, R5: a held PEP is sent a revocation of its active release, and one that raises the floor past it, and
+    each time goes to `no-policy` with event `lapsed` and `dist:revoked`, the hold ended."""
+    for lists in ({"policies": None}, {"floors": {STREAM: 2}}):
+        point = make(expiry_response="hold")
+        point.commit(bodies[0])
+        point.clock.now = EXPIRES
+        point.pep.tick()
+        assert point.pep.held
+        if "policies" in lists:
+            lists = {"policies": [point.policy_of(bodies[0])]}
+        point.pep.drain()
+        ack = _read(point, point.revoke(1, **lists))
+        sent = [_read(point, data) for data in point.pep.drain()]
+        assert [(record.event, record.cause) for record in sent] == [("lapsed", "dist:revoked"), ("trust-applied", None)]
+        assert (ack.state, ack.held, ack.trust_seq) == ("no-policy", False, 1)
+        assert point.pep.decide(lambda: decide(point.pep))["cause"] == "dist:policy-lapsed"
 
 
 def case_112_no_message_changes_the_setting(make: Callable[..., Point], bodies, decide: Callable) -> None:
