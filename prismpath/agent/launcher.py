@@ -160,7 +160,8 @@ def prepare_controls(workspace: Path, out: Controls) -> Controls:
     uses the same list). Existing ones are listed. Missing root ones are created empty (`.claude/` always, the three
     named files, `.mcp.json`, and `.git/config` and `.git/hooks/` when there is a `.git`, which is never created).
     What it creates is recorded in `out` as it goes."""
-    return controls_module.materialize(controls_module.discover(workspace), out)
+    controls_module.prepare(workspace, out)
+    return out
 
 
 EGRESS_LOG_NAME = "egress.log"

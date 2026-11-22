@@ -393,8 +393,7 @@ def run_backend(backend: str, command: str, workspace: Path, profile: Profile, s
         made = controls.Controls()
         try:
             try:
-                found = controls.discover(Path(os.path.realpath(workspace)))
-                controls.materialize(found, made)      # so a missing `.claude/` or CLAUDE.md can be bound read only too
+                found = controls.prepare(Path(os.path.realpath(workspace)), made)      # so a missing `.claude/` or CLAUDE.md can be bound read only too
             except OSError as exc:
                 raise SandboxUnavailable(f"the workspace's control paths cannot be protected ({exc}), so the command was not run") from exc
             return run_sandboxed([SHELL, "-c", command], workspace, profile, stdin=stdin, mount=mount, cwd=cwd,

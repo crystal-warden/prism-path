@@ -382,6 +382,47 @@ def test_prepare_controls_creates_what_is_missing_and_never_a_git_directory(tmp_
     assert list(tmp_path.iterdir()) == []
 
 
+def test_a_killed_run_leaves_files_the_next_run_removes_only_when_it_made_them_and_they_are_empty(tmp_path, monkeypatch):
+    from prismpath.agent import controls as controls_module
+    monkeypatch.setattr(controls_module, "marker_dir", lambda: tmp_path / "markers")
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    (workspace / "AGENTS.md").write_text("the user's own file")        # never created by a run, never removed
+    dead = subprocess.Popen([PYTHON, "-c", "pass"])
+    dead.wait()
+    crashed = launcher.Controls()
+    launcher.prepare_controls(workspace, crashed)
+    assert (workspace / "CLAUDE.md").exists() and crashed.marker is not None
+    record = json.loads(crashed.marker.read_text())
+    record["pid"] = dead.pid                                            # the run that made them is gone
+    crashed.marker.write_text(json.dumps(record))
+    (workspace / "CLAUDE.local.md").write_text("written since")         # no longer empty, so not ours to remove
+    crashed.marker = None                                               # the crashed run never reaches remove_created
+    (workspace / ".mcp.json").unlink()
+    (workspace / ".mcp.json").write_text("")                            # replaced by an empty file, still listed
+    nxt = launcher.Controls()
+    launcher.prepare_controls(workspace, nxt)
+    markers = list((tmp_path / "markers").iterdir())
+    assert len(markers) == 1 and markers[0] == nxt.marker               # the stale marker is gone
+    assert (workspace / "AGENTS.md").read_text() == "the user's own file"
+    assert (workspace / "CLAUDE.local.md").read_text() == "written since"
+    nxt.remove_created()
+    assert not list((tmp_path / "markers").iterdir())
+    assert sorted(p.name for p in workspace.iterdir()) == ["AGENTS.md", "CLAUDE.local.md"]
+
+
+def test_a_live_run_s_files_are_not_swept_by_another_run(tmp_path, monkeypatch):
+    from prismpath.agent import controls as controls_module
+    monkeypatch.setattr(controls_module, "marker_dir", lambda: tmp_path / "markers")
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    first = launcher.Controls()
+    launcher.prepare_controls(workspace, first)
+    controls_module.sweep_stale(workspace)                              # its marker names a live process
+    assert (workspace / "CLAUDE.md").exists() and first.marker.exists()
+    first.remove_created()
+
+
 # ---------------------------------------------------------------------------------- the local model route
 MODEL_STAND_IN = r'''
 import json, socket, sys, urllib.request
