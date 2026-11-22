@@ -13,6 +13,7 @@ pub mod refresh;
 pub mod replay;
 pub mod selfheal;
 pub mod spiral;
+pub mod spiral_groups;
 pub mod wire;
 pub mod zeckendorf;
 
