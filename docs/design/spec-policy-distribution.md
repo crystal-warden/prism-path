@@ -20,7 +20,7 @@ The owner decided these, and the rules below carry them out.
 
 | Decision | Where it is enforced |
 |---|---|
-| The transport is untrusted and the signature carries trust | S1 to S6, B1, F1 |
+| The transport is untrusted and the signature carries trust | S1 to S7, B1, B9, B10, F1 |
 | Never downgrade. The floor only rises and a rollback never lowers it | Q1 to Q5, RB1 to RB3, L2 |
 | Fail closed everywhere | V1, X1 to X3, R5, Q5, D1 |
 | At expiry a `mesh` or `cfs` deployment may choose HOLD. REFUSE is the default and hosts always refuse | X6 to X10, H8 |
@@ -35,6 +35,14 @@ Out of scope. A PEP that has been compromised can lie in its state record, becau
 the PEP claims. Hardware attestation would say more and is not designed here. A signature threshold above
 one is not in this version, though the format carries up to four signatures (S2) so it can be added
 without a new format.
+
+Stated limits. An authority key in the wrong hands can sign a `seq` so high that the stream cannot
+advance. TUF calls this a fast forward attack (TUF section 1.5.2) and recovers by having root rotate the
+key and the client forget the versions. This spec keeps the rule that no message lowers a floor, so the
+recovery is the provisioning step (P3) after the key is rotated and revoked. A controller in the wrong
+hands can withhold releases and revocations and can choose among unrevoked releases at or above a PEP's
+floor. It can do nothing else, and the longest it can freeze a PEP is the time left on that PEP's
+envelope (X2).
 
 A note on the word envelope. The repository already uses it twice. `spec-secure-hotswap.md` section 3.2
 has the qualification envelope, the caps and fields a pack must stay inside, named by `envelope_id`.
@@ -56,6 +64,20 @@ envelope**, and its format tag is `prismpath.dist/1`.
 | Release | Every sealed envelope that shares one stream, one `seq` and one policy hash. A PEP commits a release whole. |
 | Floor | The highest `seq` a PEP has committed on a stream, with the envelope ids committed at it. |
 
+### 2.1 The roles in standard terms
+
+| Here | NIST SP 800-207 section 3.1 | RFC 9334 section 4.1 | TUF and Uptane |
+|---|---|---|---|
+| The authority, who signs what may run | The source of the data access policies. It is not the policy engine | Reference value provider | The root and targets roles (TUF 2.1.1, 2.1.2), the Image repository (Uptane 5.3.1) |
+| The decision under the signed policy, made inside each PEP | Policy engine | | |
+| The controller | Policy administrator, the part that reaches PEPs over the control plane. It makes no decision and holds no authority key | Verifier and relying party for state records | A mirror (TUF 2.1.5). It is weaker than the Uptane Director (5.3.2), which signs |
+| The PEP | Policy enforcement point | Attester | A client, an ECU (Uptane 5.4) |
+| A relay (B10) | Part of the control plane | | A Primary that only forwards (Uptane 5.4.2.6) |
+| State records and receipts | Network and system activity logs, and the asset state a CDM system gathers | Evidence | The ECU version report (Uptane 5.4.2.1.2) |
+
+800-207 assumes a protected control plane. This spec does not, because every control message that
+matters is signed.
+
 ## 3. Target kinds and artifact kinds
 
 A target kind names a kind of PEP. An artifact kind names a kind of body. Both are closed lists in this
@@ -63,7 +85,7 @@ version. An implementation holds them in one table so that a new kind is one row
 
 | Target | The PEP | Artifacts it needs before it commits | Can it decide "larger" itself |
 |---|---|---|---|
-| `host` | The software tier of `prismpath/hotswap/policy_host.py` | `policy.ppt` | No |
+| `host` | The software tier of `prismpath/hotswap/policy_host.py` | `policy.ppt`, and `policy.spiral` when the `policy.ppt` envelope's `meta` has `packing` | No |
 | `agent` | One agent home. The hook, the decider, the sandbox profile, the egress proxy and the MCP proxy all read it (`prismpath/agent/commands.py`, `load_checked`) | `policy.core`, `egress.hosts` | Yes |
 | `gateway` | One gateway home (`prismpath/gateway/proxy.py`) | `policy.core`, `gateway.routes` | Yes for the policy. A changed route table is always a widening |
 | `xdp` | The host preloader in front of the XDP loader (`prismpath-ebpf/net_swap.py`) | `policy.core`, `net.dests`, `net.edge` | Yes |
@@ -77,6 +99,7 @@ home holds one release, so they cannot hold different versions of one policy.
 |---|---|---|---|
 | `policy.core` | A `prismpath.core/1` image in canon/2 bytes with no trailing line feed | none | The image loads (`prismpath.agent.policy.Policy`) and its SHA-256 is `policy_sha256` |
 | `policy.ppt` | A `.ppt` image | `fields`, `counts`, `wcet_cycles`, `qualification`, and when present `packing`, `flow_sha256`, `overlay_of`. They mean what the same members of a `ppt-pack/1` manifest mean, and `qualification` is its `envelope_id` | `validate_image`, the counts, the recomputed WCET and the qualification envelope gate, with their existing causes. A `mesh` target runs its own table parser and ignores `meta` |
+| `policy.spiral` | The spiral sidecar bytes (`<name>.ppt.spiral`) | none | Its SHA-256 is the `sidecar_sha256` in the staged `policy.ppt` envelope's `meta.packing`. A missing one is `spiral:sidecar-missing` at commit and a wrong one `spiral:sidecar-hash-mismatch` |
 | `sandbox.profile` | A sandbox profile in canon/2 bytes (`Profile.canonical`) | `compiler` | The PEP compiles the profile from the staged `policy.core` and the bytes must be equal. Optional for `agent`, and checked when present |
 | `egress.hosts` | A canon/2 array of lower case host names, sorted, without repeats. It may be empty | none | Each name is one the egress proxy can read |
 | `gateway.routes` | A route table document in canon/2 bytes | none | `Routes.from_doc` accepts it |
@@ -92,7 +115,7 @@ home holds one release, so they cannot hold different versions of one policy.
 
 ### 4.1 The document
 
-**E1.** A distribution envelope is a canon/2 object with exactly these fourteen members. A missing member,
+**E1.** A distribution envelope is a canon/2 object with exactly these fifteen members. A missing member,
 an extra member or a value outside the stated form is refused with `dist:bad-format`.
 
 | Member | Form | Meaning |
@@ -106,6 +129,7 @@ an extra member or a value outside the stated form is refused with `dist:bad-for
 | `meta` | object of the members section 3 lists for the artifact, strings and integers and one level of object | Facts about the body that are signed with it |
 | `not_before` | integer, Unix seconds | The envelope does not count before this second |
 | `policy_sha256` | 64 lower case hex digits | The policy hash. On a `@trust` envelope it is 64 zeros |
+| `release` | 64 lower case hex digits | The release id (E10). On a `@trust` envelope it is 64 zeros |
 | `replaces` | 64 lower case hex digits, or the empty string | The policy hash the signer compared against when setting `widens` |
 | `seq` | integer, 1 to 2^53 - 1 | The sequence number on the stream |
 | `stream` | a stream name | |
@@ -127,8 +151,8 @@ carry it, so every certified image hash stays what it was.
 one with `dist:too-large`. The `mesh` bound is 640 bytes (`TBL_MAX`) and the `cfs` bound is the table
 size.
 
-**E7.** Every envelope of one release carries the same `stream`, `seq`, `policy_sha256`, `replaces` and
-`widens`.
+**E7.** Every envelope of one release carries the same `stream`, `seq`, `policy_sha256`, `release`,
+`replaces` and `widens`.
 
 **E8.** A reader ignores nothing. An unknown artifact kind or target kind is `dist:bad-format`.
 
@@ -136,46 +160,65 @@ size.
 canonical order and skips the value of `meta`. It runs the scanner only on bytes whose signature it has
 already checked (V3 comes before V4).
 
+**E10.** The release id is the SHA-256 of the canon/2 bytes of the array of `[artifact, body_sha256]`
+pairs of every artifact in the release, sorted. The signer computes it over the whole release, so two
+envelopes belong to one release only when the authority signed them as one set. A PEP does not need the
+other bodies to use it. It requires the same `release` on every envelope it stages together (E7) and
+reports it (H1), and that is what stops a mix of artifacts that were never released together (TUF's mix
+and match, section 1.5.2).
+
 ### 4.2 What is signed
 
-**S1.** A signature is Ed25519 over the 17 bytes `prismpath.dist/1` and one zero byte, followed by the
-envelope bytes. The domain is the format's own, as `prismpath/canon.py` allows, so a constrained verifier
-checks a constant prefix.
+**S1.** A signature is Ed25519 over the DSSE pre-authentication encoding of the envelope bytes with the
+payload type `application/vnd.prismpath.dist+json`. The signed bytes are the 46 bytes
+`DSSEv1 35 application/vnd.prismpath.dist+json ` (ending in a space), the envelope length in ASCII
+decimal, one space, and the envelope bytes. `prismpath/ledgers/intoto.py` already has this encoding
+(`pae`). No canonical form is needed to check a signature, since the bytes that were signed are the
+bytes that travel.
+
+**S7.** A sealed envelope maps to a DSSE JSON envelope and back with no loss. `payload` is the envelope
+bytes in base64, `payloadType` is the one above, and each entry is a `signatures` member whose `keyid` is
+the key id in hex and whose `sig` is the signature in base64. Any DSSE verifier that holds the authority
+public key can check it.
 
 ### 4.3 The sealed envelope
 
-**S2.** A sealed envelope is one byte string, the same on every transport.
+**S2.** A sealed envelope is one byte string, the same on every transport. The signatures come first, so
+a small PEP can check one signature in a single pass over the envelope without holding it in memory.
 
 ```
-offset  size  field
-0       4     magic "PPDE"
-4       1     container version, 1
-5       2     n, the envelope length, little endian, 1 to 2048
-7       n     the envelope bytes
-7+n     1     k, the number of signatures, 1 to 4
-8+n     96*k  k entries, each a 32 byte key id followed by a 64 byte signature
+offset     size  field
+0          4     magic "PPDE"
+4          1     container version, 1
+5          1     k, the number of signatures, 1 to 4
+6          96*k  k entries, each a 32 byte key id followed by a 64 byte signature
+6+96k      2     n, the envelope length, little endian, 1 to 2048
+8+96k      n     the envelope bytes
 ```
 
 Any other length, magic or version is `dist:bad-format`. Entries are sorted by key id and no key id
 repeats.
 
-**S3.** An entry whose key id is not in the trust store is ignored. If no entry names a key the store
-knows, the envelope is refused with `dist:unknown-key`.
+**S3.** An entry counts when its key id names a key the trust store holds in the role the artifact needs
+(K4), that key is neither revoked nor retired, and the signature verifies. A key id is a hint for finding
+the key and decides nothing by itself. An entry that does not count is skipped, as DSSE skips it.
 
-**S4.** An entry that names a trusted key and does not verify refuses the envelope with `sig:invalid`,
-whatever the other entries say.
+**S4.** An envelope is signed when the number of counting entries is at least the trust store's
+threshold. The threshold is 1 in this version.
 
-**S5.** An entry by a revoked or retired key does not count. If entries by known keys verify and none of
-them counts, the envelope is refused with `sig:revoked-key`.
+**S5.** An envelope that is not signed is refused with one cause, the first of these that applies.
+`sig:revoked-key` when an entry verifies under a revoked or retired key. `sig:invalid` when an entry
+names a key the store holds and does not verify. `dist:unknown-key` otherwise.
 
-**S6.** An envelope is signed when the number of counting entries is at least the trust store's threshold.
-The threshold is 1 in this version. Fewer is `dist:unknown-key`.
+**S6.** The signature block is not signed. Adding, removing or reordering entries never changes the
+envelope id and never makes an unsigned envelope signed.
 
 ## 5. Keys and the trust store
 
 **K1.** A PEP holds a trust store with the trusted authority keys, the retired key ids, the current
 revocation list, the trust sequence and the threshold. It is durable, and a PEP that cannot read it
-refuses every envelope with `dist:unknown-key` and decides nothing (X3).
+refuses every envelope with `dist:unknown-key` and decides nothing (X3). Its durable form is a canon/2
+document with format `prismpath.dist-trust-store/1`.
 
 **K2.** A PEP holds its own instance key. An instance key that is also a trusted authority key is refused
 at start, as `root_statement.check_separation` refuses it today. A PEP under distribution holds no
@@ -183,6 +226,9 @@ authority private key.
 
 **K3.** The trust store changes only by first key provisioning (section 14), by a `trust.rotation` and by
 a `trust.revocation`. No other message changes it.
+
+**K4.** Every key in the trust store has a role. This version has one role, `authority`, and every
+artifact kind needs it. A key in a role this version does not know is kept and never counts.
 
 ## 6. Sequence numbers and the floor
 
@@ -192,7 +238,7 @@ committed at that `seq`. The floor is durable before the release is active (C4).
 **Q2.** An envelope whose `seq` is below the floor is refused with `dist:seq-replay`.
 
 **Q3.** An envelope whose `seq` equals the floor is accepted only when its envelope id is one committed at
-the floor. It changes nothing and the PEP reports its state. Any other envelope at the floor is
+the floor, which implies the committed release id. It changes nothing and the PEP reports its state. Any other envelope at the floor is
 `dist:seq-replay`.
 
 **Q4.** Nothing lowers a floor. A `trust.revocation` may raise one (R4).
@@ -213,10 +259,12 @@ bring an expired envelope back.
 **T2.** A PEP with no real time clock, such as a `mesh` node, counts from its time floor with its
 monotonic timer and saves the result at least once an hour. Such a PEP can run slow by the time it spent
 without power and never runs fast. Its expiry is late by at most that time, and this is the stated limit
-of T2.
+of T2. It catches up by V13, since every envelope the authority signed is evidence of a later time.
 
-**T3.** An envelope is refused with `dist:not-yet-valid` when the PEP's time is more than `SKEW` before
-`not_before`.
+**T3.** A PEP with a clock refuses an envelope with `dist:not-yet-valid` when its time is more than
+`SKEW` before `not_before`. A PEP with no clock has no ground to call an envelope early and does not
+apply this rule. For that PEP the authority's `not_before` is the time source, as the attested time is
+for an Uptane ECU without a clock (Uptane 5.4.1).
 
 **T4.** An envelope is refused with `dist:expired` when the PEP's time is at or past `expires`. There is no
 grace after expiry.
@@ -234,6 +282,7 @@ grace after expiry.
 | `commit` | controller | stream, `seq`, policy hash, delay in milliseconds | Make the staged release active |
 | `abort` | controller | stream, `seq`, policy hash | Drop the staged release |
 | `state` | PEP | a state record | The heartbeat, and the report of every transition |
+| `epoch` | controller | an epoch id | The controller's name for the present, echoed in state records (H9) |
 | `revoke` | controller | a sealed `trust.revocation` and its body | Applied when verified, with no commit |
 | `rotate` | controller | a sealed `trust.rotation` and its body | Applied when verified, with no commit |
 
@@ -252,7 +301,7 @@ The default poll interval is 30 seconds.
 
 | Request | Answer |
 |---|---|
-| `GET /dist/v1/offers/<pep id>` | A JSON object with `offers` (a list of offer objects), `commit` and `abort` (lists of `{stream, seq, policy}`) |
+| `GET /dist/v1/offers/<pep id>` | A JSON object with `epoch`, `offers` (a list of offer objects), `commit` and `abort` (lists of `{stream, seq, policy}`) |
 | `GET /dist/v1/blob/<sha256 hex>` | The bytes whose SHA-256 that is. A sealed envelope is asked for by its envelope id and a body by `body_sha256` |
 | `POST /dist/v1/state` | Body is one state record. The answer is 204 |
 
@@ -268,7 +317,7 @@ Used on ESP-NOW and on the cFS software bus, where one sender reaches every PEP 
 little endian. A frame is at most 250 bytes on ESP-NOW (`ESP_NOW_MAX_DATA_LEN`).
 
 ```
-all frames   0  1  type      1 offer, 2 chunk, 3 state, 4 commit, 5 abort
+all frames   0  1  type      1 offer, 2 chunk, 3 state, 4 commit, 5 abort, 6 epoch
              1  1  version   1
              2  2  transfer  chosen by the sender, one per sealed envelope
 
@@ -284,6 +333,7 @@ commit       4  16 first 16 bytes of SHA-256 of the stream name
              44 2  delay in milliseconds
 abort        as commit, without the delay
 state        4  n  one state record
+epoch        4  8  the epoch id
 ```
 
 **B6.** A PEP assembles the chunks of a transfer into the lengths the offer gave. A chunk outside those
@@ -292,6 +342,20 @@ transfer with `dist:frame-invalid`. Chunks may arrive in any order and may repea
 
 **B7.** A PEP holds at most one transfer per part at a time and a transfer that is not complete after 5
 seconds is dropped silently, so lost frames cost a retry and never a partial stage.
+
+**B9.** A PEP never reads more than it was promised. It reads at most 2,440 bytes for a sealed envelope
+(the largest S2 allows) and at most the signed `body_size` for a body, and it reads the body only after
+the envelope verified through V8. An `offers` answer over 64 kilobytes is dropped. This is the bound
+against endless data (TUF section 1.5.2).
+
+**B10.** A relay passes frames between a medium and a PEP that has no radio of its own, such as an
+ESP32-C6 in front of a board on a serial line. A relay holds no key, verifies nothing, and is not a PEP.
+It is part of the untrusted transport, so what it drops or changes is caught by the PEP behind it. The
+frame binding runs unchanged on the link behind a relay, with that link's own frame limit.
+
+**B11.** A link may be declared ordered. On an ordered link the sender sends the chunks of a part in
+offset order without repeats, and the PEP drops a transfer whose chunk is out of order with
+`dist:frame-invalid`. This lets a PEP that cannot hold a sealed envelope check it as it arrives.
 
 **B8.** A `commit` with a delay makes the release active at the PEP's own monotonic time plus the delay, so
 a group flips together without a shared clock, as the mesh does today with `FLIP_DELAY`.
@@ -315,7 +379,7 @@ cause reported and nothing is staged.
 | Rule | Check | Cause when it fails |
 |---|---|---|
 | V2 | The sealed container reads (S2) and the envelope and body fit the PEP's bounds (E6) | `dist:bad-format`, `dist:too-large` |
-| V3 | The signatures (S3 to S6) | `dist:unknown-key`, `sig:invalid`, `sig:revoked-key` |
+| V3 | The signatures (S3 to S5) | `dist:unknown-key`, `sig:invalid`, `sig:revoked-key` |
 | V4 | The envelope reads (E1, E2, E5, E8) | `document:not-canonical`, `dist:bad-format` |
 | V5 | `targets` holds this PEP's kind, `artifact` is one this kind uses or a trust kind, and `stream` is this PEP's stream or `@trust` for a trust kind | `dist:target-mismatch` |
 | V6 | Time (T3, T4, and X4 for a trust kind) | `dist:not-yet-valid`, `dist:expired` |
@@ -419,8 +483,10 @@ by raising a floor past it.
 **R7.** A list with more entries than that is refused with `dist:too-large`.
 
 **R1.** A `trust.revocation` travels on the stream `@trust`. Its `seq` is the trust sequence. A PEP accepts
-one only when its `seq` is above the PEP's trust sequence. The same envelope again changes nothing. Any
-other is `dist:trust-replay`, so an older list cannot replace a newer one.
+one only when its `seq` is exactly the PEP's trust sequence plus one, as TUF takes root version N+1 and
+no other (TUF 5.3.5). The same envelope again changes nothing. Any other is `dist:trust-replay`, so an
+older list cannot replace a newer one and no trust statement is skipped. A controller offers the trust
+statements a PEP lacks in order.
 
 **R2.** After a revocation is applied, an envelope signed only by keys in `keys` is refused with
 `sig:revoked-key`, and an envelope whose id is in `envelopes` or whose policy hash is in `policies` is
@@ -451,8 +517,10 @@ refused for the life of the trust store.
 **O1.** A `trust.rotation` travels on `@trust` and its `seq` follows R1. Revocations and rotations share
 the one trust sequence, so their order is total.
 
-**O2.** A rotation is accepted only when its sealed envelope carries a counting signature by a key the
-store trusts now and a valid signature by the key in `add`. A rotation signed only by keys the store does
+**O2.** A rotation is accepted only when its sealed envelope is signed under the store as it is now and
+also under the store as the rotation would leave it, which is TUF's rule for a new root (TUF 5.3.4). With
+a threshold of 1 that means a counting signature by a key the store trusts now and a valid signature by
+the key in `add`. A rotation signed only by keys the store does
 not know is `dist:unknown-key`. One that lacks the new key's signature is `dist:rotation-invalid`.
 
 **O3.** On acceptance the PEP adds the new key. When `retire` names a trusted key, that key is retired.
@@ -566,17 +634,22 @@ offset  size  field
 8       16    PEP id, the first 16 bytes of SHA-256 of the instance public key
 24      8     counter
 32      8     the PEP's time, Unix seconds
-40      16    first 16 bytes of SHA-256 of the stream name
-56      16    first 16 bytes of the active policy hash, zeros for none
-72      8     active seq
-80      8     floor
-88      16    first 16 bytes of the staged policy hash, zeros for none
-104     8     staged seq
-112     8     trust sequence
-120     2     m, the Facet body length, 0 to 1024
-122     m     the Facet body
-122+m   64    Ed25519 signature by the instance key over the 23 bytes
-              "prismpath.dist-state/1" and one zero byte, followed by bytes 0 to 122+m
+40      8     epoch, the latest epoch id the PEP has seen from the controller, 0 for none (H9)
+48      16    first 16 bytes of SHA-256 of the stream name
+64      16    first 16 bytes of the active policy hash, zeros for none
+80      16    first 16 bytes of the active release id, zeros for none
+96      8     active seq
+104     8     floor
+112     16    first 16 bytes of the staged release id, zeros for none
+128     8     staged seq
+136     8     trust sequence
+144     2     m, the Facet body length, 0 to 1024
+146     m     the Facet body
+146+m   2     x, the extension length, 0 to 512
+148+m   x     the extensions (H10)
+148+m+x 64    Ed25519 signature by the instance key over the DSSE pre-authentication encoding
+              (S1) of bytes 0 to 148+m+x with the payload type
+              application/vnd.prismpath.dist-state
 ```
 
 **H2.** The record is signed by the instance key and by no other. An authority key never signs one.
@@ -603,10 +676,22 @@ A PEP on the wrong policy is found by comparing hashes, never by a decode that h
 | Step | Check | Finding |
 |---|---|---|
 | 1 | The record reads, the PEP id is enrolled and the signature verifies under the enrolled instance key | `fleet:state-invalid` |
-| 2 | `counter` is above the last one accepted from this PEP | `fleet:state-replay` |
-| 3 | The active policy hash prefix and `seq` are the ones the controller expects for this PEP | `fleet:policy-mismatch` |
+| 2 | `counter` is above the last one accepted from this PEP, and `epoch` is the controller's current epoch id or the one before | `fleet:state-replay` |
+| 3 | The active policy hash prefix, release id prefix and `seq` are the ones the controller expects for this PEP | `fleet:policy-mismatch` |
 | 4 | When the body is not empty, its preamble's policy hash and layout hash equal the ones the controller computes from the expected policy | `fleet:policy-mismatch` |
 | 5 | The body decodes under the expected policy | `wire:codebook-mismatch` |
+
+**H9.** A controller names the present with an epoch id, a number that rises at least once per heartbeat
+interval. It rides in the `offers` answer as `epoch` and in a frame of type 6 (bytes 4 to 11). A PEP puts
+the highest epoch id it has seen in every record. This is the epoch id of RFC 9334 section 10.3. It tells
+the controller that a record was made after that epoch began, which the PEP's own clock cannot prove. An
+epoch id is not signed, changes nothing but that field, and a PEP never lowers the one it holds.
+
+**H10.** The extensions are a run of entries, each a type byte, a two byte length and that many bytes.
+The instance key's signature covers them. Type 1 is an Entity Attestation Token (RFC 9711) whose
+`eat_nonce` is the SHA-256 of bytes 0 to 146+m of the record, so hardware evidence is bound to one state
+record. Type 2 is reserved for the record of a member a PEP speaks for. A PEP in this version sends none.
+A controller skips a type it does not know and never treats an extension as a signature on the record.
 
 **H7.** A PEP with no accepted record for three intervals is filed as `fleet:silent`.
 
@@ -650,16 +735,21 @@ The hatches are `PPT_NET_ALLOW_UNVERIFIED=1` in the XDP loader, `--allow-unsigne
 an edge verify, and a verify of evidence or of in-toto envelopes without both keys pinned. In a production
 build a hatch is refused with `dist:hatch-refused` and the check runs.
 
-**D2.** Whether a build is a dev build is a fact of the built artifact and never of its environment or its
-configuration. In Python it is the presence of the module `prismpath._dev_build`, which is in the
-repository and is left out of the wheel and of the product export. In C it is the compile time macro
-`PPT_DEV_BUILD`, set only by the `dev` make target. In Rust it is the cargo feature `dev-hatches`, which is
-off by default. The `mesh` and `cfs` targets have no hatch in any build.
+**D2.** Whether a build is a dev build is a fact of where the code runs from and never of its environment
+or its configuration, and no build of any tracked tree is a dev build. In Python a dev build is a source
+checkout that holds the marker file `.prismpath-dev-build` beside its `pyproject.toml`, one directory
+above the `prismpath` package. The marker is outside the package, so no wheel and no sdist can carry it.
+It is not tracked, it is in `.gitignore`, and only the command `python tools/dev_build.py on` writes it.
+An installed package has no `pyproject.toml` beside it and is never a dev build. In C it is the compile
+time macro `PPT_DEV_BUILD`, set only by the `dev` make target. In Rust it is the cargo feature
+`dev-hatches`, which is off by default. The `mesh` and `cfs` targets have no hatch in any build.
 
 **D3.** A dev build says so. Every audit event a hatch produces carries `dev_build` true, and a state
 record sets bit 6 of `status`. A controller files a production PEP that reports the bit.
 
-**D4.** The release check fails when the built wheel or the export tree holds `prismpath/_dev_build.py`.
+**D4.** The release check fails when the marker is tracked, when `.gitignore` does not list it, or when
+a wheel built straight from the checkout, the sdist or the export tree holds it. It builds the wheel with
+the marker present in the checkout to show that.
 
 ## 17. The older signed forms
 
@@ -698,7 +788,7 @@ written. If another change lands first the numbers move up together and the name
 | 141 | `dist:expired` | authority | The PEP's time is at or past `expires` |
 | 142 | `dist:revoked` | authority | The envelope id or the policy hash is on the revocation list, or the active release's seq is below a raised floor |
 | 143 | `dist:widening-unsigned` | authority | A release that is larger, or cannot be shown not to be, without a covering widening statement |
-| 144 | `dist:trust-replay` | authority | A revocation or rotation whose `seq` is not above the trust sequence |
+| 144 | `dist:trust-replay` | authority | A revocation or rotation whose `seq` is not the trust sequence plus one |
 | 145 | `dist:rotation-invalid` | authority | A rotation without the new key's signature, or that names a key it may not |
 | 146 | `dist:legacy-refused` | authority | An older signed form where a distribution envelope is required |
 | 147 | `dist:hatch-refused` | authority | An escape hatch asked for in a production build |
@@ -728,7 +818,8 @@ binding and the `agent`, `gateway` and `xdp` targets are Python only.
 
 **I1.** One corpus, `prismpath/portable/conformance/distribution.json`, holds the cases of section 20 as
 bytes in and results out. It is generated by the Python reference with fixed test keys and replayed by
-Python, Rust and C. Each case names the implementations that must pass it.
+Python, Rust and C. Each case names the implementations that must pass it and the target kind of the PEP
+it runs on. A case marked `C` runs on `mesh` or `cfs`, the only kinds the C core has.
 
 ## 20. Conformance cases
 
@@ -745,10 +836,10 @@ reports exactly the cause given, or none, and its state after is the one given.
 | 6 | `expires` not above `not_before` on a policy kind | `dist:bad-format` | E5 | P R C |
 | 7 | An envelope of 2,049 bytes, and a body over the PEP's bound | `dist:bad-format`, `dist:too-large` | E6, V2 | P R C |
 | 8 | A sealed container with a wrong magic, a wrong version, a short tail, unsorted entries, a repeated key id, zero entries and five entries | `dist:bad-format` each | S2, V2 | P R C |
-| 9 | A signature made without the domain prefix | `sig:invalid` | S1, S4 | P R C |
-| 10 | Signed only by a key the store does not hold | `dist:unknown-key` | S3, V3 | P R C |
-| 11 | One good entry by a trusted key and one entry by an unknown key | accepted | S3, S6 | P R C |
-| 12 | One good entry by a trusted key and one failing entry by another trusted key | `sig:invalid` | S4 | P R C |
+| 9 | A signature made over the envelope bytes alone, and one made with another payload type | `sig:invalid` each | S1, S5 | P R C |
+| 10 | Signed only by a key the store does not hold | `dist:unknown-key` | S3, S5, V3 | P R C |
+| 11 | One good entry by a trusted key and one entry by an unknown key | accepted | S3, S4 | P R C |
+| 12 | One good entry by a trusted key and one failing entry by another trusted key | accepted, the failing entry is skipped | S3, S4 | P R C |
 | 13 | Signed only by a revoked key, and only by a retired key | `sig:revoked-key` each | S5 | P R C |
 | 14 | A tampered envelope byte under a signature that was good, read by the strict scanner | `sig:invalid`, and the scanner is never reached | E9, V1, V3 | C |
 | 15 | An envelope whose body travels unchanged, and the body's hash is the certified image hash | accepted | E4 | P |
@@ -802,7 +893,7 @@ reports exactly the cause given, or none, and its state after is the one given.
 | 63 | A first install with no statement, and with one | `dist:widening-unsigned`, committed | W2, W3 | P R C |
 | 64 | A statement is present and a deciding PEP computes larger while `widens` is false | `dist:widening-unsigned` | W6 | P |
 | 65 | A controller is given a release for `mesh` that it computes as larger with `widens` false | it refuses to offer it | W7 | P |
-| 66 | A revocation with `seq` above the trust sequence, the same one again, and an older one | applied, unchanged, `dist:trust-replay` | R1 | P R C |
+| 66 | A revocation with `seq` one above the trust sequence, the same one again, an older one, and one that skips a number | applied, unchanged, `dist:trust-replay`, `dist:trust-replay` | R1 | P R C |
 | 67 | After a key is revoked, a pack signed by it | `sig:revoked-key` | R2 | P R C |
 | 68 | A revocation raises a stream's floor to 9, then a release at 8 | `dist:seq-replay` | R4, Q4 | P R C |
 | 69 | A revocation lists the active envelope, the active policy hash, the only signing key, and a floor above the active `seq` | `no-policy`, event `lapsed`, `dist:revoked`, each time | R5 | P R C |
@@ -835,7 +926,7 @@ reports exactly the cause given, or none, and its state after is the one given.
 | 96 | A commit window ends with one member silent | `partial`, open until that member reports | F3, F4 | P |
 | 97 | Each hatch of D1 in a production build | `dist:hatch-refused` and the check runs | D1, D2 | P R C |
 | 98 | Each hatch in a dev build | it works, the audit event says `dev_build`, and the state record carries the bit | D2, D3 | P |
-| 99 | The built wheel and the export tree | neither holds `prismpath/_dev_build.py` | D4 | P |
+| 99 | With the marker written in the checkout, a wheel built straight from it, the sdist and the export tree, and `git ls-files` | none holds the marker, and it is ignored and not tracked | D2, D4 | P |
 | 100 | A writer at 0.3.0 asked for each older form | it writes a distribution envelope | L1 | P |
 | 101 | A PEP that committed an envelope is given a valid `ppt-pack/1` pack with a higher version | `dist:legacy-refused` | L2 | P R |
 | 102 | A PEP with no envelope yet is given each older form | accepted with a `legacy_form` audit event | L3 | P |
@@ -850,3 +941,16 @@ reports exactly the cause given, or none, and its state after is the one given.
 | 111 | A `host`, an `agent`, a `gateway` and an `xdp` PEP are each configured with HOLD | each refuses to start | X6, X10 | P R |
 | 112 | A held and a not held PEP are sent every message type in turn | the setting is what it was built with | X10 | P C |
 | 113 | A controller receives records with bit 5 from a `cfs` PEP, then a record without it, and a record with bit 5 from a `host` PEP | `dist:held` open then cleared, and `fleet:state-invalid` | H8 | P |
+| 114 | Two envelopes at one `seq` and policy hash with different `release`, staged together | `dist:incomplete` | E7, E10, V10 | P R C |
+| 115 | The signer's release id for a release of three artifacts, and for the same three with one body changed | the first is the SHA-256 E10 gives, and the second differs | E10 | P R |
+| 116 | A sealed envelope is written as a DSSE JSON envelope and read back, and a stock DSSE check of the JSON form | the same sealed bytes, and the signature verifies | S7, S1 | P |
+| 117 | Entries are added to, removed from and reordered in the signature block of a signed and of an unsigned envelope | the envelope id is unchanged, the signed one needs its counting entry, and the unsigned one stays refused | S6 | P R C |
+| 118 | A key held in a role this version does not know signs a release | `dist:unknown-key`, and the key is still in the store | K4, S3 | P R C |
+| 119 | A PEP with no clock that lost a month without power is sent a current envelope, and a PEP with a clock is sent the same one a month early | accepted and its time moves to `not_before`, `dist:not-yet-valid` | T2, T3, V13 | P C |
+| 120 | A body longer than `body_size`, a sealed envelope of 2,441 bytes, an `offers` answer of 65 kilobytes, and a body offered for an envelope that fails its signature | no more than the bound is read, and the body is never read in the last | B9 | P C |
+| 121 | A release sent through a relay that drops, repeats and corrupts frames, then passes them | nothing is staged until the frames are whole, then staged, and the relay holds no key | B10 | P C |
+| 122 | On an ordered link, chunks in order, and a chunk out of order | staged with the envelope never held whole, `dist:frame-invalid` | B11 | C |
+| 123 | A rotation with `seq` two above the trust sequence, then the one it skipped, then the first again | `dist:trust-replay`, applied, applied | O1, R1 | P R C |
+| 124 | A record with the controller's current epoch id, the one before, and one three epochs old, and a PEP sent a lower epoch id than it holds | accepted, accepted, `fleet:state-replay`, and the PEP keeps the higher | H9, H6 | P |
+| 125 | A record with a type 1 extension whose `eat_nonce` matches, one with an unknown type, and one whose extension was changed after signing | read, skipped, `fleet:state-invalid` | H10 | P |
+| 126 | A `host` release whose `policy.ppt` declares `packing`, with no `policy.spiral`, with a wrong one and with the right one | `spiral:sidecar-missing`, `spiral:sidecar-hash-mismatch`, committed | V11, C2 | P R |
