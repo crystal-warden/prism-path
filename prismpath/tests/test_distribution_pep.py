@@ -318,8 +318,8 @@ def test_case_103_the_forms_that_are_not_distributed_verify_as_before(point, tmp
 
 def test_case_126_a_declared_spiral_sidecar_is_needed_and_must_be_the_declared_one(point):
     """case_126: V11, C2. With no policy.spiral the commit is spiral:sidecar-missing, with a wrong one
-    spiral:sidecar-hash-mismatch, and with the right one it commits. A packing without its sidecar hash is
-    refused when it is staged."""
+    spiral:sidecar-hash-mismatch, and with the right one it commits. A packing whose profile is not the
+    spiral is refused when it is staged, and one without its sidecar hash is not of its form (case 127)."""
     sidecar, wrong = b"spiral sidecar bytes", b"another sidecar"
     meta = {**_dist.GEN.image_meta(OLD), "packing": {"profile": "spiral", "sidecar_sha256": H(sidecar)}}
     for seq, spiral, cause in ((1, None, "spiral:sidecar-missing"), (2, wrong, "spiral:sidecar-hash-mismatch"),
@@ -333,8 +333,8 @@ def test_case_126_a_declared_spiral_sidecar_is_needed_and_must_be_the_declared_o
         record = _read(point, point.pep.commit(STREAM, seq, H(OLD)))
         assert record.cause == cause, seq
     assert point.pep.active.seq == 3 and point.pep.active.bodies["policy.spiral"] == sidecar
-    bare = {**_dist.GEN.image_meta(NEW), "packing": {"profile": "spiral"}}
-    assert _read(point, point.pep.stage(seal("policy.ppt", NEW, seq=4, meta=bare), NEW)).cause == "packing:unknown-profile"
+    other = {**_dist.GEN.image_meta(NEW), "packing": {"profile": "zigzag", "sidecar_sha256": H(sidecar)}}
+    assert _read(point, point.pep.stage(seal("policy.ppt", NEW, seq=4, meta=other), NEW)).cause == "packing:unknown-profile"
 
 
 def test_case_111_a_host_pep_refuses_to_start_with_hold(tmp_path):

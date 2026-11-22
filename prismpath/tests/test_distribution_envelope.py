@@ -112,14 +112,14 @@ def test_case_007_an_envelope_over_2048_bytes_is_bad_format():
     """case_007: E6, V2. The writer and the container both refuse 2,049 bytes. The body bound half is the
     verifier's (test_distribution_verify)."""
     doc = GEN.envelope_doc(BODY)
-    doc["meta"] = {**doc["meta"], "overlay_of": ""}
-    doc["meta"]["overlay_of"] = "o" * (env.MAX_ENVELOPE + 1 - len(canon.canon2_bytes(doc)))
+    doc["meta"] = {**doc["meta"], "fields": {**doc["meta"]["fields"], "pad": ""}}
+    doc["meta"]["fields"]["pad"] = "o" * (env.MAX_ENVELOPE + 1 - len(canon.canon2_bytes(doc)))
     long = canon.canon2_bytes(doc)
     assert len(long) == 2049
     _refused("dist:bad-format", env.read, long)
     _refused("dist:bad-format", env.seal, long, [GEN.test_key("A")])
     _refused("dist:bad-format", env.unseal, env.seal_entries(long, [("00" * 32, b"\0" * 64)]))
-    doc["meta"]["overlay_of"] = doc["meta"]["overlay_of"][1:]
+    doc["meta"]["fields"]["pad"] = doc["meta"]["fields"]["pad"][1:]
     assert len(env.read(canon.canon2_bytes(doc)).raw) == 2048
 
 

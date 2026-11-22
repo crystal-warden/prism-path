@@ -107,10 +107,46 @@ ROLES = frozenset({"authority"})                    # K4: the key roles this ver
 AUTHORITY = "authority"
 
 
+# ------------------------------------------------------------------ the forms of the meta members (E11)
+
+COUNT_MEMBERS = frozenset({"atoms", "nodes", "edges", "prog_words", "max_steps", "max_stack"})
+
+
+def _string(low: int, high: int) -> Callable[[Any], bool]:
+    return lambda value: isinstance(value, str) and low <= len(value) <= high
+
+
+def _fields(value: Any) -> bool:
+    return isinstance(value, dict) and all(isinstance(kind, str) for kind in value.values())
+
+
+def _counts(value: Any) -> bool:
+    return (isinstance(value, dict) and set(value) == COUNT_MEMBERS
+            and all(is_int(count, 0, 65535) for count in value.values()))
+
+
+def _packing(value: Any) -> bool:
+    return (isinstance(value, dict) and set(value) == {"profile", "sidecar_sha256"}
+            and _string(1, 32)(value["profile"]) and is_hex64(value["sidecar_sha256"]))
+
+
+FORMS: Dict[str, Callable[[Any], bool]] = {
+    "fields": _fields,
+    "counts": _counts,
+    "wcet_cycles": lambda value: is_int(value, 0, MAX_SEQ),
+    "qualification": _string(1, 128),
+    "packing": _packing,
+    "flow_sha256": lambda value: is_hex64(value),
+    "overlay_of": _string(1, 128),
+    "names_sha256": lambda value: is_hex64(value),
+    "compiler": lambda value: is_int(value, 1, MAX_SEQ),
+}
+
+
 @dataclass(frozen=True)
 class Artifact:
-    """An artifact kind: its `meta` members and its own check (V11), None when no target in `TARGETS` uses
-    it yet."""
+    """An artifact kind: its `meta` members, each of the form `FORMS` gives it (E11), and its own check (V11),
+    None when no target in `TARGETS` uses it yet."""
     meta_required: FrozenSet[str] = frozenset()
     meta_optional: FrozenSet[str] = frozenset()
     check: Optional[Callable[[Any, bytes, Any], Optional[str]]] = None
@@ -135,10 +171,8 @@ def check_policy_ppt(envelope, body: bytes, pep) -> Optional[str]:
     cause = _first_cause(policy_pack.check_counts(meta, body))
     if cause:
         return cause
-    packing = meta.get("packing")
-    if packing is not None and not (isinstance(packing, dict) and set(packing) == {"profile", "sidecar_sha256"}
-                                    and packing["profile"] == "spiral" and is_hex64(packing["sidecar_sha256"])):
-        return "packing:unknown-profile"              # the one profile defined is a spiral with its sidecar's hash
+    if "packing" in meta and meta["packing"]["profile"] != "spiral":     # the form is E11's, read at V4
+        return "packing:unknown-profile"
     if pep.qualification is None:
         return "envelope:missing"
     ok, reasons = policy_pack.check_envelope({"envelope_id": meta["qualification"], "fields": meta["fields"]},
@@ -272,4 +306,6 @@ def register_target(name: str, target: Target) -> None:
 for _name, _target in TARGETS.items():
     _check_row(_name, _target)
 assert TRUST_ARTIFACTS <= set(ARTIFACTS) and ON_TRUST_STREAM <= TRUST_ARTIFACTS
+assert all(member in FORMS for artifact in ARTIFACTS.values()
+           for member in artifact.meta_required | artifact.meta_optional)
 assert all(artifact.role in ROLES for artifact in ARTIFACTS.values())

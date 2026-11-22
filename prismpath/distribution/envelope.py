@@ -96,19 +96,14 @@ class Envelope:
 
 
 def _check_meta(artifact: str, meta: Any) -> None:
-    """E1 meta: an object of the members section 3 lists for the artifact, strings and integers and one level
-    of object."""
+    """E1, E11: an object of exactly the members section 3 lists for the artifact, each of the form the kind
+    table gives it, so no check that reads a signed member has to guess its type."""
     _require(isinstance(meta, dict), "meta is not an object")
     required, optional = kinds.ARTIFACTS[artifact].meta_required, kinds.ARTIFACTS[artifact].meta_optional
     names = set(meta)
     _require(required <= names and names <= required | optional, f"meta members {sorted(names)} for {artifact}")
-
-    def scalar(value: Any) -> bool:
-        return isinstance(value, str) or is_int(value, -MAX_SEQ, MAX_SEQ)
-
-    for value in meta.values():
-        _require(scalar(value) or (isinstance(value, dict) and all(scalar(inner) for inner in value.values())),
-                 "a meta value is not a string, an integer or one level of object")
+    for name, value in meta.items():
+        _require(kinds.FORMS[name](value), f"meta {name} is not of its form")
 
 
 def read(envelope_bytes: bytes) -> Envelope:

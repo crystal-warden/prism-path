@@ -195,8 +195,8 @@ def build_cases(kind: str, spec: Dict[int, dict]) -> List[dict]:
     add(6, "expires_not_above_not_before", "dist:bad-format",
         sealed_by(raw(kind_doc(body, expires=NOT_BEFORE)), "A"))
     long_doc = kind_doc(body)
-    long_doc["meta"] = {**long_doc["meta"], "overlay_of": ""}
-    long_doc["meta"]["overlay_of"] = "o" * (env.MAX_ENVELOPE + 1 - len(raw(long_doc)))
+    long_doc["meta"] = {**long_doc["meta"], "fields": {**long_doc["meta"]["fields"], "pad": ""}}
+    long_doc["meta"]["fields"]["pad"] = "o" * (env.MAX_ENVELOPE + 1 - len(raw(long_doc)))
     long = raw(long_doc)
     assert len(long) == env.MAX_ENVELOPE + 1
     add(7, "envelope_2049_bytes", "dist:bad-format",
@@ -270,6 +270,13 @@ def build_cases(kind: str, spec: Dict[int, dict]) -> List[dict]:
         pep=view(qualification={**QUALIFICATION, "caps": {"atoms": 0}}))
     add(44, "wrong_wcet", "manifest:wcet-mismatch",
         sealed_by(raw(kind_doc(body, meta={**meta, "wcet_cycles": meta["wcet_cycles"] + 1})), "A"))
+
+    # E11, V4: every meta member of its form, read before any check uses it
+    for name, changes in (("fields_a_string", {"fields": "x"}), ("counts_an_integer", {"counts": 7}),
+                          ("counts_lacking_a_member", {"counts": {key: value for key, value in meta["counts"].items()
+                                                                  if key != "max_stack"}}),
+                          ("packing_without_its_sidecar", {"packing": {"profile": "spiral"}})):
+        add(127, name, "dist:bad-format", sealed_by(raw(kind_doc(body, meta={**meta, **changes})), "A"))
 
     # E7, E10, V10: one release id per release
     other_release = env.release_id([("policy.ppt", canon.sha256_hex(body)), ("policy.spiral", "ab" * 32)])
