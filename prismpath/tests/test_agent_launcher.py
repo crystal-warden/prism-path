@@ -172,8 +172,9 @@ def _launch(world, stub_port, *args, **kwargs):
     log = root / "egress.log"
     kwargs.setdefault("egress_log", str(log))
     code = launcher.launch([PYTHON, "agent.py", *args], str(workspace), stage_base=str(stages),
-                           resolver=lambda name: [PUBLIC],
-                           connect=lambda address, port, timeout: socket.create_connection(("127.0.0.1", stub_port), timeout=timeout),
+                           egress_settings=launcher.EgressSettings(
+                               resolver=lambda name: [PUBLIC],
+                               connect=lambda address, port, timeout: socket.create_connection(("127.0.0.1", stub_port), timeout=timeout)),
                            **kwargs)
     return code, json.loads((workspace / "out.json").read_text()), log
 
@@ -473,7 +474,7 @@ def _model_run(world, good_port, other_port, **kwargs):
     (workspace / "model.py").write_text(MODEL_STAND_IN)
     log = root / "egress.log"
     code = launcher.launch([PYTHON, "model.py", str(good_port), str(other_port)], str(workspace), stage_base=str(stages),
-                           egress_log=str(log), **kwargs)
+                           egress_log=str(log), egress_settings=launcher.EgressSettings(**kwargs))
     return code, json.loads((workspace / "out.json").read_text()), log
 
 
@@ -516,7 +517,8 @@ def test_a_bad_local_model_target_or_port_clash_starts_nothing(world):
     for target in ("https://localhost:8888", "http://localhost", "http://u:p@localhost:8888", "http://localhost:8888/v1",
                    "http://localhost:3128"):
         with pytest.raises(launcher.LaunchError):
-            launcher.launch([PYTHON, "-c", "pass"], str(workspace), stage_base=str(stages), local_model=target)
+            launcher.launch([PYTHON, "-c", "pass"], str(workspace), stage_base=str(stages),
+                            egress_settings=launcher.EgressSettings(local_model=target))
     assert list(stages.iterdir()) == []
 
 

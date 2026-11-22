@@ -168,15 +168,37 @@ EGRESS_LOG_NAME = "egress.log"
 
 
 # ------------------------------------------------------------------------------------------------- launch
+@dataclass(frozen=True)
+class EgressSettings:
+    """How the agent's network reaches out. `allowed_hosts` are the extra hosts the policy may allow, `local_model`
+    is `http://HOST:PORT` of the one local model server with a fixed route, and `decider`, `resolver` and `connect`
+    are for tests and embedders (a `decider` means no recorded policy, so a plain decider and no policy gate)."""
+    allowed_hosts: Sequence[str] = ()
+    local_model: Optional[str] = None
+    decider: Optional[Callable] = None
+    resolver: Callable = egress.system_resolver
+    connect: Callable = egress.system_connect
+
+
+@dataclass(frozen=True)
+class Confinement:
+    """What the agent's sandbox holds beside the workspace. `max_processes` is its process limit, `extra_ro` are host
+    paths bound read only, and `env` are (name, value) pairs set last, so they win."""
+    max_processes: int = MAX_PROCESSES
+    extra_ro: Sequence[str] = ()
+    env: Sequence[Tuple[str, str]] = ()
+
+
 def launch(command: Sequence[str], workspace: str, credential: Optional[str] = None,
-           egress_log: Optional[str] = None, stage_base: str = STAGE_BASE, max_processes: int = MAX_PROCESSES,
-           decider: Optional[Callable] = None, home: Optional[str] = None, allowed_hosts: Sequence[str] = (),
-           session: Optional[str] = None, resolver: Callable = egress.system_resolver,
-           connect: Callable = egress.system_connect, hook: Optional[str] = None,
-           env: Sequence[Tuple[str, str]] = (), local_model: Optional[str] = None,
-           extra_ro: Sequence[str] = (), on_start: Optional[Callable[[int], None]] = None) -> int:
+           egress_log: Optional[str] = None, stage_base: str = STAGE_BASE, home: Optional[str] = None,
+           session: Optional[str] = None, hook: Optional[str] = None,
+           egress_settings: EgressSettings = EgressSettings(), confinement: Confinement = Confinement(),
+           on_start: Optional[Callable[[int], None]] = None) -> int:
     """Run `command` as the agent and return its exit status. `on_start(pid)` is for tests. Raises
     LaunchError, before anything runs, when the run cannot start."""
+    local_model, decider, allowed_hosts = egress_settings.local_model, egress_settings.decider, egress_settings.allowed_hosts
+    resolver, connect = egress_settings.resolver, egress_settings.connect
+    max_processes, extra_ro, env = confinement.max_processes, confinement.extra_ro, confinement.env
     require_linux_tools()
     if not command:
         raise LaunchError("no program given: prismpath agent run -- PROGRAM [ARGS]")
@@ -237,8 +259,9 @@ def launch(command: Sequence[str], workspace: str, credential: Optional[str] = N
         inner = sandbox_exec.limited(sandbox_exec.with_relay([inside, *command[1:]], model_target[1] if model_target else 0), profile.max_processes)
 
         def outer(command_inside, extra_binds=()):
-            return sandbox_exec.bwrap_argv(root, profile, command_inside, extra_ro_binds=[*binds, *extra_binds], mount=str(root),
-                                           proxy_socket=str(staged.socket), extra_args=extra_args, env=environment)
+            return sandbox_exec.bwrap_argv(root, profile, command_inside,
+                                           sandbox_exec.Mounts(extra_ro_binds=[*binds, *extra_binds], mount=str(root), extra_args=extra_args),
+                                           proxy_socket=str(staged.socket), env=environment)
         if hook is None:    # the keys, the policy and the runs stay here; the sandbox only gets the socket
             nested = probe_nested(outer, root)
             hook_decider = decider_module.Decider(staged.decider_socket, env={**os.environ, "CLAUDE_PROJECT_DIR": str(root)},

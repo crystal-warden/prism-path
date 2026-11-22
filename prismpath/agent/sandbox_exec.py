@@ -79,19 +79,27 @@ def available() -> bool:
     return os.access(BWRAP, os.X_OK)
 
 
-def bwrap_argv(workspace: Path, profile: Profile, command: Sequence[str],
-               extra_ro_binds: Sequence[Tuple[str, str]] = (), mount: str = MOUNT, cwd: str = "",
-               proxy_socket: str = "", extra_args: Sequence[str] = (),
-               env: Sequence[Tuple[str, str]] = (), control_binds: Sequence[str] = ()) -> List[str]:
-    """The full bwrap command line. `control_binds` are host paths below the workspace (its control paths,
-    controls.py) bound read only over the writable workspace, at the same place below `mount`. `extra_ro_binds` are (source, destination) pairs bound read only after
-    the workspace, so they sit on top of it. The workspace is mounted at `mount` and the command starts in
+@dataclass(frozen=True)
+class Mounts:
+    """What the sandbox mounts beside the profile's own read only paths. `extra_ro_binds` are (source, destination)
+    pairs bound read only after the workspace, so they sit on top of it. The workspace is mounted at `mount`.
+    `control_binds` are host paths below the workspace (its control paths, controls.py) bound read only over the
+    writable workspace, at the same place below `mount`. `extra_args` are bwrap arguments placed after the workspace
+    and proxy mounts and before `extra_ro_binds` (the launcher's private home and its staged files)."""
+    extra_ro_binds: Sequence[Tuple[str, str]] = ()
+    mount: str = MOUNT
+    control_binds: Sequence[str] = ()
+    extra_args: Sequence[str] = ()
+
+
+def bwrap_argv(workspace: Path, profile: Profile, command: Sequence[str], mounts: Mounts = Mounts(),
+               cwd: str = "", proxy_socket: str = "", env: Sequence[Tuple[str, str]] = ()) -> List[str]:
+    """The full bwrap command line, with the mounts of `mounts`. The command starts in
     `cwd` (a path below the workspace, relative, or empty for its root). A profile whose `net` is a proxy state
     needs `proxy_socket`, the host path of the proxy's unix socket, which is bound in; the sandbox keeps its
     own network namespace with only `lo`, and `--share-net` is never added for these states. The caller
-    starts the relay (`with_relay`). `env` is (name, value) pairs set after the fixed ones, so they win, and
-    `extra_args` are bwrap arguments placed after the workspace and proxy mounts and before `extra_ro_binds`
-    (the launcher's private home and its staged files)."""
+    starts the relay (`with_relay`). `env` is (name, value) pairs set after the fixed ones, so they win."""
+    extra_ro_binds, mount, control_binds, extra_args = mounts.extra_ro_binds, mounts.mount, mounts.control_binds, mounts.extra_args
     workspace = Path(os.path.realpath(workspace))
     if profile.net != "none" and not proxy_socket:
         raise SandboxUnavailable("the profile asks for a proxy and no proxy socket was given, so the command was not run")
@@ -170,7 +178,7 @@ def run_sandboxed(command: Sequence[str], workspace: Path, profile: Optional[Pro
     inner = limited(command, profile.max_processes)
     if profile.net != "none":
         inner = limited(with_relay(command), profile.max_processes)
-    argv = bwrap_argv(workspace, profile, inner, mount=mount, cwd=cwd, proxy_socket=proxy_socket, control_binds=control_binds)
+    argv = bwrap_argv(workspace, profile, inner, Mounts(mount=mount, control_binds=control_binds), cwd=cwd, proxy_socket=proxy_socket)
     return _run(argv, profile.timeout_s, stdin)
 
 

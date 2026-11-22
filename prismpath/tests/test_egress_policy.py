@@ -200,8 +200,8 @@ class _MemoryStore:
         def __init__(self):
             self.entries = []
 
-        def append(self, reading, verdict, decider=None, sandbox_profile=None, hosts_sha256=None):
-            self.entries.append((reading, verdict, sandbox_profile))
+        def append(self, reading, verdict, decider=None, extras=None):
+            self.entries.append((reading, verdict, extras.sandbox_profile if extras else None))
             return len(self.entries) - 1
 
     def open(self, session, image):
