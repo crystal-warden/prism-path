@@ -15,6 +15,12 @@ spec stable.
 - **Every kind takes a trust body up to 16,384 bytes, the largest revocation list allows, beside its own bound for an artifact's body.** The signed `body_size` is held to the bound for its artifact before any body is read.
 - **A mesh node or a cFS app, whose own check does not read `meta`, only checks that it is an object nested at most three levels inside the envelope.** Every other reader checks its members and their forms.
 
+
+### Added: the frame binding of policy distribution for broadcast media (2026-11-22)
+
+- **`prismpath.distribution.frames` writes and reads the six frames of a broadcast medium.** They are the offer, the chunk, the state record, the commit with its delay, the abort and the epoch, each within the link's limit of 250 bytes on ESP-NOW, and anything a reader refuses is `dist:frame-invalid`.
+- **`frames.Assembler` puts a release back together from chunks in any order, repeated or lost.** A chunk outside the offer or with no offer, or a part whose hash is not the offered one, drops the transfer, and a transfer still incomplete after 5 seconds is dropped silently. On a link declared ordered a chunk out of order drops it too.
+- **No body is read before its envelope has passed the verifier through V8.** The body is then read only to the signed size and against the signed hash.
 ### Added: the distribution envelope and verifier in prismpath-hotswap-rs, replaying the shared corpus (2026-11-22)
 
 - **`prismpath_hotswap_rs::dist` reads, writes and verifies the distribution envelope as Python does.** It holds the sealed container, the envelope and release ids, the kind table with each artifact's own check, the trust store and its durable file, and the one verifier with rules V2 to V11 in order.

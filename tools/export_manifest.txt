@@ -250,6 +250,7 @@ prismpath/distribution/adapters/host.py
 prismpath/distribution/adapters/mesh.py
 prismpath/distribution/devbuild.py
 prismpath/distribution/envelope.py
+prismpath/distribution/frames.py
 prismpath/distribution/kinds.py
 prismpath/distribution/pep.py
 prismpath/distribution/state_record.py
@@ -762,6 +763,7 @@ prismpath/tests/test_deferral.py
 prismpath/tests/test_distribution_corpus.py
 prismpath/tests/test_distribution_crash.py
 prismpath/tests/test_distribution_envelope.py
+prismpath/tests/test_distribution_frames.py
 prismpath/tests/test_distribution_pep.py
 prismpath/tests/test_distribution_revocation.py
 prismpath/tests/test_distribution_state_record.py
