@@ -1,0 +1,2404 @@
+{
+ "version": 1,
+ "cases": [
+  {
+   "name": "admission.core.json",
+   "flow": "---\nname: core\nstart: core_decision\nfield.admission_version: int min=1 max=1\nfield.canary: category\nfield.child_exec: bool\nfield.child_generation: int min=0 max=1024\nfield.child_key: category\nfield.child_replicate: bool\nfield.child_write: bool\nfield.issuer: category\nfield.line_refusals: int min=0 max=1024\nfield.line_size: int min=0 max=1024\nfield.lineage: category\nfield.parent_exec: bool\nfield.parent_replicate: bool\nfield.parent_write: bool\nfield.policy_ref: category\nfield.population: int min=0 max=1024\nfield.request: category\nfield.requested: int min=0 max=1024\nfield.subject: category\nfield.target: category\nfield.target_stopped: bool\n---\n## core_decision\n-> allow: when request == \"stop\" and issuer in [\"operator\", \"controller\"]\n-> allow: when request == \"stop\" and issuer == \"agent\" and target in [\"self\", \"descendant\"]\n-> refuse_121: when request == \"protect\"\n-> refuse_121: when request == \"restart\" and target_stopped\n-> refuse_119: when lineage != \"verified\"\n-> escalate_122: when line_refusals >= 8\n-> refuse_123: when request == \"replicate\" and issuer == \"agent\" and target != \"self\"\n-> refuse_123: when request == \"evolve\" and issuer == \"agent\" and not target in [\"self\", \"descendant\"]\n-> refuse_118: when request in [\"replicate\", \"evolve\"] and child_key != \"instance\"\n-> refuse_118: when request in [\"replicate\", \"evolve\"] and policy_ref != \"current\"\n-> refuse_118: when request in [\"replicate\", \"evolve\"] and ((child_write and not parent_write) or (child_exec and not parent_exec) or (child_replicate and not parent_replicate))\n-> refuse_118: when request == \"replicate\" and not parent_replicate\n-> refuse_117: when request == \"replicate\" and (requested >= 3 or child_generation >= 4 or (requested == 0 and population >= 17) or (requested == 1 and population >= 16) or (requested == 2 and population >= 15) or (requested == 0 and line_size >= 7) or (requested == 1 and line_size >= 6) or (requested == 2 and line_size >= 5))\n-> refuse_120: when request == \"evolve\" and canary != \"passed\"\n-> allow: when request == \"replicate\" and requested >= 1 and issuer in [\"agent\", \"operator\"]\n-> allow: when request == \"evolve\" and issuer in [\"agent\", \"operator\"]\n-> allow: when request == \"restart\" and issuer in [\"controller\", \"operator\"]\n-> allow: when request == \"review\" and issuer == \"controller\"\n## allow\n## refuse_121\n## refuse_119\n## escalate_122\n## refuse_123\n## refuse_118\n## refuse_117\n## refuse_120\n",
+   "nodes": [
+    "core_decision"
+   ],
+   "joint_cells": {
+    "core_decision": 55050240
+   },
+   "routes": {
+    "core_decision": [
+     "refuse_120",
+     "refuse_117",
+     "refuse_118",
+     "refuse_123",
+     "escalate_122",
+     "refuse_119",
+     "refuse_121",
+     "allow",
+     ""
+    ]
+   },
+   "readings": [
+    {
+     "reading": {
+      "canary": "passed",
+      "child_exec": true,
+      "child_generation": 4,
+      "child_key": "instance",
+      "child_replicate": true,
+      "child_write": false,
+      "issuer": "operator",
+      "line_refusals": 0,
+      "line_size": 5,
+      "lineage": "\u0000__other__",
+      "parent_exec": true,
+      "parent_replicate": false,
+      "parent_write": false,
+      "policy_ref": "\u0000__other__",
+      "population": 17,
+      "request": "restart",
+      "requested": 2,
+      "target": "\u0000__other__",
+      "target_stopped": false
+     },
+     "bands": {
+      "core_decision": 5
+     },
+     "bits": "10011"
+    },
+    {
+     "reading": {
+      "canary": "passed",
+      "child_exec": true,
+      "child_generation": 0,
+      "child_key": "\u0000__other__",
+      "child_replicate": false,
+      "child_write": true,
+      "issuer": "controller",
+      "line_refusals": 0,
+      "line_size": 5,
+      "lineage": "verified",
+      "parent_exec": true,
+      "parent_replicate": false,
+      "parent_write": true,
+      "policy_ref": "\u0000__other__",
+      "population": 0,
+      "request": "protect",
+      "requested": 1,
+      "target": "\u0000__other__",
+      "target_stopped": false
+     },
+     "bands": {
+      "core_decision": 6
+     },
+     "bits": "01011"
+    },
+    {
+     "reading": {
+      "canary": "passed",
+      "child_exec": true,
+      "child_generation": 4,
+      "child_key": "\u0000__other__",
+      "child_replicate": true,
+      "child_write": true,
+      "issuer": "\u0000__other__",
+      "line_refusals": 8,
+      "line_size": 6,
+      "lineage": "verified",
+      "parent_exec": false,
+      "parent_replicate": false,
+      "parent_write": true,
+      "policy_ref": "\u0000__other__",
+      "population": 17,
+      "request": "replicate",
+      "requested": 3,
+      "target": "self",
+      "target_stopped": true
+     },
+     "bands": {
+      "core_decision": 4
+     },
+     "bits": "00011"
+    },
+    {
+     "reading": {
+      "canary": "\u0000__other__",
+      "child_exec": false,
+      "child_generation": 4,
+      "child_key": "instance",
+      "child_replicate": true,
+      "child_write": true,
+      "issuer": "agent",
+      "line_refusals": 0,
+      "line_size": 5,
+      "lineage": "\u0000__other__",
+      "parent_exec": false,
+      "parent_replicate": true,
+      "parent_write": false,
+      "policy_ref": "\u0000__other__",
+      "population": 16,
+      "request": "replicate",
+      "requested": 2,
+      "target": "descendant",
+      "target_stopped": false
+     },
+     "bands": {
+      "core_decision": 5
+     },
+     "bits": "10011"
+    },
+    {
+     "reading": {
+      "canary": "\u0000__other__",
+      "child_exec": false,
+      "child_generation": 4,
+      "child_key": "instance",
+      "child_replicate": true,
+      "child_write": false,
+      "issuer": "\u0000__other__",
+      "line_refusals": 0,
+      "line_size": 6,
+      "lineage": "verified",
+      "parent_exec": true,
+      "parent_replicate": true,
+      "parent_write": false,
+      "policy_ref": "\u0000__other__",
+      "population": 0,
+      "request": "stop",
+      "requested": 1,
+      "target": "self",
+      "target_stopped": true
+     },
+     "bands": {
+      "core_decision": 8
+     },
+     "bits": "100011"
+    },
+    {
+     "reading": {
+      "canary": "passed",
+      "child_exec": true,
+      "child_generation": 4,
+      "child_key": "\u0000__other__",
+      "child_replicate": true,
+      "child_write": false,
+      "issuer": "agent",
+      "line_refusals": 8,
+      "line_size": 0,
+      "lineage": "verified",
+      "parent_exec": true,
+      "parent_replicate": false,
+      "parent_write": false,
+      "policy_ref": "current",
+      "population": 15,
+      "request": "stop",
+      "requested": 0,
+      "target": "self",
+      "target_stopped": true
+     },
+     "bands": {
+      "core_decision": 7
+     },
+     "bits": "000011"
+    },
+    {
+     "reading": {
+      "canary": "passed",
+      "child_exec": false,
+      "child_generation": 0,
+      "child_key": "instance",
+      "child_replicate": true,
+      "child_write": true,
+      "issuer": "agent",
+      "line_refusals": 0,
+      "line_size": 0,
+      "lineage": "verified",
+      "parent_exec": true,
+      "parent_replicate": true,
+      "parent_write": true,
+      "policy_ref": "current",
+      "population": 17,
+      "request": "evolve",
+      "requested": 1,
+      "target": "self",
+      "target_stopped": true
+     },
+     "bands": {
+      "core_decision": 7
+     },
+     "bits": "000011"
+    },
+    {
+     "reading": {
+      "canary": "\u0000__other__",
+      "child_exec": false,
+      "child_generation": 0,
+      "child_key": "instance",
+      "child_replicate": false,
+      "child_write": false,
+      "issuer": "agent",
+      "line_refusals": 0,
+      "line_size": 6,
+      "lineage": "\u0000__other__",
+      "parent_exec": false,
+      "parent_replicate": true,
+      "parent_write": true,
+      "policy_ref": "current",
+      "population": 0,
+      "request": "protect",
+      "requested": 1,
+      "target": "descendant",
+      "target_stopped": true
+     },
+     "bands": {
+      "core_decision": 6
+     },
+     "bits": "01011"
+    },
+    {
+     "reading": {
+      "canary": "\u0000__other__",
+      "child_exec": true,
+      "child_generation": 0,
+      "child_key": "\u0000__other__",
+      "child_replicate": false,
+      "child_write": true,
+      "issuer": "agent",
+      "line_refusals": 8,
+      "line_size": 0,
+      "lineage": "verified",
+      "parent_exec": true,
+      "parent_replicate": true,
+      "parent_write": false,
+      "policy_ref": "\u0000__other__",
+      "population": 17,
+      "request": "evolve",
+      "requested": 2,
+      "target": "descendant",
+      "target_stopped": false
+     },
+     "bands": {
+      "core_decision": 4
+     },
+     "bits": "00011"
+    },
+    {
+     "reading": {
+      "canary": "passed",
+      "child_exec": true,
+      "child_generation": 0,
+      "child_key": "instance",
+      "child_replicate": true,
+      "child_write": false,
+      "issuer": "operator",
+      "line_refusals": 8,
+      "line_size": 6,
+      "lineage": "verified",
+      "parent_exec": false,
+      "parent_replicate": true,
+      "parent_write": true,
+      "policy_ref": "current",
+      "population": 16,
+      "request": "stop",
+      "requested": 3,
+      "target": "descendant",
+      "target_stopped": false
+     },
+     "bands": {
+      "core_decision": 7
+     },
+     "bits": "000011"
+    },
+    {
+     "reading": {
+      "canary": "\u0000__other__",
+      "child_exec": false,
+      "child_generation": 4,
+      "child_key": "\u0000__other__",
+      "child_replicate": true,
+      "child_write": false,
+      "issuer": "\u0000__other__",
+      "line_refusals": 0,
+      "line_size": 6,
+      "lineage": "\u0000__other__",
+      "parent_exec": true,
+      "parent_replicate": true,
+      "parent_write": true,
+      "policy_ref": "\u0000__other__",
+      "population": 17,
+      "request": "protect",
+      "requested": 1,
+      "target": "descendant",
+      "target_stopped": true
+     },
+     "bands": {
+      "core_decision": 6
+     },
+     "bits": "01011"
+    },
+    {
+     "reading": {
+      "canary": "\u0000__other__",
+      "child_exec": false,
+      "child_generation": 0,
+      "child_key": "\u0000__other__",
+      "child_replicate": true,
+      "child_write": true,
+      "issuer": "operator",
+      "line_refusals": 0,
+      "line_size": 5,
+      "lineage": "verified",
+      "parent_exec": false,
+      "parent_replicate": true,
+      "parent_write": true,
+      "policy_ref": "current",
+      "population": 16,
+      "request": "review",
+      "requested": 2,
+      "target": "descendant",
+      "target_stopped": false
+     },
+     "bands": {
+      "core_decision": 8
+     },
+     "bits": "100011"
+    },
+    {
+     "reading": {
+      "canary": "\u0000__other__",
+      "child_exec": false,
+      "child_generation": 0,
+      "child_key": "instance",
+      "child_replicate": true,
+      "child_write": false,
+      "issuer": "operator",
+      "line_refusals": 8,
+      "line_size": 0,
+      "lineage": "\u0000__other__",
+      "parent_exec": false,
+      "parent_replicate": true,
+      "parent_write": true,
+      "policy_ref": "\u0000__other__",
+      "population": 15,
+      "request": "protect",
+      "requested": 0,
+      "target": "\u0000__other__",
+      "target_stopped": true
+     },
+     "bands": {
+      "core_decision": 6
+     },
+     "bits": "01011"
+    },
+    {
+     "reading": {
+      "canary": "\u0000__other__",
+      "child_exec": true,
+      "child_generation": 4,
+      "child_key": "instance",
+      "child_replicate": true,
+      "child_write": false,
+      "issuer": "\u0000__other__",
+      "line_refusals": 0,
+      "line_size": 6,
+      "lineage": "\u0000__other__",
+      "parent_exec": true,
+      "parent_replicate": false,
+      "parent_write": true,
+      "policy_ref": "current",
+      "population": 0,
+      "request": "review",
+      "requested": 0,
+      "target": "\u0000__other__",
+      "target_stopped": true
+     },
+     "bands": {
+      "core_decision": 5
+     },
+     "bits": "10011"
+    },
+    {
+     "reading": {
+      "canary": "\u0000__other__",
+      "child_exec": false,
+      "child_generation": 4,
+      "child_key": "instance",
+      "child_replicate": true,
+      "child_write": false,
+      "issuer": "agent",
+      "line_refusals": 0,
+      "line_size": 7,
+      "lineage": "verified",
+      "parent_exec": false,
+      "parent_replicate": false,
+      "parent_write": true,
+      "policy_ref": "\u0000__other__",
+      "population": 17,
+      "request": "review",
+      "requested": 2,
+      "target": "\u0000__other__",
+      "target_stopped": false
+     },
+     "bands": {
+      "core_decision": 8
+     },
+     "bits": "100011"
+    },
+    {
+     "reading": {
+      "canary": "passed",
+      "child_exec": false,
+      "child_generation": 0,
+      "child_key": "\u0000__other__",
+      "child_replicate": true,
+      "child_write": true,
+      "issuer": "controller",
+      "line_refusals": 8,
+      "line_size": 6,
+      "lineage": "verified",
+      "parent_exec": true,
+      "parent_replicate": true,
+      "parent_write": false,
+      "policy_ref": "current",
+      "population": 15,
+      "request": "stop",
+      "requested": 2,
+      "target": "descendant",
+      "target_stopped": true
+     },
+     "bands": {
+      "core_decision": 7
+     },
+     "bits": "000011"
+    },
+    {
+     "reading": {
+      "canary": "\u0000__other__",
+      "child_exec": false,
+      "child_generation": 0,
+      "child_key": "instance",
+      "child_replicate": false,
+      "child_write": true,
+      "issuer": "\u0000__other__",
+      "line_refusals": 0,
+      "line_size": 5,
+      "lineage": "verified",
+      "parent_exec": true,
+      "parent_replicate": false,
+      "parent_write": false,
+      "policy_ref": "current",
+      "population": 0,
+      "request": "restart",
+      "requested": 3,
+      "target": "\u0000__other__",
+      "target_stopped": true
+     },
+     "bands": {
+      "core_decision": 6
+     },
+     "bits": "01011"
+    },
+    {
+     "reading": {
+      "canary": "passed",
+      "child_exec": false,
+      "child_generation": 4,
+      "child_key": "instance",
+      "child_replicate": true,
+      "child_write": false,
+      "issuer": "operator",
+      "line_refusals": 0,
+      "line_size": 6,
+      "lineage": "\u0000__other__",
+      "parent_exec": true,
+      "parent_replicate": true,
+      "parent_write": false,
+      "policy_ref": "current",
+      "population": 17,
+      "request": "restart",
+      "requested": 3,
+      "target": "descendant",
+      "target_stopped": true
+     },
+     "bands": {
+      "core_decision": 6
+     },
+     "bits": "01011"
+    },
+    {
+     "reading": {
+      "canary": "\u0000__other__",
+      "child_exec": false,
+      "child_generation": 4,
+      "child_key": "\u0000__other__",
+      "child_replicate": false,
+      "child_write": false,
+      "issuer": "\u0000__other__",
+      "line_refusals": 0,
+      "line_size": 7,
+      "lineage": "\u0000__other__",
+      "parent_exec": false,
+      "parent_replicate": false,
+      "parent_write": true,
+      "policy_ref": "current",
+      "population": 16,
+      "request": "evolve",
+      "requested": 3,
+      "target": "\u0000__other__",
+      "target_stopped": true
+     },
+     "bands": {
+      "core_decision": 5
+     },
+     "bits": "10011"
+    },
+    {
+     "reading": {
+      "canary": "\u0000__other__",
+      "child_exec": false,
+      "child_generation": 0,
+      "child_key": "instance",
+      "child_replicate": true,
+      "child_write": false,
+      "issuer": "controller",
+      "line_refusals": 0,
+      "line_size": 0,
+      "lineage": "verified",
+      "parent_exec": true,
+      "parent_replicate": false,
+      "parent_write": false,
+      "policy_ref": "\u0000__other__",
+      "population": 15,
+      "request": "stop",
+      "requested": 1,
+      "target": "\u0000__other__",
+      "target_stopped": true
+     },
+     "bands": {
+      "core_decision": 7
+     },
+     "bits": "000011"
+    },
+    {
+     "reading": {
+      "canary": "\u00fcnlisted",
+      "child_exec": false,
+      "child_generation": 5,
+      "child_key": "instance",
+      "child_replicate": false,
+      "child_write": false,
+      "issuer": "controller~",
+      "line_refusals": 8,
+      "line_size": 4,
+      "lineage": "verified~",
+      "parent_exec": true,
+      "parent_replicate": false,
+      "parent_write": false,
+      "policy_ref": "\u00fcnlisted",
+      "population": 15,
+      "request": "restart~",
+      "requested": 3,
+      "target": "descendant~",
+      "target_stopped": true
+     },
+     "bands": {
+      "core_decision": 5
+     },
+     "bits": "10011"
+    },
+    {
+     "reading": {
+      "canary": "passed~",
+      "child_exec": true,
+      "child_generation": 4,
+      "child_key": "\u00fcnlisted",
+      "child_replicate": false,
+      "child_write": true,
+      "issuer": "controller",
+      "line_refusals": 9,
+      "line_size": 3,
+      "lineage": "verified~",
+      "parent_exec": false,
+      "parent_replicate": false,
+      "parent_write": false,
+      "policy_ref": "\u00fcnlisted",
+      "population": 18,
+      "request": "stop~",
+      "requested": 3,
+      "target": "descendant",
+      "target_stopped": false
+     },
+     "bands": {
+      "core_decision": 5
+     },
+     "bits": "10011"
+    },
+    {
+     "reading": {
+      "canary": "\u00fcnlisted",
+      "child_exec": false,
+      "child_generation": 2,
+      "child_key": "instance~",
+      "child_replicate": false,
+      "child_write": false,
+      "issuer": "operator",
+      "line_refusals": 8,
+      "line_size": 3,
+      "lineage": "verified",
+      "parent_exec": false,
+      "parent_replicate": false,
+      "parent_write": true,
+      "policy_ref": "\u00fcnlisted",
+      "population": 13,
+      "request": "stop",
+      "requested": 4,
+      "target": "descendant",
+      "target_stopped": false
+     },
+     "bands": {
+      "core_decision": 7
+     },
+     "bits": "000011"
+    },
+    {
+     "reading": {
+      "canary": "\u00fcnlisted",
+      "child_exec": false,
+      "child_generation": 5,
+      "child_key": "instance~",
+      "child_replicate": false,
+      "child_write": false,
+      "issuer": "\u00fcnlisted",
+      "line_refusals": 8,
+      "line_size": 4,
+      "lineage": "verified",
+      "parent_exec": true,
+      "parent_replicate": true,
+      "parent_write": false,
+      "policy_ref": "\u00fcnlisted",
+      "population": 17,
+      "request": "evolve",
+      "requested": 1,
+      "target": "descendant~",
+      "target_stopped": false
+     },
+     "bands": {
+      "core_decision": 4
+     },
+     "bits": "00011"
+    },
+    {
+     "reading": {
+      "canary": "passed",
+      "child_exec": false,
+      "child_generation": 2,
+      "child_key": "instance",
+      "child_replicate": true,
+      "child_write": false,
+      "issuer": "\u00fcnlisted",
+      "line_refusals": 9,
+      "line_size": 3,
+      "lineage": "verified",
+      "parent_exec": false,
+      "parent_replicate": true,
+      "parent_write": false,
+      "policy_ref": "\u00fcnlisted",
+      "population": 18,
+      "request": "evolve",
+      "requested": 1,
+      "target": "descendant~",
+      "target_stopped": true
+     },
+     "bands": {
+      "core_decision": 4
+     },
+     "bits": "00011"
+    },
+    {
+     "reading": {
+      "canary": "\u00fcnlisted",
+      "child_exec": false,
+      "child_generation": 2,
+      "child_key": "instance~",
+      "child_replicate": true,
+      "child_write": false,
+      "issuer": "agent~",
+      "line_refusals": 7,
+      "line_size": 6,
+      "lineage": "verified",
+      "parent_exec": true,
+      "parent_replicate": true,
+      "parent_write": false,
+      "policy_ref": "current",
+      "population": 16,
+      "request": "stop",
+      "requested": 1,
+      "target": "self~",
+      "target_stopped": false
+     },
+     "bands": {
+      "core_decision": 8
+     },
+     "bits": "100011"
+    },
+    {
+     "reading": {
+      "canary": "\u00fcnlisted",
+      "child_exec": false,
+      "child_generation": 4,
+      "child_key": "instance~",
+      "child_replicate": false,
+      "child_write": true,
+      "issuer": "controller~",
+      "line_refusals": 9,
+      "line_size": 6,
+      "lineage": "verified",
+      "parent_exec": false,
+      "parent_replicate": false,
+      "parent_write": true,
+      "policy_ref": "current~",
+      "population": 13,
+      "request": "\u00fcnlisted",
+      "requested": 0,
+      "target": "self~",
+      "target_stopped": true
+     },
+     "bands": {
+      "core_decision": 4
+     },
+     "bits": "00011"
+    },
+    {
+     "reading": {
+      "canary": "passed~",
+      "child_exec": false,
+      "child_generation": 3,
+      "child_key": "instance",
+      "child_replicate": true,
+      "child_write": false,
+      "issuer": "operator",
+      "line_refusals": 9,
+      "line_size": 5,
+      "lineage": "\u00fcnlisted",
+      "parent_exec": false,
+      "parent_replicate": false,
+      "parent_write": false,
+      "policy_ref": "current",
+      "population": 17,
+      "request": "\u00fcnlisted",
+      "requested": 3,
+      "target": "\u00fcnlisted",
+      "target_stopped": false
+     },
+     "bands": {
+      "core_decision": 5
+     },
+     "bits": "10011"
+    },
+    {
+     "reading": {
+      "canary": "\u00fcnlisted",
+      "child_exec": false,
+      "child_generation": 4,
+      "child_key": "instance",
+      "child_replicate": false,
+      "child_write": false,
+      "issuer": "\u00fcnlisted",
+      "line_refusals": 6,
+      "line_size": 8,
+      "lineage": "verified~",
+      "parent_exec": false,
+      "parent_replicate": true,
+      "parent_write": true,
+      "policy_ref": "current~",
+      "population": 14,
+      "request": "protect",
+      "requested": 4,
+      "target": "\u00fcnlisted",
+      "target_stopped": true
+     },
+     "bands": {
+      "core_decision": 6
+     },
+     "bits": "01011"
+    },
+    {
+     "reading": {
+      "canary": "passed",
+      "child_exec": false,
+      "child_generation": 5,
+      "child_key": "\u00fcnlisted",
+      "child_replicate": false,
+      "child_write": false,
+      "issuer": "agent~",
+      "line_refusals": 8,
+      "line_size": 6,
+      "lineage": "verified~",
+      "parent_exec": false,
+      "parent_replicate": true,
+      "parent_write": true,
+      "policy_ref": "current",
+      "population": 14,
+      "request": "replicate",
+      "requested": 1,
+      "target": "self",
+      "target_stopped": true
+     },
+     "bands": {
+      "core_decision": 5
+     },
+     "bits": "10011"
+    },
+    {
+     "reading": {
+      "canary": "passed~",
+      "child_exec": false,
+      "child_generation": 3,
+      "child_key": "instance",
+      "child_replicate": false,
+      "child_write": true,
+      "issuer": "\u00fcnlisted",
+      "line_refusals": 6,
+      "line_size": 3,
+      "lineage": "\u00fcnlisted",
+      "parent_exec": true,
+      "parent_replicate": true,
+      "parent_write": true,
+      "policy_ref": "current~",
+      "population": 15,
+      "request": "stop",
+      "requested": 0,
+      "target": "self",
+      "target_stopped": true
+     },
+     "bands": {
+      "core_decision": 5
+     },
+     "bits": "10011"
+    },
+    {
+     "reading": {
+      "canary": "passed~",
+      "child_exec": false,
+      "child_generation": 5,
+      "child_key": "instance~",
+      "child_replicate": true,
+      "child_write": false,
+      "issuer": "agent~",
+      "line_refusals": 6,
+      "line_size": 5,
+      "lineage": "\u00fcnlisted",
+      "parent_exec": false,
+      "parent_replicate": false,
+      "parent_write": false,
+      "policy_ref": "current",
+      "population": 17,
+      "request": "protect~",
+      "requested": 3,
+      "target": "\u00fcnlisted",
+      "target_stopped": false
+     },
+     "bands": {
+      "core_decision": 5
+     },
+     "bits": "10011"
+    },
+    {
+     "reading": {
+      "canary": "passed~",
+      "child_exec": false,
+      "child_generation": 4,
+      "child_key": "instance~",
+      "child_replicate": false,
+      "child_write": false,
+      "issuer": "controller",
+      "line_refusals": 9,
+      "line_size": 6,
+      "lineage": "verified",
+      "parent_exec": true,
+      "parent_replicate": false,
+      "parent_write": false,
+      "policy_ref": "\u00fcnlisted",
+      "population": 16,
+      "request": "replicate",
+      "requested": 1,
+      "target": "\u00fcnlisted",
+      "target_stopped": false
+     },
+     "bands": {
+      "core_decision": 4
+     },
+     "bits": "00011"
+    },
+    {
+     "reading": {
+      "canary": "passed~",
+      "child_exec": false,
+      "child_generation": 2,
+      "child_key": "\u00fcnlisted",
+      "child_replicate": false,
+      "child_write": true,
+      "issuer": "operator",
+      "line_refusals": 7,
+      "line_size": 6,
+      "lineage": "verified~",
+      "parent_exec": false,
+      "parent_replicate": true,
+      "parent_write": true,
+      "policy_ref": "\u00fcnlisted",
+      "population": 13,
+      "request": "protect~",
+      "requested": 0,
+      "target": "descendant",
+      "target_stopped": false
+     },
+     "bands": {
+      "core_decision": 5
+     },
+     "bits": "10011"
+    },
+    {
+     "reading": {
+      "canary": "passed",
+      "child_exec": true,
+      "child_generation": 3,
+      "child_key": "\u00fcnlisted",
+      "child_replicate": true,
+      "child_write": false,
+      "issuer": "controller",
+      "line_refusals": 6,
+      "line_size": 3,
+      "lineage": "verified~",
+      "parent_exec": true,
+      "parent_replicate": true,
+      "parent_write": true,
+      "policy_ref": "\u00fcnlisted",
+      "population": 15,
+      "request": "restart",
+      "requested": 3,
+      "target": "descendant~",
+      "target_stopped": false
+     },
+     "bands": {
+      "core_decision": 5
+     },
+     "bits": "10011"
+    },
+    {
+     "reading": {
+      "canary": "\u00fcnlisted",
+      "child_exec": false,
+      "child_generation": 2,
+      "child_key": "\u00fcnlisted",
+      "child_replicate": true,
+      "child_write": true,
+      "issuer": "agent~",
+      "line_refusals": 6,
+      "line_size": 7,
+      "lineage": "\u00fcnlisted",
+      "parent_exec": true,
+      "parent_replicate": true,
+      "parent_write": true,
+      "policy_ref": "current~",
+      "population": 14,
+      "request": "\u00fcnlisted",
+      "requested": 0,
+      "target": "self",
+      "target_stopped": true
+     },
+     "bands": {
+      "core_decision": 5
+     },
+     "bits": "10011"
+    },
+    {
+     "reading": {
+      "canary": "passed",
+      "child_exec": true,
+      "child_generation": 2,
+      "child_key": "instance",
+      "child_replicate": false,
+      "child_write": true,
+      "issuer": "operator",
+      "line_refusals": 6,
+      "line_size": 6,
+      "lineage": "verified",
+      "parent_exec": false,
+      "parent_replicate": true,
+      "parent_write": false,
+      "policy_ref": "current",
+      "population": 15,
+      "request": "replicate",
+      "requested": 4,
+      "target": "descendant~",
+      "target_stopped": false
+     },
+     "bands": {
+      "core_decision": 2
+     },
+     "bits": "0011"
+    },
+    {
+     "reading": {
+      "canary": "passed",
+      "child_exec": true,
+      "child_generation": 2,
+      "child_key": "\u00fcnlisted",
+      "child_replicate": false,
+      "child_write": true,
+      "issuer": "operator~",
+      "line_refusals": 8,
+      "line_size": 6,
+      "lineage": "verified~",
+      "parent_exec": false,
+      "parent_replicate": true,
+      "parent_write": true,
+      "policy_ref": "\u00fcnlisted",
+      "population": 14,
+      "request": "review",
+      "requested": 0,
+      "target": "self",
+      "target_stopped": false
+     },
+     "bands": {
+      "core_decision": 5
+     },
+     "bits": "10011"
+    },
+    {
+     "reading": {
+      "canary": "passed",
+      "child_exec": false,
+      "child_generation": 4,
+      "child_key": "\u00fcnlisted",
+      "child_replicate": true,
+      "child_write": false,
+      "issuer": "agent",
+      "line_refusals": 9,
+      "line_size": 3,
+      "lineage": "verified",
+      "parent_exec": true,
+      "parent_replicate": false,
+      "parent_write": false,
+      "policy_ref": "current~",
+      "population": 14,
+      "request": "\u00fcnlisted",
+      "requested": 2,
+      "target": "descendant~",
+      "target_stopped": false
+     },
+     "bands": {
+      "core_decision": 4
+     },
+     "bits": "00011"
+    },
+    {
+     "reading": {
+      "canary": "passed",
+      "child_exec": true,
+      "child_generation": 3,
+      "child_key": "instance~",
+      "child_replicate": false,
+      "child_write": true,
+      "issuer": "operator~",
+      "line_refusals": 9,
+      "line_size": 7,
+      "lineage": "\u00fcnlisted",
+      "parent_exec": true,
+      "parent_replicate": true,
+      "parent_write": false,
+      "policy_ref": "current",
+      "population": 15,
+      "request": "restart~",
+      "requested": 2,
+      "target": "descendant",
+      "target_stopped": false
+     },
+     "bands": {
+      "core_decision": 5
+     },
+     "bits": "10011"
+    }
+   ]
+  },
+  {
+   "name": "agent_review.core.json",
+   "flow": "---\nname: core\nstart: core_decision\nfield.classifier_version: int min=3 max=3\nfield.command_class: category\nfield.git_op: category\nfield.kill_by_pattern: bool\nfield.net_dest: category\nfield.path_control: bool\nfield.path_glob: bool\nfield.path_in_toolchain: bool\nfield.path_scope: category\nfield.path_symlink: bool\nfield.path_traversal: bool\nfield.proc_class: category\nfield.remote_class: category\nfield.tool: category\nfield.zone_reach: category\n---\n## core_decision\n-> refuse_104: when git_op == \"unknown\" or path_scope == \"unknown\"\n-> refuse_105: when kill_by_pattern\n-> refuse_106: when command_class == \"network\" or git_op == \"network\"\n-> refuse_130: when net_dest in [\"allowed_host\", \"other\", \"unknown\"] or (tool == \"connect\" and net_dest == \"none\")\n-> refuse_128: when (tool in [\"write_file\", \"delete_path\"] or command_class == \"mutating\" or git_op in [\"local_write\", \"mutating\"]) and path_control\n-> refuse_107: when (tool in [\"write_file\", \"delete_path\"] or command_class == \"mutating\") and path_in_toolchain\n-> refuse_108: when (tool in [\"write_file\", \"delete_path\"] or command_class == \"mutating\") and path_glob\n-> refuse_109: when (tool in [\"write_file\", \"delete_path\"] or command_class == \"mutating\") and path_traversal\n-> refuse_110: when (tool in [\"write_file\", \"delete_path\"] or command_class == \"mutating\") and path_symlink\n-> refuse_111: when path_scope == \"outside\"\n-> refuse_112: when git_op == \"mutating\"\n-> escalate_132: when (tool in [\"write_file\", \"delete_path\"] or command_class == \"mutating\") and zone_reach in [\"protected\", \"unknown\"]\n-> escalate_124: when tool == \"unknown\" or command_class == \"unknown\"\n-> escalate_113: when git_op == \"push\"\n-> escalate_127: when tool in [\"write_file\", \"delete_path\"] or command_class == \"mutating\" or git_op == \"local_write\"\n-> allow: when tool == \"connect\" and net_dest == \"model_api\"\n-> allow: when tool in [\"list_dir\", \"read_file\"] and path_scope == \"workspace\"\n-> allow: when tool == \"run_command\" and command_class == \"read_only\" and path_scope in [\"none\", \"workspace\"]\n-> allow: when git_op == \"local_read\" and path_scope in [\"none\", \"workspace\"]\n## refuse_104\n## refuse_105\n## refuse_106\n## refuse_130\n## refuse_128\n## refuse_107\n## refuse_108\n## refuse_109\n## refuse_110\n## refuse_111\n## refuse_112\n## escalate_132\n## escalate_124\n## escalate_113\n## escalate_127\n## allow\n",
+   "nodes": [
+    "core_decision"
+   ],
+   "joint_cells": {
+    "core_decision": 1612800
+   },
+   "routes": {
+    "core_decision": [
+     "allow",
+     "escalate_127",
+     "escalate_113",
+     "escalate_124",
+     "escalate_132",
+     "refuse_112",
+     "refuse_111",
+     "refuse_110",
+     "refuse_109",
+     "refuse_108",
+     "refuse_107",
+     "refuse_128",
+     "refuse_130",
+     "refuse_106",
+     "refuse_105",
+     "refuse_104",
+     ""
+    ]
+   },
+   "readings": [
+    {
+     "reading": {
+      "command_class": "\u0000__other__",
+      "git_op": "push",
+      "kill_by_pattern": false,
+      "net_dest": "\u0000__other__",
+      "path_control": true,
+      "path_glob": false,
+      "path_in_toolchain": false,
+      "path_scope": "none",
+      "path_symlink": false,
+      "path_traversal": false,
+      "tool": "run_command",
+      "zone_reach": "unknown"
+     },
+     "bands": {
+      "core_decision": 2
+     },
+     "bits": "0011"
+    },
+    {
+     "reading": {
+      "command_class": "read_only",
+      "git_op": "network",
+      "kill_by_pattern": true,
+      "net_dest": "unknown",
+      "path_control": true,
+      "path_glob": true,
+      "path_in_toolchain": true,
+      "path_scope": "workspace",
+      "path_symlink": true,
+      "path_traversal": false,
+      "tool": "run_command",
+      "zone_reach": "\u0000__other__"
+     },
+     "bands": {
+      "core_decision": 14
+     },
+     "bits": "0100011"
+    },
+    {
+     "reading": {
+      "command_class": "unknown",
+      "git_op": "push",
+      "kill_by_pattern": true,
+      "net_dest": "model_api",
+      "path_control": false,
+      "path_glob": true,
+      "path_in_toolchain": false,
+      "path_scope": "none",
+      "path_symlink": false,
+      "path_traversal": true,
+      "tool": "list_dir",
+      "zone_reach": "\u0000__other__"
+     },
+     "bands": {
+      "core_decision": 14
+     },
+     "bits": "0100011"
+    },
+    {
+     "reading": {
+      "command_class": "network",
+      "git_op": "unknown",
+      "kill_by_pattern": true,
+      "net_dest": "unknown",
+      "path_control": true,
+      "path_glob": false,
+      "path_in_toolchain": false,
+      "path_scope": "\u0000__other__",
+      "path_symlink": true,
+      "path_traversal": true,
+      "tool": "list_dir",
+      "zone_reach": "protected"
+     },
+     "bands": {
+      "core_decision": 15
+     },
+     "bits": "0010011"
+    },
+    {
+     "reading": {
+      "command_class": "\u0000__other__",
+      "git_op": "push",
+      "kill_by_pattern": false,
+      "net_dest": "\u0000__other__",
+      "path_control": true,
+      "path_glob": false,
+      "path_in_toolchain": true,
+      "path_scope": "unknown",
+      "path_symlink": true,
+      "path_traversal": true,
+      "tool": "run_command",
+      "zone_reach": "protected"
+     },
+     "bands": {
+      "core_decision": 15
+     },
+     "bits": "0010011"
+    },
+    {
+     "reading": {
+      "command_class": "read_only",
+      "git_op": "push",
+      "kill_by_pattern": true,
+      "net_dest": "\u0000__other__",
+      "path_control": true,
+      "path_glob": true,
+      "path_in_toolchain": false,
+      "path_scope": "none",
+      "path_symlink": false,
+      "path_traversal": true,
+      "tool": "delete_path",
+      "zone_reach": "protected"
+     },
+     "bands": {
+      "core_decision": 14
+     },
+     "bits": "0100011"
+    },
+    {
+     "reading": {
+      "command_class": "unknown",
+      "git_op": "mutating",
+      "kill_by_pattern": false,
+      "net_dest": "unknown",
+      "path_control": false,
+      "path_glob": true,
+      "path_in_toolchain": false,
+      "path_scope": "none",
+      "path_symlink": true,
+      "path_traversal": false,
+      "tool": "\u0000__other__",
+      "zone_reach": "\u0000__other__"
+     },
+     "bands": {
+      "core_decision": 12
+     },
+     "bits": "0000011"
+    },
+    {
+     "reading": {
+      "command_class": "mutating",
+      "git_op": "network",
+      "kill_by_pattern": true,
+      "net_dest": "other",
+      "path_control": false,
+      "path_glob": false,
+      "path_in_toolchain": true,
+      "path_scope": "workspace",
+      "path_symlink": false,
+      "path_traversal": false,
+      "tool": "run_command",
+      "zone_reach": "unknown"
+     },
+     "bands": {
+      "core_decision": 14
+     },
+     "bits": "0100011"
+    },
+    {
+     "reading": {
+      "command_class": "network",
+      "git_op": "network",
+      "kill_by_pattern": true,
+      "net_dest": "allowed_host",
+      "path_control": false,
+      "path_glob": true,
+      "path_in_toolchain": false,
+      "path_scope": "outside",
+      "path_symlink": true,
+      "path_traversal": false,
+      "tool": "read_file",
+      "zone_reach": "\u0000__other__"
+     },
+     "bands": {
+      "core_decision": 14
+     },
+     "bits": "0100011"
+    },
+    {
+     "reading": {
+      "command_class": "\u0000__other__",
+      "git_op": "\u0000__other__",
+      "kill_by_pattern": false,
+      "net_dest": "\u0000__other__",
+      "path_control": true,
+      "path_glob": false,
+      "path_in_toolchain": false,
+      "path_scope": "none",
+      "path_symlink": true,
+      "path_traversal": false,
+      "tool": "run_command",
+      "zone_reach": "\u0000__other__"
+     },
+     "bands": {
+      "core_decision": 16
+     },
+     "bits": "1010011"
+    },
+    {
+     "reading": {
+      "command_class": "read_only",
+      "git_op": "local_read",
+      "kill_by_pattern": true,
+      "net_dest": "allowed_host",
+      "path_control": true,
+      "path_glob": false,
+      "path_in_toolchain": true,
+      "path_scope": "outside",
+      "path_symlink": true,
+      "path_traversal": false,
+      "tool": "unknown",
+      "zone_reach": "\u0000__other__"
+     },
+     "bands": {
+      "core_decision": 14
+     },
+     "bits": "0100011"
+    },
+    {
+     "reading": {
+      "command_class": "\u0000__other__",
+      "git_op": "mutating",
+      "kill_by_pattern": false,
+      "net_dest": "none",
+      "path_control": false,
+      "path_glob": true,
+      "path_in_toolchain": false,
+      "path_scope": "\u0000__other__",
+      "path_symlink": false,
+      "path_traversal": false,
+      "tool": "list_dir",
+      "zone_reach": "protected"
+     },
+     "bands": {
+      "core_decision": 5
+     },
+     "bits": "10011"
+    },
+    {
+     "reading": {
+      "command_class": "network",
+      "git_op": "mutating",
+      "kill_by_pattern": false,
+      "net_dest": "allowed_host",
+      "path_control": false,
+      "path_glob": true,
+      "path_in_toolchain": false,
+      "path_scope": "workspace",
+      "path_symlink": true,
+      "path_traversal": true,
+      "tool": "\u0000__other__",
+      "zone_reach": "protected"
+     },
+     "bands": {
+      "core_decision": 13
+     },
+     "bits": "1000011"
+    },
+    {
+     "reading": {
+      "command_class": "network",
+      "git_op": "\u0000__other__",
+      "kill_by_pattern": false,
+      "net_dest": "model_api",
+      "path_control": true,
+      "path_glob": true,
+      "path_in_toolchain": false,
+      "path_scope": "none",
+      "path_symlink": true,
+      "path_traversal": true,
+      "tool": "connect",
+      "zone_reach": "unknown"
+     },
+     "bands": {
+      "core_decision": 13
+     },
+     "bits": "1000011"
+    },
+    {
+     "reading": {
+      "command_class": "read_only",
+      "git_op": "local_write",
+      "kill_by_pattern": true,
+      "net_dest": "other",
+      "path_control": false,
+      "path_glob": true,
+      "path_in_toolchain": false,
+      "path_scope": "none",
+      "path_symlink": false,
+      "path_traversal": true,
+      "tool": "connect",
+      "zone_reach": "unknown"
+     },
+     "bands": {
+      "core_decision": 14
+     },
+     "bits": "0100011"
+    },
+    {
+     "reading": {
+      "command_class": "unknown",
+      "git_op": "network",
+      "kill_by_pattern": false,
+      "net_dest": "allowed_host",
+      "path_control": false,
+      "path_glob": false,
+      "path_in_toolchain": true,
+      "path_scope": "workspace",
+      "path_symlink": true,
+      "path_traversal": true,
+      "tool": "list_dir",
+      "zone_reach": "unknown"
+     },
+     "bands": {
+      "core_decision": 13
+     },
+     "bits": "1000011"
+    },
+    {
+     "reading": {
+      "command_class": "unknown",
+      "git_op": "push",
+      "kill_by_pattern": true,
+      "net_dest": "unknown",
+      "path_control": true,
+      "path_glob": true,
+      "path_in_toolchain": false,
+      "path_scope": "workspace",
+      "path_symlink": false,
+      "path_traversal": false,
+      "tool": "read_file",
+      "zone_reach": "unknown"
+     },
+     "bands": {
+      "core_decision": 14
+     },
+     "bits": "0100011"
+    },
+    {
+     "reading": {
+      "command_class": "mutating",
+      "git_op": "local_read",
+      "kill_by_pattern": false,
+      "net_dest": "model_api",
+      "path_control": false,
+      "path_glob": false,
+      "path_in_toolchain": false,
+      "path_scope": "\u0000__other__",
+      "path_symlink": true,
+      "path_traversal": false,
+      "tool": "unknown",
+      "zone_reach": "unknown"
+     },
+     "bands": {
+      "core_decision": 7
+     },
+     "bits": "000011"
+    },
+    {
+     "reading": {
+      "command_class": "\u0000__other__",
+      "git_op": "local_read",
+      "kill_by_pattern": true,
+      "net_dest": "allowed_host",
+      "path_control": false,
+      "path_glob": true,
+      "path_in_toolchain": false,
+      "path_scope": "unknown",
+      "path_symlink": false,
+      "path_traversal": false,
+      "tool": "write_file",
+      "zone_reach": "protected"
+     },
+     "bands": {
+      "core_decision": 15
+     },
+     "bits": "0010011"
+    },
+    {
+     "reading": {
+      "command_class": "unknown",
+      "git_op": "unknown",
+      "kill_by_pattern": false,
+      "net_dest": "other",
+      "path_control": true,
+      "path_glob": true,
+      "path_in_toolchain": true,
+      "path_scope": "none",
+      "path_symlink": false,
+      "path_traversal": true,
+      "tool": "delete_path",
+      "zone_reach": "\u0000__other__"
+     },
+     "bands": {
+      "core_decision": 15
+     },
+     "bits": "0010011"
+    },
+    {
+     "reading": {
+      "command_class": "unknown",
+      "git_op": "local_write~",
+      "kill_by_pattern": false,
+      "net_dest": "model_api",
+      "path_control": false,
+      "path_glob": false,
+      "path_in_toolchain": true,
+      "path_scope": "\u00fcnlisted",
+      "path_symlink": true,
+      "path_traversal": false,
+      "tool": "delete_path",
+      "zone_reach": "unknown~"
+     },
+     "bands": {
+      "core_decision": 10
+     },
+     "bits": "001011"
+    },
+    {
+     "reading": {
+      "command_class": "read_only",
+      "git_op": "push",
+      "kill_by_pattern": false,
+      "net_dest": "unknown~",
+      "path_control": true,
+      "path_glob": false,
+      "path_in_toolchain": false,
+      "path_scope": "workspace~",
+      "path_symlink": true,
+      "path_traversal": true,
+      "tool": "connect~",
+      "zone_reach": "protected~"
+     },
+     "bands": {
+      "core_decision": 2
+     },
+     "bits": "0011"
+    },
+    {
+     "reading": {
+      "command_class": "mutating",
+      "git_op": "unknown",
+      "kill_by_pattern": true,
+      "net_dest": "unknown~",
+      "path_control": false,
+      "path_glob": false,
+      "path_in_toolchain": true,
+      "path_scope": "\u00fcnlisted",
+      "path_symlink": true,
+      "path_traversal": false,
+      "tool": "delete_path",
+      "zone_reach": "protected~"
+     },
+     "bands": {
+      "core_decision": 15
+     },
+     "bits": "0010011"
+    },
+    {
+     "reading": {
+      "command_class": "unknown~",
+      "git_op": "push",
+      "kill_by_pattern": true,
+      "net_dest": "unknown",
+      "path_control": true,
+      "path_glob": false,
+      "path_in_toolchain": false,
+      "path_scope": "workspace",
+      "path_symlink": true,
+      "path_traversal": false,
+      "tool": "connect",
+      "zone_reach": "protected~"
+     },
+     "bands": {
+      "core_decision": 14
+     },
+     "bits": "0100011"
+    },
+    {
+     "reading": {
+      "command_class": "read_only",
+      "git_op": "unknown",
+      "kill_by_pattern": false,
+      "net_dest": "other",
+      "path_control": false,
+      "path_glob": false,
+      "path_in_toolchain": true,
+      "path_scope": "outside",
+      "path_symlink": true,
+      "path_traversal": false,
+      "tool": "connect",
+      "zone_reach": "protected"
+     },
+     "bands": {
+      "core_decision": 15
+     },
+     "bits": "0010011"
+    },
+    {
+     "reading": {
+      "command_class": "read_only",
+      "git_op": "push",
+      "kill_by_pattern": false,
+      "net_dest": "other",
+      "path_control": false,
+      "path_glob": true,
+      "path_in_toolchain": false,
+      "path_scope": "workspace",
+      "path_symlink": false,
+      "path_traversal": false,
+      "tool": "connect~",
+      "zone_reach": "protected~"
+     },
+     "bands": {
+      "core_decision": 12
+     },
+     "bits": "0000011"
+    },
+    {
+     "reading": {
+      "command_class": "unknown~",
+      "git_op": "network",
+      "kill_by_pattern": false,
+      "net_dest": "unknown~",
+      "path_control": false,
+      "path_glob": true,
+      "path_in_toolchain": true,
+      "path_scope": "none",
+      "path_symlink": false,
+      "path_traversal": false,
+      "tool": "write_file",
+      "zone_reach": "protected~"
+     },
+     "bands": {
+      "core_decision": 13
+     },
+     "bits": "1000011"
+    },
+    {
+     "reading": {
+      "command_class": "network~",
+      "git_op": "network~",
+      "kill_by_pattern": true,
+      "net_dest": "allowed_host",
+      "path_control": true,
+      "path_glob": true,
+      "path_in_toolchain": true,
+      "path_scope": "workspace",
+      "path_symlink": true,
+      "path_traversal": false,
+      "tool": "delete_path~",
+      "zone_reach": "unknown"
+     },
+     "bands": {
+      "core_decision": 14
+     },
+     "bits": "0100011"
+    },
+    {
+     "reading": {
+      "command_class": "network~",
+      "git_op": "local_write~",
+      "kill_by_pattern": false,
+      "net_dest": "\u00fcnlisted",
+      "path_control": false,
+      "path_glob": true,
+      "path_in_toolchain": false,
+      "path_scope": "none",
+      "path_symlink": true,
+      "path_traversal": true,
+      "tool": "list_dir",
+      "zone_reach": "\u00fcnlisted"
+     },
+     "bands": {
+      "core_decision": 16
+     },
+     "bits": "1010011"
+    },
+    {
+     "reading": {
+      "command_class": "mutating",
+      "git_op": "push",
+      "kill_by_pattern": false,
+      "net_dest": "none",
+      "path_control": false,
+      "path_glob": false,
+      "path_in_toolchain": false,
+      "path_scope": "workspace",
+      "path_symlink": false,
+      "path_traversal": true,
+      "tool": "delete_path",
+      "zone_reach": "protected"
+     },
+     "bands": {
+      "core_decision": 8
+     },
+     "bits": "100011"
+    },
+    {
+     "reading": {
+      "command_class": "mutating~",
+      "git_op": "mutating",
+      "kill_by_pattern": false,
+      "net_dest": "\u00fcnlisted",
+      "path_control": false,
+      "path_glob": true,
+      "path_in_toolchain": true,
+      "path_scope": "unknown~",
+      "path_symlink": false,
+      "path_traversal": false,
+      "tool": "read_file",
+      "zone_reach": "protected~"
+     },
+     "bands": {
+      "core_decision": 5
+     },
+     "bits": "10011"
+    },
+    {
+     "reading": {
+      "command_class": "\u00fcnlisted",
+      "git_op": "local_write",
+      "kill_by_pattern": true,
+      "net_dest": "unknown",
+      "path_control": true,
+      "path_glob": true,
+      "path_in_toolchain": false,
+      "path_scope": "workspace",
+      "path_symlink": true,
+      "path_traversal": false,
+      "tool": "delete_path",
+      "zone_reach": "protected~"
+     },
+     "bands": {
+      "core_decision": 14
+     },
+     "bits": "0100011"
+    },
+    {
+     "reading": {
+      "command_class": "unknown~",
+      "git_op": "local_write~",
+      "kill_by_pattern": true,
+      "net_dest": "\u00fcnlisted",
+      "path_control": false,
+      "path_glob": false,
+      "path_in_toolchain": true,
+      "path_scope": "\u00fcnlisted",
+      "path_symlink": true,
+      "path_traversal": false,
+      "tool": "\u00fcnlisted",
+      "zone_reach": "protected~"
+     },
+     "bands": {
+      "core_decision": 14
+     },
+     "bits": "0100011"
+    },
+    {
+     "reading": {
+      "command_class": "mutating",
+      "git_op": "local_write~",
+      "kill_by_pattern": true,
+      "net_dest": "model_api",
+      "path_control": true,
+      "path_glob": true,
+      "path_in_toolchain": false,
+      "path_scope": "outside",
+      "path_symlink": false,
+      "path_traversal": false,
+      "tool": "unknown",
+      "zone_reach": "protected"
+     },
+     "bands": {
+      "core_decision": 14
+     },
+     "bits": "0100011"
+    },
+    {
+     "reading": {
+      "command_class": "unknown~",
+      "git_op": "unknown",
+      "kill_by_pattern": false,
+      "net_dest": "allowed_host~",
+      "path_control": false,
+      "path_glob": true,
+      "path_in_toolchain": false,
+      "path_scope": "none",
+      "path_symlink": false,
+      "path_traversal": false,
+      "tool": "list_dir",
+      "zone_reach": "protected~"
+     },
+     "bands": {
+      "core_decision": 15
+     },
+     "bits": "0010011"
+    },
+    {
+     "reading": {
+      "command_class": "unknown~",
+      "git_op": "local_read",
+      "kill_by_pattern": false,
+      "net_dest": "other",
+      "path_control": false,
+      "path_glob": true,
+      "path_in_toolchain": false,
+      "path_scope": "unknown",
+      "path_symlink": true,
+      "path_traversal": false,
+      "tool": "delete_path~",
+      "zone_reach": "protected"
+     },
+     "bands": {
+      "core_decision": 15
+     },
+     "bits": "0010011"
+    },
+    {
+     "reading": {
+      "command_class": "network~",
+      "git_op": "network",
+      "kill_by_pattern": true,
+      "net_dest": "allowed_host~",
+      "path_control": false,
+      "path_glob": false,
+      "path_in_toolchain": false,
+      "path_scope": "outside",
+      "path_symlink": true,
+      "path_traversal": true,
+      "tool": "write_file~",
+      "zone_reach": "unknown~"
+     },
+     "bands": {
+      "core_decision": 14
+     },
+     "bits": "0100011"
+    },
+    {
+     "reading": {
+      "command_class": "\u00fcnlisted",
+      "git_op": "push",
+      "kill_by_pattern": true,
+      "net_dest": "\u00fcnlisted",
+      "path_control": false,
+      "path_glob": false,
+      "path_in_toolchain": true,
+      "path_scope": "none",
+      "path_symlink": true,
+      "path_traversal": true,
+      "tool": "read_file",
+      "zone_reach": "protected~"
+     },
+     "bands": {
+      "core_decision": 14
+     },
+     "bits": "0100011"
+    },
+    {
+     "reading": {
+      "command_class": "\u00fcnlisted",
+      "git_op": "unknown~",
+      "kill_by_pattern": false,
+      "net_dest": "other~",
+      "path_control": true,
+      "path_glob": true,
+      "path_in_toolchain": true,
+      "path_scope": "outside",
+      "path_symlink": true,
+      "path_traversal": true,
+      "tool": "read_file",
+      "zone_reach": "protected"
+     },
+     "bands": {
+      "core_decision": 6
+     },
+     "bits": "01011"
+    },
+    {
+     "reading": {
+      "command_class": "mutating~",
+      "git_op": "local_read",
+      "kill_by_pattern": true,
+      "net_dest": "other",
+      "path_control": true,
+      "path_glob": false,
+      "path_in_toolchain": true,
+      "path_scope": "outside",
+      "path_symlink": false,
+      "path_traversal": false,
+      "tool": "write_file",
+      "zone_reach": "unknown"
+     },
+     "bands": {
+      "core_decision": 14
+     },
+     "bits": "0100011"
+    }
+   ]
+  },
+  {
+   "name": "attitude",
+   "flow": "---\nname: attitude\nstart: watch\n---\n## watch\n-> critical: when vibration >= 80\n-> alarm: when pitch >= 45 or roll >= 45\n-> caution: when pitch >= 20 or roll >= 20 or vibration >= 40\n-> nominal: else\n## critical\n## alarm\n## caution\n## nominal\n",
+   "nodes": [
+    "watch"
+   ],
+   "joint_cells": {
+    "watch": 27
+   },
+   "routes": {
+    "watch": [
+     "nominal",
+     "caution",
+     "alarm",
+     "critical",
+     ""
+    ]
+   },
+   "readings": [
+    {
+     "reading": {
+      "pitch": 45,
+      "roll": 45,
+      "vibration": 40
+     },
+     "bands": {
+      "watch": 2
+     },
+     "bits": "0011"
+    },
+    {
+     "reading": {
+      "pitch": 19,
+      "roll": 19,
+      "vibration": 80
+     },
+     "bands": {
+      "watch": 3
+     },
+     "bits": "1011"
+    },
+    {
+     "reading": {
+      "pitch": 19,
+      "roll": 45,
+      "vibration": 40
+     },
+     "bands": {
+      "watch": 2
+     },
+     "bits": "0011"
+    },
+    {
+     "reading": {
+      "pitch": 20,
+      "roll": 45,
+      "vibration": 39
+     },
+     "bands": {
+      "watch": 2
+     },
+     "bits": "0011"
+    },
+    {
+     "reading": {
+      "pitch": 19,
+      "roll": 45,
+      "vibration": 39
+     },
+     "bands": {
+      "watch": 2
+     },
+     "bits": "0011"
+    },
+    {
+     "reading": {
+      "pitch": 19,
+      "roll": 20,
+      "vibration": 80
+     },
+     "bands": {
+      "watch": 3
+     },
+     "bits": "1011"
+    },
+    {
+     "reading": {
+      "pitch": 20,
+      "roll": 45,
+      "vibration": 39
+     },
+     "bands": {
+      "watch": 2
+     },
+     "bits": "0011"
+    },
+    {
+     "reading": {
+      "pitch": 45,
+      "roll": 19,
+      "vibration": 40
+     },
+     "bands": {
+      "watch": 2
+     },
+     "bits": "0011"
+    },
+    {
+     "reading": {
+      "pitch": 20,
+      "roll": 20,
+      "vibration": 80
+     },
+     "bands": {
+      "watch": 3
+     },
+     "bits": "1011"
+    },
+    {
+     "reading": {
+      "pitch": 20,
+      "roll": 19,
+      "vibration": 39
+     },
+     "bands": {
+      "watch": 1
+     },
+     "bits": "011"
+    },
+    {
+     "reading": {
+      "pitch": 20,
+      "roll": 19,
+      "vibration": 40
+     },
+     "bands": {
+      "watch": 1
+     },
+     "bits": "011"
+    },
+    {
+     "reading": {
+      "pitch": 45,
+      "roll": 19,
+      "vibration": 39
+     },
+     "bands": {
+      "watch": 2
+     },
+     "bits": "0011"
+    },
+    {
+     "reading": {
+      "pitch": 45,
+      "roll": 20,
+      "vibration": 80
+     },
+     "bands": {
+      "watch": 3
+     },
+     "bits": "1011"
+    },
+    {
+     "reading": {
+      "pitch": 19,
+      "roll": 45,
+      "vibration": 80
+     },
+     "bands": {
+      "watch": 3
+     },
+     "bits": "1011"
+    },
+    {
+     "reading": {
+      "pitch": 20,
+      "roll": 20,
+      "vibration": 40
+     },
+     "bands": {
+      "watch": 1
+     },
+     "bits": "011"
+    },
+    {
+     "reading": {
+      "pitch": 45,
+      "roll": 20,
+      "vibration": 80
+     },
+     "bands": {
+      "watch": 3
+     },
+     "bits": "1011"
+    },
+    {
+     "reading": {
+      "pitch": 45,
+      "roll": 20,
+      "vibration": 40
+     },
+     "bands": {
+      "watch": 2
+     },
+     "bits": "0011"
+    },
+    {
+     "reading": {
+      "pitch": 45,
+      "roll": 19,
+      "vibration": 80
+     },
+     "bands": {
+      "watch": 3
+     },
+     "bits": "1011"
+    },
+    {
+     "reading": {
+      "pitch": 45,
+      "roll": 45,
+      "vibration": 80
+     },
+     "bands": {
+      "watch": 3
+     },
+     "bits": "1011"
+    },
+    {
+     "reading": {
+      "pitch": 20,
+      "roll": 20,
+      "vibration": 40
+     },
+     "bands": {
+      "watch": 1
+     },
+     "bits": "011"
+    },
+    {
+     "reading": {
+      "pitch": 45,
+      "roll": 21,
+      "vibration": 38
+     },
+     "bands": {
+      "watch": 2
+     },
+     "bits": "0011"
+    },
+    {
+     "reading": {
+      "pitch": 46,
+      "roll": 19,
+      "vibration": 41
+     },
+     "bands": {
+      "watch": 2
+     },
+     "bits": "0011"
+    },
+    {
+     "reading": {
+      "pitch": 19,
+      "roll": 18,
+      "vibration": 79
+     },
+     "bands": {
+      "watch": 1
+     },
+     "bits": "011"
+    },
+    {
+     "reading": {
+      "pitch": 18,
+      "roll": 45,
+      "vibration": 81
+     },
+     "bands": {
+      "watch": 3
+     },
+     "bits": "1011"
+    },
+    {
+     "reading": {
+      "pitch": 21,
+      "roll": 21,
+      "vibration": 81
+     },
+     "bands": {
+      "watch": 3
+     },
+     "bits": "1011"
+    },
+    {
+     "reading": {
+      "pitch": 21,
+      "roll": 21,
+      "vibration": 80
+     },
+     "bands": {
+      "watch": 3
+     },
+     "bits": "1011"
+    },
+    {
+     "reading": {
+      "pitch": 44,
+      "roll": 43,
+      "vibration": 78
+     },
+     "bands": {
+      "watch": 1
+     },
+     "bits": "011"
+    },
+    {
+     "reading": {
+      "pitch": 43,
+      "roll": 18,
+      "vibration": 79
+     },
+     "bands": {
+      "watch": 1
+     },
+     "bits": "011"
+    },
+    {
+     "reading": {
+      "pitch": 44,
+      "roll": 44,
+      "vibration": 41
+     },
+     "bands": {
+      "watch": 1
+     },
+     "bits": "011"
+    },
+    {
+     "reading": {
+      "pitch": 44,
+      "roll": 46,
+      "vibration": 40
+     },
+     "bands": {
+      "watch": 2
+     },
+     "bits": "0011"
+    },
+    {
+     "reading": {
+      "pitch": 44,
+      "roll": 45,
+      "vibration": 38
+     },
+     "bands": {
+      "watch": 2
+     },
+     "bits": "0011"
+    },
+    {
+     "reading": {
+      "pitch": 19,
+      "roll": 45,
+      "vibration": 39
+     },
+     "bands": {
+      "watch": 2
+     },
+     "bits": "0011"
+    },
+    {
+     "reading": {
+      "pitch": 44,
+      "roll": 20,
+      "vibration": 39
+     },
+     "bands": {
+      "watch": 1
+     },
+     "bits": "011"
+    },
+    {
+     "reading": {
+      "pitch": 44,
+      "roll": 21,
+      "vibration": 79
+     },
+     "bands": {
+      "watch": 1
+     },
+     "bits": "011"
+    },
+    {
+     "reading": {
+      "pitch": 45,
+      "roll": 44,
+      "vibration": 39
+     },
+     "bands": {
+      "watch": 2
+     },
+     "bits": "0011"
+    },
+    {
+     "reading": {
+      "pitch": 21,
+      "roll": 18,
+      "vibration": 41
+     },
+     "bands": {
+      "watch": 1
+     },
+     "bits": "011"
+    },
+    {
+     "reading": {
+      "pitch": 43,
+      "roll": 18,
+      "vibration": 39
+     },
+     "bands": {
+      "watch": 1
+     },
+     "bits": "011"
+    },
+    {
+     "reading": {
+      "pitch": 43,
+      "roll": 21,
+      "vibration": 80
+     },
+     "bands": {
+      "watch": 3
+     },
+     "bits": "1011"
+    },
+    {
+     "reading": {
+      "pitch": 19,
+      "roll": 19,
+      "vibration": 80
+     },
+     "bands": {
+      "watch": 3
+     },
+     "bits": "1011"
+    },
+    {
+     "reading": {
+      "pitch": 45,
+      "roll": 21,
+      "vibration": 78
+     },
+     "bands": {
+      "watch": 2
+     },
+     "bits": "0011"
+    }
+   ]
+  }
+ ]
+}

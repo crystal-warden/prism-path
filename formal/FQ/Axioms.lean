@@ -5,6 +5,7 @@ import FQ.Reconstruct
 import FQ.Zeckendorf
 import FQ.AlgEq
 import FQ.Spiral
+import FQ.Signature
 import FQ.Conversion
 import FQ.Contract
 import FQ.Absence
@@ -31,6 +32,9 @@ import Core.Population
 #print axioms FQ.Spiral.spiral_bijection
 #print axioms FQ.Spiral.band_route
 #print axioms FQ.Spiral.band_eq_route_eq
+#print axioms FQ.Signature.route_eq_of_group
+#print axioms FQ.Signature.route_eq_of_signatures
+#print axioms FQ.Signature.decision_from_signatures
 #print axioms FQ.Conversion.convert_preserves
 #print axioms FQ.Conversion.fixed_policy_preserved
 #print axioms FQ.accept_faithful

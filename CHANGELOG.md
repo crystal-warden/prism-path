@@ -8,6 +8,10 @@ spec stable.
 
 ## [Unreleased]
 
+### Added: the spiral profile for policies too large to list (2026-11-22)
+
+- **A node whose joint grid is over 300,000 cells now has a band tier and a signature tier.** `prismpath/telemetry/spiral_groups.py` finds the band by evaluating the policy once, so no grid is listed, and costs 5 to 7 bits a decision on the seven large policies. The signature tier groups the fields that rules read together, sends each group's class of rule residuals, and refines inside a class in Gray order, at 14 to 43 bits. `layout_for` returns the existing `SpiralLayout` for a node that fits, so every existing layout, sidecar and recorded stream is byte identical. A stream carries a 42 byte preamble naming the policy and the layout, and a decoder refuses another policy's or another layout's stream. PROTOCOL.md section 2.6.1 defines the profile.
+- **Decision preservation is proven and tested.** `formal/FQ/Signature.lean` proves that readings whose disjoint, covering field groups have equal signatures route alike. `test_spiral_groups.py` round trips the seven policies and checks every reading of a seeded sample of the uniform and boundary populations, and the full 64,484 reading populations run at the checkpoint. `prismpath-telemetry-rs` has the band tier, held to the Python bits by `conformance/grouped_band.json`. The signature tier is not ported to Rust yet.
 ### Fixed: the spiral mesh referee compares frames again (2026-11-22)
 
 - **`prismpath-hw/spiral-mesh/referee_mesh.py` takes each frame's hex from the sender's `X` line.** Since the node began to batch triples, its `T` line carries no hex, so the referee read none, skipped every received frame and could pass its wire integrity check having compared nothing. A triple whose frame line was lost on serial is still not judged.
