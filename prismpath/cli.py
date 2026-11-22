@@ -774,7 +774,7 @@ def _check_authorization(args, flow_path: str, instance_key=None):
 def _cause_code(reason: str):
     """The registry code of a refusal string; a parameterized one carries a `:<detail>` past the name."""
     from prismpath.kernel import causes
-    return causes.code(":".join(reason.split(":")[:2]))
+    return causes.code(causes.reason_name(reason))
 
 
 def _named_causes(reasons) -> str:

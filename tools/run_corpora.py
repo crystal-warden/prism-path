@@ -104,6 +104,11 @@ CONSUMERS: dict[str, dict[str, list[tuple]]] = {
         "rs": [cargo("prismpath-rs", "test_crypto_agility", "prismpath-rs/tests/test_crypto_agility.rs")],
         "js": [("node", "run_crypto_agility.mjs", "prismpath/portable/run_crypto_agility.mjs")],
         "go": [NONE_GO], "hw": [NONE_HW]},
+    "portable/distribution": {
+        "py": [pytest("prismpath/tests/test_distribution_corpus.py")],
+        "rs": [("none", "the distribution envelope and verifier are not yet in prismpath-hotswap-rs; its replay comes with them")],
+        "js": [NONE_JS], "go": [NONE_GO],
+        "hw": [("none", "the C core of policy distribution is not yet in prismpath-hw; its replay comes with it")]},
     "portable/durable": {
         "py": [("generator", "prismpath/portable/gen_durable_fixtures.py")],
         "rs": [cargo("prismpath-rs", "test_durable", "prismpath-rs/tests/test_durable.rs")],

@@ -129,3 +129,38 @@ def test_only_a_404_from_the_crates_index_means_not_published(tmp_path):
     for code in ("429", "500", "503", "000"):
         run = _already_published_check(tmp_path, code)
         assert run.returncode != 0 and f"answered {code}" in run.stderr, code
+
+
+
+def test_case_099_no_package_and_no_export_holds_the_dev_build_marker(exported, tmp_path):
+    """case_099: D2, D4. The marker is ignored and not tracked, the export tree lacks it, and with the marker
+    written in a checkout neither a wheel built straight from that checkout nor its sdist holds it. The
+    checkout is a copy of the tracked tree, so the real one is never made a dev build by a test."""
+    import shutil
+    import tarfile
+    import zipfile
+    from prismpath.distribution import devbuild
+    root = export_clean.ROOT
+    git = lambda *a: subprocess.run(["git", "-C", str(root), *a], capture_output=True, text=True)
+    assert devbuild.MARKER not in git("ls-files").stdout.split("\n")
+    assert git("check-ignore", "-q", devbuild.MARKER).returncode == 0
+    assert not (exported / devbuild.MARKER).exists()
+    pytest.importorskip("build")
+    checkout = tmp_path / "checkout"
+    for rel in git("ls-files", "-z").stdout.split("\0"):
+        if rel and (root / rel).is_file():
+            (checkout / rel).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(root / rel, checkout / rel)
+    (checkout / devbuild.MARKER).write_text("dev\n")
+    assert devbuild.is_dev_build(checkout / "prismpath")
+    out = tmp_path / "dist"
+    for kind in ("--wheel", "--sdist"):
+        subprocess.run([sys.executable, "-m", "build", "--no-isolation", kind, "--outdir", str(out), str(checkout)],
+                       check=True, capture_output=True)
+    (sdist,), (wheel,) = out.glob("*.tar.gz"), out.glob("*.whl")
+    with tarfile.open(sdist) as archive:
+        sdist_names = archive.getnames()
+    with zipfile.ZipFile(wheel) as archive:
+        wheel_names = archive.namelist()
+    assert "prismpath/distribution/devbuild.py" in wheel_names and any(n.endswith("/pyproject.toml") for n in sdist_names)
+    assert not [name for name in sdist_names + wheel_names if name.endswith(devbuild.MARKER)]

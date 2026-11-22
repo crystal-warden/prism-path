@@ -393,13 +393,9 @@ def verify_pack(ppt_path: str, pubkey_paths: List[str],
         image = handle.read()
     if sha256_hex(image) != manifest.get("image_sha256"):
         return False, ["image:sha256-mismatch"], manifest
-    header = read_ppt_header(image)
-    counts = manifest.get("counts", {})
-    for count_key in ("atoms", "nodes", "edges", "prog_words", "max_steps", "max_stack"):
-        if counts.get(count_key) != header[count_key]:
-            return False, [f"manifest:count-mismatch:{count_key}"], manifest
-    if "wcet_cycles" in manifest and manifest["wcet_cycles"] != wcet_cycles(image):
-        return False, ["manifest:wcet-mismatch"], manifest   # recomputed from the image, independently
+    reasons = check_counts(manifest, image)
+    if reasons:
+        return False, reasons, manifest
     if "packing" in manifest:
         pk = manifest["packing"]
         if pk.get("profile") != "spiral":
@@ -411,6 +407,22 @@ def verify_pack(ppt_path: str, pubkey_paths: List[str],
             if sha256_hex(handle.read()) != pk.get("sidecar_sha256"):
                 return False, ["spiral:sidecar-hash-mismatch"], manifest
     return True, [], manifest
+
+
+def check_counts(signed: dict, image: bytes) -> List[str]:
+    """The signed `counts` against the image header, then a signed `wcet_cycles` against the bound recomputed
+    from the image, independently. [] when both hold. A pack's manifest and a distribution envelope's `meta`
+    carry the same members and are checked here alike."""
+    header = read_ppt_header(image)
+    counts = signed.get("counts", {})
+    if not isinstance(counts, dict):
+        return ["manifest:count-mismatch:counts"]
+    for count_key in ("atoms", "nodes", "edges", "prog_words", "max_steps", "max_stack"):
+        if counts.get(count_key) != header[count_key]:
+            return [f"manifest:count-mismatch:{count_key}"]
+    if "wcet_cycles" in signed and signed["wcet_cycles"] != wcet_cycles(image):
+        return ["manifest:wcet-mismatch"]
+    return []
 
 
 # ------------------------------------------------------------------ envelope

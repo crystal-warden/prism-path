@@ -134,6 +134,7 @@ EXCLUDE_PREFIXES = [
     "tools/arch_guard.", "tools/arch_scorecard.json", "tools/arith_lint.py", "tools/docs_health.py",
     "tools/evidence_check.py", "tools/ledger_lint.py", "tools/run_corpora.py", "tools/fq_redundancy.py", "tools/gen_mission_control_guide.py",
     "tools/reproduce.sh",
+    "tools/dev_build.py",      # writes the dev build marker of a research checkout (spec-policy-distribution.md, D2)
 ]
 EXCLUDE_PREFIXES.append("tools/export_manifest.txt")    # the export's own list of what it ships
 EXCLUDE_SUFFIXES = [".deferrals"]           # empty top-level scratch files
