@@ -20,8 +20,6 @@ import sys
 import threading
 import time
 
-import serial
-
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", ".."))
 
@@ -33,6 +31,7 @@ PORTS = ["/dev/ttyUSB2", "/dev/ttyUSB3", "/dev/ttyUSB4"]
 
 
 def capture(port, out, secs):
+    import serial
     serial_port = serial.Serial(port, 115200, timeout=2)
     serial_port.dtr = False; serial_port.rts = True
     time.sleep(0.1)
@@ -44,6 +43,45 @@ def capture(port, out, secs):
         if line:
             out.append(line)
     serial_port.close()
+
+
+def read_logs(logs):
+    """The sender's triples, the receivers' triples, the postures and the boot lines in each node's log.
+
+    A sender prints `T <tick> c<class> v<value>` for each triple it adds to its frame and `X <tick> len=<n> <hex>`
+    when it sends the frame, so the frame's hex belongs to every triple since the previous `X`. A receiver prints
+    `R <role> c<class> t<tick> v<value> <hex>` with the hex of the frame the triple came in. A triple whose frame
+    line was lost on serial has no hex and is not judged for wire integrity."""
+    tx = {}                    # (role, cls, tick) -> (value, hex or None)
+    rx = []                    # (observer, srcrole, cls, tick, value, hex)
+    postures = {}              # tick -> {role: n}
+    boots = []
+    for role, log in enumerate(logs):
+        pending = []
+        for line in log:
+            parts = line.split()
+            try:
+                if line.startswith("BOOT"):
+                    boots.append(f"node{role}: {line}")
+                elif line.startswith("T "):
+                    tick, cls = int(parts[1]), int(parts[2][1:])
+                    tx[(role, cls, tick)] = (int(parts[3][1:]), None)
+                    pending.append((role, cls, tick))
+                elif line.startswith("X "):
+                    frame_hex = parts[3]
+                    for key in pending:
+                        tx[key] = (tx[key][0], frame_hex)
+                    pending = []
+                elif line.startswith("R "):
+                    rx.append((role, int(parts[1]), int(parts[2][1:]), int(parts[3][1:]),
+                               int(parts[4][1:]), parts[5]))
+                elif line.startswith("P "):
+                    tick = int(parts[1])
+                    posture_index = int(parts[2].split("=")[1])
+                    postures.setdefault(tick, {})[role] = posture_index
+            except (ValueError, IndexError):
+                pass
+    return tx, rx, postures, boots
 
 
 def main():
@@ -58,28 +96,7 @@ def main():
     layout = spiral.SpiralLayout(flow, NODE)
     fidx = {field: index for index, field in enumerate(layout.fields)}
 
-    tx = {}                    # (role, cls, tick) -> (value, hex)
-    rx = []                    # (observer, srcrole, cls, tick, value, hex)
-    postures = {}              # tick -> {role: n}
-    boots = []
-    for role, log in enumerate(logs):
-        for line in log:
-            parts = line.split()
-            try:
-                if line.startswith("BOOT"):
-                    boots.append(f"node{role}: {line}")
-                elif line.startswith("T "):
-                    tick, cls = int(parts[1]), int(parts[2][1:])
-                    tx[(role, cls, tick)] = (int(parts[3][1:]), parts[4])
-                elif line.startswith("R "):
-                    rx.append((role, int(parts[1]), int(parts[2][1:]), int(parts[3][1:]),
-                               int(parts[4][1:]), parts[5]))
-                elif line.startswith("P "):
-                    tick = int(parts[1])
-                    posture_index = int(parts[2].split("=")[1])
-                    postures.setdefault(tick, {})[role] = posture_index
-            except (ValueError, IndexError):
-                pass
+    tx, rx, postures, boots = read_logs(logs)
 
     for boot_line in boots:
         print(boot_line)
@@ -89,7 +106,7 @@ def main():
     matched = 0
     for obs, src, cls, tick, val, hx in rx:
         want = tx.get((src, cls, tick))
-        if want is None:
+        if want is None or want[1] is None:
             continue                              # sender line lost on SERIAL, not RF  -  skip
         if want[1] != hx:
             bad_hex += 1

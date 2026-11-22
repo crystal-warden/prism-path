@@ -8,6 +8,10 @@ spec stable.
 
 ## [Unreleased]
 
+### Fixed: the spiral mesh referee compares frames again (2026-11-22)
+
+- **`prismpath-hw/spiral-mesh/referee_mesh.py` takes each frame's hex from the sender's `X` line.** Since the node began to batch triples, its `T` line carries no hex, so the referee read none, skipped every received frame and could pass its wire integrity check having compared nothing. A triple whose frame line was lost on serial is still not judged.
+
 ### Fixed: the in-toto export finds keys only where it is told to, and says when verify was unpinned (2026-11-22)
 
 - **`prismpath.ledgers.intoto` no longer patches `InstanceKey.__init__` or scans live objects for a private key.** A key comes from an argument, the environment variable or the run's key files.
