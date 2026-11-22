@@ -63,7 +63,7 @@ pub fn mixed_radix_gray(radices: &[usize]) -> Vec<Vec<usize>> {
 /// it keeps U+001C to U+001F and strips U+FEFF. A condition padded with one of those classifies as
 /// a `when` predicate in `is_deterministic` (which trims with py_trim) and would fall through to
 /// the raw-expression branch here, so the spiral layout would drop fields the kernel routes on.
-fn node_fields(graph: &Graph, node: &str, parts: &HashMap<String, FieldPartition>) -> Vec<String> {
+pub(crate) fn node_fields(graph: &Graph, node: &str, parts: &HashMap<String, FieldPartition>) -> Vec<String> {
     let mut seen = Vec::new();
     if let Some(flow_node) = graph.nodes.get(node) {
         for (_target, cond) in &flow_node.edges {

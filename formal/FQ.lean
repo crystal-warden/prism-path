@@ -8,6 +8,7 @@ import FQ.Reconstruct
 import FQ.Zeckendorf
 import FQ.AlgEq
 import FQ.Spiral
+import FQ.Signature
 import FQ.Conversion
 import FQ.Contract
 import FQ.Absence
