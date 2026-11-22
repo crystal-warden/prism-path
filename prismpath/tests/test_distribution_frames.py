@@ -84,6 +84,19 @@ def test_every_frame_type_encodes_and_decodes_to_itself():
     assert len(frames.encode(frames.abort_for(4, "s", 1, policy))) == 44
 
 
+def test_a_state_frame_carries_a_signed_state_record_whole():
+    """Frame type 3 carries one state record (H1), which reads back under the PEP's instance key."""
+    from prismpath.distribution import state_record as sr
+    from prismpath.tests import _dist
+    key = _dist.instance_key()
+    record = sr.StateRecord(event="staged", state="active", cause=None, pep_id=sr.pep_id(key.public_raw), counter=3,
+                            time=_dist.NOW, stream=sr.stream_prefix(_dist.STREAM), active_seq=1, floor=1, staged=True)
+    signed = sr.build(record, key)
+    data = frames.encode(frames.State(9, signed))
+    assert len(data) <= frames.ESPNOW_LIMIT
+    assert sr.read(frames.decode(data).record, key.public_raw) == record
+
+
 def test_commit_and_abort_name_a_release_by_its_prefixes():
     policy = "cd" * 32
     commit = frames.commit_for(1, "mesh/demo", 3, policy, 120)

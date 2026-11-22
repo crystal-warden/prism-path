@@ -25,6 +25,8 @@ from typing import Callable, Iterator, Optional, Tuple, Union
 
 from prismpath.distribution import envelope as env
 from prismpath.distribution.kinds import MAX_SEQ, Refused
+from prismpath.distribution.state_record import prefix as hash_prefix
+from prismpath.distribution.state_record import stream_prefix
 
 FRAME_INVALID = "dist:frame-invalid"
 TOO_LARGE = "dist:too-large"
@@ -49,16 +51,6 @@ def _require(condition: bool, detail: str, cause: str = FRAME_INVALID) -> None:
         raise Refused(cause, detail)
 
 
-def stream_prefix(stream: str) -> bytes:
-    """The first 16 bytes of the SHA-256 of a stream name, as commit, abort and the state record carry it."""
-    return hashlib.sha256(stream.encode("utf-8")).digest()[:PREFIX]
-
-
-def hash_prefix(sha256_hex: str) -> bytes:
-    """The first 16 bytes of a hash given in hex, an envelope id or a policy hash."""
-    return bytes.fromhex(sha256_hex)[:PREFIX]
-
-
 @dataclass(frozen=True)
 class Offer:
     """A sealed envelope exists for this transfer: its envelope id's first 16 bytes and the two lengths."""
@@ -79,7 +71,7 @@ class Chunk:
 
 @dataclass(frozen=True)
 class State:
-    """One state record (H1), carried as its bytes."""
+    """One state record (H1), carried as its bytes and read by `state_record.read` with the PEP's key."""
     transfer: int
     record: bytes
 
