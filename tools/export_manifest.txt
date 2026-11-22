@@ -194,7 +194,6 @@ prismpath/agent/local_route.py
 prismpath/agent/mcp_map.py
 prismpath/agent/mcp_proxy.py
 prismpath/agent/observe.py
-prismpath/agent/otel.py
 prismpath/agent/policy.py
 prismpath/agent/policy/agent_default.core.json
 prismpath/agent/policy/agent_default.rules.md
@@ -682,7 +681,6 @@ prismpath/tests/test_agent_egress.py
 prismpath/tests/test_agent_launcher.py
 prismpath/tests/test_agent_mcp_proxy.py
 prismpath/tests/test_agent_nested.py
-prismpath/tests/test_agent_otel.py
 prismpath/tests/test_agent_outcomes.py
 prismpath/tests/test_agent_package.py
 prismpath/tests/test_agent_profile.py

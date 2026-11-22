@@ -335,9 +335,11 @@ def _under_launcher(arena, **kwargs):
     capture = arena["capture"]
     log = arena["root"] / "egress.log"
     code = launcher.launch(["/usr/bin/python3", "agent.py"], str(ws), credential=str(arena["credential"]),
-                           stage_base=str(stages), max_processes=LIMIT, egress_log=str(log),
-                           resolver=lambda name: ["93.184.216.34"],
-                           connect=lambda address, port, timeout: socket.create_connection(("127.0.0.1", capture.port), timeout=timeout),
+                           stage_base=str(stages), egress_log=str(log),
+                           confinement=launcher.Confinement(max_processes=LIMIT),
+                           egress_settings=launcher.EgressSettings(
+                               resolver=lambda name: ["93.184.216.34"],
+                               connect=lambda address, port, timeout: socket.create_connection(("127.0.0.1", capture.port), timeout=timeout)),
                            **kwargs)
     assert code == 0
     assert list(stages.iterdir()) == []
