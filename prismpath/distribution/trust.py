@@ -61,8 +61,9 @@ def _keys_document(keys: Mapping[str, "Key"]) -> dict:
 
 @dataclass(frozen=True)
 class TrustStore:
-    """What an enforcement point holds about keys. `keys` maps a key id to its `Key`. The `revoked_*` sets and `floors` are cumulative (R6): a later list never removes one. A store
-    whose file could not be read has `readable` False and counts nothing."""
+    """What an enforcement point holds about keys. `keys` maps a key id to its `Key`. The `revoked_*` sets are the
+    latest revocation list, which holds every key id an earlier one held (R6), and `floors` the floor revocation
+    raised for the PEP's stream. A store whose file could not be read has `readable` False and counts nothing."""
     keys: Mapping[str, Key] = field(default_factory=dict)
     retired: FrozenSet[str] = frozenset()
     revoked_keys: FrozenSet[str] = frozenset()
@@ -139,21 +140,29 @@ class TrustStore:
         return cls(keys={canon.sha256_hex(bytes(raw)): Key(bytes(raw), role) for raw in public_keys}, **members)
 
     # ------------------------------------------------------------------ R1 to R7: revocation
-    def apply_revocation(self, envelope, body: bytes) -> "TrustStore":
+    def check_revocation(self, body: bytes) -> Optional[str]:
+        """R6 for a revocation list that already reads (V11): it holds every key id the current list holds, since a
+        key once revoked stays revoked. None, or `dist:trust-replay`."""
+        listed = kinds.read_revocation(body)
+        return None if self.revoked_keys <= frozenset(listed["keys"]) else "dist:trust-replay"
+
+    def apply_revocation(self, envelope, body: bytes, stream: Optional[str] = None) -> "TrustStore":
         """The store after a verified `trust.revocation` (`envelope`, already through V2 to V11, so its `seq` is the
-        trust sequence plus one, R1). Its keys, envelopes and policies join what the store refuses and its floors
-        raise the store's (R2, R4). Nothing leaves: a later list that drops an entry restores no trust (R6). The
-        caller makes the result durable before it reports it (R3)."""
+        trust sequence plus one, R1, and it drops no key, R6). The PEP holds this list and no other, so what it
+        refuses is bounded by R7 (R2, R6). A floor it raises is kept for `stream`, the PEP's own, and only rises
+        (R4). The caller makes the result durable before it reports it (R3)."""
         if envelope.artifact != "trust.revocation" or envelope.seq != self.trust_seq + 1:
             raise ValueError("only a verified revocation at the next trust sequence is applied (R1)")
+        if self.check_revocation(body) is not None:
+            raise ValueError("a revocation list that drops a revoked key is never applied (R6)")
         listed = kinds.read_revocation(body)
-        floors = dict(self.floors)
-        for stream, seq in listed["floors"].items():
-            floors[stream] = max(floors.get(stream, 0), seq)
-        return replace(self, revoked_keys=self.revoked_keys | frozenset(listed["keys"]),
-                       revoked_envelopes=self.revoked_envelopes | frozenset(listed["envelopes"]),
-                       revoked_policies=self.revoked_policies | frozenset(listed["policies"]), floors=floors,
-                       trust_seq=envelope.seq, trust_id=envelope.envelope_id)
+        floors = {name: seq for name, seq in self.floors.items() if stream is None or name == stream}
+        for name, seq in listed["floors"].items():
+            if stream is None or name == stream:
+                floors[name] = max(floors.get(name, 0), seq)
+        return replace(self, revoked_keys=frozenset(listed["keys"]), revoked_envelopes=frozenset(listed["envelopes"]),
+                       revoked_policies=frozenset(listed["policies"]), floors=floors, trust_seq=envelope.seq,
+                       trust_id=envelope.envelope_id)
 
     def holds_up(self, entries: Sequence[Tuple[str, bytes]], message: bytes, role: str = kinds.AUTHORITY) -> bool:
         """R5, O3: an entry by a key the store holds in `role`, not revoked, verifies. A retired key still holds up

@@ -274,9 +274,13 @@ def build_cases(kind: str, spec: Dict[int, dict]) -> List[dict]:
         sealed_by(raw(kind_doc(body, meta={**meta, "wcet_cycles": meta["wcet_cycles"] + 1})), "A"))
 
     # R1 to R7, X4: revocation lists, verified against the trust store a PEP holds
+    r_id = env.key_id(public_raw(test_key("R")))
+
     def revocation_body(**lists) -> bytes:
+        """A list on top of the corpus's store, which holds R revoked: every later list keeps R (R6)."""
+        keys = sorted(set(lists.get("keys", [])) | ({r_id} if lists.get("keep_r", True) else set()))
         return canon.canon2_bytes({canon.ENCODING_KEY: canon.CANON2, "format": "prismpath.dist-revocation/1",
-                                   "envelopes": sorted(lists.get("envelopes", [])), "keys": sorted(lists.get("keys", [])),
+                                   "envelopes": sorted(lists.get("envelopes", [])), "keys": keys,
                                    "policies": sorted(lists.get("policies", [])), "floors": lists.get("floors", {})})
 
     def revocation_doc(listed: bytes, seq: int, **changes) -> dict:
@@ -294,7 +298,8 @@ def build_cases(kind: str, spec: Dict[int, dict]) -> List[dict]:
     first = revocation_body(keys=[b_id])
     first_sealed = sealed_by(raw(revocation_doc(first, 1)), "A")
     empty = revocation_body()
-    second = (sealed_by(raw(revocation_doc(empty, 2)), "A"), empty)
+    keeping_b = revocation_body(keys=[b_id])
+    second = (sealed_by(raw(revocation_doc(keeping_b, 2)), "A"), keeping_b)
     after_first = applied(trust_store(), (first_sealed, first))
     add(66, "one_above_the_trust_sequence", None, first_sealed, payload=first)
     add(66, "the_same_one_again", None, first_sealed, payload=first, trust=after_first, unchanged=True)
@@ -307,7 +312,20 @@ def build_cases(kind: str, spec: Dict[int, dict]) -> List[dict]:
                                             revocation_body(floors={STREAM: 9})))
     add(68, "a_release_below_a_raised_floor", "dist:seq-replay", sealed_by(raw(kind_doc(body, seq=8)), "A"),
         trust=floored_store)
-    add(70, "a_later_list_dropping_the_key", "sig:revoked-key", sealed_by(good, "B"), trust=applied(after_first, second))
+    add(70, "a_later_list_dropping_the_key", "dist:trust-replay", sealed_by(raw(revocation_doc(empty, 2)), "A"),
+        payload=empty, trust=after_first)
+    add(70, "the_key_still_refused", "sig:revoked-key", sealed_by(good, "B"), trust=after_first)
+    # R6: a floor passes a revoked envelope, the next list drops it, and the envelope is refused by the floor
+    passed = raw(kind_doc(body, seq=5))
+    passing = revocation_body(envelopes=[env.envelope_id(passed)], floors={STREAM: 6})
+    passing_sealed = sealed_by(raw(revocation_doc(passing, 1)), "A")
+    add(130, "a_floor_past_a_revoked_envelope", None, passing_sealed, payload=passing)
+    dropping = revocation_body(floors={STREAM: 6})
+    dropping_sealed = sealed_by(raw(revocation_doc(dropping, 2)), "A")
+    after_passing = applied(trust_store(), (passing_sealed, passing))
+    add(130, "the_next_list_dropping_it", None, dropping_sealed, payload=dropping, trust=after_passing)
+    add(130, "the_envelope_again", "dist:seq-replay", sealed_by(passed, "A"),
+        trust=applied(after_passing, (dropping_sealed, dropping)))
     many = revocation_body(envelopes=[canon.sha256_hex(bytes([index])) for index in range(65)])
     add(71, "sixty_five_entries", "dist:too-large", sealed_by(raw(revocation_doc(many, 1)), "A"), payload=many)
     add(79, "trust_kind_with_expires", "dist:bad-format",

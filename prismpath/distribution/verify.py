@@ -138,6 +138,8 @@ def verify(sealed: bytes, body: bytes, *, trust: TrustStore, pep: PepView, now: 
         return refused("dist:incomplete")
     # V11: the artifact's own check
     cause = target.check_for(envelope.artifact)(envelope, body, pep)
+    if cause is None and envelope.artifact == "trust.revocation":
+        cause = trust.check_revocation(body)                                     # R6
     if cause is not None:
         return refused(cause)
     return Verdict(None, envelope, time_floor=time_floor)

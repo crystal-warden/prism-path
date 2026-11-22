@@ -59,9 +59,9 @@ def test_case_066_a_revocation_is_taken_at_the_next_trust_sequence_only(point):
     assert _read(point, point.pep.stage(sealed, first)).event == "trust-applied"
     again = _read(point, point.pep.stage(sealed, first))
     assert (again.event, again.trust_seq) == ("beat", 1)
-    point.revoke(2)
-    assert _read(point, point.revoke(1)).cause == "dist:trust-replay"
-    assert _read(point, point.revoke(4)).cause == "dist:trust-replay"
+    point.revoke(2, keys=[_dist.key_id("B")])
+    assert _read(point, point.revoke(1, keys=[_dist.key_id("B")])).cause == "dist:trust-replay"
+    assert _read(point, point.revoke(4, keys=[_dist.key_id("B")])).cause == "dist:trust-replay"
     assert point.pep.trust.trust_seq == 2
 
 
@@ -110,11 +110,11 @@ def test_a_revocation_that_misses_the_active_release_leaves_it_deciding(point):
     assert point.pep.state() == "active" and point.pep.refusal() is None
 
 
-def test_case_070_a_later_list_that_drops_a_key_restores_nothing(point):
-    """case_070: R6."""
+def test_case_070_a_later_list_that_drops_a_key_is_refused(point):
+    """case_070: R6. The list is dist:trust-replay and is not applied, and the key is still refused."""
     point.revoke(1, keys=[_dist.key_id("B")])
-    point.revoke(2)
-    assert _dist.key_id("B") in point.pep.trust.revoked_keys
+    assert _read(point, point.revoke(2)).cause == "dist:trust-replay"
+    assert point.pep.trust.trust_seq == 1 and _dist.key_id("B") in point.pep.trust.revoked_keys
     assert _read(point, point.pep.stage(seal("policy.ppt", NEW, signer="B"), NEW)).cause == "sig:revoked-key"
 
 
@@ -177,3 +177,18 @@ def test_a_state_record_reports_the_floor_a_revocation_raised(point):
     point.commit(OLD, seq=1)
     assert _read(point, point.revoke(1, floors={STREAM: 7})).floor == 7
     assert _read(point, point.pep.record("beat")).floor == 7 and point.pep.floor.seq == 1
+
+
+def test_a_pep_holds_only_the_latest_list_and_a_floor_keeps_out_what_it_dropped(point):
+    """R6, R4: the PEP half of case 130 (the sealing tool and the controller refuse a list that drops what no floor
+    passed, which is theirs). A list raises the floor past a revoked envelope, the next list drops the envelope,
+    the PEP then holds only that list, and the envelope sent again is refused by the floor. Floors of other
+    streams are not kept."""
+    revoked = seal("policy.ppt", OLD, seq=5)
+    revoked_id = env.envelope_id(env.unseal(revoked)[0])
+    assert _read(point, point.revoke(1, envelopes=[revoked_id], floors={STREAM: 6, "other/stream": 3})).event \
+        == "trust-applied"
+    assert point.pep.trust.floors == {STREAM: 6}
+    assert _read(point, point.revoke(2, floors={STREAM: 6})).event == "trust-applied"
+    assert point.pep.trust.revoked_envelopes == frozenset() and point.pep.trust.trust_seq == 2
+    assert _read(point, point.pep.stage(revoked, OLD)).cause == "dist:seq-replay"

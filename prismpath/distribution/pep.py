@@ -444,7 +444,7 @@ class Pep:
         """Apply a verified revocation at once, durably before it is reported (B2, R3), then lapse the active
         release and drop the staged one when the revocation removed the ground they stand on (R5). A held PEP
         lapses the same way, which ends the hold (X8)."""
-        self.trust = self.trust.apply_revocation(envelope, body).save()
+        self.trust = self.trust.apply_revocation(envelope, body, self.stream).save()
         self.audit.append("distribution", "trust-applied", {"envelope_id": envelope.envelope_id, "seq": envelope.seq,
                                                            "artifact": envelope.artifact, "result": "applied"})
         self._drop_fallen_staged()

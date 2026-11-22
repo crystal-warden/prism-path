@@ -268,6 +268,7 @@ ARTIFACTS: Dict[str, Artifact] = {
     "policy.spiral": Artifact(check=check_policy_spiral),
     "sandbox.profile": Artifact(frozenset({"compiler"})),
     "egress.hosts": Artifact(),
+    "agent.zones": Artifact(),
     "gateway.routes": Artifact(),
     "net.dests": Artifact(),
     "net.edge": Artifact(frozenset({"flow_sha256", "names_sha256", "qualification"})),
