@@ -136,6 +136,7 @@ prismpath-telemetry-rs/src/refresh.rs
 prismpath-telemetry-rs/src/replay.rs
 prismpath-telemetry-rs/src/selfheal.rs
 prismpath-telemetry-rs/src/spiral.rs
+prismpath-telemetry-rs/src/spiral_groups.rs
 prismpath-telemetry-rs/src/wire.rs
 prismpath-telemetry-rs/src/zeckendorf.rs
 prismpath-telemetry-rs/tests/fixtures/boundary.json
@@ -143,6 +144,7 @@ prismpath-telemetry-rs/tests/fixtures/concentrator.json
 prismpath-telemetry-rs/tests/fixtures/decisions.json
 prismpath-telemetry-rs/tests/fixtures/defined_wire.json
 prismpath-telemetry-rs/tests/fixtures/field_definitions.json
+prismpath-telemetry-rs/tests/fixtures/grouped_band.json
 prismpath-telemetry-rs/tests/fixtures/inputs.json
 prismpath-telemetry-rs/tests/fixtures/policy_forms.json
 prismpath-telemetry-rs/tests/fixtures/receipt_stream.json
@@ -156,6 +158,7 @@ prismpath-telemetry-rs/tests/test_ackchannel.rs
 prismpath-telemetry-rs/tests/test_boundary_parity.rs
 prismpath-telemetry-rs/tests/test_concentrator.rs
 prismpath-telemetry-rs/tests/test_conformance_decisions.rs
+prismpath-telemetry-rs/tests/test_conformance_grouped_band.rs
 prismpath-telemetry-rs/tests/test_conformance_spiral.rs
 prismpath-telemetry-rs/tests/test_cross_language.rs
 prismpath-telemetry-rs/tests/test_decode.rs
@@ -532,6 +535,7 @@ prismpath/telemetry/conformance/boundary.json
 prismpath/telemetry/conformance/concentrator.json
 prismpath/telemetry/conformance/decisions.json
 prismpath/telemetry/conformance/defined_wire.json
+prismpath/telemetry/conformance/grouped_band.json
 prismpath/telemetry/conformance/inputs.json
 prismpath/telemetry/conformance/policy_forms.json
 prismpath/telemetry/conformance/receipt_stream.json
@@ -547,6 +551,7 @@ prismpath/telemetry/facet_mcp.py
 prismpath/telemetry/gen_boundary_corpus.py
 prismpath/telemetry/gen_decisions_corpus.py
 prismpath/telemetry/gen_defined_wire_corpus.py
+prismpath/telemetry/gen_grouped_corpus.py
 prismpath/telemetry/gen_policy_forms_corpus.py
 prismpath/telemetry/gen_profile_corpora.py
 prismpath/telemetry/gen_spiral_corpus.py
@@ -560,6 +565,7 @@ prismpath/telemetry/refresh.py
 prismpath/telemetry/replay.py
 prismpath/telemetry/selfheal.py
 prismpath/telemetry/spiral.py
+prismpath/telemetry/spiral_groups.py
 prismpath/telemetry/spiral_pack.py
 prismpath/telemetry/tests/__init__.py
 prismpath/telemetry/tests/test_acceptance.py
@@ -587,6 +593,7 @@ prismpath/telemetry/tests/test_receipts.py
 prismpath/telemetry/tests/test_replay.py
 prismpath/telemetry/tests/test_selfheal.py
 prismpath/telemetry/tests/test_spiral.py
+prismpath/telemetry/tests/test_spiral_groups.py
 prismpath/telemetry/tests/test_spiral_pack.py
 prismpath/telemetry/tests/test_zeckendorf.py
 prismpath/telemetry/wire.py
