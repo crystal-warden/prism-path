@@ -40,10 +40,11 @@ pub const TOO_LARGE: &str = "dist:too-large";
 pub const INCOMPLETE: &str = "dist:incomplete";
 pub const SIG_INVALID: &str = "sig:invalid";
 pub const SIG_REVOKED_KEY: &str = "sig:revoked-key";
+pub const ROTATION_INVALID: &str = "dist:rotation-invalid";
 /// Every cause this module reports itself, each a registered name (`tests` checks the registry).
-pub const CAUSES: [&str; 14] = [
+pub const CAUSES: [&str; 15] = [
     BAD_FORMAT, NOT_CANONICAL, UNKNOWN_KEY, TARGET_MISMATCH, BODY_MISMATCH, SEQ_REPLAY, NOT_YET_VALID,
-    EXPIRED, REVOKED, TRUST_REPLAY, TOO_LARGE, INCOMPLETE, SIG_INVALID, SIG_REVOKED_KEY,
+    EXPIRED, REVOKED, TRUST_REPLAY, TOO_LARGE, INCOMPLETE, SIG_INVALID, SIG_REVOKED_KEY, ROTATION_INVALID,
 ];
 
 /// E1 `seq`, and every integer the format carries: canon/2's exact range.
@@ -532,7 +533,7 @@ impl TargetKind {
                 needs: &[ArtifactKind::PolicyPpt],
                 decides: false,
                 when_declared: &[ArtifactKind::PolicySpiral],
-                applies: &[ArtifactKind::TrustWidening, ArtifactKind::TrustRevocation],
+                applies: &[ArtifactKind::TrustWidening, ArtifactKind::TrustRevocation, ArtifactKind::TrustRotation],
                 body_bound: envelope::MAX_BODY,
                 trust_bound: TRUST_BOUND,
             }),
