@@ -649,7 +649,7 @@
    "code": 142,
    "name": "dist:revoked",
    "class": "authority",
-   "description": "a distribution envelope whose id or policy hash is on the signed revocation list, or whose seq a revocation's floor has passed; refused, or the active release lapses"
+   "description": "a distribution envelope whose id or policy hash is on the signed revocation list, refused; an active release whose seq a raised floor has passed lapses with it"
   },
   {
    "code": 143,

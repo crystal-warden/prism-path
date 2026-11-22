@@ -2176,9 +2176,9 @@
    },
    "cwe": {
     "ids": [
-     "CWE-347"
+     "CWE-354"
     ],
-    "rationale": "The signed hash does not cover the bytes given, so the signature does not verify them."
+    "rationale": "A body whose hash is not the one the envelope names fails the integrity check value, the same condition as rows 6 and 19."
    }
   },
   "139": {
@@ -2218,10 +2218,8 @@
     "none": "ATLAS has no rollback technique. T0081 concerns an agent's own configuration, not the policy that governs it."
    },
    "cwe": {
-    "ids": [
-     "CWE-294"
-    ],
-    "rationale": "Nearest entry. A valid envelope presented outside the window its signer gave it is refused."
+    "ids": [],
+    "none": "Using an envelope before its validity window opens is neither a replay nor a signature failure, and no CWE entry names it."
    }
   },
   "141": {
@@ -2240,9 +2238,9 @@
    },
    "cwe": {
     "ids": [
-     "CWE-294"
+     "CWE-324"
     ],
-    "rationale": "A once valid envelope presented again after its lifetime is refused."
+    "rationale": "An envelope past its expiry is honoured no longer, as a key past its expiration date must not be used."
    }
   },
   "142": {
@@ -2354,9 +2352,9 @@
    },
    "cwe": {
     "ids": [
-     "CWE-347"
+     "CWE-757"
     ],
-    "rationale": "Nearest entry. The older form's signature is not relied on where the distribution envelope's verification is required."
+    "rationale": "Refusing an older signed form after the cutoff stops a downgrade to a less secure format."
    }
   },
   "147": {
@@ -2377,9 +2375,9 @@
    },
    "cwe": {
     "ids": [
-     "CWE-347"
+     "CWE-489"
     ],
-    "rationale": "The signature verification stays on, since a production build refuses the switch that would skip it."
+    "rationale": "The refusal stops a development hatch, which is active debug code, from being honoured in a production build."
    }
   },
   "148": {
