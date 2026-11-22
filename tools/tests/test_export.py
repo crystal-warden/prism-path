@@ -129,3 +129,23 @@ def test_only_a_404_from_the_crates_index_means_not_published(tmp_path):
     for code in ("429", "500", "503", "000"):
         run = _already_published_check(tmp_path, code)
         assert run.returncode != 0 and f"answered {code}" in run.stderr, code
+
+
+def test_case_099_neither_the_export_tree_nor_the_built_packages_hold_the_dev_build_marker(exported, tmp_path):
+    """case_099: D4. prismpath/_dev_build.py makes a dev build, so the export leaves it out, and the sdist and
+    the wheel `python -m build` makes from that sdist leave it out too."""
+    import tarfile
+    import zipfile
+    marker = "prismpath/_dev_build.py"
+    assert (export_clean.ROOT / marker).exists() and not export_clean.is_included(marker)
+    assert not (exported / marker).exists()
+    pytest.importorskip("build")
+    subprocess.run([sys.executable, "-m", "build", "--no-isolation", "--outdir", str(tmp_path), str(export_clean.ROOT)],
+                   check=True, capture_output=True)
+    (sdist,), (wheel,) = tmp_path.glob("*.tar.gz"), tmp_path.glob("*.whl")
+    with tarfile.open(sdist) as archive:
+        sdist_names = archive.getnames()
+    with zipfile.ZipFile(wheel) as archive:
+        wheel_names = archive.namelist()
+    assert "prismpath/distribution/devbuild.py" in wheel_names
+    assert not [name for name in sdist_names + wheel_names if name.endswith("_dev_build.py")]

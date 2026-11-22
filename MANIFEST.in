@@ -15,4 +15,7 @@ recursive-include prismpath/portable *.mjs *.html *.json
 recursive-include prismpath/tests/fixtures *.md *.jsonl *.ppt *.json SHA256SUMS
 
 prune prismpath/__pycache__
+# The dev build marker (docs/design/spec-policy-distribution.md, D2 and D4): its presence makes a dev build. The
+# wheel is built from this sdist, so leaving it out here leaves it out of both.
+exclude prismpath/_dev_build.py
 global-exclude *.py[co]

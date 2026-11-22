@@ -1,0 +1,138 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
+"""The one verifier of policy distribution (spec-policy-distribution.md, section 9.1). An enforcement point,
+the controller (F1), a gateway reading a grant (GR2) and the command line all call `verify`.
+
+The rules run in the order V2 to V11 and the first that fails is the only cause reported (V1). The verifier
+is a function of its arguments: it reads no clock, no file and no floor of its own. What the enforcement
+point holds comes in as a `PepView` and its trust store, and the time floor the PEP should make durable
+after V6 passed comes back in the `Verdict` (V13). The widening rule V12 joins with W1 to W7.
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import FrozenSet, Optional
+
+from prismpath import canon
+from prismpath.distribution import envelope as env
+from prismpath.distribution import kinds
+from prismpath.distribution.kinds import Refused, Verdict
+from prismpath.distribution.trust import TrustStore
+
+SKEW = 300                                         # section 7: a PEP's clock is within 300 seconds of true time
+__all__ = ["SKEW", "Floor", "Staged", "PepView", "Verdict", "verify"]
+
+
+@dataclass(frozen=True)
+class Floor:
+    """Q1: the highest `seq` committed on the PEP's stream and the envelope ids committed at it."""
+    seq: int = 0
+    ids: FrozenSet[str] = frozenset()
+
+
+@dataclass(frozen=True)
+class Staged:
+    """What a staged release shares (E7): its stream, `seq`, policy hash, `replaces` and `widens`."""
+    stream: str
+    seq: int
+    policy_sha256: str
+    replaces: str
+    widens: bool
+
+
+@dataclass(frozen=True)
+class PepView:
+    """What the verifier needs of an enforcement point. `kind` must have a row in `kinds.TARGETS`.
+    `qualification` is the qualification envelope a `host` PEP admits images under, already verified, and
+    `body_bound` is the PEP's own bound on a body (E6)."""
+    kind: str
+    stream: str
+    floor: Floor = field(default_factory=Floor)
+    active: Optional[str] = None
+    staged: Optional[Staged] = None
+    qualification: Optional[dict] = None
+    body_bound: int = env.MAX_BODY
+
+    def __post_init__(self):
+        if self.kind not in kinds.TARGETS:
+            raise ValueError(f"no enforcement point of kind {self.kind!r} is built")
+        if not kinds.is_stream(self.stream):
+            raise ValueError(f"{self.stream!r} is not a stream name")
+
+
+def _floor_check(envelope: env.Envelope, trust: TrustStore, pep: PepView) -> Optional[Verdict]:
+    """V8. None to go on, or the verdict: a refusal, or an envelope at its floor that changes nothing."""
+    envelope_id = envelope.envelope_id
+    if envelope.artifact in kinds.ON_TRUST_STREAM:                 # R1, O1: one trust sequence
+        if envelope.seq > trust.trust_seq:
+            return None
+        if envelope.seq == trust.trust_seq and envelope_id == trust.trust_id:
+            return Verdict(None, envelope, unchanged=True)
+        return Verdict("dist:trust-replay", envelope)
+    floor = max(pep.floor.seq, trust.floors.get(envelope.stream, 0))   # Q2, Q3, and R4's raised floor
+    if envelope.seq > floor:
+        return None
+    if envelope.seq == pep.floor.seq == floor and envelope_id in pep.floor.ids:
+        return Verdict(None, envelope, unchanged=True)
+    return Verdict("dist:seq-replay", envelope)
+
+
+def verify(sealed: bytes, body: bytes, *, trust: TrustStore, pep: PepView, now: int) -> Verdict:
+    """V1: the sealed envelope and its body checked in the order V2 to V11 for `pep` at the PEP's clock
+    reading `now` (Unix seconds). Returns the first failure's cause, or the accepted envelope."""
+    # V2: the container reads, and the envelope and body fit the bounds
+    try:
+        envelope_bytes, entries = env.unseal(sealed)
+    except Refused as refused:
+        return Verdict(refused.cause)
+    body = bytes(body)
+    if len(body) > pep.body_bound:
+        return Verdict("dist:too-large")
+    # V3: the signatures, over the bytes as they came and before anything reads them (E9)
+    counted = trust.counting(entries, env.signed_message(envelope_bytes))
+    if not counted.ok:
+        return counted
+    # V4: the envelope reads
+    try:
+        envelope = env.read(envelope_bytes)
+    except Refused as refused:
+        return Verdict(refused.cause)
+    # V5: for this PEP's kind, an artifact its kind uses or a trust kind, on its stream or `@trust`
+    target = kinds.TARGETS[pep.kind]
+    stream = env.TRUST_STREAM if envelope.artifact in kinds.ON_TRUST_STREAM else pep.stream
+    if (pep.kind not in envelope.targets or envelope.stream != stream
+            or not (envelope.artifact in target.needs or envelope.artifact in kinds.TRUST_ARTIFACTS)):
+        return Verdict("dist:target-mismatch", envelope)
+    # V6: time, against the larger of the clock and the time floor (T1, T3, T4; X4 a trust kind never expires)
+    time = max(now, trust.time_floor)
+    if envelope.not_before - time > SKEW:
+        return Verdict("dist:not-yet-valid", envelope)
+    if envelope.expires and time >= envelope.expires:
+        return Verdict("dist:expired", envelope)
+    time_floor = max(trust.time_floor, envelope.not_before)          # V13
+
+    def refused(cause: str) -> Verdict:
+        return Verdict(cause, envelope, time_floor=time_floor)
+
+    # V7: revocation
+    if envelope.envelope_id in trust.revoked_envelopes or envelope.policy_sha256 in trust.revoked_policies:
+        return refused("dist:revoked")
+    # V8: the sequence
+    floor = _floor_check(envelope, trust, pep)
+    if floor is not None:
+        return Verdict(floor.cause, envelope, unchanged=floor.unchanged, time_floor=time_floor)
+    # V9: the body
+    if len(body) != envelope.body_size or canon.sha256_hex(body) != envelope.body_sha256:
+        return refused("dist:body-mismatch")
+    # V10: the release already staged at this seq agrees (E7)
+    staged = pep.staged
+    if (envelope.artifact not in kinds.ON_TRUST_STREAM and staged is not None
+            and staged.stream == envelope.stream and staged.seq == envelope.seq
+            and (staged.policy_sha256, staged.replaces, staged.widens)
+            != (envelope.policy_sha256, envelope.replaces, envelope.widens)):
+        return refused("dist:incomplete")
+    # V11: the artifact's own check
+    cause = kinds.ARTIFACTS[envelope.artifact].check(envelope, body, pep)
+    if cause is not None:
+        return refused(cause)
+    return Verdict(None, envelope, time_floor=time_floor)

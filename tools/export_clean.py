@@ -108,6 +108,7 @@ EXCLUDE_PREFIXES = [
     "prismpath/evals/eval_",
     "prismpath/bypass_", "prismpath/eval_", "prismpath/measure_p1.py", "prismpath/gen_p1_lockfile.py",
     "prismpath/benign_corpus.py",       # alias shims for the held modules
+    "prismpath/_dev_build.py",          # the dev build marker: its presence makes a dev build (spec-policy-distribution.md, D2, D4)
     "prismpath/examples/code_nodes_gemma/", "prismpath/examples/mdflow_interop/",
     "prismpath/examples/cli_worker/log_alert", "prismpath/examples/cli_worker/release_gate",
     "prismpath-rs/examples/core_diff.rs", "prismpath-rs/examples/canon2_diff.rs",
