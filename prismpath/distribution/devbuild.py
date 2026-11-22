@@ -2,22 +2,26 @@
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Dev builds and escape hatches (spec-policy-distribution.md, section 16).
 
-Whether this is a dev build is a fact of the installed package (D2): the module `prismpath._dev_build` is in
-the repository and is left out of the wheel and of the product export (D4), so an installed product is a
-production build whatever its environment or configuration says. `hatch` is the one gate every escape
-hatch passes. In a production build it refuses with `dist:hatch-refused`, and the caller then runs the
-check the hatch would have skipped (D1). In a dev build it lets the hatch through, and every audit event it
-writes carries `dev_build` true (D3).
+Whether this is a dev build is a fact of where the code runs from (D2). A dev build is a source checkout
+whose root, the parent of the `prismpath` package directory, holds both `pyproject.toml` and the marker
+file `.prismpath-dev-build`. The marker is outside the package, so no wheel and no sdist can carry it. It is
+not tracked, `.gitignore` lists it, and only `python tools/dev_build.py on` writes it. An installed package
+has no `pyproject.toml` beside it and is never a dev build.
+
+`hatch` is the one gate every escape hatch passes. In a production build it refuses with
+`dist:hatch-refused`, and the caller then runs the check the hatch would have skipped (D1). In a dev build
+it lets the hatch through, and every audit event it writes carries `dev_build` true (D3).
 """
 from __future__ import annotations
 
-import importlib.util
+from pathlib import Path
 from typing import Any, Optional
 
 from prismpath.distribution.kinds import Refused
 
-DEV_BUILD_MODULE = "prismpath._dev_build"
+MARKER = ".prismpath-dev-build"
 HATCH_REFUSED = "dist:hatch-refused"
+PACKAGE_DIR = Path(__file__).resolve().parent.parent
 
 
 class HatchRefused(Refused):
@@ -28,9 +32,11 @@ class HatchRefused(Refused):
         self.hatch = name
 
 
-def is_dev_build() -> bool:
-    """True only when the built package carries `prismpath._dev_build` (D2)."""
-    return importlib.util.find_spec(DEV_BUILD_MODULE) is not None
+def is_dev_build(package_dir: Optional[Path] = None) -> bool:
+    """True only when the parent of the `prismpath` package directory (this one unless `package_dir` is
+    given) holds both `pyproject.toml` and the marker (D2)."""
+    root = Path(package_dir or PACKAGE_DIR).parent
+    return (root / MARKER).is_file() and (root / "pyproject.toml").is_file()
 
 
 def hatch(name: str, audit: Optional[Any] = None) -> None:

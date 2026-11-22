@@ -4,6 +4,8 @@ __pycache__/
 build/
 dist/
 .pytest_cache/
+# the dev build marker (docs/design/spec-policy-distribution.md, D2): written only by `python tools/dev_build.py on`, never tracked
+.prismpath-dev-build
 # runtime artifacts (never commit)
 *.bak-*
 interactions.jsonl

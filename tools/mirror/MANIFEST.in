@@ -20,5 +20,4 @@ recursive-include prismpath/telemetry/conformance *.json
 recursive-include prismpath/tests/fixtures *.md *.jsonl *.ppt *.json SHA256SUMS
 
 prune prismpath/__pycache__
-exclude prismpath/_dev_build.py         # the dev build marker never ships (docs/design/spec-policy-distribution.md, D4)
 global-exclude *.py[co]

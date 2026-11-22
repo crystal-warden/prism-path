@@ -108,7 +108,6 @@ EXCLUDE_PREFIXES = [
     "prismpath/evals/eval_",
     "prismpath/bypass_", "prismpath/eval_", "prismpath/measure_p1.py", "prismpath/gen_p1_lockfile.py",
     "prismpath/benign_corpus.py",       # alias shims for the held modules
-    "prismpath/_dev_build.py",          # the dev build marker: its presence makes a dev build (spec-policy-distribution.md, D2, D4)
     "prismpath/examples/code_nodes_gemma/", "prismpath/examples/mdflow_interop/",
     "prismpath/examples/cli_worker/log_alert", "prismpath/examples/cli_worker/release_gate",
     "prismpath-rs/examples/core_diff.rs", "prismpath-rs/examples/canon2_diff.rs",
@@ -135,6 +134,7 @@ EXCLUDE_PREFIXES = [
     "tools/arch_guard.", "tools/arch_scorecard.json", "tools/arith_lint.py", "tools/docs_health.py",
     "tools/evidence_check.py", "tools/ledger_lint.py", "tools/run_corpora.py", "tools/fq_redundancy.py", "tools/gen_mission_control_guide.py",
     "tools/reproduce.sh",
+    "tools/dev_build.py",      # writes the dev build marker of a research checkout (spec-policy-distribution.md, D2)
 ]
 EXCLUDE_PREFIXES.append("tools/export_manifest.txt")    # the export's own list of what it ships
 EXCLUDE_SUFFIXES = [".deferrals"]           # empty top-level scratch files
