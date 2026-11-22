@@ -274,11 +274,14 @@ class PolicyHost:
 
     # -- the distribution floor: once a release came by distribution, the older path is closed (L2) --
     def _distribution_floor(self) -> bool:
-        """True when this state directory's enforcement point has committed a distribution envelope, or its
-        floor file cannot be read, which is answered the same way (fail closed)."""
-        path = os.path.join(self.state_dir, "dist", "floor.json")
+        """True when this state directory's enforcement point has committed a distribution envelope, or when
+        it was provisioned and its floor file is missing or cannot be read, which is answered the same way
+        (fail closed). Only a directory no enforcement point was provisioned in, or one whose readable floor
+        is still 0, keeps the older path open."""
+        dist = os.path.join(self.state_dir, "dist")
+        path = os.path.join(dist, "floor.json")
         if not os.path.exists(path):
-            return False
+            return os.path.exists(os.path.join(dist, "anchor.json"))
         try:
             with open(path, "rb") as floor_file:
                 floor = canon.loads_document(floor_file.read())

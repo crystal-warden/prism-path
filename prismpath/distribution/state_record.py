@@ -80,6 +80,8 @@ class StateRecord:
 
     def unsigned_bytes(self) -> bytes:
         """Bytes 0 to 148+m+x, the part the signature covers."""
+        if self.event == "refused" and not self.cause:
+            raise ValueError("a refused record carries the cause it was refused with")
         if len(self.body) > MAX_BODY or len(self.extensions) > MAX_EXTENSIONS:
             raise ValueError("a state record body or extension area beyond its bound")
         code = causes.code(self.cause) if self.cause else 0

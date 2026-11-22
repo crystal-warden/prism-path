@@ -35,6 +35,7 @@ from typing import Any, Callable, Dict, FrozenSet, Iterable, Mapping, Optional, 
 
 from prismpath import canon
 from prismpath.distribution import devbuild, kinds, state_record
+from prismpath.distribution.adapters import NOT_LARGER
 from prismpath.distribution import envelope as env
 from prismpath.distribution.kinds import Refused
 from prismpath.distribution.trust import TrustStore, read_anchor
@@ -187,6 +188,7 @@ class Pep:
         self.audit = AuditLog(self.store.path("audit.log"), instance_key=instance_key, sign_appends=True)
         self.epoch = 0
         self.held = False
+        self.outbox: list = []
         self._load()
         self._check_separation(self.trust)
         self._recover()
@@ -206,17 +208,25 @@ class Pep:
         if not self.provisioned:
             return                                                  # P1: nothing to believe yet
         self.trust = TrustStore.load(self.store.path("trust.json"))
+        try:                                                         # H3: the counter is kept apart from the floor
+            counter = self.store.read("counter.json", _COUNTER)["counter"]
+            if not kinds.is_int(counter, 0, 2 ** 64 - 1):
+                raise Refused(kinds.BAD_FORMAT, "counter.json")
+            self.counter = counter
+        except (Refused, KeyError, TypeError):
+            # A counter that cannot be read must still never repeat: the PEP locks, and its records count on
+            # from its time in microseconds, above any counter it can have sent one record at a time.
+            self.counter, self.locked = self.time() * 1_000_000, True
         try:
             with open(self.store.path("anchor.json"), "rb") as handle:
                 self.stream = read_anchor(handle.read()).stream
             floor = self.store.read("floor.json", _FLOOR)
-            counter = self.store.read("counter.json", _COUNTER)
             if floor["stream"] != self.stream or not kinds.is_int(floor["seq"], 0, kinds.MAX_SEQ):
                 raise Refused(kinds.BAD_FORMAT, "floor.json")
             self.floor = Floor(floor["seq"], frozenset(floor["ids"]))
-            self.counter = counter["counter"]
         except (OSError, Refused, KeyError, TypeError):
             self.locked = True                                       # Q5
+        if self.locked:
             return
         if self.store.exists("active.json"):
             try:
@@ -298,7 +308,7 @@ class Pep:
             self.adapter.activate(self.active)
         else:
             self.adapter.deactivate(cause)
-        self.tick()
+        self._check_expiry()
 
     # ------------------------------------------------------------------ what the PEP is
     def state(self) -> str:
@@ -326,9 +336,21 @@ class Pep:
                        has_clock=self.has_clock)
 
     def record(self, event: str, cause: Optional[str] = None) -> bytes:
-        """A signed state record of the PEP as it is now (H1), its counter durable first (H3)."""
+        """A signed state record of the PEP as it is now (H1), after the expiry check every report comes
+        after (X1)."""
+        self._check_expiry()
+        return self._record(event, cause)
+
+    def drain(self) -> list:
+        """Every state record made since the last drain, oldest first: what the PEP sends (H4). A transition
+        found on the way into a call, such as a lapse, is in it before the call's own record."""
+        sent, self.outbox = self.outbox, []
+        return sent
+
+    def _record(self, event: str, cause: Optional[str] = None) -> bytes:
+        """Make one record, its counter durable first (H3), and put it in the outbox."""
         self.counter += 1
-        if self.provisioned and not self.locked:
+        if self.provisioned:
             self.store.write("counter.json", _COUNTER, {"counter": self.counter})
         active, staged = self.active, self.staged
         record = state_record.StateRecord(
@@ -341,7 +363,9 @@ class Pep:
             staged_release=state_record.prefix(staged.release if staged else None),
             staged_seq=staged.seq if staged else 0, trust_seq=self.trust.trust_seq if self.trust.readable else 0,
             staged=staged is not None, dev_build=devbuild.is_dev_build(), held=self.held)
-        return state_record.build(record, self.instance_key)
+        signed = state_record.build(record, self.instance_key)
+        self.outbox.append(signed)
+        return signed
 
     def see_epoch(self, epoch: int) -> None:
         """H9: keep the highest epoch id the controller sent. It changes nothing else."""
@@ -353,12 +377,13 @@ class Pep:
         return tuple(name for name in blob_sha256s if self.store.get(name) is None)
 
     # ------------------------------------------------------------------ G1, G2: stage
-    def _refuse(self, cause: Optional[str], **details) -> bytes:
+    def _refuse(self, cause: str, **details) -> bytes:
         self.audit.append("distribution", "refused", {**details, "cause": cause, "result": "refused"})
-        return self.record("refused", cause)
+        return self._record("refused", cause)
 
     def stage(self, sealed: bytes, body: bytes) -> bytes:
         """Verify one sealed envelope and its body and hold it (G1). Returns the stage-ack state record."""
+        self._check_expiry()
         if self.locked:
             return self._refuse("dist:floor-lost")
         if not self.provisioned:
@@ -371,11 +396,12 @@ class Pep:
         if not verdict.ok:
             return self._refuse(verdict.cause, envelope_id=envelope_id)
         if envelope.artifact in kinds.ON_TRUST_STREAM:
-            # B2: a trust statement is applied when it verifies. Revocation (R1 to R7) and rotation (O1 to O4)
-            # are applied by their own work packages; until then a verified statement is refused unapplied.
-            return self._refuse(None, envelope_id=envelope_id, reason="trust statements are not applied yet")
+            # B2 applies a trust statement when it verifies. This version applies no revocation or rotation
+            # yet, so one is refused as an artifact this PEP does not take.
+            return self._refuse("dist:target-mismatch", envelope_id=envelope_id,
+                                reason="this version applies no revocation or rotation")
         if verdict.unchanged:
-            return self.record("beat")                               # Q3: changes nothing, reports its state
+            return self._record("beat")                               # Q3: changes nothing, reports its state
         staged = self.staged
         if staged is not None and staged.stream == envelope.stream and envelope.seq < staged.seq:
             return self._refuse("dist:seq-replay", envelope_id=envelope_id)   # G2
@@ -392,7 +418,7 @@ class Pep:
         self.audit.append("distribution", "staged", {"envelope_id": envelope_id, "artifact": envelope.artifact,
                                                      "seq": envelope.seq, "release": envelope.release,
                                                      "result": "staged"})
-        return self.record("staged")
+        return self._record("staged")
 
     # ------------------------------------------------------------------ C1 to C5: commit
     def _drop_staged(self) -> None:
@@ -419,11 +445,14 @@ class Pep:
 
     def commit(self, stream: str, seq: int, policy_sha256: str) -> bytes:
         """Make the staged release named by `stream`, `seq` and `policy_sha256` active (C1 to C5)."""
+        self._check_expiry()
         if self.locked:
             return self._refuse("dist:floor-lost")
+        if not self.trust.readable:
+            return self._refuse("dist:unknown-key")                 # K1: decides nothing, commits nothing
         staged = self.staged
         if staged is None or not staged.names(stream, seq, policy_sha256):
-            return self.record("refused", "dist:not-staged")         # C1: nothing changes
+            return self._record("refused", "dist:not-staged")        # C1: nothing changes
         if not self.target.needs <= set(staged.held):
             return self._refuse("dist:incomplete", seq=seq)          # C2
         whole = {artifact: (staged.envelopes[artifact], staged.bodies[artifact]) for artifact in staged.held}
@@ -453,9 +482,13 @@ class Pep:
         self.active, self.previous, self.held = release, previous, False
         if self.staged is not None and self.staged.seq <= release.seq:
             self.staged = None
-        self.adapter.activate(release)
+        cause = self.refusal()
+        if cause is None:
+            self.adapter.activate(release)
+        else:
+            self.adapter.deactivate(cause)                           # X3: the runtime never runs what the PEP refuses
         self._cleanup()
-        return self.record(event)
+        return self._record(event)
 
     def _cleanup(self) -> None:
         if self.staged is None:
@@ -466,16 +499,20 @@ class Pep:
     # ------------------------------------------------------------------ A1: abort
     def abort(self, stream: str, seq: int, policy_sha256: str) -> bytes:
         """Drop the staged release when the abort names it, and change nothing otherwise (A1)."""
+        self._check_expiry()
         if self.staged is None or not self.staged.names(stream, seq, policy_sha256):
-            return self.record("beat")
+            return self._record("beat")
         self._drop_staged()
         self.audit.append("distribution", "aborted", {"stream": stream, "seq": seq, "result": "aborted"})
-        return self.record("aborted")
+        return self._record("aborted")
 
     # ------------------------------------------------------------------ X1 to X9: expiry and hold
     def tick(self) -> Optional[bytes]:
-        """X1: check the active release's expiry. It lapses to `no-policy`, or under HOLD is held (X7).
-        Returns the state record of a transition, None when nothing changed."""
+        """X1: check the active release's expiry, at least once a minute. It lapses to `no-policy`, or under
+        HOLD is held (X7). Returns the state record of a transition, None when nothing changed."""
+        return self._check_expiry()
+
+    def _check_expiry(self) -> Optional[bytes]:
         if self.active is None or self.locked or not self.trust.readable:
             return None
         if self._still_valid(self.active, early=False) != "dist:expired":
@@ -485,7 +522,7 @@ class Pep:
                 return None
             self.held = True
             self.audit.append("distribution", "held", {"seq": self.active.seq, "cause": "dist:held", "result": "held"})
-            return self.record("held", "dist:held")
+            return self._record("held", "dist:held")
         return self.lapse("dist:expired")
 
     def lapse(self, cause: str) -> bytes:
@@ -498,7 +535,7 @@ class Pep:
         self._keep_blobs()
         self.audit.append("distribution", "lapsed", {"seq": lapsed.seq if lapsed else None, "cause": cause,
                                                      "result": "lapsed"})
-        return self.record("lapsed", cause)
+        return self._record("lapsed", cause)
 
     def receipt_mark(self) -> Optional[str]:
         """X7: `held` on every receipt written while the PEP holds an expired release, else None."""
@@ -507,18 +544,37 @@ class Pep:
     # ------------------------------------------------------------------ RB1, RB2, X9: rollback
     def rollback(self) -> bytes:
         """Return to the release the active one replaced (RB1), never lowering the floor. Refused while held
-        (X9) and when an envelope of the kept release has expired or is revoked (RB2)."""
+        (X9), when an envelope of the kept release has expired or is revoked (RB2), and when the kept release
+        may allow more than the active one without a widening statement that covers it (RB3). With no
+        release kept there is nothing to return to, and `PepRefused` says so."""
+        self._check_expiry()
         if self.held:
             return self._refuse("dist:held")
         if self.locked:
             return self._refuse("dist:floor-lost")
+        if not self.trust.readable:
+            return self._refuse("dist:unknown-key")
         kept = self.previous
         if kept is None:
-            return self._refuse(None, reason="no release is kept")
+            raise PepRefused("no release is kept to roll back to (RB1)")
         cause = self._still_valid(kept, early=False)
         if cause is not None:
             return self._refuse(cause, seq=kept.seq)
+        if not self._covers(kept):
+            return self._refuse("dist:widening-unsigned", seq=kept.seq)
         return self._flip("rollback", kept, previous=None, floor=self.floor)
+
+    def _covers(self, kept: Release) -> bool:
+        """RB3: a rollback to `kept` does not widen silently. It is not larger by the adapter's comparison, or
+        `kept` holds a widening statement whose `from` is empty or holds the active policy hash (W4). Going
+        from no policy to any policy is larger."""
+        active = self.active
+        if active is not None and self.adapter.compare(active, kept) == NOT_LARGER:
+            return True
+        if "trust.widening" not in kept.bodies:
+            return False
+        froms = kinds.read_widening(kept.bodies["trust.widening"])["from"]
+        return not froms or (active is not None and active.policy_sha256 in froms)
 
     # ------------------------------------------------------------------ P2, P3: provisioning
     def provision(self, anchor: bytes) -> str:
@@ -557,4 +613,4 @@ class Pep:
         self._keep_blobs()
         self.audit.append("distribution", "provisioned", {"fingerprint": read.fingerprint, "stream": read.stream,
                                                           "result": "provisioned"})
-        return self.record("provisioned")
+        return self._record("provisioned")

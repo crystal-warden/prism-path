@@ -92,8 +92,13 @@ def test_case_019_commit_abort_an_offer_and_a_state_record_never_change_the_trus
 
 
 def test_case_023_a_rollback_and_an_abort_leave_the_floor_where_it_was(point):
-    """case_023: Q4, RB1, A1."""
-    point.commit(OLD, seq=1)
+    """case_023: Q4, RB1, A1. The kept release carries a widening statement, so the rollback is not a silent
+    widening (RB3)."""
+    release = _dist.env.release_id([("policy.ppt", H(OLD))])
+    point.pep.stage(seal("policy.ppt", OLD, seq=1, release=release), OLD)
+    statement = _widening([])
+    point.pep.stage(seal("trust.widening", statement, seq=1, release=release, policy_sha256=H(OLD)), statement)
+    point.pep.commit(STREAM, 1, H(OLD))
     point.commit(NEW, seq=2)
     record = _read(point, point.pep.rollback())
     assert record.event == "rolled-back" and record.active_seq == 1 and record.floor == 2
@@ -332,9 +337,9 @@ def test_case_126_a_declared_spiral_sidecar_is_needed_and_must_be_the_declared_o
     assert _read(point, point.pep.stage(seal("policy.ppt", NEW, seq=4, meta=bare), NEW)).cause == "packing:unknown-profile"
 
 
-def test_a_host_pep_refuses_to_start_with_hold(tmp_path):
-    """X6, X10: a host has no HOLD setting, so a host PEP given one refuses to start, and so does a PEP whose
-    target kind has no row yet."""
+def test_case_111_a_host_pep_refuses_to_start_with_hold(tmp_path):
+    """case_111: X6, X10. A host has no HOLD setting, so a host PEP given one refuses to start, and so does a
+    PEP of a kind with no row yet (the agent, gateway and xdp rows join the table with their adapters)."""
     with pytest.raises(PepRefused):
         _dist.HostPep(tmp_path, expiry_response="hold")
 
@@ -364,3 +369,104 @@ def test_the_hold_machine_on_a_kind_that_allows_hold(tmp_path, monkeypatch):
     committed = _read(point, point.pep.commit(STREAM, 3, H(NEWER)))
     assert committed.event == "committed" and not committed.held and point.pep.receipt_mark() is None
     assert point.open().expiry_response == "hold"
+
+
+def test_a_commit_with_an_unreadable_trust_store_never_activates_the_runtime(point):
+    """K1, X3: a release staged before the store became unreadable is not committed, and the host stays
+    without a policy."""
+    point.pep.stage(seal("policy.ppt", OLD), OLD)
+    with open(point.pep.store.path("trust.json"), "wb") as handle:
+        handle.write(b"")
+    pep = point.open()
+    assert pep.staged is not None
+    assert _read(point, pep.commit(STREAM, 1, H(OLD))).cause == "dist:unknown-key"
+    assert pep.active is None and _host_active(pep) is None and pep.refusal() == "dist:policy-lapsed"
+
+
+@pytest.mark.parametrize("entry", ["record", "abort", "commit", "stage", "rollback"])
+def test_every_entry_point_checks_expiry_before_it_reports(tmp_path, entry):
+    """X1: a release past its expiry has lapsed before any record says otherwise, and the lapse is reported
+    first, in the order the records were made."""
+    point = _dist.HostPep(tmp_path)
+    point.commit(OLD)
+    point.clock.now = _dist.EXPIRES
+    point.pep.drain()
+    calls = {"record": lambda pep: pep.record("beat"), "abort": lambda pep: pep.abort(STREAM, 9, H(NEW)),
+             "commit": lambda pep: pep.commit(STREAM, 9, H(NEW)), "stage": lambda pep: pep.stage(b"", b""),
+             "rollback": lambda pep: pep.rollback()}
+    if entry == "rollback":
+        with pytest.raises(PepRefused):
+            calls[entry](point.pep)
+    else:
+        record = _read(point, calls[entry](point.pep))
+        assert record.state == "no-policy" and record.active_seq == 0
+    sent = [_read(point, data) for data in point.pep.drain()]
+    assert sent[0].event == "lapsed" and sent[0].cause == "dist:expired"
+    assert _host_active(point.pep) is None
+
+
+def test_the_counter_survives_a_lost_floor(point):
+    """H3: the counter is kept apart from the floor, so a locked PEP never sends a counter again."""
+    point.commit(OLD)
+    sent = _read(point, point.pep.record("beat")).counter
+    with open(point.pep.store.path("floor.json"), "wb") as handle:
+        handle.write(b"")
+    pep = point.open()
+    assert pep.state() == "locked" and _read(point, pep.record("beat")).counter > sent
+    assert _read(point, point.open().record("beat")).counter > sent + 1
+
+
+def test_the_older_path_stays_closed_when_the_floor_file_is_missing(point, tmp_path):
+    """L2: a provisioned PEP whose floor file is gone opens no way around it for a ppt-pack/1."""
+    point.commit(OLD)
+    keys = pp.keygen(str(tmp_path / "keys"))
+    ppt = tmp_path / "policy.ppt"
+    ppt.write_bytes(NEW)
+    pp.build_pack(str(ppt), {"x": "int"}, 99, "dist-demo", keys["private"], keys["public"])
+    from prismpath.hotswap.policy_host import PolicyHost
+    import os
+    os.remove(point.pep.store.path("floor.json"))
+    host = PolicyHost(str(point.state_dir), [keys["public"]], dict(_dist.GEN.QUALIFICATION), instance_key=point.key)
+    assert host.swap(str(ppt)) == {"ok": False, "reasons": ["dist:legacy-refused"]}
+
+
+def test_no_record_is_refused_without_a_cause(point):
+    """H1: a verified trust statement is refused with dist:target-mismatch until its kind is applied, a
+    rollback with nothing kept is an error and no record, and a refused record always carries its cause."""
+    revocation = canon.canon2_bytes({canon.ENCODING_KEY: canon.CANON2, "envelopes": [], "floors": {},
+                                     "format": "prismpath.dist-revocation/1", "keys": [], "policies": []})
+    record = _read(point, point.pep.stage(seal("trust.revocation", revocation, stream="@trust"), revocation))
+    assert (record.event, record.cause) == ("refused", "dist:target-mismatch")
+    counter = point.pep.counter
+    with pytest.raises(PepRefused):
+        point.pep.rollback()
+    assert point.pep.counter == counter
+    with pytest.raises(ValueError):
+        state_record.StateRecord(event="refused", state="no-policy", cause=None, pep_id=b"\0" * 16, counter=1,
+                                 time=0, stream=b"\0" * 16).unsigned_bytes()
+
+
+def _widening(froms):
+    return canon.canon2_bytes({canon.ENCODING_KEY: canon.CANON2, "format": "prismpath.dist-widening/1",
+                               "from": sorted(froms)})
+
+
+def test_a_rollback_on_a_target_that_cannot_decide_needs_a_covering_widening_statement(point):
+    """RB3, W2: the host cannot decide larger, so a rollback to the kept release is refused with
+    dist:widening-unsigned unless that release holds a widening statement whose from is empty or holds the
+    active policy hash. This is case 55's half for a target that cannot decide."""
+    point.commit(OLD, seq=1)
+    point.commit(NEW, seq=2)
+    assert _read(point, point.pep.rollback()).cause == "dist:widening-unsigned" and point.pep.active.seq == 2
+    for seq, froms, cause in ((3, [H(NEWER)], "dist:widening-unsigned"), (5, [H(NEW)], None), (7, [], None)):
+        point.pep = point.open()
+        release = _dist.env.release_id([("policy.ppt", H(OLD))])
+        point.pep.stage(seal("policy.ppt", OLD, seq=seq, release=release), OLD)
+        statement = _widening(froms)
+        point.pep.stage(seal("trust.widening", statement, seq=seq, release=release, policy_sha256=H(OLD)), statement)
+        point.pep.commit(STREAM, seq, H(OLD))
+        point.pep.stage(seal("policy.ppt", NEW, seq=seq + 1), NEW)
+        point.pep.commit(STREAM, seq + 1, H(NEW))
+        record = _read(point, point.pep.rollback())
+        assert record.cause == cause, froms
+        assert point.pep.active.seq == (seq if cause is None else seq + 1)
