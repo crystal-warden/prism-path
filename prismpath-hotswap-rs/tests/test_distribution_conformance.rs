@@ -221,6 +221,34 @@ rust_cases! {
     case_117_unsigned_with_a_failing_entry_added => "117_unsigned_with_a_failing_entry_added",
     /// case_118: K4, S3.
     case_118_unknown_role_signs => "118_unknown_role_signs",
+    /// case_066: R1.
+    case_066_one_above_the_trust_sequence => "066_one_above_the_trust_sequence",
+    /// case_066: R1.
+    case_066_the_same_one_again => "066_the_same_one_again",
+    /// case_066: R1.
+    case_066_an_older_one => "066_an_older_one",
+    /// case_066: R1.
+    case_066_one_that_skips_a_number => "066_one_that_skips_a_number",
+    /// case_067: R2.
+    case_067_a_pack_signed_by_a_revoked_key => "067_a_pack_signed_by_a_revoked_key",
+    /// case_068: R4, Q4.
+    case_068_a_release_below_a_raised_floor => "068_a_release_below_a_raised_floor",
+    /// case_070: R6.
+    case_070_a_later_list_dropping_the_key => "070_a_later_list_dropping_the_key",
+    /// case_070: R6.
+    case_070_the_key_still_refused => "070_the_key_still_refused",
+    /// case_130: R6, R8.
+    case_130_a_floor_past_a_revoked_envelope => "130_a_floor_past_a_revoked_envelope",
+    /// case_130: R6, R8.
+    case_130_the_next_list_dropping_it => "130_the_next_list_dropping_it",
+    /// case_130: R6, R8.
+    case_130_the_envelope_again => "130_the_envelope_again",
+    /// case_071: R7.
+    case_071_sixty_five_entries => "071_sixty_five_entries",
+    /// case_079: X4, E5.
+    case_079_trust_kind_with_expires => "079_trust_kind_with_expires",
+    /// case_079: X4, E5.
+    case_079_revocation_read_years_later => "079_revocation_read_years_later",
 }
 
 #[test]
@@ -376,8 +404,9 @@ fn as_trust_kind(artifact: &str, stream: &str) -> Option<String> {
 
 #[test]
 fn v5_admits_only_the_trust_kinds_the_host_machine_applies() {
-    // the host applies trust.widening, and revocation and rotation come with their application
-    assert_eq!(as_trust_kind("trust.revocation", env::TRUST_STREAM).as_deref(), Some("dist:target-mismatch"));
+    // the host applies trust.widening and trust.revocation, and rotation comes with its application. A revocation
+    // passes V5 to V9, since its body is the image it names, and V11 then reads no revocation list there
+    assert_eq!(as_trust_kind("trust.revocation", env::TRUST_STREAM).as_deref(), Some("dist:bad-format"));
     assert_eq!(as_trust_kind("trust.rotation", env::TRUST_STREAM).as_deref(), Some("dist:target-mismatch"));
     // a widening passes V5 to V9, since its body is the image it names, and V11 then reads no widening there
     assert_eq!(as_trust_kind("trust.widening", "host/demo").as_deref(), Some("dist:bad-format"));
