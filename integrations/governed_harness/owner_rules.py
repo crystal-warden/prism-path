@@ -51,6 +51,9 @@ def expected(r: Dict[str, Any]) -> Tuple[str, Optional[str]]:
     # files change only through the exact path tools
     if r["command_class"] == "mutating" or r["git_op"] == "mutating":
         return "refuse", "agent:shell-mutation"
+    # a file change that reaches one of the owner's zones, or whose reach is not known, waits for the owner
+    if r.get("zone_reach", "none") in ("protected", "unknown") and r["tool"] in WRITES:
+        return "escalate", "agent:zone-asked"
     # no push except to an allowed remote class; otherwise the owner decides
     if r["git_op"] == "push":
         return ("allow", None) if r["remote_class"] == "allowed" else ("escalate", "agent:push-escalated")

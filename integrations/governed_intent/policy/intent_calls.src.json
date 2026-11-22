@@ -3,6 +3,7 @@
  "fields": {
   "classifier_version": "int min=3 max=3",
   "tool": "category",
+  "zone_reach": "category",
   "path_scope": "category",
   "path_in_toolchain": "bool",
   "path_control": "bool",
@@ -350,158 +351,195 @@
      ]
     ],
     [
-     "or",
+     "and",
      [
-      "and",
+      "not",
       [
-       "cmp",
-       "git_op",
-       "==",
+       "and",
        [
-        "str",
-        "push"
-       ]
-      ],
-      [
-       "cmp",
-       "remote_class",
-       "==",
+        "in",
+        "tool",
+        [
+         [
+          "str",
+          "write_file"
+         ],
+         [
+          "str",
+          "delete_path"
+         ]
+        ]
+       ],
        [
-        "str",
-        "allowed"
+        "in",
+        "zone_reach",
+        [
+         [
+          "str",
+          "protected"
+         ],
+         [
+          "str",
+          "unknown"
+         ]
+        ]
        ]
       ]
      ],
      [
-      "and",
+      "or",
       [
-       "cmp",
-       "git_op",
-       "!=",
+       "and",
        [
-        "str",
-        "push"
+        "cmp",
+        "git_op",
+        "==",
+        [
+         "str",
+         "push"
+        ]
+       ],
+       [
+        "cmp",
+        "remote_class",
+        "==",
+        [
+         "str",
+         "allowed"
+        ]
        ]
       ],
       [
-       "or",
+       "and",
        [
-        "and",
+        "cmp",
+        "git_op",
+        "!=",
         [
-         "cmp",
-         "tool",
-         "==",
-         [
-          "str",
-          "connect"
-         ]
-        ],
-        [
-         "cmp",
-         "net_dest",
-         "==",
-         [
-          "str",
-          "model_api"
-         ]
+         "str",
+         "push"
         ]
        ],
        [
-        "and",
+        "or",
         [
-         "in",
-         "tool",
+         "and",
          [
+          "cmp",
+          "tool",
+          "==",
           [
            "str",
-           "list_dir"
-          ],
+           "connect"
+          ]
+         ],
+         [
+          "cmp",
+          "net_dest",
+          "==",
           [
            "str",
-           "read_file"
-          ],
-          [
-           "str",
-           "write_file"
-          ],
-          [
-           "str",
-           "delete_path"
+           "model_api"
           ]
          ]
         ],
         [
-         "cmp",
-         "path_scope",
-         "==",
+         "and",
          [
-          "str",
-          "workspace"
-         ]
-        ]
-       ],
-       [
-        "and",
-        [
-         "cmp",
-         "tool",
-         "==",
-         [
-          "str",
-          "run_command"
-         ]
-        ],
-        [
-         "cmp",
-         "command_class",
-         "==",
-         [
-          "str",
-          "read_only"
-         ]
-        ],
-        [
-         "in",
-         "path_scope",
-         [
+          "in",
+          "tool",
           [
-           "str",
-           "none"
-          ],
+           [
+            "str",
+            "list_dir"
+           ],
+           [
+            "str",
+            "read_file"
+           ],
+           [
+            "str",
+            "write_file"
+           ],
+           [
+            "str",
+            "delete_path"
+           ]
+          ]
+         ],
+         [
+          "cmp",
+          "path_scope",
+          "==",
           [
            "str",
            "workspace"
           ]
          ]
-        ]
-       ],
-       [
-        "and",
+        ],
         [
-         "in",
-         "git_op",
+         "and",
          [
+          "cmp",
+          "tool",
+          "==",
           [
            "str",
-           "local_read"
-          ],
+           "run_command"
+          ]
+         ],
+         [
+          "cmp",
+          "command_class",
+          "==",
           [
            "str",
-           "local_write"
+           "read_only"
+          ]
+         ],
+         [
+          "in",
+          "path_scope",
+          [
+           [
+            "str",
+            "none"
+           ],
+           [
+            "str",
+            "workspace"
+           ]
           ]
          ]
         ],
         [
-         "in",
-         "path_scope",
+         "and",
          [
+          "in",
+          "git_op",
           [
-           "str",
-           "none"
-          ],
+           [
+            "str",
+            "local_read"
+           ],
+           [
+            "str",
+            "local_write"
+           ]
+          ]
+         ],
+         [
+          "in",
+          "path_scope",
           [
-           "str",
-           "workspace"
+           [
+            "str",
+            "none"
+           ],
+           [
+            "str",
+            "workspace"
+           ]
           ]
          ]
         ]
@@ -546,158 +584,195 @@
      ]
     ],
     [
-     "or",
+     "and",
      [
-      "and",
+      "not",
       [
-       "cmp",
-       "git_op",
-       "==",
+       "and",
        [
-        "str",
-        "push"
-       ]
-      ],
-      [
-       "cmp",
-       "remote_class",
-       "==",
+        "in",
+        "tool",
+        [
+         [
+          "str",
+          "write_file"
+         ],
+         [
+          "str",
+          "delete_path"
+         ]
+        ]
+       ],
        [
-        "str",
-        "allowed"
+        "in",
+        "zone_reach",
+        [
+         [
+          "str",
+          "protected"
+         ],
+         [
+          "str",
+          "unknown"
+         ]
+        ]
        ]
       ]
      ],
      [
-      "and",
+      "or",
       [
-       "cmp",
-       "git_op",
-       "!=",
+       "and",
        [
-        "str",
-        "push"
+        "cmp",
+        "git_op",
+        "==",
+        [
+         "str",
+         "push"
+        ]
+       ],
+       [
+        "cmp",
+        "remote_class",
+        "==",
+        [
+         "str",
+         "allowed"
+        ]
        ]
       ],
       [
-       "or",
+       "and",
        [
-        "and",
+        "cmp",
+        "git_op",
+        "!=",
         [
-         "cmp",
-         "tool",
-         "==",
-         [
-          "str",
-          "connect"
-         ]
-        ],
-        [
-         "cmp",
-         "net_dest",
-         "==",
-         [
-          "str",
-          "model_api"
-         ]
+         "str",
+         "push"
         ]
        ],
        [
-        "and",
+        "or",
         [
-         "in",
-         "tool",
+         "and",
          [
+          "cmp",
+          "tool",
+          "==",
           [
            "str",
-           "list_dir"
-          ],
+           "connect"
+          ]
+         ],
+         [
+          "cmp",
+          "net_dest",
+          "==",
           [
            "str",
-           "read_file"
-          ],
-          [
-           "str",
-           "write_file"
-          ],
-          [
-           "str",
-           "delete_path"
+           "model_api"
           ]
          ]
         ],
         [
-         "cmp",
-         "path_scope",
-         "==",
+         "and",
          [
-          "str",
-          "workspace"
-         ]
-        ]
-       ],
-       [
-        "and",
-        [
-         "cmp",
-         "tool",
-         "==",
-         [
-          "str",
-          "run_command"
-         ]
-        ],
-        [
-         "cmp",
-         "command_class",
-         "==",
-         [
-          "str",
-          "read_only"
-         ]
-        ],
-        [
-         "in",
-         "path_scope",
-         [
+          "in",
+          "tool",
           [
-           "str",
-           "none"
-          ],
+           [
+            "str",
+            "list_dir"
+           ],
+           [
+            "str",
+            "read_file"
+           ],
+           [
+            "str",
+            "write_file"
+           ],
+           [
+            "str",
+            "delete_path"
+           ]
+          ]
+         ],
+         [
+          "cmp",
+          "path_scope",
+          "==",
           [
            "str",
            "workspace"
           ]
          ]
-        ]
-       ],
-       [
-        "and",
+        ],
         [
-         "in",
-         "git_op",
+         "and",
          [
+          "cmp",
+          "tool",
+          "==",
           [
            "str",
-           "local_read"
-          ],
+           "run_command"
+          ]
+         ],
+         [
+          "cmp",
+          "command_class",
+          "==",
           [
            "str",
-           "local_write"
+           "read_only"
+          ]
+         ],
+         [
+          "in",
+          "path_scope",
+          [
+           [
+            "str",
+            "none"
+           ],
+           [
+            "str",
+            "workspace"
+           ]
           ]
          ]
         ],
         [
-         "in",
-         "path_scope",
+         "and",
          [
+          "in",
+          "git_op",
           [
-           "str",
-           "none"
-          ],
+           [
+            "str",
+            "local_read"
+           ],
+           [
+            "str",
+            "local_write"
+           ]
+          ]
+         ],
+         [
+          "in",
+          "path_scope",
           [
-           "str",
-           "workspace"
+           [
+            "str",
+            "none"
+           ],
+           [
+            "str",
+            "workspace"
+           ]
           ]
          ]
         ]
@@ -742,158 +817,195 @@
      ]
     ],
     [
-     "or",
+     "and",
      [
-      "and",
+      "not",
       [
-       "cmp",
-       "git_op",
-       "==",
+       "and",
        [
-        "str",
-        "push"
-       ]
-      ],
-      [
-       "cmp",
-       "remote_class",
-       "==",
+        "in",
+        "tool",
+        [
+         [
+          "str",
+          "write_file"
+         ],
+         [
+          "str",
+          "delete_path"
+         ]
+        ]
+       ],
        [
-        "str",
-        "allowed"
+        "in",
+        "zone_reach",
+        [
+         [
+          "str",
+          "protected"
+         ],
+         [
+          "str",
+          "unknown"
+         ]
+        ]
        ]
       ]
      ],
      [
-      "and",
+      "or",
       [
-       "cmp",
-       "git_op",
-       "!=",
+       "and",
        [
-        "str",
-        "push"
+        "cmp",
+        "git_op",
+        "==",
+        [
+         "str",
+         "push"
+        ]
+       ],
+       [
+        "cmp",
+        "remote_class",
+        "==",
+        [
+         "str",
+         "allowed"
+        ]
        ]
       ],
       [
-       "or",
+       "and",
        [
-        "and",
+        "cmp",
+        "git_op",
+        "!=",
         [
-         "cmp",
-         "tool",
-         "==",
-         [
-          "str",
-          "connect"
-         ]
-        ],
-        [
-         "cmp",
-         "net_dest",
-         "==",
-         [
-          "str",
-          "model_api"
-         ]
+         "str",
+         "push"
         ]
        ],
        [
-        "and",
+        "or",
         [
-         "in",
-         "tool",
+         "and",
          [
+          "cmp",
+          "tool",
+          "==",
           [
            "str",
-           "list_dir"
-          ],
+           "connect"
+          ]
+         ],
+         [
+          "cmp",
+          "net_dest",
+          "==",
           [
            "str",
-           "read_file"
-          ],
-          [
-           "str",
-           "write_file"
-          ],
-          [
-           "str",
-           "delete_path"
+           "model_api"
           ]
          ]
         ],
         [
-         "cmp",
-         "path_scope",
-         "==",
+         "and",
          [
-          "str",
-          "workspace"
-         ]
-        ]
-       ],
-       [
-        "and",
-        [
-         "cmp",
-         "tool",
-         "==",
-         [
-          "str",
-          "run_command"
-         ]
-        ],
-        [
-         "cmp",
-         "command_class",
-         "==",
-         [
-          "str",
-          "read_only"
-         ]
-        ],
-        [
-         "in",
-         "path_scope",
-         [
+          "in",
+          "tool",
           [
-           "str",
-           "none"
-          ],
+           [
+            "str",
+            "list_dir"
+           ],
+           [
+            "str",
+            "read_file"
+           ],
+           [
+            "str",
+            "write_file"
+           ],
+           [
+            "str",
+            "delete_path"
+           ]
+          ]
+         ],
+         [
+          "cmp",
+          "path_scope",
+          "==",
           [
            "str",
            "workspace"
           ]
          ]
-        ]
-       ],
-       [
-        "and",
+        ],
         [
-         "in",
-         "git_op",
+         "and",
          [
+          "cmp",
+          "tool",
+          "==",
           [
            "str",
-           "local_read"
-          ],
+           "run_command"
+          ]
+         ],
+         [
+          "cmp",
+          "command_class",
+          "==",
           [
            "str",
-           "local_write"
+           "read_only"
+          ]
+         ],
+         [
+          "in",
+          "path_scope",
+          [
+           [
+            "str",
+            "none"
+           ],
+           [
+            "str",
+            "workspace"
+           ]
           ]
          ]
         ],
         [
-         "in",
-         "path_scope",
+         "and",
          [
+          "in",
+          "git_op",
           [
-           "str",
-           "none"
-          ],
+           [
+            "str",
+            "local_read"
+           ],
+           [
+            "str",
+            "local_write"
+           ]
+          ]
+         ],
+         [
+          "in",
+          "path_scope",
           [
-           "str",
-           "workspace"
+           [
+            "str",
+            "none"
+           ],
+           [
+            "str",
+            "workspace"
+           ]
           ]
          ]
         ]
@@ -973,158 +1085,195 @@
      ]
     ],
     [
-     "or",
+     "and",
      [
-      "and",
+      "not",
       [
-       "cmp",
-       "git_op",
-       "==",
+       "and",
        [
-        "str",
-        "push"
-       ]
-      ],
-      [
-       "cmp",
-       "remote_class",
-       "==",
+        "in",
+        "tool",
+        [
+         [
+          "str",
+          "write_file"
+         ],
+         [
+          "str",
+          "delete_path"
+         ]
+        ]
+       ],
        [
-        "str",
-        "allowed"
+        "in",
+        "zone_reach",
+        [
+         [
+          "str",
+          "protected"
+         ],
+         [
+          "str",
+          "unknown"
+         ]
+        ]
        ]
       ]
      ],
      [
-      "and",
+      "or",
       [
-       "cmp",
-       "git_op",
-       "!=",
+       "and",
        [
-        "str",
-        "push"
+        "cmp",
+        "git_op",
+        "==",
+        [
+         "str",
+         "push"
+        ]
+       ],
+       [
+        "cmp",
+        "remote_class",
+        "==",
+        [
+         "str",
+         "allowed"
+        ]
        ]
       ],
       [
-       "or",
+       "and",
        [
-        "and",
+        "cmp",
+        "git_op",
+        "!=",
         [
-         "cmp",
-         "tool",
-         "==",
-         [
-          "str",
-          "connect"
-         ]
-        ],
-        [
-         "cmp",
-         "net_dest",
-         "==",
-         [
-          "str",
-          "model_api"
-         ]
+         "str",
+         "push"
         ]
        ],
        [
-        "and",
+        "or",
         [
-         "in",
-         "tool",
+         "and",
          [
+          "cmp",
+          "tool",
+          "==",
           [
            "str",
-           "list_dir"
-          ],
+           "connect"
+          ]
+         ],
+         [
+          "cmp",
+          "net_dest",
+          "==",
           [
            "str",
-           "read_file"
-          ],
-          [
-           "str",
-           "write_file"
-          ],
-          [
-           "str",
-           "delete_path"
+           "model_api"
           ]
          ]
         ],
         [
-         "cmp",
-         "path_scope",
-         "==",
+         "and",
          [
-          "str",
-          "workspace"
-         ]
-        ]
-       ],
-       [
-        "and",
-        [
-         "cmp",
-         "tool",
-         "==",
-         [
-          "str",
-          "run_command"
-         ]
-        ],
-        [
-         "cmp",
-         "command_class",
-         "==",
-         [
-          "str",
-          "read_only"
-         ]
-        ],
-        [
-         "in",
-         "path_scope",
-         [
+          "in",
+          "tool",
           [
-           "str",
-           "none"
-          ],
+           [
+            "str",
+            "list_dir"
+           ],
+           [
+            "str",
+            "read_file"
+           ],
+           [
+            "str",
+            "write_file"
+           ],
+           [
+            "str",
+            "delete_path"
+           ]
+          ]
+         ],
+         [
+          "cmp",
+          "path_scope",
+          "==",
           [
            "str",
            "workspace"
           ]
          ]
-        ]
-       ],
-       [
-        "and",
+        ],
         [
-         "in",
-         "git_op",
+         "and",
          [
+          "cmp",
+          "tool",
+          "==",
           [
            "str",
-           "local_read"
-          ],
+           "run_command"
+          ]
+         ],
+         [
+          "cmp",
+          "command_class",
+          "==",
           [
            "str",
-           "local_write"
+           "read_only"
+          ]
+         ],
+         [
+          "in",
+          "path_scope",
+          [
+           [
+            "str",
+            "none"
+           ],
+           [
+            "str",
+            "workspace"
+           ]
           ]
          ]
         ],
         [
-         "in",
-         "path_scope",
+         "and",
          [
+          "in",
+          "git_op",
           [
-           "str",
-           "none"
-          ],
+           [
+            "str",
+            "local_read"
+           ],
+           [
+            "str",
+            "local_write"
+           ]
+          ]
+         ],
+         [
+          "in",
+          "path_scope",
           [
-           "str",
-           "workspace"
+           [
+            "str",
+            "none"
+           ],
+           [
+            "str",
+            "workspace"
+           ]
           ]
          ]
         ]
@@ -1204,158 +1353,195 @@
      ]
     ],
     [
-     "or",
+     "and",
      [
-      "and",
+      "not",
       [
-       "cmp",
-       "git_op",
-       "==",
+       "and",
        [
-        "str",
-        "push"
-       ]
-      ],
-      [
-       "cmp",
-       "remote_class",
-       "==",
+        "in",
+        "tool",
+        [
+         [
+          "str",
+          "write_file"
+         ],
+         [
+          "str",
+          "delete_path"
+         ]
+        ]
+       ],
        [
-        "str",
-        "allowed"
+        "in",
+        "zone_reach",
+        [
+         [
+          "str",
+          "protected"
+         ],
+         [
+          "str",
+          "unknown"
+         ]
+        ]
        ]
       ]
      ],
      [
-      "and",
+      "or",
       [
-       "cmp",
-       "git_op",
-       "!=",
+       "and",
        [
-        "str",
-        "push"
+        "cmp",
+        "git_op",
+        "==",
+        [
+         "str",
+         "push"
+        ]
+       ],
+       [
+        "cmp",
+        "remote_class",
+        "==",
+        [
+         "str",
+         "allowed"
+        ]
        ]
       ],
       [
-       "or",
+       "and",
        [
-        "and",
+        "cmp",
+        "git_op",
+        "!=",
         [
-         "cmp",
-         "tool",
-         "==",
-         [
-          "str",
-          "connect"
-         ]
-        ],
-        [
-         "cmp",
-         "net_dest",
-         "==",
-         [
-          "str",
-          "model_api"
-         ]
+         "str",
+         "push"
         ]
        ],
        [
-        "and",
+        "or",
         [
-         "in",
-         "tool",
+         "and",
          [
+          "cmp",
+          "tool",
+          "==",
           [
            "str",
-           "list_dir"
-          ],
+           "connect"
+          ]
+         ],
+         [
+          "cmp",
+          "net_dest",
+          "==",
           [
            "str",
-           "read_file"
-          ],
-          [
-           "str",
-           "write_file"
-          ],
-          [
-           "str",
-           "delete_path"
+           "model_api"
           ]
          ]
         ],
         [
-         "cmp",
-         "path_scope",
-         "==",
+         "and",
          [
-          "str",
-          "workspace"
-         ]
-        ]
-       ],
-       [
-        "and",
-        [
-         "cmp",
-         "tool",
-         "==",
-         [
-          "str",
-          "run_command"
-         ]
-        ],
-        [
-         "cmp",
-         "command_class",
-         "==",
-         [
-          "str",
-          "read_only"
-         ]
-        ],
-        [
-         "in",
-         "path_scope",
-         [
+          "in",
+          "tool",
           [
-           "str",
-           "none"
-          ],
+           [
+            "str",
+            "list_dir"
+           ],
+           [
+            "str",
+            "read_file"
+           ],
+           [
+            "str",
+            "write_file"
+           ],
+           [
+            "str",
+            "delete_path"
+           ]
+          ]
+         ],
+         [
+          "cmp",
+          "path_scope",
+          "==",
           [
            "str",
            "workspace"
           ]
          ]
-        ]
-       ],
-       [
-        "and",
+        ],
         [
-         "in",
-         "git_op",
+         "and",
          [
+          "cmp",
+          "tool",
+          "==",
           [
            "str",
-           "local_read"
-          ],
+           "run_command"
+          ]
+         ],
+         [
+          "cmp",
+          "command_class",
+          "==",
           [
            "str",
-           "local_write"
+           "read_only"
+          ]
+         ],
+         [
+          "in",
+          "path_scope",
+          [
+           [
+            "str",
+            "none"
+           ],
+           [
+            "str",
+            "workspace"
+           ]
           ]
          ]
         ],
         [
-         "in",
-         "path_scope",
+         "and",
          [
+          "in",
+          "git_op",
           [
-           "str",
-           "none"
-          ],
+           [
+            "str",
+            "local_read"
+           ],
+           [
+            "str",
+            "local_write"
+           ]
+          ]
+         ],
+         [
+          "in",
+          "path_scope",
           [
-           "str",
-           "workspace"
+           [
+            "str",
+            "none"
+           ],
+           [
+            "str",
+            "workspace"
+           ]
           ]
          ]
         ]
@@ -1392,6 +1578,40 @@
     [
      "truthy",
      "path_in_toolchain"
+    ]
+   ]
+  },
+  {
+   "target": "escalate_132",
+   "when": [
+    "and",
+    [
+     "in",
+     "tool",
+     [
+      [
+       "str",
+       "write_file"
+      ],
+      [
+       "str",
+       "delete_path"
+      ]
+     ]
+    ],
+    [
+     "in",
+     "zone_reach",
+     [
+      [
+       "str",
+       "protected"
+      ],
+      [
+       "str",
+       "unknown"
+      ]
+     ]
     ]
    ]
   },

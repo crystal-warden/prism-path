@@ -36,7 +36,7 @@ from pathlib import Path
 
 import pytest
 
-from prismpath.agent import claude_code
+from prismpath.agent import claude_code, zones
 from prismpath.agent.policy import Policy
 from prismpath.kernel import causes
 
@@ -87,9 +87,13 @@ def _env(case, world):
     return {"CLAUDE_PROJECT_DIR": _fill(case["project_dir"], world)} if case.get("project_dir") else {}
 
 
-@pytest.mark.parametrize("case", FIXTURES, ids=[c["id"] for c in FIXTURES])
+ZONE_FIXTURES = json.loads((Path(__file__).parent / "fixtures" / "claude_code_zone_hooks.json").read_text(encoding="utf-8"))
+
+
+@pytest.mark.parametrize("case", FIXTURES + ZONE_FIXTURES, ids=[c["id"] for c in FIXTURES + ZONE_FIXTURES])
 def test_hook_answer(case, world, policy):
-    result = claude_code.evaluate(_hook_input(case, world), _env(case, world), policy)
+    point = zones.fixed(case["zone"]) if "zone" in case else None        # a recorded zone answer for the case
+    result = claude_code.evaluate(_hook_input(case, world), _env(case, world), policy, point)
     out = result.answer["hookSpecificOutput"]
     expect = case["expect"]
     assert out["permissionDecision"] == expect["answer"], (result.call, result.reading, result.decision)

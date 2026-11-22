@@ -4,6 +4,7 @@ import Classifier.Scan
 import Classifier.Control
 import Classifier.Shape
 import Classifier.Net
+import Classifier.Zone
 /-!
 # The classifier oracle
 
@@ -33,7 +34,12 @@ as `control_refused`), which `Control.control_refused` and `Control.change_on_co
 policy a change that names a control file of the agent is refused. And whether every reading with `net_dest` `other`
 or `unknown`, and every `connect` that names none, is refused (`netSafe`, printed as `net_refused`), which
 `Net.net_refused` and `Net.connect_other_refused` turn into: under that policy a `connect` to a host that is neither
-of the model's API nor on the owner's list is refused.
+of the model's API nor on the owner's list is refused. And whether no change that reads `zone_reach` `protected` or
+`unknown` is allowed (`zoneSafe`, printed as `zone_asked`), which `Zone.zone_not_allowed`,
+`Zone.allowed_change_every_path_none`, `Zone.absent_point_not_allowed` and `Zone.protected_not_allowed` turn into: under that
+policy a change is allowed only when the information point answered `none` for every path it names. A case also carries
+`"zone": [[PATH, "none"|"protected"|"unknown"]...]`, the point's answers for the paths `Zone.zoneQueries` names, which the
+oracle asks for as `missing.zone` once the disk facts are known.
 
 Only this file does input and output; everything it prints is computed by the model's functions.
 -/
@@ -89,6 +95,15 @@ def oneTable (ms : List (String × J)) (k : String) : List (Str × Bool) :=
     | [p, b] => do pure (← jStr p, ← jBool b)
     | _ => none)
 
+def zoneTable (ms : List (String × J)) : List (Str × Zone) :=
+  (rows ms "zone").filterMap (fun r => match r with
+    | [p, f] => do
+      let name ← jStr f
+      let z ← if name == "none".toList then some Zone.none else if name == "protected".toList then some Zone.protectedZ
+              else if name == "unknown".toList then some Zone.unknown else none
+      pure (← jStr p, z)
+    | _ => none)
+
 def look {α β} [BEq α] (t : List (α × β)) (k : α) : Option β := (t.find? (fun e => e.1 == k)).map (·.2)
 
 def diskOf (t : List (Str × Disk)) (p : Str) : Disk := (look t p).getD default
@@ -100,11 +115,12 @@ def hookDiskOf (ins same : List ((Str × Str) × Bool)) (ex : List (Str × Bool)
 
 def readingJson (r : Reading) : String := writeJ r.json
 
-def missingJson (disk : List Str) (ins same : List (Str × Str)) (ex : List Str) : String :=
+def missingJson (disk : List Str) (ins same : List (Str × Str)) (ex : List Str) (zone : List Str := []) : String :=
   let s (x : Str) := esc (String.ofList x)
   let pr (x : Str × Str) := "[" ++ s x.1 ++ "," ++ s x.2 ++ "]"
   "{\"disk\":[" ++ ",".intercalate (disk.map s) ++ "],\"inside\":[" ++ ",".intercalate (ins.map pr) ++
-  "],\"same\":[" ++ ",".intercalate (same.map pr) ++ "],\"exists\":[" ++ ",".intercalate (ex.map s) ++ "]}"
+  "],\"same\":[" ++ ",".intercalate (same.map pr) ++ "],\"exists\":[" ++ ",".intercalate (ex.map s) ++
+    "],\"zone\":[" ++ ",".intercalate (zone.map s) ++ "]}"
 
 def answer (line : String) : String :=
   match Core.readBytes line.toUTF8 with
@@ -120,17 +136,26 @@ def answer (line : String) : String :=
       | _ => []
     let dt := diskTable ms
     let disk := diskOf dt
+    let zt := zoneTable ms
+    let zone : Str → Zone := fun p => (look zt p).getD .unknown
     let missingDisk (call : J) := (diskQueriesD remotes call).filter (fun p => (look dt p).isNone)
+    let missingZone (rm : List Str) (call : J) := (zoneQueries disk rm call).filter (fun p => (look zt p).isNone)
     if kind == "call" then
       let call := if nonscalar then unknownCall else input
       match missingDisk call with
-      | [] => head ++ ",\"reading\":" ++ readingJson (classifyD disk remotes call) ++ "}"
+      | [] =>
+        match missingZone remotes call with
+        | [] => head ++ ",\"reading\":" ++ readingJson (classifyZ zone disk remotes call) ++ "}"
+        | z => head ++ ",\"missing\":" ++ missingJson [] [] [] [] z ++ "}"
       | m => head ++ ",\"missing\":" ++ missingJson m [] [] [] ++ "}"
     else if kind == "mcp" then
       let cwd := match get? ms "server_cwd" with | some (.str s) => s.toList | _ => []
       let call := if nonscalar then unknownCall else mcpCall input cwd
       match missingDisk call with
-      | [] => head ++ ",\"call\":" ++ writeJ call ++ ",\"reading\":" ++ readingJson (classifyD disk remotes call) ++ "}"
+      | [] =>
+        match missingZone remotes call with
+        | [] => head ++ ",\"call\":" ++ writeJ call ++ ",\"reading\":" ++ readingJson (classifyZ zone disk remotes call) ++ "}"
+        | z => head ++ ",\"missing\":" ++ missingJson [] [] [] [] z ++ "}"
       | m => head ++ ",\"missing\":" ++ missingJson m [] [] [] ++ "}"
     else if kind == "hook" then
       let pd := match get? ms "project_dir" with | some (.str s) => some s.toList | _ => none
@@ -155,8 +180,11 @@ def answer (line : String) : String :=
           | true, some c => (scanQueries (hookCwdOf input ws') (strip c)).filter (fun p => (look dt p).isNone)
           | _, _ => []
         match missingDisk call ++ scanQ with
-        | [] => head ++ ",\"call\":" ++ writeJ call ++ ",\"workspace\":" ++ esc (String.ofList ws') ++
-            ",\"reading\":" ++ readingJson (hookReading hd disk input pd pc) ++ "}"
+        | [] =>
+          match (if isUnknownCall call then [] else missingZone [] call) with
+          | [] => head ++ ",\"call\":" ++ writeJ call ++ ",\"workspace\":" ++ esc (String.ofList ws') ++
+              ",\"reading\":" ++ readingJson (hookReadingZ zone hd disk input pd pc) ++ "}"
+          | z => head ++ ",\"missing\":" ++ missingJson [] [] [] [] z ++ "}"
         | m => head ++ ",\"missing\":" ++ missingJson m [] [] [] ++ "}"
     else head ++ ",\"error\":\"kind\"}"
   | .ok _ => "{\"error\":\"case\"}"
@@ -187,7 +215,8 @@ def main (args : List String) : IO UInt32 := do
     | .ok c => IO.println ("{\"policy\":\"accepted\",\"fits\":" ++ (if fitsAll c.defs then "true" else "false") ++
         ",\"scan_refused\":" ++ (if scanSafe c then "true" else "false") ++
         ",\"control_refused\":" ++ (if controlSafe c then "true" else "false") ++
-        ",\"net_refused\":" ++ (if netSafe c then "true" else "false") ++ "}")
+        ",\"net_refused\":" ++ (if netSafe c then "true" else "false") ++
+        ",\"zone_asked\":" ++ (if zoneSafe c then "true" else "false") ++ "}")
     | .error _ => IO.println "{\"policy\":\"refused\"}"
     return 0
   | _ =>

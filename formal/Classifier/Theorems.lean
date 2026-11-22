@@ -715,17 +715,17 @@ theorem mcp_unknown_tool (ps am : List (String × J)) (name : String) (cwd : Str
 
 /-! ## The shape of every reading -/
 
-/-- Every reading holds the fourteen fields the agent policies define, in canonical order, and its version. -/
+/-- Every reading holds the fifteen fields the agent policies define, in canonical order, and its version. -/
 theorem reading_fields (r : Reading) :
     r.members.map (·.1) = ["classifier_version", "command_class", "git_op", "kill_by_pattern", "net_dest",
       "path_control", "path_glob", "path_in_toolchain", "path_scope", "path_symlink", "path_traversal", "proc_class",
-      "remote_class", "tool"] ∧
+      "remote_class", "tool", "zone_reach"] ∧
     Core.field? r.members "classifier_version" = some (.int CLASSIFIER_VERSION) := ⟨rfl, rfl⟩
 
 theorem field_category (r : Reading) : ∀ n ∈ categoryFields, ∃ s, Core.field? r.members n = some (.str s) := by
   intro n hn
   simp only [categoryFields, List.mem_cons, List.not_mem_nil, or_false] at hn
-  rcases hn with rfl | rfl | rfl | rfl | rfl | rfl | rfl <;> exact ⟨_, rfl⟩
+  rcases hn with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl <;> exact ⟨_, rfl⟩
 
 theorem field_bool (r : Reading) : ∀ n ∈ boolFields, ∃ b, Core.field? r.members n = some (.bool b) := by
   intro n hn
@@ -739,7 +739,7 @@ theorem field_other (r : Reading) (n : String) (h0 : n ≠ "classifier_version")
     rw [List.find?_eq_none]
     intro m hm
     simp only [Reading.members, List.mem_cons, List.not_mem_nil, or_false] at hm
-    rcases hm with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl <;>
+    rcases hm with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl <;>
       simp only [beq_iff_eq] <;> intro e <;> simp_all
   simp only [Core.field?, this]
 

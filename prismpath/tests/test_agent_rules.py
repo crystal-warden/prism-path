@@ -126,7 +126,7 @@ def test_a_core_refusal_is_its_own_row(project):
     reading = {"classifier_version": 3, "net_dest": "none", "proc_class": "none", "tool": "git", "path_scope": "none", "path_in_toolchain": False,
                "path_glob": False, "path_traversal": False, "path_symlink": False, "path_control": False,
                "command_class": "none",
-               "kill_by_pattern": False, "git_op": "none", "remote_class": "none"}
+               "kill_by_pattern": False, "git_op": "none", "remote_class": "none", "zone_reach": "none"}
     assert rules.rule_index(policy, policy.reading_bytes(reading)) is None       # no rule holds: the core refuses
     run = store.open("core", policy.image)
     run.append(policy.reading_bytes(reading), policy.verdict(policy.reading_bytes(reading)))

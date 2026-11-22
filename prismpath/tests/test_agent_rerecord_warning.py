@@ -31,7 +31,9 @@ OLD = sorted((Path(__file__).parent / "fixtures" / "agent_old_starters").glob("*
 OLD_NET = [p for p in OLD if "ccf2f60" in p.name]
 # the three recorded between the connect rule and the read-only fix (commit 2b73218): classifier version 2
 OLD_RO = [p for p in OLD if "2b73218" in p.name]
-OLD_CONTROL = [p for p in OLD if "ccf2f60" not in p.name and "2b73218" not in p.name]
+# the three recorded between the read-only fix and the zone rule (commit 1b114af): classifier version 3, no zone_reach
+OLD_ZONE = [p for p in OLD if "1b114af" in p.name]
+OLD_CONTROL = [p for p in OLD if "ccf2f60" not in p.name and "2b73218" not in p.name and "1b114af" not in p.name]
 
 
 def _image(path: Path) -> bytes:
@@ -46,8 +48,8 @@ def _with_extra_rule(image: bytes) -> bytes:
     return canon2.dumps(doc)
 
 
-def test_the_fixtures_are_the_ten_known_older_starters():
-    assert len(OLD) == 10 and len(OLD_NET) == 3 and len(OLD_RO) == 3 and len(OLD_CONTROL) == 4
+def test_the_fixtures_are_the_thirteen_known_older_starters():
+    assert len(OLD) == 13 and len(OLD_NET) == 3 and len(OLD_RO) == 3 and len(OLD_ZONE) == 3 and len(OLD_CONTROL) == 4
     found = {hashlib.sha256(_image(p)).hexdigest()[:16]: p.name.split("-")[0] for p in OLD}
     assert found == {key: value[0] for key, value in OLDER_STARTERS.items()}
     for path in OLD:
@@ -83,6 +85,16 @@ def test_a_starter_from_before_the_read_only_fix_is_named_and_decides_nothing(pa
     assert name == path.name.split("-")[0] and "before the read-only fix (classifier version 3" in what
     assert older_date(image) == "2026-11-21"
     assert classifier_mismatch(Policy(image)) and "run `prismpath agent init`" in classifier_mismatch(Policy(image))
+
+
+@pytest.mark.parametrize("path", OLD_ZONE, ids=lambda p: p.name)
+def test_a_starter_from_before_the_zone_rule_is_named_and_has_no_zone_field(path):
+    image = _image(path)
+    name, what = older_starter_of(image)
+    assert name == path.name.split("-")[0] and "before the zone rule (cause 132" in what
+    assert older_date(image) == "2026-11-21"
+    assert "zone_reach" not in Policy(image).doc["fields"]
+    assert control_check(image) == {"refuses_control_changes": True}
 
 
 @pytest.mark.parametrize("name", sorted(STARTERS))

@@ -108,7 +108,7 @@ def test_the_order_of_the_rules_is_part_of_the_image():
     swapped = ps.compile_source("\n".join(lines))
     assert swapped != ps.compile_source(source)
     rules = canon2.loads(swapped)["rules"]
-    assert [rule["target"] for rule in rules[11:13]] == ["escalate_113", "allow"]
+    assert [rule["target"] for rule in rules[12:14]] == ["escalate_113", "allow"]   # rule 12 is the zone question
 
 
 # ----------------------------------------------------------------- the source format

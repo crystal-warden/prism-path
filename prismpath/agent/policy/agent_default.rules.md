@@ -16,6 +16,7 @@ field.path_traversal: bool
 field.proc_class: category
 field.remote_class: category
 field.tool: category
+field.zone_reach: category
 ---
 ## core_decision
 The default starter, what `prismpath agent init` records. A call it cannot read and a shell command that changes files inside the workspace ask the person.
@@ -38,6 +39,10 @@ are observations a later policy proposal may read; they never change the policy 
 -> refuse agent:symlink-path: when (tool in ["write_file", "delete_path"] or command_class == "mutating") and path_symlink
 -> refuse agent:outside-workspace: when path_scope == "outside"
 -> refuse agent:shell-mutation: when git_op == "mutating"
+
+A change to code the owner protects waits for the person, and so does one whose reach is not known (no zone information
+point answered, or the file is not one it can read). Only a change that reads `none` for every path it names goes on to the rules below.
+-> escalate agent:zone-asked: when (tool in ["write_file", "delete_path"] or command_class == "mutating") and zone_reach in ["protected", "unknown"]
 
 A shell command that changes files inside the workspace, or a tool or command the classifier cannot
 read, waits for the person.

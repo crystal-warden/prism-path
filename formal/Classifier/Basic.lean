@@ -209,6 +209,12 @@ inductive ProcClass where
   | none | single | tree | unknown
   deriving DecidableEq, Repr, Inhabited
 
+/-- Whether a change reaches the owner's zones (`zone_reach`), as an information point answered for the paths it names.
+`none` for every call that changes no file. `protectedZ` is the answer `protected` (`protected` is a Lean keyword). -/
+inductive Zone where
+  | none | protectedZ | unknown
+  deriving DecidableEq, Repr, Inhabited
+
 /-- One reading. `classifier_version` is the constant `CLASSIFIER_VERSION` and is written by `Reading.json`. -/
 structure Reading where
   tool : Tool := .unknown
@@ -224,6 +230,7 @@ structure Reading where
   remoteClass : Remote := .none
   netDest : NetDest := .none
   procClass : ProcClass := .none
+  zoneReach : Zone := .none
   deriving DecidableEq, Repr, Inhabited
 
 /-- The unknown reading (`classifier.unknown_reading`): it routes to `agent:unclassifiable`. -/
@@ -248,6 +255,8 @@ def Remote.name : Remote → String
 def NetDest.name : NetDest → String
   | .none => "none" | .model_api => "model_api" | .allowed_host => "allowed_host" | .other => "other"
   | .unknown => "unknown"
+def Zone.name : Zone → String
+  | .none => "none" | .protectedZ => "protected" | .unknown => "unknown"
 def ProcClass.name : ProcClass → String
   | .none => "none" | .single => "single" | .tree => "tree" | .unknown => "unknown"
 
@@ -267,7 +276,8 @@ def Reading.members (r : Reading) : List (String × J) :=
    ("path_traversal", .bool r.pathTraversal),
    ("proc_class", .str r.procClass.name),
    ("remote_class", .str r.remoteClass.name),
-   ("tool", .str r.tool.name)]
+   ("tool", .str r.tool.name),
+   ("zone_reach", .str r.zoneReach.name)]
 
 def Reading.json (r : Reading) : J := .obj r.members
 

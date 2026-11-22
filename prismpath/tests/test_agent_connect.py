@@ -139,7 +139,7 @@ def test_a_policy_that_lets_another_destination_through_is_named_by_the_check():
 
 
 def test_existing_readings_keep_their_verdicts_under_the_new_starters():
-    """Every reading a call that is not a connect can make (net_dest none, any proc_class) is decided as the starter
+    """Every reading a call that is not a connect can make (net_dest none, zone_reach none, any proc_class) is decided as the starter
     from before the connect rule decided it, for a seeded sample of the whole space."""
     old_dir = Path(__file__).parent / "fixtures" / "agent_old_starters"
     old = {"default": "default-ccf2f60", "review": "review-ccf2f60", "strict": "strict-ccf2f60"}
@@ -157,6 +157,6 @@ def test_existing_readings_keep_their_verdicts_under_the_new_starters():
             reading = {"tool": tool, "path_scope": scope, "command_class": command, "git_op": git_op,
                        "remote_class": remote, **hazards}
             was = _decide(before, {"classifier_version": 1, **reading})
-            now = _decide(after, {"classifier_version": 3, "net_dest": "none",
+            now = _decide(after, {"classifier_version": 3, "net_dest": "none", "zone_reach": "none",
                                   "proc_class": rng.choice(("none", "single", "tree", "unknown")), **reading})
             assert (now.kind, now.cause) == (was.kind, was.cause), (name, reading)

@@ -77,14 +77,16 @@ KNOWN_CATEGORIES = {
     "remote_class": ("none", "allowed", "other"),
     "net_dest": ("none", "model_api", "allowed_host", "other", "unknown"),
     "proc_class": ("none", "single", "tree", "unknown"),
+    "zone_reach": ("none", "protected", "unknown"),
 }
 REQUIRED_FIELDS = ("path_scope", "command_class", "git_op")
 # What the classifier never produces, so the walk does not decide it: a field that is `none` unless another field has
 # one of some values (a `net_dest` other than none only for a `connect`, a `proc_class` other than none only for a
-# `run_command`). (field, its empty value, the gate field, the gate values.) A group of values is skipped only when it
+# `run_command`, a `zone_reach` other than none only for a file tool or a `run_command`). (field, its empty value, the gate field, the gate values.) A group of values is skipped only when it
 # holds no empty value and its gate group holds none of the gate values, so a policy whose rules cannot tell the gate
-# values apart is still walked whole. Without this the two fields multiply the walk by their classes.
-CLASSIFIER_ONLY = (("net_dest", "none", "tool", ("connect",)), ("proc_class", "none", "tool", ("run_command",)))
+# values apart is still walked whole. Without this the three fields multiply the walk by their classes.
+CLASSIFIER_ONLY = (("net_dest", "none", "tool", ("connect",)), ("proc_class", "none", "tool", ("run_command",)),
+                   ("zone_reach", "none", "tool", ("write_file", "delete_path", "run_command")))
 OUTSIDE_SCOPES = ("outside", "unknown", None)
 NETWORK_VALUES = ("network", "unknown")
 CHANGING_TOOLS = ("write_file", "delete_path")

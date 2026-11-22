@@ -170,6 +170,9 @@ _REGISTRY: Tuple[Tuple[int, str, str, str], ...] = (
     # -- the gateway in front of a resource (prismpath/gateway): an HTTP request to a service behind a PrismPath
     # gateway that its policy does not allow is refused with a 403, whoever sent it and by whatever client.
     (131, "gateway:request-refused",     "routing",   "an HTTP request to a resource behind a PrismPath gateway that the gateway's policy refuses, or that the gateway cannot read, decide or receipt (a request it cannot read is never forwarded); answered with a 403 and not forwarded"),
+    # -- the owner's zones (prismpath/agent/zones.py, every starter): a change to a file the owner's zone file protects, or
+    # whose reach into one is not known, waits for the person, so protected code is asked about whatever the worker is.
+    (132, "agent:zone-asked",            "routing",   "an agent call that would change a file that reaches code in one of the owner's zones, or whose reach is not known (no zone information point answered, or the file is not one it can read), with none of the earlier refusals holding, under every starter policy; escalated and not run"),
 )
 
 CODES: Dict[int, Tuple[str, str, str]] = {cause_code: (canonical_name, class_name, description)

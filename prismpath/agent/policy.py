@@ -98,12 +98,23 @@ OLDER_STARTERS = {
                                    "refuses every reading of the current classifier"),
     "0a079f267aab636c": ("strict", "the agent_rules from before the read-only fix (classifier version 3), which "
                                    "refuses every reading of the current classifier"),
+    # The three recorded by `init` from the read-only fix (classifier version 3) until the zone rule shipped. They read
+    # every field of classifier version 3 but have no `zone_reach` field, so a change to a file the owner's zone file
+    # protects is not asked about, and the zone file is never read for them.
+    "ed284ba561434f93": ("default", "the agent_default from before the zone rule (cause 132), which does not ask about a "
+                                    "change that reaches the owner's zones"),
+    "ec89bf03785d2aa1": ("review", "the agent_review from before the zone rule (cause 132), which does not ask about a "
+                                   "change that reaches the owner's zones"),
+    "eab548b3984ab34d": ("strict", "the agent_rules from before the zone rule (cause 132), which does not ask about a "
+                                   "change that reaches the owner's zones"),
 }
 RULE_DATE = "2026-11-19"          # the day the control-file rule shipped: the first four older images are "from before" it
 NET_RULE_DATE = "2026-11-20"      # the day the connect rule and classifier version 2 shipped: the next three are "from before" it
 _NET_OLDER = ("e184122df6538d99", "6e6f4f8604997b41", "9d50ffe71afff5ef")
 READONLY_RULE_DATE = "2026-11-21"   # the day classifier version 3 shipped: the last three are "from before" it
 _READONLY_OLDER = ("b64f0e29805388f5", "4cb122afd5c105de", "0a079f267aab636c")
+ZONE_RULE_DATE = "2026-11-21"       # the day the zone rule shipped: the three after the read-only fix are "from before" it
+_ZONE_OLDER = ("ed284ba561434f93", "ec89bf03785d2aa1", "eab548b3984ab34d")
 
 
 def older_starter_of(image: bytes) -> Optional[Tuple[str, str]]:
@@ -112,10 +123,12 @@ def older_starter_of(image: bytes) -> Optional[Tuple[str, str]]:
 
 
 def older_date(image: bytes) -> Optional[str]:
-    """The day the shipped rule an older starter image lacks was added (`RULE_DATE` or `NET_RULE_DATE`), or None."""
+    """The day the shipped rule an older starter image lacks was added (`RULE_DATE`, `NET_RULE_DATE` or `ZONE_RULE_DATE`), or None."""
     key = hashlib.sha256(image).hexdigest()[:16]
     if key not in OLDER_STARTERS:
         return None
+    if key in _ZONE_OLDER:
+        return ZONE_RULE_DATE
     if key in _READONLY_OLDER:
         return READONLY_RULE_DATE
     return NET_RULE_DATE if key in _NET_OLDER else RULE_DATE
@@ -198,6 +211,8 @@ def _base_reading(policy: "Policy") -> Dict[str, Any]:
         base["net_dest"] = "none"
     if "proc_class" in fields:
         base["proc_class"] = "none"
+    if "zone_reach" in fields:
+        base["zone_reach"] = "none"
     return base
 
 

@@ -109,10 +109,14 @@ def build_calls(thresholds: Dict[str, Any], lock: str) -> Dict[str, Any]:
     floor = json.loads(FLOOR_SOURCE.read_text())
     rules = floor["rules"]
     assert all(rule["target"].startswith("refuse_") for rule in rules[:FLOOR_REFUSALS])
-    assert [rule["target"] for rule in rules[FLOOR_REFUSALS:]] == ["allow", "escalate_113", "allow", "allow", "allow", "allow"]
-    allow_push, allow_rest = rules[FLOOR_REFUSALS]["when"], [rule["when"] for rule in rules[FLOOR_REFUSALS + 2:]]
-    floor_allows = ["or", copy.deepcopy(allow_push),
-                    ["and", _cmp("git_op", "!=", _s("push")), ["or", *copy.deepcopy(allow_rest)]]]
+    assert [rule["target"] for rule in rules[FLOOR_REFUSALS:]] == ["escalate_132", "allow", "escalate_113", "allow", "allow",
+                                                                    "allow", "allow"]
+    # the floor's zone question (cause 132) comes before its allows, so a call the floor allows is one that reads no zone
+    zone_asked = rules[FLOOR_REFUSALS]["when"]
+    allow_push, allow_rest = rules[FLOOR_REFUSALS + 1]["when"], [rule["when"] for rule in rules[FLOOR_REFUSALS + 3:]]
+    floor_allows = ["and", ["not", copy.deepcopy(zone_asked)],
+                    ["or", copy.deepcopy(allow_push),
+                     ["and", _cmp("git_op", "!=", _s("push")), ["or", *copy.deepcopy(allow_rest)]]]]
     verified = _verified(lock)
     margin = _cmp("intent_margin_bp", ">=", ["num", thresholds["intent_margin_bp"]])
     semantic = [
@@ -172,7 +176,7 @@ def load_responses() -> Policy:
 
 
 FLOOR_FIELDS = ("classifier_version", "tool", "path_scope", "path_in_toolchain", "path_control", "path_glob", "path_traversal",
-                "path_symlink", "command_class", "kill_by_pattern", "git_op", "remote_class", "net_dest", "proc_class")
+                "path_symlink", "command_class", "kill_by_pattern", "git_op", "remote_class", "net_dest", "proc_class", "zone_reach")
 
 
 def zeroed(reading: Dict[str, Any]) -> Dict[str, Any]:
