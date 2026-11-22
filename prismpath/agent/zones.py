@@ -20,6 +20,29 @@ signed with the policy's authority key and bound to the sha256 of the recorded p
 (or editing the file) makes it unusable until the owner signs it again. A file that does not verify reads `unknown`,
 never `none`.
 
+The index is a control path, and the point does not trust one the agent could have written. The agent can write the
+workspace, so an index in it (`.contextcloud/` by default) could be edited to claim that protected code reaches nothing.
+The directory of the zone document's `index` is therefore a control path like `.claude/` (`control_paths`): the hook
+refuses a write, delete or mutating command onto it with the control-write cause (classifier.py takes the point's
+`control_paths` as control paths), and both per call sandbox backends hold it read only (controls.discover `extra`,
+passed to the runner as `--control-path`, and bound by the launcher). Context Cloud's own indexing runs outside
+the agent's sandbox and still writes it. When the index file sits directly in the project root the directory
+cannot be held read only without holding the whole project, so only the index file and its -wal and -shm siblings
+that exist are control paths, and the next rule applies to it.
+The point answers `unknown` for every path, and says why (`why`), when the agent could have written the index. That is
+decided from how the other control paths are trusted. The agent writes only the workspace: the hook refuses a write
+outside it (`path_scope`) and the per call sandbox mounts the rest of the host read only, which is also what keeps the
+recorded policy and the zone file themselves out of its reach. So the index is trusted when this host has the per call
+sandbox (Linux, sandbox_hook.supported) and either it lies below a directory strictly inside the project, the control
+path above, or it lies outside the project and the recorded policy's sandbox profile does not write the host
+(`host_write`, which the caller passes in). In every other case, which is a host with no sandbox (a shell command is
+decided and not confined), an index directly in the project root (its directory is writable and a -wal could be
+planted), or a profile that writes the host, the agent's user must have no write permission (`os.access`) on the index
+file, its -wal and -shm siblings that exist, or the directory that holds them, or the point answers `unknown`. (Context
+Cloud itself opens an index read and write, so this last route serves an index that is only read by the point.) An
+index path that goes through a link, or one that cannot be examined, is not trusted either. Running as root counts as
+able to write.
+
 A path is `protected` when the file defines a protected name (or sits under a protected module), or any function of
 the file reaches the protected set with certainty `certain` or `likely`; `unknown` when the file is not a Python
 file of the index, the index holds a different version of it (a stale index), a lookup fails or times out, or Context
@@ -182,7 +205,22 @@ def information_point(home: Path, policy_image: bytes, workspace: Path, env: Opt
         return unusable("Context Cloud is not installed (no `contextcloud` on the PATH and no $CONTEXTCLOUD)")
     if not Path(doc["index"]).is_file():
         return unusable(f"no Context Cloud index at {doc['index']}; run `contextcloud index`")
-    return ContextCloudZones(doc, home, exe)
+    return ContextCloudZones(doc, home, exe, host_write=_host_write(home, policy_image))
+
+
+def _agent_unconfined() -> bool:
+    """True where no per call sandbox confines a shell command (not Linux)."""
+    from prismpath.agent import sandbox_hook
+    return not sandbox_hook.supported()
+
+
+def _host_write(home: Path, policy_image: bytes) -> bool:
+    """Whether the recorded policy's per call sandbox profile writes the host; True when that cannot be told."""
+    try:
+        from prismpath.agent import sandbox_hook
+        return bool(sandbox_hook.profile_for(home, policy_image).host_write)
+    except Exception:   # noqa: BLE001 - an unreadable profile is the cautious answer
+        return True
 
 
 # ------------------------------------------------------------------------------------------------ the adapter
@@ -195,30 +233,81 @@ class ContextCloudZones:
     """The information point that asks Context Cloud (`contextcloud reaches --json`, whose JSON output is described in the Context Cloud repository)."""
 
     def __init__(self, doc: Dict[str, Any], home: Path, executable: str, budget_s: float = DEFAULT_BUDGET_S,
-                 run=subprocess.run):
+                 run=subprocess.run, host_write: bool = False):
         self.doc, self.home, self.exe, self.budget_s, self._run = doc, Path(home), executable, budget_s, run
         self.protected: List[str] = list(doc["protected"])
         self.project = Path(doc["project"])
         self.index = Path(doc["index"])
         self.zones_sha = _sha256(json.dumps(doc, sort_keys=True).encode())
         self.stats: Dict[str, Any] = {}
+        self.host_write = host_write
+        self.why = self._distrust()
+
+    # --- the index is a control path, and must not be one the agent could have written
+    @property
+    def control_paths(self) -> Tuple[str, ...]:
+        """The paths the hook and both sandbox backends hold read only: the index directory when it is strictly
+        inside the project, else the index file and its -wal and -shm siblings."""
+        parent = self.index.parent
+        if self._below_project(parent):
+            return (str(parent),)
+        return tuple(str(self.index) + s for s in ("", "-wal", "-shm"))
+
+    def _below_project(self, path: Path) -> bool:
+        try:
+            return path != self.project and path.relative_to(self.project) is not None
+        except ValueError:
+            return False
+
+    def _within_project(self, path: Path) -> bool:
+        return path == self.project or self._below_project(path)
+
+    def _distrust(self) -> str:
+        """Why this index cannot be trusted ('' when it can), as the module docstring states."""
+        try:
+            if os.path.realpath(self.index) != str(self.index):
+                return f"the index path {self.index} goes through a link"
+            parent = self.index.parent
+            if not _agent_unconfined() and (self._below_project(parent) or (
+                    not self.host_write and not self._within_project(parent))):
+                return ""
+            targets = [str(self.index) + s for s in ("", "-wal", "-shm") if os.path.lexists(str(self.index) + s)]
+            targets.append(str(parent))
+            writable = [t for t in targets if os.access(t, os.W_OK)]
+        except OSError as exc:
+            return f"the index at {self.index} cannot be examined ({type(exc).__name__})"
+        if writable:
+            return (f"the agent's user can write {writable[0]}, so the index could have been changed by the agent; "
+                    "take its write permission off, or keep it below a directory of the project, or outside it, on a host with the sandbox")
+        return ""
 
     # --- the index (read only: which functions a file holds, and the version of it that was indexed)
+    def _connect(self, immutable: bool = False):
+        mode = "immutable=1" if immutable else "mode=ro"
+        return sqlite3.connect(f"file:{self.index}?{mode}", uri=True, timeout=0.05)
+
     def _index_rows(self, rel: str) -> Optional[Tuple[str, str, List[str]]]:
-        try:
-            db = sqlite3.connect(f"file:{self.index}?mode=ro", uri=True, timeout=0.05)
+        # A write protected index in a write protected directory cannot be opened as a WAL database (SQLite must
+        # create its -shm file), so it is read as immutable: nothing can be writing it, and a -wal that holds newer
+        # rows is left unread, which at worst reads a file as stale (`unknown`).
+        for immutable in (False, True):
             try:
-                row = db.execute("SELECT module, sha256 FROM files WHERE file = ? AND tier = 'saved'", (rel,)).fetchone()
-                if row is None:
+                db = self._connect(immutable)
+                try:
+                    row = db.execute("SELECT module, sha256 FROM files WHERE file = ? AND tier = 'saved'", (rel,)).fetchone()
+                    if row is None:
+                        return None
+                    names = [r[0] for r in db.execute(
+                        "SELECT symbol FROM symbols WHERE file = ? AND tier = 'saved' AND symbol_kind IN ('function', 'method')",
+                        (rel,))]
+                finally:
+                    db.close()
+            except sqlite3.Error:
+                if immutable:
                     return None
-                names = [r[0] for r in db.execute(
-                    "SELECT symbol FROM symbols WHERE file = ? AND tier = 'saved' AND symbol_kind IN ('function', 'method')",
-                    (rel,))]
-            finally:
-                db.close()
-        except sqlite3.Error:
-            return None
-        return row[0], row[1], sorted(set(names))
+                continue
+            return row[0], row[1], sorted(set(names))
+        return None
 
     def _index_signature(self) -> str:
         parts = []
@@ -275,6 +364,9 @@ class ContextCloudZones:
     # --- one path
     def reach(self, raw: str, config: Any, budget_s: Optional[float] = None) -> str:
         from prismpath.agent import classifier
+        if self.why:
+            self.stats = {"functions": 0, "cached": False, "seconds": 0.0, "untrusted_index": self.why}
+            return "unknown"
         started = time.monotonic()
         budget = self.budget_s if budget_s is None else budget_s
         self.stats = {"functions": 0, "cached": False, "seconds": 0.0}
@@ -351,5 +443,8 @@ def status(home: Path, policy_image: bytes, workspace: Path, env: Optional[Mappi
         return {"declared": False, "point": "none", "detail": "no zone file: nothing is protected"}
     if isinstance(point, _Fixed):
         return {"declared": True, "point": "unknown", "detail": point.why}
-    return {"declared": True, "point": "contextcloud", "protected": point.protected, "index": str(point.index),
-            "executable": point.exe}
+    out = {"declared": True, "point": "contextcloud", "protected": point.protected, "index": str(point.index),
+           "executable": point.exe, "control_paths": list(point.control_paths)}
+    if point.why:
+        out.update(point="unknown", detail=point.why)
+    return out

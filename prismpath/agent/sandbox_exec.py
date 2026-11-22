@@ -222,10 +222,10 @@ def landlock_refusal(profile: Profile, workspace: Path) -> str:
     return ""
 
 
-def _holes(workspace: Path) -> List[str]:
+def _holes(workspace: Path, extra: Sequence[str] = ()) -> List[str]:
     """The paths below the workspace that must stay read only and that no read only mount protects: the control paths
     (existing ones, and the root ones that are missing, which a script must not create) and `.toolchain`."""
-    holes = [path for path in controls.discover(workspace).binds
+    holes = [path for path in controls.discover(workspace, extra).binds
              if not (os.path.lexists(path) and controls.on_read_only_mount(path))]
     toolchain = Path(workspace) / ".toolchain"
     if toolchain.is_dir() and not toolchain.is_symlink() and not controls.on_read_only_mount(str(toolchain)):
@@ -290,7 +290,8 @@ def _end_descendants(group: int, keep: int = 0) -> None:
 
 
 def run_landlock(command: str, workspace: Path, profile: Optional[Profile] = None, stdin: Optional[bytes] = None,
-                 cwd: str = "", net_rules: bool = True, seccomp: bool = True, scope_rules: bool = True) -> SandboxResult:
+                 cwd: str = "", net_rules: bool = True, seccomp: bool = True, scope_rules: bool = True,
+                 control_paths: Sequence[str] = ()) -> SandboxResult:
     """Run one shell command string with the Landlock backend (prismpath/agent/landlock.py): fork, confine the child,
     exec `bash -c`. The same inputs as `run_sandboxed` for a no network profile, and the same result. The three
     switches turn one layer off and exist for the tests that show each layer stops what it should on its own.
@@ -314,7 +315,7 @@ def run_landlock(command: str, workspace: Path, profile: Optional[Profile] = Non
            "GIT_COMMITTER_NAME": "agent", "GIT_COMMITTER_EMAIL": "agent@workspace.invalid"}
     if scratch:
         env["TMPDIR"] = scratch
-    rules = landlock.rules_for(profile.ro_mounts, profile.host_write, str(workspace), scratch, holes=_holes(workspace))
+    rules = landlock.rules_for(profile.ro_mounts, profile.host_write, str(workspace), scratch, holes=_holes(workspace, control_paths))
     nproc = _task_count() + int(profile.max_processes)
     out, err, feed = tempfile.TemporaryFile(), tempfile.TemporaryFile(), None
     try:
@@ -391,8 +392,10 @@ def _landlock_child(job_text: str) -> None:
 
 
 def run_backend(backend: str, command: str, workspace: Path, profile: Profile, stdin: Optional[bytes] = None,
-                mount: str = MOUNT, cwd: str = "", proxy_socket: str = "") -> SandboxResult:
-    """Run one shell command string with the backend named. `auto` tries bubblewrap and, only when its sandbox could
+                mount: str = MOUNT, cwd: str = "", proxy_socket: str = "",
+                control_paths: Sequence[str] = ()) -> SandboxResult:
+    """Run one shell command string with the backend named. `control_paths` are the extra control paths the hook read
+    off the signed zone file (the zone index), held read only beside the fixed ones. `auto` tries bubblewrap and, only when its sandbox could
     not be started (so nothing ran), Landlock; a host with neither is `SandboxUnavailable`. A named backend that is
     not available is `SandboxUnavailable` too, and never another backend."""
     if backend not in ("auto",) + BACKENDS:
@@ -401,7 +404,7 @@ def run_backend(backend: str, command: str, workspace: Path, profile: Profile, s
         made = controls.Controls()
         try:
             try:
-                found = controls.prepare(Path(os.path.realpath(workspace)), made)      # so a missing `.claude/` or CLAUDE.md can be bound read only too
+                found = controls.prepare(Path(os.path.realpath(workspace)), made, extra=control_paths)      # so a missing `.claude/` or CLAUDE.md can be bound read only too
             except OSError as exc:
                 raise SandboxUnavailable(f"the workspace's control paths cannot be protected ({exc}), so the command was not run") from exc
             return run_sandboxed([SHELL, "-c", command], workspace, profile, stdin=stdin, mount=mount, cwd=cwd,
@@ -413,7 +416,7 @@ def run_backend(backend: str, command: str, workspace: Path, profile: Profile, s
                 raise first
         finally:
             made.remove_created()
-    return run_landlock(command, workspace, profile, stdin=stdin, cwd=cwd)
+    return run_landlock(command, workspace, profile, stdin=stdin, cwd=cwd, control_paths=control_paths)
 
 
 # ------------------------------------------------------------------------------------------ as a program
@@ -442,6 +445,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--timeout", type=int, default=None, help="seconds; the profile's timeout_s when not given")
     parser.add_argument("--backend", default="auto", choices=("auto",) + BACKENDS,
                         help="bwrap, landlock, or auto (bubblewrap, then Landlock where bubblewrap cannot start)")
+    parser.add_argument("--control-path", action="append", default=[],
+                        help="a further path below the workspace held read only, as the hook names it (the zone index)")
     parser.add_argument("--observe-socket", default=None, help="the decider's unix socket, for a runner inside the agent sandbox")
     for flag in ("run", "session", "receipt", "image", "profile"):    # observe.py: bind what the command shows to its receipt
         parser.add_argument(f"--observe-{flag}", default=None)
@@ -458,7 +463,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         if rel == ".." or rel.startswith("../"):
             raise ValueError("the working directory is outside the workspace")
         done = run_backend(args.backend, args.command, Path(workspace), profile, stdin=b"", mount=workspace,
-                           cwd="" if rel == "." else rel, proxy_socket=args.proxy_socket)
+                           cwd="" if rel == "." else rel, proxy_socket=args.proxy_socket,
+                           control_paths=args.control_path)
     except (SandboxUnavailable, ValueError, KeyError, TypeError, ProfileError) as exc:
         sys.stderr.write(f"PrismPath did not run this command: the sandbox could not be set up ({exc})\n")
         return 126

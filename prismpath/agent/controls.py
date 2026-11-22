@@ -2,7 +2,9 @@
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """The workspace's control paths, found in one place for every layer that has to keep them read only.
 
-A control path is a file or directory whose content the agent harness reads as instructions or hooks: `.claude/`,
+A control path is a file or directory whose content the agent harness reads as instructions or hooks, or that holds a
+fact the policy relies on: the zone index (`.contextcloud/` by default, named by the signed zone file, zones.py), which
+`discover` takes as `extra` and the hook reads off the zone information point's `control_paths`. The fixed ones are `.claude/`,
 `.mcp.json`, every CLAUDE.md, CLAUDE.local.md and AGENTS.md, `.git/config` and `.git/hooks/` (the classifier's
 `CONTROL_NAMES` and walker decide which names count, so this list cannot drift from the hook's own rule). The
 launcher binds them read only over the writable workspace for the whole run (launcher.prepare_controls), and the per
@@ -26,7 +28,7 @@ import stat
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Sequence
 
 from prismpath.agent import classifier
 
@@ -157,8 +159,10 @@ class Found:
     workspace: str = ""
 
 
-def discover(workspace: Path) -> Found:
-    """Look at `workspace` and list its control paths, creating nothing."""
+def discover(workspace: Path, extra: Sequence[str] = ()) -> Found:
+    """Look at `workspace` and list its control paths, creating nothing. `extra` are further control paths the owner's
+    signed files name (the directory of the zone index, zones.py `control_paths`): each one that exists below the
+    workspace is bound like the fixed ones, and one outside the workspace is left to the sandbox's own read only view."""
     workspace = Path(workspace)
     found = Found(workspace=str(workspace))
 
@@ -179,6 +183,11 @@ def discover(workspace: Path) -> Found:
             path = git / name
             if not path.exists() and not path.is_symlink():
                 files.append(path)
+            bind(path)
+    prefix = os.path.realpath(workspace).rstrip("/") + "/"
+    for named in extra:
+        path = Path(named)
+        if os.path.lexists(path) and (os.path.realpath(path.parent).rstrip("/") + "/").startswith(prefix):
             bind(path)
     for hit in classifier._walk_names(str(workspace)):
         path = Path(hit)
@@ -217,10 +226,10 @@ def on_read_only_mount(path: str) -> bool:
         return False
 
 
-def prepare(workspace: Path, out: Controls, directory: Optional[Path] = None) -> Found:
+def prepare(workspace: Path, out: Controls, directory: Optional[Path] = None, extra: Sequence[str] = ()) -> Found:
     """`sweep_stale`, then `discover`, then `materialize` into `out`, in that order, so that what a killed run left is
     gone before the control paths are looked at. Returns what was found."""
     sweep_stale(workspace, directory)
-    found = discover(workspace)
+    found = discover(workspace, extra)
     materialize(found, out, directory)
     return found
