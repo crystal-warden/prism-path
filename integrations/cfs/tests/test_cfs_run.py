@@ -114,6 +114,7 @@ def _run(run_check, tmp: Path, keys: Path, name: str, payloads, extra=()):
                            str(tmp / "instance.seed"), str(tmp / "payloads.txt"), str(TIME_US), *extra],
                           capture_output=True, text=True)
     assert done.returncode == 0 and "run_check: all checks passed" in done.stdout, done.stdout + done.stderr
+    assert "lost floor: lock refuses, minimum admits from its version" in done.stdout   # the lost store's two responses
     return downlink.fetch(out, tmp / f"{name}.ground"), done.stdout
 
 

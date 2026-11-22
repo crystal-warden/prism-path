@@ -28,6 +28,18 @@
 /** The Critical Data Store block that holds the run state across a processor reset. */
 #define PRISMPATH_APP_PLATFORM_CDS_NAME         PRISMPATH_APP_PLATFORM_CFGVAL(CDS_NAME)
 #define DEFAULT_PRISMPATH_APP_PLATFORM_CDS_NAME "PPRunState"
+/**
+ * What the app does after a processor reset when the store holds a run state that does not read, so the highest
+ * accepted image version is lost. PP_LOST_FLOOR_LOCK, the default, begins a new run that admits no image, so every
+ * proposal is refused, until ground deletes the store (cFE ES Delete CDS, with the app stopped) and restarts the app.
+ * PP_LOST_FLOOR_MINIMUM begins a new run that admits every image of PRISMPATH_APP_PLATFORM_LOST_FLOOR_MIN_VERSION
+ * and up, so the app keeps deciding, and an older image at or above that version can be activated again. A mission
+ * picks by what its workload can bear. A power-on reset clears the store, and the floor, in both.
+ */
+#define PRISMPATH_APP_PLATFORM_LOST_FLOOR                     PRISMPATH_APP_PLATFORM_CFGVAL(LOST_FLOOR)
+#define DEFAULT_PRISMPATH_APP_PLATFORM_LOST_FLOOR             PP_LOST_FLOOR_LOCK
+#define PRISMPATH_APP_PLATFORM_LOST_FLOOR_MIN_VERSION         PRISMPATH_APP_PLATFORM_CFGVAL(LOST_FLOOR_MIN_VERSION)
+#define DEFAULT_PRISMPATH_APP_PLATFORM_LOST_FLOOR_MIN_VERSION 1u
 
 /**
  * The runtime monitor's staleness bound in seconds of mission elapsed time, or 0 when this mission has no monitor.

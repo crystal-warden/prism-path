@@ -210,6 +210,7 @@ static void PRISMPATH_APP_InitState(void)
 {
     int32 Status;
     bool  Restored = false;
+    bool  Lost     = false;
 
     (void)OS_mkdir(PRISMPATH_APP_PLATFORM_RUN_DIR, 0);
     Status = CFE_ES_RegisterCDS(&PRISMPATH_APP_Data.CdsHandle, sizeof(PP_RunState_t), PRISMPATH_APP_PLATFORM_CDS_NAME);
@@ -223,8 +224,9 @@ static void PRISMPATH_APP_InitState(void)
         }
         else
         {
+            Lost = true;
             CFE_EVS_SendEvent(PRISMPATH_APP_STATE_ERR_EID, CFE_EVS_EventType_ERROR,
-                              "PRISMPATH_APP the CDS run state does not read; a new run begins");
+                              "PRISMPATH_APP the CDS run state does not read, so the version floor is lost; a new run begins");
         }
     }
     else if (Status == CFE_SUCCESS)
@@ -253,6 +255,24 @@ static void PRISMPATH_APP_InitState(void)
     else
     {
         PP_Run_Init(&PRISMPATH_APP_Data.Run);
+        if (Lost)
+        {
+            PP_Run_LoseFloor(&PRISMPATH_APP_Data.Run, PRISMPATH_APP_PLATFORM_LOST_FLOOR,
+                             PRISMPATH_APP_PLATFORM_LOST_FLOOR_MIN_VERSION);
+            if (PRISMPATH_APP_Data.Run.FloorLost != 0u)
+            {
+                CFE_EVS_SendEvent(PRISMPATH_APP_STATE_ERR_EID, CFE_EVS_EventType_ERROR,
+                                  "PRISMPATH_APP FLOOR LOST: no policy image is admitted and every proposal is refused "
+                                  "until ground deletes the CDS %s and restarts the app",
+                                  PRISMPATH_APP_PLATFORM_CDS_NAME);
+            }
+            else
+            {
+                CFE_EVS_SendEvent(PRISMPATH_APP_STATE_ERR_EID, CFE_EVS_EventType_ERROR,
+                                  "PRISMPATH_APP FLOOR LOST: images from v%u up are admitted",
+                                  (unsigned int)PRISMPATH_APP_PLATFORM_LOST_FLOOR_MIN_VERSION);
+            }
+        }
         if (PP_Run_Begin(&PP_Io) != 0)
         {
             CFE_EVS_SendEvent(PRISMPATH_APP_STATE_ERR_EID, CFE_EVS_EventType_ERROR,
@@ -260,7 +280,9 @@ static void PRISMPATH_APP_InitState(void)
         }
         PRISMPATH_APP_SaveState();
         CFE_EVS_SendEvent(PRISMPATH_APP_STATE_INF_EID, CFE_EVS_EventType_INFORMATION,
-                          "PRISMPATH_APP RUN BEGUN receipts=0 floor=v0");
+                          "PRISMPATH_APP RUN BEGUN receipts=0 floor=v%u%s",
+                          (unsigned int)PRISMPATH_APP_Data.Run.FloorVersion,
+                          PRISMPATH_APP_Data.Run.FloorLost != 0u ? " locked" : "");
     }
 }
 
