@@ -8,6 +8,14 @@ spec stable.
 
 ## [Unreleased]
 
+### Fixed: the crates publish check fails on any answer from the index but 200 and 404 (2026-11-22)
+
+- **The already published check in `publish-crates.yml` treats only a 404 from the crates.io index as not published.** A rate limit, a server error or a network failure stops the step instead of letting a publish go ahead. `tools/tests/test_export.py` runs the step with the index stubbed.
+
+### Changed: the export ships only files listed in a manifest (2026-11-22)
+
+- **`tools/export_clean.py` fails and names any tracked file under an included prefix that is not in `tools/export_manifest.txt`,** so a new research file no longer ships by default. Add it to the manifest to ship it or to an exclude rule to hold it back. `--write-manifest` rewrites the manifest from the current rules, and the exported tree is unchanged.
+
 ### Fixed: a cFS store that does not read no longer resets the version floor to 0 (2026-11-21)
 
 - **After a processor reset with a run state in the Critical Data Store that does not read,** the cFS app begins a new run under the response its mission chose (`PRISMPATH_APP_PLATFORM_LOST_FLOOR`), not a floor of 0 that would admit any older signed image. `PP_LOST_FLOOR_LOCK`, the default, admits no image, so every proposal is refused, until ground deletes the store and restarts the app; the mark is saved with the state, so a later reset keeps it. `PP_LOST_FLOOR_MINIMUM` admits every image from `PRISMPATH_APP_PLATFORM_LOST_FLOOR_MIN_VERSION` up. The state's spare word holds the mark, so the store's size is unchanged. `tests/run_check.c` checks both responses.
