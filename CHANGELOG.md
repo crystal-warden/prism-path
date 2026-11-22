@@ -8,6 +8,13 @@ spec stable.
 
 ## [Unreleased]
 
+### Fixed: the crates publish check fails on any answer from the index but 200 and 404 (2026-11-22)
+
+- **The already published check in `publish-crates.yml` treats only a 404 from the crates.io index as not published.** A rate limit, a server error or a network failure stops the step instead of letting a publish go ahead. `tools/tests/test_export.py` runs the step with the index stubbed.
+
+### Changed: the export ships only files listed in a manifest (2026-11-22)
+
+- **`tools/export_clean.py` fails and names any tracked file under an included prefix that is not in `tools/export_manifest.txt`,** so a new research file no longer ships by default. Add it to the manifest to ship it or to an exclude rule to hold it back. `--write-manifest` rewrites the manifest from the current rules, and the exported tree is unchanged.
 ### Fixed: the in-toto export finds keys only where it is told to, and says when verify was unpinned (2026-11-22)
 
 - **`prismpath.ledgers.intoto` no longer patches `InstanceKey.__init__` or scans live objects for a private key.** A key comes from an argument, the environment variable or the run's key files.
