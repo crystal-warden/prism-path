@@ -8,6 +8,15 @@ spec stable.
 
 ## [Unreleased]
 
+### Added: the distribution envelope and verifier in prismpath-hotswap-rs, replaying the shared corpus (2026-11-22)
+
+- **`prismpath_hotswap_rs::dist` reads, writes and verifies the distribution envelope as Python does.** It holds the sealed container, the envelope and release ids, the kind table with each artifact's own check, the trust store and its durable file, and the one verifier with rules V2 to V11 in order.
+- **`prismpath_rs::canon2::codec` is one serde reader and writer for canon/2.** Every distribution document derives it, so its fields are its members and a member missing or extra does not read.
+- **`tests/test_distribution_conformance.rs` replays every corpus case that runs on Rust, each under its own test.** The verdicts match Python's, and the Rust writers give back the corpus's bytes, the trust stores and the 38 containers the Python writer sealed included.
+- **Every `meta` member is read in its own form when the envelope is read.** A `policy.ppt` whose `fields`, `counts`, `wcet_cycles`, `qualification`, `packing`, `flow_sha256` or `overlay_of` has another form is `dist:bad-format`, and so is a `net.edge` or `sandbox.profile` member of another form.
+- **The host row says which trust kinds its machine applies and bounds a body, as Python's does.** V5 refuses any other trust kind with `dist:target-mismatch`, and a body is held to the smaller of the PEP's bound and its kind's.
+- **The pack gate refuses a manifest whose `fields` or `counts` is not an object with `manifest:bad-format`.** Its count check is now `check_counts`, which the envelope check shares.
+
 ### Added: the enforcement point state machine for policy distribution, with the software host as its first target (2026-11-22)
 
 - **`prismpath.distribution.pep.Pep` stages, commits, aborts, rolls back and lapses at expiry, one machine for every Python target.** Its store under `<state>/dist/` is written in the commit order of the spec, so a death at any step leaves the old release or the new one and never a mix. A store it cannot read refuses every envelope and decides nothing.

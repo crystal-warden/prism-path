@@ -25,6 +25,7 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 
+pub mod dist;
 pub mod flow_authority;
 pub mod host;
 pub mod merkle;
@@ -215,7 +216,7 @@ pub fn validate_image(data: &[u8], caps: Option<&BTreeMap<String, u64>>) -> (boo
     // an empty caps object is falsy in the reference, so it checks nothing
     if let Some(caps) = caps.filter(|caps| !caps.is_empty()) {
         let defaults = default_caps();
-        for key in ["atoms", "nodes", "edges", "prog_words", "max_steps", "max_stack"] {
+        for key in COUNT_NAMES {
             let cap = caps.get(key).copied().unwrap_or_else(|| defaults[key]);
             if header.count(key) > cap {
                 reasons.push(format!("image:caps-exceeded:{key}"));
@@ -469,6 +470,49 @@ fn py_number_equals(recorded: &Value, count: u64) -> bool {
     }
 }
 
+/// The six header counts a manifest signs, in the order the reference checks them.
+pub const COUNT_NAMES: [&str; 6] = ["atoms", "nodes", "edges", "prog_words", "max_steps", "max_stack"];
+
+/// The signed `counts` against the image header, then a signed `wcet_cycles` against the bound
+/// recomputed from the image, independently (`policy_pack.check_counts`). Empty when both hold. A pack's
+/// manifest and a distribution envelope's `meta` carry the same members and are checked here alike. A
+/// `counts` that is not an object is `manifest:bad-format` (spec-policy-distribution.md E11), and a
+/// header that does not read is its own reason.
+pub fn check_counts(signed: &Value, image: &[u8]) -> Vec<String> {
+    let header = match read_ppt_header(image) {
+        Ok(header) => header,
+        Err(error) => return vec![error],
+    };
+    let counts = match signed.get("counts") {
+        None => None,
+        Some(Value::Object(counts)) => Some(counts),
+        Some(_) => return vec!["manifest:bad-format".to_string()],
+    };
+    for count_name in COUNT_NAMES {
+        let recorded = counts.and_then(|counts| counts.get(count_name));
+        if !recorded.is_some_and(|value| py_number_equals(value, header.count(count_name))) {
+            return vec![format!("manifest:count-mismatch:{count_name}")];
+        }
+    }
+    if let Some(recorded) = signed.get("wcet_cycles") {
+        match wcet_cycles(image) {
+            Ok(cycles) if py_number_equals(recorded, cycles) => {}
+            Ok(_) => return vec!["manifest:wcet-mismatch".to_string()],
+            Err(error) => return vec![error],
+        }
+    }
+    Vec::new()
+}
+
+/// The registry name a refusal reason carries: a parameterized reason has a `:<detail>` past the name
+/// (`causes.reason_name`), so `manifest:count-mismatch:atoms` is `manifest:count-mismatch`.
+pub fn reason_name(reason: &str) -> &str {
+    match reason.match_indices(':').nth(1) {
+        Some((index, _)) => &reason[..index],
+        None => reason,
+    }
+}
+
 /// The Authorized gate. Same pipeline + stable reason strings as the reference:
 /// signature by a known, non-revoked key; key_id binds; image hash + header counts match.
 pub fn verify_pack(
@@ -531,25 +575,9 @@ pub fn verify_pack(
     if manifest.get("image_sha256").and_then(|value| value.as_str()) != Some(sha256_hex(&image).as_str()) {
         return (false, vec!["image:sha256-mismatch".to_string()], Some(manifest));
     }
-    let header = match read_ppt_header(&image) {
-        Ok(header) => header,
-        Err(error) => return (false, vec![error], Some(manifest)),
-    };
-    for count_name in ["atoms", "nodes", "edges", "prog_words", "max_steps", "max_stack"] {
-        let recorded = manifest.get("counts").and_then(|counts| counts.get(count_name));
-        if !recorded.is_some_and(|value| py_number_equals(value, header.count(count_name))) {
-            return (false, vec![format!("manifest:count-mismatch:{count_name}")], Some(manifest));
-        }
-    }
-    if let Some(recorded) = manifest.get("wcet_cycles") {
-        // recomputed from the image, independently of the signer
-        let recomputed = match wcet_cycles(&image) {
-            Ok(cycles) => cycles,
-            Err(error) => return (false, vec![error], Some(manifest)),
-        };
-        if !py_number_equals(recorded, recomputed) {
-            return (false, vec!["manifest:wcet-mismatch".to_string()], Some(manifest));
-        }
+    let reasons = check_counts(&manifest, &image);
+    if !reasons.is_empty() {
+        return (false, reasons, Some(manifest));
     }
     if let Some(packing) = manifest.get("packing") {
         if packing.get("profile").and_then(|value| value.as_str()) != Some("spiral") {
@@ -632,8 +660,13 @@ pub fn load_envelope(base_path: &str, pubkey_paths: &[String]) -> (Option<Value>
 }
 
 /// The Envelope-bounded gate: manifest targets this envelope, fields ⊆ envelope fields, and the
-/// image passes the capped structural/fragment walk.
+/// image passes the capped structural/fragment walk. A manifest whose `fields` or `counts` is present
+/// and not an object is `manifest:bad-format` and nothing else is checked, so no field escapes the
+/// subset check by being written in another form (the reference raises on it).
 pub fn check_envelope(manifest: &Value, image: &[u8], envelope: &Value) -> (bool, Vec<String>) {
+    if ["fields", "counts"].iter().any(|member| manifest.get(member).is_some_and(|value| !value.is_object())) {
+        return (false, vec!["manifest:bad-format".to_string()]);
+    }
     let mut reasons: Vec<String> = Vec::new();
     if manifest.get("envelope_id") != envelope.get("envelope_id") {
         reasons.push("envelope:id-mismatch".to_string());
