@@ -17,9 +17,17 @@ on:
             "integrations/governed_harness/**", "prismpath/tests/fixtures/claude_code_hooks.json",
             ".github/workflows/formal.yml"]
   workflow_dispatch:
+  schedule:
+    - cron: "17 6 * * 1"
 
 permissions:
   contents: read
+
+# A push or pull request deselects the tests marked checkpoint (an exhaustive sweep whose seeded sample runs here
+# anyway); the weekly schedule and a manual run are the checkpoint and run everything.
+env:
+  PYTEST_MARKER: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'checkpoint or not checkpoint' || 'not checkpoint' }}
+  CLASSIFIER_CASES: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && '20000' || '2000' }}
 
 jobs:
   lean:
@@ -57,12 +65,12 @@ jobs:
       - name: The egress policy and the edge table agree with the oracle, and no case may be skipped
         run: |
           set -o pipefail
-          PRISMPATH_REQUIRE_CORE_ORACLE=1 python -m pytest prismpath/tests/test_egress_policy.py prismpath/tests/test_net_from_policy.py -q -rs --deselect prismpath/tests/test_net_from_policy.py::test_the_loaders_own_gate_refuses_a_table_that_is_not_the_one_the_host_verified | tee /tmp/egress.txt
+          PRISMPATH_REQUIRE_CORE_ORACLE=1 python -m pytest prismpath/tests/test_egress_policy.py prismpath/tests/test_net_from_policy.py -q -rs -m "$PYTEST_MARKER" --deselect prismpath/tests/test_net_from_policy.py::test_the_loaders_own_gate_refuses_a_table_that_is_not_the_one_the_host_verified | tee /tmp/egress.txt
           ! grep -q "SKIPPED" /tmp/egress.txt
-      - name: The classifier differential harness (docs/design/spec-verified-classifier.md), CI size and the full 20,000 call run
+      - name: The classifier differential harness (docs/design/spec-verified-classifier.md), CI size and a generated run (20,000 calls at the checkpoint)
         run: |
-          PRISMPATH_REQUIRE_CLASSIFIER_ORACLE=1 python -m pytest prismpath/tests/test_classifier_diff.py -q
-          python formal/diff/classifier_diff.py --cases 20000 --seed 1
+          PRISMPATH_REQUIRE_CLASSIFIER_ORACLE=1 python -m pytest prismpath/tests/test_classifier_diff.py -q -m "$PYTEST_MARKER"
+          python formal/diff/classifier_diff.py --cases "$CLASSIFIER_CASES" --seed 1
       - name: No sorry in the sources
         run: "! grep -rn --include=*.lean -w sorry formal/FQ formal/FQ.lean formal/Core formal/Core.lean formal/Classifier formal/Classifier.lean"
       - name: Bridge vectors are byte identical to a fresh generation from the frozen corpora

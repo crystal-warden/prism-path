@@ -154,7 +154,13 @@ IMAGES = {
 }
 
 
-@pytest.mark.parametrize("name", sorted(IMAGES))
+def _per_push(names, keep):
+    """The images a sweep runs on every push (`keep`); the others carry the checkpoint mark, so the full sweep runs
+    in the checkpoint workflow."""
+    return [name if name in keep else pytest.param(name, marks=pytest.mark.checkpoint) for name in sorted(names)]
+
+
+@pytest.mark.parametrize("name", _per_push(IMAGES, {"default", "allow_other"}))
 def test_the_compiled_net_state_agrees_with_the_oracle_over_every_connect_reading(oracle, name):
     readings = list(_grid(Policy(IMAGES[name])))
     allowed = _oracle_allows(IMAGES[name], readings)
