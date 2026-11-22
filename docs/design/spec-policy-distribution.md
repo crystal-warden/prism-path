@@ -148,9 +148,12 @@ carry it, so every certified image hash stays what it was.
 
 **E5.** `expires` is greater than `not_before`, except on a trust kind where it is 0.
 
-**E6.** An envelope is at most 2,048 bytes. A PEP may set a lower bound for the body and refuses a larger
-one with `dist:too-large`. The `mesh` bound is 640 bytes (`TBL_MAX`) and the `cfs` bound is the table
-size.
+**E6.** An envelope is at most 2,048 bytes. A target kind has two bounds for a body, one for the body of an
+artifact it uses and one for the body of a trust kind, and a PEP refuses a larger body with
+`dist:too-large`. For `mesh` the artifact bound is 640 bytes (`TBL_MAX`), and for `cfs` it is the table
+size. The trust bound of every kind is 16,384 bytes, which holds a revocation list of the full size R7
+allows, so the smallest PEP of this version can take any list the authority may write. A PEP may set a
+lower artifact bound of its own and never a lower trust bound.
 
 **E7.** Every envelope of one release carries the same `stream`, `seq`, `policy_sha256`, `release`,
 `replaces` and `widens`.
@@ -415,10 +418,10 @@ cause reported and nothing is staged.
 
 | Rule | Check | Cause when it fails |
 |---|---|---|
-| V2 | The sealed container reads (S2) and the envelope and body fit the PEP's bounds (E6) | `dist:bad-format`, `dist:too-large` |
+| V2 | The sealed container reads (S2), and the body is no longer than the larger of the PEP's two bounds (E6) | `dist:bad-format`, `dist:too-large` |
 | V3 | The signatures (S3 to S5) | `dist:unknown-key`, `sig:invalid`, `sig:revoked-key` |
 | V4 | The envelope reads (E1, E2, E5, E8, E11) | `document:not-canonical`, `dist:bad-format` |
-| V5 | `targets` holds this PEP's kind, `artifact` is one this kind uses or a trust kind, and `stream` is this PEP's stream or `@trust` for a trust kind | `dist:target-mismatch` |
+| V5 | `targets` holds this PEP's kind, `artifact` is one this kind uses or a trust kind, and `stream` is this PEP's stream or `@trust` for a trust kind. Then the signed `body_size` is within the bound for that artifact (E6), which is checked before any body is read (B9) | `dist:target-mismatch`, then `dist:too-large` |
 | V6 | Time (T3, T4, and X4 for a trust kind) | `dist:not-yet-valid`, `dist:expired` |
 | V7 | The envelope id and the policy hash are not on the revocation list | `dist:revoked` |
 | V8 | The sequence (Q2, Q3, or R1 and O1 for a trust kind) | `dist:seq-replay`, `dist:trust-replay` |
@@ -1007,3 +1010,4 @@ reports exactly the cause given, or none, and its state after is the one given.
 | 129 | An `agent` PEP is offered a release whose `agent.zones` lacks a name the active one protects, one with no `agent.zones` at all, and one that adds a name, each with no statement | `dist:widening-unsigned`, `dist:widening-unsigned`, committed | W1, W3, V11 | P |
 | 130 | A list raises a floor past a revoked envelope, the next list drops that envelope, and the envelope is sent again. Then a list that drops an envelope no floor has passed is given to the sealing tool and to a controller | applied, applied with the PEP holding only the latest list, `dist:seq-replay`, then refused by both | R6, R8 | P R C |
 | 131 | A rotation that would make a ninth key, and seventeen keys retired one after another, then a pack signed by the first retired | `dist:too-large`, then `dist:unknown-key` | K5 | P R C |
+| 132 | A `mesh` PEP is sent a revocation list of 64 entries in each list and 16 streams, a `policy.ppt` of 641 bytes, and over frames a trust body offered at 16,385 bytes | applied, `dist:too-large` from the signed `body_size` with no body read, and the transfer dropped with `dist:too-large` | E6, V5, R7, B9 | P C |
