@@ -199,6 +199,10 @@ CONSUMERS: dict[str, dict[str, list[tuple]]] = {
         "py": [pytest("prismpath/telemetry/tests/test_defined_fields.py")],
         "rs": [cargo("prismpath-telemetry-rs", "test_defined_fields", "prismpath-telemetry-rs/tests/test_defined_fields.rs")],
         "js": [NONE_JS], "go": [NONE_GO], "hw": [NONE_HW]},
+    "telemetry/grouped_band": {
+        "py": [pytest("prismpath/telemetry/tests/test_spiral_groups.py")],
+        "rs": [cargo("prismpath-telemetry-rs", "test_conformance_grouped_band", "prismpath-telemetry-rs/tests/test_conformance_grouped_band.rs")],
+        "js": [NONE_JS], "go": [NONE_GO], "hw": [NONE_HW]},
     "telemetry/inputs": {
         "py": [pytest("prismpath/telemetry/tests/test_acceptance.py")],
         "rs": [cargo("prismpath-telemetry-rs", "test_acceptance", "prismpath-telemetry-rs/tests/test_acceptance.rs")],

@@ -661,7 +661,7 @@
    "code": 144,
    "name": "dist:trust-replay",
    "class": "authority",
-   "description": "a revocation list or a key rotation whose seq is not above the enforcement point's trust sequence; refused and the trust store unchanged"
+   "description": "a revocation list or a key rotation whose seq is not the enforcement point's trust sequence plus one; refused and the trust store unchanged"
   },
   {
    "code": 145,
