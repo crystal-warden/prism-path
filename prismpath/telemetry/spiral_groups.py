@@ -25,7 +25,6 @@ from __future__ import annotations
 import ast
 import hashlib
 import itertools
-import json
 import math
 import random
 import struct
@@ -342,11 +341,15 @@ class GroupedLayout:
         return wire.route_node(self.graph, self.node, self.rebuild(signature))
 
     # -- identity ----------------------------------------------------------
-    def describe(self) -> dict:
-        return {"node": self.node, "fields": self.fields,
-                "routes": ["" if route is None else route for route in self.routes],
-                "groups": [{"fields": group.fields, "radices": [len(options) for options in group.reach],
-                            "classes": group.class_width} for group in self.groups]}
+    def describe(self) -> str:
+        """The layout as text, for its hash: the node, its fields, its band list, and per group its fields,
+        radices and class sizes."""
+        routes = "/".join(route or "" for route in self.routes)
+        groups = " ".join("[{}:{}:{}]".format(",".join(group.fields),
+                                              "x".join(str(len(options)) for options in group.reach),
+                                              ",".join(str(width) for width in group.class_width))
+                          for group in self.groups)
+        return f"grouped {self.node} {','.join(self.fields)} {routes} {groups}"
 
 
 def layout_for(graph, node: str, parts: Optional[Dict[str, Any]] = None, limit: int = ENUMERATION_LIMIT,
@@ -387,9 +390,9 @@ class GroupedFacet:
         self.nodes = [name for name in wire.decision_nodes(graph)
                       if spiral._node_fields(graph, name, self.parts)]
         self.layouts = {name: layout_for(graph, name, self.parts, limit, group_limit) for name in self.nodes}
-        self.layout_hash = hashlib.sha256(json.dumps(
-            [("grouped", lay.describe()) if isinstance(lay, GroupedLayout) else ("joint", lay.node, lay.size)
-             for lay in self.layouts.values()], sort_keys=True).encode("utf-8")).digest()[:16]
+        self.layout_hash = hashlib.sha256("\n".join(
+            lay.describe() if isinstance(lay, GroupedLayout) else f"joint {lay.node} {lay.size}"
+            for lay in self.layouts.values()).encode("utf-8")).digest()[:16]
 
     # -- per reading -------------------------------------------------------
     def _values(self, reading: Dict[str, Any], tier: int) -> List[int]:

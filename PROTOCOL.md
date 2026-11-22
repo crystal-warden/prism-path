@@ -226,14 +226,17 @@ decision node, in document order, each value sent as the Fibonacci code of `valu
 - **Stream.** A stream of the profile is a preamble followed by the tier's frames, zero padded to a
   byte. The preamble is 42 bytes: the ASCII `PPLF`, the version (1), the tier (1 band, 2 signature,
   3 signature with refinement), the first 16 bytes of the SHA-256 of the policy document, the first
-  16 bytes of the SHA-256 of the layout (the JSON, keys sorted, of each node's fields, route list,
-  group fields, radices and class sizes, or of a node's name and size when it fits `SpiralLayout`),
+  16 bytes of the SHA-256 of the layout (the UTF-8 lines, one per node in document order, `joint NAME
+  SIZE` for a node that fits `SpiralLayout` and for a grouped node `grouped NAME FIELDS ROUTES GROUPS`,
+  where FIELDS is the comma joined sorted fields, ROUTES the slash joined band list with the empty
+  string for `None`, and GROUPS the space joined `[fields:radices:class sizes]` of each group, with
+  commas inside the fields and class sizes and `x` between the radices),
   and the number of frames as a little endian u32. A decoder MUST refuse a stream whose magic,
   version, policy hash or layout hash is not its own, one that ends inside a code, one with codes
   left after its last frame, and a class rank or index outside its group. The preamble is sent once
   per epoch, so across a 4,096 decision epoch it costs about 0.01 byte a decision.
 - **Cost.** Measured on the seven policies in `prismpath/telemetry/tests/test_spiral_groups.py`,
-  the band tier is 5 to 7 bits a decision and the signature tier 14 to 43 bits, against 53 to 333
+  the band tier is 5 to 7 bits a decision and the signature tier 14 to 43 bits, against 37 to 333
   bits for the plain wire, and no reading of the sampled populations changed its decision.
   Reference implementation `prismpath/telemetry/spiral_groups.py` (Python, both tiers) and
   `prismpath-telemetry-rs/src/spiral_groups.rs` (Rust, the band tier).
