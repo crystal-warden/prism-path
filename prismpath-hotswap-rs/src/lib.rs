@@ -476,8 +476,8 @@ pub const COUNT_NAMES: [&str; 6] = ["atoms", "nodes", "edges", "prog_words", "ma
 /// The signed `counts` against the image header, then a signed `wcet_cycles` against the bound
 /// recomputed from the image, independently (`policy_pack.check_counts`). Empty when both hold. A pack's
 /// manifest and a distribution envelope's `meta` carry the same members and are checked here alike. A
-/// `counts` that is not an object is `manifest:count-mismatch:counts`, and a header that does not read
-/// is its own reason.
+/// `counts` that is not an object is `manifest:bad-format` (spec-policy-distribution.md E11), and a
+/// header that does not read is its own reason.
 pub fn check_counts(signed: &Value, image: &[u8]) -> Vec<String> {
     let header = match read_ppt_header(image) {
         Ok(header) => header,
@@ -486,7 +486,7 @@ pub fn check_counts(signed: &Value, image: &[u8]) -> Vec<String> {
     let counts = match signed.get("counts") {
         None => None,
         Some(Value::Object(counts)) => Some(counts),
-        Some(_) => return vec!["manifest:count-mismatch:counts".to_string()],
+        Some(_) => return vec!["manifest:bad-format".to_string()],
     };
     for count_name in COUNT_NAMES {
         let recorded = counts.and_then(|counts| counts.get(count_name));
@@ -660,8 +660,13 @@ pub fn load_envelope(base_path: &str, pubkey_paths: &[String]) -> (Option<Value>
 }
 
 /// The Envelope-bounded gate: manifest targets this envelope, fields ⊆ envelope fields, and the
-/// image passes the capped structural/fragment walk.
+/// image passes the capped structural/fragment walk. A manifest whose `fields` or `counts` is present
+/// and not an object is `manifest:bad-format` and nothing else is checked, so no field escapes the
+/// subset check by being written in another form (the reference raises on it).
 pub fn check_envelope(manifest: &Value, image: &[u8], envelope: &Value) -> (bool, Vec<String>) {
+    if ["fields", "counts"].iter().any(|member| manifest.get(member).is_some_and(|value| !value.is_object())) {
+        return (false, vec!["manifest:bad-format".to_string()]);
+    }
     let mut reasons: Vec<String> = Vec::new();
     if manifest.get("envelope_id") != envelope.get("envelope_id") {
         reasons.push("envelope:id-mismatch".to_string());
