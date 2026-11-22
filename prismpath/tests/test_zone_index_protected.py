@@ -554,6 +554,76 @@ def test_the_program_that_runs_is_the_real_path_that_was_tested(project, tmp_pat
     link.symlink_to(project.exe)
     point = zones.ContextCloudZones(project.doc(), project.home, str(link))
     seen = []
-    point._run = lambda command, **k: seen.append(command[0]) or type("R", (), {"returncode": 0, "stdout": '{"certainty": "no"}'})()
+    point._run = lambda command, **k: seen.append(command) or type("R", (), {"returncode": 0, "stdout": '{"certainty": "no"}'})()
     assert point.reach("pkg/caller.py", project.config(point)) == "none"
-    assert seen == [os.path.realpath(project.exe)]
+    assert seen and seen[0][:3] == [sys.executable, "-I", os.path.realpath(project.exe)]     # its own interpreter, -I, the real path
+
+
+# ------------------------------------------------------------------------------------------------ the third review
+def _planting_program(project, tmp_path):
+    """A program that imports `contextcloud` if it can, like the real one, and a planted package in the project that
+    leaves a marker when imported."""
+    marker = tmp_path / "marker"
+    plant = project.root / "plant" / "contextcloud"
+    plant.mkdir(parents=True)
+    (plant / "__init__.py").write_text(f"open({str(marker)!r}, 'w').write('imported')\n")
+    exe = project.bin / "contextcloud-imports"
+    project.bin.chmod(0o755)
+    exe.write_text(f"#!{sys.executable}\ntry:\n    import contextcloud\nexcept ImportError:\n    pass\nprint('{{\"certainty\": \"no\"}}')\n")
+    exe.chmod(0o555)
+    project.bin.chmod(0o555)
+    return exe, marker, project.root / "plant"
+
+
+def test_a_pythonpath_inside_the_project_never_reaches_the_program(project, tmp_path, monkeypatch):
+    import subprocess
+    exe, marker, plant = _planting_program(project, tmp_path)
+    monkeypatch.setenv("PYTHONPATH", str(plant))
+    monkeypatch.setenv("PYTHONSTARTUP", str(plant / "contextcloud" / "__init__.py"))
+    subprocess.run([sys.executable, str(exe)], capture_output=True, text=True)       # the plant works against an unscrubbed run
+    assert marker.exists()
+    marker.unlink()
+    point = zones.ContextCloudZones(project.doc(exe=exe), project.home, str(exe))
+    assert point.why == "" and point.reach("pkg/caller.py", project.config(point)) == "none"
+    assert not marker.exists()                                                        # never imported
+    env = zones.clean_env(project.home)
+    assert not [k for k in env if k.startswith("PYTHON")] and env["PATH"] == "/usr/local/bin:/usr/bin:/bin"
+
+
+def test_the_rebuild_and_the_package_lookup_run_in_the_clean_environment(project, tmp_path, monkeypatch):
+    monkeypatch.setenv("PYTHONPATH", str(project.root))
+    seen = {}
+
+    def run(command, **kwargs):
+        seen.update(kwargs)
+        return type("R", (), {"returncode": 0, "stdout": str(project.pkg) + "\n", "stderr": ""})()
+    zones.find_program(str(project.exe), project.home, run=run)
+    assert "PYTHONPATH" not in seen["env"] and seen["env"] == zones.clean_env(project.home)
+    doc = project.doc()
+    (project.root / ".contextcloud" / "index.sqlite-wal").write_text("")
+    rebuilt = []
+    monkeypatch.setattr(zones.subprocess, "run", lambda command, **kw: rebuilt.append((command, kw)) or type("R", (), {"returncode": 0, "stderr": ""})())
+    zones.rebuild_index_after_signing(project.home, doc, lambda: None, {"CONTEXTCLOUD": str(project.exe)})
+    command, kwargs = rebuilt[0]
+    assert kwargs["env"] == zones.clean_env(project.home) and command[:2] == [sys.executable, "-I"]
+
+
+def test_zones_set_refuses_a_package_the_agents_user_could_change_where_nothing_confines_it(project, tmp_path, monkeypatch):
+    package = tmp_path / "site" / "contextcloud"
+    package.mkdir(parents=True)
+    (package / "deep").mkdir()
+    (package / "deep" / "x.py").write_text("")
+    assert zones.package_tree_problem(str(package), project.root, confined=True) == ""         # the sandbox holds
+    assert "owns or can write" in zones.package_tree_problem(str(package), project.root, confined=False)
+    monkeypatch.setattr(zones, "_agent_uid", lambda: os.getuid() + 1)
+    assert "owns or can write" in zones.package_tree_problem(str(package), project.root, confined=False)   # writable by mode
+    for path in [package / "deep" / "x.py", package / "deep", package, package.parent]:
+        path.chmod(0o555 if path.is_dir() else 0o444)
+    try:
+        assert zones.package_tree_problem(str(package), project.root, confined=False) == ""
+        (package / "deep").chmod(0o755)                                                          # one writable directory deep down
+        assert "deep" in zones.package_tree_problem(str(package), project.root, confined=False)
+    finally:
+        for path in [package.parent, package, package / "deep"]:
+            path.chmod(0o755)
+    assert "inside the project" in zones.package_tree_problem(str(project.root / "vendor"), project.root, confined=True)

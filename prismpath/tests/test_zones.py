@@ -278,13 +278,13 @@ def test_the_hook_asks_about_every_write_when_a_zone_is_declared_and_context_clo
 FAKE = """#!{python}
 import json, os, shutil, sys, time
 if sys.argv[1] == "index":      # a rebuild: the index a test saved is put where --index says
-    shutil.copy(os.environ["FAKE_CC_INDEX_SRC"], sys.argv[sys.argv.index("--index") + 1])
+    shutil.copy({index_src!r}, sys.argv[sys.argv.index("--index") + 1])
     sys.exit(0)
 name = sys.argv[2]
-log = os.environ.get("FAKE_CC_LOG")
+log = {log!r}
 if log:
     open(log, "a").write(name + "\\n")
-answers = json.load(open(os.environ["FAKE_CC_ANSWERS"]))
+answers = json.load(open({answers!r}))
 answer = answers.get(name, "no")
 if answer == "error":
     sys.stderr.write("no function named")
@@ -308,7 +308,9 @@ class World:
         self.exe = tmp_path / "contextcloud"
         self.pkg = tmp_path / "ccpackage"
         self.pkg.mkdir()
-        self.exe.write_text(FAKE.format(python=sys.executable))
+        self.index_src = tmp_path / "saved-index.sqlite"
+        self.exe.write_text(FAKE.format(python=sys.executable, answers=str(self.answers), log=str(self.log),
+                                        index_src=str(self.index_src)))
         self.exe.chmod(self.exe.stat().st_mode | stat.S_IXUSR)
         self.answers.write_text("{}")
         monkeypatch.setenv("FAKE_CC_ANSWERS", str(self.answers))

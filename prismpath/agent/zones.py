@@ -51,14 +51,16 @@ access to them (`os.access`). So on a host where one user runs the agent and own
 elsewhere writes through a read only bind), and the path must not go through a link. The executable (`$CONTEXTCLOUD`
 or the first `contextcloud` on the PATH) is tested the same way on its resolved real path: inside the project it is
 never trusted, outside it it is trusted where the sandbox holds, and otherwise by the permission rule on the file and
-its directory; it runs, as the real path that was tested and not the name it was found by, with the hook's config directory as its
-working directory, not the workspace. The code that answers lives in Context Cloud's package, which an editable
+its directory; it runs, as the real path that was tested and not the name it was found by (by its own interpreter with `-I` when its
+shebang names one), with the hook's config directory as its working directory, not the workspace, and in a fixed
+environment with no PYTHON* variable (`clean_env`), so a PYTHONPATH inside the project shadows nothing. The code that answers lives in Context Cloud's package, which an editable
 install may put inside the project, so `zones set` finds the program's real path and the real path of the
 `contextcloud` package directory (by running the program's own interpreter once, `-I`, outside the workspace) and
 records both in the signed zone document (`program`). At hook time, with nothing run, the program's real path must be
 the recorded one, and both it and the package directory get the test above (inside the project is never trusted); a
-zone document without them reads `unknown`. The package's files are not walked: its directory and the directory above
-are what the permission rule looks at. The cache (`zones-cache.json`) is read and written only where the sandbox holds
+zone document without them reads `unknown`. At hook time the package's files are not walked (its directory and the one above are what the permission rule looks at),
+but `zones set` walks the whole package once and refuses when the sandbox does not hold and the agent's user owns or can
+write any file or directory below it, or when it is inside the project (`package_tree_problem`). The cache (`zones-cache.json`) is read and written only where the sandbox holds
 (`_confined`), since otherwise the agent can write it. An index that cannot be examined is not trusted. Running as root
 counts as able to write.
 
@@ -156,6 +158,49 @@ def zone_document(protected: Iterable[str], project: Path, index: Optional[Path]
     return doc
 
 
+def clean_env(home: Path) -> Dict[str, str]:
+    """The only environment the program runs in: no PYTHON* variable (a PYTHONPATH inside the project would let the
+    agent put its own `contextcloud` package ahead of the installed one, and run in the hook outside the sandbox), a
+    fixed system PATH, and the little a program needs."""
+    return {"PATH": "/usr/local/bin:/usr/bin:/bin", "HOME": str(home), "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8",
+            "TMPDIR": tempfile.gettempdir()}
+
+
+def program_argv(real: str) -> List[str]:
+    """What runs the program at the real path `real`: its own Python interpreter with `-I` (no user site, no PYTHON*
+    variable, no current directory on the path) when its shebang names one by an absolute path, else the program."""
+    try:
+        with open(real, "rb") as handle:
+            first = handle.readline(512).decode("utf-8", "replace").strip()
+    except OSError:
+        return [real]
+    words = first[2:].split() if first.startswith("#!") else []
+    if words and os.path.isabs(words[0]) and os.path.basename(words[0]).startswith("python"):
+        return [words[0], "-I", real]
+    return [real]
+
+
+def package_tree_problem(package: str, project: Path, confined: bool) -> str:
+    """Why the package directory cannot be trusted by `zones set`, or '': inside the project, or, where the sandbox does
+    not hold (`confined` false), any directory or file below it that the agent's user owns or can write."""
+    real = os.path.realpath(package)
+    if Path(real) == project or project in Path(real).parents:
+        return f"the Context Cloud package {real} is inside the project, where the agent can change it"
+    if confined:
+        return ""
+    uid = _agent_uid()
+    for here, dirs, files in os.walk(real):
+        for name in [here] + [os.path.join(here, n) for n in dirs + files]:
+            try:
+                st = os.lstat(name)
+            except OSError:
+                continue
+            if uid == 0 or st.st_uid == uid or (not stat.S_ISLNK(st.st_mode) and os.access(name, os.W_OK)):
+                return (f"the agent's user owns or can write {name} in the Context Cloud package, and nothing confines "
+                        "the agent here, so the package could be changed by it")
+    return ""
+
+
 def find_program(exe: str, home: Path, run=subprocess.run) -> Dict[str, str]:
     """{"path", "package"}: the real path of the `contextcloud` program and of its package directory, found by running
     the program's own interpreter once (`-I`, with the config directory as working directory, so nothing of the
@@ -180,7 +225,8 @@ def find_program(exe: str, home: Path, run=subprocess.run) -> Dict[str, str]:
         raise ZoneError(f"the interpreter of the Context Cloud program {real} cannot be found")
     code = "import contextcloud, os; print(os.path.dirname(os.path.realpath(contextcloud.__file__)))"
     try:
-        done = run([interpreter, "-I", "-c", code], capture_output=True, text=True, timeout=60, cwd=str(home))
+        done = run([interpreter, "-I", "-c", code], capture_output=True, text=True, timeout=60, cwd=str(home),
+                   env=clean_env(home))
     except (OSError, subprocess.SubprocessError) as exc:
         raise ZoneError(f"the Context Cloud package could not be located ({type(exc).__name__})") from exc
     package = done.stdout.strip()
@@ -275,8 +321,9 @@ def rebuild_index_after_signing(home: Path, doc: Dict[str, Any], sign_now, env: 
         os.unlink(name)
     index.parent.mkdir(parents=True, exist_ok=True)
     try:
-        done = subprocess.run([exe, "index", doc["project"], "--index", str(index), "--no-color"], capture_output=True,
-                              text=True, timeout=timeout_s, cwd=str(home))
+        done = subprocess.run([*program_argv(os.path.realpath(exe)), "index", doc["project"], "--index", str(index),
+                               "--no-color"], capture_output=True, text=True, timeout=timeout_s, cwd=str(home),
+                              env=clean_env(home))
     except (OSError, subprocess.SubprocessError) as exc:
         raise ZoneError(f"the zone file is recorded and the old index was removed, but `contextcloud index` could not run "
                         f"({type(exc).__name__}); run it") from exc
@@ -489,10 +536,11 @@ class ContextCloudZones:
 
     # --- one function
     def _function(self, name: str, timeout: float) -> str:
-        command = [self.real_exe, "reaches", name, "--json", "--no-color", "--index", str(self.index),
+        command = [*program_argv(self.real_exe), "reaches", name, "--json", "--no-color", "--index", str(self.index),
                    "--protected", ",".join(self.protected)]
         try:
-            done = self._run(command, capture_output=True, text=True, timeout=max(timeout, 0.001), cwd=str(self.home))
+            done = self._run(command, capture_output=True, text=True, timeout=max(timeout, 0.001), cwd=str(self.home),
+                             env=clean_env(self.home))
             if done.returncode != 0:
                 return "unknown"
             certainty = json.loads(done.stdout).get("certainty")

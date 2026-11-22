@@ -688,8 +688,13 @@ def zones_cmd(action: str, project: Path, protected: Optional[List[str]], protec
             if exe is None:
                 raise zones.ZoneError("Context Cloud is not installed (no `contextcloud` on the PATH and no $CONTEXTCLOUD), "
                                       "and `zones set` records where it is")
-            doc = zones.zone_document(names, project, Path(index) if index else None, image,
-                                      program=zones.find_program(exe, home))
+            program = zones.find_program(exe, home)
+            from prismpath.agent import sandbox_hook
+            confined = sandbox_hook.supported() and not zones._host_write(home, image)
+            problem = zones.package_tree_problem(program["package"], project, confined)
+            if problem:
+                raise zones.ZoneError(problem)
+            doc = zones.zone_document(names, project, Path(index) if index else None, image, program=program)
             zones.rebuild_index_after_signing(home, doc, lambda: zones.sign(home, doc))
             result = {"recorded": True, "project": doc["project"], "index": doc["index"],
                       "protected": doc["protected"], "policy_sha256": doc["policy_sha256"]}
