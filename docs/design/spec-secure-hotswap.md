@@ -210,7 +210,7 @@ flag and stamps `unsigned: true` into the audit event.
 6. FPGA signed attestation path + version register. *(follow on: hardware retest)*
 7. MCU pre loader. *(follow on: hardware availability)*
 8. Key management hardening: rotation, revocation distribution, secure element storage.
-   *(follow on)*
+   *(follow on. Rotation and revocation distribution are specified in `spec-policy-distribution.md`)*
 
 ## 7. Honest caveats
 
