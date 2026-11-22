@@ -696,7 +696,7 @@ written. If another change lands first the numbers move up together and the name
 | 139 | `dist:seq-replay` | authority | A `seq` below the floor, or at it with another envelope |
 | 140 | `dist:not-yet-valid` | authority | The PEP's time is more than the skew before `not_before` |
 | 141 | `dist:expired` | authority | The PEP's time is at or past `expires` |
-| 142 | `dist:revoked` | authority | The envelope id or the policy hash is on the revocation list, or a floor was raised past it |
+| 142 | `dist:revoked` | authority | The envelope id or the policy hash is on the revocation list, or the active release's seq is below a raised floor |
 | 143 | `dist:widening-unsigned` | authority | A release that is larger, or cannot be shown not to be, without a covering widening statement |
 | 144 | `dist:trust-replay` | authority | A revocation or rotation whose `seq` is not above the trust sequence |
 | 145 | `dist:rotation-invalid` | authority | A rotation without the new key's signature, or that names a key it may not |
