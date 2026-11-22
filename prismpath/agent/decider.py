@@ -44,7 +44,8 @@ class Decider:
         self.env = dict(os.environ if env is None else env)
         self.max_input = max_input
         self.read_timeout_s = read_timeout_s
-        self._handler = handler or (lambda raw: commands.hook(raw, self.env, nested=nested))
+        self.launch: list = []     # the sessions this launch decided calls for, so state survives a new session (`/clear`)
+        self._handler = handler or (lambda raw: commands.hook(raw, self.env, nested=nested, launch=self.launch))
         self._slots = threading.BoundedSemaphore(max_connections)
         self._decide = threading.Lock()
         self._server: Optional[socket.socket] = None

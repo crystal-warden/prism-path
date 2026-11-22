@@ -11,7 +11,7 @@ Checks, in the order they are reported:
   config-dir, key-files     the directory is mode 0700 and each key file 0600 (not applicable on Windows)
   authority-key, instance-key   the private key matches its public key (a nonce is signed and verified)
   policy                    the recorded policy's attestation verifies under the authority key, and its
-                            hash is one of the shipped starters, strict, default or review (an older
+                            hash is one of the shipped starters, strict, default, review or session (an older
                             shipped image of one, or an attested custom image, is a warning)
   policy-control            the recorded policy refuses every change to the agent's own control files (warn when
                             it does not: an older starter, or a custom image without the rule)
@@ -166,7 +166,7 @@ def _check_policy(home: Path) -> Dict[str, Any]:
                       f"current {was} starter ({STARTERS[was]})", f"prismpath agent init --policy {was}",
                       sha256=recorded, starter=was)
     return _check("policy", "warn", f"the recorded policy {recorded[:16]} is custom: attested, but not one of the shipped "
-                  f"starters (strict, default or review) nor a known older image of one", fix, sha256=recorded,
+                  f"starters (strict, default, review or session) nor a known older image of one", fix, sha256=recorded,
                   starter="custom")
 
 

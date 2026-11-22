@@ -18,7 +18,7 @@ from pathlib import Path
 
 import pytest
 
-from prismpath.agent import claude_code, classifier, commands, zones
+from prismpath.agent import claude_code, classifier, commands, session_state, zones
 from prismpath.agent.policy import STARTERS, Policy, starter_path
 
 DEMO = Path.home() / "contextcloud-demo"
@@ -117,7 +117,7 @@ def test_the_other_fields_do_not_change_with_the_point():
 # ----------------------------------------------------------------------------------------- the starters
 def _decide(name, reading):
     policy = Policy.load(starter_path(name))
-    return policy.decide(policy.reading_bytes(reading))
+    return policy.decide(policy.reading_bytes({**session_state.FRESH, **reading} if policy.stateful else reading))   # a fresh session
 
 
 @pytest.mark.parametrize("name", sorted(STARTERS))

@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-from prismpath.agent import claude_code, classifier, mcp_map
+from prismpath.agent import claude_code, classifier, mcp_map, session_state
 from prismpath.agent.policy import STARTERS, Policy, starter_path
 from prismpath.kernel import causes
 
@@ -40,7 +40,7 @@ def ws(tmp_path):
 def _decide(name, ws, tool, tool_input, cwd=None):
     hook = {"session_id": "s", "hook_event_name": "PreToolUse", "tool_name": tool, "tool_input": tool_input,
             "cwd": str(cwd or ws)}
-    result = claude_code.evaluate(hook, {"CLAUDE_PROJECT_DIR": str(ws)}, POLICIES[name])
+    result = claude_code.evaluate(hook, {"CLAUDE_PROJECT_DIR": str(ws)}, POLICIES[name], session=session_state.FRESH)   # a fresh session: what the stateless starters decide
     return result.decision.kind, result.decision.cause_code, result
 
 

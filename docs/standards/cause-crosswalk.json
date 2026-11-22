@@ -2042,6 +2042,52 @@
     ],
     "rationale": "Nearest entry: a change to protected code made without authorization; the cause asks for that authorization, it does not check it."
    }
+  },
+  "133": {
+   "name": "agent:session-change-asked",
+   "class": "routing",
+   "kind": "security-control",
+   "owasp_asi": {
+    "ids": [
+     "ASI02"
+    ],
+    "rationale": "A change or a push in a session that already changed protected code waits for the person, so a series of small steps does not carry past the question the first one raised."
+   },
+   "mitre_atlas": {
+    "ids": [
+     "AML.T0053"
+    ],
+    "rationale": "An agent tool call that follows an earlier change to protected files in the same session."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-862"
+    ],
+    "rationale": "Nearest entry: a change made without authorization after the session's earlier change to protected code; the cause asks for that authorization, it does not check it."
+   }
+  },
+  "134": {
+   "name": "agent:session-shell-asked",
+   "class": "routing",
+   "kind": "security-control",
+   "owasp_asi": {
+    "ids": [
+     "ASI02"
+    ],
+    "rationale": "A shell command past the session's budget of shell runs waits for the person, whatever the agent that proposes it."
+   },
+   "mitre_atlas": {
+    "ids": [
+     "AML.T0053"
+    ],
+    "rationale": "An agent tool call to run a command, after the session already ran many."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-770"
+    ],
+    "rationale": "Nearest entry: an unbounded allocation of a resource, here shell runs; the cause bounds what runs without asking, it does not limit what the person approves."
+   }
   }
  }
 }
