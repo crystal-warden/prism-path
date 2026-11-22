@@ -9,6 +9,7 @@ the staged settings.json and gets decisions, and cannot read the keys, the polic
 Nothing reads a real login or key; the keys here are made fresh in a throwaway HOME. Paths the sandbox must see
 are under /var/tmp."""
 import ast
+import contextlib
 import json
 import os
 import shutil
@@ -44,8 +45,9 @@ def _no_real_config_dir(monkeypatch):
         monkeypatch.delenv(name, raising=False)
 
 
-@pytest.fixture()
-def world(tmp_path):
+@contextlib.contextmanager
+def made_world():
+    """A workspace, a decoy outside it and two homes under /var/tmp, removed after."""
     root = Path(tempfile.mkdtemp(dir="/var/tmp", prefix="pp-decider-"))
     home_a, home_b = root / "homeA", root / "homeB"
     for home in (home_a, home_b):
@@ -60,8 +62,16 @@ def world(tmp_path):
     os.symlink(decoy, ws / "link_out")
     os.symlink(decoy / "sentinel.txt", ws / "cfg")
     os.symlink("notes.txt", ws / "inner_link")
-    yield {"home": home_a, "home_b": home_b, "ws": str(ws.resolve()), "decoy": str(decoy.resolve()), "root": root}
-    shutil.rmtree(root, ignore_errors=True)
+    try:
+        yield {"home": home_a, "home_b": home_b, "ws": str(ws.resolve()), "decoy": str(decoy.resolve()), "root": root}
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+@pytest.fixture()
+def world(tmp_path):
+    with made_world() as made:
+        yield made
 
 
 def _client(sock, raw, timeout=60):

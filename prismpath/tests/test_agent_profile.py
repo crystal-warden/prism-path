@@ -83,6 +83,7 @@ def test_a_refusal_ahead_of_an_allow_keeps_the_capability_off():
     assert not compile_profile(variant(rules=[refuse, NETWORK])).network
 
 
+@pytest.mark.fresh_needs
 def test_the_same_image_twice_is_byte_identical_with_the_same_hash():
     for rules in ([], [NETWORK], [OUTSIDE_WRITE]):
         a, b = compile_profile(variant(rules=rules)), compile_profile(variant(rules=rules))

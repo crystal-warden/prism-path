@@ -61,6 +61,7 @@ from prismpath.kernel import canon2
 
 FORMAT = "prismpath.profile/1"          # a profile with no `net`: the bytes (and hash) every such profile has always had
 FORMAT_NET = "prismpath.profile/2"      # a profile that carries `net`
+COMPILER_VERSION = 1           # raise it when `compile_profile` changes what it makes from an image, so a cached profile is not reused
 ROLES = ("bash", "agent")
 SYSTEM_PREFIX = "/usr"
 WORKSPACE = "workspace"        # the role of the one read write path; the runner binds the real directory

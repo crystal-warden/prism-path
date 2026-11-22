@@ -107,6 +107,7 @@ def test_the_agent_role_needs_the_net_fields_and_the_role_is_checked():
         compile_profile(image("default"), "root")
 
 
+@pytest.mark.fresh_needs
 def test_the_same_image_twice_gives_the_same_agent_profile_bytes():
     raw = with_rules("default", ALLOW_HOST)
     assert compile_profile(raw, "agent").canonical() == compile_profile(Policy(raw), "agent").canonical()
@@ -200,8 +201,8 @@ class _MemoryStore:
         def __init__(self):
             self.entries = []
 
-        def append(self, reading, verdict, decider=None, sandbox_profile=None, hosts_sha256=None):
-            self.entries.append((reading, verdict, sandbox_profile))
+        def append(self, reading, verdict, decider=None, extras=None):
+            self.entries.append((reading, verdict, extras.sandbox_profile if extras else None))
             return len(self.entries) - 1
 
     def open(self, session, image):
