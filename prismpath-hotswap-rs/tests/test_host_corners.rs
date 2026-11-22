@@ -296,3 +296,19 @@ fn a_pack_whose_manifest_holds_a_non_finite_number_is_rejected_and_not_activated
         std::fs::write(&manifest_path, text).unwrap();
     }
 }
+
+#[test]
+fn the_envelope_gate_refuses_a_manifest_whose_fields_or_counts_is_not_an_object() {
+    let envelope = serde_json::json!({"envelope_id": "e", "fields": {"x": "int"}, "caps": {}});
+    for member in ["fields", "counts"] {
+        let manifest = serde_json::json!({"envelope_id": "e", member: "x"});
+        let (ok, reasons) = prismpath_hotswap_rs::check_envelope(&manifest, b"", &envelope);
+        assert!(!ok);
+        assert_eq!(reasons, vec!["manifest:bad-format".to_string()], "{member}");
+    }
+    // the count check of the pack gate refuses the same form with the same cause
+    let image = hex::decode("5050544d01000100010001000200010001000000ffff010001000000000005020500000000000100010000000100000001000000").unwrap();
+    assert!(read_ppt_header(&image).is_ok());
+    let reasons = prismpath_hotswap_rs::check_counts(&serde_json::json!({"counts": 5}), &image);
+    assert_eq!(reasons, vec!["manifest:bad-format".to_string()]);
+}

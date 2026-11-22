@@ -43,6 +43,10 @@ docs/standards/taxonomies/nist_ai_rmf.json
 docs/standards/taxonomies/owasp_agentic_top10.json
 prismpath-hotswap-rs/Cargo.toml
 prismpath-hotswap-rs/README.md
+prismpath-hotswap-rs/src/dist/envelope.rs
+prismpath-hotswap-rs/src/dist/mod.rs
+prismpath-hotswap-rs/src/dist/trust.rs
+prismpath-hotswap-rs/src/dist/verify.rs
 prismpath-hotswap-rs/src/flow_authority.rs
 prismpath-hotswap-rs/src/host.rs
 prismpath-hotswap-rs/src/lib.rs
@@ -50,10 +54,12 @@ prismpath-hotswap-rs/src/merkle.rs
 prismpath-hotswap-rs/src/pyval.rs
 prismpath-hotswap-rs/src/root_statement.rs
 prismpath-hotswap-rs/tests/common/mod.rs
+prismpath-hotswap-rs/tests/fixtures/distribution.json
 prismpath-hotswap-rs/tests/fixtures/host_trace.json
 prismpath-hotswap-rs/tests/fixtures/hotswap.json
 prismpath-hotswap-rs/tests/fixtures/receipts.json
 prismpath-hotswap-rs/tests/test_cause_names.rs
+prismpath-hotswap-rs/tests/test_distribution_conformance.rs
 prismpath-hotswap-rs/tests/test_host_corners.rs
 prismpath-hotswap-rs/tests/test_host_crash.rs
 prismpath-hotswap-rs/tests/test_host_cross_language.rs
@@ -71,6 +77,7 @@ prismpath-rs/Cargo.toml
 prismpath-rs/README.md
 prismpath-rs/src/bin/conformance.rs
 prismpath-rs/src/canon2.rs
+prismpath-rs/src/canon2/codec.rs
 prismpath-rs/src/causes.rs
 prismpath-rs/src/compose.rs
 prismpath-rs/src/condition.rs
@@ -243,6 +250,7 @@ prismpath/distribution/adapters/host.py
 prismpath/distribution/adapters/mesh.py
 prismpath/distribution/devbuild.py
 prismpath/distribution/envelope.py
+prismpath/distribution/frames.py
 prismpath/distribution/kinds.py
 prismpath/distribution/pep.py
 prismpath/distribution/state_record.py
@@ -755,6 +763,7 @@ prismpath/tests/test_deferral.py
 prismpath/tests/test_distribution_corpus.py
 prismpath/tests/test_distribution_crash.py
 prismpath/tests/test_distribution_envelope.py
+prismpath/tests/test_distribution_frames.py
 prismpath/tests/test_distribution_pep.py
 prismpath/tests/test_distribution_state_record.py
 prismpath/tests/test_distribution_trace.py
