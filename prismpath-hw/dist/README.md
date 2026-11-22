@@ -19,7 +19,9 @@ and lapses or drops a release that no longer stands (R5). A trust body is held t
 The scanner reads the envelope's members in canonical order and checks of `meta` only that it is an
 object nesting at most three levels that ends inside the envelope, as E9 allows a constrained target. The
 signatures are checked before the scanner reads a byte (V3 before V4). The machine keeps what it must hold
-durably in one `pp_durable` struct that the caller's `persist` writes whole, and it reports every
+durably in one `pp_durable` struct in parts (the anchor, the counter, the trust store, the floor, each release slot
+and a pending intent named by release id and seq), and the caller's `persist` is told which parts changed and
+writes each whole, so a state record writes its 12 byte counter and no more, and it reports every
 transition in a state record signed by the instance key.
 
 `prismpath/tests/test_distribution_c.py` builds `host_check.c` with the host `cc` and

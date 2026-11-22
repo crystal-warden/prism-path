@@ -18,6 +18,7 @@ from pathlib import Path
 
 import pytest
 
+from prismpath import canon
 from prismpath.distribution import envelope as env
 from prismpath.distribution.kinds import Refused
 from prismpath.kernel import causes
@@ -575,3 +576,58 @@ def test_case_132_the_assembler_holds_a_trust_body_and_a_table_to_their_own_boun
         f"dropped {causes.NAMES['dist:too-large']}"]
     assert f"dropped {causes.NAMES['dist:too-large']}" in _python_events(frames, table, big, ordered=False,
                                                                         limit=frames.ESPNOW_LIMIT)
+
+
+def test_a_durable_floor_that_does_not_read_opens_the_pep_locked(host_check):
+    """Q5: the boards keep each part of the durable state under its own NVS name (pp_durable_pack). A floor whose
+    bytes are not one opens a PEP that is locked and admits nothing."""
+    key = _generator().test_key("A")
+    public = _generator().public_raw(key)
+    lines = [f"key {env.key_id(public)} {public.hex()} 0", f"machine 0 1 {INSTANCE_SEED}", f"provision {S} {N}",
+             f"stage {_sealed(0, 1)} {BODIES[0].hex()} {N}", f"commit {S} 1 {H[0]} 0 0 {N}", "lose floor",
+             f"restart {N}", f"stage {_sealed(1, 2)} {BODIES[1].hex()} {N}", f"decide {N}", "done"]
+    done = subprocess.run([str(host_check)], input="\n".join(lines) + "\n", capture_output=True, text=True, timeout=60)
+    assert done.returncode == 0, done.stderr
+    out = done.stdout.splitlines()
+    record = _records(out[4])[0]
+    assert (record.cause, record.state, record.active_seq) == ("dist:floor-lost", "locked", 0)
+    assert out[5] == f"decide {causes.NAMES['dist:floor-lost']} 0"
+
+
+def _machine(host_check, steps: list) -> list:
+    key = _generator().test_key("A")
+    public = _generator().public_raw(key)
+    lines = [f"key {env.key_id(public)} {public.hex()} 0", f"machine 0 1 {INSTANCE_SEED}", *steps, "done"]
+    done = subprocess.run([str(host_check)], input="\n".join(lines) + "\n", capture_output=True, text=True, timeout=120)
+    assert done.returncode == 0, done.stderr
+    return done.stdout.splitlines()
+
+
+def test_a_state_record_writes_the_counter_alone_and_the_durable_state_fits_its_parts(host_check):
+    """H3, C4: the core persists in parts. A state record writes only the counter, 12 bytes, however long the PEP
+    runs, and the largest part a commit writes is a release, a few kilobytes on a mesh node, inside a 24 kilobyte
+    NVS partition."""
+    out = _machine(host_check, ["sizes", f"provision {S} {N}", f"stage {_sealed(0, 1)} {BODIES[0].hex()} {N}",
+                                f"commit {S} 1 {H[0]} 0 0 {N}", "written", *[f"record 0 {N}"] * 500, "written"])
+    durable, release, machine = (int(value) for value in out[0].split()[1:])
+    assert durable < 64 * 1024 and release < 16 * 1024
+    total, writes, largest = (int(value) for value in out[4].split()[1:])
+    assert largest < 8 * 1024 and total < 24 * 1024
+    total, writes, largest = (int(value) for value in out[-1].split()[1:])
+    assert (total, writes, largest) == (12 * 500, 500, 12)
+
+
+def test_a_widening_statement_holds_at_most_64_hashes(host_check):
+    """W4: a statement whose from holds 64 hashes is staged and kept at its real size, and one with 65 is
+    dist:too-large."""
+    def statement(count: int) -> bytes:
+        hashes = sorted(hashlib.sha256(bytes([index])).hexdigest() for index in range(count))
+        return canon.canon2_bytes({"encoding": "canon/2", "format": "prismpath.dist-widening/1", "from": hashes})
+    steps = [f"provision {S} {N}"]
+    for seq, count in ((1, 64), (2, 65)):
+        body = statement(count)
+        sealed = _dist.seal("trust.widening", body, seq=seq, targets=("mesh",), policy_sha256=H[0],
+                            release=env.release_id([("policy.ppt", H[0])]))
+        steps.append(f"stage {sealed.hex()} {body.hex()} {N}")
+    out = _machine(host_check, steps)
+    assert _events(out[1]) == [("staged", None)] and _events(out[2]) == [("refused", "dist:too-large")]
