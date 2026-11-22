@@ -8,6 +8,11 @@ spec stable.
 
 ## [Unreleased]
 
+### Added: the distribution verifier and state machine in C, tested natively against the shared corpus (2026-11-22)
+
+- **`prismpath-hw/dist/` is the C core of policy distribution for mesh nodes and the cFS app.** It reads the sealed container and the envelope with a strict canon/2 reader that allocates nothing, checks the signatures with Monocypher before it reads the envelope, and runs the one verifier, the frame reassembly and the enforcement point machine with its signed state records.
+- **The C core answers as the Python reference does.** `prismpath/tests/test_distribution_c.py` builds it with the host compiler and its sanitizers, replays every mesh case of the corpus, requires the machine's signed state records byte for byte beside the Python machine, and runs the reassembly frame for frame beside `frames.py`.
+
 ### Added: the enforcement point state machine for policy distribution, with the software host as its first target (2026-11-22)
 
 - **`prismpath.distribution.pep.Pep` stages, commits, aborts, rolls back and lapses at expiry, one machine for every Python target.** Its store under `<state>/dist/` is written in the commit order of the spec, so a death at any step leaves the old release or the new one and never a mix. A store it cannot read refuses every envelope and decides nothing.
