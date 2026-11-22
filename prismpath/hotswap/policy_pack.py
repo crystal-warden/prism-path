@@ -393,6 +393,8 @@ def verify_pack(ppt_path: str, pubkey_paths: List[str],
         image = handle.read()
     if sha256_hex(image) != manifest.get("image_sha256"):
         return False, ["image:sha256-mismatch"], manifest
+    if not isinstance(manifest.get("fields", {}), dict):
+        return False, ["manifest:bad-format"], manifest
     reasons = check_counts(manifest, image)
     if reasons:
         return False, reasons, manifest
@@ -416,7 +418,7 @@ def check_counts(signed: dict, image: bytes) -> List[str]:
     header = read_ppt_header(image)
     counts = signed.get("counts", {})
     if not isinstance(counts, dict):
-        return ["manifest:count-mismatch:counts"]
+        return ["manifest:bad-format"]
     for count_key in ("atoms", "nodes", "edges", "prog_words", "max_steps", "max_stack"):
         if counts.get(count_key) != header[count_key]:
             return [f"manifest:count-mismatch:{count_key}"]
@@ -477,6 +479,8 @@ def load_envelope(base_path: str, pubkey_paths: List[str]) -> Tuple[Optional[dic
 def check_envelope(manifest: dict, image: bytes, envelope: dict) -> Tuple[bool, List[str]]:
     """The Envelope-bounded gate: manifest targets this envelope, fields are a subset,
     and the image passes the capped structural/fragment walk."""
+    if not isinstance(manifest.get("fields", {}), dict) or not isinstance(manifest.get("counts", {}), dict):
+        return False, ["manifest:bad-format"]               # a signed member of another form is refused, never read
     reasons: List[str] = []
     if manifest.get("envelope_id") != envelope.get("envelope_id"):
         reasons.append("envelope:id-mismatch")

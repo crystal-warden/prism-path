@@ -169,6 +169,24 @@ other bodies to use it. It requires the same `release` on every envelope it stag
 reports it (H1), and that is what stops a mix of artifacts that were never released together (TUF's mix
 and match, section 1.5.2).
 
+**E11.** Each `meta` member has a fixed form, and a reader checks the form when it reads the envelope
+(V4), before any check uses the member. Another form is `dist:bad-format`.
+
+| Artifact | Member | Form |
+|---|---|---|
+| `policy.ppt` | `fields` | an object whose values are strings |
+| `policy.ppt` | `counts` | an object with exactly `atoms`, `nodes`, `edges`, `prog_words`, `max_steps`, `max_stack`, each an integer from 0 to 65535 |
+| `policy.ppt` | `wcet_cycles` | an integer, 0 or more |
+| `policy.ppt`, `net.edge` | `qualification` | a string of 1 to 128 characters |
+| `policy.ppt` | `packing` | an object with exactly `profile`, a string of 1 to 32 characters, and `sidecar_sha256`, 64 lower case hex digits. A profile other than `spiral` is then `packing:unknown-profile` at V11 |
+| `policy.ppt`, `net.edge` | `flow_sha256` | 64 lower case hex digits |
+| `policy.ppt` | `overlay_of` | a string of 1 to 128 characters |
+| `net.edge` | `names_sha256` | 64 lower case hex digits |
+| `sandbox.profile` | `compiler` | an integer, 1 or more |
+
+A check that reads a signed member never has to guess its type. The same holds for the older pack gate,
+which refuses a manifest whose `fields` or `counts` is not an object with `manifest:bad-format`.
+
 ### 4.2 What is signed
 
 **S1.** A signature is Ed25519 over the DSSE pre-authentication encoding of the envelope bytes with the
@@ -387,7 +405,7 @@ cause reported and nothing is staged.
 |---|---|---|
 | V2 | The sealed container reads (S2) and the envelope and body fit the PEP's bounds (E6) | `dist:bad-format`, `dist:too-large` |
 | V3 | The signatures (S3 to S5) | `dist:unknown-key`, `sig:invalid`, `sig:revoked-key` |
-| V4 | The envelope reads (E1, E2, E5, E8) | `document:not-canonical`, `dist:bad-format` |
+| V4 | The envelope reads (E1, E2, E5, E8, E11) | `document:not-canonical`, `dist:bad-format` |
 | V5 | `targets` holds this PEP's kind, `artifact` is one this kind uses or a trust kind, and `stream` is this PEP's stream or `@trust` for a trust kind | `dist:target-mismatch` |
 | V6 | Time (T3, T4, and X4 for a trust kind) | `dist:not-yet-valid`, `dist:expired` |
 | V7 | The envelope id and the policy hash are not on the revocation list | `dist:revoked` |
@@ -961,3 +979,4 @@ reports exactly the cause given, or none, and its state after is the one given.
 | 124 | A record with the controller's current epoch id, the one before, and one three epochs old, and a PEP sent a lower epoch id than it holds | accepted, accepted, `fleet:state-replay`, and the PEP keeps the higher | H9, H6 | P |
 | 125 | A record with a type 1 extension whose `eat_nonce` matches, one with an unknown type, and one whose extension was changed after signing | read, skipped, `fleet:state-invalid` | H10 | P |
 | 126 | A `host` release whose `policy.ppt` declares `packing`, with no `policy.spiral`, with a wrong one and with the right one | `spiral:sidecar-missing`, `spiral:sidecar-hash-mismatch`, committed | V11, C2 | P R |
+| 127 | A `policy.ppt` envelope whose `fields` is a string, whose `counts` is an integer, whose `counts` lacks a member, whose `packing` has no `sidecar_sha256`, and a `ppt-pack/1` manifest whose `fields` is a string | `dist:bad-format` four times, then `manifest:bad-format`, and no check raises | E11, V4 | P R |

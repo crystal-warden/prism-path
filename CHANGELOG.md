@@ -8,6 +8,14 @@ spec stable.
 
 ## [Unreleased]
 
+### Added: the enforcement point state machine for policy distribution, with the software host as its first target (2026-11-22)
+
+- **`prismpath.distribution.pep.Pep` stages, commits, aborts, rolls back and lapses at expiry, one machine for every Python target.** Its store under `<state>/dist/` is written in the commit order of the spec, so a death at any step leaves the old release or the new one and never a mix. A store it cannot read refuses every envelope and decides nothing.
+- **Every transition is reported in a state record signed by the PEP's instance key** (`state_record`). Provisioning takes a trust anchor and waits for the operator to confirm its fingerprint.
+- **The host adapter installs a committed release through `PolicyHost.install_verified`, the commit half `swap` now ends in,** and checks a declared spiral sidecar. Once a release came by distribution, `swap` and `rollback` refuse a pack with `dist:legacy-refused`.
+- **Every `meta` member of a distribution envelope has a fixed form, checked when the envelope is read,** so no check ever reads a signed member of another type. The older pack gate refuses a manifest whose `fields` or `counts` is not an object with `manifest:bad-format`.
+- **A modelled mesh node and a modelled cFS app run the same machine,** the mesh row in the kind table and the cFS row registered from `integrations/cfs/dist_kind.py`. Either may be provisioned to hold an expired release instead of refusing, and every record and receipt it signs while held says so.
+
 ### Added: the distribution envelope, the trust store and the one verifier (2026-11-22)
 
 - **`prismpath.distribution` writes, seals and reads the distribution envelope.** `envelope.build`, `seal`, `unseal`, `release_id` and `envelope_id` are the signed form every distributed artifact will travel in. A signature covers the DSSE encoding of the envelope bytes, and `to_dsse` and `from_dsse` map a sealed envelope to DSSE JSON and back. `kinds` holds the artifact and target kinds in one table.

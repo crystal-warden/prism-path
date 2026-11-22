@@ -36,6 +36,28 @@ class Key:
     role: str = kinds.AUTHORITY
 
 
+def _read_keys(keys, what: str) -> Dict[str, Key]:
+    """The `keys` member of a trust store or an anchor: key id to `{public, role}`, each id its key's."""
+    def require(condition: bool, detail: str) -> None:
+        if not condition:
+            raise Refused(kinds.BAD_FORMAT, f"{what} {detail}")
+
+    require(isinstance(keys, dict), "keys")
+    raw_keys: Dict[str, Key] = {}
+    for kid, held in keys.items():
+        require(isinstance(held, dict) and set(held) == {"public", "role"}, "a key entry")
+        require(is_hex64(held["public"]), "a public key")
+        require(isinstance(held["role"], str) and _ROLE.fullmatch(held["role"]) is not None, "a key role")
+        public_raw = bytes.fromhex(held["public"])
+        require(canon.sha256_hex(public_raw) == kid, "a key id that is not its key's")
+        raw_keys[kid] = Key(public_raw, held["role"])
+    return raw_keys
+
+
+def _keys_document(keys: Mapping[str, "Key"]) -> dict:
+    return {kid: {"public": key.public.hex(), "role": key.role} for kid, key in keys.items()}
+
+
 @dataclass(frozen=True)
 class TrustStore:
     """What an enforcement point holds about keys. `keys` maps a key id to its `Key`. The `revoked_*` sets and `floors` are cumulative (R6): a later list never removes one. A store
@@ -56,7 +78,7 @@ class TrustStore:
     # ------------------------------------------------------------------ the durable file
     def document(self) -> dict:
         return {canon.ENCODING_KEY: canon.CANON2, "format": FORMAT, "floors": dict(self.floors),
-                "keys": {kid: {"public": key.public.hex(), "role": key.role} for kid, key in self.keys.items()},
+                "keys": _keys_document(self.keys),
                 "retired": sorted(self.retired), "revoked_envelopes": sorted(self.revoked_envelopes),
                 "revoked_keys": sorted(self.revoked_keys), "revoked_policies": sorted(self.revoked_policies),
                 "threshold": self.threshold, "time_floor": self.time_floor, "trust_id": self.trust_id,
@@ -83,17 +105,7 @@ class TrustStore:
                     and doc[name] == sorted(set(doc[name])) for name in _LISTS), "a key or hash list")
         require(isinstance(doc["floors"], dict) and all(is_stream(stream) and is_int(seq, 1, MAX_SEQ)
                                                         for stream, seq in doc["floors"].items()), "floors")
-        keys = doc["keys"]
-        require(isinstance(keys, dict), "keys")
-        raw_keys: Dict[str, Key] = {}
-        for kid, held in keys.items():
-            require(isinstance(held, dict) and set(held) == {"public", "role"}, "a key entry")
-            require(is_hex64(held["public"]), "a public key")
-            require(isinstance(held["role"], str) and _ROLE.fullmatch(held["role"]) is not None, "a key role")
-            public_raw = bytes.fromhex(held["public"])
-            require(canon.sha256_hex(public_raw) == kid, "a key id that is not its key's")
-            raw_keys[kid] = Key(public_raw, held["role"])
-        return cls(keys=raw_keys, retired=frozenset(doc["retired"]), revoked_keys=frozenset(doc["revoked_keys"]),
+        return cls(keys=_read_keys(doc["keys"], "trust store"), retired=frozenset(doc["retired"]), revoked_keys=frozenset(doc["revoked_keys"]),
                    revoked_envelopes=frozenset(doc["revoked_envelopes"]),
                    revoked_policies=frozenset(doc["revoked_policies"]), floors=dict(doc["floors"]),
                    trust_seq=doc["trust_seq"], trust_id=doc["trust_id"], threshold=doc["threshold"],
@@ -155,3 +167,47 @@ class TrustStore:
         if revoked_verifies:
             return Verdict(REVOKED_KEY)
         return Verdict(INVALID if held_fails else UNKNOWN_KEY)
+
+
+# ------------------------------------------------------------------ the trust anchor (P2, P3)
+
+ANCHOR_FORMAT = "prismpath.dist-trust/1"
+_ANCHOR_MEMBERS = frozenset({"encoding", "format", "keys", "stream", "target", "threshold"})
+
+
+@dataclass(frozen=True)
+class Anchor:
+    """A trust anchor (P2 step 3): the keys with their roles, the threshold, the PEP's target kind and its
+    stream. `fingerprint` is the SHA-256 of its bytes, which the operator compares (P2 step 4)."""
+    keys: Mapping[str, Key]
+    threshold: int
+    target: str
+    stream: str
+    fingerprint: str
+
+    def store(self) -> TrustStore:
+        """P3: the trust store an anchor provisions, with the trust sequence and time floor at their start."""
+        return TrustStore(keys=dict(self.keys), threshold=self.threshold)
+
+
+def anchor_bytes(public_keys: Sequence[bytes], *, target: str, stream: str, role: str = kinds.AUTHORITY) -> bytes:
+    """The canon/2 bytes of an anchor trusting `public_keys` (32 raw bytes each) in `role`. The owner's tool."""
+    keys = {canon.sha256_hex(bytes(raw)): Key(bytes(raw), role) for raw in public_keys}
+    raw = canon.canon2_bytes({canon.ENCODING_KEY: canon.CANON2, "format": ANCHOR_FORMAT, "keys": _keys_document(keys),
+                              "stream": stream, "target": target, "threshold": THRESHOLD})
+    read_anchor(raw)
+    return raw
+
+
+def read_anchor(raw: bytes) -> Anchor:
+    """The anchor in `raw`, or `Refused` (`dist:bad-format`, `document:not-canonical`)."""
+    doc = kinds.load_canonical(raw, "trust anchor")
+    if not (isinstance(doc, dict) and set(doc) == _ANCHOR_MEMBERS and doc["format"] == ANCHOR_FORMAT
+            and doc["encoding"] == canon.CANON2 and doc["threshold"] == THRESHOLD
+            and doc["target"] in kinds.TARGET_KINDS and is_stream(doc["stream"])):
+        raise Refused(kinds.BAD_FORMAT, "not a trust anchor")
+    keys = _read_keys(doc["keys"], "trust anchor")
+    if not keys:
+        raise Refused(kinds.BAD_FORMAT, "a trust anchor with no key")
+    return Anchor(keys=keys, threshold=doc["threshold"], target=doc["target"], stream=doc["stream"],
+                  fingerprint=canon.sha256_hex(bytes(raw)))

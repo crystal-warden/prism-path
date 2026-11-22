@@ -238,9 +238,14 @@ prismpath/crypto_host.py
 prismpath/crypto_registry.py
 prismpath/deferral.py
 prismpath/distribution/__init__.py
+prismpath/distribution/adapters/__init__.py
+prismpath/distribution/adapters/host.py
+prismpath/distribution/adapters/mesh.py
 prismpath/distribution/devbuild.py
 prismpath/distribution/envelope.py
 prismpath/distribution/kinds.py
+prismpath/distribution/pep.py
+prismpath/distribution/state_record.py
 prismpath/distribution/trust.py
 prismpath/distribution/verify.py
 prismpath/embedder.py
@@ -608,6 +613,7 @@ prismpath/telemetry/tests/test_zeckendorf.py
 prismpath/telemetry/wire.py
 prismpath/telemetry/zeckendorf.py
 prismpath/tests/__init__.py
+prismpath/tests/_dist.py
 prismpath/tests/_repo.py
 prismpath/tests/_sandbox_probes.py
 prismpath/tests/fixtures/agent_old_starters/default-1b114af.core.json
@@ -747,7 +753,10 @@ prismpath/tests/test_crypto_migration.py
 prismpath/tests/test_crypto_registry.py
 prismpath/tests/test_deferral.py
 prismpath/tests/test_distribution_corpus.py
+prismpath/tests/test_distribution_crash.py
 prismpath/tests/test_distribution_envelope.py
+prismpath/tests/test_distribution_pep.py
+prismpath/tests/test_distribution_state_record.py
 prismpath/tests/test_distribution_trace.py
 prismpath/tests/test_distribution_verify.py
 prismpath/tests/test_doc_references.py

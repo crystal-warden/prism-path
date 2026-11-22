@@ -189,9 +189,9 @@ def test_case_118_a_key_in_a_role_this_version_does_not_know_never_counts(tmp_pa
 def test_case_119_a_pep_with_no_clock_takes_not_before_as_its_time():
     """case_119: T2, T3, V13. A month behind after a power loss it accepts a current envelope and its time
     floor moves to not_before. A PEP with a clock a month early refuses the same envelope."""
-    accepted = GEN.replay(BY_NAME["119_no_clock_a_month_behind"])
+    accepted = GEN.replay(BY_NAME["119_no_clock_a_month_behind_on_mesh"])
     assert accepted["cause"] is None and accepted["time_floor"] == GEN.NOT_BEFORE
-    assert _cause("119_clock_a_month_early") == "dist:not-yet-valid"
+    assert _cause("119_clock_a_month_early_on_mesh") == "dist:not-yet-valid"
     expired = verifier.PepView("host", GEN.STREAM, qualification=GEN.QUALIFICATION, has_clock=False)
     good = bytes.fromhex(BY_NAME["001_round_trip"]["sealed"])
     assert _verify(good, pep=expired, now=GEN.EXPIRES).cause == "dist:expired"
@@ -211,7 +211,7 @@ def test_the_staged_release_must_agree_at_its_seq():
 
 def test_a_pep_view_names_a_built_kind_and_a_stream():
     with pytest.raises(ValueError):
-        verifier.PepView("mesh", GEN.STREAM)
+        verifier.PepView("agent", GEN.STREAM)
     with pytest.raises(ValueError):
         verifier.PepView("host", env.TRUST_STREAM)
 
@@ -244,3 +244,39 @@ def test_the_hatch_gate_refuses_in_a_production_build_and_audits(tmp_path, monke
     monkeypatch.setattr(devbuild, "is_dev_build", lambda package_dir=None: True)
     devbuild.hatch("--allow-unsigned", log)
     assert log.events[-1]["data"] == {"hatch": "--allow-unsigned", "dev_build": True, "result": "allowed"}
+
+
+@pytest.mark.parametrize("member", ["fields", "counts"])
+@pytest.mark.parametrize("value", [[], "x", 7, {"x": ["y"]}])
+def test_a_policy_ppt_meta_member_that_is_not_its_form_is_refused_never_raised(member, value):
+    """V11, V1: `fields` and `counts` of a signed policy.ppt that are not objects of their members' forms are
+    dist:bad-format. The verifier answers every signed envelope with a verdict and never raises."""
+    if member == "counts" and isinstance(value, dict):
+        value = {"atoms": "one"}
+    meta = {**GEN.image_meta(GEN.image()), member: value}
+    sealed = env.seal(canon.canon2_bytes(GEN.envelope_doc(GEN.image(), meta=meta)), [GEN.test_key("A")])
+    assert _verify(sealed).cause == "dist:bad-format"
+
+
+def test_case_127_a_meta_member_of_another_form_is_refused_where_it_is_read(tmp_path):
+    """case_127: E11, V4. A policy.ppt whose fields is a string, whose counts is an integer, whose counts lacks a
+    member and whose packing has no sidecar_sha256 is dist:bad-format each, and a ppt-pack/1 manifest whose
+    fields is a string is manifest:bad-format from the older gate. Nothing raises."""
+    for name in ("fields_a_string", "counts_an_integer", "counts_lacking_a_member", "packing_without_its_sidecar"):
+        assert _cause(f"127_{name}") == "dist:bad-format", name
+    from prismpath.hotswap import policy_pack as pp
+    keys = pp.keygen(str(tmp_path / "keys"))
+    image = GEN.image()
+    envelope = {"envelope_id": "dist-demo", "fields": {"x": "int"}, "caps": dict(pp.DEFAULT_CAPS)}
+    for member in ("fields", "counts"):
+        ppt = tmp_path / f"{member}.ppt"
+        ppt.write_bytes(image)
+        manifest = pp.build_pack(str(ppt), {"x": "int"}, 1, "dist-demo", keys["private"], keys["public"])
+        manifest[member] = "x"
+        pp.write_signed_document(str(ppt) + ".manifest.json", manifest)
+        with open(str(ppt) + ".manifest.sig", "wb") as handle:
+            handle.write(pp._load_private(keys["private"]).sign(pp.signed_bytes(manifest)))
+        ok, reasons, _manifest = pp.verify_pack(str(ppt), [keys["public"]])
+        assert (ok, reasons) == (False, ["manifest:bad-format"]), member
+        assert pp.check_envelope(manifest, image, envelope) == (False, ["manifest:bad-format"])
+        assert pp.check_counts(manifest, image) == (["manifest:bad-format"] if member == "counts" else [])
