@@ -8,6 +8,10 @@ spec stable.
 
 ## [Unreleased]
 
+### Fixed: in-toto export hardening (2026-11-22)
+
+- **`prismpath.ledgers.intoto` no longer patches `InstanceKey.__init__` or scans live objects for a private key, so a key comes only from an argument, the environment variable or the run's key files, `verify` reports `pinned` so an unpinned check is not mistaken for a pinned one, and `import_envelopes` removes the roots file it restored when verification fails.**
+
 ### Fixed: a cFS store that does not read no longer resets the version floor to 0 (2026-11-21)
 
 - **After a processor reset with a run state in the Critical Data Store that does not read,** the cFS app begins a new run under the response its mission chose (`PRISMPATH_APP_PLATFORM_LOST_FLOOR`), not a floor of 0 that would admit any older signed image. `PP_LOST_FLOOR_LOCK`, the default, admits no image, so every proposal is refused, until ground deletes the store and restarts the app; the mark is saved with the state, so a later reset keeps it. `PP_LOST_FLOOR_MINIMUM` admits every image from `PRISMPATH_APP_PLATFORM_LOST_FLOOR_MIN_VERSION` up. The state's spare word holds the mark, so the store's size is unchanged. `tests/run_check.c` checks both responses.
