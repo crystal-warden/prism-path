@@ -269,7 +269,7 @@ def test_the_runner_reports_a_shell_command_as_an_outcome_with_or_without_signal
     raw = policy.reading_bytes(_reading_of(policy, ws))
     verdict = policy.decide(raw).verdict
     for n in range(3):
-        run.append(raw, verdict, sandbox_profile="a" * 64, tool_use_id=f"toolu_R{n}")
+        run.append(raw, verdict, extras=run_module.Extras(sandbox_profile="a" * 64, tool_use_id=f"toolu_R{n}"))
 
     def report(receipt, returncode, stderr="", timed_out=False, profile="a" * 64):
         data = {"hook_event_name": "PrismPathObservation", "session_id": "r", "receipt": receipt, "image_sha256": image,

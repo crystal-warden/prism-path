@@ -154,6 +154,32 @@ def test_the_profile_is_cached_by_image_hash_and_a_damaged_cache_is_recompiled(w
         sandbox_hook.profile_for(agent, image)                      # not trusted, so it tried to compile
 
 
+def test_a_cache_entry_is_used_only_for_the_image_and_compiler_it_was_made_for(world, monkeypatch):
+    _init(world)
+    agent = _agent_dir(world["home"])
+    image = (agent / "policy.core.json").read_bytes()
+    sandbox_hook.profile_for(agent, image)
+    entry_path = agent / "profiles" / (sandbox_hook._sha256_hex(image) + ".json")
+    other = image + b" "                                            # another image, its own digest
+    other_path = agent / "profiles" / (sandbox_hook._sha256_hex(other) + ".json")
+    other_path.write_bytes(entry_path.read_bytes())                 # the first image's entry filed under the second's name
+    compiled = []
+
+    def counting(img, role="bash"):
+        compiled.append(img)
+        raise profile_module.ProfileError("stop here")
+    monkeypatch.setattr(profile_module, "compile_profile", counting)
+    with pytest.raises(sandbox_hook.SandboxRefused):
+        sandbox_hook.profile_for(agent, other)
+    assert compiled == [other]                                      # not taken from the cache
+    entry = json.loads(entry_path.read_text())
+    entry["compiler"] = profile_module.COMPILER_VERSION + 1         # made by another compiler version
+    entry_path.write_text(json.dumps(entry))
+    with pytest.raises(sandbox_hook.SandboxRefused):
+        sandbox_hook.profile_for(agent, image)
+    assert compiled == [other, image]
+
+
 # ------------------------------------------------------------------------------------- refuse, ask, fail closed
 def test_a_refusal_carries_no_rewrite_and_a_question_asks_with_the_rewrite(world):
     _init(world)

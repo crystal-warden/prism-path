@@ -8,6 +8,27 @@ spec stable.
 
 ## [Unreleased]
 
+### Fixed: control files a killed run left behind, and a cached profile made for another policy (2026-11-22)
+
+- **A run that was killed no longer leaves empty `CLAUDE.md`, `CLAUDE.local.md`, `AGENTS.md`, `.mcp.json` or `.claude/` in the workspace.** What a run creates to bind them read only is now written to a marker outside the workspace first, and the next run removes what a marker from a process that is gone lists, only while it is still empty. A marker is read only from a directory this user owns and no one else can write, and it can remove only the workspace's own control paths. A file that was already there, or that has content, is never removed.
+- **A cached sandbox profile is used only for the policy image and compiler version it was made for.** The cache entry now carries the compiler version and a binding hash over the image digest, the version and the profile, and an entry that does not match is compiled again.
+
+### Removed: the unused agent OpenTelemetry attribute module (2026-11-22)
+
+- **`prismpath.agent.otel` is gone.** Nothing imported it. The span exporter in `prismpath.ledgers.otel` is unchanged.
+### Fixed: the crates publish check fails on any answer from the index but 200 and 404 (2026-11-22)
+
+- **The already published check in `publish-crates.yml` treats only a 404 from the crates.io index as not published.** A rate limit, a server error or a network failure stops the step instead of letting a publish go ahead. `tools/tests/test_export.py` runs the step with the index stubbed.
+
+### Changed: the export ships only files listed in a manifest (2026-11-22)
+
+- **`tools/export_clean.py` fails and names any tracked file under an included prefix that is not in `tools/export_manifest.txt`,** so a new research file no longer ships by default. Add it to the manifest to ship it or to an exclude rule to hold it back. `--write-manifest` rewrites the manifest from the current rules, and the exported tree is unchanged.
+### Fixed: the in-toto export finds keys only where it is told to, and says when verify was unpinned (2026-11-22)
+
+- **`prismpath.ledgers.intoto` no longer patches `InstanceKey.__init__` or scans live objects for a private key.** A key comes from an argument, the environment variable or the run's key files.
+- **`verify` reports `pinned`, `pinned_authority` and `pinned_instance`.** A check without pins reads the run's own `instance.pub`, which says nothing about who made the run, so its report says `pinned: false` and `signed-unpinned`.
+- **A failed `import_envelopes` leaves the run directory as it was.** The roots file it restored is removed when verification fails, and a malformed envelope is a `Bad` error.
+
 ### Fixed: a cFS store that does not read no longer resets the version floor to 0 (2026-11-21)
 
 - **After a processor reset with a run state in the Critical Data Store that does not read,** the cFS app begins a new run under the response its mission chose (`PRISMPATH_APP_PLATFORM_LOST_FLOOR`), not a floor of 0 that would admit any older signed image. `PP_LOST_FLOOR_LOCK`, the default, admits no image, so every proposal is refused, until ground deletes the store and restarts the app; the mark is saved with the state, so a later reset keeps it. `PP_LOST_FLOOR_MINIMUM` admits every image from `PRISMPATH_APP_PLATFORM_LOST_FLOOR_MIN_VERSION` up. The state's spare word holds the mark, so the store's size is unchanged. `tests/run_check.c` checks both responses.
@@ -109,6 +130,13 @@ spec stable.
 - **The classifier gains the tool `connect` and the reading fields `net_dest` and `proc_class`; `CLASSIFIER_VERSION` is 2.** A connect call (`{"tool": "connect", "args": {"host", "port"}}`) reads `net_dest` `model_api` for a host of the constant `MODEL_API` table on port 443, `allowed_host` for an owner listed host on 443, `unknown` for a host it does not read (upper case, a trailing dot, userinfo, a port or a path in it, short IPv4 forms) or a port outside 1 to 65535, and `other` for the rest. `proc_class` is `single`, `tree` or `unknown` for a command and `none` otherwise. Nothing feeds a connect in yet (the proxy is a later package).
 - **Every starter refuses a connection that is not the model's own API with the new cause 130 `agent:net-refused` and allows one to it.** The starter images are recorded again (their field `classifier_version` now holds 2 only), so an older recorded starter refuses every reading until `prismpath agent init`; `prismpath agent doctor` and `status` name the three older images. Existing calls keep their verdicts, since no old rule reads either new field. The intent layer's images are regenerated from the strict starter.
 - **The Lean model proves the network rule** (`Net.lean`): `connect_other_refused`, `connect_unreadable_refused`, `net_refused`, `netDestOf_model_api`, and the oracle's `--policy` mode reports `net_refused` (`netSafe`) for each image. The differential harness reads a corpus of odd hosts and ports with 0 disagreements.
+
+### Added: the agent and its shell calls run sandboxed on Linux (2026-11-20)
+
+- **An allowed Bash call on Linux runs under bubblewrap.** The hook answers allow with the command rewritten (`updatedInput`) to run under the bash role profile compiled from the recorded policy, and the receipt carries the profile's hash. `prismpath/agent/sandbox_exec.py` builds the bwrap command line and fails closed when bwrap is missing or never reports its sandbox up. A missing bwrap or a profile that does not compile is a deny with the new cause 129 `agent:sandbox-unavailable`. `prismpath agent init` compiles the profile once and says when it cannot.
+- **`prismpath agent run -- PROGRAM [ARGS]` runs the agent itself in a sandbox (Linux only).** It stages a per run config directory with a read only `settings.json` that holds the hook entries, pins the program binary, binds the workspace control paths read only, runs the program under bwrap with the agent role profile and its network through the egress proxy, and removes what it staged on exit. Nothing reads a real login. `--credential FILE` copies one file in as the program's credential and is off unless given.
+- **Under `prismpath agent run` the hook is a thin client and the decision is taken outside the sandbox.** The decider (`prismpath/agent/decider.py`) listens on a unix socket bound into the sandbox and runs the same `commands.hook` with the keys, the policy and the run directory, which stay outside. The client (`prismpath/agent/hook_client.py`) is standard library only, staged read only and run by the system Python in isolated mode. A request over 1 MiB or not read within 10 s is denied with cause 126, at most 8 connections are served at once and decisions are taken one at a time. A missing socket, a bad reply or a timeout in the client is a deny.
+- **Under `prismpath agent run` an allowed Bash call runs in a per call sandbox nested in the agent's.** The launcher probes at start whether a bwrap can run inside its own. The rewritten command names the system interpreter and a runner bound read only, runs under the bash role profile, and reports what it showed over the decider's socket. Where nesting is unavailable the call is a deny with cause 129 and never runs under the outer profile alone.
 
 ### Added: sandbox observations, and approved questions run sandboxed (2026-11-20)
 
