@@ -85,7 +85,8 @@ class Target:
     whether it can decide larger (W1). `uses` is what V5 admits besides the trust kinds in `applies`, the ones
     its machine applies. `expiry_hold` is whether a deployment may choose HOLD at expiry (X6), true only for
     `mesh` and `cfs`. `body_bound` is the kind's bound on a body (E6), and `checks` the kind's own V11 checks
-    where they differ from the artifact's."""
+    where they differ from the artifact's. `reads_meta` is false for a kind whose own check does not read `meta`,
+    so its reader only bounds `meta` and skips its members (E9)."""
     needs: FrozenSet[str]
     decides: bool
     when_declared: FrozenSet[str] = frozenset()
@@ -93,6 +94,7 @@ class Target:
     applies: FrozenSet[str] = frozenset({"trust.widening", "trust.revocation"})
     body_bound: int = 16777215
     checks: Any = None
+    reads_meta: bool = True
 
     @property
     def uses(self) -> FrozenSet[str]:
@@ -283,7 +285,7 @@ MESH_TABLE_MAX = 640                               # E6: TBL_MAX in prismpath-hw
 TARGETS: Dict[str, Target] = {
     "host": Target(needs=frozenset({"policy.ppt"}), decides=False, when_declared=frozenset({"policy.spiral"})),
     "mesh": Target(needs=frozenset({"policy.ppt"}), decides=False, expiry_hold=True, body_bound=MESH_TABLE_MAX,
-                   checks={"policy.ppt": check_mesh_table}),
+                   checks={"policy.ppt": check_mesh_table}, reads_meta=False),
 }
 
 

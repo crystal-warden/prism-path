@@ -97,7 +97,7 @@ def verify(sealed: bytes, body: bytes, *, trust: TrustStore, pep: PepView, now: 
         return counted
     # V4: the envelope reads
     try:
-        envelope = env.read(envelope_bytes)
+        envelope = env.read(envelope_bytes, reads_meta=kinds.TARGETS[pep.kind].reads_meta)
     except Refused as refused:
         return Verdict(refused.cause)
     # V5: for this PEP's kind, an artifact its kind uses or a trust kind its machine applies, on its stream or

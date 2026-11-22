@@ -12,6 +12,7 @@ spec stable.
 
 - **An enforcement point applies a signed `trust.revocation` as soon as it verifies, durably before it reports it.** A list is taken only at the trust sequence plus one, its keys, envelopes and policies are refused from then on, its floors raise the stream floors, and a later list never restores what an earlier one refused. A list over 64 entries or 16 streams is `dist:too-large`.
 - **A revocation that removes the ground of the active release lapses it to no policy with `dist:revoked`, and drops a staged release on the same test.** That ends a hold as well. A PEP that never hears of a revocation still stops at the release's expiry.
+- **A mesh node or a cFS app, whose own check does not read `meta`, only checks that it is an object nested at most three levels inside the envelope.** Every other reader checks its members and their forms.
 
 ### Added: the enforcement point state machine for policy distribution, with the software host as its first target (2026-11-22)
 

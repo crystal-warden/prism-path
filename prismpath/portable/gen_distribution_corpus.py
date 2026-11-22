@@ -156,9 +156,11 @@ def build_cases(kind: str, spec: Dict[int, dict]) -> List[dict]:
 
     def add(number: int, name: str, expected: Optional[str], sealed: bytes, *, payload: bytes = body,
             trust: Optional[TrustStore] = None, pep: verifier.PepView = default_pep, now: int = NOW,
-            unreadable: bool = False, unchanged: bool = False) -> None:
+            unreadable: bool = False, unchanged: bool = False, on: Optional[str] = None) -> None:
         runs_on = spec[number]["runs_on"]
-        if not ("C" in runs_on if kind == "mesh" else "R" in runs_on or "C" not in runs_on):
+        if on is not None and on != kind:                   # a part of a case that is about one kind
+            return
+        if on is None and not ("C" in runs_on if kind == "mesh" else "R" in runs_on or "C" not in runs_on):
             return
         store = trust_store() if trust is None else trust
         suffix = "" if kind == "host" else f"_on_{kind}"
@@ -312,6 +314,17 @@ def build_cases(kind: str, spec: Dict[int, dict]) -> List[dict]:
         sealed_by(raw(revocation_doc(empty, 1, expires=NOW + 1)), "A"), payload=empty)
     add(79, "revocation_read_years_later", None,
         sealed_by(raw(revocation_doc(empty, 1, not_before=NOW - 10 * 365 * 86400)), "A"), payload=empty)
+
+    # E9, E11: a kind that does not read meta only bounds it; every other reads its members and forms
+    loose = sealed_by(raw(kind_doc(body, meta={**meta, "counts": 7})), "A")
+    add(128, "counts_an_integer_where_meta_is_read", "dist:bad-format", loose, on="host")
+    add(128, "counts_an_integer_where_meta_is_skipped", None, loose, on="mesh")
+    add(128, "meta_a_string", "dist:bad-format", sealed_by(raw(kind_doc(body, meta="x")), "A"), on="mesh")
+    add(128, "meta_nested_four_levels", "dist:bad-format",
+        sealed_by(raw(kind_doc(body, meta={"a": {"b": {"c": {}}}})), "A"), on="mesh")
+    whole = raw(kind_doc(body))
+    cut = whole[:whole.index(b'"meta":{') + len(b'"meta":{"counts":{')]
+    add(128, "meta_running_past_the_envelope", "dist:bad-format", sealed_by(cut, "A"), on="mesh")
 
     # E11, V4: every meta member of its form, read before any check uses it
     for name, changes in (("fields_a_string", {"fields": "x"}), ("counts_an_integer", {"counts": 7}),

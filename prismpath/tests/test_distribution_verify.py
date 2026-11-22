@@ -280,3 +280,18 @@ def test_case_127_a_meta_member_of_another_form_is_refused_where_it_is_read(tmp_
         assert (ok, reasons) == (False, ["manifest:bad-format"]), member
         assert pp.check_envelope(manifest, image, envelope) == (False, ["manifest:bad-format"])
         assert pp.check_counts(manifest, image) == (["manifest:bad-format"] if member == "counts" else [])
+
+
+def test_case_128_a_kind_that_does_not_read_meta_only_bounds_it():
+    """case_128: E9, E11. One signed policy.ppt whose counts is an integer is accepted on mesh, whose reader skips
+    meta, and dist:bad-format on host, which reads it. On mesh a meta that is a string, one nested four levels and
+    one running past the envelope are each dist:bad-format. The controller's part, which always reads meta in full
+    (F1), is the controller's."""
+    assert _cause("128_counts_an_integer_where_meta_is_read") == "dist:bad-format"
+    assert _cause("128_counts_an_integer_where_meta_is_skipped_on_mesh") is None
+    for name in ("meta_a_string", "meta_nested_four_levels", "meta_running_past_the_envelope"):
+        assert _cause(f"128_{name}_on_mesh") == "dist:bad-format", name
+    doc = {**GEN.envelope_doc(GEN.image()), "meta": {"a": {"b": {}}}}
+    assert env.read(canon.canon2_bytes(doc), reads_meta=False).meta == {"a": {"b": {}}}
+    with pytest.raises(env.Refused):
+        env.read(canon.canon2_bytes(doc))

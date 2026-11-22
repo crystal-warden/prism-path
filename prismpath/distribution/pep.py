@@ -273,7 +273,7 @@ class Pep:
             sealed, body = self.store.get(held["sealed"]), self.store.get(held["body"])
             if sealed is None or body is None:
                 raise Refused(kinds.BAD_FORMAT, f"a blob of {artifact} is missing or not its name's")
-            envelope = env.read(env.unseal(sealed)[0])
+            envelope = env.read(env.unseal(sealed)[0], reads_meta=self.target.reads_meta)
             if envelope.envelope_id != held["envelope_id"] or envelope.artifact != artifact:
                 raise Refused(kinds.BAD_FORMAT, f"the blob of {artifact} is another envelope")
             release.held[artifact] = Held(held["envelope_id"], held["sealed"], held["body"])

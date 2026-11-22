@@ -515,3 +515,13 @@ def test_a_rollback_on_a_target_that_cannot_decide_needs_a_covering_widening_sta
         record = _read(point, point.pep.rollback())
         assert record.cause == cause, froms
         assert point.pep.active.seq == (seq if cause is None else seq + 1)
+
+
+def test_a_mesh_node_reads_its_stored_envelopes_as_it_staged_them(tmp_path):
+    """E9: a mesh node that staged an envelope whose meta it skips reads it back the same way after a restart."""
+    make, bodies, _decide = _mesh(tmp_path)
+    point = make()
+    doc = _dist.GEN.envelope_doc(bodies[0], targets=["mesh"], meta={**_dist.GEN.image_meta(bodies[0]), "counts": 7})
+    sealed = _dist.env.seal(canon.canon2_bytes(doc), [_dist.GEN.test_key("A")])   # no writer emits it (F1)
+    assert _read(point, point.pep.stage(sealed, bodies[0])).event == "staged"
+    assert point.open().staged.seq == 1

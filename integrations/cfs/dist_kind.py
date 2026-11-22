@@ -43,7 +43,7 @@ def check_cfs_table(envelope, body: bytes, _pep) -> Optional[str]:
 
 
 TARGET = kinds.Target(needs=frozenset({"cfs.table"}), decides=False, expiry_hold=True, body_bound=BODY_SIZE,
-                      checks={"cfs.table": check_cfs_table})
+                      checks={"cfs.table": check_cfs_table}, reads_meta=False)
 kinds.register_target("cfs", TARGET)
 
 
