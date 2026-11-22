@@ -110,5 +110,32 @@ a root was signed (the statement's `time_us` is the signer's clock). The writers
 (telemetry epochs, eBPF receipt sealing, the mesh firmware, the Rust, Go and JavaScript kernels) do
 not yet produce root statements; see the changelog.
 
+## Policy distribution
+
+`src/dist/` is the Rust side of `docs/design/spec-policy-distribution.md`, mirroring
+`prismpath/distribution/`. `dist::envelope` reads and writes the distribution envelope and the sealed
+container (signatures first, each an Ed25519 signature over the DSSE encoding of the envelope bytes),
+and computes the envelope and release ids. `dist::trust` is the trust store and its durable file, and
+`dist::verify::verify` is the one verifier, rules V2 to V11 in order, the first failure the only cause.
+The kind table and each artifact's own check are in `dist`. Every document derives the one canon/2 serde
+reader and writer of `prismpath_rs::canon2::codec`, so its field list is its member list.
+
+```rust
+use prismpath_hotswap_rs::dist::{trust::TrustStore, verify::{verify, PepView}, TargetKind};
+
+let trust = TrustStore::load("state/trust.store");          // unreadable counts nothing (K1)
+let mut pep = PepView::new(TargetKind::Host, "host/demo")?;
+pep.qualification = Some(qualification_envelope);           // the envelope images are admitted under
+let verdict = verify(&sealed, &body, &trust, &pep, now_unix_seconds);
+match verdict.cause { None => { /* stage it, and keep verdict.time_floor durable */ }
+                      Some(cause) => println!("{cause}") }  // "dist:seq-replay", "sig:invalid", ...
+```
+
+`tests/test_distribution_conformance.rs` replays `tests/fixtures/distribution.json`, a byte identical
+copy of the corpus the Python verifier wrote, and gives every case that runs on Rust its own test. Each
+must report the cause, the unchanged flag, the time floor and the envelope id Python recorded, and the
+Rust writers must give back the corpus's bytes, the containers the Python writer sealed with the fixed
+test keys included.
+
 **Related.** The `prismpath swap` command drives the Python side of the same contract;
 `prismpath-hw/` and `prismpath-ebpf/` consume the images this host activates.

@@ -193,7 +193,7 @@ fn io_text(path: &str, error: &std::io::Error) -> String {
 
 /// `canon.atomic_write_bytes`: the old file or the new one, never a torn one. Parent created, temp
 /// file beside the target, flushed and fsynced, then renamed over it.
-fn atomic_write_bytes(path: &str, data: &[u8]) -> Result<(), HostError> {
+pub(crate) fn atomic_write_bytes(path: &str, data: &[u8]) -> Result<(), HostError> {
     let io = |error: std::io::Error| HostError::Io(io_text(path, &error));
     if let Some(dir) = std::path::Path::new(path).parent() {
         if !dir.as_os_str().is_empty() {

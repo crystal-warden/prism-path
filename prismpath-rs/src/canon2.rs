@@ -15,8 +15,11 @@
 //! units, raw UTF-8 with only `"`, `\` and control characters escaped) and refuses every value `read`
 //! could not read back. `canonicalize` is the path for text a person wrote: every rule but the spelling,
 //! then the canonical bytes, which `read` accepts; it is a writer's step and no reader calls it.
+//! `codec` is serde for canon/2, so a document type derives its reader and writer.
 
 use crate::value::Value;
+
+pub mod codec;
 
 pub const EXACT_LIMIT: i64 = (1i64 << 53) - 1;
 pub const MAX_DEPTH: usize = 128;
