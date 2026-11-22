@@ -10,7 +10,7 @@ spec stable.
 
 ### Added: the policy distribution spec and its refusal causes (2026-11-22)
 
-- **`docs/design/spec-policy-distribution.md` defines how one signed policy reaches every enforcement point and stays true there.** It sets out one signed envelope for every distributed artifact, the messages and their two bindings, the enforcement point and controller machines, revocation, rotation, the widening rule, the hold at expiry for mesh and cFS, the heartbeat and 113 conformance cases.
+- **`docs/design/spec-policy-distribution.md` defines how one signed policy reaches every enforcement point and stays true there.** It sets out one signed envelope for every distributed artifact, the messages and their two bindings, the enforcement point and controller machines, revocation, rotation, the widening rule, the hold at expiry for mesh and cFS, the heartbeat and 126 conformance cases.
 - **The cause registry gains 135 to 159 for policy distribution.** They are 20 `dist:` refusals, the `dist:held` mark and four `fleet:` findings, with their crosswalk entries, the regenerated Rust and Lean registries and the frozen corpora.
 
 ### Fixed: control files a killed run left behind, and a cached profile made for another policy (2026-11-22)
