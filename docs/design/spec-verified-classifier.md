@@ -334,8 +334,8 @@ theorems prove sufficient.
 `formal/diff/classifier_diff.py` runs every case through the Python and through the oracle. The Python's four
 disk functions are replaced for the run by a provider that records every fact asked; the facts go to the oracle,
 and a fact the oracle needs and the Python did not ask is observed and the case run again. The real disk
-provider (a throwaway workspace and decoy with links in and out) serves the 132 written hook inputs and the 51
-adversary probes (54 calls); a synthetic provider, each fact a seeded function of its key, serves the generated
+provider (a throwaway workspace and decoy with links in and out) serves every written hook input
+(`prismpath/tests/fixtures/claude_code_hooks.json` and the zone inputs beside it) and the 51 adversary probes (54 calls); a synthetic provider, each fact a seeded function of its key, serves the generated
 calls, so every combination of disk facts meets every text. Numbers reach the oracle as 0, since no part of the
 reading reads a number's value; a call with a lone surrogate reaches it as outside the domain.
 
