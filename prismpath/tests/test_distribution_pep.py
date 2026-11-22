@@ -475,12 +475,11 @@ def test_the_older_path_stays_closed_when_the_floor_file_is_missing(point, tmp_p
 
 
 def test_no_record_is_refused_without_a_cause(point):
-    """H1, V5: a trust kind the target's machine does not apply (a rotation, until it does) is refused with
-    dist:target-mismatch, a rollback with nothing kept is an error and no record, and a refused record always
-    carries its cause."""
-    rotation = canon.canon2_bytes({canon.ENCODING_KEY: canon.CANON2, "format": "prismpath.dist-rotation/1",
-                                   "add": _dist.GEN.public_raw(_dist.GEN.test_key("B")).hex(), "retire": ""})
-    record = _read(point, point.pep.stage(seal("trust.rotation", rotation, stream="@trust"), rotation))
+    """H1: a refusal always carries its cause, a rollback with nothing kept is an error and no record, and a
+    refused record without a cause cannot be built."""
+    rotation = _dist.rotation("B")
+    sealed = _dist.trust_statement("trust.rotation", rotation, seq=1, signers=("A", "B"), targets=("mesh",))
+    record = _read(point, point.pep.stage(sealed, rotation))
     assert (record.event, record.cause) == ("refused", "dist:target-mismatch")
     counter = point.pep.counter
     with pytest.raises(PepRefused):

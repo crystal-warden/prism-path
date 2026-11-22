@@ -46,7 +46,8 @@ class PepView:
     """What the verifier needs of an enforcement point. `kind` must have a row in `kinds.TARGETS`.
     `qualification` is the qualification envelope a `host` PEP admits images under, already verified,
     `body_bound` is the PEP's own bound on the body of an artifact, within its kind's, and never on a trust body (E6), and `has_clock` is False for a PEP with no real time
-    clock, whose `now` is its time floor plus its monotonic count (T2) and which never applies T3."""
+    clock, whose `now` is its time floor plus its monotonic count (T2) and which never applies T3.
+    `instance_key_id` is the PEP's own instance key id, which a rotation may never add (O4)."""
     kind: str
     stream: str
     floor: Floor = field(default_factory=Floor)
@@ -55,6 +56,7 @@ class PepView:
     qualification: Optional[dict] = None
     body_bound: int = env.MAX_BODY
     has_clock: bool = True
+    instance_key_id: Optional[str] = None
 
     def __post_init__(self):
         if self.kind not in kinds.TARGETS:
@@ -145,6 +147,8 @@ def verify(sealed: bytes, body: bytes, *, trust: TrustStore, pep: PepView, now: 
     cause = target.check_for(envelope.artifact)(envelope, body, pep)
     if cause is None and envelope.artifact == "trust.revocation":
         cause = trust.check_revocation(body)                                     # R6
+    if cause is None and envelope.artifact == "trust.rotation":
+        cause = trust.check_rotation(body, entries, env.signed_message(envelope_bytes), pep.instance_key_id)  # O2-O4
     if cause is not None:
         return refused(cause)
     return Verdict(None, envelope, time_floor=time_floor)

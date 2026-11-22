@@ -767,6 +767,7 @@ prismpath/tests/test_distribution_envelope.py
 prismpath/tests/test_distribution_frames.py
 prismpath/tests/test_distribution_pep.py
 prismpath/tests/test_distribution_revocation.py
+prismpath/tests/test_distribution_rotation.py
 prismpath/tests/test_distribution_state_record.py
 prismpath/tests/test_distribution_trace.py
 prismpath/tests/test_distribution_verify.py

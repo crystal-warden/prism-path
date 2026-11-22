@@ -7,8 +7,9 @@ trust sequence, the threshold and the time floor (T1), and its durable file, a c
 
 `counting` is S3 to S5, which entries of a sealed envelope count and the one cause when too few do. A store
 that cannot be read refuses every envelope with `dist:unknown-key` (K1). The store changes only by provisioning,
-a rotation and a revocation (K3). `apply_revocation` is the store after a verified revocation (R1 to R6). Nothing
-here verifies any other part of an envelope.
+a rotation and a revocation (K3). `apply_revocation` is the store after a verified revocation (R1 to R6),
+`check_rotation` the rotation's own rules (O2 to O4) and `apply_rotation` the store after a verified rotation.
+Nothing here verifies any other part of an envelope.
 """
 from __future__ import annotations
 
@@ -23,9 +24,11 @@ from prismpath.distribution.kinds import MAX_SEQ, Refused, Verdict, is_hex64, is
 FORMAT = "prismpath.dist-trust-store/1"
 THRESHOLD = 1                                      # S6: the only threshold in this version
 UNKNOWN_KEY, INVALID, REVOKED_KEY = "dist:unknown-key", "sig:invalid", "sig:revoked-key"
+ROTATION_INVALID = "dist:rotation-invalid"
 _ROLE = re.compile(r"[a-z][a-z0-9-]{0,31}")
-_LISTS = ("retired", "revoked_envelopes", "revoked_keys", "revoked_policies")
-_MEMBERS = frozenset({"encoding", "floors", "format", "keys", "threshold", "time_floor", "trust_id",
+_LISTS = ("revoked_envelopes", "revoked_keys", "revoked_policies")
+MAX_KEYS, MAX_RETIRED = 8, 16                       # K5: the same bounds in every implementation
+_MEMBERS = frozenset({"encoding", "floors", "format", "keys", "retired", "threshold", "time_floor", "trust_id",
                       "trust_seq", *_LISTS})
 
 
@@ -63,9 +66,11 @@ def _keys_document(keys: Mapping[str, "Key"]) -> dict:
 class TrustStore:
     """What an enforcement point holds about keys. `keys` maps a key id to its `Key`. The `revoked_*` sets are the
     latest revocation list, which holds every key id an earlier one held (R6), and `floors` the floor revocation
-    raised for the PEP's stream. A store whose file could not be read has `readable` False and counts nothing."""
+    raised for the PEP's stream. `retired` is the retired key ids, oldest first, at most 16, and `keys` holds at
+    most 8 keys that are not retired (K5). A store whose file could not be read has `readable` False and counts
+    nothing."""
     keys: Mapping[str, Key] = field(default_factory=dict)
-    retired: FrozenSet[str] = frozenset()
+    retired: Tuple[str, ...] = ()
     revoked_keys: FrozenSet[str] = frozenset()
     revoked_envelopes: FrozenSet[str] = frozenset()
     revoked_policies: FrozenSet[str] = frozenset()
@@ -77,11 +82,15 @@ class TrustStore:
     readable: bool = True
     path: Optional[str] = None
 
+    def __post_init__(self):
+        if not isinstance(self.retired, tuple):                       # a set given by a caller, in a stable order
+            object.__setattr__(self, "retired", tuple(sorted(self.retired)))
+
     # ------------------------------------------------------------------ the durable file
     def document(self) -> dict:
         return {canon.ENCODING_KEY: canon.CANON2, "format": FORMAT, "floors": dict(self.floors),
                 "keys": _keys_document(self.keys),
-                "retired": sorted(self.retired), "revoked_envelopes": sorted(self.revoked_envelopes),
+                "retired": list(self.retired), "revoked_envelopes": sorted(self.revoked_envelopes),
                 "revoked_keys": sorted(self.revoked_keys), "revoked_policies": sorted(self.revoked_policies),
                 "threshold": self.threshold, "time_floor": self.time_floor, "trust_id": self.trust_id,
                 "trust_seq": self.trust_seq}
@@ -107,7 +116,11 @@ class TrustStore:
                     and doc[name] == sorted(set(doc[name])) for name in _LISTS), "a key or hash list")
         require(isinstance(doc["floors"], dict) and all(is_stream(stream) and is_int(seq, 1, MAX_SEQ)
                                                         for stream, seq in doc["floors"].items()), "floors")
-        return cls(keys=_read_keys(doc["keys"], "trust store"), retired=frozenset(doc["retired"]), revoked_keys=frozenset(doc["revoked_keys"]),
+        retired = doc["retired"]
+        require(isinstance(retired, list) and all(is_hex64(item) for item in retired) and len(set(retired)) == len(retired)
+                and len(retired) <= MAX_RETIRED and set(retired) <= set(doc["keys"]), "retired")
+        require(len(set(doc["keys"]) - set(retired)) <= MAX_KEYS, "keys beyond the bound")
+        return cls(keys=_read_keys(doc["keys"], "trust store"), retired=tuple(retired), revoked_keys=frozenset(doc["revoked_keys"]),
                    revoked_envelopes=frozenset(doc["revoked_envelopes"]),
                    revoked_policies=frozenset(doc["revoked_policies"]), floors=dict(doc["floors"]),
                    trust_seq=doc["trust_seq"], trust_id=doc["trust_id"], threshold=doc["threshold"],
@@ -179,6 +192,53 @@ class TrustStore:
             except InvalidSignature:
                 continue
         return False
+
+    # ------------------------------------------------------------------ O1 to O4: rotation
+    def check_rotation(self, body: bytes, entries: Sequence[Tuple[str, bytes]], message: bytes,
+                       instance_key_id: Optional[str] = None) -> Optional[str]:
+        """O2 to O4 for a rotation whose envelope already counts under this store (V3) and reads (V11): the key in
+        `add` signs it too, so it is signed under the store it leaves as well, `add` is neither the PEP's own
+        instance key nor a revoked key, and `retire` names a key the store holds. None, or
+        `dist:rotation-invalid`."""
+        from prismpath.hotswap import policy_pack
+        _priv, Public, _ser, InvalidSignature = policy_pack._ed25519()
+        doc = kinds.read_rotation(body)
+        added = bytes.fromhex(doc["add"])
+        added_id = canon.sha256_hex(added)
+        if added_id == instance_key_id or added_id in self.revoked_keys:
+            return ROTATION_INVALID                                  # O4
+        if doc["retire"] and doc["retire"] not in self.keys:
+            return ROTATION_INVALID                                  # O3
+        live = {kid for kid in self.keys if kid not in self.retired} | {added_id}
+        if doc["retire"]:
+            live.discard(doc["retire"])
+        if len(live) > MAX_KEYS:
+            return "dist:too-large"                                  # K5: a ninth key
+        for kid, signature in entries:
+            if kid == added_id:
+                try:
+                    Public.from_public_bytes(added).verify(signature, message)
+                    return None                                      # O2
+                except (InvalidSignature, ValueError):
+                    break
+        return ROTATION_INVALID
+
+    def apply_rotation(self, envelope, body: bytes) -> "TrustStore":
+        """The store after a verified `trust.rotation` at the next trust sequence (O1): the new key is held in the
+        authority role and the retired one no longer counts (O3), though a release already active under it stays.
+        A seventeenth retired id forgets the oldest, and its key with it (K5)."""
+        if envelope.artifact != "trust.rotation" or envelope.seq != self.trust_seq + 1:
+            raise ValueError("only a verified rotation at the next trust sequence is applied (O1)")
+        doc = kinds.read_rotation(body)
+        added = bytes.fromhex(doc["add"])
+        keys = {**self.keys, canon.sha256_hex(added): Key(added, kinds.AUTHORITY)}
+        retired = list(self.retired)
+        if doc["retire"] and doc["retire"] not in retired:
+            retired.append(doc["retire"])
+        while len(retired) > MAX_RETIRED:                            # K5: the oldest retired id is forgotten, and
+            keys.pop(retired.pop(0), None)                           # its signature then reads as an unknown key's
+        return replace(self, keys=keys, retired=tuple(retired), trust_seq=envelope.seq,
+                       trust_id=envelope.envelope_id)
 
     # ------------------------------------------------------------------ S3 to S5
     def counting(self, entries: Sequence[Tuple[str, bytes]], message: bytes, role: str = kinds.AUTHORITY) -> Verdict:

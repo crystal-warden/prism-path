@@ -350,7 +350,7 @@ class Pep:
                        staged=None if staged is None else Staged(staged.stream, staged.seq, staged.policy_sha256,
                                                                  staged.release, staged.replaces, staged.widens),
                        qualification=self.adapter.qualification, body_bound=self.adapter.body_bound,
-                       has_clock=self.has_clock)
+                       has_clock=self.has_clock, instance_key_id=self.instance_key.key_id)
 
     def record(self, event: str, cause: Optional[str] = None) -> bytes:
         """A signed state record of the PEP as it is now (H1), after the expiry check every report comes
@@ -421,6 +421,8 @@ class Pep:
             return self._record("beat")                               # Q3, R1: changes nothing, reports its state
         if envelope.artifact == "trust.revocation":
             return self._apply_revocation(envelope, body)
+        if envelope.artifact == "trust.rotation":
+            return self._apply_rotation(envelope, body)
         staged = self.staged
         if staged is not None and staged.stream == envelope.stream and envelope.seq < staged.seq:
             return self._refuse("dist:seq-replay", envelope_id=envelope_id)   # G2
@@ -439,16 +441,26 @@ class Pep:
                                                      "result": "staged"})
         return self._record("staged")
 
-    # ------------------------------------------------------------------ B2, R1 to R6: a revocation
-    def _apply_revocation(self, envelope, body: bytes) -> bytes:
-        """Apply a verified revocation at once, durably before it is reported (B2, R3), then lapse the active
-        release and drop the staged one when the revocation removed the ground they stand on (R5). A held PEP
-        lapses the same way, which ends the hold (X8)."""
-        self.trust = self.trust.apply_revocation(envelope, body, self.stream).save()
+    # ------------------------------------------------------------------ B2: the trust statements
+    def _adopt(self, envelope, store: TrustStore) -> None:
+        """Make the store a verified trust statement leaves durable before anything reports it (B2, R3)."""
+        self.trust = store.save()
         self.audit.append("distribution", "trust-applied", {"envelope_id": envelope.envelope_id, "seq": envelope.seq,
                                                            "artifact": envelope.artifact, "result": "applied"})
+
+    def _apply_revocation(self, envelope, body: bytes) -> bytes:
+        """Apply a verified revocation at once, then drop the staged release and lapse the active one when the
+        revocation removed the ground they stand on (R5). A held PEP lapses the same way, which ends the hold
+        (X8)."""
+        self._adopt(envelope, self.trust.apply_revocation(envelope, body, self.stream))
         self._drop_fallen_staged()
         self._check_active()
+        return self._record("trust-applied")
+
+    def _apply_rotation(self, envelope, body: bytes) -> bytes:
+        """Apply a verified rotation at once (O3). A release active under a key it retires stays active until it
+        expires or is replaced."""
+        self._adopt(envelope, self.trust.apply_rotation(envelope, body))
         return self._record("trust-applied")
 
     def _drop_fallen_staged(self) -> None:

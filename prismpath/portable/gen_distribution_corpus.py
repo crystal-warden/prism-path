@@ -354,6 +354,38 @@ def build_cases(kind: str, spec: Dict[int, dict]) -> List[dict]:
     whole = raw(kind_doc(body))
     cut = whole[:whole.index(b'"meta":{') + len(b'"meta":{"counts":{')]
     add(128, "meta_running_past_the_envelope", "dist:bad-format", sealed_by(cut, "A"), on="mesh")
+    # O1 to O4: rotations, verified against the trust store a PEP holds
+    def rotation_body(add: str, retire: str = "") -> bytes:
+        return canon.canon2_bytes({canon.ENCODING_KEY: canon.CANON2, "format": "prismpath.dist-rotation/1",
+                                   "add": public_raw(test_key(add)).hex(),
+                                   "retire": env.key_id(public_raw(test_key(retire))) if retire else ""})
+
+    def rotation_doc(rotated: bytes, seq: int) -> dict:
+        return {**revocation_doc(rotated, seq), "artifact": "trust.rotation"}
+
+    adding_b = rotation_body("U")
+    rotate_sealed = sealed_by(raw(rotation_doc(adding_b, 1)), "A", "U")
+    add(72, "signed_by_the_old_and_the_new_key", None, rotate_sealed, payload=adding_b)
+    retiring = rotation_body("U", retire="A")
+    retiring_sealed = sealed_by(raw(rotation_doc(retiring, 1)), "A", "U")
+    after_retiring = trust_store().apply_rotation(env.read(env.unseal(retiring_sealed)[0]), retiring)
+    add(72, "a_pack_under_the_new_key", None, sealed_by(good, "U"), trust=after_retiring)
+    add(73, "a_pack_signed_by_the_retired_key", "sig:revoked-key", good_sealed, trust=after_retiring)
+    add(74, "signed_only_by_an_unknown_key", "dist:unknown-key", sealed_by(raw(rotation_doc(adding_b, 1)), "U"),
+        payload=adding_b)
+    add(74, "without_the_new_key", "dist:rotation-invalid", sealed_by(raw(rotation_doc(adding_b, 1)), "A"),
+        payload=adding_b)
+    retire_unknown = rotation_body("U", retire="X9")
+    add(75, "retiring_an_unknown_key", "dist:rotation-invalid", sealed_by(raw(rotation_doc(retire_unknown, 1)), "A", "U"),
+        payload=retire_unknown)
+    adding_revoked = rotation_body("R")
+    add(75, "adding_a_revoked_key", "dist:rotation-invalid", sealed_by(raw(rotation_doc(adding_revoked, 1)), "A", "R"),
+        payload=adding_revoked)
+    add(76, "a_rotation_after_a_revocation_at_its_seq", "dist:trust-replay", rotate_sealed, payload=adding_b,
+        trust=after_first)
+    later = sealed_by(raw(rotation_doc(adding_b, 2)), "A", "U")
+    add(123, "two_above_the_trust_sequence", "dist:trust-replay", later, payload=adding_b)
+    add(123, "the_same_once_the_skipped_one_is_in", None, later, payload=adding_b, trust=after_first)
 
     # E11, V4: every meta member of its form, read before any check uses it
     for name, changes in (("fields_a_string", {"fields": "x"}), ("counts_an_integer", {"counts": 7}),

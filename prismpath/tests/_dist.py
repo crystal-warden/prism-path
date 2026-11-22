@@ -70,6 +70,19 @@ def revocation(*, envelopes=(), keys=(), policies=(), floors=None) -> bytes:
                                "floors": dict(floors or {})})
 
 
+def rotation(add: str, retire: str = "") -> bytes:
+    """The canon/2 body of a rotation (section 11) adding the test key `add` and retiring the test key `retire`."""
+    return canon.canon2_bytes({canon.ENCODING_KEY: canon.CANON2, "format": "prismpath.dist-rotation/1",
+                               "add": GEN.public_raw(GEN.test_key(add)).hex(), "retire": key_id(retire) if retire else ""})
+
+
+def trust_statement(artifact: str, body: bytes, *, seq: int, signers=("A",), targets=("host",)) -> bytes:
+    """A sealed trust statement on `@trust`, signed by every test key in `signers` (O2 asks for two)."""
+    envelope_bytes = env.build(artifact, body, stream=env.TRUST_STREAM, seq=seq, targets=targets, not_before=NOT_BEFORE,
+                               expires=0, policy_sha256=env.ZERO_HASH, release=env.ZERO_HASH)
+    return env.seal(envelope_bytes, [GEN.test_key(name) for name in signers])
+
+
 def key_id(name: str) -> str:
     return env.key_id(GEN.public_raw(GEN.test_key(name)))
 
@@ -119,6 +132,13 @@ class Point:
     def commit(self, body: bytes, seq: int = 1, **seal_args) -> bytes:
         self.pep.stage(self.seal(body, seq=seq, **seal_args), body)
         return self.pep.commit(STREAM, seq, seal_args.get("policy_sha256") or self.policy_of(body))
+
+    def rotate(self, seq: int, add: str, retire: str = "", signers=None) -> bytes:
+        """Stage a rotation adding `add` and retiring `retire`, signed by the old key and the new one by default."""
+        body = rotation(add, retire)
+        sealed = trust_statement("trust.rotation", body, seq=seq, signers=signers or (self.authorities[0], add),
+                                 targets=(self.kind,))
+        return self.pep.stage(sealed, body)
 
     def revoke(self, seq: int, signer: str = "A", **lists) -> bytes:
         """Stage the revocation list `lists` at trust sequence `seq`, which applies it (B2)."""
