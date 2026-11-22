@@ -23,6 +23,7 @@ every build; `gray_perm_product` needs only `propext` and `Quot.sound`).
 | `Spiral.gray_perm_product` | Spiral.lean | the reflected Gray enumeration is a permutation of the mixed radix product |
 | `Spiral.spiral_bijection` | Spiral.lean | the route bucketed Gray layout is duplicate free, contains exactly the cells of the space, and index of cell and cell of index invert |
 | `Spiral.band_route`, `Spiral.band_eq_route_eq` | Spiral.lean | the band an index falls in determines the route of its cell |
+| `Signature.route_eq_of_signatures`, `Signature.decision_from_signatures` | Signature.lean | the grouped signature tier is exact: readings whose disjoint, covering field groups have equal signatures (each rule's truth function over the other fields, cut after the first rule that always holds) route alike, so the decision is a function of the signatures |
 | `Zeck.decode_encode` | Zeckendorf.lean | the Fibonacci code round trips for every positive integer |
 | `Zeck.takeCode_encode` | Zeckendorf.lean | **I2.** The first `11` after a code closes exactly that code: the wire frames itself |
 | `Zeck.decodeStream_flatMap` | Zeckendorf.lean | a concatenation of codes decodes to exactly the values encoded, with no length header |
@@ -47,6 +48,7 @@ Plainly:
 - The numeric partition is coarsest within the class of interval partitions (I1b).
 - The corrected reference algorithm computes that canonical partition.
 - Spiral indexing is a bijection over the resulting cell product, and a band determines a route.
+- For a policy too large to list, the decision is a function of its field groups' signatures.
 - Fibonacci coding round trips and a stream of codes frames itself (I2).
 - A rational source value converted under a fixed field's rounding mode decides exactly as it would
   against the authored decimal thresholds, for the comparisons that mode carries (the conversion
@@ -162,7 +164,7 @@ curl -sSf https://elan.lean-lang.org/elan-init.sh | sh -s -- -y --default-toolch
 cd formal && lake exe cache get
 lake build                         # compiles every module, evaluates every #guard, prints the axiom audit
 grep -rn sorry FQ/ FQ.lean Core/ Core.lean Classifier/ Classifier.lean   # expect no output
-for m in FQ.Syntax FQ.Partition FQ.I1 FQ.Reconstruct FQ.AlgEq FQ.Zeckendorf FQ.Spiral FQ.Bridge FQ.Vectors; do
+for m in FQ.Syntax FQ.Partition FQ.I1 FQ.Reconstruct FQ.AlgEq FQ.Zeckendorf FQ.Spiral FQ.Signature FQ.Bridge FQ.Vectors; do
   lake env leanchecker $m          # independent kernel re-check of the stored proofs
 done
 cd .. && ./.venv/bin/python formal/gen_vectors.py   # regenerate FQ/Vectors.lean from the frozen corpora
@@ -181,6 +183,7 @@ The reference suites the bridge depends on: `pytest prismpath/tests`, `pytest pr
 | `FQ/Reconstruct.lean` | the reconstruct corollary |
 | `FQ/AlgEq.lean` | reference algorithm equals canonical form |
 | `FQ/Spiral.lean` | Gray enumeration, layout, bijection, bands |
+| `FQ/Signature.lean` | the decision from the field groups' signatures |
 | `FQ/Zeckendorf.lean` | the Fibonacci wire on Mathlib's Zeckendorf theorem |
 | `FQ/Conversion.lean` | the conversion lemma and its lift to policies |
 | `FQ/Contract.lean` | raw values, the engine's semantics on them, acceptance, contract (a) |
