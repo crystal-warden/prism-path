@@ -25,7 +25,7 @@ COPIES = {
     "prismpath-rs/tests/fixtures": (KERNEL_CORPUS, ["canon2", "capability", "causes", "connector", "context", "contract", "crypto_agility",
                                                     "crypto_migration", "durable", "field_definitions", "flows", "level_m", "locked_flows", "merkle_consistency", "merkle_stream", "parse_limits",
                                                     "predicates", "reach"]),
-    "prismpath-hotswap-rs/tests/fixtures": (KERNEL_CORPUS, ["host_trace", "hotswap", "receipts"]),
+    "prismpath-hotswap-rs/tests/fixtures": (KERNEL_CORPUS, ["distribution", "host_trace", "hotswap", "receipts"]),
     "prismpath-telemetry-rs/tests/fixtures": (WIRE_CORPUS, ["boundary", "concentrator", "decisions", "defined_wire", "inputs",
                                                             "policy_forms", "receipt_stream", "receipts", "refresh", "replay", "spiral"]),
 }
