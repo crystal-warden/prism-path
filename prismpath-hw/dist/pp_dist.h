@@ -43,6 +43,7 @@
 #define PP_CAUSE_EXPIRED 141              /* dist:expired */
 #define PP_CAUSE_REVOKED 142              /* dist:revoked */
 #define PP_CAUSE_TRUST_REPLAY 144         /* dist:trust-replay */
+#define PP_CAUSE_ROTATION_INVALID 145     /* dist:rotation-invalid */
 #define PP_CAUSE_TOO_LARGE 148            /* dist:too-large */
 #define PP_CAUSE_FRAME_INVALID 150        /* dist:frame-invalid */
 #define PP_CAUSE_WIDENING_UNSIGNED 143    /* dist:widening-unsigned */
@@ -61,9 +62,13 @@
 #define PP_MAX_SEQ 9007199254740991LL
 #define PP_SKEW 300           /* section 7 */
 #define PP_STREAM_MAX 64
-#define PP_MAX_KEYS 8         /* keys a trust store holds */
-#define PP_MAX_LIST 64        /* entries of one revocation list (R7) */
-#define PP_MAX_FLOORS 8       /* streams whose floor a revocation raised */
+#define PP_MAX_KEYS 8         /* K5: keys a trust store holds */
+#define PP_MAX_RETIRED 16     /* K5: retired key ids a trust store remembers */
+#define PP_MAX_LIST 64        /* R6, R7: a PEP holds the latest revocation list, at most 64 entries a list */
+#define PP_MAX_FLOORS 1       /* R6: a PEP keeps the floor a revocation raised for its own stream only */
+#define PP_REVOCATION_ENTRIES 64 /* R7: the entries of one revocation list */
+#define PP_REVOCATION_FLOORS 16  /* R7: the streams of one revocation list */
+#define PP_TRUST_BOUND 16384  /* E6: every kind's bound on a trust body, which holds the largest list R7 allows */
 #define PP_MAX_FLOOR_IDS 4    /* envelope ids committed at one floor */
 #define PP_MESH_TABLE_MAX 640 /* E6: TBL_MAX in prismpath-hw/mesh/main/ppt_mesh.c */
 #define PP_META_MAX_DEPTH 3   /* E9: the scanner's bound on meta's nesting */
@@ -71,7 +76,7 @@
 /* ------------------------------------------------------------------ the kinds (section 3) */
 typedef enum {
     PP_ART_POLICY_CORE, PP_ART_POLICY_PPT, PP_ART_POLICY_SPIRAL, PP_ART_SANDBOX_PROFILE, PP_ART_EGRESS_HOSTS,
-    PP_ART_GATEWAY_ROUTES, PP_ART_NET_DESTS, PP_ART_NET_EDGE, PP_ART_CFS_TABLE, PP_ART_GRANT,
+    PP_ART_AGENT_ZONES, PP_ART_GATEWAY_ROUTES, PP_ART_NET_DESTS, PP_ART_NET_EDGE, PP_ART_CFS_TABLE, PP_ART_GRANT,
     PP_ART_TRUST_WIDENING, PP_ART_TRUST_REVOCATION, PP_ART_TRUST_ROTATION, PP_ART_COUNT
 } pp_artifact;
 
@@ -124,7 +129,7 @@ typedef struct {
     int readable;
     pp_key keys[PP_MAX_KEYS];
     size_t n_keys;
-    uint8_t retired[PP_MAX_LIST][32];
+    uint8_t retired[PP_MAX_RETIRED][32];
     size_t n_retired;
     uint8_t revoked_keys[PP_MAX_LIST][32];
     size_t n_revoked_keys;
@@ -160,7 +165,8 @@ typedef struct {
     size_t n_floor_ids;
     int has_staged;
     pp_staged staged;
-    long long body_bound;           /* the PEP's own bound on a body, within its kind's (E6) */
+    long long body_bound;           /* the PEP's own bound on the body of an artifact, within its kind's, never on a
+                                       trust body (E6) */
     int has_clock;                  /* 0 for a PEP with no real time clock (T2), which never applies T3 */
 } pp_pep;
 
@@ -217,13 +223,13 @@ void pp_sha256(const uint8_t *data, size_t len, uint8_t out[32]);
 #define PP_FRAME_LIMIT 250        /* ESP_NOW_MAX_DATA_LEN */
 #define PP_TRANSFER_TIMEOUT_MS 5000 /* B7 */
 #ifndef PP_ASSEMBLER_BODY_MAX
-#define PP_ASSEMBLER_BODY_MAX PP_MESH_TABLE_MAX /* the largest body this build assembles */
+#define PP_ASSEMBLER_BODY_MAX PP_TRUST_BOUND /* the largest body this build assembles: a trust body (E6) */
 #endif
 
 /* The enforcement point's check of a whole sealed envelope through V8 (B9): 0 and the signed body_size and
  * body_sha256, or the verifier's cause. */
 typedef uint8_t (*pp_admit_fn)(void *context, const uint8_t *sealed, size_t len, long long *body_size,
-                               uint8_t body_sha256[32]);
+                               uint8_t body_sha256[32], pp_artifact *artifact);
 
 /* One transfer being assembled (B6, B7, B11). Its buffers are its own, so nothing allocates. */
 typedef struct {
@@ -245,7 +251,8 @@ typedef struct {
     pp_transfer t;
     int ordered; /* B11: the link is declared ordered */
     size_t limit; /* the link's frame limit */
-    long long body_bound;
+    long long artifact_bound; /* the PEP's bound on the body of an artifact */
+    long long trust_bound;    /* its bound on a trust body, never below PP_TRUST_BOUND (E6) */
     pp_admit_fn admit;
     void *context;
 } pp_assembler;
@@ -256,7 +263,7 @@ typedef struct {
 #define PP_ASM_CONTROL 3 /* a state, commit, abort or epoch frame, for the caller */
 
 void pp_assembler_init(pp_assembler *a, pp_admit_fn admit, void *context, int ordered, size_t limit,
-                       long long body_bound);
+                       long long artifact_bound);
 
 /* One frame's bytes at the PEP's monotonic time `now_ms`. Answers PP_ASM_* with the cause of a drop. */
 int pp_assembler_receive(pp_assembler *a, const uint8_t *frame, size_t len, uint32_t now_ms, uint8_t *cause);
@@ -273,8 +280,9 @@ enum { PP_ST_NO_POLICY, PP_ST_ACTIVE, PP_ST_LOCKED };
 
 typedef struct {
     pp_envelope envelope;
-    size_t body_len;
-    uint8_t body[PP_RELEASE_BODY_MAX];
+    size_t sealed_len;
+    uint8_t sealed[PP_MAX_SEALED]; /* kept so a revocation can test whether a held key still signs it (R5) */
+    size_t body_len;               /* the body is in the release's buffer for its kind (pp_held_body) */
 } pp_artifact_held;
 
 /* A release as the PEP holds it (E7): its shared members and the artifacts it holds, in staging order. */
@@ -288,7 +296,12 @@ typedef struct {
     int widens;
     size_t n;
     pp_artifact_held held[2]; /* a mesh release holds a policy.ppt and may hold a trust.widening */
+    uint8_t artifact_body[PP_RELEASE_BODY_MAX]; /* the body of the artifact, within the kind's bound */
+    uint8_t trust_body[PP_TRUST_BOUND];         /* the body of a trust statement it holds, within the trust bound */
 } pp_release;
+
+/* The body of the release's k-th artifact, in the buffer for its kind. */
+uint8_t *pp_held_body(pp_release *release, size_t k);
 
 /* Everything the PEP keeps durably, each part with whether it reads. The caller's `persist` writes it, the
  * whole of it or nothing (C4), and a restart opens the PEP from it. */

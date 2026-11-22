@@ -35,7 +35,6 @@
  *   decide <now>
  *   restart <now>
  *   lose floor | counter | trust | setting
- *   revoke_policy <hex>   the store as a revocation applied after staging leaves it (case 50)
  *   done
  *
  * and prints one line per step: "records" and the hex of each state record the step made, oldest first,
@@ -100,9 +99,9 @@ static void print_records(const pp_pep_machine *pep) {
 static int machine(const char *args, pp_trust *anchor) {
     static pp_pep_machine pep;
     static pp_config config;
-    static uint8_t sealed_bytes[PP_MAX_SEALED + 64], body_bytes[PP_RELEASE_BODY_MAX + 1024];
-    static char line[2 * (PP_MAX_SEALED + PP_RELEASE_BODY_MAX + 1024) + 256];
-    char seed[80], a[2 * PP_MAX_SEALED + 160], b[2 * (PP_RELEASE_BODY_MAX + 1024) + 8], c[80];
+    static uint8_t sealed_bytes[PP_MAX_SEALED + 64], body_bytes[PP_MAX_BODY_TEST];
+    static char line[2 * (PP_MAX_SEALED + PP_MAX_BODY_TEST) + 256], a[sizeof line], b[sizeof line];
+    char seed[80], c[80];
     memset(&config, 0, sizeof config);
     if (sscanf(args, "%d %d %79s", &config.expiry_hold, &config.has_clock, seed) != 3) return 2;
     hash32(seed, config.instance_seed);
@@ -170,9 +169,6 @@ static int machine(const char *args, pp_trust *anchor) {
             else if (strcmp(rest, "trust") == 0) saved.trust_reads = 0;
             else if (strcmp(rest, "setting") == 0) saved.setting_reads = 0;
             else return 2;
-        } else if (strcmp(word, "revoke_policy") == 0) {
-            if (pep.d.trust.n_revoked_policies < PP_MAX_LIST) hash32(rest, pep.d.trust.revoked_policies[pep.d.trust.n_revoked_policies++]);
-            printf("records\n");
         } else if (strcmp(word, "setting") == 0) {
             config.expiry_hold = atoi(rest); /* the next restart asks for this expiry response */
         } else {
@@ -192,13 +188,15 @@ typedef struct {
 
 /* frames.admit_through_v8: the sealed envelope verified with no body, V9's body mismatch the only refusal
  * that means it passed V2 to V8. */
-static uint8_t admit(void *context, const uint8_t *sealed_part, size_t len, long long *body_size, uint8_t hash[32]) {
+static uint8_t admit(void *context, const uint8_t *sealed_part, size_t len, long long *body_size, uint8_t hash[32],
+                     pp_artifact *artifact) {
     static pp_verdict verdict;
     admit_context *ctx = context;
     pp_verify(sealed_part, len, (const uint8_t *)"", 0, ctx->trust, ctx->pep, ctx->now, &verdict);
     if (verdict.cause == 0 || (verdict.cause == PP_CAUSE_BODY_MISMATCH && verdict.envelope.body_size > 0)) {
         *body_size = verdict.envelope.body_size;
         memcpy(hash, verdict.envelope.body_sha256, 32);
+        *artifact = verdict.envelope.artifact;
         return 0;
     }
     return verdict.cause;
@@ -273,7 +271,7 @@ int main(void) {
             hash32(a, trust.keys[trust.n_keys].id);
             hash32(b, trust.keys[trust.n_keys].public_key);
             trust.keys[trust.n_keys++].role = (uint8_t)role;
-        } else if (strcmp(word, "retired") == 0 && trust.n_retired < PP_MAX_LIST) {
+        } else if (strcmp(word, "retired") == 0 && trust.n_retired < PP_MAX_RETIRED) {
             hash32(rest, trust.retired[trust.n_retired++]);
         } else if (strcmp(word, "revoked_key") == 0 && trust.n_revoked_keys < PP_MAX_LIST) {
             hash32(rest, trust.revoked_keys[trust.n_revoked_keys++]);

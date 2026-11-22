@@ -15,7 +15,7 @@ spec stable.
 - **Every kind takes a trust body up to 16,384 bytes, the largest revocation list allows, beside its own bound for an artifact's body.** The signed `body_size` is held to the bound for its artifact before any body is read, by the verifier, the frame assembler and the Rust host alike.
 - **The Rust host applies the same checks of a revocation list as Python and replays the new revocation cases.**
 - **A mesh node or a cFS app, whose own check does not read `meta`, only checks that it is an object nested at most three levels inside the envelope.** Every other reader checks its members and their forms.
-
+- **The C core in `prismpath-hw/dist/` applies revocations as the Python machine does.** A mesh node holds the latest list, refuses one that drops a revoked key, keeps the floor a list raises for its own stream, holds a trust body to 16,384 bytes, and is held step by step to the Python machine and frame by frame to `frames.py`.
 
 ### Added: the distribution verifier and state machine in C, tested natively against the shared corpus (2026-11-22)
 
