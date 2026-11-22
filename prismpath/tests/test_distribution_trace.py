@@ -35,10 +35,14 @@ REPLAYERS = {"P": REPO / "tests" / "test_distribution_corpus.py",
 # carry; the product's own boundary check covers its packages.
 RESEARCH_ONLY = {99: ROOT / "tools" / "tests" / "test_export.py"}
 C_KINDS = frozenset({"mesh", "cfs"})
+# Cases whose corpus half an implementation's replay decides while another half waits for a later pull
+# request, so the replay does not claim them and they stay in PENDING until that half has its test.
+# 16: the Rust PEP allows nothing; 66, 70, 79, 130: the Rust verifier decides them, and applying the list is the
+# Rust PEP's (PR 14)
+PARTIAL = {"P": frozenset(), "R": frozenset({16, 66, 70, 79, 130}), "C": frozenset()}
 PENDING = {
     "P": "30 32-37 45 49 54-65 72-76 80-81 86-98 100 102 104-105 109 113 120-121 123-125 129 131",
-    "R": "1-13 16-17 20-24 26 28-29 31 39-44 46-48 50-53 62-63 66-77 79 82 84-85 97 101 104 111 114-115 117-118 "
-         "123 126-127 130-131",
+    "R": "16-17 23-24 26 31 43 46-48 50-53 62-63 66 69-70 72-77 79 82 84-85 97 101 104 111 123 126 130-131",
     "C": "1-14 20-22 24-29 31 35-42 46-48 50 52-53 60-63 66-74 76-77 79 82 85 97 104-110 112 114 117-123 128 130-132",
 }
 
@@ -77,7 +81,7 @@ def _covered(impl: str) -> set:
     covered = set(_named(impl))
     if REPLAYERS[impl].exists():
         covered |= {case["case"] for case in CORPUS["cases"] if impl in case["runs_on"]
-                    and (impl != "C" or case["pep"]["kind"] in C_KINDS)}
+                    and (impl != "C" or case["pep"]["kind"] in C_KINDS)} - PARTIAL[impl]
     return covered
 
 
@@ -138,3 +142,7 @@ def test_a_replay_that_exists_has_no_not_yet_built_marker():
         marked = any(consumer[0] == "none" for consumer in rows[column])
         assert not (REPLAYERS[impl].exists() and marked), (impl, column)
         assert REPLAYERS[impl].exists() or marked, (impl, column)
+
+
+def test_a_case_a_replay_does_not_claim_stays_pending_until_its_other_half_has_a_test():
+    assert all(PARTIAL[impl] <= _expand(PENDING[impl]) for impl in "PRC")
