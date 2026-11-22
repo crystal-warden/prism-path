@@ -195,6 +195,13 @@ def test_case_115_the_release_id_is_the_hash_of_the_sorted_artifact_pairs():
         env.release_id([])
     with pytest.raises(Refused):
         env.release_id([("policy.ppt", "aa" * 32), ("policy.ppt", "bb" * 32)])
+    for kind in ("trust.widening", "trust.revocation", "trust.rotation"):
+        with pytest.raises(Refused):
+            env.release_id([("policy.ppt", "aa" * 32), (kind, "bb" * 32)])
+    with pytest.raises(Refused):
+        env.release_id([("policy.zip", "aa" * 32)])
+    with pytest.raises(Refused):
+        env.release_id([("policy.ppt", "AA" * 32)])
 
 
 def test_case_116_a_sealed_envelope_maps_to_dsse_json_and_back():
@@ -209,7 +216,15 @@ def test_case_116_a_sealed_envelope_maps_to_dsse_json_and_back():
     signed = _dsse_pae(doc["payloadType"].encode(), base64.b64decode(doc["payload"]))
     for member in doc["signatures"]:
         Public.from_public_bytes(publics[member["keyid"]]).verify(base64.b64decode(member["sig"]), signed)
+    urlsafe = {**doc, "payload": base64.urlsafe_b64encode(base64.b64decode(doc["payload"])).decode().rstrip("="),
+               "signatures": [{"keyid": member["keyid"],
+                               "sig": base64.urlsafe_b64encode(base64.b64decode(member["sig"])).decode()}
+                              for member in doc["signatures"]]}
+    assert env.from_dsse(urlsafe) == sealed                        # DSSE allows URL safe base64, padded or not
+    mixed = base64.b64encode(b"\xfb\xff\xfe" * 4).decode()         # holds + and /
+    mixed = mixed[:2] + "-" + mixed[3:]
     for broken in ({**doc, "payloadType": "application/json"}, {**doc, "payload": "!"}, {**doc, "signatures": []},
+                   {**doc, "payload": mixed},
                    {**doc, "extra": 1}, {**doc, "signatures": doc["signatures"] * 2}):
         with pytest.raises(Refused):
             env.from_dsse(broken)

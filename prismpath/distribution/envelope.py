@@ -53,9 +53,13 @@ def key_id(public_raw: bytes) -> str:
 
 def release_id(artifacts: Iterable[Tuple[str, str]]) -> str:
     """E10: the SHA-256 of the canon/2 bytes of the sorted `[artifact, body_sha256]` pairs of every artifact in
-    the release. The signer computes it over the whole release."""
-    pairs = sorted([str(artifact), str(body_sha256)] for artifact, body_sha256 in artifacts)
+    the release. The signer computes it over the whole release. A trust kind is never one of them: a
+    `trust.widening` envelope binds to its release by carrying the same `release` (E7)."""
+    pairs = sorted([artifact, body_sha256] for artifact, body_sha256 in artifacts)
     _require(bool(pairs) and len({pair[0] for pair in pairs}) == len(pairs), "a release names each artifact once")
+    _require(all(artifact in kinds.ARTIFACTS and artifact not in kinds.TRUST_ARTIFACTS for artifact, _ in pairs),
+             "a release id names only artifact kinds that are not trust kinds")
+    _require(all(is_hex64(body_sha256) for _, body_sha256 in pairs), "a body hash in a release id")
     return canon.sha256_hex(canon.canon2_bytes(pairs))
 
 
@@ -233,20 +237,28 @@ def to_dsse(sealed: bytes) -> dict:
                            for kid, signature in entries]}
 
 
+def _b64decode(text: Any) -> bytes:
+    """DSSE base64, standard or URL safe (one alphabet per string), padded or not."""
+    if not isinstance(text, str) or ("+" in text or "/" in text) and ("-" in text or "_" in text):
+        raise ValueError("base64 that is not one alphabet")
+    standard = text.replace("-", "+").replace("_", "/")
+    return base64.b64decode(standard + "=" * (-len(standard) % 4), validate=True)
+
+
 def from_dsse(doc: Mapping[str, Any]) -> bytes:
-    """S7: the sealed envelope a DSSE JSON envelope maps back to. The signature order of DSSE carries no
-    meaning, so the entries are sorted by key id. Anything `unseal` would refuse is `dist:bad-format`."""
+    """S7: the sealed envelope a DSSE JSON envelope maps back to. Its base64 may be standard or URL safe, as
+    DSSE allows. The signature order of DSSE carries no meaning, so the entries are sorted by key id. Anything `unseal` would refuse is `dist:bad-format`."""
     _require(isinstance(doc, Mapping) and set(doc) == {"payload", "payloadType", "signatures"}, "DSSE members")
     _require(doc["payloadType"] == PAYLOAD_TYPE, "DSSE payloadType")
     signatures = doc["signatures"]
     _require(isinstance(signatures, list), "DSSE signatures")
     try:
-        envelope_bytes = base64.b64decode(doc["payload"], validate=True)
+        envelope_bytes = _b64decode(doc["payload"])
         entries = []
         for member in signatures:
             _require(isinstance(member, Mapping) and set(member) == {"keyid", "sig"} and is_hex64(member["keyid"]),
                      "a DSSE signature member")
-            signature = base64.b64decode(member["sig"], validate=True)
+            signature = _b64decode(member["sig"])
             _require(len(signature) == SIGNATURE_SIZE, "a DSSE signature length")
             entries.append((member["keyid"], signature))
     except (binascii.Error, TypeError, ValueError):
