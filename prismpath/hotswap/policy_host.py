@@ -42,16 +42,7 @@ _IMAGE_FILE = re.compile(r"^active-[0-9a-f]{64}\.ppt$")
 _IMAGE_LEAVINGS = re.compile(r"^active(-[0-9a-f]{64})?\.ppt(\.tmp)?$")
 
 
-def _fsync_dir(directory: str) -> None:
-    """Make a rename or a removal in `directory` durable. Windows cannot open a directory, and its
-    rename is not covered by this call."""
-    if os.name == "nt":
-        return
-    descriptor = os.open(directory, os.O_RDONLY)
-    try:
-        os.fsync(descriptor)
-    finally:
-        os.close(descriptor)
+_fsync_dir = canon.fsync_dir
 
 
 def image_file_name(sha256: str) -> str:
@@ -100,7 +91,7 @@ class PolicyHost:
         root_statement.check_separation(instance_key, _authority_key_ids(self.pubkey_paths))
         self.audit = AuditLog(audit_path or os.path.join(state_dir, "swaps.log"), instance_key=instance_key,
                               sign_appends=True, policy_of=self._policy_identity)
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
         self._active: Optional[dict] = None    # {sha256, version, key_id, envelope_id, image, since}
         self._prev: Optional[dict] = None      # last-known-good, for rollback
         self._version_path = os.path.join(state_dir, "active_version")
@@ -281,11 +272,28 @@ class PolicyHost:
             raise SwapRejected(reasons)
         return {"ok": False, "reasons": reasons}
 
+    # -- the distribution floor: once a release came by distribution, the older path is closed (L2) --
+    def _distribution_floor(self) -> bool:
+        """True when this state directory's enforcement point has committed a distribution envelope, or its
+        floor file cannot be read, which is answered the same way (fail closed)."""
+        path = os.path.join(self.state_dir, "dist", "floor.json")
+        if not os.path.exists(path):
+            return False
+        try:
+            with open(path, "rb") as floor_file:
+                floor = canon.loads_document(floor_file.read())
+            return not (isinstance(floor, dict) and floor.get("seq") == 0)
+        except (OSError, ValueError):
+            return True
+
     def swap(self, ppt_path: str, *, allow_unsigned: bool = False, strict: bool = False) -> dict:
         """Verify -> envelope -> version -> stage -> atomic flip. Returns {ok, reasons} (or the
         active dict on success). Every outcome is one audit event; the active policy only changes
-        on full success."""
+        on full success. A state directory whose enforcement point committed a distribution envelope
+        refuses every pack with `dist:legacy-refused` (L2)."""
         with self._lock:
+            if self._distribution_floor():
+                return self._reject(None, None, ["dist:legacy-refused"], strict)
             pending = self._recover()
             image = None
             try:
@@ -325,27 +333,55 @@ class PolicyHost:
             except ValueError as error:
                 return self._reject(to_hash, manifest.get("version"), [str(error)], strict)
 
-            new_active = {"sha256": to_hash, "version": manifest.get("version"),
-                          "key_id": manifest.get("key_id"),
-                          "envelope_id": manifest.get("envelope_id"),
-                          "unsigned": bool(manifest.get("unsigned")),
-                          "overlay_of": manifest.get("overlay_of"),
-                          "counts": staged, "image": image, "since": _now(),
-                          "ppt_path": os.path.abspath(ppt_path)}
-            # commit: intent, floor, evidence, image, record and flip, clean up; see the protocol note above
-            self._write_pending(to_hash, manifest.get("version"))
-            if manifest.get("version") is not None:
-                self._persist_version(manifest["version"])
+            record = {"sha256": to_hash, "version": manifest.get("version"),
+                      "key_id": manifest.get("key_id"),
+                      "envelope_id": manifest.get("envelope_id"),
+                      "unsigned": bool(manifest.get("unsigned")),
+                      "overlay_of": manifest.get("overlay_of"),
+                      "counts": staged, "since": _now(),
+                      "ppt_path": os.path.abspath(ppt_path)}
+            return self.install_verified(image, record)
+
+    def install_verified(self, image: bytes, record: dict, evidence: Optional[dict] = None) -> dict:
+        """The commit half of a swap, for an image every check has already passed: by `swap` after its own
+        checks, and by the distribution enforcement point after the verifier (spec-policy-distribution.md,
+        C4). `record` is the active record without the image. Intent, floor when the record has a version,
+        evidence, image, record and flip, clean up; see the protocol note above. `evidence` adds members to
+        the audit event."""
+        with self._lock:
+            new_active = {**record, "image": image}
+            to_hash = record["sha256"]
+            self._write_pending(to_hash, record.get("version"))
+            if record.get("version") is not None:
+                self._persist_version(record["version"])
             self.audit.append("policy_host", "swap", {
                 "from_hash": self._active["sha256"] if self._active else None,
-                "to_hash": to_hash, "version": manifest.get("version"),
-                "key_id": manifest.get("key_id"), "envelope_id": manifest.get("envelope_id"),
-                "unsigned": bool(manifest.get("unsigned")), "overlay_of": manifest.get("overlay_of"),
-                "result": "accepted"})
+                "to_hash": to_hash, "version": record.get("version"),
+                "key_id": record.get("key_id"), "envelope_id": record.get("envelope_id"),
+                "unsigned": bool(record.get("unsigned")), "overlay_of": record.get("overlay_of"),
+                "result": "accepted", **(evidence or {})})
             self._active_file = self._persist_active(new_active)
             self._prev, self._active = self._active, new_active
             self._finish_commit(self._active_file)
             return {"ok": True, **self.active()}
+
+    def withdraw(self, cause: str) -> dict:
+        """Hold no policy from now on: the distribution enforcement point lapsed, is locked or cannot read
+        its trust store (spec-policy-distribution.md, X3). The evidence first, then the record, then the
+        images, so a death at any step leaves either the old policy or none, never a half."""
+        with self._lock:
+            if self._active is None:
+                return {"ok": True, "active": None}
+            self.audit.append("policy_host", "withdraw", {"from_hash": self._active["sha256"], "cause": cause,
+                                                          "result": "withdrawn"})
+            try:
+                os.remove(self._active_record_path())
+            except FileNotFoundError:
+                pass
+            _fsync_dir(self.state_dir)
+            self._active, self._prev = None, None
+            self._finish_commit("")
+            return {"ok": True, "active": None}
 
     def _policy_identity(self) -> Optional[dict]:
         """The pack in force when a root statement is signed, as the statement records it."""
@@ -369,6 +405,8 @@ class PolicyHost:
         AuditWriteError with the previous policy still active and nothing flipped. Does NOT lower the
         version floor (anti-rollback still holds against replayed old packs)."""
         with self._lock:
+            if self._distribution_floor():
+                return {"ok": False, "reasons": ["dist:legacy-refused"]}
             self._recover()
             if self._prev is None:
                 return {"ok": False, "reasons": ["rollback:no-previous"]}

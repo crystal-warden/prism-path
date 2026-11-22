@@ -377,6 +377,18 @@ def atomic_write_bytes(path, data: bytes) -> None:
     os.replace(tmp, path)
 
 
+def fsync_dir(directory) -> None:
+    """Make a rename or a removal in `directory` durable. Windows cannot open a directory, and its rename is
+    not covered by this call."""
+    if os.name == "nt":
+        return
+    descriptor = os.open(os.fspath(directory), os.O_RDONLY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
 def safe_name(name: str) -> str:
     """Filesystem safe and deliberately NOT injective (composer disambiguates with a hash when it
     matters): every character outside [A-Za-z0-9_.-] becomes `_`; empty becomes `flow`."""
