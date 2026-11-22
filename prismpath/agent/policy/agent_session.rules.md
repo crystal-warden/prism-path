@@ -2,7 +2,7 @@
 name: agent_session
 description: agent_default, except that what the session already did can make a later call ask the person (changes after a protected change, read only shell commands past a budget)
 start: core_decision
-field.classifier_version: int min=2 max=2
+field.classifier_version: int min=3 max=3
 field.command_class: category
 field.git_op: category
 field.kill_by_pattern: bool

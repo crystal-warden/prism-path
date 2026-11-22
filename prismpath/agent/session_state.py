@@ -13,7 +13,9 @@ differential see a reading like any other.
                                              `run_command`, banded: none for 0, few below `SHELL_MANY`, many from it
 
 Where the state comes from. Only the session's journal (prismpath/agent/run.py), the receipts the decider itself
-appended, each checked line by line against its reading and the policy image when it is read. Nothing the agent can
+appended, each checked against its reading and the policy image when it was appended, and counted then: the journal's
+validated-prefix record keeps the counts (`Run.session_counts`), so a call reads only the lines since. Under
+`prismpath agent run` the state is every session of the launch (`read(launch=...)`), so `/clear` does not reset it. Nothing the agent can
 write is read: an outcome (which a hook event or the runner reports, so a claim) is never an input, and a call that
 was asked about and declined counts like one that ran, which is the safe direction since a count only ever restricts.
 
@@ -30,7 +32,7 @@ restrictive (formal/Classifier/Session.lean: `session_restricts`, checked per im
 """
 from __future__ import annotations
 
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 CHANGES = "session_protected_changes"
 SHELL = "session_shell_runs"
@@ -58,39 +60,61 @@ def _is_change(reading: Mapping[str, Any]) -> bool:
     return reading.get("tool") in CHANGING_TOOLS or reading.get("command_class") == "mutating"
 
 
-def derive(entries: List[Dict[str, Any]]) -> Dict[str, str]:
-    """The two fields from the journal lines of one session (as `Run.snapshot` returns them), a pure function of them.
-    A line is counted unless its receipt is a refusal. A change whose `zone_reach` is missing or anything but `none`
-    makes the first field `some`; a `run_command` adds one to the second."""
+#: the counts a session's state is a function of: `changes` is 1 once a protected change was not refused, `shell` the
+#: shell runs that were not refused. The journal's validated-prefix record keeps them for the lines it covers
+#: (`Run.session_counts`), so a call reads only the lines appended since.
+ZERO = {"changes": 0, "shell": 0}
+
+
+def step(counts: Mapping[str, int], entry: Mapping[str, Any]) -> Dict[str, int]:
+    """`counts` after one more journal line. A line is counted unless its receipt is a refusal. A change whose
+    `zone_reach` is missing or anything but `none` sets `changes`; a `run_command` adds one to `shell`."""
     from prismpath.agent import run as run_module
     from prismpath.kernel import canon2
-    protected, shell = False, 0
+    if run_module.receipt_kind(entry["receipt"]) == "refuse":
+        return dict(counts)
+    reading = canon2.loads(bytes.fromhex(entry["reading"]))
+    if not isinstance(reading, dict):
+        raise ValueError("a journal reading is not an object")
+    changes = 1 if counts["changes"] or (_is_change(reading) and reading.get("zone_reach") != "none") else 0
+    return {"changes": changes, "shell": counts["shell"] + (1 if reading.get("tool") == "run_command" else 0)}
+
+
+def fields(counts: Mapping[str, int]) -> Dict[str, str]:
+    return {CHANGES: "some" if counts["changes"] else "none", SHELL: band(counts["shell"])}
+
+
+def derive(entries: List[Dict[str, Any]]) -> Dict[str, str]:
+    """The two fields from the journal lines of one session (as `Run.snapshot` returns them), a pure function of them,
+    and what `Run.session_counts` must agree with."""
+    counts = dict(ZERO)
     for entry in entries:
-        if run_module.receipt_kind(entry["receipt"]) == "refuse":
-            continue
-        reading = canon2.loads(bytes.fromhex(entry["reading"]))
-        if not isinstance(reading, dict):
-            raise ValueError("a journal reading is not an object")
-        if _is_change(reading) and reading.get("zone_reach") != "none":
-            protected = True
-        if reading.get("tool") == "run_command":
-            shell += 1
-    return {CHANGES: "some" if protected else "none", SHELL: band(shell)}
+        counts = step(counts, entry)
+    return fields(counts)
 
 
-def read(store, session: str) -> Tuple[Dict[str, str], Optional[int]]:
-    """(the fields, the number of receipts they were read from) for `session` in `store`. The number is what a caller
-    passes to `Run.append(expect=...)`, so a receipt appended between the read and the append (a parallel tool call) is
-    noticed; it is None when the state could not be read, and then the fields are `RESTRICTIVE`."""
+def read(store, session: str, launch: Sequence[str] = ()) -> Tuple[Dict[str, str], Optional[int]]:
+    """(the fields, the number of receipts of `session` they were read with) for `session` in `store`. The number is
+    what a caller passes to `Run.append(expect=...)`, so a receipt appended between the read and the append (a parallel
+    tool call) is noticed; it is None when the state could not be read, and then the fields are `RESTRICTIVE`.
+
+    `launch` is the sessions that came before `session` under the same `prismpath agent run` (`commands.hook`): their
+    receipts count too, so starting a new Claude Code session inside one launch (`/clear`) does not reset the state.
+    Any of them that cannot be read makes the whole state `RESTRICTIVE`."""
     from prismpath.agent import run as run_module
     try:
-        if not (store.root / run_module.run_dir_name(session)).exists():
-            return dict(FRESH), 0
-        run = store.get(session)
-        count, entries = run.snapshot()
-        if (run.dir / run_module.TORN).exists():
-            # a writer was killed inside an append: its call may have run with no receipt, so the history is incomplete
-            return dict(RESTRICTIVE), None
-        return derive(entries), count
+        counts, held = dict(ZERO), 0
+        for name in [*(other for other in launch if other != session), session]:
+            if not (store.root / run_module.run_dir_name(name)).exists():
+                continue            # a session with no run directory has not begun
+            run = store.get(name)
+            count, more = run.session_counts()
+            if (run.dir / run_module.TORN).exists():
+                # a writer was killed inside an append: its call may have run with no receipt, so the history is incomplete
+                return dict(RESTRICTIVE), None
+            counts = {"changes": counts["changes"] | more["changes"], "shell": counts["shell"] + more["shell"]}
+            if name == session:
+                held = count
+        return fields(counts), held
     except Exception:       # noqa: BLE001 - whatever cannot be read reads as the most restrictive value
         return dict(RESTRICTIVE), None

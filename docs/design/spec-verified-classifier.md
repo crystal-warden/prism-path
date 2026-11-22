@@ -305,12 +305,20 @@ version does not change. The decider (`prismpath/agent/session_state.py`) adds b
 journal, only for a policy that defines either, so every other policy decides on the readings it always did.
 
 - **Where the state comes from.** Only the receipts the decider appended, each checked against its reading and the policy
-  image as the journal is read (`Run.snapshot`). `session_protected_changes` is `some` once a receipt that was not a
+  image when it was appended. `session_protected_changes` is `some` once a receipt that was not a
   refusal is a change (a file tool, or a mutating command) whose `zone_reach` was anything but `none`.
   `session_shell_runs` counts the receipts that were not refusals and read as `run_command`: none for 0, few below 20,
   many from 20. A call that was asked about and declined counts like one that ran, since a count only restricts. An
   outcome (what a hook event or the runner reports) is a claim and is never read.
-- **Fail safe.** A history that cannot be read reads as `some` and `many`: a line that does not verify, a journal missing
+- **Which sessions.** Under the stdin hook the state is the Claude Code session's own. Under `prismpath agent run` it is
+  every session that launch decided calls for, which its decider keeps in order, so starting a new session inside one
+  launch (`/clear`) does not reset it. Any of those sessions that cannot be read makes the whole state `some` and `many`.
+- **Read incrementally.** The journal's validated-prefix record, which appends already trust, also keeps the two counts
+  of the lines it covers (`Run.session_counts`), so a call validates and counts only the lines appended since. A record
+  with no counts or counts of the wrong shape means the whole journal is read once. A line the record covers was
+  validated and counted when it was appended, so changing it later changes no count; `seal` and `verify` validate
+  every line. The counts agree with `session_state.derive` over the whole journal (tests/test_session_state.py).
+- **Fail safe.** A history that cannot be read reads as `some` and `many`: a line since the record that does not verify, a journal missing
   where the run's other files show there was one, a run directory with no image, a torn tail (a writer killed inside an
   append, so a call may have run with no receipt), or any error. A session with no run directory has not begun and reads
   `none`, `none`. A reading handed to `Policy.reading_bytes` without the fields is given `some` and `many`, and the core
@@ -318,6 +326,10 @@ journal, only for a policy that defines either, so every other policy decides on
 - **Parallel calls.** The state is read with the receipt count, and the append names that count (`Run.append(expect=)`).
   A receipt appended in between, which a second tool call of the same turn does, refuses the append and the call is
   decided again on the new state, up to eight times, then denied.
+- **Same-turn ordering.** The state is what was decided, not what ran. When Claude Code asks about several calls of
+  one turn and runs them later, or runs an approved call after a later call was decided, the later call was decided
+  without the earlier one having run, and a call asked about and declined still counts. This is a limit of the hook,
+  which is told about a call before it runs and is not told the order calls run in; it only ever counts more.
 - **The `session` starter** is `agent_default` and two rules after every refusal, and nothing else
   (`prismpath agent init --policy session`). 133 `agent:session-change-asked`: once the session made a protected change,
   a change inside the workspace, a commit and a push to an allowed remote ask. 134 `agent:session-shell-asked`: once the

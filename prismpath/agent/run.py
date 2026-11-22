@@ -69,6 +69,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from prismpath.agent import session_state
 from prismpath.kernel import canon2
 from prismpath.ledgers import core_evidence
 
@@ -111,6 +112,13 @@ _HEX64 = re.compile(r"[0-9a-f]{64}")
 # (`routes_sha256`) and the egress proxy's allowed host list (`hosts_sha256`).
 BOUND_DIGESTS = ("routes_sha256", "hosts_sha256")
 _GRANT_ID = re.compile(r"[0-9a-f]{32}")
+
+
+def _counts_ok(state: Any) -> bool:
+    """A validated-prefix record's session counts are shaped like `session_state.ZERO`."""
+    return (isinstance(state, dict) and set(state) == set(session_state.ZERO)
+            and all(isinstance(v, int) and not isinstance(v, bool) and v >= 0 for v in state.values())
+            and state["changes"] in (0, 1))
 
 
 def _extras_ok(entry: Dict[str, Any]) -> bool:
@@ -291,35 +299,45 @@ class Run:
         """The validated-prefix record, or None when it is absent or does not read."""
         try:
             record = canon2.loads((self.dir / PREFIX).read_bytes())
-            if (set(record) == {"bytes", "count", "last", "last_len"} and all(
+            if (set(record) - {"state"} == {"bytes", "count", "last", "last_len"} and all(
                     isinstance(record[k], int) and not isinstance(record[k], bool) for k in ("bytes", "count", "last_len"))
                     and isinstance(record["last"], str) and 0 < record["last_len"] <= record["bytes"]
-                    and record["count"] > 0):
+                    and record["count"] > 0 and ("state" not in record or _counts_ok(record["state"]))):
                 return record
         except Exception:   # noqa: BLE001 - a record that does not read is only a missed shortcut
             pass
         return None
 
-    def _write_prefix(self, length: int, count: int, last: bytes) -> None:
+    def _write_prefix(self, length: int, count: int, last: bytes, state: Optional[Dict[str, int]] = None) -> None:
         """Record that the first `length` bytes of the journal, `count` lines ending with `last`, were
-        validated. Not fsynced: the record is a shortcut, and a lost or stale one only means more is validated."""
+        validated, and, when known, the session counts of those lines (`session_state.step`). Not fsynced: the record
+        is a shortcut, and a lost or stale one only means more is validated, and a record with no counts only means
+        `session_counts` reads the whole journal once."""
+        record = {"bytes": length, "count": count, "last": core_evidence.sha256_hex(last), "last_len": len(last)}
+        if state is not None:
+            record["state"] = state
         tmp = self.dir / (PREFIX + ".tmp")
-        tmp.write_bytes(canon2.dumps({"bytes": length, "count": count, "last": core_evidence.sha256_hex(last),
-                                      "last_len": len(last)}))
+        tmp.write_bytes(canon2.dumps(record))
         os.replace(tmp, self.dir / PREFIX)
 
-    def _scan(self, full: bool):
-        """(count, entries) of the journal after dropping a torn tail. Call with the lock held.
+    def _scan(self, full: bool, with_state: bool = False):
+        """(count, entries) of the journal after dropping a torn tail, and with `with_state` the session counts of
+        every line as a third item (None when they are not known). Call with the lock held.
 
         With `full`, every line is validated and `entries` holds them all. Without it, the lines the
         validated-prefix record covers are trusted when the record still matches the file (the journal is
         at least that long and its last recorded line is the same bytes, on a line boundary), only the bytes
-        after it are validated, and `entries` holds only those. Any mismatch validates the whole journal."""
+        after it are validated, and `entries` holds only those. Any mismatch validates the whole journal.
+
+        The counts are carried the same way: from zero when the scan starts at the first line, from the record's
+        `state` when it starts after the record, and unknown when the record has none (one written before the counts
+        were kept) or a line's reading does not read, in which case the record is written without them."""
         path = self.dir / JOURNAL
         if not path.exists():
-            return 0, []
+            return (0, [], dict(session_state.ZERO)) if with_state else (0, [])
         image_sha = core_evidence.sha256_hex((self.dir / IMAGE).read_bytes())
         start, count, last = 0, 0, b""
+        state: Optional[Dict[str, int]] = dict(session_state.ZERO)
         with open(path, "rb") as handle:
             record = None if full else self._prefix()
             if record is not None and record["bytes"] <= os.fstat(handle.fileno()).st_size:
@@ -330,6 +348,7 @@ class Run:
                 if ((not at or chunk[:1] == b"\n") and line.endswith(b"\n")
                         and core_evidence.sha256_hex(line) == record["last"]):
                     start, count, last = record["bytes"], record["count"], line
+                    state = dict(record["state"]) if "state" in record else None
             handle.seek(start)
             data = handle.read()
         end = data.rfind(b"\n") + 1
@@ -361,12 +380,17 @@ class Run:
             if not ok:
                 raise RunCorrupt(f"session {self.session}: journal line {n} is damaged")
             entries.append(entry)
+            if state is not None:
+                try:
+                    state = session_state.step(state, entry)
+                except Exception:   # noqa: BLE001 - counts that cannot be kept are unknown, and read as restrictive
+                    state = None
         total = count + len(lines)
         if lines:
             last = lines[-1] + b"\n"
         if total and (lines or full):
-            self._write_prefix(start + end, total, last)
-        return total, entries
+            self._write_prefix(start + end, total, last, state)
+        return (total, entries, state) if with_state else (total, entries)
 
     def _entries(self) -> List[Dict[str, Any]]:
         """Every complete journal line, parsed and validated, after dropping a torn tail. Call with the lock held."""
@@ -388,6 +412,27 @@ class Run:
                     raise RunCorrupt(f"session {self.session}: the journal is missing")
                 return 0, []
             return self._scan(full=True)
+
+    def session_counts(self) -> "tuple[int, Dict[str, int]]":
+        """`(count, counts)`: how many receipts the run holds and the session counts of all of them
+        (`session_state.step`), read under the lock like `snapshot` and with the same missing-journal rule, but
+        validating only the lines appended since the validated-prefix record, which keeps the counts of the lines it
+        covers. `session_state.derive` over `snapshot()` is the same answer (prismpath/tests/test_session_state.py).
+        The record is trusted as it is on append, and is in the run directory with the journal it describes, so
+        whoever could change it could change the journal; `seal` and `verify` still validate every line."""
+        with _locked(self.dir / LOCK):
+            if not (self.dir / IMAGE).exists():
+                raise RunError(f"no run for session {self.session}")
+            if not (self.dir / JOURNAL).exists():
+                if any((self.dir / name).exists() for name in self._JOURNAL_FILES):
+                    raise RunCorrupt(f"session {self.session}: the journal is missing")
+                return 0, dict(session_state.ZERO)
+            count, _entries, state = self._scan(full=False, with_state=True)
+            if state is None:
+                count, _entries, state = self._scan(full=True, with_state=True)
+            if state is None:
+                raise RunCorrupt(f"session {self.session}: a journal reading does not read as a reading")
+            return count, state
 
     def _last_entry_with_tool_use_id(self, tool_use_id: str) -> Optional[Dict[str, Any]]:
         """The latest journal line that carries `tool_use_id`, or None. Call with the lock held.
@@ -437,7 +482,7 @@ class Run:
         `expect`, when given, is the number of receipts the caller's decision was made against (`snapshot`): the append
         is refused with `RunStale`, writing nothing, when the run holds another number."""
         with _locked(self.dir / LOCK):
-            n = self._scan(full=False)[0]
+            n, _tail, counts = self._scan(full=False, with_state=True)
             if expect is not None and n != expect:
                 raise RunStale(f"session {self.session}: the run holds {n} receipts, not the {expect} this decision was made against")
             image = (self.dir / IMAGE).read_bytes()
@@ -473,7 +518,12 @@ class Run:
                 os.close(fd)
             if new:
                 _fsync_dir(self.dir)
-            self._write_prefix(length, n + 1, line)
+            if counts is not None:
+                try:
+                    counts = session_state.step(counts, entry)
+                except Exception:   # noqa: BLE001 - counts that cannot be kept are unknown, and read as restrictive
+                    counts = None
+            self._write_prefix(length, n + 1, line, counts)
             return n
 
     # ------------------------------------------------------------------ observations

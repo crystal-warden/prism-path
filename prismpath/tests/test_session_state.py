@@ -145,10 +145,26 @@ def begun(store):
 
 
 def test_a_line_that_does_not_verify_reads_the_most_restrictive_state_and_no_count(store, begun):
+    """The last line, which the validated-prefix record hashes, damaged: the record no longer matches, every line is
+    validated, and the damage is found."""
+    path = _journal_path(store)
+    lines = path.read_bytes().split(b"\n")
+    lines[1] = lines[1].replace(b'"i":1', b'"i":7')
+    path.write_bytes(b"\n".join(lines))
+    assert session_state.read(store, "s") == (RESTRICTIVE, None)
+
+
+def test_an_earlier_line_damaged_after_it_was_counted_keeps_the_counts_it_was_counted_with(store, begun):
+    """A line the record covers was validated and counted when it was appended, so changing it later changes no count
+    (the state cannot be loosened that way); with the record gone the whole journal is validated and the damage found;
+    `seal` and `verify` always validate every line."""
+    before = session_state.read(store, "s")
     path = _journal_path(store)
     lines = path.read_bytes().split(b"\n")
     lines[0] = lines[0].replace(b'"i":0', b'"i":7')
     path.write_bytes(b"\n".join(lines))
+    assert session_state.read(store, "s") == before
+    (path.parent / run_module.PREFIX).unlink()
     assert session_state.read(store, "s") == (RESTRICTIVE, None)
 
 
@@ -278,11 +294,13 @@ def hooked(tmp_path, monkeypatch):
     monkeypatch.setattr(zones, "information_point", lambda *args, **kwargs: world.point)
     counter = iter(range(10 ** 6))
 
+    world.launch = None
+
     def send(tool, tool_input, session="sess", event="PreToolUse"):
         payload = {"session_id": session, "transcript_path": "/x/t.jsonl", "cwd": str(ws), "permission_mode": "default",
                    "hook_event_name": event, "tool_name": tool, "tool_input": tool_input,
                    "tool_use_id": f"toolu_{next(counter)}"}
-        answer = commands.hook(json.dumps(payload).encode(), env)
+        answer = commands.hook(json.dumps(payload).encode(), env, launch=world.launch)
         out = answer["hookSpecificOutput"]
         return out["permissionDecision"], out.get("permissionDecisionReason", "")
 
@@ -382,6 +400,102 @@ def test_a_stateless_starter_writes_no_session_field_and_decides_as_before(tmp_p
     assert commands.hook(json.dumps(payload).encode(), dict(os.environ))["hookSpecificOutput"]["permissionDecision"] == "allow"
     line = (commands.config_dir(dict(os.environ)) / "runs" / "s" / "journal.jsonl").read_bytes().split(b"\n")[0]
     assert "session_" not in bytes.fromhex(canon2.loads(line)["reading"]).decode()
+
+
+# ----------------------------------------------------------------------------------------------- the counts the prefix keeps
+MIX = [{**WRITE, "zone_reach": "none"}, SHELL, {**SHELL, "command_class": "mutating"}, {**WRITE, "path_scope": "outside"},
+       {"tool": "read_file", "path_scope": "workspace"}, {**WRITE, "zone_reach": "protected"}, {**SHELL, "path_scope": "outside"}]
+
+
+def test_the_counts_the_prefix_record_keeps_are_the_counts_of_every_line(store):
+    import random
+    rng = random.Random(5)
+    policy = _policy()
+    run = store.open("s", policy.image)
+    for n in range(1, 80):
+        state = session_state.read(store, "s")[0]
+        _append(run, policy, rng.choice(MIX[:5]) if n < 60 else rng.choice(MIX), state)
+        count, counts = run.session_counts()
+        assert count == n and session_state.fields(counts) == session_state.derive(run.snapshot()[1])
+        assert canon2.loads((run.dir / run_module.PREFIX).read_bytes())["state"] == counts
+
+
+def test_a_call_reads_only_the_lines_appended_since_the_record(store, monkeypatch):
+    policy = _policy()
+    run = store.open("s", policy.image)
+    for _ in range(40):
+        _append(run, policy, SHELL)
+    stepped = []
+    real = session_state.step
+    monkeypatch.setattr(session_state, "step", lambda counts, entry: stepped.append(1) or real(counts, entry))
+    assert run.session_counts() == (40, {"changes": 0, "shell": 40}) and stepped == []
+    _append(run, policy, SHELL)
+    assert len(stepped) == 1 and run.session_counts()[1]["shell"] == 41 and len(stepped) == 1
+
+
+@pytest.mark.parametrize("state", [None, {"changes": 2, "shell": 0}, {"changes": 0, "shell": -1}, {"changes": 0},
+                                   {"changes": True, "shell": 0}, "x"])
+def test_a_record_with_no_counts_or_counts_of_the_wrong_shape_means_the_whole_journal_is_read(store, state):
+    policy = _policy()
+    run = store.open("s", policy.image)
+    _append(run, policy, {**WRITE, "zone_reach": "protected"})
+    _append(run, policy, SHELL)
+    path = run.dir / run_module.PREFIX
+    record = canon2.loads(path.read_bytes())
+    record.pop("state")
+    if state is not None:
+        record["state"] = state
+    path.write_bytes(canon2.dumps(record))
+    assert run.session_counts() == (2, {"changes": 1, "shell": 1})
+    assert canon2.loads(path.read_bytes())["state"] == {"changes": 1, "shell": 1}
+
+
+def test_an_unreadable_reading_leaves_the_counts_unknown_and_the_state_the_most_restrictive(store):
+    policy = _policy("default")
+    run = store.open("s", policy.image)
+    run.append(canon2.dumps([1, 2]), {"verdict": "route", "target": "allow", "edge": 0})
+    assert "state" not in canon2.loads((run.dir / run_module.PREFIX).read_bytes())
+    assert session_state.read(store, "s") == (RESTRICTIVE, None)
+
+
+# ----------------------------------------------------------------------------------------------- one launch, many sessions
+def test_under_one_launch_a_new_session_keeps_the_state_of_the_sessions_before_it(hooked):
+    hooked.launch = []
+    assert hooked.write("secure.py", session="first")[0] == "ask"
+    decision, reason = hooked.write("plain.py", session="after-clear")
+    assert decision == "ask" and "133" in reason
+    assert hooked.launch == ["first", "after-clear"]
+    reading = canon2.loads(bytes.fromhex(hooked.journal("after-clear")[0]["reading"]))
+    assert reading["session_protected_changes"] == "some"
+    hooked.launch = None                                               # the stdin hook: each session its own
+    assert hooked.write("plain.py", session="elsewhere")[0] == "allow"
+
+
+def test_under_one_launch_shell_runs_add_up_across_sessions(hooked):
+    hooked.launch = []
+    for k in range(session_state.SHELL_MANY):
+        assert hooked.shell("ls", session=f"s{k % 3}")[0] == "allow"
+    decision, reason = hooked.shell("ls", session="s9")
+    assert decision == "ask" and "134" in reason
+
+
+def test_under_one_launch_an_earlier_session_that_cannot_be_read_makes_the_state_the_most_restrictive(hooked):
+    hooked.launch = []
+    assert hooked.write("plain.py", session="first")[0] == "allow"
+    path = hooked.home / "runs" / "first" / run_module.JOURNAL
+    path.write_bytes(path.read_bytes() + b'{"i":1')
+    decision, reason = hooked.shell("ls", session="second")
+    assert decision == "ask" and "134" in reason
+
+
+def test_the_decider_keeps_one_launch_list_for_every_call(monkeypatch, tmp_path):
+    from prismpath.agent import decider
+    seen = []
+    monkeypatch.setattr(commands, "hook", lambda raw, env, nested=None, launch=None: seen.append(launch) or {})
+    d = decider.Decider(tmp_path / "d.sock", env={})
+    d._handler(b"{}")
+    d._handler(b"{}")
+    assert seen[0] is d.launch and seen[1] is d.launch and isinstance(d.launch, list)
 
 
 def test_the_starters_are_the_four():

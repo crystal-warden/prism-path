@@ -392,14 +392,19 @@ def outcome_answer(data: Dict[str, Any], event: str, store) -> Dict[str, Any]:
     return {}
 
 
-def hook(raw: bytes, env: Optional[Mapping[str, str]] = None, nested=None) -> Dict[str, Any]:
+def hook(raw: bytes, env: Optional[Mapping[str, str]] = None, nested=None,
+         launch: Optional[List[str]] = None) -> Dict[str, Any]:
     """The answer to one hook input. Never raises; whatever fails is a deny with cause 126.
 
     `nested` (a `sandbox_hook.Nested`) is for the decider of `prismpath agent run`, where the hook client is inside
     the outer sandbox and the host interpreter and checkout that the per call rewrite names do not exist there. The
     rewrite then names the system interpreter and the runner the launcher bound, and the runner reports what the
     command showed over the decider's socket. Where the outer sandbox cannot host the per call one, a shell command
-    is denied with cause 129; it is never run under the outer profile alone."""
+    is denied with cause 129; it is never run under the outer profile alone.
+
+    `launch` is the list of sessions one `prismpath agent run` has decided calls for, which its decider keeps and this
+    extends: a policy that reads the session's history reads every one of them, so a new Claude Code session in the
+    same launch (`/clear`) keeps the state. With no launch (the stdin hook) the state is the session's own."""
     event = None
     try:
         data = json.loads(raw.decode("utf-8"))
@@ -439,8 +444,10 @@ def hook(raw: bytes, env: Optional[Mapping[str, str]] = None, nested=None) -> Di
         # A policy that reads the session's history decides against the receipts the session holds when the decision
         # is made, and the append names that count: a receipt appended meanwhile (a parallel tool call) means the
         # decision may rest on state that is no longer true, so it is made again.
+        if launch is not None and session not in launch:
+            launch.append(session)
         for _attempt in range(STATE_ATTEMPTS):
-            state, held = session_state.read(store, session) if policy.stateful else (None, None)
+            state, held = session_state.read(store, session, launch or ()) if policy.stateful else (None, None)
             result = claude_code.evaluate(data, env, policy, lambda ws: zone_module.information_point(
                 home, policy.image, Path(ws), env), session=state)
             answer, profile = result.answer, None
