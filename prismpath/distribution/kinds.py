@@ -81,10 +81,12 @@ TARGET_KINDS = frozenset({"agent", "cfs", "gateway", "host", "mesh", "xdp"})
 class Target:
     """A target kind: the artifacts it needs before it commits (C2), those it needs only when another
     artifact of the release asks for them (`policy.spiral`, when the `policy.ppt` declares packing), and
-    whether it can decide larger (W1). `uses` is what V5 admits."""
+    whether it can decide larger (W1). `uses` is what V5 admits. `expiry_hold` is whether a deployment may
+    choose HOLD at expiry (X6), true only for `mesh` and `cfs`."""
     needs: FrozenSet[str]
     decides: bool
     when_declared: FrozenSet[str] = frozenset()
+    expiry_hold: bool = False
 
     @property
     def uses(self) -> FrozenSet[str]:
@@ -123,8 +125,10 @@ def check_policy_ppt(envelope, body: bytes, pep) -> Optional[str]:
     cause = _first_cause(policy_pack.check_counts(meta, body))
     if cause:
         return cause
-    if "packing" in meta and (not isinstance(meta["packing"], dict) or meta["packing"].get("profile") != "spiral"):
-        return "packing:unknown-profile"
+    packing = meta.get("packing")
+    if packing is not None and not (isinstance(packing, dict) and set(packing) == {"profile", "sidecar_sha256"}
+                                    and packing["profile"] == "spiral" and is_hex64(packing["sidecar_sha256"])):
+        return "packing:unknown-profile"              # the one profile defined is a spiral with its sidecar's hash
     if pep.qualification is None:
         return "envelope:missing"
     ok, reasons = policy_pack.check_envelope({"envelope_id": meta["qualification"], "fields": meta["fields"]},
