@@ -97,3 +97,24 @@ def test_a_restart_keeps_a_release_under_a_retired_key_and_lapses_one_under_a_re
     point.pep = point.open()
     point.revoke(2, signer="B", keys=[_dist.key_id("A")])
     assert point.pep.state() == "no-policy" and point.open().state() == "no-policy"
+
+
+def test_case_131_the_trust_store_is_bounded(tmp_path):
+    """case_131: K5. A rotation that would make a ninth key is dist:too-large. Seventeen keys retired one after
+    another forget the first, and a pack signed by it then reads as signed by an unknown key."""
+    point = _dist.HostPep(tmp_path / "nine")
+    for index in range(1, 8):
+        assert _read(point, point.rotate(index, add=f"K{index}", signers=("A", f"K{index}"))).event == "trust-applied"
+    assert len(point.pep.trust.keys) == 8
+    assert _read(point, point.rotate(8, add="K8", signers=("A", "K8"))).cause == "dist:too-large"
+
+    point = _dist.HostPep(tmp_path / "retired")
+    previous = "A"
+    for index in range(1, 18):
+        record = _read(point, point.rotate(index, add=f"R{index}", retire=previous, signers=(previous, f"R{index}")))
+        assert record.event == "trust-applied", index
+        previous = f"R{index}"
+    assert len(point.pep.trust.retired) == 16 and _dist.key_id("A") not in point.pep.trust.keys
+    assert _read(point, point.pep.stage(seal("policy.ppt", OLD, signer="A"), OLD)).cause == "dist:unknown-key"
+    assert _read(point, point.pep.stage(seal("policy.ppt", OLD, signer="R1"), OLD)).cause == "sig:revoked-key"
+    assert point.open().trust.retired == point.pep.trust.retired

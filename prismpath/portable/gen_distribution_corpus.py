@@ -383,6 +383,18 @@ def build_cases(kind: str, spec: Dict[int, dict]) -> List[dict]:
         payload=adding_revoked)
     add(76, "a_rotation_after_a_revocation_at_its_seq", "dist:trust-replay", rotate_sealed, payload=adding_b,
         trust=after_first)
+    # K5: at most 8 keys and 16 retired ids
+    eight = TrustStore.with_keys([public_raw(test_key(name)) for name in ("A", "K1", "K2", "K3", "K4", "K5", "K6", "K7")])
+    add(131, "a_ninth_key", "dist:too-large", rotate_sealed, payload=adding_b, trust=eight)
+    rotated, previous = TrustStore.with_keys([public_raw(test_key("A"))]), "A"
+    for index in range(1, 18):
+        step = rotation_body(f"R{index}", retire=previous)
+        step_sealed = sealed_by(raw(rotation_doc(step, index)), previous, f"R{index}")
+        rotated = rotated.apply_rotation(env.read(env.unseal(step_sealed)[0]), step)
+        previous = f"R{index}"
+    assert len(rotated.retired) == 16
+    add(131, "a_pack_by_the_first_of_seventeen_retired", "dist:unknown-key", good_sealed, trust=rotated)
+
     later = sealed_by(raw(rotation_doc(adding_b, 2)), "A", "U")
     add(123, "two_above_the_trust_sequence", "dist:trust-replay", later, payload=adding_b)
     add(123, "the_same_once_the_skipped_one_is_in", None, later, payload=adding_b, trust=after_first)

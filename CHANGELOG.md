@@ -12,6 +12,7 @@ spec stable.
 
 - **An enforcement point applies a signed `trust.rotation` as soon as it verifies.** It is taken only at the next trust sequence, which revocations share, and only when the key it adds signed it too. It may never add the PEP's own instance key or a revoked key, nor retire a key the store does not hold.
 - **A retired key's signatures no longer count, and a release already active under it keeps deciding until it expires or is replaced.**
+- **A trust store holds at most 8 keys and remembers at most 16 retired ones.** A rotation that would add a ninth is `dist:too-large`, and the oldest retired key is forgotten when a seventeenth is retired.
 
 ### Changed: the C core of policy distribution persists its state in parts (2026-11-23)
 
