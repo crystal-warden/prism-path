@@ -22,26 +22,37 @@ never `none`.
 
 The index is a control path, and the point does not trust one the agent could have written. The agent can write the
 workspace, so an index in it (`.contextcloud/` by default) could be edited to claim that protected code reaches nothing.
-The directory of the zone document's `index` is therefore a control path like `.claude/` (`control_paths`): the hook
-refuses a write, delete or mutating command onto it with the control-write cause (classifier.py takes the point's
+The directory of the zone document's `index` is therefore a control path like `.claude/` (`control_paths_of`, a
+function of the verified document alone, so every point built from it names the same paths, an unusable one too): the
+hook refuses a write, delete or mutating command onto it with the control-write cause (classifier.py takes the point's
 `control_paths` as control paths), and both per call sandbox backends hold it read only (controls.discover `extra`,
-passed to the runner as `--control-path`, and bound by the launcher). Context Cloud's own indexing runs outside
-the agent's sandbox and still writes it. When the index file sits directly in the project root the directory
-cannot be held read only without holding the whole project, so only the index file and its -wal and -shm siblings
-that exist are control paths, and the next rule applies to it.
-The point answers `unknown` for every path, and says why (`why`), when the agent could have written the index. That is
-decided from how the other control paths are trusted. The agent writes only the workspace: the hook refuses a write
-outside it (`path_scope`) and the per call sandbox mounts the rest of the host read only, which is also what keeps the
-recorded policy and the zone file themselves out of its reach. So the index is trusted when this host has the per call
-sandbox (Linux, sandbox_hook.supported) and either it lies below a directory strictly inside the project, the control
-path above, or it lies outside the project and the recorded policy's sandbox profile does not write the host
-(`host_write`, which the caller passes in). In every other case, which is a host with no sandbox (a shell command is
-decided and not confined), an index directly in the project root (its directory is writable and a -wal could be
-planted), or a profile that writes the host, the agent's user must have no write permission (`os.access`) on the index
-file, its -wal and -shm siblings that exist, or the directory that holds them, or the point answers `unknown`. (Context
-Cloud itself opens an index read and write, so this last route serves an index that is only read by the point.) An
-index path that goes through a link, or one that cannot be examined, is not trusted either. Running as root counts as
-able to write.
+passed to the runner as `--control-path`, and bound by the launcher, which creates a missing one empty as it does
+`.claude/`, so a script cannot make it). A directory is named with a trailing slash. Context Cloud's own indexing runs
+outside the agent's sandbox and still writes it. When the index file sits directly in the project root the directory
+cannot be held read only without holding the whole project, so only the index file and its -wal and -shm siblings are
+control paths, and the permission rule below applies to it.
+The index holds facts the policy relies on, so its content must begin after protection does: `prismpath agent zones
+set` signs the zone file, then deletes the index and rebuilds it with `contextcloud index`, or refuses when Context
+Cloud is absent and an index exists.
+
+The point answers `unknown` for every path, and says why (`why`), when the agent could have written the index, or the
+`contextcloud` program that reads it. The agent writes only the workspace: the hook refuses a write outside it
+(`path_scope`) and the per call sandbox mounts the rest of the host read only, which also keeps the recorded policy and
+the zone file out of its reach. That holds only where this host has the per call sandbox (Linux,
+sandbox_hook.supported) and the recorded policy's profile does not write the host (`host_write`, passed in by
+`information_point`): Landlock cannot hold a control path read only under a `host_write` profile, and the hook's cache
+file, which the profile then lets the agent write, is neither read nor written. Where that holds, the index is trusted
+when it lies outside the project, or when its directory is a direct child of the project root (a deeper one could be
+renamed away and made again beside the bound directory). In every other case (no sandbox, `host_write`, an index
+directly in the root or in a deeper directory) it is trusted by permissions only: the agent's user must neither own the
+index, its existing -wal and -shm, and the directory that holds them (an owner can change the mode back), nor have write
+access to them (`os.access`). So on a host where one user runs the agent and owns the files, those cases read
+`unknown`. Whatever the route, the index and its existing siblings must be regular files with one link (a hard link
+elsewhere writes through a read only bind), and the path must not go through a link. The executable (`$CONTEXTCLOUD`
+or the first `contextcloud` on the PATH) is tested the same way on its resolved real path: inside the project it is
+never trusted, outside it it is trusted where the sandbox holds, and otherwise by the permission rule on the file and
+its directory; it runs with the hook's config directory as its working directory, not the workspace. An index that
+cannot be examined is not trusted. Running as root counts as able to write.
 
 A path is `protected` when the file defines a protected name (or sits under a protected module), or any function of
 the file reaches the protected set with certainty `certain` or `likely`; `unknown` when the file is not a Python
@@ -56,6 +67,7 @@ import hashlib
 import json
 import os
 import shutil
+import stat
 import sqlite3
 import subprocess
 import tempfile
@@ -83,6 +95,8 @@ class ZoneError(Exception):
 
 
 class _Fixed:
+    control_paths: Tuple[str, ...] = ()
+
     def __init__(self, answer: str, why: str):
         self.answer, self.why = answer, why
 
@@ -104,9 +118,12 @@ def fixed(answer: str) -> "_Fixed":
     return _Fixed(answer, "a fixed answer")
 
 
-def unusable(why: str) -> "_Fixed":
-    """The point of a declared zone file that cannot be used: it says `unknown` for every path."""
-    return _Fixed("unknown", why)
+def unusable(why: str, control_paths: Sequence[str] = ()) -> "_Fixed":
+    """The point of a declared zone file that cannot be used: it says `unknown` for every path. `control_paths` are
+    those of the verified zone document, if there was one, which stay control paths whether the point works or not."""
+    point = _Fixed("unknown", why)
+    point.control_paths = tuple(control_paths)
+    return point
 
 
 # ------------------------------------------------------------------------------------------------ the zone file
@@ -182,6 +199,47 @@ def load(home: Path, policy_image: bytes, workspace: Optional[Path] = None) -> O
     return doc
 
 
+def control_paths_of(doc: Mapping[str, Any]) -> Tuple[str, ...]:
+    """The control paths a verified zone document makes: the index's directory, with a trailing slash, when it is
+    strictly inside the project, else the index file and its -wal and -shm siblings."""
+    index, project = Path(doc["index"]), Path(doc["project"])
+    parent = index.parent
+    if parent != project and project in parent.parents:
+        return (str(parent) + "/",)
+    return tuple(str(index) + suffix for suffix in ("", "-wal", "-shm"))
+
+
+def rebuild_index_after_signing(home: Path, doc: Dict[str, Any], sign_now, env: Optional[Mapping[str, str]] = None,
+                                timeout_s: float = 3600.0) -> None:
+    """Record the zone file (`sign_now()`), and only then make the index: an index that exists before the zone file
+    does (or that was written while it was not a control path) is unauthenticated, so it is deleted with its -wal and
+    -shm and rebuilt by `contextcloud index`. Raises ZoneError, before anything is recorded or deleted, when an index
+    exists and Context Cloud is absent, and after the zone file is recorded when the rebuild fails (the index is then
+    missing, which the point reads as `unknown`)."""
+    index = Path(doc["index"])
+    names = [str(index) + suffix for suffix in ("", "-wal", "-shm")]
+    existing = [n for n in names if os.path.lexists(n)]
+    exe = contextcloud_executable(env)
+    if existing and exe is None:
+        raise ZoneError(f"an index exists at {index} and was not built since it became a control path, so it cannot be "
+                        "trusted, and Context Cloud is not installed to rebuild it; remove the index or install Context Cloud")
+    sign_now()
+    if not existing:
+        return
+    for name in existing:
+        os.unlink(name)
+    index.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        done = subprocess.run([exe, "index", doc["project"], "--index", str(index), "--no-color"], capture_output=True,
+                              text=True, timeout=timeout_s, cwd=str(home))
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise ZoneError(f"the zone file is recorded and the old index was removed, but `contextcloud index` could not run "
+                        f"({type(exc).__name__}); run it") from exc
+    if done.returncode != 0:
+        raise ZoneError("the zone file is recorded and the old index was removed, but `contextcloud index` failed "
+                        f"({' '.join(done.stderr.split())[:200]}); run it")
+
+
 def contextcloud_executable(env: Optional[Mapping[str, str]] = None) -> Optional[str]:
     """`$CONTEXTCLOUD`, else `contextcloud` on the PATH, else None (Context Cloud is absent)."""
     env = os.environ if env is None else env
@@ -200,12 +258,18 @@ def information_point(home: Path, policy_image: bytes, workspace: Path, env: Opt
         return unusable(str(exc))
     if doc is None:
         return NO_ZONES
+    held = control_paths_of(doc)
     exe = contextcloud_executable(env)
     if exe is None:
-        return unusable("Context Cloud is not installed (no `contextcloud` on the PATH and no $CONTEXTCLOUD)")
+        return unusable("Context Cloud is not installed (no `contextcloud` on the PATH and no $CONTEXTCLOUD)", held)
     if not Path(doc["index"]).is_file():
-        return unusable(f"no Context Cloud index at {doc['index']}; run `contextcloud index`")
+        return unusable(f"no Context Cloud index at {doc['index']}; run `contextcloud index`", held)
     return ContextCloudZones(doc, home, exe, host_write=_host_write(home, policy_image))
+
+
+def _agent_uid() -> int:
+    """The user the agent runs as: the hook's own, since the hook and the agent are one user's processes."""
+    return os.geteuid()
 
 
 def _agent_unconfined() -> bool:
@@ -246,40 +310,59 @@ class ContextCloudZones:
     # --- the index is a control path, and must not be one the agent could have written
     @property
     def control_paths(self) -> Tuple[str, ...]:
-        """The paths the hook and both sandbox backends hold read only: the index directory when it is strictly
-        inside the project, else the index file and its -wal and -shm siblings."""
-        parent = self.index.parent
-        if self._below_project(parent):
-            return (str(parent),)
-        return tuple(str(self.index) + s for s in ("", "-wal", "-shm"))
+        return control_paths_of(self.doc)
 
     def _below_project(self, path: Path) -> bool:
-        try:
-            return path != self.project and path.relative_to(self.project) is not None
-        except ValueError:
-            return False
+        return path != self.project and self.project in path.parents
 
     def _within_project(self, path: Path) -> bool:
         return path == self.project or self._below_project(path)
 
+    def _confined(self) -> bool:
+        """The per call sandbox holds the agent to the workspace here (see the module docstring)."""
+        return not _agent_unconfined() and not self.host_write
+
+    @staticmethod
+    def _not_the_agents(targets: Sequence[str]) -> str:
+        """'' when the agent's user neither owns nor can write any of `targets`, else the first that it does."""
+        uid = _agent_uid()
+        for target in targets:
+            st = os.stat(target)
+            if uid == 0 or st.st_uid == uid or os.access(target, os.W_OK):
+                return target
+        return ""
+
     def _distrust(self) -> str:
-        """Why this index cannot be trusted ('' when it can), as the module docstring states."""
+        """Why this index, or the program that reads it, cannot be trusted ('' when they can)."""
         try:
-            if os.path.realpath(self.index) != str(self.index):
-                return f"the index path {self.index} goes through a link"
+            index = str(self.index)
+            if os.path.realpath(index) != index:
+                return f"the index path {index} goes through a link"
             parent = self.index.parent
-            if not _agent_unconfined() and (self._below_project(parent) or (
-                    not self.host_write and not self._within_project(parent))):
-                return ""
-            targets = [str(self.index) + s for s in ("", "-wal", "-shm") if os.path.lexists(str(self.index) + s)]
-            targets.append(str(parent))
-            writable = [t for t in targets if os.access(t, os.W_OK)]
+            files = [index + s for s in ("", "-wal", "-shm") if os.path.lexists(index + s)]
+            for name in files:
+                st = os.lstat(name)
+                if not stat.S_ISREG(st.st_mode) or st.st_nlink != 1:
+                    return f"{name} is not a plain file with one link, so another name could write it"
+            by_sandbox = self._confined() and (not self._within_project(parent) or parent.parent == self.project)
+            if not by_sandbox:
+                mine = self._not_the_agents(files + [str(parent)])
+                if mine:
+                    return (f"the agent's user owns or can write {mine}, so the index could have been changed by the "
+                            "agent; keep it in a direct subdirectory of the project, or outside it, on a host with the "
+                            "sandbox and a profile that does not write the host, or give it to another user")
+            return self._exe_distrust()
         except OSError as exc:
             return f"the index at {self.index} cannot be examined ({type(exc).__name__})"
-        if writable:
-            return (f"the agent's user can write {writable[0]}, so the index could have been changed by the agent; "
-                    "take its write permission off, or keep it below a directory of the project, or outside it, on a host with the sandbox")
-        return ""
+
+    def _exe_distrust(self) -> str:
+        real = os.path.realpath(self.exe)
+        if self._within_project(Path(real)):
+            return f"the Context Cloud program {real} is inside the project, where the agent can change it"
+        if self._confined():
+            return ""
+        mine = self._not_the_agents([real, os.path.dirname(real)])
+        return (f"the agent's user owns or can write {mine}, part of the Context Cloud program") if mine else ""
 
     # --- the index (read only: which functions a file holds, and the version of it that was indexed)
     def _connect(self, immutable: bool = False):
@@ -353,7 +436,7 @@ class ContextCloudZones:
         command = [self.exe, "reaches", name, "--json", "--no-color", "--index", str(self.index),
                    "--protected", ",".join(self.protected)]
         try:
-            done = self._run(command, capture_output=True, text=True, timeout=max(timeout, 0.001))
+            done = self._run(command, capture_output=True, text=True, timeout=max(timeout, 0.001), cwd=str(self.home))
             if done.returncode != 0:
                 return "unknown"
             certainty = json.loads(done.stdout).get("certainty")
@@ -393,7 +476,7 @@ class ContextCloudZones:
         if _covered(module, self.protected) or any(_covered(n, self.protected) for n in names):
             return "protected"                    # the file defines protected code, no lookup needed
         key = _sha256("|".join((self._index_signature(), self.zones_sha, indexed_sha, rel)).encode())
-        cached = self._cache_get(key)
+        cached = None if self.host_write else self._cache_get(key)     # under host_write the agent can write the cache
         if cached is not None:
             self.stats.update(cached=True)
             return cached
@@ -418,7 +501,8 @@ class ContextCloudZones:
             return "unknown"
         else:
             fact = "none"
-        self._cache_put(key, fact)
+        if not self.host_write:
+            self._cache_put(key, fact)
         return fact
 
     def warm(self, files: Optional[Iterable[str]] = None, budget_s: float = 600.0) -> Dict[str, str]:

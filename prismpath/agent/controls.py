@@ -92,19 +92,20 @@ def _private(directory: Path) -> bool:
     return stat.S_ISDIR(st.st_mode) and st.st_uid == os.getuid() and not st.st_mode & 0o077
 
 
-def _sweepable(workspace: Path) -> set:
+def _sweepable(workspace: Path, extra: Sequence[str] = ()) -> set:
     """The only paths a sweep may remove: the control paths `discover` can create at this workspace's root and in its
     `.git`, whatever a marker says."""
     root = Path(os.path.realpath(workspace))
     names = [root / n for n in (".claude", ".mcp.json") + ROOT_CONTROL_NAMES]
-    return set(names + [root / ".git" / "config", root / ".git" / "hooks"])
+    named = [Path(os.path.realpath(Path(e.rstrip("/")).parent)) / Path(e.rstrip("/")).name for e in extra]
+    return set(names + named + [root / ".git" / "config", root / ".git" / "hooks"])
 
 
 def _in(path: Path, allowed: set) -> bool:
     return Path(os.path.realpath(path.parent)) / path.name in allowed
 
 
-def sweep_stale(workspace: Path, directory: Optional[Path] = None) -> None:
+def sweep_stale(workspace: Path, directory: Optional[Path] = None, extra: Sequence[str] = ()) -> None:
     """Remove what an earlier run of this workspace created and did not clean up, when it is provably still ours: a
     marker in the private marker directory, written by a process that no longer exists, lists it, it is one of the
     workspace's own control paths, and it is still an empty file or an empty directory."""
@@ -112,7 +113,7 @@ def sweep_stale(workspace: Path, directory: Optional[Path] = None) -> None:
     if not _private(directory):
         return
     key = _workspace_key(workspace)
-    allowed = _sweepable(workspace)
+    allowed = _sweepable(workspace, extra)
     try:
         markers = [m for m in directory.iterdir() if m.name.startswith(key + ".") and m.name.endswith(".json")]
     except OSError:
@@ -159,6 +160,18 @@ class Found:
     workspace: str = ""
 
 
+def _extra_path(named: str, workspace: Path):
+    """(the path, its parent) of an extra control path when it names something directly or deeper below the workspace,
+    else (None, None): one outside is left to the sandbox's own read only view. A directory is named with a trailing
+    slash."""
+    path = Path(named.rstrip("/") or "/")
+    parent = Path(os.path.realpath(path.parent))
+    root = os.path.realpath(workspace).rstrip("/") + "/"
+    if not (str(parent).rstrip("/") + "/").startswith(root):
+        return None, None
+    return path, parent
+
+
 def discover(workspace: Path, extra: Sequence[str] = ()) -> Found:
     """Look at `workspace` and list its control paths, creating nothing. `extra` are further control paths the owner's
     signed files name (the directory of the zone index, zones.py `control_paths`): each one that exists below the
@@ -184,11 +197,15 @@ def discover(workspace: Path, extra: Sequence[str] = ()) -> Found:
             if not path.exists() and not path.is_symlink():
                 files.append(path)
             bind(path)
-    prefix = os.path.realpath(workspace).rstrip("/") + "/"
     for named in extra:
-        path = Path(named)
-        if os.path.lexists(path) and (os.path.realpath(path.parent).rstrip("/") + "/").startswith(prefix):
-            bind(path)
+        path, parent = _extra_path(named, workspace)
+        if path is None:
+            continue
+        if not os.path.lexists(path):       # a missing one is made empty to be bound, as a missing `.claude/` is
+            if not parent.is_dir():
+                continue
+            (found.create_dirs if named.endswith("/") else found.create_files).append(path)
+        bind(path)
     for hit in classifier._walk_names(str(workspace)):
         path = Path(hit)
         if path.parent != workspace:        # the root ones are bound above
@@ -229,7 +246,7 @@ def on_read_only_mount(path: str) -> bool:
 def prepare(workspace: Path, out: Controls, directory: Optional[Path] = None, extra: Sequence[str] = ()) -> Found:
     """`sweep_stale`, then `discover`, then `materialize` into `out`, in that order, so that what a killed run left is
     gone before the control paths are looked at. Returns what was found."""
-    sweep_stale(workspace, directory)
+    sweep_stale(workspace, directory, extra)
     found = discover(workspace, extra)
     materialize(found, out, directory)
     return found

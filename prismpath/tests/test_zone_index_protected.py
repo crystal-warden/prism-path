@@ -60,9 +60,12 @@ class Project:
             db.execute("INSERT INTO symbols VALUES (?, 'saved', ?, 'function')", (rel, f"{module}.{fn}"))
         db.commit()
         db.close()
-        self.exe = tmp_path / "contextcloud"
+        self.bin = tmp_path / "ccbin"
+        self.bin.mkdir()
+        self.exe = self.bin / "contextcloud"
         self.exe.write_text(f"#!{sys.executable}\nprint('{{\"certainty\": \"no\"}}')\n")
-        self.exe.chmod(0o755)
+        self.exe.chmod(0o555)
+        self.bin.chmod(0o555)
 
     def point(self, image=b"image", index=None):
         doc = zones.zone_document(["pkg.secure.check"], self.root, index or self.index, image)
@@ -76,7 +79,7 @@ class Project:
 def project(tmp_path):
     made = Project(tmp_path)
     yield made
-    for path in (made.root / ".contextcloud", made.index, tmp_path / "outside", tmp_path / "outside" / "index.sqlite"):
+    for path in (made.bin, made.root / ".contextcloud", made.index, tmp_path / "outside", tmp_path / "outside" / "index.sqlite"):
         if path.exists():
             path.chmod(0o755 if path.is_dir() else 0o644)
 
@@ -125,7 +128,7 @@ def test_a_hard_link_to_the_index_is_a_control_path_too(project, tmp_path):
 
 
 def test_the_control_paths_are_the_index_directory_or_the_files_when_the_index_is_in_the_root(project):
-    assert project.point().control_paths == (str(project.root / ".contextcloud"),)
+    assert project.point().control_paths == (str(project.root / ".contextcloud") + "/",)
     root_index = project.root / "index.sqlite"
     assert project.point(index=root_index).control_paths == (str(root_index), str(root_index) + "-wal", str(root_index) + "-shm")
 
@@ -184,23 +187,40 @@ def test_discover_binds_an_extra_control_path_below_the_workspace_only(project, 
 
 
 # ------------------------------------------------------------------------------------------------ the information point
-def test_an_index_in_the_project_is_trusted_where_the_sandbox_confines_the_agent(project):
+@pytest.fixture()
+def other_user(monkeypatch):
+    """The agent runs as another user than the one that made the files, so only the modes decide."""
+    monkeypatch.setattr(zones, "_agent_uid", lambda: os.getuid() + 1)
+
+
+def _no_sandbox(monkeypatch):
+    monkeypatch.setattr(sandbox_hook, "supported", lambda: False)
+
+
+def test_an_index_in_a_direct_subdirectory_of_the_project_is_trusted_where_the_sandbox_confines_the_agent(project):
     point = project.point()
     assert point.why == ""
     assert point.reach("pkg/caller.py", project.config(point)) == "none"
 
 
 def test_a_forged_index_that_claims_no_reach_reads_unknown_when_the_agent_could_have_written_it(project, monkeypatch):
-    monkeypatch.setattr(sandbox_hook, "supported", lambda: False)       # a host with no per call sandbox: the file's mode decides
+    _no_sandbox(monkeypatch)                                           # no per call sandbox: only the file's owner and mode decide
     point = project.point()
-    assert "can write" in point.why
+    assert "owns or can write" in point.why
     for rel in ("pkg/caller.py", "pkg/secure.py"):
         assert point.reach(rel, project.config(point)) == "unknown"
-    assert zones.status(project.home, b"x", project.root) is not None
 
 
-def test_the_same_index_made_read_only_is_trusted_without_a_sandbox(project, monkeypatch):
-    monkeypatch.setattr(sandbox_hook, "supported", lambda: False)
+def test_an_index_the_agents_user_owns_is_untrusted_even_when_read_only(project, monkeypatch):
+    _no_sandbox(monkeypatch)
+    project.index.chmod(0o444)
+    (project.root / ".contextcloud").chmod(0o555)                      # the owner can chmod it back
+    point = project.point()
+    assert "owns or can write" in point.why and point.reach("pkg/caller.py", project.config(point)) == "unknown"
+
+
+def test_the_same_index_owned_by_another_user_and_read_only_is_trusted_without_a_sandbox(project, monkeypatch, other_user):
+    _no_sandbox(monkeypatch)
     project.index.chmod(0o444)
     (project.root / ".contextcloud").chmod(0o555)
     point = project.point()
@@ -208,8 +228,8 @@ def test_the_same_index_made_read_only_is_trusted_without_a_sandbox(project, mon
     assert point.reach("pkg/caller.py", project.config(point)) == "none"
 
 
-def test_a_writable_sibling_or_directory_alone_makes_the_index_untrusted(project, monkeypatch):
-    monkeypatch.setattr(sandbox_hook, "supported", lambda: False)
+def test_a_writable_sibling_or_directory_alone_makes_the_index_untrusted(project, monkeypatch, other_user):
+    _no_sandbox(monkeypatch)
     project.index.chmod(0o444)
     assert project.point().why                                          # the directory is still writable
     (project.root / ".contextcloud").chmod(0o555)
@@ -228,32 +248,32 @@ def _outside(project, tmp_path):
     return outside, target
 
 
-def test_an_index_outside_the_project_is_trusted_under_the_sandbox_and_not_when_the_profile_writes_the_host(project, tmp_path):
+def test_an_index_outside_the_project_is_trusted_under_the_sandbox_and_not_when_the_profile_writes_the_host(project, tmp_path, other_user):
     outside, target = _outside(project, tmp_path)
     point = project.point(index=target)
     assert point.why == "" and point.reach("pkg/caller.py", project.config(point)) == "none"
     doc = zones.zone_document(["pkg.secure.check"], project.root, target, b"image")
     writes_host = zones.ContextCloudZones(doc, project.home, str(project.exe), host_write=True)
-    assert "can write" in writes_host.why and writes_host.reach("pkg/caller.py", project.config(writes_host)) == "unknown"
+    assert "owns or can write" in writes_host.why and writes_host.reach("pkg/caller.py", project.config(writes_host)) == "unknown"
     target.chmod(0o444)
     outside.chmod(0o555)
     read_only = zones.ContextCloudZones(doc, project.home, str(project.exe), host_write=True)
     assert read_only.why == "" and read_only.reach("pkg/caller.py", project.config(read_only)) == "none"
 
 
-def test_an_index_outside_the_project_is_untrusted_without_a_sandbox_unless_read_only(project, tmp_path, monkeypatch):
-    monkeypatch.setattr(sandbox_hook, "supported", lambda: False)
+def test_an_index_outside_the_project_is_untrusted_without_a_sandbox_unless_read_only(project, tmp_path, monkeypatch, other_user):
+    _no_sandbox(monkeypatch)
     outside, target = _outside(project, tmp_path)
-    assert "can write" in project.point(index=target).why
+    assert "owns or can write" in project.point(index=target).why
     target.chmod(0o444)
     outside.chmod(0o555)
     assert project.point(index=target).why == ""
 
 
-def test_an_index_directly_in_the_project_root_needs_no_write_permission(project):
+def test_an_index_directly_in_the_project_root_is_trusted_by_permissions_only(project, other_user):
     root_index = project.root / "index.sqlite"
     root_index.write_bytes(project.index.read_bytes())
-    assert "can write" in project.point(index=root_index).why          # the sandbox cannot protect the root directory
+    assert "owns or can write" in project.point(index=root_index).why     # the sandbox cannot protect the root directory
     root_index.chmod(0o444)
     project.root.chmod(0o555)
     try:
@@ -262,27 +282,175 @@ def test_an_index_directly_in_the_project_root_needs_no_write_permission(project
         project.root.chmod(0o755)
 
 
-def test_the_information_point_passes_the_profile_to_the_adapter(project, monkeypatch):
-    class Profile:
-        host_write = True
-    monkeypatch.setattr(sandbox_hook, "profile_for", lambda home, image: Profile())
-    assert zones._host_write(project.home, b"image") is True
-    monkeypatch.setattr(sandbox_hook, "profile_for", lambda home, image: (_ for _ in ()).throw(ValueError("x")))
-    assert zones._host_write(project.home, b"image") is True
-
-
 def test_an_index_path_that_goes_through_a_link_is_not_trusted(project, tmp_path):
     real = tmp_path / "real"
     real.mkdir()
     (real / "index.sqlite").write_bytes(project.index.read_bytes())
-    (real / "index.sqlite").chmod(0o444)
-    real.chmod(0o555)
-    try:
-        link = tmp_path / "link"
-        link.symlink_to(real)
-        doc = zones.zone_document(["pkg.secure.check"], project.root, real / "index.sqlite", b"image")
-        doc["index"] = str(link / "index.sqlite")                        # the signed document names a path through a link
-        point = zones.ContextCloudZones(doc, project.home, str(project.exe))
-        assert "link" in point.why and point.reach("pkg/caller.py", project.config(point)) == "unknown"
-    finally:
-        real.chmod(0o755)
+    link = tmp_path / "link"
+    link.symlink_to(real)
+    doc = zones.zone_document(["pkg.secure.check"], project.root, real / "index.sqlite", b"image")
+    doc["index"] = str(link / "index.sqlite")                        # the signed document names a path through a link
+    point = zones.ContextCloudZones(doc, project.home, str(project.exe))
+    assert "link" in point.why and point.reach("pkg/caller.py", project.config(point)) == "unknown"
+
+
+# ------------------------------------------------------------------------------------------------ the review's seven fixes
+def _signed_world(project, tmp_path):
+    from prismpath.agent import commands
+    from prismpath.agent.policy import starter_path as sp
+    home = tmp_path / "config"
+    home.mkdir(mode=0o700)
+    for role in commands.KEY_ROLES:
+        commands._ensure_key(home, role)
+    image = sp("default").read_bytes().rstrip(b"\n")
+    zones.sign(home, zones.zone_document(["pkg.secure.check"], project.root, None, image))
+    return home, image
+
+
+def test_1_an_unusable_point_keeps_the_control_paths_of_the_signed_document(project, tmp_path):
+    home, image = _signed_world(project, tmp_path)
+    no_program = zones.information_point(home, image, project.root, {"PATH": ""})
+    assert no_program.answer == "unknown" and no_program.control_paths == (str(project.root / ".contextcloud") + "/",)
+    project.index.unlink()
+    no_index = zones.information_point(home, image, project.root, {"CONTEXTCLOUD": str(project.exe)})
+    assert no_index.answer == "unknown" and no_index.control_paths == (str(project.root / ".contextcloud") + "/",)
+    reading = classifier.classify({"tool": "write_file", "args": {"path": ".contextcloud/index.sqlite", "content": "x"}},
+                                  project.config(no_index))
+    assert reading["path_control"] is True
+
+
+def test_1_a_missing_index_directory_is_made_empty_to_be_bound_and_removed_after(project):
+    (project.root / ".contextcloud" / "index.sqlite").unlink()
+    (project.root / ".contextcloud").rmdir()
+    made = controls.Controls()
+    found = controls.prepare(project.root, made, directory=project.home / "markers", extra=[str(project.root / ".contextcloud") + "/"])
+    assert str(project.root / ".contextcloud") in found.binds and (project.root / ".contextcloud").is_dir()
+    made.remove_created()
+    assert not (project.root / ".contextcloud").exists()
+
+
+@pytest.mark.parametrize("backend,mark", [("bwrap", needs_bwrap), ("landlock", needs_landlock)])
+def test_1_a_script_cannot_create_the_missing_index_directory(project, backend, mark):
+    if mark.args[0]:
+        pytest.skip(mark.kwargs["reason"])
+    (project.root / ".contextcloud" / "index.sqlite").unlink()
+    (project.root / ".contextcloud").rmdir()
+    paths = (str(project.root / ".contextcloud") + "/",)
+    attack = "mkdir .contextcloud; echo forged > .contextcloud/index.sqlite; true"
+    if backend == "bwrap":
+        sandbox_exec.run_backend("bwrap", attack, project.root, Profile(timeout_s=60), stdin=b"", mount=str(project.root), control_paths=paths)
+    else:
+        sandbox_exec.run_landlock(attack, project.root, Profile(timeout_s=60), stdin=b"", control_paths=paths)
+    assert not (project.root / ".contextcloud" / "index.sqlite").exists()
+
+
+def test_2_a_deeper_index_directory_is_not_trusted_by_the_sandbox(project, monkeypatch, other_user):
+    deep = project.root / "a" / "b" / ".cc"
+    deep.mkdir(parents=True)
+    (deep / "index.sqlite").write_bytes(project.index.read_bytes())
+    point = project.point(index=deep / "index.sqlite")
+    assert "owns or can write" in point.why                            # the parent a/b can be renamed under bwrap
+    assert point.reach("pkg/caller.py", project.config(point)) == "unknown"
+
+
+@pytest.mark.skipif(not _bwrap_ok(), reason="bwrap cannot start here")
+def test_2_under_bwrap_a_nested_directory_can_be_swapped_which_is_why_it_is_not_trusted(project):
+    deep = project.root / "a" / "b" / ".cc"
+    deep.mkdir(parents=True)
+    (deep / "index.sqlite").write_text("real")
+    sandbox_exec.run_backend("bwrap", "mv a/b a/b2; mkdir -p a/b/.cc; echo forged > a/b/.cc/index.sqlite; true", project.root,
+                             Profile(timeout_s=60), stdin=b"", mount=str(project.root), control_paths=(str(deep) + "/",))
+    assert (project.root / "a" / "b" / ".cc" / "index.sqlite").read_text().strip() == "forged"
+
+
+def test_3_an_index_with_another_hard_link_is_untrusted(project):
+    os.link(project.index, project.root / "pkg" / "alias.sqlite")
+    point = project.point()
+    assert "one link" in point.why and point.reach("pkg/caller.py", project.config(point)) == "unknown"
+
+
+def test_3_an_existing_wal_with_another_hard_link_is_untrusted(project):
+    (project.root / ".contextcloud" / "index.sqlite-wal").write_text("")
+    os.link(project.root / ".contextcloud" / "index.sqlite-wal", project.root / "pkg" / "w")
+    assert "one link" in project.point().why
+
+
+def test_4_under_host_write_an_inner_directory_is_not_trusted_and_the_cache_is_not_read(project, other_user):
+    doc = zones.zone_document(["pkg.secure.check"], project.root, None, b"image")
+    point = zones.ContextCloudZones(doc, project.home, str(project.exe), host_write=True)
+    assert "owns or can write" in point.why and point.reach("pkg/caller.py", project.config(point)) == "unknown"
+    trusted = zones.ContextCloudZones(doc, project.home, str(project.exe))
+    assert trusted.reach("pkg/caller.py", project.config(trusted)) == "none"        # filled the cache
+    assert any(project.home.glob(zones.CACHE_FILE))
+    trusted_ro = zones.ContextCloudZones(doc, project.home, str(project.exe), host_write=True)
+    trusted_ro.why = ""                                                              # as if the index were read only
+    calls = []
+    trusted_ro._run = lambda *a, **k: calls.append(a) or (_ for _ in ()).throw(OSError("asked"))
+    assert trusted_ro.reach("pkg/caller.py", project.config(trusted_ro)) == "unknown" and calls   # asked, not the cache
+
+
+def test_5_the_owner_of_a_read_only_index_is_not_trusted_but_another_owner_is(project, monkeypatch):
+    _no_sandbox(monkeypatch)
+    project.index.chmod(0o444)
+    (project.root / ".contextcloud").chmod(0o555)
+    assert "owns or can write" in project.point().why
+    monkeypatch.setattr(zones, "_agent_uid", lambda: os.getuid() + 1)
+    assert project.point().why == ""
+
+
+def test_6_a_program_inside_the_project_is_never_trusted_and_runs_outside_the_workspace(project, tmp_path):
+    inside = project.root / "venv-cc"
+    inside.write_text(project.exe.read_text())
+    inside.chmod(0o755)
+    doc = zones.zone_document(["pkg.secure.check"], project.root, None, b"image")
+    point = zones.ContextCloudZones(doc, project.home, str(inside))
+    assert "inside the project" in point.why and point.reach("pkg/caller.py", project.config(point)) == "unknown"
+    link = tmp_path / "linked-cc"
+    link.symlink_to(inside)
+    assert "inside the project" in zones.ContextCloudZones(doc, project.home, str(link)).why      # the real path is tested
+    seen = {}
+    good = zones.ContextCloudZones(doc, project.home, str(project.exe))
+
+    def run(command, **kwargs):
+        seen.update(kwargs)
+        raise OSError("stop")
+    good._run = run
+    good.reach("pkg/caller.py", project.config(good))
+    assert seen["cwd"] == str(project.home)
+
+
+def test_6_a_program_outside_is_untrusted_without_a_sandbox_when_its_directory_is_writable(project, monkeypatch, other_user):
+    _no_sandbox(monkeypatch)
+    project.index.chmod(0o444)
+    (project.root / ".contextcloud").chmod(0o555)
+    assert project.point().why == ""
+    project.bin.chmod(0o755)
+    point = project.point()
+    assert "part of the Context Cloud program" in point.why and point.reach("pkg/caller.py", project.config(point)) == "unknown"
+
+
+def test_7_zones_set_deletes_and_rebuilds_an_existing_index_after_signing(project, tmp_path, monkeypatch):
+    home, image = _signed_world(project, tmp_path)
+    order = []
+    rebuilt = tmp_path / "rebuilt"
+    exe = tmp_path / "cc-index"
+    exe.write_text(f"#!{sys.executable}\nimport sys\nopen({str(rebuilt)!r}, 'w').write(' '.join(sys.argv[1:]))\nopen(sys.argv[sys.argv.index('--index') + 1], 'w').write('new')\n")
+    exe.chmod(0o755)
+    (project.root / ".contextcloud" / "index.sqlite-wal").write_text("forged")
+    doc = zones.zone_document(["pkg.secure.check"], project.root, None, image)
+    zones.rebuild_index_after_signing(home, doc, lambda: order.append("signed"), {"CONTEXTCLOUD": str(exe)})
+    assert order == ["signed"] and project.index.read_text() == "new"
+    assert not (project.root / ".contextcloud" / "index.sqlite-wal").exists()
+    assert "index" in rebuilt.read_text() and "--index" in rebuilt.read_text()
+
+
+def test_7_zones_set_refuses_an_existing_index_it_cannot_rebuild_and_records_nothing(project, tmp_path):
+    home, image = _signed_world(project, tmp_path)
+    doc = zones.zone_document(["pkg.secure.check"], project.root, None, image)
+    recorded = []
+    with pytest.raises(zones.ZoneError, match="cannot be trusted"):
+        zones.rebuild_index_after_signing(home, doc, lambda: recorded.append(1), {"PATH": ""})
+    assert recorded == [] and project.index.exists()
+    project.index.unlink()
+    zones.rebuild_index_after_signing(home, doc, lambda: recorded.append(1), {"PATH": ""})   # nothing to rebuild
+    assert recorded == [1]

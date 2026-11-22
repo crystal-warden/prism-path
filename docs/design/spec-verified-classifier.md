@@ -165,6 +165,12 @@ on every platform** (Unicode NFC and `casefold`), it is any of:
   written, as before. The search below a directory examines at most `WALK_LIMIT` (20,000) entries and does not enter
   `.git`, `node_modules`, `target`, `.venv`, `venv` or `__pycache__` directories it meets on the way; past the limit it
   stops, and the answer is the one found so far;
+- **the zone index paths**: when the zone information point names control paths (`Config.zones.control_paths`, taken from
+  the signed zone document alone: the index's directory when it lies below the project, else the index file and its
+  `-wal` and `-shm` siblings), each one and everything below it is a control path, its ancestors are holders, and a hard
+  link to a file below it is a control file. A point that names none (no zone declared, or a fixed point) adds none, so
+  every reading made without a zone file is unchanged and `CLASSIFIER_VERSION` is not bumped. The sandbox backends and the
+  launcher hold the same paths read only (`controls.discover`, `extra`);
 - **a hard link to any of these**: a file whose device and inode match a control file that exists (`os.stat`
   `st_dev`/`st_ino`, checked only when the path's link count is above one). A link made after the call is classified is
   the sandbox's job, not the classifier's, like any change to the disk between classification and execution.

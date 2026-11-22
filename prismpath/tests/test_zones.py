@@ -276,7 +276,10 @@ def test_the_hook_asks_about_every_write_when_a_zone_is_declared_and_context_clo
 
 # ----------------------------------------------------------------------------------------- the adapter, hermetic
 FAKE = """#!{python}
-import json, os, sys, time
+import json, os, shutil, sys, time
+if sys.argv[1] == "index":      # a rebuild: the index a test saved is put where --index says
+    shutil.copy(os.environ["FAKE_CC_INDEX_SRC"], sys.argv[sys.argv.index("--index") + 1])
+    sys.exit(0)
 name = sys.argv[2]
 log = os.environ.get("FAKE_CC_LOG")
 if log:
@@ -444,6 +447,9 @@ def test_the_zones_command_records_reports_and_warms(world, home, image, monkeyp
     world.add("pkg/b.py", "def g(): pass\n", ["g"])
     world.answer(pkg__b__g="certain")
     monkeypatch.setenv("CONTEXTCLOUD", str(world.exe))
+    saved = tmp_path / "saved-index.sqlite"
+    saved.write_bytes(world.index.read_bytes())
+    monkeypatch.setenv("FAKE_CC_INDEX_SRC", str(saved))
 
     def run(*args):
         out = io.StringIO()
@@ -455,6 +461,7 @@ def test_the_zones_command_records_reports_and_warms(world, home, image, monkeyp
     assert recorded["protected"] == ["pkg.secure.check", "pkg.x"] and recorded["recorded"] is True
     status = run("status", world.project, None, None, None)
     assert status["point"] == "contextcloud" and status["protected"] == recorded["protected"]
+    assert os.path.exists(world.index)                                 # deleted and rebuilt after the zone file was signed
     assert run("warm", world.project, None, None, None)["by_fact"] == {"none": 1, "protected": 1, "unknown": 0}
     with pytest.raises(commands.AgentError):
         commands.zones_cmd("set", world.project, ["a b"], None, None, True, io.StringIO())

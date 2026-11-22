@@ -685,7 +685,7 @@ def zones_cmd(action: str, project: Path, protected: Optional[List[str]], protec
                 names += [line.strip() for line in Path(protected_file).read_text(encoding="utf-8").split("\n")
                           if line.strip() and not line.strip().startswith("#")]
             doc = zones.zone_document(names, project, Path(index) if index else None, image)
-            zones.sign(home, doc)
+            zones.rebuild_index_after_signing(home, doc, lambda: zones.sign(home, doc))
             result = {"recorded": True, "project": doc["project"], "index": doc["index"],
                       "protected": doc["protected"], "policy_sha256": doc["policy_sha256"]}
         elif action == "status":
