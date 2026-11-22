@@ -178,6 +178,66 @@ principle (agreed from the shared policy, never transmitted) exactly as the code
   `[class, tick, value]`, each offset by one; class 1 band tier, class 2 refinement, class 3
   posture gossip (the joint cell as a fleet coherence beacon).
 
+#### 2.6.1 The grouped spiral profile (a node whose joint grid is too large to list)
+
+`SpiralLayout` lists every cell of a node's joint grid, which a policy with tens of fields cannot
+afford. A node whose joint grid is over 300,000 cells (`spiral_groups.ENUMERATION_LIMIT`) uses the
+grouped profile instead, and a node under it keeps the layout, the sidecar and every byte above.
+The profile has the same two tiers and is derived from the signed policy exactly as the layout is;
+nothing is transmitted to set it up. A frame of the profile carries one reading's decisions for every
+decision node, in document order, each value sent as the Fibonacci code of `value + 1`.
+
+- **Band tier.** One code per node, the band of the route the node fires on the reading. The bands
+  are the node's deterministic targets in reverse order of first appearance among its edges (the
+  baseline, declared last, is band 0), then band `n` for a reading no edge routes, where `n` is the
+  number of targets. Unlike `SpiralLayout` the list holds every declared target, not only the ones
+  some cell reaches, because finding those needs the grid. The sender evaluates the policy once to
+  find the band, and the receiver reads the route off the list. Decision lossless, no magnitude.
+- **Groups.** A node's fields are the fields its deterministic edges read, sorted. Fields read
+  together by one atom are one group. The remaining groups are merged greedily, in decreasing order
+  of the number of edges that read both groups (ties in order of first appearance), while the
+  product of the two groups' reachable cell counts stays at or under 50,000
+  (`GROUP_LIMIT`). A group's fields are sorted by name and the groups are ordered by their first
+  field. A field's reachable cells are its cells in symbol order, left out when a defined integer
+  field's declared range does not reach them.
+- **Signature tier.** The residual of an edge on a group's cell is its condition with the group's
+  fields set from the cell's representative values and every other field left open, reduced by
+  dropping a true conjunct or false disjunct and by the absorbing constant (a false conjunct makes the
+  conjunction false, a true disjunct makes the disjunction true). The signature of a cell is the
+  list of residuals of the node's deterministic edges in order, cut after the first residual that is
+  true. Cells with equal signatures are one class. Two cells of one class decide alike for every
+  value of the other fields, so the classes of all groups together fix the decision.
+- **Group layout.** Each group is a spiral in the sense of the layout above. Its cells are listed in
+  mixed radix reflected Gray order (the radix of a field is its reachable cell count, and a cell is
+  the position in that list). Its classes are the bands, ordered by descending size and, among equal
+  sizes, by first appearance in that Gray order. Within a band the cells keep their Gray order.
+- **Signature code.** One code per group, the class rank, left out for a group with one class. A
+  node that fits `SpiralLayout` sends its band here instead, so a stream mixing both kinds of node
+  stays decodable.
+- **Refinement tier.** Following the signature codes of the frame, one code per group of a grouped
+  node, the Gray index of the reading's cell inside its class, left out for a class of one cell.
+  A node that fits `SpiralLayout` sends the index inside its band.
+- **How the receiver rebuilds the decision.** For each group the receiver takes the representative
+  reading of the first cell of the class named (the cell named, with the refinement tier), joins the
+  groups' fields into one reading, and routes it with the policy. The result is the route of every
+  reading that falls in those classes, which is what `FQ.Signature.route_eq_of_signatures` proves
+  (`formal/`). With the refinement tier the rebuilt reading is in the sender's own cell, so the
+  quantized reading is recovered as `SpiralLayout.decode_progressive` recovers it.
+- **Stream.** A stream of the profile is a preamble followed by the tier's frames, zero padded to a
+  byte. The preamble is 42 bytes: the ASCII `PPLF`, the version (1), the tier (1 band, 2 signature,
+  3 signature with refinement), the first 16 bytes of the SHA-256 of the policy document, the first
+  16 bytes of the SHA-256 of the layout (the JSON, keys sorted, of each node's fields, route list,
+  group fields, radices and class sizes, or of a node's name and size when it fits `SpiralLayout`),
+  and the number of frames as a little endian u32. A decoder MUST refuse a stream whose magic,
+  version, policy hash or layout hash is not its own, one that ends inside a code, one with codes
+  left after its last frame, and a class rank or index outside its group. The preamble is sent once
+  per epoch, so across a 4,096 decision epoch it costs about 0.01 byte a decision.
+- **Cost.** Measured on the seven policies in `prismpath/telemetry/tests/test_spiral_groups.py`,
+  the band tier is 5 to 7 bits a decision and the signature tier 14 to 43 bits, against 53 to 333
+  bits for the plain wire, and no reading of the sampled populations changed its decision.
+  Reference implementation `prismpath/telemetry/spiral_groups.py` (Python, both tiers) and
+  `prismpath-telemetry-rs/src/spiral_groups.rs` (Rust, the band tier).
+
 ### 2.7 The refresh profile (bounded staleness under loss; optional capability, normative when declared)
 
 For a stateless per-reading stream, a lost frame costs freshness only (I5). For a **send-on-delta**
