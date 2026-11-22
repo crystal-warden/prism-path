@@ -424,6 +424,50 @@ def test_a_live_run_s_files_are_not_swept_by_another_run(tmp_path, monkeypatch):
     first.remove_created()
 
 
+def test_a_marker_never_removes_a_path_outside_the_workspace_s_control_paths(tmp_path, monkeypatch):
+    from prismpath.agent import controls as controls_module
+    markers = tmp_path / "markers"
+    monkeypatch.setattr(controls_module, "marker_dir", lambda: markers)
+    workspace, elsewhere = tmp_path / "ws", tmp_path / "elsewhere"
+    workspace.mkdir()
+    elsewhere.mkdir()
+    (elsewhere / "empty.lock").write_text("")                           # someone's empty file outside the workspace
+    (workspace / "notes.md").write_text("")                             # an empty file in it that is not a control path
+    (workspace / "CLAUDE.md").write_text("")                            # a control path, empty, which a dead run listed
+    dead = subprocess.Popen([PYTHON, "-c", "pass"])
+    dead.wait()
+    markers.mkdir(mode=0o700)
+    key = controls_module._workspace_key(workspace)
+    (markers / f"{key}.{dead.pid}.0.json").write_text(json.dumps(
+        {"pid": dead.pid, "workspace": str(workspace), "dirs": [str(elsewhere)],
+         "files": [str(elsewhere / "empty.lock"), str(workspace / "notes.md"), str(workspace / "CLAUDE.md")]}))
+    controls_module.sweep_stale(workspace)
+    assert (elsewhere / "empty.lock").exists() and (workspace / "notes.md").exists()
+    assert not (workspace / "CLAUDE.md").exists()                       # the one listed control path is removed
+
+
+def test_a_marker_directory_others_can_write_is_not_trusted(tmp_path, monkeypatch):
+    from prismpath.agent import controls as controls_module
+    markers = tmp_path / "markers"
+    monkeypatch.setattr(controls_module, "marker_dir", lambda: markers)
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    (workspace / "CLAUDE.md").write_text("")
+    dead = subprocess.Popen([PYTHON, "-c", "pass"])
+    dead.wait()
+    markers.mkdir()
+    os.chmod(markers, 0o777)                                            # as if made first by someone else in a shared temp
+    key = controls_module._workspace_key(workspace)
+    (markers / f"{key}.{dead.pid}.0.json").write_text(json.dumps(
+        {"pid": dead.pid, "workspace": str(workspace), "dirs": [], "files": [str(workspace / "CLAUDE.md")]}))
+    controls_module.sweep_stale(workspace)
+    assert (workspace / "CLAUDE.md").exists()
+    made = launcher.Controls()
+    launcher.prepare_controls(workspace, made)
+    assert made.marker is None                                          # and no marker is written there
+    made.remove_created()
+
+
 # ---------------------------------------------------------------------------------- the local model route
 MODEL_STAND_IN = r'''
 import json, socket, sys, urllib.request

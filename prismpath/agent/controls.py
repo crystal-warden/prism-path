@@ -22,6 +22,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import stat
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -79,11 +80,37 @@ def _alive(pid: int) -> bool:
     return True
 
 
+def _private(directory: Path) -> bool:
+    """Whether the marker directory is a real directory this user owns that no one else can write or read. Anything
+    else (a link, another user's directory made first in a shared temp, a loose mode) is not trusted with markers."""
+    try:
+        st = os.lstat(directory)
+    except OSError:
+        return False
+    return stat.S_ISDIR(st.st_mode) and st.st_uid == os.getuid() and not st.st_mode & 0o077
+
+
+def _sweepable(workspace: Path) -> set:
+    """The only paths a sweep may remove: the control paths `discover` can create at this workspace's root and in its
+    `.git`, whatever a marker says."""
+    root = Path(os.path.realpath(workspace))
+    names = [root / n for n in (".claude", ".mcp.json") + ROOT_CONTROL_NAMES]
+    return set(names + [root / ".git" / "config", root / ".git" / "hooks"])
+
+
+def _in(path: Path, allowed: set) -> bool:
+    return Path(os.path.realpath(path.parent)) / path.name in allowed
+
+
 def sweep_stale(workspace: Path, directory: Optional[Path] = None) -> None:
     """Remove what an earlier run of this workspace created and did not clean up, when it is provably still ours: a
-    marker written by a process that no longer exists lists it, and it is still an empty file or an empty directory."""
+    marker in the private marker directory, written by a process that no longer exists, lists it, it is one of the
+    workspace's own control paths, and it is still an empty file or an empty directory."""
     directory = directory or marker_dir()
+    if not _private(directory):
+        return
     key = _workspace_key(workspace)
+    allowed = _sweepable(workspace)
     try:
         markers = [m for m in directory.iterdir() if m.name.startswith(key + ".") and m.name.endswith(".json")]
     except OSError:
@@ -94,7 +121,8 @@ def sweep_stale(workspace: Path, directory: Optional[Path] = None) -> None:
             pid = int(record["pid"])
             if pid == os.getpid() or _alive(pid):
                 continue
-            Controls(created_files=[Path(p) for p in record["files"]], created_dirs=[Path(p) for p in record["dirs"]]).remove_created()
+            Controls(created_files=[Path(p) for p in record["files"] if _in(Path(p), allowed)],
+                     created_dirs=[Path(p) for p in record["dirs"] if _in(Path(p), allowed)]).remove_created()
         except (OSError, ValueError, KeyError, TypeError):
             pass
         try:
@@ -108,6 +136,9 @@ def _write_marker(out: "Controls", workspace: Path, directory: Optional[Path], f
     directory = directory or marker_dir()
     try:
         directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+        if not _private(directory):
+            out.marker = None
+            return
         if out.marker is None:
             out.marker = directory / f"{_workspace_key(workspace)}.{os.getpid()}.{id(out):x}.json"
         out.marker.write_text(json.dumps({"pid": os.getpid(), "workspace": str(workspace),
