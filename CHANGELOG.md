@@ -8,6 +8,10 @@ spec stable.
 
 ## [Unreleased]
 
+### Fixed: the spiral mesh referee compares frames again (2026-11-22)
+
+- **`prismpath-hw/spiral-mesh/referee_mesh.py` takes each frame's hex from the sender's `X` line.** Since the node began to batch triples, its `T` line carries no hex, so the referee read none, skipped every received frame and could pass its wire integrity check having compared nothing. A triple whose frame line was lost on serial is still not judged.
+
 ### Fixed: control files a killed run left behind, and a cached profile made for another policy (2026-11-22)
 
 - **A run that was killed no longer leaves empty `CLAUDE.md`, `CLAUDE.local.md`, `AGENTS.md`, `.mcp.json` or `.claude/` in the workspace.** What a run creates to bind them read only is now written to a marker outside the workspace first, and the next run removes what a marker from a process that is gone lists, only while it is still empty. A marker is read only from a directory this user owns and no one else can write, and it can remove only the workspace's own control paths. A file that was already there, or that has content, is never removed.
