@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import base64
 import binascii
-import gc
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
 
@@ -28,19 +27,6 @@ SUBJECT_FILES = ("receipts.jsonl", "receipts.roots.jsonl")
 
 class Bad(core_evidence.Bad, ValueError):
     """An envelope or run that fails in-toto / DSSE or core run verification."""
-
-
-_KEY_CACHE: Dict[str, root_statement.InstanceKey] = {}
-_ORIG_INSTANCE_INIT = root_statement.InstanceKey.__init__
-
-
-def _tracking_init(self, private_key, public_raw: bytes, path: Optional[str] = None):
-    _ORIG_INSTANCE_INIT(self, private_key, public_raw, path)
-    _KEY_CACHE[self.key_id] = self
-
-
-if root_statement.InstanceKey.__init__ is _ORIG_INSTANCE_INIT:
-    root_statement.InstanceKey.__init__ = _tracking_init
 
 
 def pae(payload_type: str, payload: bytes) -> bytes:
@@ -140,21 +126,10 @@ def _find_instance_key(run: Path, keys: Any = None, instance_key: Any = None) ->
         loaded = _load_key_arg(explicit)
         if loaded.public_raw != want_pub or loaded.key_id != want_id:
             raise Bad("the given instance key does not match the run's instance.pub")
-        _KEY_CACHE[want_id] = loaded
         return loaded
-
-    cached = _KEY_CACHE.get(want_id)
-    if cached is not None and cached.public_raw == want_pub:
-        return cached
-
-    for obj in gc.get_objects():
-        if isinstance(obj, root_statement.InstanceKey) and obj.public_raw == want_pub:
-            _KEY_CACHE[want_id] = obj
-            return obj
 
     env_key = root_statement.key_from_env()
     if env_key is not None and env_key.public_raw == want_pub:
-        _KEY_CACHE[want_id] = env_key
         return env_key
 
     for candidate in _candidate_key_files(run):
@@ -163,7 +138,6 @@ def _find_instance_key(run: Path, keys: Any = None, instance_key: Any = None) ->
         except Exception:
             continue
         if loaded.public_raw == want_pub:
-            _KEY_CACHE[want_id] = loaded
             return loaded
 
     raise Bad(f"cannot find the instance private key for {run}; pass keys=... or set {root_statement.INSTANCE_KEY_ENV}")
@@ -405,6 +379,10 @@ def _verify_one(
         )
     except core_evidence.Bad as exc:
         raise Bad(str(exc)) from None
+    summary = dict(summary)
+    summary["pinned"] = auth_pin is not None and inst_pin is not None
+    summary["pinned_authority"] = auth_pin is not None
+    summary["pinned_instance"] = inst_pin is not None
     return summary
 
 
@@ -446,6 +424,7 @@ def verify(
         "replayed": sum(s["replayed"] for s in summaries),
         "agree": sum(s["agree"] for s in summaries),
         "disagree": sum(s["disagree"] for s in summaries),
+        "pinned": all(s["pinned"] for s in summaries),
         "root_statement": "signed" if all(s["root_statement"] == "signed" for s in summaries) else "signed-unpinned",
     }
 
@@ -460,10 +439,22 @@ def import_envelopes(
     env_list = [envelopes] if isinstance(envelopes, dict) else list(envelopes)
     run_path = Path(run_dir)
     if len(env_list) == 1 and (run_path / "run.json").exists() and not (run_path / "receipts.roots.jsonl").exists():
-        payload_bytes = _b64_decode(env_list[0].get("payload"), "payload")
-        stmt = canon2.loads(payload_bytes)
-        pred = stmt.get("predicate", {})
+        env = env_list[0]
+        if not isinstance(env, dict):
+            raise Bad("the DSSE envelope must be an object with payloadType, payload and signatures")
+        payload_bytes = _b64_decode(env.get("payload"), "payload")
+        try:
+            stmt = canon2.loads(payload_bytes)
+        except canon2.Canon2Error as exc:
+            raise Bad(f"the in-toto statement payload is not a canon/2 document ({exc.rule})") from None
+        pred = stmt.get("predicate", {}) if isinstance(stmt, dict) else {}
         if isinstance(pred, dict) and all(k in pred for k in core_evidence.ROOT_MEMBERS):
             root_doc = {k: pred[k] for k in core_evidence.ROOT_MEMBERS}
-            (run_path / "receipts.roots.jsonl").write_bytes(canon2.dumps(root_doc) + b"\n")
+            target = run_path / "receipts.roots.jsonl"
+            target.write_bytes(canon2.dumps(root_doc) + b"\n")
+            try:
+                return verify(env_list, run_dir, pinned_keys, **kwargs)
+            except BaseException:
+                target.unlink(missing_ok=True)
+                raise
     return verify(env_list, run_dir, pinned_keys, **kwargs)
