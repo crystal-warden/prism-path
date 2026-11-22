@@ -8,6 +8,12 @@ spec stable.
 
 ## [Unreleased]
 
+### Added: the frame binding of policy distribution for broadcast media (2026-11-22)
+
+- **`prismpath.distribution.frames` writes and reads the six frames of a broadcast medium.** They are the offer, the chunk, the state record, the commit with its delay, the abort and the epoch, each within the link's limit of 250 bytes on ESP-NOW, and anything a reader refuses is `dist:frame-invalid`.
+- **`frames.Assembler` puts a release back together from chunks in any order, repeated or lost.** A chunk outside the offer or with no offer, or a part whose hash is not the offered one, drops the transfer, and a transfer still incomplete after 5 seconds is dropped silently. On a link declared ordered a chunk out of order drops it too.
+- **No body is read before its envelope has passed the verifier through V8.** The body is then read only to the signed size and against the signed hash.
+
 ### Added: the enforcement point state machine for policy distribution, with the software host as its first target (2026-11-22)
 
 - **`prismpath.distribution.pep.Pep` stages, commits, aborts, rolls back and lapses at expiry, one machine for every Python target.** Its store under `<state>/dist/` is written in the commit order of the spec, so a death at any step leaves the old release or the new one and never a mix. A store it cannot read refuses every envelope and decides nothing.
