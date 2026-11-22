@@ -10,7 +10,7 @@ import pytest
 pytest.importorskip("cryptography")
 
 from prismpath import canon  # noqa: E402
-from prismpath.distribution import kinds, state_record  # noqa: E402
+from prismpath.distribution import state_record  # noqa: E402
 from prismpath.distribution.pep import Pep, PepRefused  # noqa: E402
 from prismpath.distribution.adapters.host import HostAdapter  # noqa: E402
 from prismpath.hotswap import policy_pack as pp  # noqa: E402
@@ -349,27 +349,66 @@ def test_case_111_a_host_pep_refuses_to_start_with_hold(tmp_path):
         Pep(str(tmp_path / "agent"), Agent(_dist.HostPep(tmp_path / "h").host()), _dist.instance_key(), _dist.Clock())
 
 
-def test_the_hold_machine_on_a_kind_that_allows_hold(tmp_path, monkeypatch):
-    """X7 to X9 on the machine itself, with the host row given the column that only mesh and cfs carry. The
-    mesh and cfs targets the conformance cases name join the table with their own rows."""
-    monkeypatch.setitem(kinds.TARGETS, "host", replace(kinds.TARGETS["host"], expiry_hold=True))
-    point = _dist.HostPep(tmp_path, expiry_response="hold")
-    point.commit(OLD, seq=1)
-    point.commit(NEW, seq=2)
-    point.clock.now = _dist.EXPIRES
-    record = _read(point, point.pep.tick())
-    assert (record.event, record.cause, record.state, record.held) == ("held", "dist:held", "active", True)
-    assert point.pep.refusal() is None and point.pep.receipt_mark() == "held" and point.pep.tick() is None
-    assert _read(point, point.pep.record("beat")).held
-    assert _read(point, point.pep.rollback()).cause == "dist:held" and point.pep.active.seq == 2
-    replay = seal("policy.ppt", OLD, seq=1, not_before=_dist.EXPIRES, expires=_dist.EXPIRES + 1000)
-    assert _read(point, point.pep.stage(replay, OLD)).cause == "dist:seq-replay"           # X8
-    later = seal("policy.ppt", NEWER, seq=3, not_before=_dist.EXPIRES, expires=_dist.EXPIRES + 1000)
-    point.pep.stage(later, NEWER)
-    committed = _read(point, point.pep.commit(STREAM, 3, H(NEWER)))
-    assert committed.event == "committed" and not committed.held and point.pep.receipt_mark() is None
-    assert point.open().expiry_response == "hold"
+def _mesh(tmp_path):
+    from prismpath.kernel import ppt_compile
+    counter = iter(range(100))
+    images = [ppt_compile.compile_predicate(f"when x >= {n}") for n in (5, 7)]
+    regs = ppt_compile.encode_regs(images[0], {"x": 6})
 
+    def make(**settings):
+        return _dist.MeshPep(tmp_path / f"node{next(counter)}", **settings)
+    return make, [image.serialize() for image in images], (lambda pep: pep.adapter.decide(regs))
+
+
+def test_case_106_a_mesh_node_left_at_refuse_lapses_at_expiry(tmp_path):
+    """case_106: X6, X1, on a modelled mesh node. The cFS half is in integrations/cfs/tests."""
+    _dist.case_106_refuse_lapses(*_mesh(tmp_path))
+
+
+def test_case_107_a_mesh_node_on_hold_keeps_deciding_and_marks_everything(tmp_path):
+    """case_107: X6, X7, on a modelled mesh node."""
+    _dist.case_107_hold_keeps_deciding_and_marks_everything(*_mesh(tmp_path))
+
+
+def test_case_110_a_held_mesh_node_never_widens(tmp_path):
+    """case_110: X9, on a modelled mesh node."""
+    _dist.case_110_a_held_pep_never_widens(*_mesh(tmp_path))
+
+
+def test_case_112_no_message_changes_a_mesh_node_s_setting(tmp_path):
+    """case_112: X10, on a modelled mesh node."""
+    _dist.case_112_no_message_changes_the_setting(*_mesh(tmp_path))
+
+
+def test_a_mesh_node_reads_a_table_with_its_own_parser_and_bound(tmp_path):
+    """Section 3, E6: a mesh node ignores meta, so a table whose meta disagrees with it is admitted, and a body
+    over 640 bytes is too large."""
+    make, bodies, _decide = _mesh(tmp_path)
+    point = make()
+    wrong = {**_dist.GEN.image_meta(bodies[0]), "wcet_cycles": 1, "qualification": "elsewhere"}
+    assert _read(point, point.pep.stage(point.seal(bodies[0], meta=wrong), bodies[0])).event == "staged"
+    big = bodies[0] + b"\0" * 700
+    assert _read(point, point.pep.stage(point.seal(big, seq=2), big)).cause == "dist:too-large"
+
+
+def test_the_mesh_evaluator_agrees_with_the_predicate_reference():
+    """The model's evaluator is the embedded PPT evaluator in Python. On every predicate vector the compiler
+    takes, the start node's edge holds exactly when the Python predicate reference says the condition holds."""
+    import json
+    from prismpath.distribution.adapters.mesh import evaluate
+    from prismpath.kernel import ppt_compile
+    corpus = json.loads((_dist.REPO / "portable" / "conformance" / "predicates.json").read_text(encoding="utf-8"))
+    checked = 0
+    for case in corpus["cases"]:
+        try:                                          # the compiler's declared subset: conditions and values it takes
+            image = ppt_compile.compile_predicate(case["cond"])
+            regs = ppt_compile.encode_regs(image, case["ctx"])
+        except (ppt_compile.SubsetError, ValueError):
+            continue
+        step = evaluate(image.serialize(), regs, 0)
+        assert (step is not None) == case["expect"], case
+        checked += 1
+    assert checked >= 100
 
 def test_a_commit_with_an_unreadable_trust_store_never_activates_the_runtime(point):
     """K1, X3: a release staged before the store became unreadable is not committed, and the host stays

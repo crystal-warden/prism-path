@@ -36,7 +36,7 @@ REPLAYERS = {"P": REPO / "tests" / "test_distribution_corpus.py",
 RESEARCH_ONLY = {99: ROOT / "tools" / "tests" / "test_export.py"}
 C_KINDS = frozenset({"mesh", "cfs"})
 PENDING = {
-    "P": "30-37 45 49 54-76 79-81 86-98 100 102 104-110 112-113 120-121 123-125",
+    "P": "30-37 45 49 54-76 79-81 86-98 100 102 104-105 108-109 113 120-121 123-125",
     "R": "1-13 16-17 20-24 26 28-29 31 39-44 46-48 50-53 62-63 66-77 79 82 84-85 97 101 104 111 114-115 117-118 "
          "123 126",
     "C": "1-14 20-22 24-29 31 35-42 46-48 50 52-53 60-63 66-74 76-77 79 82 85 97 104-110 112 114 117-123",
@@ -113,6 +113,28 @@ def test_only_case_099_is_research_only():
 
 
 def test_the_corpus_runs_each_case_where_the_spec_says():
+    """I1: each case runs only where its row says, a C case only on a kind the C core has, a Rust case only on
+    `host`, and the copies of one case together run everywhere its row names."""
+    where = {}
     for case in CORPUS["cases"] + CORPUS["release_ids"]:
-        assert case["case"] in SPEC and case["runs_on"] == SPEC[case["case"]]["runs_on"], case["name"]
-        assert case["name"].startswith(f"{case['case']:03d}_")
+        number = case["case"]
+        assert number in SPEC and set(case["runs_on"]) <= set(SPEC[number]["runs_on"]), case["name"]
+        assert case["name"].startswith(f"{number:03d}_")
+        kind = case.get("pep", {}).get("kind", "host")
+        assert ("C" not in case["runs_on"] or kind in C_KINDS) and ("R" not in case["runs_on"] or kind == "host")
+        where.setdefault(number, set()).update(case["runs_on"])
+    assert all(runs == set(SPEC[number]["runs_on"]) for number, runs in where.items()), where
+
+
+def test_a_replay_that_exists_has_no_not_yet_built_marker():
+    """A language whose replay of the corpus exists is not marked in tools/run_corpora.py as not claiming it, so
+    the marker of a gap cannot outlive the gap."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("run_corpora", ROOT / "tools" / "run_corpora.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    rows = module.CONSUMERS["portable/distribution"]
+    for impl, column in (("P", "py"), ("R", "rs"), ("C", "hw")):
+        marked = any(consumer[0] == "none" for consumer in rows[column])
+        assert not (REPLAYERS[impl].exists() and marked), (impl, column)
+        assert REPLAYERS[impl].exists() or marked, (impl, column)

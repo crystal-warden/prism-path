@@ -45,7 +45,7 @@ class Staged:
 class PepView:
     """What the verifier needs of an enforcement point. `kind` must have a row in `kinds.TARGETS`.
     `qualification` is the qualification envelope a `host` PEP admits images under, already verified,
-    `body_bound` is the PEP's own bound on a body (E6), and `has_clock` is False for a PEP with no real time
+    `body_bound` is the PEP's own bound on a body, within its kind's (E6), and `has_clock` is False for a PEP with no real time
     clock, whose `now` is its time floor plus its monotonic count (T2) and which never applies T3."""
     kind: str
     stream: str
@@ -89,7 +89,7 @@ def verify(sealed: bytes, body: bytes, *, trust: TrustStore, pep: PepView, now: 
     except Refused as refused:
         return Verdict(refused.cause)
     body = bytes(body)
-    if len(body) > pep.body_bound:
+    if len(body) > min(pep.body_bound, kinds.TARGETS[pep.kind].body_bound):
         return Verdict("dist:too-large")
     # V3: the signatures, over the bytes as they came and before anything reads them (E9)
     counted = trust.counting(entries, env.signed_message(envelope_bytes), kinds.AUTHORITY)   # K4: every kind's role
@@ -100,11 +100,12 @@ def verify(sealed: bytes, body: bytes, *, trust: TrustStore, pep: PepView, now: 
         envelope = env.read(envelope_bytes)
     except Refused as refused:
         return Verdict(refused.cause)
-    # V5: for this PEP's kind, an artifact its kind uses or a trust kind, on its stream or `@trust`
+    # V5: for this PEP's kind, an artifact its kind uses or a trust kind its machine applies, on its stream or
+    # `@trust`
     target = kinds.TARGETS[pep.kind]
     stream = env.TRUST_STREAM if envelope.artifact in kinds.ON_TRUST_STREAM else pep.stream
     if (pep.kind not in envelope.targets or envelope.stream != stream
-            or not (envelope.artifact in target.uses or envelope.artifact in kinds.TRUST_ARTIFACTS)):
+            or not (envelope.artifact in target.uses or envelope.artifact in target.applies)):
         return Verdict("dist:target-mismatch", envelope)
     # V6: time, against the larger of the clock and the time floor (T1, T3, T4; X4 a trust kind never expires).
     # A PEP with no clock has no ground to call an envelope early (T3) and catches up by V13 (T2).
@@ -136,7 +137,7 @@ def verify(sealed: bytes, body: bytes, *, trust: TrustStore, pep: PepView, now: 
             != (envelope.policy_sha256, envelope.release, envelope.replaces, envelope.widens)):
         return refused("dist:incomplete")
     # V11: the artifact's own check
-    cause = kinds.ARTIFACTS[envelope.artifact].check(envelope, body, pep)
+    cause = target.check_for(envelope.artifact)(envelope, body, pep)
     if cause is not None:
         return refused(cause)
     return Verdict(None, envelope, time_floor=time_floor)

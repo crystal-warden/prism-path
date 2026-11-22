@@ -240,6 +240,7 @@ prismpath/deferral.py
 prismpath/distribution/__init__.py
 prismpath/distribution/adapters/__init__.py
 prismpath/distribution/adapters/host.py
+prismpath/distribution/adapters/mesh.py
 prismpath/distribution/devbuild.py
 prismpath/distribution/envelope.py
 prismpath/distribution/kinds.py

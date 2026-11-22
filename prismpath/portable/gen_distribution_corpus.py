@@ -136,18 +136,34 @@ def replay(case: dict) -> dict:
             "envelope_id": verdict.envelope.envelope_id if verdict.envelope is not None else None}
 
 
-def build() -> dict:
-    spec = spec_cases()
+def build_cases(kind: str, spec: Dict[int, dict]) -> List[dict]:
+    """The verifier cases on a PEP of `kind`: on `host` every case that runs in Rust or only in Python, for
+    Python and Rust, and on `mesh` every case that runs in the C core, for Python and the C core (I1)."""
     body = image()
     signer = test_key("A")
-    default_pep = verifier.PepView("host", STREAM, qualification=QUALIFICATION)
+    implementations = {"host": ("P", "R"), "mesh": ("P", "C")}[kind]
     cases: List[dict] = []
+
+    def view(**members) -> verifier.PepView:
+        if kind != "host":
+            members.pop("qualification", None)               # only a host admits images under a qualification
+        return verifier.PepView(kind, STREAM, **members)
+
+    def kind_doc(body_: bytes, **changes) -> dict:
+        return envelope_doc(body_, **{"targets": [kind], **changes})
+
+    default_pep = view(qualification=QUALIFICATION)
 
     def add(number: int, name: str, expected: Optional[str], sealed: bytes, *, payload: bytes = body,
             trust: Optional[TrustStore] = None, pep: verifier.PepView = default_pep, now: int = NOW,
             unreadable: bool = False, unchanged: bool = False) -> None:
+        runs_on = spec[number]["runs_on"]
+        if not ("C" in runs_on if kind == "mesh" else "R" in runs_on or "C" not in runs_on):
+            return
         store = trust_store() if trust is None else trust
-        case = {"case": number, "name": f"{number:03d}_{name}", "runs_on": spec[number]["runs_on"],
+        suffix = "" if kind == "host" else f"_on_{kind}"
+        case = {"case": number, "name": f"{number:03d}_{name}{suffix}",
+                "runs_on": [implementation for implementation in runs_on if implementation in implementations],
                 "trust": None if unreadable else store.document(), "pep": pep_document(pep), "now": now,
                 "sealed": sealed.hex(), "body": payload.hex()}
         case["expect"] = replay(case)
@@ -161,24 +177,24 @@ def build() -> dict:
     def sealed_by(envelope_bytes: bytes, *names: str) -> bytes:
         return env.seal(envelope_bytes, [test_key(name) for name in names])
 
-    good = raw(envelope_doc(body))
+    good = raw(kind_doc(body))
     good_sealed = sealed_by(good, "A")
     good_id = env.envelope_id(good)
 
     # E1 to E8, S1, S2: the envelope and the container read
     add(1, "round_trip", None, good_sealed)
-    doc = envelope_doc(body)
+    doc = kind_doc(body)
     del doc["meta"]
     add(2, "member_missing", "dist:bad-format", sealed_by(raw(doc), "A"))
-    add(3, "member_extra", "dist:bad-format", sealed_by(raw(envelope_doc(body, note="x")), "A"))
-    reversed_doc = json.dumps(dict(sorted(envelope_doc(body).items(), reverse=True)), separators=(",", ":"),
+    add(3, "member_extra", "dist:bad-format", sealed_by(raw(kind_doc(body, note="x")), "A"))
+    reversed_doc = json.dumps(dict(sorted(kind_doc(body).items(), reverse=True)), separators=(",", ":"),
                               sort_keys=False, ensure_ascii=False).encode()
     add(4, "members_out_of_order", "document:not-canonical", sealed_by(reversed_doc, "A"))
-    add(5, "unknown_artifact", "dist:bad-format", sealed_by(raw(envelope_doc(body, artifact="policy.zip")), "A"))
-    add(5, "unknown_target", "dist:bad-format", sealed_by(raw(envelope_doc(body, targets=["host", "toaster"])), "A"))
+    add(5, "unknown_artifact", "dist:bad-format", sealed_by(raw(kind_doc(body, artifact="policy.zip")), "A"))
+    add(5, "unknown_target", "dist:bad-format", sealed_by(raw(kind_doc(body, targets=[kind, "toaster"])), "A"))
     add(6, "expires_not_above_not_before", "dist:bad-format",
-        sealed_by(raw(envelope_doc(body, expires=NOT_BEFORE)), "A"))
-    long_doc = envelope_doc(body)
+        sealed_by(raw(kind_doc(body, expires=NOT_BEFORE)), "A"))
+    long_doc = kind_doc(body)
     long_doc["meta"] = {**long_doc["meta"], "overlay_of": ""}
     long_doc["meta"]["overlay_of"] = "o" * (env.MAX_ENVELOPE + 1 - len(raw(long_doc)))
     long = raw(long_doc)
@@ -186,7 +202,7 @@ def build() -> dict:
     add(7, "envelope_2049_bytes", "dist:bad-format",
         env.seal_entries(long, [(env.key_id(public_raw(signer)), signer.sign(env.signed_message(long)))]))
     add(7, "body_over_bound", "dist:too-large", good_sealed,
-        pep=verifier.PepView("host", STREAM, qualification=QUALIFICATION, body_bound=len(body) - 1))
+        pep=view(qualification=QUALIFICATION, body_bound=len(body) - 1))
 
     a_entry = env.unseal(good_sealed)[1][0]
     b_entry = env.unseal(sealed_by(good, "B"))[1][0]
@@ -217,16 +233,16 @@ def build() -> dict:
     add(16, "trust_store_unreadable", "dist:unknown-key", good_sealed, unreadable=True)
 
     # Q1 to Q3, V8: the floor
-    floored = sealed_by(raw(envelope_doc(body, seq=5)), "A")
-    floored_id = env.envelope_id(raw(envelope_doc(body, seq=5)))
-    add(20, "seq_below_floor", "dist:seq-replay", sealed_by(raw(envelope_doc(body, seq=4)), "A"),
-        pep=verifier.PepView("host", STREAM, floor=verifier.Floor(5, frozenset({floored_id})),
+    floored = sealed_by(raw(kind_doc(body, seq=5)), "A")
+    floored_id = env.envelope_id(raw(kind_doc(body, seq=5)))
+    add(20, "seq_below_floor", "dist:seq-replay", sealed_by(raw(kind_doc(body, seq=4)), "A"),
+        pep=view(floor=verifier.Floor(5, frozenset({floored_id})),
                              qualification=QUALIFICATION))
     add(21, "seq_at_floor_committed_id", None, floored, unchanged=True,
-        pep=verifier.PepView("host", STREAM, floor=verifier.Floor(5, frozenset({floored_id})),
+        pep=view(floor=verifier.Floor(5, frozenset({floored_id})),
                              qualification=QUALIFICATION))
     add(22, "seq_at_floor_other_id", "dist:seq-replay", floored,
-        pep=verifier.PepView("host", STREAM, floor=verifier.Floor(5, frozenset({good_id})),
+        pep=view(floor=verifier.Floor(5, frozenset({good_id})),
                              qualification=QUALIFICATION))
 
     # T3, T4, V6: time
@@ -237,11 +253,11 @@ def build() -> dict:
 
     # V1, V5, V7, V9, V11
     add(39, "two_failures_report_the_earlier", "dist:target-mismatch",
-        sealed_by(raw(envelope_doc(body, targets=["xdp"])), "A"), now=EXPIRES)
-    add(40, "another_target_kind", "dist:target-mismatch", sealed_by(raw(envelope_doc(body, targets=["agent"])), "A"))
+        sealed_by(raw(kind_doc(body, targets=["xdp"])), "A"), now=EXPIRES)
+    add(40, "another_target_kind", "dist:target-mismatch", sealed_by(raw(kind_doc(body, targets=["agent"])), "A"))
     add(40, "an_artifact_the_kind_does_not_use", "dist:target-mismatch",
-        sealed_by(raw(envelope_doc(body, artifact="policy.core", meta={})), "A"))
-    add(40, "another_stream", "dist:target-mismatch", sealed_by(raw(envelope_doc(body, stream="host/other")), "A"))
+        sealed_by(raw(kind_doc(body, artifact="policy.core", meta={})), "A"))
+    add(40, "another_stream", "dist:target-mismatch", sealed_by(raw(kind_doc(body, stream="host/other")), "A"))
     add(41, "envelope_id_revoked", "dist:revoked", good_sealed, trust=trust_store(revoked_envelopes=frozenset({good_id})))
     add(41, "policy_hash_revoked", "dist:revoked", good_sealed,
         trust=trust_store(revoked_policies=frozenset({canon.sha256_hex(body)})))
@@ -249,16 +265,16 @@ def build() -> dict:
     add(42, "body_one_byte_changed", "dist:body-mismatch", good_sealed, payload=body[:-1] + bytes([body[-1] ^ 1]))
     meta = image_meta(body)
     add(44, "counts_differ", "manifest:count-mismatch",
-        sealed_by(raw(envelope_doc(body, meta={**meta, "counts": {**meta["counts"], "atoms": meta["counts"]["atoms"] + 1}})), "A"))
+        sealed_by(raw(kind_doc(body, meta={**meta, "counts": {**meta["counts"], "atoms": meta["counts"]["atoms"] + 1}})), "A"))
     add(44, "over_a_qualification_cap", "image:caps-exceeded", good_sealed,
-        pep=verifier.PepView("host", STREAM, qualification={**QUALIFICATION, "caps": {"atoms": 0}}))
+        pep=view(qualification={**QUALIFICATION, "caps": {"atoms": 0}}))
     add(44, "wrong_wcet", "manifest:wcet-mismatch",
-        sealed_by(raw(envelope_doc(body, meta={**meta, "wcet_cycles": meta["wcet_cycles"] + 1})), "A"))
+        sealed_by(raw(kind_doc(body, meta={**meta, "wcet_cycles": meta["wcet_cycles"] + 1})), "A"))
 
     # E7, E10, V10: one release id per release
     other_release = env.release_id([("policy.ppt", canon.sha256_hex(body)), ("policy.spiral", "ab" * 32)])
     add(114, "staged_release_id_differs", "dist:incomplete", good_sealed,
-        pep=verifier.PepView("host", STREAM, qualification=QUALIFICATION,
+        pep=view(qualification=QUALIFICATION,
                              staged=verifier.Staged(STREAM, 1, canon.sha256_hex(body), other_release, "", False)))
 
     # S6: the signature block is not signed
@@ -273,9 +289,15 @@ def build() -> dict:
     # T2, T3, V13: a PEP with no clock takes the authority's not_before as its time
     month = 30 * 86400
     add(119, "no_clock_a_month_behind", None, good_sealed, now=NOT_BEFORE - month,
-        pep=verifier.PepView("host", STREAM, qualification=QUALIFICATION, has_clock=False))
+        pep=view(qualification=QUALIFICATION, has_clock=False))
     add(119, "clock_a_month_early", "dist:not-yet-valid", good_sealed, now=NOT_BEFORE - month)
 
+    return cases
+
+
+def build() -> dict:
+    spec = spec_cases()
+    cases = build_cases("host", spec) + build_cases("mesh", spec)
     release_ids = []
     three = [("policy.core", canon.sha256_hex(b"core")), ("egress.hosts", canon.sha256_hex(b"[]")),
              ("sandbox.profile", canon.sha256_hex(b"profile"))]

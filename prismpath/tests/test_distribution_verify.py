@@ -189,9 +189,9 @@ def test_case_118_a_key_in_a_role_this_version_does_not_know_never_counts(tmp_pa
 def test_case_119_a_pep_with_no_clock_takes_not_before_as_its_time():
     """case_119: T2, T3, V13. A month behind after a power loss it accepts a current envelope and its time
     floor moves to not_before. A PEP with a clock a month early refuses the same envelope."""
-    accepted = GEN.replay(BY_NAME["119_no_clock_a_month_behind"])
+    accepted = GEN.replay(BY_NAME["119_no_clock_a_month_behind_on_mesh"])
     assert accepted["cause"] is None and accepted["time_floor"] == GEN.NOT_BEFORE
-    assert _cause("119_clock_a_month_early") == "dist:not-yet-valid"
+    assert _cause("119_clock_a_month_early_on_mesh") == "dist:not-yet-valid"
     expired = verifier.PepView("host", GEN.STREAM, qualification=GEN.QUALIFICATION, has_clock=False)
     good = bytes.fromhex(BY_NAME["001_round_trip"]["sealed"])
     assert _verify(good, pep=expired, now=GEN.EXPIRES).cause == "dist:expired"
@@ -211,7 +211,7 @@ def test_the_staged_release_must_agree_at_its_seq():
 
 def test_a_pep_view_names_a_built_kind_and_a_stream():
     with pytest.raises(ValueError):
-        verifier.PepView("mesh", GEN.STREAM)
+        verifier.PepView("agent", GEN.STREAM)
     with pytest.raises(ValueError):
         verifier.PepView("host", env.TRUST_STREAM)
 

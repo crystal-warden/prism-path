@@ -13,6 +13,7 @@ spec stable.
 - **`prismpath.distribution.pep.Pep` stages, commits, aborts, rolls back and lapses at expiry, one machine for every Python target.** Its store under `<state>/dist/` is written in the commit order of the spec, so a death at any step leaves the old release or the new one and never a mix. A store it cannot read refuses every envelope and decides nothing.
 - **Every transition is reported in a state record signed by the PEP's instance key** (`state_record`). Provisioning takes a trust anchor and waits for the operator to confirm its fingerprint.
 - **The host adapter installs a committed release through `PolicyHost.install_verified`, the commit half `swap` now ends in,** and checks a declared spiral sidecar. Once a release came by distribution, `swap` and `rollback` refuse a pack with `dist:legacy-refused`.
+- **A modelled mesh node and a modelled cFS app run the same machine,** the mesh row in the kind table and the cFS row registered from `integrations/cfs/dist_kind.py`. Either may be provisioned to hold an expired release instead of refusing, and every record and receipt it signs while held says so.
 
 ### Added: the distribution envelope, the trust store and the one verifier (2026-11-22)
 

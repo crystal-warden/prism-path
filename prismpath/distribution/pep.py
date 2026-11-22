@@ -13,6 +13,7 @@ Its durable store is `<state>/dist/`, each file canon/2 and written whole (the o
     trust.json     the trust store (K1)
     floor.json     the floor (Q1)
     counter.json   the state record counter (H3)
+    setting.json   the expiry response the PEP was provisioned with (X10)
     staged.json    the staged release
     pending.json   the intent record of a commit or a rollback
     active.json    the active release and the one it replaced (RB1)
@@ -31,7 +32,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field, replace
-from typing import Any, Callable, Dict, FrozenSet, Iterable, Mapping, Optional, Tuple
+from typing import Any, Callable, Dict, FrozenSet, Iterable, Optional, Tuple
 
 from prismpath import canon
 from prismpath.distribution import devbuild, kinds, state_record
@@ -43,9 +44,9 @@ from prismpath.distribution.verify import SKEW, Floor, PepView, Staged, verify
 from prismpath.ledgers.audit_log import AuditLog
 
 REFUSE, HOLD = "refuse", "hold"
-_FLOOR, _ACTIVE, _STAGED, _PENDING, _COUNTER = ("prismpath.dist-floor/1", "prismpath.dist-active/1",
-                                                "prismpath.dist-staged/1", "prismpath.dist-pending/1",
-                                                "prismpath.dist-counter/1")
+_FLOOR, _ACTIVE, _STAGED, _PENDING, _COUNTER, _SETTING = (
+    "prismpath.dist-floor/1", "prismpath.dist-active/1", "prismpath.dist-staged/1", "prismpath.dist-pending/1",
+    "prismpath.dist-counter/1", "prismpath.dist-setting/1")
 
 
 class PepRefused(Exception):
@@ -190,6 +191,7 @@ class Pep:
         self.held = False
         self.outbox: list = []
         self._load()
+        self._check_setting()
         self._check_separation(self.trust)
         self._recover()
 
@@ -246,6 +248,19 @@ class Pep:
                 self.pending = self.store.read("pending.json", _PENDING)
             except Refused:
                 self.pending = {"op": "unknown", "release": None}
+
+    def _check_setting(self) -> None:
+        """X10: the expiry response is fixed at provisioning. A start with another one is refused, and one that
+        cannot be read locks the PEP."""
+        if not self.provisioned:
+            return
+        try:
+            provisioned = self.store.read("setting.json", _SETTING)["expiry"]
+        except (Refused, KeyError):
+            self.locked = True
+            return
+        if provisioned != self.expiry_response:
+            raise PepRefused(f"this PEP was provisioned to {provisioned} at expiry, not to {self.expiry_response} (X10)")
 
     def _release(self, doc: Optional[dict]) -> Optional[Release]:
         """A release document read back with every blob it names, or `Refused` when one is missing or not
@@ -395,11 +410,6 @@ class Pep:
         envelope_id = envelope.envelope_id if envelope is not None else None
         if not verdict.ok:
             return self._refuse(verdict.cause, envelope_id=envelope_id)
-        if envelope.artifact in kinds.ON_TRUST_STREAM:
-            # B2 applies a trust statement when it verifies. This version applies no revocation or rotation
-            # yet, so one is refused as an artifact this PEP does not take.
-            return self._refuse("dist:target-mismatch", envelope_id=envelope_id,
-                                reason="this version applies no revocation or rotation")
         if verdict.unchanged:
             return self._record("beat")                               # Q3: changes nothing, reports its state
         staged = self.staged
@@ -541,6 +551,16 @@ class Pep:
         """X7: `held` on every receipt written while the PEP holds an expired release, else None."""
         return "held" if self.held else None
 
+    def decide(self, under_release: Callable[[], Any]) -> dict:
+        """One decision through the PEP, after the expiry check (X1). With no active release, or locked, it is
+        refused with the cause of X3 and `under_release` is not called. Otherwise its answer is the decision,
+        and the receipt carries the hold mark while the PEP is held (X7)."""
+        self._check_expiry()
+        cause = self.refusal()
+        if cause is not None:
+            return {"decision": None, "cause": cause, "mark": None}
+        return {"decision": under_release(), "cause": None, "mark": self.receipt_mark()}
+
     # ------------------------------------------------------------------ RB1, RB2, X9: rollback
     def rollback(self) -> bytes:
         """Return to the release the active one replaced (RB1), never lowering the floor. Refused while held
@@ -606,6 +626,7 @@ class Pep:
         self.trust = store.save(self.store.path("trust.json"))
         self.store.write("floor.json", _FLOOR, {"stream": read.stream, "seq": 0, "ids": []})
         self.store.write("counter.json", _COUNTER, {"counter": self.counter})
+        self.store.write("setting.json", _SETTING, {"expiry": self.expiry_response})
         self.store.write_bytes("anchor.json", raw)
         self.store.remove("anchor.pending")
         self.stream, self.floor, self.locked, self.provisioned, self.held = read.stream, Floor(), False, True, False

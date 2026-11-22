@@ -5,13 +5,14 @@ new kind is one row.
 
 The names are closed lists of the format: an envelope naming any other artifact or target kind is
 `dist:bad-format` (E8), and each artifact's `meta` members are its row's. A target kind has a row in
-`TARGETS` once an enforcement point of that kind is built. This version has `host`. A PEP of a kind with no
-row cannot be described to the verifier. Each artifact's own check (V11) is `check(envelope, body, pep)`,
-which answers None or the cause.
+`TARGETS` once an enforcement point of that kind is built: `host` and `mesh` here, and `cfs`, whose table
+layout lives with the cFS app, registered by `integrations/cfs/dist_kind.py` through `register_target`. A
+PEP of a kind with no row cannot be described to the verifier. Each artifact's own check (V11) is
+`check(envelope, body, pep)`, which answers None or the cause. A target row may hold its own check of an
+artifact in `checks`, as a mesh node reads a `policy.ppt` with its own table parser and ignores `meta`.
 
-The three trust kinds read their bodies here as their formats. What a trust statement does to the trust
-store (R1 to R7, O1 to O4) and the widening rule (W1 to W7) are applied by the code that owns them, not
-by this table.
+A target row also says which trust kinds its machine applies (`applies`). V5 refuses any other trust kind
+with `dist:target-mismatch`, so a statement is never verified and then left unapplied.
 """
 from __future__ import annotations
 
@@ -81,16 +82,25 @@ TARGET_KINDS = frozenset({"agent", "cfs", "gateway", "host", "mesh", "xdp"})
 class Target:
     """A target kind: the artifacts it needs before it commits (C2), those it needs only when another
     artifact of the release asks for them (`policy.spiral`, when the `policy.ppt` declares packing), and
-    whether it can decide larger (W1). `uses` is what V5 admits. `expiry_hold` is whether a deployment may
-    choose HOLD at expiry (X6), true only for `mesh` and `cfs`."""
+    whether it can decide larger (W1). `uses` is what V5 admits besides the trust kinds in `applies`, the ones
+    its machine applies. `expiry_hold` is whether a deployment may choose HOLD at expiry (X6), true only for
+    `mesh` and `cfs`. `body_bound` is the kind's bound on a body (E6), and `checks` the kind's own V11 checks
+    where they differ from the artifact's."""
     needs: FrozenSet[str]
     decides: bool
     when_declared: FrozenSet[str] = frozenset()
     expiry_hold: bool = False
+    applies: FrozenSet[str] = frozenset({"trust.widening"})
+    body_bound: int = 16777215
+    checks: Any = None
 
     @property
     def uses(self) -> FrozenSet[str]:
         return self.needs | self.when_declared
+
+    def check_for(self, artifact: str) -> Optional[Callable[[Any, bytes, Any], Optional[str]]]:
+        """V11 for `artifact` on this kind: the kind's own check, else the artifact's."""
+        return (self.checks or {}).get(artifact) or ARTIFACTS[artifact].check
 
 
 ROLES = frozenset({"authority"})                    # K4: the key roles this version knows
@@ -141,6 +151,14 @@ def check_policy_spiral(_envelope, _body: bytes, _pep) -> Optional[str]:
     `sidecar_sha256` of the staged `policy.ppt` envelope's `meta.packing` when the release commits (C2), with
     `spiral:sidecar-missing` and `spiral:sidecar-hash-mismatch`, by the host's adapter."""
     return None
+
+
+def check_mesh_table(_envelope, body: bytes, _pep) -> Optional[str]:
+    """`policy.ppt` on a mesh node (V11): the node runs its own table parser and ignores `meta`, so the check is
+    the image check alone, with its existing causes."""
+    from prismpath.hotswap import policy_pack
+    ok, reasons = policy_pack.validate_image(body)
+    return None if ok else _first_cause(reasons)
 
 
 def _trust_body(body: bytes, form: str, members: FrozenSet[str]) -> dict:
@@ -221,11 +239,37 @@ ARTIFACTS: Dict[str, Artifact] = {
 TRUST_ARTIFACTS = frozenset({"trust.widening", "trust.revocation", "trust.rotation"})
 ON_TRUST_STREAM = frozenset({"trust.revocation", "trust.rotation"})     # R1, O1: they travel on `@trust`
 
+MESH_TABLE_MAX = 640                               # E6: TBL_MAX in prismpath-hw/mesh/main/ppt_mesh.c
+
 TARGETS: Dict[str, Target] = {
     "host": Target(needs=frozenset({"policy.ppt"}), decides=False, when_declared=frozenset({"policy.spiral"})),
+    "mesh": Target(needs=frozenset({"policy.ppt"}), decides=False, expiry_hold=True, body_bound=MESH_TABLE_MAX,
+                   checks={"policy.ppt": check_mesh_table}),
 }
 
-assert set(TARGETS) <= TARGET_KINDS and TRUST_ARTIFACTS <= set(ARTIFACTS)
-assert all(target.uses <= set(ARTIFACTS) - TRUST_ARTIFACTS for target in TARGETS.values())
-assert all(ARTIFACTS[name].check is not None for target in TARGETS.values() for name in target.uses | TRUST_ARTIFACTS)
+
+def _check_row(name: str, target: Target) -> None:
+    """The invariants every row holds: a kind of the closed list, artifacts it uses that are not trust kinds,
+    trust kinds it applies that are, and a check for every artifact it may verify."""
+    if name not in TARGET_KINDS:
+        raise ValueError(f"{name!r} is not a target kind of this format")
+    if not target.uses <= set(ARTIFACTS) - TRUST_ARTIFACTS or not target.applies <= TRUST_ARTIFACTS:
+        raise ValueError(f"the {name} row names an artifact or a trust kind that is not one")
+    if any(target.check_for(artifact) is None for artifact in target.uses | target.applies):
+        raise ValueError(f"the {name} row uses an artifact with no check")
+
+
+def register_target(name: str, target: Target) -> None:
+    """Add the row of a target kind whose checks live outside this package, as the cFS app's table layout does.
+    The name must be on the closed list, and a kind is registered once with one row."""
+    _check_row(name, target)
+    existing = TARGETS.get(name)
+    if existing is not None and existing != target:
+        raise ValueError(f"the {name} kind is registered with another row")
+    TARGETS[name] = target
+
+
+for _name, _target in TARGETS.items():
+    _check_row(_name, _target)
+assert TRUST_ARTIFACTS <= set(ARTIFACTS) and ON_TRUST_STREAM <= TRUST_ARTIFACTS
 assert all(artifact.role in ROLES for artifact in ARTIFACTS.values())
