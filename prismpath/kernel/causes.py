@@ -230,6 +230,11 @@ def code(cause_name: str) -> Optional[int]:
     return NAMES.get(cause_name)
 
 
+def reason_name(reason: str) -> str:
+    """The registry name a refusal string carries: a parameterized one has a `:<detail>` past the name."""
+    return ":".join(reason.split(":")[:2])
+
+
 def cause_class(code_or_name) -> Optional[str]:
     cause_code = NAMES.get(code_or_name) if isinstance(code_or_name, str) else code_or_name
     entry = CODES.get(cause_code) if cause_code is not None else None
