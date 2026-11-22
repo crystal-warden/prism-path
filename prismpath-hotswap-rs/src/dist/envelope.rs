@@ -11,7 +11,7 @@
 //! envelope is trusted. That is `verify::verify`.
 
 use super::{
-    is_meta_value, is_stream, load, require, ArtifactKind, Canon2Tag, DistFormat, Hex64, MaybeHex64, Refused, SortedSet,
+    is_stream, load, require, ArtifactKind, Canon2Tag, DistFormat, Hex64, MaybeHex64, Meta, Refused, SortedSet,
     TargetKind, BAD_FORMAT, MAX_SEQ,
 };
 use ed25519_dalek::{Signer, SigningKey};
@@ -95,26 +95,14 @@ impl EnvelopeDoc {
         } else {
             require(self.expires > self.not_before, "expires is not above not_before")?; // E5
         }
-        self.check_meta()
+        Ok(())
     }
 
-    /// E1 `meta`: an object of the members section 3 lists for the artifact, strings and integers and
-    /// one level of object.
-    fn check_meta(&self) -> Result<(), Refused> {
-        let Doc::Obj(members) = &self.meta else {
-            return Err(Refused::new(BAD_FORMAT, "meta is not an object"));
-        };
-        let row = self.artifact.row();
-        let names: Vec<&str> = members.iter().map(|(name, _)| name.as_str()).collect();
-        require(
-            row.meta_required.iter().all(|name| names.contains(name))
-                && names.iter().all(|name| row.meta_required.contains(name) || row.meta_optional.contains(name)),
-            &format!("meta members {names:?} for {}", self.artifact),
-        )?;
-        require(
-            members.iter().all(|(_, value)| is_meta_value(value)),
-            "a meta value is not a string, an integer or one level of object",
-        )
+    /// E1 and E11 `meta`: the members section 3 lists for the artifact, each in its form, read as the
+    /// artifact's own type.
+    fn read_meta(&self) -> Result<Meta, Refused> {
+        (self.artifact.row().meta)(self.meta.clone())
+            .map_err(|error| Refused::new(BAD_FORMAT, format!("meta for {} ({error})", self.artifact)))
     }
 
     /// The canon/2 bytes of the envelope. A writer refuses every envelope `read` would refuse, so
@@ -138,6 +126,7 @@ pub fn build(mut doc: EnvelopeDoc, body: &[u8]) -> Result<Vec<u8>, Refused> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Envelope {
     doc: EnvelopeDoc,
+    meta: Meta,
     raw: Vec<u8>,
 }
 
@@ -156,6 +145,11 @@ impl Envelope {
     pub fn envelope_id(&self) -> Hex64 {
         envelope_id(&self.raw)
     }
+
+    /// `meta` read as its artifact's form (E11).
+    pub fn form(&self) -> &Meta {
+        &self.meta
+    }
 }
 
 /// E1, E2, E5 and E8: the envelope in `envelope_bytes`, or `Refused` with `document:not-canonical` for
@@ -165,7 +159,8 @@ pub fn read(envelope_bytes: &[u8]) -> Result<Envelope, Refused> {
     require(!envelope_bytes.is_empty() && envelope_bytes.len() <= MAX_ENVELOPE, "an envelope's length")?;
     let doc: EnvelopeDoc = load(envelope_bytes, "envelope")?;
     doc.check()?;
-    Ok(Envelope { doc, raw: envelope_bytes.to_vec() })
+    let meta = doc.read_meta()?;
+    Ok(Envelope { doc, meta, raw: envelope_bytes.to_vec() })
 }
 
 /// S1: what every signature covers, the DSSE pre-authentication encoding of the envelope bytes with the

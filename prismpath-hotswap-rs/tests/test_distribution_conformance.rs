@@ -276,3 +276,94 @@ fn case_115_release_ids_are_the_sha256_of_the_sorted_pairs() {
     }
     assert_ne!(vectors[0]["release"], vectors[1]["release"]);
 }
+
+/// The verdict on case 001's envelope with `change` made to its `meta`, written by hand (the writer
+/// refuses it) and sealed by the authority key.
+fn with_meta(change: impl Fn(&mut serde_json::Map<String, Value>)) -> Option<String> {
+    let case = case("001_round_trip");
+    let sealed = bytes(case, "sealed");
+    let (envelope_bytes, _) = env::unseal(&sealed).unwrap();
+    let mut doc: Value = serde_json::from_slice(envelope_bytes).unwrap();
+    change(doc["meta"].as_object_mut().unwrap());
+    let raw = canon2::write_json(&doc).unwrap();
+    assert!(env::read(&raw).is_err() && doc_refused_by_writer(&raw), "the writer refuses what the reader refuses");
+    let resealed = env::seal(&raw, &[test_key("A")]).unwrap();
+    verify::verify(&resealed, &bytes(case, "body"), &trust_of(case), &pep_of(case), case["now"].as_i64().unwrap()).cause
+}
+
+fn doc_refused_by_writer(raw: &[u8]) -> bool {
+    codec::from_bytes::<env::EnvelopeDoc>(raw).map_or(true, |doc| doc.to_bytes().is_err())
+}
+
+// E11 and V4: every meta member is read in its form before a check uses it. These are the four envelope
+// parts of conformance case 127, which the shared corpus gains with the spec row.
+#[test]
+fn a_policy_ppt_whose_fields_is_a_string_is_bad_format() {
+    assert_eq!(with_meta(|meta| { meta.insert("fields".into(), json!("x")); }).as_deref(), Some("dist:bad-format"));
+}
+
+#[test]
+fn a_policy_ppt_whose_counts_is_an_integer_is_bad_format() {
+    assert_eq!(with_meta(|meta| { meta.insert("counts".into(), json!(5)); }).as_deref(), Some("dist:bad-format"));
+}
+
+#[test]
+fn a_policy_ppt_whose_counts_lacks_a_member_is_bad_format() {
+    let cause = with_meta(|meta| { meta["counts"].as_object_mut().unwrap().remove("max_stack"); });
+    assert_eq!(cause.as_deref(), Some("dist:bad-format"));
+}
+
+#[test]
+fn a_policy_ppt_whose_packing_has_no_sidecar_sha256_is_bad_format() {
+    assert_eq!(with_meta(|meta| { meta.insert("packing".into(), json!({"profile": "spiral"})); }).as_deref(), Some("dist:bad-format"));
+}
+
+#[test]
+fn each_other_meta_form_is_held_at_v4() {
+    let refused: [(&str, Value); 8] = [
+        ("counts", json!({"atoms": 70000, "nodes": 1, "edges": 1, "prog_words": 1, "max_steps": 1, "max_stack": 1})),
+        ("fields", json!({"x": 1})),
+        ("wcet_cycles", json!(-1)),
+        ("qualification", json!("")),
+        ("qualification", json!("q".repeat(129))),
+        ("flow_sha256", json!("AB".repeat(32))),
+        ("overlay_of", json!(null)),
+        ("packing", json!({"profile": "spiral", "sidecar_sha256": "ab".repeat(32), "note": "x"})),
+    ];
+    for (member, value) in refused {
+        let cause = with_meta(|meta| { meta.insert(member.into(), value.clone()); });
+        assert_eq!(cause.as_deref(), Some("dist:bad-format"), "meta.{member} = {value}");
+    }
+    // a well formed packing with another profile reads, and V11 then names the profile
+    let case = case("001_round_trip");
+    let sealed = bytes(case, "sealed");
+    let (envelope_bytes, _) = env::unseal(&sealed).unwrap();
+    let mut doc: Value = serde_json::from_slice(envelope_bytes).unwrap();
+    doc["meta"]["packing"] = json!({"profile": "zigzag", "sidecar_sha256": "ab".repeat(32)});
+    let raw = canon2::write_json(&doc).unwrap();
+    let resealed = env::seal(&raw, &[test_key("A")]).unwrap();
+    let verdict = verify::verify(&resealed, &bytes(case, "body"), &trust_of(case), &pep_of(case), case["now"].as_i64().unwrap());
+    assert_eq!(verdict.cause.as_deref(), Some("packing:unknown-profile"));
+}
+
+#[test]
+fn the_net_edge_and_sandbox_profile_meta_forms_are_read_at_v4() {
+    let case = case("001_round_trip");
+    let sealed = bytes(case, "sealed");
+    let (envelope_bytes, _) = env::unseal(&sealed).unwrap();
+    let reads = |artifact: &str, meta: Value| {
+        let mut doc: Value = serde_json::from_slice(envelope_bytes).unwrap();
+        doc["artifact"] = json!(artifact);
+        doc["meta"] = meta;
+        env::read(&canon2::write_json(&doc).unwrap()).map(|_| ()).map_err(|refused| refused.cause)
+    };
+    let hash = "ab".repeat(32);
+    assert_eq!(reads("net.edge", json!({"flow_sha256": hash, "names_sha256": hash, "qualification": "q"})), Ok(()));
+    assert_eq!(reads("net.edge", json!({"flow_sha256": hash, "names_sha256": "x", "qualification": "q"})), Err("dist:bad-format"));
+    assert_eq!(reads("net.edge", json!({"flow_sha256": hash, "qualification": "q"})), Err("dist:bad-format"));
+    assert_eq!(reads("sandbox.profile", json!({"compiler": 1})), Ok(()));
+    assert_eq!(reads("sandbox.profile", json!({"compiler": 0})), Err("dist:bad-format"));
+    assert_eq!(reads("sandbox.profile", json!({"compiler": "1"})), Err("dist:bad-format"));
+    assert_eq!(reads("policy.core", json!({})), Ok(()));
+    assert_eq!(reads("policy.core", json!({"note": "x"})), Err("dist:bad-format"));
+}

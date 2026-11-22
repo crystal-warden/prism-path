@@ -444,31 +444,32 @@ kind_names!(
 /// An artifact's own check (V11): None when it passes, else the cause.
 pub type Check = fn(&Envelope, &[u8], &PepView) -> Option<String>;
 
-/// An artifact kind's row: its `meta` members, its own check (V11), None when no built target uses it
-/// yet, and the key role it needs (K4).
+/// Reads an artifact's `meta` as its form (E11).
+pub type MetaReader = fn(Doc) -> Result<Meta, codec::Error>;
+
+/// An artifact kind's row: the form of its `meta` (E1, E11), its own check (V11), None when no built
+/// target uses it yet, and the key role it needs (K4).
 #[derive(Clone, Copy)]
 pub struct Artifact {
-    pub meta_required: &'static [&'static str],
-    pub meta_optional: &'static [&'static str],
+    pub meta: MetaReader,
     pub check: Option<Check>,
     pub role: &'static str,
 }
 
-const PLAIN: Artifact = Artifact { meta_required: &[], meta_optional: &[], check: None, role: AUTHORITY };
+const PLAIN: Artifact = Artifact { meta: |doc| codec::from_doc::<NoMeta>(doc).map(|_| Meta::None), check: None, role: AUTHORITY };
 
 impl ArtifactKind {
     pub fn row(self) -> Artifact {
         use ArtifactKind::*;
         match self {
             PolicyPpt => Artifact {
-                meta_required: &["fields", "counts", "wcet_cycles", "qualification"],
-                meta_optional: &["packing", "flow_sha256", "overlay_of"],
+                meta: |doc| codec::from_doc(doc).map(Meta::PolicyPpt),
                 check: Some(check_policy_ppt),
                 ..PLAIN
             },
             PolicySpiral => Artifact { check: Some(check_policy_spiral), ..PLAIN },
-            SandboxProfile => Artifact { meta_required: &["compiler"], ..PLAIN },
-            NetEdge => Artifact { meta_required: &["flow_sha256", "names_sha256", "qualification"], ..PLAIN },
+            SandboxProfile => Artifact { meta: |doc| codec::from_doc(doc).map(Meta::SandboxProfile), ..PLAIN },
+            NetEdge => Artifact { meta: |doc| codec::from_doc(doc).map(Meta::NetEdge), ..PLAIN },
             TrustWidening => Artifact { check: Some(|_, body, _| read_widening(body).err().map(cause_of)), ..PLAIN },
             TrustRevocation => Artifact { check: Some(|_, body, _| read_revocation(body).err().map(cause_of)), ..PLAIN },
             TrustRotation => Artifact { check: Some(|_, body, _| read_rotation(body).err().map(cause_of)), ..PLAIN },
@@ -522,6 +523,108 @@ impl TargetKind {
     }
 }
 
+// ------------------------------------------------------------------ the meta forms (E11)
+
+/// A string of 1 to `MAX` characters.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(try_from = "String", into = "String")]
+pub struct Text<const MAX: usize>(String);
+
+impl<const MAX: usize> Text<MAX> {
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl<const MAX: usize> TryFrom<String> for Text<MAX> {
+    type Error = String;
+    fn try_from(text: String) -> Result<Text<MAX>, String> {
+        if (1..=MAX).contains(&text.chars().count()) {
+            Ok(Text(text))
+        } else {
+            Err(format!("a string of 1 to {MAX} characters, not {} characters", text.chars().count()))
+        }
+    }
+}
+
+impl<const MAX: usize> From<Text<MAX>> for String {
+    fn from(text: Text<MAX>) -> String {
+        text.0
+    }
+}
+
+/// An optional member: absent is None, and present it has the member's form (null is not absent).
+fn present<'de, D: Deserializer<'de>, T: Deserialize<'de>>(deserializer: D) -> Result<Option<T>, D::Error> {
+    T::deserialize(deserializer).map(Some)
+}
+
+/// The `meta` of an artifact kind that has no members: the empty object.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct NoMeta {}
+
+/// `policy.ppt` `counts`: exactly the six header counts.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Counts {
+    pub atoms: u16,
+    pub nodes: u16,
+    pub edges: u16,
+    pub prog_words: u16,
+    pub max_steps: u16,
+    pub max_stack: u16,
+}
+
+/// `policy.ppt` `packing`: the profile, checked at V11, and the sidecar's hash.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Packing {
+    pub profile: Text<32>,
+    pub sidecar_sha256: Hex64,
+}
+
+/// `policy.ppt` `meta`. The members mean what the same members of a `ppt-pack/1` manifest mean, and
+/// `qualification` is its `envelope_id`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PptMeta {
+    pub fields: BTreeMap<String, String>,
+    pub counts: Counts,
+    pub wcet_cycles: u64,
+    pub qualification: Text<128>,
+    #[serde(default, deserialize_with = "present", skip_serializing_if = "Option::is_none")]
+    pub packing: Option<Packing>,
+    #[serde(default, deserialize_with = "present", skip_serializing_if = "Option::is_none")]
+    pub flow_sha256: Option<Hex64>,
+    #[serde(default, deserialize_with = "present", skip_serializing_if = "Option::is_none")]
+    pub overlay_of: Option<Text<128>>,
+}
+
+/// `net.edge` `meta`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct NetEdgeMeta {
+    pub flow_sha256: Hex64,
+    pub names_sha256: Hex64,
+    pub qualification: Text<128>,
+}
+
+/// `sandbox.profile` `meta`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProfileMeta {
+    pub compiler: std::num::NonZeroU64,
+}
+
+/// An envelope's `meta` read as its artifact's form.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Meta {
+    None,
+    PolicyPpt(PptMeta),
+    NetEdge(NetEdgeMeta),
+    SandboxProfile(ProfileMeta),
+}
+
 // ------------------------------------------------------------------ the artifact checks (V11)
 
 fn first_cause(reasons: &[String]) -> Option<String> {
@@ -530,9 +633,12 @@ fn first_cause(reasons: &[String]) -> Option<String> {
 
 /// `policy.ppt` on a target that reads `meta` (V11): `validate_image`, the signed counts, the recomputed
 /// WCET, the packing profile, and the qualification envelope gate the PEP holds, each with its existing
-/// cause. `meta` means what the same members of a `ppt-pack/1` manifest mean.
+/// cause. The members' forms were read at V4 (E11), so no check here meets another form.
 pub fn check_policy_ppt(envelope: &Envelope, body: &[u8], pep: &PepView) -> Option<String> {
-    let meta = envelope.meta.to_json();
+    let Meta::PolicyPpt(ppt) = envelope.form() else {
+        return Some(BAD_FORMAT.to_string());
+    };
+    let meta = serde_json::to_value(ppt).expect("a policy.ppt meta is a JSON object");
     let (ok, reasons) = crate::validate_image(body, None);
     if !ok {
         return first_cause(&reasons);
@@ -540,10 +646,8 @@ pub fn check_policy_ppt(envelope: &Envelope, body: &[u8], pep: &PepView) -> Opti
     if let Some(cause) = first_cause(&crate::check_counts(&meta, body)) {
         return Some(cause);
     }
-    if let Some(packing) = meta.get("packing") {
-        if packing.get("profile").and_then(|profile| profile.as_str()) != Some("spiral") {
-            return Some("packing:unknown-profile".to_string());
-        }
+    if ppt.packing.as_ref().is_some_and(|packing| packing.profile.as_str() != "spiral") {
+        return Some("packing:unknown-profile".to_string());
     }
     let Some(qualification) = &pep.qualification else {
         return Some("envelope:missing".to_string());
@@ -608,14 +712,6 @@ pub fn read_rotation(body: &[u8]) -> Result<Rotation, Refused> {
 
 pub fn read_widening(body: &[u8]) -> Result<Widening, Refused> {
     load(body, "widening body")
-}
-
-/// A `meta` value: a string or an integer, or one level of object of those (E1).
-pub(crate) fn is_meta_value(value: &Doc) -> bool {
-    fn scalar(value: &Doc) -> bool {
-        matches!(value, Doc::Str(_) | Doc::Int(_))
-    }
-    scalar(value) || matches!(value, Doc::Obj(members) if members.iter().all(|(_, inner)| scalar(inner)))
 }
 
 #[cfg(test)]
