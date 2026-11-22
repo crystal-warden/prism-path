@@ -8,9 +8,11 @@ spec stable.
 
 ## [Unreleased]
 
-### Fixed: in-toto export hardening (2026-11-22)
+### Fixed: the in-toto export finds keys only where it is told to, and says when verify was unpinned (2026-11-22)
 
-- **`prismpath.ledgers.intoto` no longer patches `InstanceKey.__init__` or scans live objects for a private key, so a key comes only from an argument, the environment variable or the run's key files, `verify` reports `pinned` so an unpinned check is not mistaken for a pinned one, and `import_envelopes` removes the roots file it restored when verification fails.**
+- **`prismpath.ledgers.intoto` no longer patches `InstanceKey.__init__` or scans live objects for a private key.** A key comes from an argument, the environment variable or the run's key files.
+- **`verify` reports `pinned`, `pinned_authority` and `pinned_instance`.** A check without pins reads the run's own `instance.pub`, which says nothing about who made the run, so its report says `pinned: false` and `signed-unpinned`.
+- **A failed `import_envelopes` leaves the run directory as it was.** The roots file it restored is removed when verification fails, and a malformed envelope is a `Bad` error.
 
 ### Fixed: a cFS store that does not read no longer resets the version floor to 0 (2026-11-21)
 
