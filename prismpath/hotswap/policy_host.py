@@ -32,6 +32,7 @@ import threading
 from datetime import datetime, timezone
 from typing import List, Optional
 
+from prismpath.distribution import devbuild
 from prismpath.hotswap import policy_pack as pp
 from prismpath.ledgers.audit_log import AuditLog
 from prismpath.ledgers import root_statement
@@ -293,11 +294,19 @@ class PolicyHost:
         """Verify -> envelope -> version -> stage -> atomic flip. Returns {ok, reasons} (or the
         active dict on success). Every outcome is one audit event; the active policy only changes
         on full success. A state directory whose enforcement point committed a distribution envelope
-        refuses every pack with `dist:legacy-refused` (L2)."""
+        refuses every pack with `dist:legacy-refused` (L2). `allow_unsigned` is an escape hatch that works
+        only in a dev build. In a production build the hatch is refused and the pack is checked as signed."""
         with self._lock:
             if self._distribution_floor():
                 return self._reject(None, None, ["dist:legacy-refused"], strict)
             pending = self._recover()
+            if allow_unsigned:
+                # an escape hatch: a dev build lets it through, a production build refuses it and the signed check
+                # runs instead (docs/design/spec-policy-distribution.md, D1, D2)
+                try:
+                    devbuild.hatch("--allow-unsigned", self.audit)
+                except devbuild.HatchRefused:
+                    allow_unsigned = False
             image = None
             try:
                 with open(ppt_path, "rb") as image_file:

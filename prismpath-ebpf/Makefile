@@ -112,11 +112,22 @@ loader: loader.c ppt_image.c ppt_maps.c ppt_common.h ppt_image.h ppt_maps.h
 		$(CC) $(CFLAGS) -DNO_LIBBPF loader.c ppt_image.c -o loader; \
 	fi
 
+# The dev build of the loader (docs/design/spec-policy-distribution.md, D2): the only binary in which the
+# PPT_NET_ALLOW_UNVERIFIED escape hatch works, for the observe only demos. The production `loader` refuses it.
+loader-dev: loader.c ppt_image.c ppt_maps.c ppt_common.h ppt_image.h ppt_maps.h
+	@if [ $(LIBBPF_EXISTS) -eq 1 ]; then \
+		$(CC) $(CFLAGS) -DPPT_DEV_BUILD loader.c ppt_image.c ppt_maps.c $$(pkg-config --cflags --libs libbpf) -lelf -lz -lpthread -lcrypto -o loader-dev; \
+	else \
+		$(CC) $(CFLAGS) -DPPT_DEV_BUILD -DNO_LIBBPF loader.c ppt_image.c -o loader-dev; \
+	fi
+
+dev: loader-dev
+
 clean:
-	rm -f ppt_xdp.bpf.o ppt_net.bpf.o facet_decode.bpf.o ppt_select.bpf.o a6/ppt_xdp.bpf.o gnet/gn_xdp.bpf.o gnet/gn_xdp.pin.bpf.o gnet/gn_loader gnet/gn_batch loader interp $(LOADER_OBJS) $(TOOLS) test_merkle test_merkle_ext smoke.out scratch/regs*.bin
+	rm -f ppt_xdp.bpf.o ppt_net.bpf.o facet_decode.bpf.o ppt_select.bpf.o a6/ppt_xdp.bpf.o gnet/gn_xdp.bpf.o gnet/gn_xdp.pin.bpf.o gnet/gn_loader gnet/gn_batch loader loader-dev interp $(LOADER_OBJS) $(TOOLS) test_merkle test_merkle_ext smoke.out scratch/regs*.bin
 
 # Host-parity + (as root) full kernel verify/attach/execute. Captures smoke.out; preserves exit code.
 smoke: all
 	@bash smoke.sh > smoke.out 2>&1; rc=$$?; cat smoke.out; exit $$rc
 
-.PHONY: all clean smoke tools gnet test-merkle
+.PHONY: all clean smoke tools gnet test-merkle dev

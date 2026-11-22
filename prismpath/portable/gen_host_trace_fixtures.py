@@ -194,9 +194,13 @@ def _cases(key_id):
     case("revoked_key", [open_, _swap("v1"), active, snap], revoked=[key_id])
     case("strict_raises", [open_, _swap("v2"), _swap("v1", strict=True), _swap("tampered", strict=True),
                            _swap("absent", strict=True), _swap("v3", strict=True), verify, snap])
-    case("unsigned", [open_, _swap("v1"), _swap("no_manifest", allow_unsigned=True),
-                      _swap("bad_magic_image", allow_unsigned=True), _swap("absent", allow_unsigned=True),
-                      {"op": "rollback"}, active, verify, snap])
+    # --allow-unsigned is an escape hatch (docs/design/spec-policy-distribution.md, D1, D2): a production build
+    # refuses it and checks the pack as signed, and a case marked dev_build runs as a dev build, where it works
+    for dev_build in (False, True):
+        case("unsigned" + ("_dev_build" if dev_build else ""),
+             [open_, _swap("v1"), _swap("no_manifest", allow_unsigned=True),
+              _swap("bad_magic_image", allow_unsigned=True), _swap("absent", allow_unsigned=True),
+              {"op": "rollback"}, active, verify, snap], dev_build=dev_build)
     case("overlay_of", [open_, _swap("v1"), _swap("v4_overlay"), {"op": "attest"}, active, snap, open_, active,
                         {"op": "attest"}, snap])
     case("unicode_envelope", [open_, _swap("unicode_v1"), {"op": "attest"}, active, verify, snap, open_, active],
@@ -228,8 +232,10 @@ def _cases(key_id):
          [open_, _swap("v1"), _swap("v2", fault="clear"), active, {"op": "rollback"}, snap])
     case("crash_on_the_first_swap", [open_, _swap("v1", fault="active_record"), snap, open_, active, _swap("v1"),
                                      snap])
-    case("crash_unsigned_skips_the_floor", [open_, _swap("v1", allow_unsigned=True, fault="floor"),
-                                            _swap("v1", allow_unsigned=True, fault="evidence"), snap])
+    for dev_build in (False, True):
+        case("crash_unsigned_skips_the_floor" + ("_dev_build" if dev_build else ""),
+             [open_, _swap("v1", allow_unsigned=True, fault="floor"), _swap("v1", allow_unsigned=True, fault="evidence"),
+              snap], dev_build=dev_build)
 
     # the audit file refuses the event
     case("audit_unwritable_on_accept",
@@ -627,7 +633,13 @@ def build():
             work.mkdir(parents=True)
             (work / "keys").mkdir()
             (work / "keys" / "authority.pub").write_bytes(Path(pub_path).read_bytes())
-            case["expect"] = run_case(case, doc, str(work))
+            from prismpath.distribution import devbuild
+            real = devbuild.is_dev_build
+            devbuild.is_dev_build = (lambda package_dir=None: True) if case.get("dev_build") else (lambda package_dir=None: False)
+            try:
+                case["expect"] = run_case(case, doc, str(work))
+            finally:
+                devbuild.is_dev_build = real
     return doc
 
 

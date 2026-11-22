@@ -208,15 +208,23 @@ fn host_pipeline_floor_rollback_and_audit() {
     assert_eq!(rb0["ok"], Value::Bool(false));
     assert_eq!(rb0["reasons"], serde_json::json!(["rollback:no-previous"]));
 
-    // 5) an unsigned swap (validate-only path, no version bump) becomes the second active —
-    //    then rollback restores the signed v3 policy as last-known-good
+    // 5) an unsigned swap is an escape hatch (spec-policy-distribution.md, D1, D2). In a production build it is
+    //    refused and the pack is checked as signed, so v3 again meets its own floor. In a dev build it becomes the
+    //    second active, and rollback restores the signed v3 policy as last-known-good
     let r4 = host.swap(&ppt, true).unwrap();
-    assert_eq!(r4["ok"], Value::Bool(true), "unsigned swap must be accepted: {r4}");
-    assert_eq!(r4["unsigned"], Value::Bool(true));
-    let rb = host.rollback().unwrap();
-    assert_eq!(rb["ok"], Value::Bool(true), "rollback must restore last-known-good: {rb}");
-    assert_eq!(rb["version"].as_i64(), Some(3));
-    assert_eq!(rb["unsigned"], Value::Bool(false));
+    if prismpath_hotswap_rs::dist::DEV_BUILD {
+        assert_eq!(r4["ok"], Value::Bool(true), "unsigned swap must be accepted: {r4}");
+        assert_eq!(r4["unsigned"], Value::Bool(true));
+        let rb = host.rollback().unwrap();
+        assert_eq!(rb["ok"], Value::Bool(true), "rollback must restore last-known-good: {rb}");
+        assert_eq!(rb["version"].as_i64(), Some(3));
+        assert_eq!(rb["unsigned"], Value::Bool(false));
+    } else {
+        assert_eq!(r4["reasons"], serde_json::json!(["version:not-monotonic:3<=3"]), "{r4}");
+        let hatch = host.audit.events().iter().rev().find(|event| event["action"] == "hatch").cloned().unwrap();
+        assert_eq!(hatch["data"]["cause"], "dist:hatch-refused");
+        assert_eq!(hatch["data"]["dev_build"], Value::Bool(false));
+    }
 
     // 6) the audit trail (every accept/reject/rollback above) verifies with a real Merkle root
     host.attest().unwrap();

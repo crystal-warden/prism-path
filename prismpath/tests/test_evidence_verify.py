@@ -68,10 +68,17 @@ def test_a_good_run_verifies_with_every_receipt_replayed(produced):
     assert summary["disagree"] == 0 and summary["excluded"] == len(manifest["excluded"])
 
 
-def test_unpinned_keys_verify_as_signed_unpinned(produced):
+def test_unpinned_keys_are_an_escape_hatch(produced, monkeypatch):
+    """Without both keys pinned every check runs and a production build refuses the pass with dist:hatch-refused
+    (spec-policy-distribution.md, D1). Only a dev build reports signed-unpinned."""
     base, _manifest = produced
-    assert core_evidence.verify(base / "run", sample=5)["root_statement"] == "signed-unpinned"
     one_pin = {"pin_authority": _pins(produced)["pin_authority"]}
+    for pins in ({}, one_pin):
+        with pytest.raises(core_evidence.Bad, match="dist:hatch-refused"):
+            core_evidence.verify(base / "run", sample=5, **pins)
+    from prismpath.distribution import devbuild
+    monkeypatch.setattr(devbuild, "is_dev_build", lambda package_dir=None: True)
+    assert core_evidence.verify(base / "run", sample=5)["root_statement"] == "signed-unpinned"
     assert core_evidence.verify(base / "run", sample=5, **one_pin)["root_statement"] == "signed-unpinned"
 
 
@@ -316,7 +323,7 @@ def test_the_command_verifies_a_good_run(produced, capsys):
     assert out.startswith(f"prismpath evidence: verified {base / 'run'}: decider python, {manifest['receipts']} receipts")
     assert "root statement signed," in out and "through the reference kernel" in out and " 0 disagree" in out
     code, out, _err = _cli(capsys, base / "run", "--sample", "10")
-    assert code == 0 and "root statement signed-unpinned" in out and "10 replayed" in out, out
+    assert code == 1 and "dist:hatch-refused" in out, out                 # owner decision 8: unpinned is exit 1
 
 
 def test_the_command_refuses_a_tampered_run(produced, tmp_path, capsys):
@@ -332,10 +339,12 @@ def test_the_command_refuses_a_tampered_run(produced, tmp_path, capsys):
 
 def test_the_command_json_report(produced, capsys):
     base, manifest = produced
-    code, out, _err = _cli(capsys, base / "run", "--sample", "7", "--json")
+    pins = _pins(produced)
+    code, out, _err = _cli(capsys, base / "run", "--sample", "7", "--json", "--pin-authority", str(pins["pin_authority"]),
+                           "--pin-instance", str(pins["pin_instance"]))
     report = json.loads(out)
     assert code == 0 and report["ok"] is True and report["replayed"] == report["agree"] == 7
-    assert report["root_statement"] == "signed-unpinned" and report["receipts"] == manifest["receipts"]
+    assert report["root_statement"] == "signed" and report["receipts"] == manifest["receipts"]
 
 
 def test_the_command_refuses_its_inputs_with_exit_2(produced, tmp_path, capsys):
@@ -359,7 +368,8 @@ def test_the_verifier_needs_no_numpy(produced):
         "            raise ImportError('numpy is blocked for this test')\n"
         "sys.meta_path.insert(0, Block())\n"
         "from prismpath import cli\n"
-        f"code = cli.main(['evidence', 'verify', {str(base / 'run')!r}, '--sample', 'all'])\n"
+        f"code = cli.main(['evidence', 'verify', {str(base / 'run')!r}, '--sample', 'all', '--pin-authority', "
+        f"{str(_pins(produced)['pin_authority'])!r}, '--pin-instance', {str(_pins(produced)['pin_instance'])!r}])\n"
         "assert 'numpy' not in sys.modules\n"
         "sys.exit(code)\n")
     package_parent = str(Path(prismpath.__file__).resolve().parents[1])

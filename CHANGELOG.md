@@ -8,6 +8,13 @@ spec stable.
 
 ## [Unreleased]
 
+### Changed: escape hatches work only in a dev build (2026-11-22)
+
+- **`--allow-unsigned` on a swap and on the XDP preloader, `PPT_NET_ALLOW_UNVERIFIED=1` in the XDP loader, and a verify of evidence or of in-toto envelopes without both keys pinned now pass through `devbuild.hatch`.** A production build refuses each with `dist:hatch-refused`, writes that to the audit log, and runs the check the hatch would have skipped. A dev build, a checkout holding `.prismpath-dev-build`, lets them through and marks every hatch event `dev_build`.
+- **`prismpath evidence verify` without both `--pin-authority` and `--pin-instance` exits 1 outside a dev build.** Pin your own copies of the authority and instance public keys, or run `python tools/dev_build.py on` in a research checkout to see the unpinned result.
+- **The loader's bypass is compiled only into `loader-dev`, which `make -C prismpath-ebpf dev` builds for the observe only demos.**
+- **The Rust host refuses `allow_unsigned` the same way unless the crate is built with its `dev-hatches` feature, which is off by default.** The host trace corpus replays its unsigned cases once for each build.
+
 ### Added: authority key rotation, signed by the old key and the new (2026-11-22)
 
 - **An enforcement point applies a signed `trust.rotation` as soon as it verifies.** It is taken only at the next trust sequence, which revocations share, and only when the key it adds signed it too. It may never add the PEP's own instance key or a revoked key, nor retire a key the store does not hold.

@@ -616,6 +616,7 @@ def edge_checks(out_dir, pubkeys: Sequence[str], revoked: frozenset = frozenset(
         names_text = (out / "edge.names").read_text()
     except OSError as error:
         return [f"edge:unreadable:{error.errno}"], info
+    allow_unsigned = net_swap._hatch(allow_unsigned, None)      # a production build checks the signed flow anyway
     if not allow_unsigned:
         manifest = _manifest(ppt_path)
         if manifest is None or manifest.get("flow_sha256") != pp.sha256_hex(flow.encode("utf-8")):

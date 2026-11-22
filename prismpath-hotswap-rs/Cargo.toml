@@ -15,5 +15,10 @@ hex = "0.4"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0", features = ["float_roundtrip"] }
 
+[features]
+# A dev build (docs/design/spec-policy-distribution.md, D2): the only build in which an escape hatch works.
+# Off by default, so a built crate refuses every hatch with dist:hatch-refused and runs the check.
+dev-hatches = []
+
 [dev-dependencies]
 base64 = "0.22"

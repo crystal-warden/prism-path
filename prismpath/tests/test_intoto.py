@@ -208,9 +208,15 @@ def test_export_does_not_find_a_live_key_object_in_memory(sealed_agent_run, tmp_
     assert len(intoto.export(elsewhere, instance_key=held)) == 1
 
 
-def test_unpinned_verify_says_it_is_unpinned(sealed_agent_run):
+def test_unpinned_verify_says_it_is_unpinned(sealed_agent_run, monkeypatch):
+    """Unpinned verify is an escape hatch: refused with dist:hatch-refused in a production build, and in a dev
+    build it says it is unpinned (spec-policy-distribution.md, D1)."""
     run_dir, keys = sealed_agent_run
     envelopes = intoto.export(run_dir)
+    with pytest.raises(intoto.Bad, match="dist:hatch-refused"):
+        intoto.verify(envelopes, run_dir)
+    from prismpath.distribution import devbuild
+    monkeypatch.setattr(devbuild, "is_dev_build", lambda package_dir=None: True)
     unpinned = intoto.verify(envelopes, run_dir)
     assert unpinned["pinned"] is False
     assert unpinned["root_statement"] == "signed-unpinned"

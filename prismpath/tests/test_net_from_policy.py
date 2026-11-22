@@ -733,5 +733,16 @@ def test_the_loaders_own_gate_refuses_a_table_that_is_not_the_one_the_host_verif
     wrong = run({**clean, "PPT_NET_VERIFIED_SHA256": "0" * 64})
     assert wrong.returncode == 2 and "is not the verified table" in wrong.stderr                    # some other table
     assert run({**clean, "PPT_NET_VERIFIED_SHA256": signed["edge"].ppt_sha256}).returncode == 0     # the one verified
-    bypass = run({**clean, "PPT_NET_ALLOW_UNVERIFIED": "1"})
-    assert bypass.returncode == 0 and "UNVERIFIED" in bypass.stderr                                 # the operator's explicit bypass
+    refused = run({**clean, "PPT_NET_ALLOW_UNVERIFIED": "1"})                                     # a production build
+    assert refused.returncode == 2 and "dist:hatch-refused" in refused.stderr and "no verified table" in refused.stderr
+
+
+@pytest.mark.skipif(not (LOADER.parent / "loader-dev").exists(), reason="dev loader not built (make -C prismpath-ebpf dev)")
+def test_the_unverified_bypass_works_only_in_the_dev_loader(signed):
+    """D2, D3. PPT_NET_ALLOW_UNVERIFIED=1 loads unverified only in the binary `make dev` compiles with
+    PPT_DEV_BUILD, and that binary says so on stderr."""
+    table = str(signed["out"] / "edge.ppt")
+    env = {k: v for k, v in os.environ.items() if k not in ("PPT_NET_VERIFIED_SHA256",)}
+    bypass = subprocess.run([str(LOADER.parent / "loader-dev"), table, "netverify"], capture_output=True, text=True,
+                            cwd=_ebpf, env={**env, "PPT_NET_ALLOW_UNVERIFIED": "1"})
+    assert bypass.returncode == 0 and "UNVERIFIED" in bypass.stderr and "dev build" in bypass.stderr

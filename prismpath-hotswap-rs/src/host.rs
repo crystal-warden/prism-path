@@ -860,6 +860,21 @@ impl PolicyHost {
         Ok(())
     }
 
+    /// The gate every escape hatch passes (D1 to D3): one `hatch` audit event, then true only in a dev build.
+    fn hatch(&self, name: &str) -> Result<bool, HostError> {
+        let dev_build = crate::dist::DEV_BUILD;
+        let mut fields: Fields = vec![
+            ("hatch", json!(name)),
+            ("dev_build", json!(dev_build)),
+            ("result", json!(if dev_build { "allowed" } else { "refused" })),
+        ];
+        if !dev_build {
+            fields.push(("cause", json!(crate::dist::HATCH_REFUSED)));
+        }
+        self.audit.append("distribution", "hatch", fields)?;
+        Ok(dev_build)
+    }
+
     fn reject(
         &self,
         state: &HostState,
@@ -896,6 +911,9 @@ impl PolicyHost {
     pub fn swap_with(&self, ppt_path: &str, allow_unsigned: bool, strict: bool) -> Result<Value, HostError> {
         let mut state = locked(&self.state);
         let pending = self.recover(&mut state)?;
+        // an escape hatch: a dev build lets it through, a production build refuses it and the signed check runs
+        // instead (docs/design/spec-policy-distribution.md, D1, D2)
+        let allow_unsigned = allow_unsigned && self.hatch("--allow-unsigned")?;
         let image = match std::fs::read(ppt_path) {
             Ok(bytes) => bytes,
             Err(error) => {

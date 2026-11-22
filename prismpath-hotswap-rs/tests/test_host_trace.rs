@@ -217,7 +217,14 @@ fn every_host_trace_case_replays_byte_identically() {
     let cases = doc["cases"].as_array().unwrap();
     assert!(cases.len() >= 30, "the corpus is not the one this test was written against");
     let mut operations = 0;
+    let mut replayed = 0;
     for case in cases {
+        // a case marked dev_build is a dev build's (spec-policy-distribution.md, D2), replayed only with the
+        // `dev-hatches` feature, and every other case only without it
+        if case["dev_build"].as_bool().unwrap_or(false) != prismpath_hotswap_rs::dist::DEV_BUILD {
+            continue;
+        }
+        replayed += 1;
         let name = case["name"].as_str().unwrap();
         let work = fresh_dir(name);
         let (results, final_report, files) = run_case(&doc, case, &work);
@@ -231,7 +238,8 @@ fn every_host_trace_case_replays_byte_identically() {
         assert_eq!(canon(&final_report), canon(&expect["final"]), "{name}: persisted log (events, leaves, root, skipped)");
         assert_eq!(canon(&files), canon(&expect["files"]), "{name}: state directory files");
     }
-    eprintln!("host trace: {}/{} cases, {operations} operations replayed byte identical to Python", cases.len(), cases.len());
+    assert!(replayed >= 2, "{replayed} cases for this build");
+    eprintln!("host trace: {replayed}/{} cases, {operations} operations replayed byte identical to Python", cases.len());
 }
 
 /// The corpus must keep exercising what it exists to pin; a regeneration that drops a branch fails here.

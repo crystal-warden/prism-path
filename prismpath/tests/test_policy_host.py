@@ -125,7 +125,10 @@ def test_strict_raises(env):
         host.swap(_pack(env, "v1", 1), strict=True)
 
 
-def test_allow_unsigned_stamps_the_event(env):
+def test_allow_unsigned_stamps_the_event(env, monkeypatch):
+    """In a dev build, the only build where the escape hatch works (spec-policy-distribution.md, D2)."""
+    from prismpath.distribution import devbuild
+    monkeypatch.setattr(devbuild, "is_dev_build", lambda package_dir=None: True)
     host = _host(env)
     ppt = env["tmp"] / "raw.ppt"
     ppt.write_bytes(pc.compile_flow(parse(_flow(100))).serialize())

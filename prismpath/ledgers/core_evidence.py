@@ -350,8 +350,8 @@ def verify(run: Path, *, sample=200, seed=0, pin_authority=None, pin_instance=No
     """Every check of a run, or Bad naming the first that fails. Returns a summary.
 
     `sample` is how many receipts to replay (None for every one), chosen with `seed`; `pin_authority` and
-    `pin_instance` name the reader's own copies of the two public keys, and without both the root statement
-    is `signed-unpinned`. `replay` decides the chosen receipts again, `replay_through_reference` when None;
+    `pin_instance` name the reader's own copies of the two public keys. Without both the checks all run and the
+    pass is refused with `dist:hatch-refused`, except in a dev build, where the root statement is `signed-unpinned`. `replay` decides the chosen receipts again, `replay_through_reference` when None;
     the research tool passes its replay through the Lean oracle. A file that does not read as its format is
     refused like any other failed check."""
     try:
@@ -364,6 +364,15 @@ def verify(run: Path, *, sample=200, seed=0, pin_authority=None, pin_instance=No
     counts = (replay or replay_through_reference)(chosen)
     if counts["disagree"]:
         raise Bad(f"{counts['disagree']} replayed decisions differ from {counts['against']}: {counts['first']}")
+    if pin_authority is None or pin_instance is None:
+        # every check above ran; a pass without both keys pinned says nothing about who made the run, so it is an
+        # escape hatch that only a dev build lets through (docs/design/spec-policy-distribution.md, D1, D2)
+        from prismpath.distribution import devbuild
+        try:
+            devbuild.hatch("evidence verify without both keys pinned")
+        except devbuild.HatchRefused:
+            raise Bad("dist:hatch-refused: a run verified without both keys pinned says nothing about who made it; "
+                      "pin the authority and the instance public keys") from None
     return {**summary, **counts}
 
 

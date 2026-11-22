@@ -478,7 +478,8 @@ def _add_assessor_commands(subparsers) -> None:
                          'receipts, every decision or a sample replayed through the reference kernel')
     evidence_parser.add_argument('action', choices=['verify'],
                                  help='evidence action: verify checks a core run directory and exits 0 when it '
-                                      'verifies (signed, or signed-unpinned without both pins) and 1 when refused')
+                                      'verifies with both keys pinned and 1 when refused; without both pins every '
+                                      'check runs and the pass is refused with dist:hatch-refused outside a dev build')
     evidence_parser.add_argument('run', help='the core run directory (run.json, cases.jsonl, images.jsonl, '
                                              'receipts.jsonl, receipts.roots.jsonl, authority.pub, instance.pub)')
     evidence_parser.add_argument('--sample', default='200', type=_sample_arg, metavar='N|all',
@@ -486,8 +487,8 @@ def _add_assessor_commands(subparsers) -> None:
     evidence_parser.add_argument('--seed', type=int, default=0, help='the seed that chooses the sample (default 0)')
     evidence_parser.add_argument('--pin-authority', dest='pin_authority', default=None, metavar='PUB',
                                  help="your own copy of the authority public key (raw 32 bytes, as `swap keygen` "
-                                      "writes it); with --pin-instance the root statement is signed, without both "
-                                      "signed-unpinned")
+                                      "writes it); with --pin-instance the root statement is signed, and without "
+                                      "both the verify is refused outside a dev build")
     evidence_parser.add_argument('--pin-instance', dest='pin_instance', default=None, metavar='PUB',
                                  help="your own copy of the instance public key (raw 32 bytes, as `ledger keygen` "
                                       "writes it)")

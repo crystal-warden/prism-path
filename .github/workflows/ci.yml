@@ -314,6 +314,10 @@ jobs:
         run: cargo test --manifest-path prismpath-hotswap-rs/Cargo.toml -q
       - name: Hot swap port clippy
         run: cargo clippy --manifest-path prismpath-hotswap-rs/Cargo.toml --all-targets -- -D warnings
+      - name: Hot swap port as a dev build (the dev-hatches feature, where an escape hatch works)
+        run: |
+          cargo test --manifest-path prismpath-hotswap-rs/Cargo.toml -q --features dev-hatches
+          cargo clippy --manifest-path prismpath-hotswap-rs/Cargo.toml --all-targets --features dev-hatches -- -D warnings
       - name: Reflect bindings (prismpath-reflect-bindings) — bind, reading round trip, bind time failures
         run: cargo test --manifest-path prismpath-reflect-bindings/Cargo.toml -q
       - name: Reflect bindings clippy

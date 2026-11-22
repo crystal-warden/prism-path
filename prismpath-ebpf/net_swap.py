@@ -30,6 +30,7 @@ _REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _REPO not in sys.path:
     sys.path.insert(0, _REPO)
 
+from prismpath.distribution import devbuild               # noqa: E402
 from prismpath.hotswap import policy_pack as pp          # noqa: E402
 from prismpath.ledgers.audit_log import AuditLog          # noqa: E402
 
@@ -51,6 +52,18 @@ def _write_version(path: str, v: int) -> None:
     os.replace(tmp, path)
 
 
+def _hatch(asked: bool, audit) -> bool:
+    """`--allow-unsigned` is an escape hatch: it works in a dev build, and in a production build it is refused
+    with `dist:hatch-refused` and the signed checks run (docs/design/spec-policy-distribution.md, D1, D2)."""
+    if not asked:
+        return False
+    try:
+        devbuild.hatch("--allow-unsigned", audit)
+    except devbuild.HatchRefused:
+        return False
+    return True
+
+
 def preload_swap(ppt_path: str, iface: str, pubkey_paths: List[str], envelope_base: Optional[str],
                  state_dir: str, *, allow_unsigned: bool = False, revoked_path: Optional[str] = None,
                  loader: str = "./loader", run: Callable = subprocess.run, dry_run: bool = False,
@@ -67,6 +80,7 @@ def preload_swap(ppt_path: str, iface: str, pubkey_paths: List[str], envelope_ba
     os.makedirs(state_dir, exist_ok=True)
     audit = AuditLog(os.path.join(state_dir, "net_swaps.log"))
     vpath = os.path.join(state_dir, "active_version")
+    allow_unsigned = _hatch(allow_unsigned, audit)
 
     try:
         with open(ppt_path, "rb") as f:
