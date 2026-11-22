@@ -86,8 +86,8 @@ def receipt_stream_corpus() -> dict:
         encode.append(_encode_case(f"code_{cause_code}", {**fields, "cause": cause_code}))
         encode.append(_encode_case(f"name_{cause_name}", {**fields, "cause": cause_name}))
     encode.append(_encode_case("code_0", {**base, "cause": 0}))
-    # bytes no row holds (87, 100 and 101 were probes here until the registry appended rows at those codes)
-    for cause_code in (150, 200, 254, 255):
+    # bytes no row holds (87, 100, 101 and 150 were probes here until the registry appended rows at those codes)
+    for cause_code in (199, 200, 254, 255):
         assert causes.name(cause_code) is None, f"{cause_code} is registered now; probe another byte"
         encode.append(_encode_case(f"unregistered_{cause_code}", {**base, "cause": cause_code}))
     for cause_code in (256, 1000, -1, -255):

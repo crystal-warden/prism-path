@@ -11,7 +11,7 @@
 pub const CAUSE_NONE: u8 = 0;
 
 /// `registry_sha256()` of the Python registry when this file was generated.
-pub const REGISTRY_SHA256: &str = "9111521f734c145606f0fc871b720dc2f34bb78dee9ed06046b3ac58f4e36bcd";
+pub const REGISTRY_SHA256: &str = "dbd8fde7d3f8a90aa98fdf6faa4e7bf5d87ef662d942398644f4aa0610d68631";
 
 /// The cause class, the semantic axis of the registry.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -245,6 +245,56 @@ pub const AGENT_ZONE_ASKED: u8 = 132;
 pub const AGENT_SESSION_CHANGE_ASKED: u8 = 133;
 /// `agent:session-shell-asked`
 pub const AGENT_SESSION_SHELL_ASKED: u8 = 134;
+/// `dist:bad-format`
+pub const DIST_BAD_FORMAT: u8 = 135;
+/// `dist:unknown-key`
+pub const DIST_UNKNOWN_KEY: u8 = 136;
+/// `dist:target-mismatch`
+pub const DIST_TARGET_MISMATCH: u8 = 137;
+/// `dist:body-mismatch`
+pub const DIST_BODY_MISMATCH: u8 = 138;
+/// `dist:seq-replay`
+pub const DIST_SEQ_REPLAY: u8 = 139;
+/// `dist:not-yet-valid`
+pub const DIST_NOT_YET_VALID: u8 = 140;
+/// `dist:expired`
+pub const DIST_EXPIRED: u8 = 141;
+/// `dist:revoked`
+pub const DIST_REVOKED: u8 = 142;
+/// `dist:widening-unsigned`
+pub const DIST_WIDENING_UNSIGNED: u8 = 143;
+/// `dist:trust-replay`
+pub const DIST_TRUST_REPLAY: u8 = 144;
+/// `dist:rotation-invalid`
+pub const DIST_ROTATION_INVALID: u8 = 145;
+/// `dist:legacy-refused`
+pub const DIST_LEGACY_REFUSED: u8 = 146;
+/// `dist:hatch-refused`
+pub const DIST_HATCH_REFUSED: u8 = 147;
+/// `dist:too-large`
+pub const DIST_TOO_LARGE: u8 = 148;
+/// `dist:derived-mismatch`
+pub const DIST_DERIVED_MISMATCH: u8 = 149;
+/// `dist:frame-invalid`
+pub const DIST_FRAME_INVALID: u8 = 150;
+/// `dist:not-staged`
+pub const DIST_NOT_STAGED: u8 = 151;
+/// `dist:incomplete`
+pub const DIST_INCOMPLETE: u8 = 152;
+/// `dist:policy-lapsed`
+pub const DIST_POLICY_LAPSED: u8 = 153;
+/// `dist:floor-lost`
+pub const DIST_FLOOR_LOST: u8 = 154;
+/// `fleet:state-invalid`
+pub const FLEET_STATE_INVALID: u8 = 155;
+/// `fleet:state-replay`
+pub const FLEET_STATE_REPLAY: u8 = 156;
+/// `fleet:policy-mismatch`
+pub const FLEET_POLICY_MISMATCH: u8 = 157;
+/// `fleet:silent`
+pub const FLEET_SILENT: u8 = 158;
+/// `dist:held`
+pub const DIST_HELD: u8 = 159;
 
 /// Every registered cause, in registry order.
 pub const REGISTRY: &[Cause] = &[
@@ -348,6 +398,31 @@ pub const REGISTRY: &[Cause] = &[
     Cause { code: 132, name: "agent:zone-asked", class: CauseClass::Routing, description: "an agent call that would change a file that reaches code in one of the owner's zones, or whose reach is not known (no zone information point answered, or the file is not one it can read), with none of the earlier refusals holding, under every starter policy; escalated and not run" },
     Cause { code: 133, name: "agent:session-change-asked", class: CauseClass::Routing, description: "an agent call that would change a file inside the workspace, commit, or push to an allowed remote, in a session that already made a change to code in one of the owner's zones (a change whose reach was protected or not known, asked about or let through) or whose history could not be read, with none of the earlier refusals holding, under the session starter policy; escalated and not run" },
     Cause { code: 134, name: "agent:session-shell-asked", class: CauseClass::Routing, description: "an agent shell command that would run without asking (a read only command or a local git operation inside the workspace), in a session that already ran many shell commands or whose history could not be read, with none of the earlier refusals holding, under the session starter policy; escalated and not run" },
+    Cause { code: 135, name: "dist:bad-format", class: CauseClass::Authority, description: "a sealed envelope, a distribution envelope or a trust body that does not read as its format (a missing or extra member, a value outside its form, an unknown artifact or target kind, a wrong container); refused and nothing staged" },
+    Cause { code: 136, name: "dist:unknown-key", class: CauseClass::Authority, description: "a distribution envelope with no signature by a key the trust store holds, or fewer counting signatures than the threshold, or a trust store that cannot be read; refused and nothing staged" },
+    Cause { code: 137, name: "dist:target-mismatch", class: CauseClass::Authority, description: "a distribution envelope that is not for this enforcement point's target kind, for an artifact its kind uses, or for its stream; refused and nothing staged" },
+    Cause { code: 138, name: "dist:body-mismatch", class: CauseClass::Authority, description: "a distributed body or a fetched blob whose size or SHA-256 is not the one its envelope or its request names; refused and nothing staged" },
+    Cause { code: 139, name: "dist:seq-replay", class: CauseClass::Authority, description: "a distribution envelope whose seq is below the stream's floor, or at the floor with an envelope id not committed there, or below the staged seq; refused and nothing staged" },
+    Cause { code: 140, name: "dist:not-yet-valid", class: CauseClass::Authority, description: "a distribution envelope read when the enforcement point's time is more than the allowed skew before its not_before; refused and nothing staged" },
+    Cause { code: 141, name: "dist:expired", class: CauseClass::Authority, description: "a distribution envelope read when the enforcement point's time is at or past its expires, or an active release whose envelope expired; refused, or the release lapses" },
+    Cause { code: 142, name: "dist:revoked", class: CauseClass::Authority, description: "a distribution envelope whose id or policy hash is on the signed revocation list, refused; an active release whose seq a raised floor has passed lapses with it" },
+    Cause { code: 143, name: "dist:widening-unsigned", class: CauseClass::Authority, description: "a release that allows more than the active one, or cannot be shown not to, without a covering signed widening statement, or whose signer said it does not widen when it does; refused and nothing staged" },
+    Cause { code: 144, name: "dist:trust-replay", class: CauseClass::Authority, description: "a revocation list or a key rotation whose seq is not the enforcement point's trust sequence plus one; refused and the trust store unchanged" },
+    Cause { code: 145, name: "dist:rotation-invalid", class: CauseClass::Authority, description: "a key rotation without a valid signature by the key it adds, or that retires an unknown key, or adds the enforcement point's own instance key or a revoked key; refused and the trust store unchanged" },
+    Cause { code: 146, name: "dist:legacy-refused", class: CauseClass::Authority, description: "an older signed form (a ppt-pack/1 pack, a core image attestation, a signed destination table, a grant, a cFS table signature or a mesh message) where a distribution envelope is required; refused" },
+    Cause { code: 147, name: "dist:hatch-refused", class: CauseClass::Authority, description: "an escape hatch that would skip a check, asked for in a production build; refused and the check runs" },
+    Cause { code: 148, name: "dist:too-large", class: CauseClass::Envelope, description: "a distribution envelope, a body or a revocation list beyond the bound the enforcement point sets for it; refused and nothing staged" },
+    Cause { code: 149, name: "dist:derived-mismatch", class: CauseClass::Envelope, description: "a distributed artifact derived from the policy (an edge table, a sandbox profile) that is not byte for byte what the enforcement point compiles from the staged policy; refused and nothing staged" },
+    Cause { code: 150, name: "dist:frame-invalid", class: CauseClass::Wire, description: "a distribution frame or chunk outside its offered transfer, a chunk with no offer, or an assembled part whose hash is not the offered one; the transfer is dropped" },
+    Cause { code: 151, name: "dist:not-staged", class: CauseClass::State, description: "a commit that names no staged release; answered with a state record and nothing changes" },
+    Cause { code: 152, name: "dist:incomplete", class: CauseClass::State, description: "a release that lacks an artifact its target kind needs, or whose envelopes disagree on stream, seq or policy; not committed and the active release stays" },
+    Cause { code: 153, name: "dist:policy-lapsed", class: CauseClass::State, description: "a decision asked of an enforcement point that has no active release (it lapsed at expiry or by revocation, or none was ever committed); refused" },
+    Cause { code: 154, name: "dist:floor-lost", class: CauseClass::State, description: "the enforcement point's floor cannot be read, so it is locked, admits no release and decides nothing until it is provisioned again" },
+    Cause { code: 155, name: "fleet:state-invalid", class: CauseClass::Wire, description: "a state record that does not read, is from no enrolled enforcement point, is not signed by its enrolled instance key, or carries the hold bit from a target that has no hold setting; filed by the controller" },
+    Cause { code: 156, name: "fleet:state-replay", class: CauseClass::Wire, description: "a state record whose counter is not above the last one the controller accepted from that enforcement point; filed by the controller" },
+    Cause { code: 157, name: "fleet:policy-mismatch", class: CauseClass::Wire, description: "an enforcement point reports a policy hash, a seq or a Facet preamble other than the one the controller expects for it; filed by the controller" },
+    Cause { code: 158, name: "fleet:silent", class: CauseClass::Wire, description: "no accepted state record from an enforcement point for three heartbeat intervals; filed by the controller" },
+    Cause { code: 159, name: "dist:held", class: CauseClass::State, description: "an enforcement point deciding under an expired release because its deployment chose to hold at expiry, or an action refused because of that hold; marked in every state record and receipt while it lasts" },
 ];
 
 /// The engine's stop vocabulary mapped onto the registry; `terminal` and `waiting` are clean and have no cause.

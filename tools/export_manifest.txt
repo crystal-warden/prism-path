@@ -11,6 +11,7 @@ docs/design/spec-crypto-agility.md
 docs/design/spec-guard-onion.md
 docs/design/spec-intoto-receipts.md
 docs/design/spec-ledger-opentimestamps.md
+docs/design/spec-policy-distribution.md
 docs/design/spec-secure-hotswap.md
 docs/design/spec-telemetry-cbor.md
 docs/design/spec-verified-classifier.md

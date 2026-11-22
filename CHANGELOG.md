@@ -8,6 +8,10 @@ spec stable.
 
 ## [Unreleased]
 
+### Added: the policy distribution spec and its refusal causes (2026-11-22)
+
+- **`docs/design/spec-policy-distribution.md` defines how one signed policy reaches every enforcement point and stays true there.** It sets out one signed envelope for every distributed artifact, the messages and their two bindings, the enforcement point and controller machines, revocation, rotation, the widening rule, the hold at expiry for mesh and cFS, the heartbeat and 126 conformance cases.
+- **The cause registry gains 135 to 159 for policy distribution.** They are 20 `dist:` refusals, the `dist:held` mark and four `fleet:` findings, with their crosswalk entries, the regenerated Rust and Lean registries and the frozen corpora.
 ### Added: the spiral profile for policies too large to list (2026-11-22)
 
 - **A node whose joint grid is over 300,000 cells now has a band tier and a signature tier.** `prismpath/telemetry/spiral_groups.py` finds the band by evaluating the policy once, so no grid is listed, and costs 5 to 7 bits a decision on the seven large policies. The signature tier groups the fields that rules read together, sends each group's class of rule residuals, and refines inside a class in Gray order, at 14 to 43 bits. `layout_for` returns the existing `SpiralLayout` for a node that fits, so every existing layout, sidecar and recorded stream is byte identical. A stream carries a 42 byte preamble naming the policy and the layout, and a decoder refuses another policy's or another layout's stream. PROTOCOL.md section 2.6.1 defines the profile.

@@ -177,6 +177,34 @@ _REGISTRY: Tuple[Tuple[int, str, str, str], ...] = (
     # own receipts, makes a call that would have run without asking wait for the person.
     (133, "agent:session-change-asked",  "routing",   "an agent call that would change a file inside the workspace, commit, or push to an allowed remote, in a session that already made a change to code in one of the owner's zones (a change whose reach was protected or not known, asked about or let through) or whose history could not be read, with none of the earlier refusals holding, under the session starter policy; escalated and not run"),
     (134, "agent:session-shell-asked",   "routing",   "an agent shell command that would run without asking (a read only command or a local git operation inside the workspace), in a session that already ran many shell commands or whose history could not be read, with none of the earlier refusals holding, under the session starter policy; escalated and not run"),
+    # -- policy distribution (docs/design/spec-policy-distribution.md, section 18): the distribution envelope, its
+    # verifier, the enforcement point and controller machines, revocation, rotation, the widening rule and the
+    # fleet view. The classes follow the spec's table, and the codes are appended after 134 in its order.
+    (135, "dist:bad-format",             "authority", "a sealed envelope, a distribution envelope or a trust body that does not read as its format (a missing or extra member, a value outside its form, an unknown artifact or target kind, a wrong container); refused and nothing staged"),
+    (136, "dist:unknown-key",            "authority", "a distribution envelope with no signature by a key the trust store holds, or fewer counting signatures than the threshold, or a trust store that cannot be read; refused and nothing staged"),
+    (137, "dist:target-mismatch",        "authority", "a distribution envelope that is not for this enforcement point's target kind, for an artifact its kind uses, or for its stream; refused and nothing staged"),
+    (138, "dist:body-mismatch",          "authority", "a distributed body or a fetched blob whose size or SHA-256 is not the one its envelope or its request names; refused and nothing staged"),
+    (139, "dist:seq-replay",             "authority", "a distribution envelope whose seq is below the stream's floor, or at the floor with an envelope id not committed there, or below the staged seq; refused and nothing staged"),
+    (140, "dist:not-yet-valid",          "authority", "a distribution envelope read when the enforcement point's time is more than the allowed skew before its not_before; refused and nothing staged"),
+    (141, "dist:expired",                "authority", "a distribution envelope read when the enforcement point's time is at or past its expires, or an active release whose envelope expired; refused, or the release lapses"),
+    (142, "dist:revoked",                "authority", "a distribution envelope whose id or policy hash is on the signed revocation list, refused; an active release whose seq a raised floor has passed lapses with it"),
+    (143, "dist:widening-unsigned",      "authority", "a release that allows more than the active one, or cannot be shown not to, without a covering signed widening statement, or whose signer said it does not widen when it does; refused and nothing staged"),
+    (144, "dist:trust-replay",           "authority", "a revocation list or a key rotation whose seq is not the enforcement point's trust sequence plus one; refused and the trust store unchanged"),
+    (145, "dist:rotation-invalid",       "authority", "a key rotation without a valid signature by the key it adds, or that retires an unknown key, or adds the enforcement point's own instance key or a revoked key; refused and the trust store unchanged"),
+    (146, "dist:legacy-refused",         "authority", "an older signed form (a ppt-pack/1 pack, a core image attestation, a signed destination table, a grant, a cFS table signature or a mesh message) where a distribution envelope is required; refused"),
+    (147, "dist:hatch-refused",          "authority", "an escape hatch that would skip a check, asked for in a production build; refused and the check runs"),
+    (148, "dist:too-large",              "envelope",  "a distribution envelope, a body or a revocation list beyond the bound the enforcement point sets for it; refused and nothing staged"),
+    (149, "dist:derived-mismatch",       "envelope",  "a distributed artifact derived from the policy (an edge table, a sandbox profile) that is not byte for byte what the enforcement point compiles from the staged policy; refused and nothing staged"),
+    (150, "dist:frame-invalid",          "wire",      "a distribution frame or chunk outside its offered transfer, a chunk with no offer, or an assembled part whose hash is not the offered one; the transfer is dropped"),
+    (151, "dist:not-staged",             "state",     "a commit that names no staged release; answered with a state record and nothing changes"),
+    (152, "dist:incomplete",             "state",     "a release that lacks an artifact its target kind needs, or whose envelopes disagree on stream, seq or policy; not committed and the active release stays"),
+    (153, "dist:policy-lapsed",          "state",     "a decision asked of an enforcement point that has no active release (it lapsed at expiry or by revocation, or none was ever committed); refused"),
+    (154, "dist:floor-lost",             "state",     "the enforcement point's floor cannot be read, so it is locked, admits no release and decides nothing until it is provisioned again"),
+    (155, "fleet:state-invalid",         "wire",      "a state record that does not read, is from no enrolled enforcement point, is not signed by its enrolled instance key, or carries the hold bit from a target that has no hold setting; filed by the controller"),
+    (156, "fleet:state-replay",          "wire",      "a state record whose counter is not above the last one the controller accepted from that enforcement point; filed by the controller"),
+    (157, "fleet:policy-mismatch",       "wire",      "an enforcement point reports a policy hash, a seq or a Facet preamble other than the one the controller expects for it; filed by the controller"),
+    (158, "fleet:silent",                "wire",      "no accepted state record from an enforcement point for three heartbeat intervals; filed by the controller"),
+    (159, "dist:held",                   "state",     "an enforcement point deciding under an expired release because its deployment chose to hold at expiry, or an action refused because of that hold; marked in every state record and receipt while it lasts"),
 )
 
 CODES: Dict[int, Tuple[str, str, str]] = {cause_code: (canonical_name, class_name, description)
