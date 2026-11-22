@@ -107,6 +107,7 @@ def test_the_agent_role_needs_the_net_fields_and_the_role_is_checked():
         compile_profile(image("default"), "root")
 
 
+@pytest.mark.fresh_needs
 def test_the_same_image_twice_gives_the_same_agent_profile_bytes():
     raw = with_rules("default", ALLOW_HOST)
     assert compile_profile(raw, "agent").canonical() == compile_profile(Policy(raw), "agent").canonical()
