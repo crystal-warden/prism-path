@@ -173,8 +173,10 @@ Use these words this way, everywhere.
 - Not a distinct layer the existing engines cannot reach. The comparison measured the opposite.
 - Not a compiler of policy from prose. The predicates are authored; the tooling checks and compiles them.
 - Not a legal compliance guarantee. Enforcement within the governed path plus evidence, nothing more.
-- Not a sandbox. Execution isolation belongs to the runtime or the provider; PrismPath governs what is
-  permitted to run, what outcome is accepted, and where execution goes next.
+- Not a general sandbox. The agent harness compiles the recorded policy to a sandbox profile and runs each
+  allowed shell call under it (bubblewrap, else Landlock, on Linux), and `prismpath agent run` runs the agent
+  itself under the agent profile, so the decision and its confinement come from one policy. Isolating anything
+  outside that path belongs to the runtime or the provider.
 - Not an agent framework, not a model, not a replacement for an orchestrator. Workers sit underneath.
 - Not a proof of the evaluator. The Lean development proves the quantization; the interpreters are
   certified by conformance.
