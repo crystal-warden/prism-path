@@ -84,7 +84,8 @@ class Target:
     artifact of the release asks for them (`policy.spiral`, when the `policy.ppt` declares packing), and
     whether it can decide larger (W1). `uses` is what V5 admits besides the trust kinds in `applies`, the ones
     its machine applies. `expiry_hold` is whether a deployment may choose HOLD at expiry (X6), true only for
-    `mesh` and `cfs`. `body_bound` is the kind's bound on a body (E6), and `checks` the kind's own V11 checks
+    `mesh` and `cfs`. `body_bound` is the kind's bound on the body of an artifact it uses and `trust_bound` its
+    bound on a trust body, 16,384 bytes for every kind, which holds the largest list R7 allows (E6), and `checks` the kind's own V11 checks
     where they differ from the artifact's. `reads_meta` is false for a kind whose own check does not read `meta`,
     so its reader only bounds `meta` and skips its members (E9)."""
     needs: FrozenSet[str]
@@ -93,6 +94,7 @@ class Target:
     expiry_hold: bool = False
     applies: FrozenSet[str] = frozenset({"trust.widening", "trust.revocation"})
     body_bound: int = 16777215
+    trust_bound: int = 16384
     checks: Any = None
     reads_meta: bool = True
 
@@ -281,6 +283,7 @@ ARTIFACTS: Dict[str, Artifact] = {
 TRUST_ARTIFACTS = frozenset({"trust.widening", "trust.revocation", "trust.rotation"})
 ON_TRUST_STREAM = frozenset({"trust.revocation", "trust.rotation"})     # R1, O1: they travel on `@trust`
 
+TRUST_BOUND = 16384                                # E6: every kind takes the largest revocation list R7 allows
 MESH_TABLE_MAX = 640                               # E6: TBL_MAX in prismpath-hw/mesh/main/ppt_mesh.c
 
 TARGETS: Dict[str, Target] = {
@@ -295,6 +298,8 @@ def _check_row(name: str, target: Target) -> None:
     trust kinds it applies that are, and a check for every artifact it may verify."""
     if name not in TARGET_KINDS:
         raise ValueError(f"{name!r} is not a target kind of this format")
+    if target.trust_bound != TRUST_BOUND:
+        raise ValueError(f"the {name} row's trust bound is {TRUST_BOUND} bytes, as every kind's (E6)")
     if not target.uses <= set(ARTIFACTS) - TRUST_ARTIFACTS or not target.applies <= TRUST_ARTIFACTS:
         raise ValueError(f"the {name} row names an artifact or a trust kind that is not one")
     if any(target.check_for(artifact) is None for artifact in target.uses | target.applies):

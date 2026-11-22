@@ -525,3 +525,24 @@ def test_a_mesh_node_reads_its_stored_envelopes_as_it_staged_them(tmp_path):
     sealed = _dist.env.seal(canon.canon2_bytes(doc), [_dist.GEN.test_key("A")])   # no writer emits it (F1)
     assert _read(point, point.pep.stage(sealed, bodies[0])).event == "staged"
     assert point.open().staged.seq == 1
+
+
+def test_case_132_a_mesh_node_takes_a_full_size_list_and_holds_a_table_to_its_own_bound(tmp_path):
+    """case_132: E6, V5, R7, B9, the PEP half (the frame half, a trust body offered over frames at 16,385 bytes,
+    is the frame binding's). A full-size revocation list is applied under the trust bound, and a 641 byte table
+    is dist:too-large from its signed size with no body given."""
+    make, bodies, _decide = _mesh(tmp_path)
+    point = make()
+    assert _dist.GEN.replay(_corpus_case("132_a_full_size_revocation_list_on_mesh"))["cause"] is None
+    assert _dist.GEN.replay(_corpus_case("132_a_641_byte_table_from_its_signed_size_on_mesh"))["cause"] == "dist:too-large"
+    full = bytes.fromhex(_corpus_case("132_a_full_size_revocation_list_on_mesh")["body"])
+    sealed = _dist.seal("trust.revocation", full, seq=1, stream="@trust", targets=("mesh",))
+    assert len(full) > 640 and _read(point, point.pep.stage(sealed, full)).event == "trust-applied"
+    big = bodies[0] + b"\0" * (641 - len(bodies[0]))
+    assert _read(point, point.pep.stage(point.seal(big, seq=2), b"")).cause == "dist:too-large"
+
+
+def _corpus_case(name):
+    import json
+    corpus = json.loads((_dist.REPO / "portable" / "conformance" / "distribution.json").read_text(encoding="utf-8"))
+    return next(case for case in corpus["cases"] if case["name"] == name)

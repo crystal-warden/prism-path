@@ -326,6 +326,17 @@ def build_cases(kind: str, spec: Dict[int, dict]) -> List[dict]:
     add(130, "the_next_list_dropping_it", None, dropping_sealed, payload=dropping, trust=after_passing)
     add(130, "the_envelope_again", "dist:seq-replay", sealed_by(passed, "A"),
         trust=applied(after_passing, (dropping_sealed, dropping)))
+    # E6, V5, B9: a trust body has the trust bound of every kind; an artifact's signed size is held to its own bound
+    full = revocation_body(envelopes=[canon.sha256_hex(b"e%d" % index) for index in range(64)],
+                           keys=[canon.sha256_hex(b"k%d" % index) for index in range(63)],
+                           policies=[canon.sha256_hex(b"p%d" % index) for index in range(64)],
+                           floors={f"s/{index:02d}": 1 for index in range(16)})
+    assert 640 < len(full) <= 16384
+    add(132, "a_full_size_revocation_list", None, sealed_by(raw(revocation_doc(full, 1)), "A"), payload=full, on="mesh")
+    big = body + b"\0" * (641 - len(body))
+    add(132, "a_641_byte_table_from_its_signed_size", "dist:too-large",
+        sealed_by(raw(kind_doc(big, meta=image_meta(body))), "A"), payload=b"", on="mesh")
+
     many = revocation_body(envelopes=[canon.sha256_hex(bytes([index])) for index in range(65)])
     add(71, "sixty_five_entries", "dist:too-large", sealed_by(raw(revocation_doc(many, 1)), "A"), payload=many)
     add(79, "trust_kind_with_expires", "dist:bad-format",
