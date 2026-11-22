@@ -165,7 +165,7 @@ rust_cases! {
     case_013_revoked_key_only => "013_revoked_key_only",
     /// case_013: S5.
     case_013_retired_key_only => "013_retired_key_only",
-    /// case_016: K1, X3.
+    // case 16's X3 half, that the PEP allows nothing, is the Rust PEP's (PR 14), so it is not claimed here
     case_016_trust_store_unreadable => "016_trust_store_unreadable",
     /// case_020: Q1, Q2, V8.
     case_020_seq_below_floor => "020_seq_below_floor",
@@ -203,6 +203,14 @@ rust_cases! {
     case_044_over_a_qualification_cap => "044_over_a_qualification_cap",
     /// case_044: V11.
     case_044_wrong_wcet => "044_wrong_wcet",
+    /// case_127: E11, V4.
+    case_127_fields_a_string => "127_fields_a_string",
+    /// case_127: E11, V4.
+    case_127_counts_an_integer => "127_counts_an_integer",
+    /// case_127: E11, V4.
+    case_127_counts_lacking_a_member => "127_counts_lacking_a_member",
+    /// case_127: E11, V4.
+    case_127_packing_without_its_sidecar => "127_packing_without_its_sidecar",
     /// case_114: E7, E10, V10.
     case_114_staged_release_id_differs => "114_staged_release_id_differs",
     /// case_117: S6.
@@ -226,13 +234,14 @@ fn every_case_the_corpus_runs_on_rust_has_its_test() {
 
 #[test]
 fn every_case_on_a_kind_rust_has_built_decides_as_python_did() {
-    // the cases of Python and the C core only included: one verifier answers alike everywhere it runs
+    // the host cases that run on Python alone included: one verifier answers alike everywhere it runs. The
+    // mesh cases are the C core's, a kind this crate has not built.
     let mut decided = 0;
     for case in cases().iter().filter(|case| case["pep"]["kind"] == "host") {
         assert_eq!(decide(case), case["expect"], "{}", case["name"]);
         decided += 1;
     }
-    assert_eq!(decided, cases().len());
+    assert!(decided > NAMED.len(), "{decided} host cases");
 }
 
 #[test]
@@ -295,29 +304,7 @@ fn doc_refused_by_writer(raw: &[u8]) -> bool {
     codec::from_bytes::<env::EnvelopeDoc>(raw).map_or(true, |doc| doc.to_bytes().is_err())
 }
 
-// E11 and V4: every meta member is read in its form before a check uses it. These are the four envelope
-// parts of conformance case 127, which the shared corpus gains with the spec row.
-#[test]
-fn a_policy_ppt_whose_fields_is_a_string_is_bad_format() {
-    assert_eq!(with_meta(|meta| { meta.insert("fields".into(), json!("x")); }).as_deref(), Some("dist:bad-format"));
-}
-
-#[test]
-fn a_policy_ppt_whose_counts_is_an_integer_is_bad_format() {
-    assert_eq!(with_meta(|meta| { meta.insert("counts".into(), json!(5)); }).as_deref(), Some("dist:bad-format"));
-}
-
-#[test]
-fn a_policy_ppt_whose_counts_lacks_a_member_is_bad_format() {
-    let cause = with_meta(|meta| { meta["counts"].as_object_mut().unwrap().remove("max_stack"); });
-    assert_eq!(cause.as_deref(), Some("dist:bad-format"));
-}
-
-#[test]
-fn a_policy_ppt_whose_packing_has_no_sidecar_sha256_is_bad_format() {
-    assert_eq!(with_meta(|meta| { meta.insert("packing".into(), json!({"profile": "spiral"})); }).as_deref(), Some("dist:bad-format"));
-}
-
+// E11 and V4: the forms of every meta member beyond the four parts of case 127 the corpus holds.
 #[test]
 fn each_other_meta_form_is_held_at_v4() {
     let refused: [(&str, Value); 8] = [
@@ -366,4 +353,42 @@ fn the_net_edge_and_sandbox_profile_meta_forms_are_read_at_v4() {
     assert_eq!(reads("sandbox.profile", json!({"compiler": "1"})), Err("dist:bad-format"));
     assert_eq!(reads("policy.core", json!({})), Ok(()));
     assert_eq!(reads("policy.core", json!({"note": "x"})), Err("dist:bad-format"));
+}
+
+/// Case 001's envelope rewritten as a trust kind, sealed by the authority key, and its verdict on the host.
+fn as_trust_kind(artifact: &str, stream: &str) -> Option<String> {
+    let case = case("001_round_trip");
+    let sealed = bytes(case, "sealed");
+    let (envelope_bytes, _) = env::unseal(&sealed).unwrap();
+    let mut doc: Value = serde_json::from_slice(envelope_bytes).unwrap();
+    doc["artifact"] = json!(artifact);
+    doc["stream"] = json!(stream);
+    doc["meta"] = json!({});
+    doc["expires"] = json!(0);
+    if stream == env::TRUST_STREAM {
+        doc["policy_sha256"] = json!("0".repeat(64));
+        doc["release"] = json!("0".repeat(64));
+    }
+    let raw = canon2::write_json(&doc).unwrap();
+    let resealed = env::seal(&raw, &[test_key("A")]).unwrap();
+    verify::verify(&resealed, &bytes(case, "body"), &trust_of(case), &pep_of(case), case["now"].as_i64().unwrap()).cause
+}
+
+#[test]
+fn v5_admits_only_the_trust_kinds_the_host_machine_applies() {
+    // the host applies trust.widening, and revocation and rotation come with their application
+    assert_eq!(as_trust_kind("trust.revocation", env::TRUST_STREAM).as_deref(), Some("dist:target-mismatch"));
+    assert_eq!(as_trust_kind("trust.rotation", env::TRUST_STREAM).as_deref(), Some("dist:target-mismatch"));
+    // a widening passes V5 to V9, since its body is the image it names, and V11 then reads no widening there
+    assert_eq!(as_trust_kind("trust.widening", "host/demo").as_deref(), Some("dist:bad-format"));
+}
+
+#[test]
+fn the_body_bound_is_the_smaller_of_the_peps_and_its_kinds() {
+    let case = case("001_round_trip");
+    let mut pep = pep_of(case);
+    pep.body_bound = i64::MAX;
+    let body = vec![0u8; (env::MAX_BODY + 1) as usize];
+    let verdict = verify::verify(&bytes(case, "sealed"), &body, &trust_of(case), &pep, case["now"].as_i64().unwrap());
+    assert_eq!(verdict.cause.as_deref(), Some("dist:too-large"));
 }
