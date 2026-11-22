@@ -173,6 +173,10 @@ _REGISTRY: Tuple[Tuple[int, str, str, str], ...] = (
     # -- the owner's zones (prismpath/agent/zones.py, every starter): a change to a file the owner's zone file protects, or
     # whose reach into one is not known, waits for the person, so protected code is asked about whatever the worker is.
     (132, "agent:zone-asked",            "routing",   "an agent call that would change a file that reaches code in one of the owner's zones, or whose reach is not known (no zone information point answered, or the file is not one it can read), with none of the earlier refusals holding, under every starter policy; escalated and not run"),
+    # -- state across calls (prismpath/agent/session_state.py, the `session` starter): what this session already did, read from its
+    # own receipts, makes a call that would have run without asking wait for the person.
+    (133, "agent:session-change-asked",  "routing",   "an agent call that would change a file inside the workspace, commit, or push to an allowed remote, in a session that already made a change to code in one of the owner's zones (a change whose reach was protected or not known, asked about or let through) or whose history could not be read, with none of the earlier refusals holding, under the session starter policy; escalated and not run"),
+    (134, "agent:session-shell-asked",   "routing",   "an agent shell command that would run without asking (a read only command or a local git operation inside the workspace), in a session that already ran many shell commands or whose history could not be read, with none of the earlier refusals holding, under the session starter policy; escalated and not run"),
 )
 
 CODES: Dict[int, Tuple[str, str, str]] = {cause_code: (canonical_name, class_name, description)

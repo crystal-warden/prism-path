@@ -6,6 +6,7 @@ import Classifier.ScanTheorems
 import Classifier.Control
 import Classifier.Net
 import Classifier.Zone
+import Classifier.Session
 /-!
 # The classifier's axiom audit
 
@@ -191,3 +192,18 @@ elab "#assert_standard_axioms " id:ident : command => do
 #assert_standard_axioms Classifier.protected_not_allowed
 #assert_standard_axioms Classifier.hookReadingZ_known
 #assert_standard_axioms Classifier.hookReadingZ_unknown
+#assert_standard_axioms Classifier.session_mem
+#assert_standard_axioms Classifier.rank_le_two
+#assert_standard_axioms Classifier.rank_two_iff
+#assert_standard_axioms Classifier.rank_zero_iff
+#assert_standard_axioms Classifier.session_restricts
+#assert_standard_axioms Classifier.session_refused
+#assert_standard_axioms Classifier.session_not_allowed
+#assert_standard_axioms Classifier.session_allowed_base_allowed
+#assert_standard_axioms Classifier.session_failsafe
+#assert_standard_axioms Classifier.session_top_allowed
+#assert_standard_axioms Classifier.session_zone_not_allowed
+#assert_standard_axioms Classifier.session_control_refused
+#assert_standard_axioms Classifier.session_net_refused
+#assert_standard_axioms Classifier.session_scan_safe_reading
+#assert_standard_axioms Classifier.session_allowed_change_every_path_none
