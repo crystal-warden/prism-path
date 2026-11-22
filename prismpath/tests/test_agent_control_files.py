@@ -72,8 +72,7 @@ def test_an_ordinary_write_keeps_its_old_verdict(name, expected, ws):
 
 
 @pytest.mark.parametrize("name", sorted(STARTERS))
-@pytest.mark.parametrize("command", ["cat .claude/settings.json", "ls .claude/hooks", "grep x .mcp.json",
-                                     "sed -n 1p .mcp.json"])
+@pytest.mark.parametrize("command", ["cat .claude/settings.json", "ls .claude/hooks", "grep x .mcp.json"])
 def test_a_read_of_a_control_file_is_decided_as_before(name, command, ws):
     assert _decide(name, ws, "Bash", {"command": command})[:2] == ("allow", None)
     assert _decide(name, ws, "Read", {"file_path": str(ws / ".claude" / "settings.json")})[:2] == ("allow", None)

@@ -2,7 +2,7 @@
 name: agent_review
 description: agent_default, except that every call that would change something inside the workspace asks the person
 start: core_decision
-field.classifier_version: int min=2 max=2
+field.classifier_version: int min=3 max=3
 field.command_class: category
 field.git_op: category
 field.kill_by_pattern: bool

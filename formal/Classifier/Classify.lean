@@ -175,10 +175,6 @@ def commandClass : List Str → CmdClass
       else if installerFetches base args then .network
       else if (base == lit "python" || base == lit "python3") && args.take 2 == [lit "-m", lit "pip"] then .network
       else if base == lit "find" && args.any (fun a => FIND_EFFECTS.contains a) then .mutating
-      else if base == lit "sed" && args.any (fun a => a == lit "-i" || startsWith a (lit "-i") ||
-          startsWith a (lit "--in-place")) then .mutating
-      else if base == lit "sort" && args.any (fun a => a == lit "-o" || startsWith a (lit "--output")) then .mutating
-      else if base == lit "tree" && args.contains (lit "-o") then .mutating
       else if READ_ONLY.contains base then .read_only
       else if MUTATING.contains base || isInstaller base then .mutating
       else .unknown
@@ -260,7 +256,14 @@ def gitListing (isTag : Bool) (args : List Str) : Bool :=
   let switch := if isTag then [lit "-l", lit "--list"] else [lit "--list"]
   listLoop isTag flags (args.any (fun a => switch.contains a)) false args
 
-def unsafeOption (a : Str) : Bool := GIT_UNSAFE_OPTIONS.any (fun o => a == o || startsWith a (o ++ ['=']))
+/-- `git_unsafe_option`: an option of `GIT_UNSAFE_OPTIONS`, a long argument that is a prefix (of at least `--` and
+one character) of one of `GIT_UNSAFE_LONG` once its `=value` is cut, or a short cluster holding `O`. -/
+def unsafeOption (a : Str) : Bool :=
+  GIT_UNSAFE_OPTIONS.any (fun o => a == o || startsWith a (o ++ ['='])) ||
+  (if startsWith a (lit "--") then
+    let name := a.takeWhile (· != '=')
+    name.length ≥ 3 && GIT_UNSAFE_LONG.any (fun o => startsWith o name)
+   else startsWith a (lit "-") && a.contains 'O')
 
 /-- `git_facts`: the operation, the remote class, and the paths whose facts the reading merges. `sub` is
 `none` when the subcommand is not a string; `args` is `none` when the arguments are not a list of at most

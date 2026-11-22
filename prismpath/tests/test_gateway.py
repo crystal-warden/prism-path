@@ -3,6 +3,7 @@
 """The gateway in front of a resource: the reading of an HTTP request, the demo policy, the decision and receipt of
 every request, and the bounds. A stand-in upstream records what reaches it."""
 import http.client
+import io
 import json
 import os
 import socket
@@ -327,6 +328,11 @@ def test_every_decision_is_a_receipt_and_the_run_verifies(gw, home, upstream):
     assert gcli.verify(home, True, out=Sink()) in (0, 1)
     doc = json.loads("".join(report))
     assert doc["verified"] and doc["runs"][0]["receipts"] == 4 and doc["runs"][0]["disagree"] == 0
+    assert doc["runs"][0]["routes_sha256"] == [ROUTES.digest()]       # the table the receipts were decided under, kept on the lines
+    assert all(row["routes_sha256"] == ROUTES.digest() for row in rows)
+    out = io.StringIO()
+    gcli.verify(home, False, out=out)
+    assert f"route table sha256 {ROUTES.digest()}" in out.getvalue()
 
 
 def test_rules_report_counts_hits(gw, home):
@@ -503,11 +509,29 @@ def test_the_upstream_url_is_checked(home):
 
 
 # -------------------------------------------------------------------------------------------------- the CLI
+def test_cli_will_not_serve_without_a_route_table(upstream, tmp_path):
+    env = dict(os.environ, PYTHONPATH=str(ROOT) + os.pathsep + os.environ.get("PYTHONPATH", ""),
+               XDG_CONFIG_HOME=str(tmp_path / "cfg"))
+    base = [sys.executable, "-m", "prismpath.cli", "gateway", "--home", str(tmp_path / "h")]
+    assert subprocess.run(base + ["init"], env=env).returncode == 0
+    done = subprocess.run(base + ["--upstream", upstream.url, "--listen", "127.0.0.1:0"], env=env, capture_output=True,
+                          text=True, timeout=30)
+    assert done.returncode != 0 and "--routes FILE" in done.stderr and "listening" not in done.stderr
+    assert not (tmp_path / "h" / "runs").exists() or not list((tmp_path / "h" / "runs").iterdir())
+
+
+def test_the_route_table_digest_is_of_its_canonical_bytes_and_ignores_spacing_and_case():
+    a = rd.Routes.from_doc({"routes": [{"match": "/Admin/*", "class": "admin"}, {"match": "/health", "class": "health"}]})
+    b = rd.Routes.from_doc(json.loads('{ "routes" : [ {"class":"admin","match":"/admin/*"}, {"class":"health","match":"/health"} ] }'))
+    assert a.digest() == b.digest() and len(a.digest()) == 64
+    assert a.digest() != rd.Routes.from_doc({"routes": [{"match": "/health", "class": "health"}, {"match": "/admin/*", "class": "admin"}]}).digest()
+
+
 def test_cli_serves_and_refuses_without_a_policy(upstream, tmp_path):
     env = dict(os.environ, PYTHONPATH=str(ROOT) + os.pathsep + os.environ.get("PYTHONPATH", ""),
                XDG_CONFIG_HOME=str(tmp_path / "cfg"))
     cmd = [sys.executable, "-m", "prismpath.cli", "gateway", "--upstream", upstream.url, "--listen", "127.0.0.1:0",
-           "--home", str(tmp_path / "empty")]
+           "--home", str(tmp_path / "empty"), "--routes", str(POLICY / "demo.routes.json")]
     child = subprocess.Popen(cmd, env=env, stderr=subprocess.PIPE, text=True)
     try:
         lines = [child.stderr.readline(), child.stderr.readline()]

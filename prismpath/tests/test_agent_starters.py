@@ -192,7 +192,7 @@ PATH_HAZARDS = ("path_in_toolchain", "path_glob", "path_traversal", "path_symlin
 
 
 def _reading(tool, scope, command, git_op, **flags):
-    reading = {"classifier_version": 2, "net_dest": "none", "proc_class": "none", "tool": tool, "path_scope": scope, "command_class": command,
+    reading = {"classifier_version": 3, "net_dest": "none", "proc_class": "none", "tool": tool, "path_scope": scope, "command_class": command,
                "git_op": git_op, "remote_class": "allowed" if git_op == "push" else "none",
                "kill_by_pattern": False, **{name: False for name in PATH_HAZARDS}}
     reading.update(flags)

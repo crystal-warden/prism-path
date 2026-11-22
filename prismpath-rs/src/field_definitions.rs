@@ -344,11 +344,25 @@ pub fn canonical_value(definition: &FieldDefinition, raw: &Value) -> Result<Valu
 
 /// Ok(value) for a value that is already canonical, or the refusal reason. It converts nothing.
 pub fn accept_canonical(definition: &FieldDefinition, value: &Value) -> Result<Value, &'static str> {
+    match check_canonical(definition, value)? {
+        true => Ok(Value::Null),
+        false => Ok(match value {
+            Value::Num(number) => Value::Num(*number as i128 as i64 as f64),
+            other => other.clone(),
+        }),
+    }
+}
+
+/// `accept_canonical` without making the accepted value: `Ok(true)` for an absent value the definition allows,
+/// `Ok(false)` for a canonical present value, which compares exactly as the value `accept_canonical` returns
+/// (a bool or a category is returned unchanged, and an integral number in range is the same number), or the
+/// refusal. For an encoder that reads the cell from the value it was given.
+pub fn check_canonical(definition: &FieldDefinition, value: &Value) -> Result<bool, &'static str> {
     if matches!(value, Value::Null) {
-        return if definition.absent_allowed { Ok(Value::Null) } else { Err(REFUSAL_MISSING) };
+        return if definition.absent_allowed { Ok(true) } else { Err(REFUSAL_MISSING) };
     }
     match (definition.kind, value) {
-        (DefinedKind::Bool, Value::Bool(_)) | (DefinedKind::Category, Value::Str(_)) => Ok(value.clone()),
+        (DefinedKind::Bool, Value::Bool(_)) | (DefinedKind::Category, Value::Str(_)) => Ok(false),
         (DefinedKind::Int | DefinedKind::Fixed, Value::Num(number)) => {
             if !number.is_finite() {
                 return Err(REFUSAL_OUT_OF_RANGE);
@@ -356,7 +370,7 @@ pub fn accept_canonical(definition: &FieldDefinition, value: &Value) -> Result<V
             if number.fract() != 0.0 {
                 return Err(REFUSAL_FRACTIONAL);
             }
-            in_range(definition, *number as i128).map(|integer| Value::Num(integer as f64))
+            in_range(definition, *number as i128).map(|_| false)
         }
         _ => Err(REFUSAL_WRONG_TYPE),
     }

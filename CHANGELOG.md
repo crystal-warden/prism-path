@@ -8,13 +8,50 @@ spec stable.
 
 ## [Unreleased]
 
+### Changed: the Rust Facet encoder writes codes straight into words (2026-11-21)
+
+- **`prismpath-telemetry-rs` builds each Fibonacci code as an integer (a compile-time table for 1 to 255, a search over a fixed table above) and packs it with a `BitWriter`, instead of building a string of `0` and `1` characters and walking it.** `zeckendorf::encode`, `encode_stream`, `packed::pack` and `packed::encode` give the same bytes as before and are held to the old string algorithms by `tests/test_fast_encode.rs`. Acceptance checks a value without copying it (`quantizer::accept_check`, `prismpath_rs::field_definitions::check_canonical`), since the accepted value compares as the value given. `wire::Encoder` sorts the field order once and writes a reading's packed bytes directly: `encode_packed_into` takes the HashMap reading `encode_reading` takes, with the same refusals, `encode_row_into` takes one value per field in wire order, and `encode_symbols_packed` takes cell symbols. On 1M readings of the fusion policy the shipped path went from 1.5M to 2.0M readings per second, the encoder takes 7.6M (HashMap) and 12M (row), and code and pack alone about 45M; on the 12 field agent policy 0.53M, 0.68M, 2.7M, 4.7M and about 22M.
+
+### Fixed: programs the classifier read as read only could write files or run commands (2026-11-21)
+
+- **What was wrong.** `sed`, `sort`, `uniq`, `xxd` and `tree` were on the classifier's read only list, and only the
+  literal flags `sed -i`, `sort -o` and `tree -o` were caught. So `sed -ri`, `sort -o.claude/settings.json`,
+  `uniq notes .claude/settings.json`, `sed 'w FILE'`, `sed '1e CMD'` and `xxd -r notes .git/hooks/pre-commit` read
+  `read_only` and the starter policies allowed them, through the Claude Code hook. Likewise `git diff --output=FILE`,
+  `git grep -O sh` (and `--open-files-in-pager`) and `git diff --no-index` read as a plain allowed git listing.
+  Through the Claude Code hook that let a command rewrite the agent's own settings or hooks.
+- **What changed.** `CLASSIFIER_VERSION` is 3. `sed`, `sort`, `uniq`, `xxd`, `tree`, `file` (`-C` writes a file) and
+  `date` (`-s` sets the clock) are mutating, and so are named writers in the hazard scan. A git argument that is
+  `--output`, `--open-files-in-pager`, `--no-index`, `--ext-diff`, `--contents`, `--ignore-revs-file` or `--remerge-diff` (it writes temporary objects) (or any prefix of
+  one, which git accepts) or a short cluster holding `O` is an unsafe option, so the call reads git `unknown`. The three
+  starters are recompiled for version 3, the previous images are named as older starters, and a recorded policy from
+  before this fix gets the re-init message. The MCP proxy now decides under the recorded, attested policy of
+  `agent init` (`commands.load_checked`), refuses every call without one, and accepts `--policy` only when it is that
+  policy.
+- **What is proven.** The theorems prove the model's readings and refusals given the model's lists. They do not prove
+  that a listed program is read only. `prismpath/tests/test_read_only_runs.py` now checks that by running every
+  read only program and every plain git read, with the options each prints in its own help, in a temporary tree, and
+  requires the tree unchanged and no child run.
+
+### Changed: review fixes (2026-11-21)
+
+- **`prismpath gateway` will not serve without `--routes FILE`**, because with an empty table every path reads `other` and a policy that allows `other` would allow all of them. The route table's canon/2 digest is kept on each receipt's journal line (`routes_sha256`, outside the sealed root and the receipt format) and `gateway verify` reports it.
+- **The egress proxy records the digest of the `--allow-host` list** (`hosts_sha256` on each egress receipt's journal line, reported by `agent verify`), since the list is a launcher argument and no signed policy holds it. The egress log is kept by default in the egress run's directory as `egress.log`, and `--egress-log` names another place.
+- **`agent approvals` counts an asked receipt as approved only when the call ran.** A call that failed or was interrupted is reported as `asked_failed` and does not count toward `--min`.
+- **A PostToolUse outcome finds its receipt by `tool_use_id` from the end of the journal** instead of validating every line each time.
+- **The Lean oracle cases of the egress and edge table tests run in CI** (the `formal` workflow), the launcher shell child tests run wherever a per call backend works (Landlock included), and a test fails when a source file names a `docs/` path that does not exist.
+
+### Added: hook inputs recorded from a real Claude Code session (2026-11-21)
+
+- **`prismpath/tests/fixtures/claude_code_live_2026-11-21.json` holds the 18 hook inputs Claude Code 2.1.326 sent to `prismpath agent hook` in a headless session** (PreToolUse for Read, Glob, Grep, Bash, Write and Edit, PostToolUse for each call that ran, SessionEnd), with paths and ids replaced. `test_agent_claude_code_live.py` answers each PreToolUse input again and requires the live answer. The real inputs carry fields the written fixtures do not (`session_id`, `transcript_path`, `permission_mode`, `tool_use_id`, `prompt_id`, `scratchpad_dir`, `effort`). The hook inputs in `claude_code_hooks.json` are written in that shape, not recorded, and the spec and this changelog now call them written. The same session gave 9 receipts that replay with no disagreement and 11 outcome records bound to them.
+
 ### Fixed: file tool paths that start with `~` refuse as outside the workspace (2026-11-20)
 
-- **A path whose first component is `~` or `~user` reads as outside the workspace** for Read, Write, Edit, MultiEdit, NotebookEdit, Glob, Grep and the filesystem server's tools, so the agent's own Read of `~/.ssh/config` refuses with cause 111 where it was asked with 124. The rule is always outside, whatever `HOME` is, as the Bash scan already reads it. A `~` that is not the first component is an ordinary name, and a leading `~` no longer sets `path_glob`. Proved in Lean (`pathFacts_home`, `classify_home`), covered by the oracle, the differential harness and four recorded hook inputs.
+- **A path whose first component is `~` or `~user` reads as outside the workspace** for Read, Write, Edit, MultiEdit, NotebookEdit, Glob, Grep and the filesystem server's tools, so the agent's own Read of `~/.ssh/config` refuses with cause 111 where it was asked with 124. The rule is always outside, whatever `HOME` is, as the Bash scan already reads it. A `~` that is not the first component is an ordinary name, and a leading `~` no longer sets `path_glob`. Proved in Lean (`pathFacts_home`, `classify_home`), covered by the oracle, the differential harness and four written hook inputs.
 
 ### Added: gateway grants (2026-11-21)
 
-- **`prismpath gateway grant --path-class CLASS --method-class CLASS --ttl SECONDS` signs a grant with the gateway home's authority key, and the gateway reads the `X-PrismPath-Grant` header as the request's `grant` field.** A grant (`prismpath.grant/1`, canon/2, Ed25519 over a domain-separated document) names the route and method classes it covers, the policy image it was issued under and a window of at most 30 days. It names no holder, so it is the same grant whoever presents it. It reads `valid` only when it verifies under this gateway's key and policy, covers the request and is in force, `expired` past its window, and `invalid` otherwise. `prismpath gateway revoke --grant-id ID` adds it to `grants.revoked` in the home, which is read again when it changes, so the next request that presents it is refused; a list that cannot be read revokes every grant. The grant id and the SHA-256 of the grant are kept on the receipt's journal line, and the grant header is never forwarded. The demo policy lets a granted read reach the admin routes.
+- **`prismpath gateway grant --path-class CLASS --method-class CLASS --ttl SECONDS` signs a grant with the gateway home's authority key, and the gateway reads the `X-PrismPath-Grant` header as the request's `grant` field.** A grant (`prismpath.grant/1`, canon/2, Ed25519 over a domain-separated document) names the route and method classes it covers, the policy image it was issued under and a window of at most 30 days. It names no holder, so it is the same grant whoever presents it. It reads `valid` only when it verifies under this gateway's key and policy, covers the request and is in force, `expired` past its window, and `invalid` otherwise. `prismpath gateway revoke --grant-id ID` adds it to `grants.revoked` in the home, which is read again when it changes, so the next request that presents it is refused; a list that cannot be read revokes every grant. The grant id and the SHA-256 of the grant are kept on the receipt's journal line (bound to the line by the journal check, not under the sealed root), and the grant header is never forwarded. The demo policy lets a granted read reach the admin routes.
 
 ### Added: what became of each call, and approvals worth a rule (2026-11-20)
 
@@ -41,7 +78,7 @@ spec stable.
 - **`prismpath gateway --upstream URL --listen ADDR` is an HTTP reverse proxy that decides every request with the core under an attested policy and receipts the decision before the service sees it.** A request is read into the fields `method_class`, `path_class` (from the owner's route table), `body_class`, `content_class`, `query` and `grant`, in the canon/2 form the agent classifier's readings use, without asking who sent it, so a curl, a script and a model get the same decision. What it cannot read reads `unknown` and is refused, nothing is forwarded without a durable receipt, a missing or unattested policy refuses every request, and sizes and times are bounded. A refusal is a 403 with the new cause 131 `gateway:request-refused`; `gateway init`, `verify` and `rules` record the policy, verify the run and count rule hits. The demo policy `prismpath/gateway/policy/demo.rules.md` compiles to its attested image.
 ### Added: the network edge is compiled from the signed agent policy (2026-11-20)
 
-- **`prismpath-ebpf/net_from_policy.py` projects the signed image's connect allow set onto the table `ppt_net.bpf.c` loads.** The edge passes TCP to port 443 at the addresses of the owner's destination table (`prismpath.net_dests/1`, host to IPv4 addresses) for each class the image allows and the agent profile's proxy state covers, for the sources it governs, and drops the rest. An address shared by an allowed and a refused name is dropped and reported, a name that moves is not followed until the owner compiles and signs a new table, and `other` and `unknown` are never passed. The node order is fixed so the loader's drop mask index never moves.
+- **`prismpath-ebpf/net_from_policy.py` projects the signed image's connect allow set onto the table `ppt_net.bpf.c` loads.** The edge passes TCP to port 443 at the addresses of the owner's destination table (`prismpath.net_dests/1`, host to IPv4 addresses) for each class the image allows and the agent profile's proxy state covers, for the sources it governs, and drops every other IPv4 packet from those sources. Frames it cannot classify (IPv6, VLAN tags, other ethertypes, a malformed IPv4 header) are handled as the entry on `ppt_net.bpf.c` above says. An address shared by an allowed and a refused name is dropped and reported, a name that moves is not followed until the owner compiles and signs a new table, and `other` and `unknown` are never passed. The node order is fixed so the loader's drop mask index never moves.
 - **The table is signed with its flow.** The flow names the source image hash, `policy_pack` signs the table with the flow's hash, and `verify` is a dry run (pack signature, envelope, version floor, the table recompiled from the flow and from the image, the loader's own parser) that loads nothing. `net_swap.py` gains `--dry-run`, and `net_compile.address_refusals` takes `bit_pattern_constants` so a destination at or above 128.0.0.0 is named by the value the front end puts in the register. `prismpath/tests/test_net_from_policy.py` holds the table, run through the userspace C evaluator, to the Lean oracle over a packet corpus.
 
 ### Added: state across calls (2026-11-21)
@@ -93,7 +130,7 @@ spec stable.
   or `.pth` file was never loaded. Run `prismpath agent init` again to rewrite an installed hook.
 - The Lean model proves the scan's control rule (`scan_control`, `scan_control_refused` in `ScanTheorems.lean`); the
   differential harness covers redirections and the new paths (0 disagreements in 20,000 generated cases), and the
-  recorded hook inputs are now 161.
+  written hook inputs are now 161.
 
 ### Added: a warning for a policy recorded before the control-file rule (2026-11-20)
 
@@ -117,7 +154,7 @@ spec stable.
 - The Lean model of the classifier carries the field and proves the rule (`formal/Classifier/Control.lean`): a control
   path reads control, and under every `controlSafe` policy, which the oracle checks on each shipped image, a change
   that names one is refused (`control_refused` in the oracle's `--policy` output). The differential harness and the
-  recorded hook inputs (now 132) cover it, and the refusals are receipted like any other, so they are observations a
+  written hook inputs (now 132) cover it, and the refusals are receipted like any other, so they are observations a
   later policy proposal may read; they never change the policy on their own.
 
 ### Added: a rule table for the installed policy (2026-11-19)
@@ -149,9 +186,10 @@ What changed since 0.1.0, in short:
   Agentic Applications, MITRE ATLAS and CWE, and the regulatory mapping relates them to the frameworks it names.
 - **OpenTelemetry decision attributes.** A proposal and a producer (`prismpath.agent.otel`) for the outcome, the cause
   and the receipt of a governed tool call on its span.
-- **The classifier is proven.** Its reading of a call is defined in Lean and held to the Python over the recorded
-  inputs, the adversary probes and 20,000 generated calls, and a proven hazard scan keeps hazards refused when a
-  command falls outside its grammar.
+- **The classifier's readings are proven given its lists.** Its reading of a call is defined in Lean and held to the
+  Python over the recorded inputs, the adversary probes and 20,000 generated calls, and a proven hazard scan keeps
+  hazards refused when a command falls outside its grammar. This was worded "The classifier is proven" in 0.2.0,
+  which overstated it: see the Unreleased fix below.
 - **Every Merkle tree is RFC 6962's**, with consistency proofs, a streaming root in Python, Rust and C, and strict
   canon/2 readers. These are breaking changes and are listed below.
 - **Native crates.** The four Rust crates (kernel, Facet telemetry wire, policy hot swap, preflight) are held to the
@@ -180,13 +218,13 @@ The detailed entries follow.
   core's boundary accepts every reading under the three agent policies. No unfinished proof, standard axioms
   only, enforced at build (docs/design/spec-verified-classifier.md).
 - **`lake exe classifier-oracle`** and **`formal/diff/classifier_diff.py`** hold the Python to the model over the
-  120 recorded hook inputs, the 51 adversary probes and 20,000 generated calls: no disagreement. The formal
+  120 written hook inputs, the 51 adversary probes and 20,000 generated calls: no disagreement. The formal
   workflow runs it, and `tools/reproduce.sh` has the step `classifier-diff`.
 - **Behaviour change (owner decision).** A Bash command is split by a plain word grammar instead of `shlex`:
   plain words and quoted text, nothing else, so a backslash, an unquoted `~ { # ! ^`, any control or non ASCII
   character reads unknown and is asked about under `agent_default`. Signals, process ids, the pkill word
   boundary and `git tag -nN` are read in ASCII, the stricter reading. A call holding a lone surrogate reads
-  unknown. No recorded hook input or adversary probe changed answer; on 20,000 generated commands 1,177 moved to
+  unknown. No written hook input or adversary probe changed answer; on 20,000 generated commands 1,177 moved to
   ask (124). The classifier's disk reads are now one function (`classifier.disk_facts`), the mapping's three
   (`claude_code._inside`, `_same_dir`, `_exists`).
 - **Hazards outside the grammar stay refused (owner decision).** A Bash command that reads unknown is scanned on its
@@ -194,7 +232,7 @@ The detailed entries follow.
   word or a URL scheme, a token outside the workspace, a `..` or a `.toolchain` component sets the reading fields
   the refusal rules fire on; nothing found leaves it asking. Proved: each rule as stated, and under every shipped
   agent policy the scan only ever adds refusals. Of the 605 generated commands the grammar alone moved from refuse
-  to ask, 529 are refused again; no command outside the grammar is allowed. Recorded inputs `kill-3`,
+  to ask, 529 are refused again; no command outside the grammar is allowed. Written inputs `kill-3`,
   `shell-tilde` and `shell-brace` now refuse (105, 106, 111) where they asked.
 
 ### Added: three starter policies for the governed agent (2026-11-16)

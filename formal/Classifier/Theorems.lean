@@ -364,7 +364,9 @@ theorem hook_bash_unknown (d : HookDisk) (ms ti : List (String × J)) (s : Strin
 
 /-! ## Read only -/
 
-/-- **Nothing outside the read only set is read only.** An argv reads `read_only` only when its program (the
+/-- **Nothing outside the model's `READ_ONLY` list is read only.** This is a fact about the model's own list, not
+a proof that a listed program cannot write: `prismpath/tests/test_read_only_runs.py` runs every listed program to
+check that. An argv reads `read_only` only when its program (the
 bare word, or the base name of a path in a system directory) is in `READ_ONLY`, is in neither `NETWORK` nor
 `PRIVILEGE`, is not git, and no argument holds a URL. -/
 theorem commandClass_read_only {argv : List Str} (h : commandClass argv = .read_only) :
@@ -406,23 +408,10 @@ theorem commandClass_read_only {argv : List Str} (h : commandClass argv = .read_
       · simp only [h6, if_true] at h; cases h
       simp only [Bool.not_eq_true] at h6
       simp only [h6, Bool.false_eq_true, if_false] at h
-      by_cases h7 : (base == lit "sed" && args.any (fun a => a == lit "-i" || startsWith a (lit "-i") ||
-          startsWith a (lit "--in-place"))) = true
-      · simp only [h7, if_true] at h; cases h
-      simp only [Bool.not_eq_true] at h7
-      simp only [h7, Bool.false_eq_true, if_false] at h
-      by_cases h8 : (base == lit "sort" && args.any (fun a => a == lit "-o" || startsWith a (lit "--output"))) = true
-      · simp only [h8, if_true] at h; cases h
-      simp only [Bool.not_eq_true] at h8
-      simp only [h8, Bool.false_eq_true, if_false] at h
-      by_cases h9 : (base == lit "tree" && args.contains (lit "-o")) = true
-      · simp only [h9, if_true] at h; cases h
-      simp only [Bool.not_eq_true] at h9
-      simp only [h9, Bool.false_eq_true, if_false] at h
-      by_cases h10 : READ_ONLY.contains base = true
+      by_cases h7 : READ_ONLY.contains base = true
       · simp only [Bool.or_eq_false_iff] at h1 h3
-        exact ⟨h10, h3.1, h1.2, fun e => by simp [e] at h2, h3.2⟩
-      · simp only [h10, Bool.false_eq_true, if_false] at h
+        exact ⟨h7, h3.1, h1.2, fun e => by simp [e] at h2, h3.2⟩
+      · simp only [h7, Bool.false_eq_true, if_false] at h
         split at h <;> cases h
 
 theorem runPlan_keeps (remotes : List Str) (argv : List Str) :

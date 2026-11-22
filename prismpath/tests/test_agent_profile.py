@@ -63,7 +63,7 @@ def test_an_image_that_allows_a_network_git_op_gets_network():
 def test_a_push_to_an_allowed_remote_is_allowed_but_gives_no_network():
     # the starters allow it, and the sandbox is stricter than the oracle there: the push fails for want of a network
     policy = Policy(image("default"))
-    reading = {"classifier_version": 2, "net_dest": "none", "proc_class": "none", "command_class": "none", "git_op": "push", "kill_by_pattern": False,
+    reading = {"classifier_version": 3, "net_dest": "none", "proc_class": "none", "command_class": "none", "git_op": "push", "kill_by_pattern": False,
                "path_control": False, "path_glob": False, "path_in_toolchain": False, "path_scope": "none", "path_symlink": False,
                "path_traversal": False, "remote_class": "allowed", "tool": "git", "zone_reach": "none"}
     assert policy.decide(policy.reading_bytes(reading)).runs

@@ -176,7 +176,7 @@ def test_the_kernel_decides_like_the_python_reference_and_refuses_every_corrupte
 def _staged_cfs():
     exe = Path(os.environ.get("CFS_EXE_DIR") or REPO / ".cfs-build" / "cFS" / "build-native_std" / "exe" / "cpu1")
     if not (exe / "core-cpu1").exists():
-        pytest.skip(f"no native cFS build staged at {exe}; see integrations/cfs/README.md")
+        pytest.skip(f"no native cFS build staged at {exe}; set CFS_EXE_DIR to a native cFS exe/cpu1 that includes prismpath_app")
     if "prismpath_app" not in (exe / "cf" / "cfe_es_startup.scr").read_text() or not (exe / "cf" / "pp_app_policy.tbl").exists():
         pytest.skip("the staged cFS build does not include the prismpath_app (startup script entry or table missing)")
     return exe

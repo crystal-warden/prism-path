@@ -1,6 +1,6 @@
 # Govern a coding agent in ten minutes
 
-This guide puts PrismPath in front of Claude Code. Every tool call Claude proposes goes to a PrismPath hook first. The hook decides allow, refuse or ask under a signed policy and writes a receipt for the decision, and you can check those receipts afterwards. You need Linux or macOS, Python 3.10 or later and Claude Code. The commands below that start with `prismpath` are run in CI against recorded hook input, so the guide stays true to the code.
+This guide puts PrismPath in front of Claude Code. Every tool call Claude proposes goes to a PrismPath hook first. The hook decides allow, refuse or ask under a signed policy and writes a receipt for the decision, and you can check those receipts afterwards. You need Linux or macOS, Python 3.10 or later and Claude Code. The commands below that start with `prismpath` are run in CI against written hook input, so the guide stays true to the code.
 
 ## 1. Install
 
@@ -104,7 +104,7 @@ When the session ends, every allowed receipt with no outcome is recorded as `no 
 
 Outcomes are records and never decisions. They cannot block anything, since the call already ran, and a hook that cannot record one answers with nothing. No outcome changes a policy, a profile, a rule or any verdict, and nothing that decides reads one. They sit outside the signed root, in their own file, so a line cut from the end would not be noticed, and a rewritten file that is consistent with itself can be told from the original only by the receipts it names. Under the launcher the reports come from inside the sandbox over the decider's socket, so they are claims of the agent's process. A forged one can add a false `ran` to a receipt and can never widen what runs.
 
-`prismpath agent status` shows the totals for each session and for all of them, for example `allowed 5 (4 ran, 1 no outcome); asked 2 (1 approved and ran, 1 no outcome); refused 3`. A call still waiting for its outcome counts as having none until it arrives.
+`prismpath agent status` shows the totals for each session and for all of them, for example `allowed 5 (4 ran, 1 no outcome); asked 3 (1 approved and ran, 1 failed or interrupted, 1 no outcome); refused 3`. A call still waiting for its outcome counts as having none until it arrives.
 
 ### Approvals worth a rule
 
@@ -112,7 +112,7 @@ Outcomes are records and never decisions. They cannot block anything, since the 
 prismpath agent approvals --min 3
 ```
 
-Lists the rules that ask you whose questions you approved, and that then ran, at least `--min` times (3 by default). Each shows the counts and up to three example readings. A reading is classes only, for example `command_class=mutating path_scope=workspace proc_class=single tool=run_command`, never a path or a command. The output is headed candidates for the owner to sign, nothing is changed. An approval you give over and over is a hint that an allow rule for that class of call may be what you want. To adopt one, write the rule in your policy source and sign it with your authority key as in [writing-agent-rules.md](writing-agent-rules.md). The command never edits a policy and nothing adopts a rule on its own. Only receipts of runs that verify are counted.
+Lists the rules that ask you whose questions you approved, and that then ran (a call that failed or was interrupted is shown apart and not counted), at least `--min` times (3 by default). Each shows the counts and up to three example readings. A reading is classes only, for example `command_class=mutating path_scope=workspace proc_class=single tool=run_command`, never a path or a command. The output is headed candidates for the owner to sign, nothing is changed. An approval you give over and over is a hint that an allow rule for that class of call may be what you want. To adopt one, write the rule in your policy source and sign it with your authority key as in [writing-agent-rules.md](writing-agent-rules.md). The command never edits a policy and nothing adopts a rule on its own. Only receipts of runs that verify are counted.
 
 ## See which rules fire
 
@@ -122,7 +122,7 @@ prismpath agent rules
 
 `rules` lists the recorded policy's rules in order, the way `iptables -L -v` lists a firewall. Each row has the rule's number, its hits, the time of its last hit, its target (`allow`, `refuse_<code>` or `escalate_<code>` with the cause name) and its condition as the rules file writes it. After the rules come two rows for the core's own refusals, `route:no-matching-edge` (no rule holds) and `route:contract-violation` (the reading broke the policy's field definitions), because there is no catch all rule. Two findings follow. **Never matched** lists the rules with no hit in the counted receipts. **Unreachable** lists a rule that no reading can ever reach because earlier rules cover every reading it matches. That second finding comes from the policy alone, by deciding every combination of field values through the reference kernel. A field without a finite set of values is not enumerated, and `rules` says which rules it did not check.
 
-The outcome column says what became of the calls, as described under [What became of each call](#what-became-of-each-call). For a rule that allows it is the calls that ran and the calls with no outcome. For a rule that asks it is the calls you approved that ran and the calls with no outcome, declined or never run. A rule that refuses counts its refusals.
+The outcome column says what became of the calls, as described under [What became of each call](#what-became-of-each-call). For a rule that allows it is the calls that ran and the calls with no outcome. For a rule that asks it is the calls you approved that ran, the calls that failed or were interrupted, and the calls with no outcome, declined or never run. A rule that refuses counts its refusals.
 
 Only receipts of runs that verify are counted, and the output says how many receipts did not verify (or were decided under another policy) and were skipped. A receipt has no time of its own, so the time of a hit is the time of its run: the signed time of a sealed run, else its last receipt. `--since 2026-11-01` counts only runs at or after that ISO 8601 time. The command reads your runs from scratch copies and never writes a receipt, a seal or a policy.
 
@@ -133,7 +133,7 @@ Only receipts of runs that verify are counted, and the output says how many rece
 | `config_dir`, `since` | the configuration directory and the `--since` time or null |
 | `policy` | `name`, `image` and `sha256` of the recorded policy |
 | `receipts` | `counted`, `not_verified`, `other_policy`, `runs_counted` and `skipped`, a list of `session`, `receipts` and `reason` |
-| `rules` | per rule: `rule`, `condition`, `target`, `decision`, `cause`, `code`, `hits`, `last_hit`, and what became of the calls, `allowed_ran`, `allowed_no_outcome`, `asked_approved`, `asked_no_outcome`, `refused` |
+| `rules` | per rule: `rule`, `condition`, `target`, `decision`, `cause`, `code`, `hits`, `last_hit`, and what became of the calls, `allowed_ran`, `allowed_no_outcome`, `asked_approved`, `asked_failed`, `asked_no_outcome`, `refused` |
 | `core_refusals` | per core refusal: `cause`, `code`, `hits`, `last_hit`, `refused` |
 | `never_matched` | the numbers of the rules with no hit |
 | `unreachable` | `checked`, `readings`, `rules` (numbers) and `not_checked` (`rule` and the `fields` that have no finite set of values) |

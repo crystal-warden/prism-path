@@ -111,7 +111,7 @@ class Gateway:
             return Outcome("refuse", failure=f"the request could not be decided ({type(exc).__name__}: {exc})")
         try:
             with self.lock:
-                index = self.run.append(raw, decision.verdict, grant=grant)
+                index = self.run.append(raw, decision.verdict, grant=grant, routes_sha256=self.routes.digest())
         except Exception as exc:   # noqa: BLE001 - never forward a request whose receipt is not durable
             return Outcome("refuse", failure=f"its receipt could not be written ({type(exc).__name__}: {exc})")
         return Outcome(decision.kind, decision.cause, decision.cause_code, index)

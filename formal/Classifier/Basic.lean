@@ -105,15 +105,15 @@ def join (a b : Str) : Str :=
 def wordsOf (ws : List String) : List Str := ws.map lit
 
 def READ_ONLY : List Str := wordsOf ["ls", "cat", "head", "tail", "wc", "grep", "egrep", "fgrep", "echo", "pwd",
-  "true", "false", "sort", "uniq", "diff", "cmp", "stat", "file", "date", "basename", "dirname", "realpath",
-  "readlink", "tree", "du", "md5sum", "sha1sum", "sha256sum", "cut", "printf", "which", "whoami", "uname", "id",
-  "find", "sed", "nl", "od", "xxd", "column", "comm", "join", "paste", "rev", "seq", "tac", "test", "expr",
+  "true", "false", "diff", "cmp", "stat", "basename", "dirname", "realpath",
+  "readlink", "du", "md5sum", "sha1sum", "sha256sum", "cut", "printf", "which", "whoami", "uname", "id",
+  "find", "nl", "od", "column", "comm", "join", "paste", "rev", "seq", "tac", "test", "expr",
   "pgrep", "ps"]
 def MUTATING : List Str := wordsOf ["rm", "rmdir", "mv", "cp", "ln", "chmod", "chown", "chgrp", "touch", "mkdir",
   "dd", "truncate", "shred", "tee", "install", "unlink", "tar", "unzip", "zip", "gzip", "gunzip", "patch", "kill",
   "pkill", "killall", "python", "python3", "perl", "ruby", "node", "bash", "sh", "zsh", "dash", "make", "cargo",
   "rustc", "gcc", "cc", "npm", "npx", "pytest", "xargs", "env", "nohup", "timeout", "nice", "awk", "gawk", "mawk",
-  "vim", "vi", "nano", "ed", "crontab", "systemctl"]
+  "vim", "vi", "nano", "ed", "crontab", "systemctl", "sed", "sort", "uniq", "xxd", "tree", "file", "date"]
 def NETWORK : List Str := wordsOf ["curl", "wget", "ssh", "scp", "sftp", "nc", "ncat", "netcat", "telnet", "ftp",
   "ping", "ping6", "dig", "nslookup", "host", "traceroute", "tracepath", "socat", "apt", "apt-get", "brew",
   "aria2c", "http", "https", "lynx", "w3m", "links", "rsync", "torsocks"]
@@ -155,6 +155,10 @@ def GIT_LIST_VALUE_FLAGS : List Str := wordsOf ["--contains", "--no-contains", "
 def GIT_LIST_PREFIXES : List Str := wordsOf ["--sort=", "--format=", "--abbrev=", "--color=", "--column="]
 def GIT_UNSAFE_OPTIONS : List Str := wordsOf ["--exec", "--upload-pack", "--receive-pack", "-c", "--config",
   "--git-dir", "--work-tree", "-C"]
+/-- `GIT_UNSAFE_LONG`: long options a read subcommand must not carry, as a prefix `git` would accept too. -/
+def GIT_UNSAFE_LONG : List Str := wordsOf ["--exec", "--upload-pack", "--receive-pack", "--config", "--git-dir",
+  "--work-tree", "--output", "--open-files-in-pager", "--no-index", "--ext-diff", "--contents",
+  "--ignore-revs-file", "--remerge-diff"]
 
 def TOOLS : List Str := wordsOf ["list_dir", "read_file", "write_file", "delete_path", "run_command", "git"]
 def MAX_PATH : Nat := 4096
@@ -232,7 +236,7 @@ structure Reading where
 /-- The unknown reading (`classifier.unknown_reading`): it routes to `agent:unclassifiable`. -/
 def unknownReading : Reading := {}
 
-def CLASSIFIER_VERSION : Nat := 2
+def CLASSIFIER_VERSION : Nat := 3
 
 def Tool.name : Tool → String
   | .list_dir => "list_dir" | .read_file => "read_file" | .write_file => "write_file"

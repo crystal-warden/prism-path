@@ -192,7 +192,7 @@ def _covered(name: str, protected: Sequence[str]) -> bool:
 
 
 class ContextCloudZones:
-    """The information point that asks Context Cloud (`contextcloud reaches --json`, docs/cli-json.md there)."""
+    """The information point that asks Context Cloud (`contextcloud reaches --json`, whose JSON output is described in the Context Cloud repository)."""
 
     def __init__(self, doc: Dict[str, Any], home: Path, executable: str, budget_s: float = DEFAULT_BUDGET_S,
                  run=subprocess.run):
