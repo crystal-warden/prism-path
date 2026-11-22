@@ -463,9 +463,10 @@ def hook(raw: bytes, env: Optional[Mapping[str, str]] = None, nested=None,
             run = store.open(session, policy.image)
             try:
                 index = run.append(policy.reading_bytes(result.reading), result.decision.verdict,
-                                   sandbox_profile=profile.hash() if profile is not None else None,
-                                   sandbox_backend=(nested.backend if nested else "bwrap") if profile is not None else None,
-                                   tool_use_id=data.get("tool_use_id"), expect=held)
+                                   extras=run_module.Extras(
+                                       sandbox_profile=profile.hash() if profile is not None else None,
+                                       sandbox_backend=(nested.backend if nested else "bwrap") if profile is not None else None,
+                                       tool_use_id=data.get("tool_use_id")), expect=held)
                 break
             except run_module.RunStale:
                 continue
@@ -636,14 +637,19 @@ def run(program: List[str], workspace: Optional[str] = None, credential: Optiona
     mismatch = classifier_mismatch(policy)
     if mismatch:
         raise AgentError(f"{mismatch}; nothing was run")
-    kwargs = {} if max_processes is None else {"max_processes": max_processes}
+    egress_kwargs: Dict[str, Any] = {}
+    confinement_kwargs: Dict[str, Any] = {}
+    if max_processes is not None:
+        confinement_kwargs["max_processes"] = max_processes
     if local_model:
-        kwargs["local_model"] = local_model
+        egress_kwargs["local_model"] = local_model
     if extra_ro:
-        kwargs["extra_ro"] = extra_ro
+        confinement_kwargs["extra_ro"] = extra_ro
     if allowed_hosts:
-        kwargs["allowed_hosts"] = [host.lower() for host in allowed_hosts]
-    return launcher.launch(program, workspace or os.getcwd(), credential=credential, egress_log=egress_log, **kwargs)
+        egress_kwargs["allowed_hosts"] = [host.lower() for host in allowed_hosts]
+    return launcher.launch(program, workspace or os.getcwd(), credential=credential, egress_log=egress_log,
+                           egress_settings=launcher.EgressSettings(**egress_kwargs),
+                           confinement=launcher.Confinement(**confinement_kwargs))
 
 
 def confinement_state() -> Dict[str, Any]:

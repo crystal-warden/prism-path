@@ -39,7 +39,7 @@ def bwrap_argv(workspace: Path) -> List[str]:
     """The bubblewrap line itself now lives in `prismpath.agent.sandbox_exec`; this adds the executor."""
     return sandbox_exec.bwrap_argv(workspace, Profile(timeout_s=TIMEOUT_S),
                                    ["/usr/bin/python3", "-I", "/run/exec_tool.py"],
-                                   [(str(EXECUTOR), "/run/exec_tool.py")])
+                                   sandbox_exec.Mounts(extra_ro_binds=[(str(EXECUTOR), "/run/exec_tool.py")]))
 
 
 def execute(call: Dict[str, Any], workspace: Path) -> Dict[str, Any]:

@@ -28,6 +28,7 @@ from typing import Iterable, Optional, Tuple
 
 from prismpath.agent import classifier
 from prismpath.agent.profile import Profile
+from prismpath.agent.run import Extras
 
 PROXY_CLASSES = {"none": (), "proxy_model": ("model_api",), "proxy_allow": ("model_api", "allowed_host")}
 
@@ -69,7 +70,7 @@ class PolicyGate:
             with self._lock:
                 if self.run is None:
                     self.run = self.store.open(self.session, self.policy.image)
-                self.run.append(raw, decision.verdict, sandbox_profile=self.profile_sha256, hosts_sha256=self.hosts_sha256)
+                self.run.append(raw, decision.verdict, extras=Extras(sandbox_profile=self.profile_sha256, hosts_sha256=self.hosts_sha256))
         except Exception:  # noqa: BLE001 - no receipt, no tunnel
             return False, "receipt-error"
         if decision.kind == "allow":

@@ -17,12 +17,17 @@ env:
   PYTEST_MARKER: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'checkpoint or not checkpoint' || 'not checkpoint' }}
 
 jobs:
+  # The package promises Python 3.10 and newer. A push or pull request runs the whole suite at the two ends, 3.10 and
+  # 3.12, and on 3.11 compiles every module and runs the kernel's own tests; the weekly checkpoint runs the whole suite
+  # on all three. The job keeps one name per version, so the required checks are the same on every event.
   test:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         python-version: ["3.10", "3.11", "3.12"]
+    env:
+      WHOLE_SUITE: ${{ matrix.python-version != '3.11' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -44,9 +49,20 @@ jobs:
       # One run of the suite. PRISMPATH_REQUIRE_LANDLOCK=1 makes a kernel without Landlock fail the Landlock tests
       # rather than skip them, and the JUnit report is what the three checks below read, so no test runs twice.
       - name: Unit tests (parser / predicates / router / engine / prefilter)
+        if: ${{ env.WHOLE_SUITE == 'true' }}
         env:
           PRISMPATH_REQUIRE_LANDLOCK: "1"
         run: python -m pytest prismpath/tests -q -rs -m "$PYTEST_MARKER" --junitxml=/tmp/unit.xml
+      - name: Every module compiles, and the kernel tests (3.11 between checkpoints)
+        if: ${{ env.WHOLE_SUITE != 'true' }}
+        run: |
+          python -m compileall -q prismpath tools integrations adapters
+          python -m pytest -q -rs -m "$PYTEST_MARKER" prismpath/tests/test_parser.py prismpath/tests/test_predicates.py \
+            prismpath/tests/test_router.py prismpath/tests/test_router_cache_bound.py prismpath/tests/test_engine.py \
+            prismpath/tests/test_engine_error_guard.py prismpath/tests/test_engine_surface_corpus.py \
+            prismpath/tests/test_prefilter.py prismpath/tests/test_prefilter_shadow.py prismpath/tests/test_canon.py \
+            prismpath/tests/test_canon2.py prismpath/tests/test_canonicalize.py prismpath/tests/test_canon_nonfinite.py \
+            prismpath/tests/test_core_evidence.py
       # The sandbox tests run commands under bubblewrap; none may have been skipped.
       # The Landlock backend of the per call sandbox is the path a shell command
       # takes under `prismpath agent run` on this runner, where Ubuntu 24.04's AppArmor setting forbids a bwrap inside a bwrap,
@@ -55,7 +71,7 @@ jobs:
       # The launcher's shell child tests (the nested table, the adversary set) run under whichever per call backend works, so
       # on this runner they run under Landlock; a skip for want of any backend would leave them unchecked, so it fails here.
       - name: The sandbox, Landlock and per call backend tests ran rather than skipped
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && env.WHOLE_SUITE == 'true' }}
         shell: python
         run: |
           import sys, xml.etree.ElementTree as ET

@@ -195,10 +195,10 @@ def test_an_append_to_a_5000_receipt_run_costs_what_an_append_to_a_new_run_costs
 
 def test_an_outcome_finds_its_receipt_by_tool_use_id_without_validating_the_whole_journal(tmp_path, monkeypatch):
     run, raw, verdict = _big_run(tmp_path, 5000)
-    first = run.append(raw, verdict, tool_use_id="toolu_first")      # validates the journal once, then the record holds
-    run.append(raw, verdict, tool_use_id="toolu_dup")
+    first = run.append(raw, verdict, extras=runmod.Extras(tool_use_id="toolu_first"))      # validates the journal once, then the record holds
+    run.append(raw, verdict, extras=runmod.Extras(tool_use_id="toolu_dup"))
     run.append(raw, verdict)                                          # a line with no id
-    last = run.append(raw, verdict, tool_use_id="toolu_dup")          # the same id again: the later receipt is the one found
+    last = run.append(raw, verdict, extras=runmod.Extras(tool_use_id="toolu_dup"))          # the same id again: the later receipt is the one found
     monkeypatch.setattr(runmod.Run, "_entries", lambda self: pytest.fail("a full rescan of the journal"))
     start = time.perf_counter()
     got = run.outcome_of_hook("toolu_last", "PostToolUse", "Read")
@@ -236,12 +236,12 @@ def test_an_outcome_reads_a_receipt_appended_after_the_prefix_record_was_written
 
 def test_a_route_table_and_an_allowed_host_list_digest_are_kept_on_the_line_and_reported(tmp_path):
     run, raw, verdict = _big_run(tmp_path, 3)
-    run.append(raw, verdict, routes_sha256="a" * 64)
-    run.append(raw, verdict, hosts_sha256="b" * 64)
+    run.append(raw, verdict, extras=runmod.Extras(routes_sha256="a" * 64))
+    run.append(raw, verdict, extras=runmod.Extras(hosts_sha256="b" * 64))
     assert run.bound_digests() == {"routes_sha256": ["a" * 64], "hosts_sha256": ["b" * 64]}
     with pytest.raises(runmod.RunError):
-        run.append(raw, verdict, routes_sha256="not-a-digest")
-    run.append(raw, verdict, routes_sha256="c" * 64)
+        run.append(raw, verdict, extras=runmod.Extras(routes_sha256="not-a-digest"))
+    run.append(raw, verdict, extras=runmod.Extras(routes_sha256="c" * 64))
     assert run.bound_digests()["routes_sha256"] == ["a" * 64, "c" * 64]      # a run resumed under another table says so
 
 

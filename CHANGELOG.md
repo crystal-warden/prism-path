@@ -12,6 +12,21 @@ spec stable.
 
 - **`prismpath-hw/spiral-mesh/referee_mesh.py` takes each frame's hex from the sender's `X` line.** Since the node began to batch triples, its `T` line carries no hex, so the referee read none, skipped every received frame and could pass its wire integrity check having compared nothing. A triple whose frame line was lost on serial is still not judged.
 
+### Fixed: control files a killed run left behind, and a cached profile made for another policy (2026-11-22)
+
+- **A run that was killed no longer leaves empty `CLAUDE.md`, `CLAUDE.local.md`, `AGENTS.md`, `.mcp.json` or `.claude/` in the workspace.** What a run creates to bind them read only is now written to a marker outside the workspace first, and the next run removes what a marker from a process that is gone lists, only while it is still empty. A marker is read only from a directory this user owns and no one else can write, and it can remove only the workspace's own control paths. A file that was already there, or that has content, is never removed.
+- **A cached sandbox profile is used only for the policy image and compiler version it was made for.** The cache entry now carries the compiler version and a binding hash over the image digest, the version and the profile, and an entry that does not match is compiled again.
+
+### Removed: the unused agent OpenTelemetry attribute module (2026-11-22)
+
+- **`prismpath.agent.otel` is gone.** Nothing imported it. The span exporter in `prismpath.ledgers.otel` is unchanged.
+### Fixed: the crates publish check fails on any answer from the index but 200 and 404 (2026-11-22)
+
+- **The already published check in `publish-crates.yml` treats only a 404 from the crates.io index as not published.** A rate limit, a server error or a network failure stops the step instead of letting a publish go ahead. `tools/tests/test_export.py` runs the step with the index stubbed.
+
+### Changed: the export ships only files listed in a manifest (2026-11-22)
+
+- **`tools/export_clean.py` fails and names any tracked file under an included prefix that is not in `tools/export_manifest.txt`,** so a new research file no longer ships by default. Add it to the manifest to ship it or to an exclude rule to hold it back. `--write-manifest` rewrites the manifest from the current rules, and the exported tree is unchanged.
 ### Fixed: the in-toto export finds keys only where it is told to, and says when verify was unpinned (2026-11-22)
 
 - **`prismpath.ledgers.intoto` no longer patches `InstanceKey.__init__` or scans live objects for a private key.** A key comes from an argument, the environment variable or the run's key files.

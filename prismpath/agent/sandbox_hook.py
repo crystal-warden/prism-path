@@ -87,8 +87,15 @@ def _sha256_hex(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+def _binding(image_sha: str, compiler: int, profile_sha: str) -> str:
+    """What ties a cached profile to the policy image it was compiled from and to the compiler that compiled it,
+    so an entry made for another image, or by another compiler version, is never used."""
+    return _sha256_hex(f"prismpath.profile-cache/1\0{image_sha}\0{compiler}\0{profile_sha}".encode("ascii"))
+
+
 def profile_for(home: Path, image: bytes):
-    """The profile of `image`, from the cache in `home` or compiled and cached. Raises SandboxRefused."""
+    """The profile of `image`, from the cache in `home` or compiled and cached. A cache entry is used only when it names
+    this image's digest and the current compiler version and its binding hash over both agrees. Raises SandboxRefused."""
     from prismpath.agent import profile as profile_module
     image_sha = _sha256_hex(image)
     cache = Path(home) / PROFILES_DIR / f"{image_sha}.json"
@@ -99,6 +106,8 @@ def profile_for(home: Path, image: bytes):
             host_write=bool(entry["profile"]["host_write"]), network=bool(entry["profile"]["network"]),
             max_processes=int(entry["profile"]["max_processes"]), timeout_s=int(entry["profile"]["timeout_s"]))
         if entry["image_sha256"] == image_sha and entry["profile_sha256"] == loaded.hash() \
+                and entry["compiler"] == profile_module.COMPILER_VERSION \
+                and entry["binding"] == _binding(image_sha, profile_module.COMPILER_VERSION, loaded.hash()) \
                 and loaded.to_object() == entry["profile"]:
             return loaded
     except (OSError, ValueError, KeyError, TypeError):
@@ -111,6 +120,8 @@ def profile_for(home: Path, image: bytes):
         cache.parent.mkdir(parents=True, exist_ok=True)
         tmp = cache.with_name(cache.name + f".{os.getpid()}.tmp")
         tmp.write_text(json.dumps({"image_sha256": image_sha, "profile_sha256": compiled.hash(),
+                                   "compiler": profile_module.COMPILER_VERSION,
+                                   "binding": _binding(image_sha, profile_module.COMPILER_VERSION, compiled.hash()),
                                    "profile": compiled.to_object()}, sort_keys=True), encoding="utf-8")
         os.replace(tmp, cache)
     except OSError:

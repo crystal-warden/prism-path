@@ -47,7 +47,10 @@ jobs:
               | python -c "import json,sys; print(next(p['version'] for p in json.load(sys.stdin)['packages'] if p['name']=='$crate'))")
             path="${crate:0:2}/${crate:2:2}/$crate"
             code=$(curl -s -o index.txt -w '%{http_code}' "https://index.crates.io/$path")
-            if [ "$code" = "200" ] && grep -q "\"vers\":\"$version\"" index.txt; then
+            if [ "$code" != "200" ] && [ "$code" != "404" ]; then
+              echo "The crates.io index answered $code for $crate, so it is not known whether $version is published." >&2
+              status=1
+            elif [ "$code" = "200" ] && grep -q "\"vers\":\"$version\"" index.txt; then
               echo "$crate $version is already on crates.io. Raise its version before tagging." >&2
               status=1
             else
