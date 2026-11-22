@@ -5,9 +5,16 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+  schedule:
+    - cron: "17 6 * * 1"
 
 permissions:
   contents: read
+
+# A push or pull request deselects the tests marked checkpoint (an exhaustive sweep whose seeded sample runs here
+# anyway); the weekly schedule and a manual run are the checkpoint and run everything.
+env:
+  PYTEST_MARKER: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'checkpoint or not checkpoint' || 'not checkpoint' }}
 
 jobs:
   test:
@@ -34,37 +41,48 @@ jobs:
       # with socat inside the sandbox; without these the tests skip, and the sandbox goes unchecked on x86_64.
       - name: Install the sandbox tools
         run: sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends bubblewrap socat
+      # One run of the suite. PRISMPATH_REQUIRE_LANDLOCK=1 makes a kernel without Landlock fail the Landlock tests
+      # rather than skip them, and the JUnit report is what the three checks below read, so no test runs twice.
       - name: Unit tests (parser / predicates / router / engine / prefilter)
-        run: python -m pytest prismpath/tests -q -rs
-      - name: The sandbox tests ran rather than skipped
-        run: |
-          set -o pipefail
-          python -m pytest prismpath/tests/test_sandbox_exec.py prismpath/tests/test_sandbox_net.py -q -rs | tee /tmp/sb.txt
-          ! grep -q "SKIPPED" /tmp/sb.txt
+        env:
+          PRISMPATH_REQUIRE_LANDLOCK: "1"
+        run: python -m pytest prismpath/tests -q -rs -m "$PYTEST_MARKER" --junitxml=/tmp/unit.xml
+      # The sandbox tests run commands under bubblewrap; none may have been skipped.
       # The Landlock backend of the per call sandbox is the path a shell command
-      # takes under `prismpath agent run` on this runner, where Ubuntu 24.04's AppArmor setting forbids a bwrap inside a bwrap.
-      # PRISMPATH_REQUIRE_LANDLOCK=1 makes a kernel without Landlock fail the tests, and the log is searched as well, so a
-      # Landlock test that was skipped is as red as one that failed. (The bubblewrap-nested tests of the same file skip on
-      # this runner by design, so only a skip for want of Landlock fails here.)
-      - name: The Landlock backend ran rather than skipped
-        env:
-          PRISMPATH_REQUIRE_LANDLOCK: "1"
-        run: |
-          set -o pipefail
-          python -c "from prismpath.agent import landlock; print('Landlock ABI', landlock.abi_version(), landlock.describe())"
-          python -m pytest prismpath/tests/test_landlock_backend.py -v -rs | tee /tmp/ll.txt
-          ! grep -i "SKIPPED" /tmp/ll.txt | grep -i "no Landlock"
-          grep -q "test_where_nesting_is_forced_off_the_call_runs_under_landlock_and_every_adversary_case_is_stopped PASSED" /tmp/ll.txt
-          grep -q "test_landlock_stops_every_adversary_case_and_still_works_inside_the_workspace PASSED" /tmp/ll.txt
+      # takes under `prismpath agent run` on this runner, where Ubuntu 24.04's AppArmor setting forbids a bwrap inside a bwrap,
+      # so a Landlock test skipped for want of Landlock is as red as one that failed, and the two adversary tests must pass.
+      # (The bubblewrap-nested tests of the same file skip on this runner by design.)
       # The launcher's shell child tests (the nested table, the adversary set) run under whichever per call backend works, so
-      # on this runner they run under Landlock. A skip for want of any backend would leave them unchecked, so it fails here.
-      - name: The per call backend tests of the launcher ran rather than skipped
-        env:
-          PRISMPATH_REQUIRE_LANDLOCK: "1"
+      # on this runner they run under Landlock; a skip for want of any backend would leave them unchecked, so it fails here.
+      - name: The sandbox, Landlock and per call backend tests ran rather than skipped
+        if: ${{ !cancelled() }}
+        shell: python
         run: |
-          set -o pipefail
-          python -m pytest prismpath/tests/test_agent_nested.py prismpath/tests/test_agent_adversary.py -q -rs | tee /tmp/pc.txt
-          ! grep -i "SKIPPED" /tmp/pc.txt | grep -i "neither a nested bubblewrap nor Landlock"
+          import sys, xml.etree.ElementTree as ET
+          cases = list(ET.parse("/tmp/unit.xml").iter("testcase"))
+          def of(*files):
+              return [c for c in cases if c.get("classname", "").rsplit(".", 1)[-1] in files]
+          def skipped(case):
+              node = case.find("skipped")
+              return None if node is None else (node.get("message") or "") + (node.text or "")
+          bad = []
+          sandbox = of("test_sandbox_exec", "test_sandbox_net")
+          bad += [f"skipped: {c.get('name')}" for c in sandbox if skipped(c) is not None]
+          landlock = of("test_landlock_backend")
+          bad += [f"skipped for want of Landlock: {c.get('name')}" for c in landlock if "no landlock" in (skipped(c) or "").lower()]
+          for name in ("test_where_nesting_is_forced_off_the_call_runs_under_landlock_and_every_adversary_case_is_stopped",
+                       "test_landlock_stops_every_adversary_case_and_still_works_inside_the_workspace"):
+              hit = [c for c in landlock if c.get("name") == name]
+              if not hit or any(c.find("failure") is not None or c.find("error") is not None or skipped(c) is not None for c in hit):
+                  bad.append(f"did not pass: {name}")
+          nested = of("test_agent_nested", "test_agent_adversary")
+          bad += [f"skipped for want of a backend: {c.get('name')}" for c in nested
+                  if "neither a nested bubblewrap nor landlock" in (skipped(c) or "").lower()]
+          if not (sandbox and landlock and nested):
+              bad.append(f"a file's tests are missing from the report ({len(sandbox)}, {len(landlock)}, {len(nested)})")
+          print(f"sandbox {len(sandbox)}, landlock {len(landlock)}, nested and adversary {len(nested)} tests in the report")
+          print("\n".join(bad) or "none skipped")
+          sys.exit(1 if bad else 0)
       # The sandbox security + robustness gate. Exits non-zero on ANY code execution or uncaught
       # crash across ~23k adversarial + random predicate inputs. This is the check that guards the
       # "a `when` predicate cannot execute code, and cannot crash a run" claim in the papers.
@@ -168,7 +186,7 @@ jobs:
           $VENV_BIN/python -c 'import json; assert json.load(open("preflight.json"))["events"] == 2'
           $VENV_BIN/python -c 'from prismpath.mission_control import app; import importlib.resources as resources; assert (resources.files("prismpath.mission_control") / "static" / "index.html").is_file(); assert (resources.files("prismpath.mission_control") / "static" / "vendor" / "cytoscape.min.js").is_file()'
       - name: Shipped test suite against the installed package
-        run: cd /tmp && /tmp/wheel-venv/bin/python -m pytest --pyargs prismpath.tests prismpath.telemetry.tests -q -rs -p no:cacheprovider -m "not cross_language"
+        run: cd /tmp && /tmp/wheel-venv/bin/python -m pytest --pyargs prismpath.tests prismpath.telemetry.tests -q -rs -p no:cacheprovider -m "not cross_language and ($PYTEST_MARKER)"
       - name: The sdist rebuilds and installs
         run: |
           rm -rf /tmp/sdist-work && mkdir /tmp/sdist-work && tar -xzf dist/*.tar.gz -C /tmp/sdist-work

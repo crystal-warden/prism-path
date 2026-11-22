@@ -17,6 +17,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import random
 import re
 import shlex
 import shutil
@@ -107,7 +108,18 @@ def _flags(argv):
     return sorted(longs | shorts)
 
 
-def _forms(argv):
+SAMPLE = 40   # the forms of each program that the per push test runs, drawn with a seed that names the program
+
+
+def _forms(argv, sample=None):
+    """Every option form the program documents, or with `sample` a seeded draw of that many of them."""
+    forms = _all_forms(argv)
+    if sample is None or len(forms) <= sample:
+        return forms
+    return [forms[0], *random.Random(shlex.join(argv)).sample(forms[1:], sample - 1)]
+
+
+def _all_forms(argv):
     forms = [[]]
     for flag in _flags(argv):
         for value in ([], ["out.txt"], ["sub/out.txt"], ["sh"]):
@@ -123,11 +135,10 @@ def _programs():
     return sorted(p for p in classifier.READ_ONLY if shutil.which(p))
 
 
-@pytest.mark.parametrize("program", _programs())
-def test_a_read_only_program_changes_nothing_under_any_option_it_documents(program, tmp_path):
+def _run_program(program, tmp_path, sample):
     ws, env, log = _world(tmp_path)
     ran = 0
-    for form in _forms([program]):
+    for form in _forms([program], sample):
         for operands in ([], ["notes.txt"], ["notes.txt", "sub/b.txt"], ["pat", "notes.txt"], ["notes.txt", ".claude/settings.json"]):
             argv = [program, *form, *operands]
             if not _plain(shlex.join(argv), ws):
@@ -143,14 +154,25 @@ def test_a_read_only_program_changes_nothing_under_any_option_it_documents(progr
     assert ran
 
 
+@pytest.mark.parametrize("program", _programs())
+def test_a_sample_of_the_options_a_read_only_program_documents_changes_nothing(program, tmp_path):
+    """The per push check: a seeded sample of each program's forms. The full set runs at the checkpoint."""
+    _run_program(program, tmp_path, SAMPLE)
+
+
+@pytest.mark.checkpoint
+@pytest.mark.parametrize("program", _programs())
+def test_a_read_only_program_changes_nothing_under_any_option_it_documents(program, tmp_path):
+    _run_program(program, tmp_path, None)
+
+
 GIT_READS = sorted(classifier.GIT_LOCAL_READ)
 
 
-@pytest.mark.parametrize("sub", GIT_READS)
-def test_a_git_local_read_changes_nothing_under_any_option_it_documents(sub, tmp_path):
+def _run_git(sub, tmp_path, sample):
     ws, env, log = _world(tmp_path)
     ran = 0
-    for form in _forms(["git", sub]):
+    for form in _forms(["git", sub], sample):
         for operands in ([], ["notes.txt"], ["HEAD"]):
             argv = ["git", sub, *form, *operands]
             if not _plain(shlex.join(argv), ws):
@@ -164,6 +186,17 @@ def test_a_git_local_read_changes_nothing_under_any_option_it_documents(sub, tmp
             assert not log.exists(), f"{shlex.join(argv)} ran a child: {log.read_text()}"
             assert _snapshot(ws) == before, f"{shlex.join(argv)} changed the tree"
     assert ran
+
+
+@pytest.mark.parametrize("sub", GIT_READS)
+def test_a_sample_of_the_options_a_git_local_read_documents_changes_nothing(sub, tmp_path):
+    _run_git(sub, tmp_path, SAMPLE)
+
+
+@pytest.mark.checkpoint
+@pytest.mark.parametrize("sub", GIT_READS)
+def test_a_git_local_read_changes_nothing_under_any_option_it_documents(sub, tmp_path):
+    _run_git(sub, tmp_path, None)
 
 
 def _fixture_commands():

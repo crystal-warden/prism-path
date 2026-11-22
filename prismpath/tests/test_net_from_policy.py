@@ -68,6 +68,12 @@ ALL_IMAGES["allow_every_connect"] = canon2.dumps({**canon2.loads(starter_path("d
                                                       starter_path("default").read_bytes().rstrip(b"\n"))["rules"]})
 
 
+def _per_push(names, keep):
+    """The images a sweep runs on every push (`keep`); the others carry the checkpoint mark, so the full sweep runs
+    in the checkpoint workflow."""
+    return [name if name in keep else pytest.param(name, marks=pytest.mark.checkpoint) for name in sorted(names)]
+
+
 @pytest.fixture(scope="module")
 def evaluator(tmp_path_factory):
     if not shutil.which("cc"):
@@ -143,7 +149,7 @@ def test_the_starters_pass_model_api_only_and_a_policy_that_allows_a_host_passes
     assert _passed("allow_every_connect") == ("model_api", "allowed_host")
 
 
-@pytest.mark.parametrize("name", sorted(ALL_IMAGES))
+@pytest.mark.parametrize("name", _per_push(ALL_IMAGES, {"default", "allow_other", "allow_every_connect"}))
 def test_the_classes_the_compile_passes_are_the_oracles_allowed_classes_covered_by_the_profile(oracle, name, tmp_path):
     raw, config = ALL_IMAGES[name], _config(tmp_path)
     calls = {"model_api": ("api.anthropic.com", 443), "allowed_host": ("docs.example.com", 443),
@@ -337,7 +343,7 @@ def run_differential(name, tmp_path, evaluator, sources):
     return outcomes, stricter, wrong
 
 
-@pytest.mark.parametrize("name", sorted(ALL_IMAGES))
+@pytest.mark.parametrize("name", _per_push(ALL_IMAGES, {"default"}))     # test_the_stricter_cases_are_listed runs three more
 @pytest.mark.parametrize("scoped", [True, False], ids=["scoped", "every-source"])
 def test_the_compiled_table_agrees_with_the_oracle_over_the_packet_corpus_and_is_never_looser(oracle, evaluator, tmp_path, name, scoped):
     outcomes, stricter, wrong = run_differential(name, tmp_path, evaluator, GOVERNED if scoped else ())
