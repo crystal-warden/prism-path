@@ -106,7 +106,7 @@ CONSUMERS: dict[str, dict[str, list[tuple]]] = {
         "go": [NONE_GO], "hw": [NONE_HW]},
     "portable/distribution": {
         "py": [pytest("prismpath/tests/test_distribution_corpus.py")],
-        "rs": [("none", "the distribution envelope and verifier are not yet in prismpath-hotswap-rs; its replay comes with them")],
+        "rs": [cargo("prismpath-hotswap-rs", "test_distribution_conformance", "prismpath-hotswap-rs/tests/test_distribution_conformance.rs")],
         "js": [NONE_JS], "go": [NONE_GO],
         "hw": [pytest("prismpath/tests/test_distribution_c.py")]},
     "portable/durable": {
