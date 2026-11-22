@@ -193,3 +193,45 @@ def test_wrong_pinned_key_fails(sealed_agent_run, tmp_path):
     # Wrong single pinned instance key bytes
     with pytest.raises(intoto.Bad, match="pinned instance key"):
         intoto.verify(envelopes, run_dir, (other_keys / "instance.pub").read_bytes())
+
+
+def test_export_does_not_find_a_live_key_object_in_memory(sealed_agent_run, tmp_path):
+    run_dir, keys = sealed_agent_run
+    held = root_statement.InstanceKey.load(str(keys / "instance.key"))  # live in this process
+    assert held.public_raw == (run_dir / "instance.pub").read_bytes()
+    elsewhere = tmp_path / "elsewhere" / "deep" / "run"
+    shutil.copytree(run_dir, elsewhere)
+    assert not hasattr(intoto, "_KEY_CACHE")
+    assert root_statement.InstanceKey.__init__.__module__ == root_statement.__name__
+    with pytest.raises(intoto.Bad, match="cannot find the instance private key"):
+        intoto.export(elsewhere)
+    assert len(intoto.export(elsewhere, instance_key=held)) == 1
+
+
+def test_unpinned_verify_says_it_is_unpinned(sealed_agent_run):
+    run_dir, keys = sealed_agent_run
+    envelopes = intoto.export(run_dir)
+    unpinned = intoto.verify(envelopes, run_dir)
+    assert unpinned["pinned"] is False
+    assert unpinned["root_statement"] == "signed-unpinned"
+    pinned = intoto.verify(envelopes, run_dir, keys)
+    assert pinned["pinned"] is True
+    assert pinned["root_statement"] == "signed"
+
+
+def test_failed_import_leaves_the_run_directory_as_it_was(tmp_path):
+    run_dir = tmp_path / "run"
+    keys = tmp_path / "keys"
+    core_evidence.produce(CASES, run_dir, keys)
+    envelopes = intoto.export(run_dir)
+    roots_path = run_dir / "receipts.roots.jsonl"
+    roots_path.unlink()
+    before = sorted(p.name for p in run_dir.iterdir())
+    tampered = copy.deepcopy(envelopes)
+    raw = bytearray(base64.b64decode(tampered[0]["payload"]))
+    raw[len(raw) // 2] ^= 1
+    tampered[0]["payload"] = base64.b64encode(bytes(raw)).decode("ascii")
+    with pytest.raises(intoto.Bad):
+        intoto.import_envelopes(tampered, run_dir, keys)
+    assert not roots_path.exists()
+    assert sorted(p.name for p in run_dir.iterdir()) == before

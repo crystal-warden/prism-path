@@ -99,7 +99,10 @@ field names and values stored in the run:
 
 1. The envelope structure (`payloadType` equal to `application/vnd.in-toto+json`, canonical base64
    `payload` and `signatures`, 64-byte signature, 32-byte hex `keyid`).
-2. The run's `authority.pub` and `instance.pub` against `pinned_keys` when supplied.
+2. The run's `authority.pub` and `instance.pub` against `pinned_keys` when supplied. Pinning is optional. Without pins the signature is checked against the run's own
+   `instance.pub`, which says nothing about who made the run, so the returned report carries
+   `pinned: false` and `root_statement: "signed-unpinned"`, and `pinned: true` only when both the authority
+   and instance keys were pinned.
 3. The Ed25519 signature in the DSSE envelope over `pae(payloadType, payload_bytes)` under the
    pinned (or run-carried) instance public key.
 4. That `payload_bytes` is a canonical `canon/2` document with `_type`
