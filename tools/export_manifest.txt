@@ -234,6 +234,12 @@ prismpath/crypto_agility.py
 prismpath/crypto_host.py
 prismpath/crypto_registry.py
 prismpath/deferral.py
+prismpath/distribution/__init__.py
+prismpath/distribution/devbuild.py
+prismpath/distribution/envelope.py
+prismpath/distribution/kinds.py
+prismpath/distribution/trust.py
+prismpath/distribution/verify.py
 prismpath/embedder.py
 prismpath/engine.py
 prismpath/evals/__init__.py
@@ -460,6 +466,7 @@ prismpath/portable/conformance/context.json
 prismpath/portable/conformance/contract.json
 prismpath/portable/conformance/crypto_agility.json
 prismpath/portable/conformance/crypto_migration.json
+prismpath/portable/conformance/distribution.json
 prismpath/portable/conformance/durable.json
 prismpath/portable/conformance/field_definitions.json
 prismpath/portable/conformance/flows.json
@@ -485,6 +492,7 @@ prismpath/portable/gen_context_fixtures.py
 prismpath/portable/gen_contract_fixtures.py
 prismpath/portable/gen_crypto_agility_fixtures.py
 prismpath/portable/gen_crypto_migration_fixtures.py
+prismpath/portable/gen_distribution_corpus.py
 prismpath/portable/gen_durable_fixtures.py
 prismpath/portable/gen_field_definitions.py
 prismpath/portable/gen_host_trace_fixtures.py
@@ -731,6 +739,10 @@ prismpath/tests/test_crypto_host.py
 prismpath/tests/test_crypto_migration.py
 prismpath/tests/test_crypto_registry.py
 prismpath/tests/test_deferral.py
+prismpath/tests/test_distribution_corpus.py
+prismpath/tests/test_distribution_envelope.py
+prismpath/tests/test_distribution_trace.py
+prismpath/tests/test_distribution_verify.py
 prismpath/tests/test_doc_references.py
 prismpath/tests/test_egress_policy.py
 prismpath/tests/test_emits_types.py

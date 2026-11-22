@@ -8,6 +8,13 @@ spec stable.
 
 ## [Unreleased]
 
+### Added: the distribution envelope, the trust store and the one verifier (2026-11-22)
+
+- **`prismpath.distribution` writes, seals and reads the distribution envelope.** `envelope.build`, `seal`, `unseal` and `envelope_id` are the signed form every distributed artifact will travel in, and `kinds` holds the artifact and target kinds in one table.
+- **`verify.verify` checks a sealed envelope in the order V2 to V11 and reports only the first cause.** It reads its keys, retired keys, revocations, trust sequence and time floor from `trust.TrustStore`, whose durable file counts nothing when it cannot be read.
+- **`devbuild.hatch` refuses every escape hatch with `dist:hatch-refused` unless the build carries `prismpath/_dev_build.py`.** The export, the sdist and the wheel built from it leave that module out.
+- **`portable/conformance/distribution.json` freezes 44 verifier cases from fixed test keys,** and a trace test fails when a conformance case of the spec has no test in an implementation it names.
+
 ### Added: the policy distribution spec and its refusal causes (2026-11-22)
 
 - **`docs/design/spec-policy-distribution.md` defines how one signed policy reaches every enforcement point and stays true there.** It sets out one signed envelope for every distributed artifact, the messages and their two bindings, the enforcement point and controller machines, revocation, rotation, the widening rule, the hold at expiry for mesh and cFS, the heartbeat and 113 conformance cases.
