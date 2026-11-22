@@ -222,7 +222,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install
-        run: pip install numpy pytest build cryptography
+        run: pip install numpy pytest build cryptography "setuptools>=77"   # case 99 builds a wheel with --no-isolation, which needs the backend installed
       - name: The maintenance suite, including the export
         run: python -m pytest tools/tests -q
       - name: Export the product tree and check it
