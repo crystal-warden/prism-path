@@ -24,7 +24,11 @@ export refuses a working tree with uncommitted changes to tracked files, so a pr
 names a research commit that exists (`--allow-dirty` is for working on this script).
 
 What the product carries is the MANIFEST below, meant to be read and adjusted. A tracked file lands in
-the tree if an include rule matches it and no exclude rule does. These are not copied as they are:
+the tree if an include rule matches it and no exclude rule does. The include prefixes only name where to
+look: a file under one also has to be listed in `tools/export_manifest.txt`, the exact files shipped from
+there, or the export fails and names it. So a new research file under an included prefix never ships
+silently. Add it to the manifest to ship it, or to an exclude rule to hold it back, and
+`--write-manifest` rewrites the manifest from the current rules. These are not copied as they are:
 
   * `tools/mirror/` is an overlay: each file in it is written into the tree at its path under that
     directory, replacing the research file of the same path. It holds what the product's packaging and
@@ -131,9 +135,11 @@ EXCLUDE_PREFIXES = [
     "tools/evidence_check.py", "tools/ledger_lint.py", "tools/run_corpora.py", "tools/fq_redundancy.py", "tools/gen_mission_control_guide.py",
     "tools/reproduce.sh",
 ]
+EXCLUDE_PREFIXES.append("tools/export_manifest.txt")    # the export's own list of what it ships
 EXCLUDE_SUFFIXES = [".deferrals"]           # empty top-level scratch files
 EXCLUDE_EXACT = {"docs_health_report.md", "interactions.jsonl"}
 
+MANIFEST_PATH = "tools/export_manifest.txt"
 OVERLAY_DIR = "tools/mirror"
 README_SOURCE = "tools/mirror_readme.md"
 PUBLISH_SOURCE = "tools/mirror_publish.yml"
@@ -163,6 +169,16 @@ def is_included(path):
     if any(path.startswith(prefix) for prefix in EXCLUDE_PREFIXES):
         return False
     return path in INCLUDE_FILES or any(path.startswith(prefix) for prefix in INCLUDE_PREFIXES)
+
+
+def read_manifest():
+    return {line for line in (ROOT / MANIFEST_PATH).read_text().splitlines() if line}
+
+
+def unlisted(tracked, manifest=None):
+    """Tracked files an include prefix would ship that the manifest does not list."""
+    manifest = read_manifest() if manifest is None else manifest
+    return [path for path in tracked if is_included(path) and path not in INCLUDE_FILES and path not in manifest]
 
 
 def overlay_files():
@@ -225,7 +241,15 @@ def main():
                     help="make a local commit if --out is already a git repo (never pushes)")
     ap.add_argument("--allow-dirty", action="store_true",
                     help="export with uncommitted changes to tracked files (the commit named is then not the tree)")
+    ap.add_argument("--write-manifest", action="store_true",
+                    help=f"rewrite {MANIFEST_PATH} from the current rules and stop (review the diff before committing it)")
     args = ap.parse_args()
+
+    if args.write_manifest:
+        listed = sorted(path for path in tracked_files() if is_included(path) and path not in INCLUDE_FILES)
+        (ROOT / MANIFEST_PATH).write_text("".join(path + "\n" for path in listed))
+        print(f"wrote {len(listed)} paths to {MANIFEST_PATH}")
+        return
 
     out = Path(args.out).resolve()
     if out == ROOT:
@@ -234,6 +258,10 @@ def main():
         sys.exit("refusing to export a working tree with uncommitted changes: the tree would name a commit it is not")
 
     tracked = tracked_files()
+    new = unlisted(tracked)
+    if new:
+        sys.exit("these tracked files are under an included prefix but not in " + MANIFEST_PATH + ":\n  "
+                 + "\n  ".join(new) + "\nAdd each to the manifest to ship it, or to an exclude rule to hold it back.")
     plan = export_plan(tracked)
     commit = git("rev-parse", "HEAD")
     tree = git("rev-parse", "HEAD^{tree}")

@@ -45,7 +45,7 @@ pytest.importorskip("fcntl")
 
 from prismpath.agent import commands, launcher, run as run_module  # noqa: E402
 from prismpath.tests import test_agent_cli as cli_tests  # noqa: E402
-from prismpath.tests.test_agent_decider import world, _no_real_config_dir  # noqa: E402,F401
+from prismpath.tests.test_agent_decider import made_world, _no_real_config_dir  # noqa: E402,F401
 from prismpath.tests.test_agent_launcher import needs_socat  # noqa: E402
 from prismpath.tests.test_agent_nested import NESTING, PER_CALL_BACKEND, needs_nesting  # noqa: E402,F401
 from prismpath.tests.test_sandbox_adversary import RUN_SCRIPT, _install, _outside_address  # noqa: E402
@@ -276,32 +276,40 @@ class Counter:
         self.sock.close()
 
 
-@pytest.fixture()
-def arena(world, monkeypatch):
-    home, ws = world["home"], Path(world["ws"])
-    monkeypatch.setenv("HOME", str(home))
-    for name in ("XDG_CONFIG_HOME", "APPDATA", "CLAUDE_PROJECT_DIR"):
-        monkeypatch.delenv(name, raising=False)
-    cli_tests._init(world)                                  # also writes ws/.claude/settings.json, the control file
-    _install(world, [RUN_SCRIPT])
-    decoy = Path(world["decoy"])
-    (decoy / "secret.txt").write_text(SECRET + "\n")
-    credential = world["root"] / "fake-credential.json"
-    credential.write_text(CREDENTIAL_TEXT)
-    counter, capture = Counter(), Capture()
-    plan = {"secret": str(decoy / "secret.txt"), "written": str(decoy / "written.txt"),
-            "control": str(ws / ".claude" / "settings.json"), "address": counter.address, "port": counter.port,
-            "nonmodel": "evil.example", "forks": FORKS, "credential": CREDENTIAL_IN, "credential_text": CREDENTIAL_TEXT,
-            "secret_text": SECRET}
-    (ws / "probe.py").write_text(PROBE)
-    (ws / "agent.py").write_text(STAND_IN)
-    (ws / "plan.json").write_text(json.dumps(plan))
-    try:
-        yield {**world, "plan": plan, "credential": credential, "counter": counter, "capture": capture,
-               "control_before": (ws / ".claude" / "settings.json").read_bytes()}
-    finally:
-        counter.close()
-        capture.close()
+@pytest.fixture(scope="module")
+def world():
+    with made_world() as made:
+        yield made
+
+
+@pytest.fixture(scope="module")
+def arena(world):
+    """One arena for the module: the host run and the launcher run are made once (`results`) and every test reads them."""
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        home, ws = world["home"], Path(world["ws"])
+        monkeypatch.setenv("HOME", str(home))
+        for name in ("XDG_CONFIG_HOME", "APPDATA", "CLAUDE_PROJECT_DIR"):
+            monkeypatch.delenv(name, raising=False)
+        cli_tests._init(world)                                  # also writes ws/.claude/settings.json, the control file
+        _install(world, [RUN_SCRIPT])
+        decoy = Path(world["decoy"])
+        (decoy / "secret.txt").write_text(SECRET + "\n")
+        credential = world["root"] / "fake-credential.json"
+        credential.write_text(CREDENTIAL_TEXT)
+        counter, capture = Counter(), Capture()
+        plan = {"secret": str(decoy / "secret.txt"), "written": str(decoy / "written.txt"),
+                "control": str(ws / ".claude" / "settings.json"), "address": counter.address, "port": counter.port,
+                "nonmodel": "evil.example", "forks": FORKS, "credential": CREDENTIAL_IN, "credential_text": CREDENTIAL_TEXT,
+                "secret_text": SECRET}
+        (ws / "probe.py").write_text(PROBE)
+        (ws / "agent.py").write_text(STAND_IN)
+        (ws / "plan.json").write_text(json.dumps(plan))
+        try:
+            yield {**world, "plan": plan, "credential": credential, "counter": counter, "capture": capture,
+                   "control_before": (ws / ".claude" / "settings.json").read_bytes()}
+        finally:
+            counter.close()
+            capture.close()
 
 
 def _reset(arena):
@@ -335,9 +343,11 @@ def _under_launcher(arena, **kwargs):
     capture = arena["capture"]
     log = arena["root"] / "egress.log"
     code = launcher.launch(["/usr/bin/python3", "agent.py"], str(ws), credential=str(arena["credential"]),
-                           stage_base=str(stages), max_processes=LIMIT, egress_log=str(log),
-                           resolver=lambda name: ["93.184.216.34"],
-                           connect=lambda address, port, timeout: socket.create_connection(("127.0.0.1", capture.port), timeout=timeout),
+                           stage_base=str(stages), egress_log=str(log),
+                           confinement=launcher.Confinement(max_processes=LIMIT),
+                           egress_settings=launcher.EgressSettings(
+                               resolver=lambda name: ["93.184.216.34"],
+                               connect=lambda address, port, timeout: socket.create_connection(("127.0.0.1", capture.port), timeout=timeout)),
                            **kwargs)
     assert code == 0
     assert list(stages.iterdir()) == []
@@ -353,7 +363,7 @@ def _honoured(row):
     return row.get("verdict") in (None, "allow") and _reached(row)
 
 
-@pytest.fixture()
+@pytest.fixture(scope="module")
 def results(arena):
     """The host run and the launcher run, once, and the physical state each left."""
     host = _on_host(arena)

@@ -11,7 +11,7 @@ a run directory, one per session id under a root the caller names (`RunStore`). 
     carry extras beside them: `sandbox` (the profile hash and backend of an allowed shell call), `tool_use_id` (the
     id Claude Code gave the call), `grant` (the grant a gateway request presented), `routes_sha256` (the digest of
     the gateway's route table) and `hosts_sha256` (the digest of the egress proxy's allowed host list). The journal check binds the
-    extras to their line (`_extras_ok` and the line's own canon/2 bytes), and the sealed root does not: it covers
+    extras to their line (`Extras.valid` and the line's own canon/2 bytes), and the sealed root does not: it covers
     only the receipts, so an extra is evidence of the journal and not of the signed root;
   * `lock`: the lock file every operation takes exclusively (`fcntl.flock`);
   * `journal.prefix`: the validated-prefix record that keeps an append's cost independent of the run's length;
@@ -66,6 +66,7 @@ import os
 import re
 import time
 from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -121,26 +122,65 @@ def _counts_ok(state: Any) -> bool:
             and state["changes"] in (0, 1))
 
 
-def _extras_ok(entry: Dict[str, Any]) -> bool:
-    """A journal line holds `i`, `reading` and `receipt`, and at most a sandbox record, a tool_use_id, a grant, and the
-    digest of the gateway's route table or of the egress proxy's allowed host list the line was decided under."""
-    if not {"i", "reading", "receipt"} <= set(entry) <= {"i", "reading", "receipt", "sandbox", "tool_use_id", "grant", *BOUND_DIGESTS}:
-        return False
-    if any(key in entry and not _HEX64.fullmatch(str(entry[key])) for key in BOUND_DIGESTS):
-        return False
-    sandbox, grant = entry.get("sandbox"), entry.get("grant")
-    if "sandbox" in entry and not (isinstance(sandbox, dict)
-                                   and set(sandbox) in ({"profile_sha256"}, {"profile_sha256", "backend"})
-                                   and _HEX64.fullmatch(str(sandbox["profile_sha256"]))
-                                   and sandbox.get("backend", "bwrap") in ("bwrap", "landlock")):
-        return False
-    if "tool_use_id" in entry and not valid_tool_use_id(entry["tool_use_id"]):
-        return False
-    if "grant" in entry and not (isinstance(grant, dict) and set(grant) == {"grant_id", "grant_sha256"}
-                                 and _GRANT_ID.fullmatch(str(grant["grant_id"]))
-                                 and _HEX64.fullmatch(str(grant["grant_sha256"]))):
-        return False
-    return True
+@dataclass(frozen=True)
+class Extras:
+    """What a journal line carries beside its reading and receipt. Each field is optional and is kept on the line
+    only when given, so a next kind of extra is a field here, a key in `KEYS` and a check in `valid`, not another
+    parameter of `Run.append`.
+
+    `sandbox_profile` is the SHA-256 of the sandbox profile the allowed call was rewritten to run under, kept beside
+    the receipt (the receipt is exactly `prismpath.core-receipt/1`, which has no such field), so it is bound to the
+    line by the journal's own check and is not part of the sealed root. `sandbox_backend` (`bwrap` or `landlock`)
+    is the per call sandbox the hook had the call rewritten to run in; a line that has none was written before the
+    backend was recorded and means bwrap. `tool_use_id`, the id Claude Code gave the call, is kept the same way, so
+    the PostToolUse outcome of that call can be bound to this receipt (`Run.outcome_of_hook`); a value that is not
+    shaped like an id is left off. `grant` is the `{"grant_id", "grant_sha256"}` of the grant a gateway request
+    presented. `routes_sha256` and `hosts_sha256` are the digests of the gateway's route table and of the egress
+    proxy's allowed host list, so that `verify` reports which table or list the receipts were decided under."""
+    sandbox_profile: Optional[str] = None
+    sandbox_backend: Optional[str] = None
+    tool_use_id: Optional[str] = None
+    grant: Optional[Dict[str, str]] = None
+    routes_sha256: Optional[str] = None
+    hosts_sha256: Optional[str] = None
+
+    #: the keys a journal line may hold beside `i`, `reading` and `receipt`
+    KEYS = ("sandbox", "tool_use_id", "grant", *BOUND_DIGESTS)
+
+    def apply(self, entry: Dict[str, Any]) -> None:
+        """Add the given extras to the journal line `entry`."""
+        if self.sandbox_profile is not None:
+            entry["sandbox"] = {"profile_sha256": self.sandbox_profile}
+            if self.sandbox_backend is not None:
+                entry["sandbox"]["backend"] = self.sandbox_backend
+        if valid_tool_use_id(self.tool_use_id):
+            entry["tool_use_id"] = self.tool_use_id
+        if self.grant is not None:
+            entry["grant"] = {"grant_id": self.grant["grant_id"], "grant_sha256": self.grant["grant_sha256"]}
+        for key in BOUND_DIGESTS:
+            if getattr(self, key) is not None:
+                entry[key] = getattr(self, key)
+
+    @staticmethod
+    def valid(entry: Dict[str, Any]) -> bool:
+        """A journal line holds `i`, `reading` and `receipt`, and at most the keys in `KEYS`, each well formed."""
+        if not {"i", "reading", "receipt"} <= set(entry) <= {"i", "reading", "receipt", *Extras.KEYS}:
+            return False
+        if any(key in entry and not _HEX64.fullmatch(str(entry[key])) for key in BOUND_DIGESTS):
+            return False
+        sandbox, grant = entry.get("sandbox"), entry.get("grant")
+        if "sandbox" in entry and not (isinstance(sandbox, dict)
+                                       and set(sandbox) in ({"profile_sha256"}, {"profile_sha256", "backend"})
+                                       and _HEX64.fullmatch(str(sandbox["profile_sha256"]))
+                                       and sandbox.get("backend", "bwrap") in ("bwrap", "landlock")):
+            return False
+        if "tool_use_id" in entry and not valid_tool_use_id(entry["tool_use_id"]):
+            return False
+        if "grant" in entry and not (isinstance(grant, dict) and set(grant) == {"grant_id", "grant_sha256"}
+                                     and _GRANT_ID.fullmatch(str(grant["grant_id"]))
+                                     and _HEX64.fullmatch(str(grant["grant_sha256"]))):
+            return False
+        return True
 
 
 class RunError(Exception):
@@ -374,7 +414,7 @@ class Run:
                       and receipt["case"] == self.session and receipt["reading"] == n
                       and receipt["reading_sha256"] == core_evidence.sha256_hex(reading)
                       and receipt["image_sha256"] == image_sha
-                      and _extras_ok(entry))
+                      and Extras.valid(entry))
             except Exception:
                 ok = False
             if not ok:
@@ -459,28 +499,16 @@ class Run:
                 for line in reversed(parts[1:] if position > 0 else parts):
                     if needle in line:
                         entry = canon2.loads(line)
-                        if entry.get("tool_use_id") == tool_use_id and _extras_ok(entry):
+                        if entry.get("tool_use_id") == tool_use_id and Extras.valid(entry):
                             return entry
         return None
 
     def append(self, reading: bytes, verdict: Dict[str, Any], decider: str = DECIDER,
-               sandbox_profile: Optional[str] = None, sandbox_backend: Optional[str] = None,
-               tool_use_id: Optional[str] = None, grant: Optional[Dict[str, str]] = None,
-               routes_sha256: Optional[str] = None, hosts_sha256: Optional[str] = None,
-               expect: Optional[int] = None) -> int:
-        """Record one decided reading as the next receipt, durably, and return its index. `sandbox_profile` is the
-        SHA-256 of the sandbox profile the allowed call was rewritten to run under; it is kept on the journal
-        line beside the receipt (the receipt is exactly `prismpath.core-receipt/1`, which has no such field),
-        so it is bound to the line by the journal's own check and is not part of the sealed root. `sandbox_backend`
-        (`bwrap` or `landlock`) is the per call sandbox the hook had the call rewritten to run in; a line that has
-        none was written before the backend was recorded and means bwrap. `tool_use_id`, the id Claude Code gave the
-        call, is kept the same way (an optional key of the line, never in the receipt), so the PostToolUse outcome of
-        that call can be bound to this receipt (`Run.outcome_of_hook`). A value that is not shaped like an id is left
-        off. `grant` is the `{"grant_id", "grant_sha256"}` of the grant a gateway request presented, kept the same way.
-        `routes_sha256` and `hosts_sha256` are the digests of the gateway's route table and of the egress proxy's allowed
-        host list, kept the same way, so that `verify` reports which table or list the receipts were decided under.
-        `expect`, when given, is the number of receipts the caller's decision was made against (`snapshot`): the append
-        is refused with `RunStale`, writing nothing, when the run holds another number."""
+               extras: Extras = Extras(), expect: Optional[int] = None) -> int:
+        """Record one decided reading as the next receipt, durably, and return its index. `extras` is what the journal
+        line keeps beside the receipt (`Extras`), never in the receipt. `expect`, when given, is the number of receipts
+        the caller's decision was made against (`snapshot`): the append is refused with `RunStale`, writing nothing,
+        when the run holds another number."""
         with _locked(self.dir / LOCK):
             n, _tail, counts = self._scan(full=False, with_state=True)
             if expect is not None and n != expect:
@@ -491,18 +519,8 @@ class Run:
                        "reading_sha256": core_evidence.sha256_hex(reading), "decider": decider,
                        **core_evidence._decision(verdict)}
             entry = {"i": n, "reading": reading.hex(), "receipt": receipt}
-            if sandbox_profile is not None:
-                entry["sandbox"] = {"profile_sha256": sandbox_profile}
-                if sandbox_backend is not None:
-                    entry["sandbox"]["backend"] = sandbox_backend
-            if valid_tool_use_id(tool_use_id):
-                entry["tool_use_id"] = tool_use_id
-            if grant is not None:
-                entry["grant"] = {"grant_id": grant["grant_id"], "grant_sha256": grant["grant_sha256"]}
-            for key, value in (("routes_sha256", routes_sha256), ("hosts_sha256", hosts_sha256)):
-                if value is not None:
-                    entry[key] = value
-            if not _extras_ok(entry):
+            extras.apply(entry)
+            if not Extras.valid(entry):
                 raise RunError(f"session {self.session}: a journal line's sandbox or grant record is malformed")
             line = canon2.dumps(entry) + b"\n"
             path = self.dir / JOURNAL
