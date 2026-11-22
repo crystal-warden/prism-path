@@ -161,7 +161,9 @@ canonical order and skips the value of `meta`. It runs the scanner only on bytes
 already checked (V3 comes before V4).
 
 **E10.** The release id is the SHA-256 of the canon/2 bytes of the array of `[artifact, body_sha256]`
-pairs of every artifact in the release, sorted. The signer computes it over the whole release, so two
+pairs of every artifact in the release other than a trust kind, sorted. A `trust.widening` envelope is
+bound to its release by carrying the same `release` (E7) and is not part of the id, so the owner can sign
+a widening statement for a release that is already sealed without signing the release again. The signer computes it over the whole release, so two
 envelopes belong to one release only when the authority signed them as one set. A PEP does not need the
 other bodies to use it. It requires the same `release` on every envelope it stages together (E7) and
 reports it (H1), and that is what stops a mix of artifacts that were never released together (TUF's mix
@@ -229,6 +231,11 @@ a `trust.revocation`. No other message changes it.
 
 **K4.** Every key in the trust store has a role. This version has one role, `authority`, and every
 artifact kind needs it. A key in a role this version does not know is kept and never counts.
+The role an artifact needs is a column of the kind table. Because the artifact kind is inside the
+envelope and V3 runs before the envelope is read, a version with more than one role works in two steps.
+V3 finds every role under which the envelope is signed (S4) and fails only when there is none. V5 then
+requires the role its artifact needs to be one of them, with `dist:unknown-key` otherwise. The scanner
+still reads only bytes that a held key signed (E9).
 
 ## 6. Sequence numbers and the floor
 
