@@ -477,7 +477,7 @@ impl ArtifactKind {
         }
     }
 
-    /// One of the three trust kinds, which every target admits (V5) and whose `expires` is 0 (E5).
+    /// One of the three trust kinds, whose `expires` is 0 (E5) and which a target admits when its machine applies it (V5).
     pub fn is_trust(self) -> bool {
         matches!(self, ArtifactKind::TrustWidening | ArtifactKind::TrustRevocation | ArtifactKind::TrustRotation)
     }
@@ -493,19 +493,26 @@ fn cause_of(refused: Refused) -> String {
 }
 
 /// A target kind's row: the artifacts it needs before it commits (C2), those it needs only when another
-/// artifact of the release asks for them (`policy.spiral`, when the `policy.ppt` declares packing), and
-/// whether it can decide larger (W1).
+/// artifact of the release asks for them (`policy.spiral`, when the `policy.ppt` declares packing),
+/// whether it can decide larger (W1), the trust kinds its machine applies, and its bound on a body (E6).
 #[derive(Debug, Clone, Copy)]
 pub struct Target {
     pub needs: &'static [ArtifactKind],
     pub decides: bool,
     pub when_declared: &'static [ArtifactKind],
+    pub applies: &'static [ArtifactKind],
+    pub body_bound: i64,
 }
 
 impl Target {
-    /// What V5 admits besides the trust kinds.
+    /// The artifacts this kind uses, besides the trust kinds it applies.
     pub fn uses(&self, artifact: ArtifactKind) -> bool {
         self.needs.contains(&artifact) || self.when_declared.contains(&artifact)
+    }
+
+    /// What V5 admits: an artifact this kind uses or a trust kind its machine applies.
+    pub fn admits(&self, artifact: ArtifactKind) -> bool {
+        self.uses(artifact) || self.applies.contains(&artifact)
     }
 }
 
@@ -517,6 +524,8 @@ impl TargetKind {
                 needs: &[ArtifactKind::PolicyPpt],
                 decides: false,
                 when_declared: &[ArtifactKind::PolicySpiral],
+                applies: &[ArtifactKind::TrustWidening],
+                body_bound: envelope::MAX_BODY,
             }),
             TargetKind::Agent | TargetKind::Cfs | TargetKind::Gateway | TargetKind::Mesh | TargetKind::Xdp => None,
         }
@@ -740,12 +749,13 @@ mod tests {
     }
 
     #[test]
-    fn every_artifact_a_built_target_uses_and_every_trust_kind_has_a_check() {
+    fn every_artifact_a_built_target_admits_has_a_check() {
         for target in TargetKind::ALL.iter().filter_map(|kind| kind.target()) {
-            for artifact in ArtifactKind::ALL.iter().filter(|artifact| target.uses(**artifact) || artifact.is_trust()) {
+            for artifact in ArtifactKind::ALL.iter().filter(|artifact| target.admits(**artifact)) {
                 assert!(artifact.row().check.is_some(), "{artifact} has no check");
-                assert!(!artifact.is_trust() || !target.uses(*artifact), "a target uses a trust kind");
+                assert_eq!(artifact.is_trust(), target.applies.contains(artifact), "{artifact} is used or applied by its kind");
             }
+            assert!((0..=envelope::MAX_BODY).contains(&target.body_bound));
         }
         assert!(ArtifactKind::ALL.iter().all(|artifact| ROLES.contains(&artifact.row().role)));
     }

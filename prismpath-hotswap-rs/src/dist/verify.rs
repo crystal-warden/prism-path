@@ -75,8 +75,8 @@ impl PepKind {
 }
 
 /// What the verifier needs of an enforcement point. `qualification` is the qualification envelope a
-/// `host` PEP admits images under, already verified, `body_bound` is the PEP's own bound on a body
-/// (E6), and `has_clock` is false for a PEP with no real time clock, whose `now` is its time floor plus
+/// `host` PEP admits images under, already verified, `body_bound` is the PEP's own bound on a body,
+/// within its kind's (E6), and `has_clock` is false for a PEP with no real time clock, whose `now` is its time floor plus
 /// its monotonic count (T2) and which never applies T3.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -139,7 +139,8 @@ pub fn verify(sealed: &[u8], body: &[u8], trust: &TrustStore, pep: &PepView, now
         Ok(unsealed) => unsealed,
         Err(refused) => return Verdict::refused(refused.cause),
     };
-    if i64::try_from(body.len()).map_or(true, |length| length > pep.body_bound) {
+    let bound = pep.body_bound.min(pep.kind.target().body_bound); // E6: the PEP's bound, within its kind's
+    if i64::try_from(body.len()).map_or(true, |length| length > bound) {
         return Verdict::refused(TOO_LARGE);
     }
     // V3: the signatures, over the bytes as they came and before anything reads them (E9)
@@ -158,13 +159,11 @@ pub fn verify(sealed: &[u8], body: &[u8], trust: &TrustStore, pep: &PepView, now
         unchanged: false,
         time_floor,
     };
-    // V5: for this PEP's kind, an artifact its kind uses or a trust kind, on its stream or `@trust`
+    // V5: for this PEP's kind, an artifact its kind uses or a trust kind its machine applies, on its stream
+    // or `@trust`
     let target = pep.kind.target();
     let stream = if envelope.artifact.on_trust_stream() { env::TRUST_STREAM } else { pep.stream.as_str() };
-    if !envelope.targets.contains(&pep.kind.kind())
-        || envelope.stream != stream
-        || !(target.uses(envelope.artifact) || envelope.artifact.is_trust())
-    {
+    if !envelope.targets.contains(&pep.kind.kind()) || envelope.stream != stream || !target.admits(envelope.artifact) {
         return refuse(TARGET_MISMATCH, envelope, None);
     }
     // V6: time, against the larger of the clock and the time floor (T1, T3, T4; X4 a trust kind never
