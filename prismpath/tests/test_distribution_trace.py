@@ -128,9 +128,9 @@ def test_the_corpus_runs_each_case_where_the_spec_says():
 
 def test_a_replay_that_exists_has_no_not_yet_built_marker():
     """A language whose replay of the corpus exists is not marked in tools/run_corpora.py as not claiming it, so
-    the marker of a gap cannot outlive the gap."""
+    the marker of a gap cannot outlive the gap. The table is research's own, so the product skips this."""
     import importlib.util
-    spec = importlib.util.spec_from_file_location("run_corpora", ROOT / "tools" / "run_corpora.py")
+    spec = importlib.util.spec_from_file_location("run_corpora", repo_file("tools", "run_corpora.py"))
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     rows = module.CONSUMERS["portable/distribution"]
