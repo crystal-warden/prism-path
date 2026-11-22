@@ -33,8 +33,12 @@ theorem refusal_registered (r : Refusal) : (r.code, r.cause) ∈ causeRegistry :
   | contract _ _ => simp only [Refusal.code, Refusal.cause]; decide
   | noMatch => simp only [Refusal.code, Refusal.cause]; decide
 
+-- `decide` unfolds the whole generated registry, so its depth grows with the row count. The bound is raised
+-- for these two proofs alone, and the proofs are unchanged.
+set_option maxRecDepth 4096 in
 theorem registry_codes_nonzero : ∀ x ∈ causeRegistry, x.1 ≠ 0 := by decide
 
+set_option maxRecDepth 4096 in
 theorem registry_codes_distinct : (causeRegistry.map (·.1)).Nodup := by decide
 
 theorem refusal_code_ne_zero (r : Refusal) : r.code ≠ 0 :=
