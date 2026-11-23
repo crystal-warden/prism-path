@@ -405,7 +405,7 @@ def _python_events(frames, case: dict, sequence: list, *, ordered: bool, limit: 
     pep = gen.pep_from_document(case["pep"])
     clock = {"ms": 0}
     assembler = frames.Assembler(frames.admit_through_v8(
-        lambda sealed, body: verifier.verify(sealed, body, trust=trust, pep=pep, now=case["now"])),
+        lambda sealed: verifier.verify_envelope(sealed, trust=trust, pep=pep, now=case["now"])),
         clock=lambda: clock["ms"] / 1000, ordered=ordered, limit=limit, artifact_bound=640)
     out = []
     for data, now_ms in sequence:
@@ -764,3 +764,33 @@ def test_a_rotation_into_a_full_store_holds_the_new_key_as_the_python_machine_do
     assert _events(lines[18]) == [("staged", None)]
     assert _events(lines[19]) == [("refused", "dist:unknown-key")]
     assert _events(lines[20]) == [("refused", "sig:revoked-key")]
+
+
+def test_case_134_a_trust_statement_reaches_the_node_whatever_its_targets_say(host_check, tmp_path):
+    """case_134: V5, R1, on the C core. A revocation naming only `host` is applied by a mesh node as the Python
+    machine applies it, and the rotation naming every kind after it is taken at the next trust sequence."""
+    body = _dist.revocation(keys=[_dist.key_id("R")])
+    only_host = _dist.trust_statement("trust.revocation", body, seq=1, targets=("host",))
+    rotation = _dist.rotation("B")
+    every = _dist.trust_statement("trust.rotation", rotation, seq=2, signers=("A", "B"), targets=("host", "mesh"))
+    script = [("provision", S, N), ("stage", only_host.hex(), body.hex(), N), ("stage", every.hex(), rotation.hex(), N)]
+    lines = _same(host_check, tmp_path, script)
+    assert _events(lines[1]) == _events(lines[2]) == [("trust-applied", None)]
+    assert _records(lines[2])[0].trust_seq == 2
+
+
+def test_a_rollback_is_held_to_what_a_commit_checks_on_the_c_core(host_check, tmp_path):
+    """RB2 on the C core (case 54 runs in Python): a rollback to a kept release whose only signing key is revoked,
+    or that is below a raised floor, is refused with that check's cause as the Python machine refuses it."""
+    statement = canon.canon2_bytes({canon.ENCODING_KEY: canon.CANON2, "format": "prismpath.dist-widening/1", "from": []})
+    release = env.release_id([("policy.ppt", H[0])])
+    widening = _dist.seal("trust.widening", statement, seq=1, release=release, policy_sha256=H[0],
+                          targets=("mesh",)).hex()
+    kept = [("provision", S, N, ("A", "B")), ("stage", widening, statement.hex(), N),
+            ("stage", _sealed(0, 1), BODIES[0].hex(), N), ("commit", S, 1, H[0], N),
+            ("stage", _sealed(1, 2, signer="B"), BODIES[1].hex(), N), ("commit", S, 2, H[1], N)]
+    for name, revoke, cause in (("key", _revoke(1, N, keys=[_dist.key_id("A")]), "sig:revoked-key"),
+                                ("floor", _revoke(1, N, floors={S: 2}), "dist:seq-replay")):
+        lines = _same(host_check, tmp_path / name, kept + [revoke, ("rollback", N)])
+        assert _events(lines[-1]) == [("refused", cause)], name
+
