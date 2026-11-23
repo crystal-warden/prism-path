@@ -36,7 +36,7 @@ import shlex
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Mapping, Optional, Tuple
+from typing import Any, Dict, Mapping, Optional, Sequence, Tuple
 
 PROFILES_DIR = "profiles"
 RUNNER = Path(__file__).resolve().parent / "sandbox_exec.py"
@@ -131,7 +131,8 @@ def profile_for(home: Path, image: bytes):
 
 def rewrite_command(command: str, workspace: str, cwd: str, profile, python: Optional[str] = None,
                     timeout_s: Optional[int] = None, observe: Optional[Mapping[str, Any]] = None,
-                    runner: Optional[str] = None, backend: Optional[str] = None) -> str:
+                    runner: Optional[str] = None, backend: Optional[str] = None,
+                    control_paths: Sequence[str] = ()) -> str:
     """The shell command that runs `command` under the sandbox with `profile`."""
     python = python or sys.executable
     parts = [python, "-I", str(runner or RUNNER), "--workspace", workspace, "--cwd", cwd,
@@ -140,6 +141,8 @@ def rewrite_command(command: str, workspace: str, cwd: str, profile, python: Opt
         parts += ["--timeout", str(int(timeout_s))]
     if backend:     # nested: the launcher measured which per call sandbox works inside, and the runner holds to it
         parts += ["--backend", backend]
+    for path in control_paths:      # held read only beside the fixed control paths (the zone index, zones.py)
+        parts += ["--control-path", str(path)]
     if observe:     # where the runner records what the command showed, bound to the call's receipt (observe.py)
         from prismpath.agent import observe as observe_module
         if "socket" in observe:     # nested: the run directory is outside, so the decider records it
@@ -154,14 +157,14 @@ def rewrite_command(command: str, workspace: str, cwd: str, profile, python: Opt
 
 def sandbox_input(hook_input: Mapping[str, Any], workspace: str, profile, python: Optional[str] = None,
                   observe: Optional[Mapping[str, Any]] = None, runner: Optional[str] = None,
-                  backend: Optional[str] = None) -> Dict[str, Any]:
+                  backend: Optional[str] = None, control_paths: Sequence[str] = ()) -> Dict[str, Any]:
     """`updatedInput` for an allowed Bash call: the original tool input, whole, with only `command` replaced."""
     tool_input = hook_input.get("tool_input")
     if not isinstance(tool_input, dict) or not isinstance(tool_input.get("command"), str):
         raise SandboxRefused("the Bash call has no command to sandbox")
     cwd = hook_input.get("cwd") if isinstance(hook_input.get("cwd"), str) and hook_input.get("cwd") else workspace
     out = dict(tool_input)
-    out["command"] = rewrite_command(tool_input["command"], workspace, cwd, profile, python, call_timeout_s(tool_input), observe, runner, backend)
+    out["command"] = rewrite_command(tool_input["command"], workspace, cwd, profile, python, call_timeout_s(tool_input), observe, runner, backend, control_paths)
     return out
 
 

@@ -155,12 +155,12 @@ def stage(settings: dict, credential: Optional[str], base: str = STAGE_BASE) -> 
         raise
 
 
-def prepare_controls(workspace: Path, out: Controls) -> Controls:
+def prepare_controls(workspace: Path, out: Controls, extra: Sequence[str] = ()) -> Controls:
     """Make every control path of the workspace bindable (`controls.discover` finds them, and the per call sandbox
     uses the same list). Existing ones are listed. Missing root ones are created empty (`.claude/` always, the three
     named files, `.mcp.json`, and `.git/config` and `.git/hooks/` when there is a `.git`, which is never created).
-    What it creates is recorded in `out` as it goes."""
-    controls_module.prepare(workspace, out)
+    `extra` are the zone index's control paths (zones.py), bound when they exist. What it creates is recorded in `out` as it goes."""
+    controls_module.prepare(workspace, out, extra=extra)
     return out
 
 
@@ -217,12 +217,15 @@ def launch(command: Sequence[str], workspace: str, credential: Optional[str] = N
         if not os.path.exists(path):
             raise LaunchError(f"the read only path {path} does not exist, so nothing was run")
     gate = None
+    zone_paths: Tuple[str, ...] = ()
     home_dir = Path(home) if home else commands.config_dir()
     if decider is None:
         profile, policy, store = _policy_profile(home_dir, max_processes)
         session = session or f"egress-{time.strftime('%Y%m%dT%H%M%S')}-{os.getpid()}"
         gate = egress_policy.PolicyGate(policy, store, session, root, profile, allowed_hosts)
         decider = egress.refuse_all
+        from prismpath.agent import zones as zone_module
+        zone_paths = tuple(getattr(zone_module.information_point(home_dir, policy.image, root), "control_paths", ()))
     else:
         profile = Profile(net="proxy_model", max_processes=max_processes)
     real = resolve_program(command[0])
@@ -236,7 +239,7 @@ def launch(command: Sequence[str], workspace: str, credential: Optional[str] = N
     hook_decider = None
     nested = None
     try:
-        prepare_controls(root, controls)
+        prepare_controls(root, controls, zone_paths)
         proxy = egress.EgressProxy(staged.socket, staged.log, decider=decider, gate=gate, resolver=resolver, connect=connect).start()
         if model_target is not None:
             model_route = local_route.LocalModelRoute(staged.root / "model.sock", staged.log, *model_target).start()

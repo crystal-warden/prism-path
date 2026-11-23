@@ -448,8 +448,12 @@ def hook(raw: bytes, env: Optional[Mapping[str, str]] = None, nested=None,
             launch.append(session)
         for _attempt in range(STATE_ATTEMPTS):
             state, held = session_state.read(store, session, launch or ()) if policy.stateful else (None, None)
-            result = claude_code.evaluate(data, env, policy, lambda ws: zone_module.information_point(
-                home, policy.image, Path(ws), env), session=state)
+            points = []
+
+            def point_for(ws):
+                points.append(zone_module.information_point(home, policy.image, Path(ws), env))
+                return points[-1]
+            result = claude_code.evaluate(data, env, policy, point_for, session=state)
             answer, profile = result.answer, None
             has_command = isinstance(data.get("tool_input"), dict) and isinstance(data["tool_input"].get("command"), str)
             if (result.decision.kind == "allow" or (result.decision.kind == "escalate" and has_command)) \
@@ -483,7 +487,8 @@ def hook(raw: bytes, env: Optional[Mapping[str, str]] = None, nested=None,
                 observe["socket"] = nested.socket
             updated = sandbox_hook.sandbox_input(data, result.workspace, profile, observe=observe,
                                                  python=nested.python if nested else None, runner=nested.runner if nested else None,
-                                                 backend=nested.backend if nested else "bwrap")
+                                                 backend=nested.backend if nested else "bwrap",
+                                                 control_paths=tuple(getattr(points[-1], "control_paths", ())) if points else ())
             answer = claude_code.hook_answer(result.decision, updated)
         answer = claude_code.fill_receipt(answer, receipt_id(session, index))
         return answer
@@ -679,8 +684,18 @@ def zones_cmd(action: str, project: Path, protected: Optional[List[str]], protec
             if protected_file:
                 names += [line.strip() for line in Path(protected_file).read_text(encoding="utf-8").split("\n")
                           if line.strip() and not line.strip().startswith("#")]
-            doc = zones.zone_document(names, project, Path(index) if index else None, image)
-            zones.sign(home, doc)
+            exe = zones.contextcloud_executable()
+            if exe is None:
+                raise zones.ZoneError("Context Cloud is not installed (no `contextcloud` on the PATH and no $CONTEXTCLOUD), "
+                                      "and `zones set` records where it is")
+            program = zones.find_program(exe, home)
+            from prismpath.agent import sandbox_hook
+            confined = sandbox_hook.supported() and not zones._host_write(home, image)
+            problem = zones.package_tree_problem(program["package"], project, confined)
+            if problem:
+                raise zones.ZoneError(problem)
+            doc = zones.zone_document(names, project, Path(index) if index else None, image, program=program)
+            zones.rebuild_index_after_signing(home, doc, lambda: zones.sign(home, doc))
             result = {"recorded": True, "project": doc["project"], "index": doc["index"],
                       "protected": doc["protected"], "policy_sha256": doc["policy_sha256"]}
         elif action == "status":

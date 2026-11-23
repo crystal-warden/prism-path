@@ -16,6 +16,9 @@ spec stable.
 - **The Rust host applies the same checks of a revocation list as Python and replays the new revocation cases.**
 - **A mesh node or a cFS app, whose own check does not read `meta`, only checks that it is an object nested at most three levels inside the envelope.** Every other reader checks its members and their forms.
 - **The C core in `prismpath-hw/dist/` applies revocations as the Python machine does.** A mesh node holds the latest list, refuses one that drops a revoked key, keeps the floor a list raises for its own stream, holds a trust body to 16,384 bytes, and is held step by step to the Python machine and frame by frame to `frames.py`.
+### Fixed: the zone index is a control path and an index the agent could have written reads unknown (2026-11-22)
+
+- **The zone index, `.contextcloud/` by default, can no longer be edited by the agent to claim that protected code reaches nothing.** The hook refuses a write or a mutating command onto it as a control write, both per call sandbox backends hold it read only, and the zones information point answers `unknown` for every path when the agent could have written the index or the Context Cloud program that reads it. `prismpath agent zones set` now records the Context Cloud program and its package directory in the signed zone file, checks both again at hook time, runs the program in a fixed environment with no PYTHON variable, refuses a package the agent could change, and rebuilds an existing index after the zone file is signed.
 
 ### Added: the distribution verifier and state machine in C, tested natively against the shared corpus (2026-11-22)
 
