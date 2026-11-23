@@ -51,9 +51,10 @@ class HomePep(_dist.AgentPep):
         (self.state_dir / "instance.pub").write_bytes(_dist.GEN.public_raw(private))
         super().__post_init__()
 
-    def release(self, body, seq, *, hosts=None, extra=(), widens=True, froms=()):
+    def release(self, body, seq, *, hosts=None, extra=(), widens=True, froms=(), withheld=()):
         """Stage `body` and `hosts` at `seq` with a widening statement of `froms`, and the `extra` (artifact, body)
-        envelopes of the same release, then commit."""
+        envelopes of the same release, leaving out the envelopes of `withheld` as a transport might, then
+        commit."""
         hosts = hosts or self.hosts
         pairs = [("egress.hosts", hosts), ("policy.core", body), *extra]
         release = _dist.env.release_id(sorted((name, H(data)) for name, data in pairs))
@@ -65,6 +66,8 @@ class HomePep(_dist.AgentPep):
             acks.append(self.pep.stage(seal("trust.widening", statement, seq=seq, targets=("agent",), **args), statement))
         from prismpath.agent.profile import COMPILER_VERSION
         for name, data in pairs:
+            if name in withheld:
+                continue
             meta = {"compiler": COMPILER_VERSION} if name == "sandbox.profile" else {}
             acks.append(self.pep.stage(seal(name, data, seq=seq, targets=("agent",), meta=meta, **args), data))
         acks.append(self.pep.commit(STREAM, seq, H(body)))
@@ -227,6 +230,28 @@ def test_case_045_a_staged_sandbox_profile_that_is_not_the_compiled_one_is_deriv
     records = home.release(STRICT, 1, extra=[("sandbox.profile", other)])
     assert records[-1].cause == "dist:derived-mismatch" and home.pep.active is None
     assert home.release(STRICT, 2, extra=[("sandbox.profile", compiled)])[-1].event == "committed"
+
+
+def test_case_137_138_a_home_never_commits_a_release_with_its_zones_or_its_profile_withheld(home):
+    """case_137, case_138: C2, E10 on a real agent home. A first install whose signed release names `agent.zones`
+    and `sandbox.profile`, with either envelope withheld, is dist:incomplete and the hook loads nothing. After the
+    whole release commits, an update that keeps the protected zones and adds a host, with its `agent.zones`
+    withheld, is dist:incomplete too, and the hook, the egress hosts and the zone names stay the committed ones."""
+    profile = compile_profile(STRICT, "bash").canonical()
+    names = _zones("billing", "payroll")
+    whole = [("agent.zones", names), ("sandbox.profile", profile)]
+    for seq, withheld in ((1, ("agent.zones",)), (2, ("sandbox.profile",))):
+        records = home.release(STRICT, seq, extra=whole, withheld=withheld)
+        assert records[-1].cause == "dist:incomplete" and home.pep.active is None, withheld
+        with pytest.raises(commands.AgentError):
+            commands.load_checked(home.state_dir)
+    assert home.release(STRICT, 3, extra=whole)[-1].event == "committed"
+    more = canon.canon2_bytes(["api.example.com", "b.example.com"])
+    records = home.release(STRICT, 4, hosts=more, extra=whole, withheld=("agent.zones",))
+    assert records[-1].cause == "dist:incomplete" and home.pep.active.seq == 3
+    policy, _store = commands.load_checked(home.state_dir)
+    assert policy.image == STRICT and commands.hosts_of(home.state_dir) == ("api.example.com",)
+    assert home.pep.active.bodies["agent.zones"] == names
 
 
 def test_case_129_a_zone_file_that_protects_less_is_a_widening(home, tmp_path):
