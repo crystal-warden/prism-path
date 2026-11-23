@@ -46,9 +46,28 @@ from prismpath.distribution.verify import SKEW, Floor, PepView, Staged, verify
 from prismpath.ledgers.audit_log import AuditLog
 
 REFUSE, HOLD = "refuse", "hold"
+K2_SCAN, K2_SKIP = 4096, frozenset({"runs"})          # K2: the bound of the scan of a home for an authority key
 _FLOOR, _ACTIVE, _STAGED, _PENDING, _COUNTER, _SETTING = (
     "prismpath.dist-floor/1", "prismpath.dist-active/1", "prismpath.dist-staged/1", "prismpath.dist-pending/1",
     "prismpath.dist-counter/1", "prismpath.dist-setting/1")
+
+
+def _signed_by_a_held_key(trust: TrustStore, entries, message: bytes) -> bool:
+    """A stored sealed envelope still carries a signature that verifies under a key the store holds, whatever that
+    key's standing: a blob changed on disk is caught when it is read back, and revocation and retirement are
+    R5's to judge, after the load."""
+    from prismpath.hotswap import policy_pack
+    _priv, Public, _ser, InvalidSignature = policy_pack._ed25519()
+    for kid, signature in entries:
+        key = trust.keys.get(kid)
+        if key is None:
+            continue
+        try:
+            Public.from_public_bytes(key.public).verify(signature, message)
+            return True
+        except (InvalidSignature, ValueError):
+            continue
+    return False
 
 
 class PepRefused(Exception):
@@ -279,9 +298,12 @@ class Pep:
             sealed, body = self.store.get(held["sealed"]), self.store.get(held["body"])
             if sealed is None or body is None:
                 raise Refused(kinds.BAD_FORMAT, f"a blob of {artifact} is missing or not its name's")
-            envelope = env.read(env.unseal(sealed)[0], reads_meta=self.target.reads_meta)
+            envelope_bytes, entries = env.unseal(sealed)
+            envelope = env.read(envelope_bytes, reads_meta=self.target.reads_meta)
             if envelope.envelope_id != held["envelope_id"] or envelope.artifact != artifact:
                 raise Refused(kinds.BAD_FORMAT, f"the blob of {artifact} is another envelope")
+            if self.trust.readable and not _signed_by_a_held_key(self.trust, entries, env.signed_message(envelope_bytes)):
+                raise Refused(kinds.BAD_FORMAT, f"the stored blob of {artifact} is not signed by a key the store holds")
             release.held[artifact] = Held(held["envelope_id"], held["sealed"], held["body"])
             release.envelopes[artifact], release.bodies[artifact] = envelope, body
             release.paths[artifact] = self.store.blob_path(held["body"])
@@ -296,11 +318,22 @@ class Pep:
             return
         from prismpath.hotswap import policy_pack
         _priv, _pub, ser, _invalid = policy_pack._ed25519()
+        looked = 0
         for directory, subdirectories, files in os.walk(home):
-            subdirectories[:] = [name for name in subdirectories if os.path.join(directory, name) != self.store.dir]
+            # the scan is bounded: not the PEP's own store, not the runs a home keeps, no deeper than two levels,
+            # and at most K2_SCAN files, since a private key is a small file among the home's own
+            depth = os.path.relpath(directory, home).count(os.sep) + (directory != home)
+            subdirectories[:] = [] if depth >= 2 else [
+                name for name in subdirectories
+                if os.path.join(directory, name) != self.store.dir and name not in K2_SKIP]
             for name in files:
+                looked += 1
+                if looked > K2_SCAN:
+                    return
                 path = os.path.join(directory, name)
                 try:
+                    if os.path.getsize(path) > 16384:
+                        continue
                     with open(path, "rb") as handle:
                         head = handle.read(64)
                     if not (head.startswith(b"-----BEGIN") and b"PRIVATE KEY" in head):
@@ -377,6 +410,8 @@ class Pep:
             self.store.write("counter.json", _COUNTER, {"counter": self.counter})
         active, staged = self.active, self.staged
         image = active.bodies.get("policy.core") if active is not None and self.state() == "active" else None
+        if image is not None and hasattr(self.adapter, "readings"):
+            self.recent.extend(self.adapter.readings())               # decided in another process of the home
         body = heartbeat.body(image, self.recent) if image is not None else b""
         self.recent.clear()
         record = state_record.StateRecord(

@@ -50,8 +50,10 @@ def hosts_digest(allowed_hosts: Iterable[str]) -> str:
 
 
 class PolicyGate:
-    def __init__(self, policy, store, session: str, workspace, profile: Profile, allowed_hosts: Iterable[str] = ()):
+    def __init__(self, policy, store, session: str, workspace, profile: Profile, allowed_hosts: Iterable[str] = (),
+                 home=None):
         self.policy, self.store, self.session, self.profile = policy, store, session, profile
+        self.home = home        # a home that follows a stream is told each reading, for its heartbeat
         self.run = None         # opened by the first receipt, so a run with no connection leaves no run behind
         self.config = classifier.Config.for_workspace(Path(workspace), allowed_hosts=tuple(allowed_hosts))
         self.profile_sha256 = profile.hash()
@@ -67,6 +69,9 @@ class PolicyGate:
             reading = self.reading(authority)
             raw = self.policy.reading_bytes(reading)
             decision = self.policy.decide(raw)
+            if self.home is not None:
+                from prismpath.distribution.adapters import agent_home
+                agent_home.note(self.home, reading)
             with self._lock:
                 if self.run is None:
                     self.run = self.store.open(self.session, self.policy.image)

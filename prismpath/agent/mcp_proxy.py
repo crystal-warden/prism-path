@@ -114,7 +114,7 @@ class Governor:
 
     def __init__(self, home: Path, runs: Optional[Path], session: str, workspace: Path, server_cwd: str,
                  policy_path: Optional[Path] = None):
-        self.session, self.server_cwd = session, server_cwd
+        self.session, self.server_cwd, self.home = session, server_cwd, home
         self.failure: Optional[str] = None
         self.policy = self.run = self.config = None
         store = None
@@ -143,6 +143,8 @@ class Governor:
             decision = self.policy.decide(raw)
         except Exception as exc:   # noqa: BLE001
             return Outcome("refuse", failure=f"the call could not be decided ({type(exc).__name__}: {exc})")
+        from prismpath.distribution.adapters import agent_home
+        agent_home.note(self.home, reading)                     # a home that follows a stream, for its heartbeat
         try:
             index = self.run.append(raw, decision.verdict)
         except Exception as exc:   # noqa: BLE001 - never forward a call whose receipt is not durable

@@ -297,6 +297,15 @@ def read_widening(body: bytes) -> dict:
     return doc
 
 
+def read_profile(body: bytes) -> dict:
+    """`sandbox.profile`: a sandbox profile in canon/2 bytes (`Profile.canonical`). Whether it is the one the policy
+    compiles to is the agent home's check at commit (`dist:derived-mismatch`)."""
+    doc = load_canonical(body, "sandbox.profile")
+    if not isinstance(doc, dict) or doc.get("format") not in ("prismpath.profile/1", "prismpath.profile/2"):
+        raise Refused(BAD_FORMAT, "sandbox.profile is not a sandbox profile")
+    return doc
+
+
 ZONES_FORMAT = "prismpath.dist-zones/1"
 ZONES_MAX, ZONE_NAME_MAX = 10000, 512
 
@@ -331,7 +340,7 @@ ARTIFACTS: Dict[str, Artifact] = {
     "policy.ppt": Artifact(frozenset({"fields", "counts", "wcet_cycles", "qualification"}),
                            frozenset({"packing", "flow_sha256", "overlay_of"}), check_policy_ppt),
     "policy.spiral": Artifact(check=check_policy_spiral),
-    "sandbox.profile": Artifact(frozenset({"compiler"})),
+    "sandbox.profile": Artifact(frozenset({"compiler"}), check=_reads(lambda body: read_profile(body))),
     "egress.hosts": Artifact(check=_reads(read_hosts)),
     "agent.zones": Artifact(check=_reads(read_zones)),
     "gateway.routes": Artifact(),
@@ -353,7 +362,7 @@ TARGETS: Dict[str, Target] = {
     "host": Target(needs=frozenset({"policy.ppt"}), decides=False, when_declared=frozenset({"policy.spiral"}),
                    compares=frozenset({"policy.ppt"})),
     "agent": Target(needs=frozenset({"policy.core", "egress.hosts"}), decides=True,
-                    when_declared=frozenset({"agent.zones"})),
+                    when_declared=frozenset({"agent.zones", "sandbox.profile"})),
     "mesh": Target(needs=frozenset({"policy.ppt"}), decides=False, expiry_hold=True, body_bound=MESH_TABLE_MAX,
                    checks={"policy.ppt": check_mesh_table}, reads_meta=False, compares=frozenset({"policy.ppt"})),
 }

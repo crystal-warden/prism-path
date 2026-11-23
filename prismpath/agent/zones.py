@@ -261,8 +261,11 @@ def load(home: Path, policy_image: bytes, workspace: Optional[Path] = None) -> O
     the signature does not verify under the authority key, it is bound to another policy, or (when `workspace` is
     given) to another project."""
     from prismpath.agent import commands
+    from prismpath.distribution.adapters import agent_home
     from prismpath.hotswap import policy_pack
     from prismpath.kernel import canon2
+    if agent_home.is_distributed(home):
+        return _load_distributed(home, policy_image, workspace)
     path, attestation = home / ZONES_FILE, home / ATTESTATION_FILE
     if not path.exists() and not attestation.exists():
         return None
@@ -285,6 +288,43 @@ def load(home: Path, policy_image: bytes, workspace: Optional[Path] = None) -> O
         raise ZoneError("the zone file is not a prismpath.zones/1 document")
     if doc.get("policy_sha256") != _sha256(policy_image):
         raise ZoneError("the zone file is bound to another policy than the recorded one; sign it again")
+    if workspace is not None and os.path.realpath(workspace) != doc["project"]:
+        raise ZoneError("the zone file is for another project")
+    return doc
+
+
+LOCAL_SETTINGS = "zones.local.json"     # a distributed home's own setting: where the project and its index are
+
+
+def _load_distributed(home: Path, policy_image: bytes, workspace: Optional[Path]) -> Optional[Dict[str, Any]]:
+    """The zone document of a home that follows a stream: the protected names are the committed `agent.zones`
+    artifact (spec-policy-distribution.md, section 3), checked again on this load, and the project and its index
+    are the home's own setting in `zones.local.json`, else the workspace and its default index. No zone artifact
+    is no zone. The index stays a control path (`control_paths_of`)."""
+    import json
+    from prismpath.agent import commands
+    from prismpath.distribution import kinds
+    try:
+        policy, bodies = commands.load_distributed(home)
+    except commands.AgentError as exc:
+        raise ZoneError(str(exc)) from None
+    if policy.image != bytes(policy_image):
+        raise ZoneError("the committed release holds another policy than the one deciding")
+    if "agent.zones" not in bodies:
+        return None
+    try:
+        names = kinds.read_zones(bodies["agent.zones"])["protected"]
+    except kinds.Refused as refused:
+        raise ZoneError(f"the committed zone file does not read: {refused}") from None
+    settings_path = home / LOCAL_SETTINGS
+    if settings_path.is_file():
+        settings = json.loads(settings_path.read_text(encoding="utf-8"))
+        project, index = Path(settings["project"]), Path(settings["index"]) if settings.get("index") else None
+    elif workspace is not None:
+        project, index = Path(workspace), None
+    else:
+        raise ZoneError(f"the home names no project for its zones; write {settings_path}")
+    doc = zone_document(names, project, index, policy_image)
     if workspace is not None and os.path.realpath(workspace) != doc["project"]:
         raise ZoneError("the zone file is for another project")
     return doc
