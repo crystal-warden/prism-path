@@ -96,7 +96,10 @@ cannot decide. They take a release on its signature alone only when `widens` is 
 policy they have active (W2). Every other release needs a widening statement that covers them.
 
 A rollback is held to the same rule (RB3). A rollback to a release identical to the active one is never a
-widening.
+widening. On a host or a mesh node a local rollback to an older table works only when the kept release holds a
+widening statement that covers the newer policy. When the owner signed the older release, the newer policy's
+hash was not known, so in practice that is a statement with an empty `from`. Without one the owner releases
+the older policy again at a higher `seq`.
 
 ## 5. Groups and the two rules
 
