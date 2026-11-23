@@ -41,7 +41,7 @@ C_KINDS = frozenset({"mesh", "cfs"})
 # trust statement, a commit or a release staying active is the Rust PEP's (PR 14)
 PARTIAL = {"P": frozenset(), "R": frozenset({16, 66, 70, 72, 73, 79, 123, 130, 134}), "C": frozenset()}
 PENDING = {
-    "P": "45 49 55-65 81 88-91 100 102 104-105 109 129",
+    "P": "45 49 56-59 64-65 81 88-91 100 102 104-105 129",
     "R": "16-17 23-24 26 31 43 46-48 50-53 62-63 66 69-70 72-73 77 79 82 84-85 101 104 111 123 126 130 134",
     "C": "25 60-63 97 104-105 109 122",
 }
@@ -120,11 +120,11 @@ def test_the_corpus_runs_each_case_where_the_spec_says():
     """I1: each case runs only where its row says, a C case only on a kind the C core has, a Rust case only on
     `host`, and the copies of one case together run everywhere its row names."""
     where = {}
-    for case in CORPUS["cases"] + CORPUS["release_ids"] + CORPUS["frames"]:
+    for case in CORPUS["cases"] + CORPUS["release_ids"] + CORPUS["frames"] + CORPUS["widening"]:
         number = case["case"]
         assert number in SPEC and set(case["runs_on"]) <= set(SPEC[number]["runs_on"]), case["name"]
         assert case["name"].startswith(f"{number:03d}_")
-        kind = case.get("pep", {}).get("kind", "host")
+        kind = case.get("pep", {}).get("kind", case.get("kind", "host"))
         assert ("C" not in case["runs_on"] or kind in C_KINDS) and ("R" not in case["runs_on"] or kind == "host")
         where.setdefault(number, set()).update(case["runs_on"])
     assert all(runs == set(SPEC[number]["runs_on"]) for number, runs in where.items()), where

@@ -39,7 +39,7 @@ def test_case_073_a_retired_key_no_longer_counts_and_its_active_release_keeps_de
     point.commit(OLD, signer="A")
     assert _read(point, point.rotate(1, add="B", retire="A")).event == "trust-applied"
     assert _dist.key_id("A") in point.pep.trust.retired
-    assert _read(point, point.pep.stage(seal("policy.ppt", NEW, seq=2, signer="A"), NEW)).cause == "sig:revoked-key"
+    assert _read(point, point.stage(NEW, seq=2, signer="A")).cause == "sig:revoked-key"
     assert point.pep.state() == "active" and point.pep.refusal() is None
     assert point.open().state() == "active"
     assert _read(point, point.commit(NEW, seq=2, signer="B")).event == "committed"
@@ -123,15 +123,15 @@ def test_case_131_the_trust_store_is_bounded(tmp_path):
         assert record.event == "trust-applied", index
         previous = f"R{index}"
     assert len(point.pep.trust.retired) == 16 and _dist.key_id("A") not in point.pep.trust.keys
-    assert _read(point, point.pep.stage(seal("policy.ppt", OLD, signer="A"), OLD)).cause == "dist:unknown-key"
-    assert _read(point, point.pep.stage(seal("policy.ppt", OLD, signer="R1"), OLD)).cause == "sig:revoked-key"
+    assert _read(point, point.stage(OLD, signer="A")).cause == "dist:unknown-key"
+    assert _read(point, point.stage(OLD, signer="R1")).cause == "sig:revoked-key"
     assert point.open().trust.retired == point.pep.trust.retired
 
 
 def test_a_rotation_drops_a_staged_release_whose_only_key_it_retires(point):
     """O3, S5: only a release already active keeps standing under a retired key. A staged release signed only
     by the key a rotation retires no longer has a counting signature, so it is dropped."""
-    point.pep.stage(seal("policy.ppt", OLD, signer="A"), OLD)
+    point.stage(OLD, signer="A")
     assert point.pep.staged is not None
     point.rotate(1, add="B", retire="A")
     assert point.pep.staged is None and point.pep.state() == "no-policy"
@@ -140,7 +140,7 @@ def test_a_rotation_drops_a_staged_release_whose_only_key_it_retires(point):
 def test_a_commit_refuses_a_release_without_a_counting_signature(point, monkeypatch):
     """C3, S5: the commit checks the staged release's signatures again, so one whose key was retired after staging
     is never made active, even when nothing dropped it on the way."""
-    point.pep.stage(seal("policy.ppt", OLD, signer="A"), OLD)
+    point.stage(OLD, signer="A")
     monkeypatch.setattr(point.pep, "_drop_fallen_staged", lambda: None)
     point.rotate(1, add="B", retire="A")
     record = _read(point, point.pep.commit(_dist.STREAM, 1, H(OLD)))

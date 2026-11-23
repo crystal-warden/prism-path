@@ -56,10 +56,17 @@ class Fleet:
                         for name, point in self.points.items()}
         self.first = first
 
-    def put(self, body, seq, **args):
-        sealed = self.first.seal(body, seq=seq, **args)
-        self.controller.put(sealed, body)
-        return sealed
+    def put(self, body, seq, *, widen=None, replaces=None, **args):
+        """Store a release of `body` at `seq`. It replaces the release put before it, and the first one, or one
+        put with `widen`, goes with a widening statement that covers any PEP (W2, W3)."""
+        previous = getattr(self, "previous", None)
+        widen = previous is None if widen is None else widen
+        replaces = (previous or "") if replaces is None else replaces
+        pairs = _dist.release_with_statement(self.first, body, seq, widen=widen, replaces=replaces, **args)
+        for sealed, data in pairs:
+            self.controller.put(sealed, data)
+        self.previous = self.first.policy_of(body)
+        return pairs[-1][0]
 
     def round(self, *names):
         for name in names or self.clients:
@@ -123,7 +130,7 @@ def test_case_095_a_group_under_each_commits_where_it_can_and_files_the_two_refu
     assert fleet.points["p2"].pep.active.seq == 3
     controller.enroll(fleet.points["p2"].key.public_raw, "host", STREAM, "fleet", "each")
     fleet.clients["p3"].transport = Tampering(controller)
-    fleet.put(NEW, 2)
+    fleet.put(NEW, 2, widen=True, replaces="")         # a first install for p1 and p3
     rollout = controller.offer("fleet", STREAM, 2)
     for _ in range(3):
         fleet.round()
@@ -135,7 +142,7 @@ def test_case_095_a_group_under_each_commits_where_it_can_and_files_the_two_refu
     assert set(fleet.member("p3").findings) == {"sig:invalid"}
     causes = {name: [event["data"].get("cause") for event in point.pep.audit.events if event["action"] == "refused"]
               for name, point in fleet.points.items()}
-    assert causes == {"p1": [], "p2": ["dist:seq-replay"], "p3": ["sig:invalid"]}
+    assert causes == {"p1": [], "p2": ["dist:seq-replay"] * 2, "p3": ["sig:invalid"] * 2}   # the statement, the release
     assert "committed" in [event["action"] for event in fleet.points["p1"].pep.audit.events]
     logged = [(event["action"], event["data"].get("pep"), event["data"].get("finding"))
               for event in controller.audit.events]
@@ -593,14 +600,19 @@ def test_the_commit_window_on_the_mesh_is_the_delay_plus_2_seconds(tmp_path):
 
 
 def test_a_member_is_staged_only_once_every_envelope_of_the_release_is(tmp_path):
-    """F3: a release of two envelopes, an image and its spiral sidecar, is staged on a member only when both
-    acks came, so the commit is not sent early and the release commits whole."""
+    """F3: a release of three envelopes, the widening statement of a first install, an image and its spiral
+    sidecar, is staged on a member only when every ack came, so the commit is not sent early and the release
+    commits whole."""
     fleet = Fleet(tmp_path, names=("p1",))
     sidecar = b"spiral sidecar bytes"
     meta = {**GEN.image_meta(OLD), "packing": {"profile": "spiral", "sidecar_sha256": H(sidecar)}}
     release = env.release_id([("policy.ppt", H(OLD)), ("policy.spiral", H(sidecar))])
-    fleet.controller.put(_dist.seal("policy.ppt", OLD, meta=meta, release=release), OLD)
-    fleet.controller.put(_dist.seal("policy.spiral", sidecar, release=release, policy_sha256=H(OLD)), sidecar)
+    statement = _dist.widening()
+    fleet.controller.put(_dist.seal("trust.widening", statement, release=release, policy_sha256=H(OLD),
+                                    widens=True), statement)
+    fleet.controller.put(_dist.seal("policy.ppt", OLD, meta=meta, release=release, widens=True), OLD)
+    fleet.controller.put(_dist.seal("policy.spiral", sidecar, release=release, policy_sha256=H(OLD), widens=True),
+                         sidecar)
     rollout = fleet.controller.offer("fleet", STREAM, 1)
     pep = fleet.points["p1"].pep
     pep.see_epoch(fleet.controller.epoch)

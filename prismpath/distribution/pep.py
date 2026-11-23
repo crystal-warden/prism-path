@@ -36,8 +36,8 @@ from dataclasses import dataclass, field, replace
 from typing import Any, Callable, Dict, FrozenSet, Iterable, Optional, Tuple
 
 from prismpath import canon
-from prismpath.distribution import devbuild, kinds, state_record
-from prismpath.distribution.adapters import NOT_LARGER
+from prismpath.distribution import devbuild, kinds, state_record, widening
+from prismpath.distribution.adapters import LARGER, NOT_LARGER
 from prismpath.distribution import envelope as env
 from prismpath.distribution.kinds import Refused
 from prismpath.distribution.trust import TrustStore, read_anchor
@@ -441,6 +441,12 @@ class Pep:
         staged = self.staged
         if staged is not None and staged.stream == envelope.stream and envelope.seq < staged.seq:
             return self._refuse("dist:seq-replay", envelope_id=envelope_id)   # G2
+        if envelope.artifact != "trust.widening":
+            same = staged is not None and staged.stream == envelope.stream and staged.seq == envelope.seq
+            cause = self._widening(envelope.widens, envelope.replaces,
+                                   {envelope.artifact: bytes(body)}, staged.bodies if same else {}, whole=False)
+            if cause is not None:
+                return self._refuse(cause, envelope_id=envelope_id)           # V12
         if staged is None or staged.seq != envelope.seq:
             staged = Release(envelope.stream, envelope.seq, envelope.policy_sha256, envelope.release,
                              envelope.replaces, envelope.widens)
@@ -455,6 +461,25 @@ class Pep:
                                                      "seq": envelope.seq, "release": envelope.release,
                                                      "result": "staged"})
         return self._record("staged")
+
+    def _widening(self, widens: bool, replaces: str, artifacts: Dict[str, bytes], staged: Dict[str, bytes], *,
+                  whole: bool) -> Optional[str]:
+        """V12 against the active release. `artifacts` are the bodies being judged and `staged` what is already
+        staged of the same release, where its widening statement is. A PEP that can decide compares one artifact
+        at staging and, at commit (`whole`), the whole release, which also sees an artifact the release drops."""
+        active = self.active
+        answer = None
+        if self.target.decides:
+            if whole:
+                answer = widening.compare_release(None if active is None else active.bodies, artifacts)
+            elif active is None:
+                answer = LARGER
+            else:
+                ((name, body),) = artifacts.items()
+                answer = widening.compare_artifact(name, active.bodies.get(name), body)
+        return widening.check(self.target, widens=widens, replaces=replaces,
+                              active_policy=active.policy_sha256 if active else None, answer=answer,
+                              statement=staged.get("trust.widening"))
 
     # ------------------------------------------------------------------ B2: the trust statements
     def _adopt(self, envelope, store: TrustStore) -> None:
@@ -587,6 +612,9 @@ class Pep:
         if cause is not None:
             self._drop_staged()
             return self._refuse(cause, seq=seq)
+        cause = self._widening(staged.widens, staged.replaces, staged.bodies, staged.bodies, whole=True)
+        if cause is not None:
+            return self._refuse(cause, seq=seq)                       # V12 again, against what is active now
         return self._flip("commit", staged, previous=self.active, floor=Floor(staged.seq, staged.envelope_ids))
 
     def _flip(self, op: str, release: Release, *, previous: Optional[Release], floor: Floor) -> bytes:
@@ -712,16 +740,20 @@ class Pep:
         return self._flip("rollback", kept, previous=None, floor=self.floor)
 
     def _covers(self, kept: Release) -> bool:
-        """RB3: a rollback to `kept` does not widen silently. It is not larger by the adapter's comparison, or
-        `kept` holds a widening statement whose `from` is empty or holds the active policy hash (W4). Going
-        from no policy to any policy is larger."""
+        """RB3: a rollback to `kept` does not widen silently. A release identical to the active one is never
+        larger. A PEP that can decide compares the two (W1) and needs nothing more when `kept` is not larger,
+        and refuses a larger one whose `widens` is false (W6). Otherwise `kept` must hold a widening statement
+        whose `from` is empty or holds the active policy hash (W4). Going from no policy to any is larger."""
         active = self.active
-        if active is not None and self.adapter.compare(active, kept) == NOT_LARGER:
+        if active is not None and kept.release == active.release:
             return True
-        if "trust.widening" not in kept.bodies:
-            return False
-        froms = kinds.read_widening(kept.bodies["trust.widening"])["from"]
-        return not froms or (active is not None and active.policy_sha256 in froms)
+        if self.target.decides:
+            answer = widening.compare_release(None if active is None else active.bodies, kept.bodies)
+            if answer == NOT_LARGER:
+                return True
+            if not kept.widens:
+                return False
+        return widening.covers(kept.bodies.get("trust.widening"), active.policy_sha256 if active else None)
 
     # ------------------------------------------------------------------ P2, P3: provisioning
     def provision(self, anchor: bytes) -> str:

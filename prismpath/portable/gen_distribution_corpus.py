@@ -14,6 +14,11 @@ is the trust store document, or null for a store that cannot be read. `expect` i
 decides, and the generator also asserts that it is the cause the spec gives, so the file never freezes a
 wrong verdict. `release_ids` holds the release id vectors of E10.
 
+`widening` holds the widening rule's cases (V12, W2 to W4) for a PEP that cannot decide: `{case, name,
+runs_on, kind, active_policy, sealed, statement, expect}`. `sealed` is the release envelope whose `widens` and
+`replaces` are read, `active_policy` the PEP's active policy hash or null, `statement` the body of the
+`trust.widening` envelope staged for the same release or null, and `expect` the cause, null when it may stage.
+
 `frames` holds the frame binding's cases (B6, B7, B9, B10) for a PEP that assembles a transfer from frames:
 `{case, name, runs_on, trust, pep, now, limit, ordered, steps, expect}`, where each step is `{at, frame}`, the
 receiver's monotonic time in milliseconds and one frame's bytes, and `expect` lists each event the receiver
@@ -37,6 +42,8 @@ sys.path.insert(0, str(REPO))
 from prismpath import canon  # noqa: E402
 from prismpath.distribution import envelope as env  # noqa: E402
 from prismpath.distribution import frames as framing  # noqa: E402
+from prismpath.distribution import kinds as dist_kinds  # noqa: E402
+from prismpath.distribution import widening as widening_rule  # noqa: E402
 from prismpath.distribution import verify as verifier  # noqa: E402
 from prismpath.distribution.trust import TrustStore  # noqa: E402
 from prismpath.hotswap import policy_pack as pp  # noqa: E402
@@ -161,6 +168,55 @@ def replay_frames(entry: dict) -> List[dict]:
         elif isinstance(event, framing.Dropped):
             events.append({"step": index, "event": "dropped", "transfer": event.transfer, "cause": event.cause})
     return events
+
+
+def replay_widening(entry: dict) -> dict:
+    """V12 on a PEP that cannot decide, as the Python PEP runs it, in the corpus's `expect` form."""
+    envelope = env.read(env.unseal(bytes.fromhex(entry["sealed"]))[0], reads_meta=False)
+    statement = None if entry["statement"] is None else bytes.fromhex(entry["statement"])
+    cause = widening_rule.check(dist_kinds.TARGETS[entry["kind"]], widens=envelope.widens, replaces=envelope.replaces,
+                                active_policy=entry["active_policy"], answer=None, statement=statement)
+    return {"cause": cause}
+
+
+def build_widening(spec: Dict[int, dict]) -> List[dict]:
+    """The widening cases on `host` (Python and Rust) and on `mesh` (Python and the C core)."""
+    out = []
+    body = image()
+    other = canon.sha256_hex(b"another policy")
+    active = canon.sha256_hex(ppt_compile.compile_predicate("when x >= 3").serialize())
+
+    def statement(froms):
+        return canon.canon2_bytes({canon.ENCODING_KEY: canon.CANON2, "format": "prismpath.dist-widening/1",
+                                   "from": sorted(froms)})
+
+    for kind in ("host", "mesh"):
+        implementations = {"host": "PR", "mesh": "PC"}[kind]
+
+        def add(number, name, expected, *, replaces, widens=False, active_policy=active, froms=None):
+            if implementations[1] not in spec[number]["runs_on"]:       # host for Rust, mesh for the C core
+                return
+            runs_on = [one for one in spec[number]["runs_on"] if one in implementations]
+            doc = envelope_doc(body, targets=[kind], replaces=replaces, widens=widens)
+            entry = {"case": number, "name": f"{number:03d}_{name}" + ("" if kind == "host" else f"_on_{kind}"),
+                     "runs_on": runs_on, "kind": kind, "active_policy": active_policy,
+                     "sealed": env.seal(canon2.dumps(doc), [test_key("A")]).hex(),
+                     "statement": None if froms is None else statement(froms).hex()}
+            entry["expect"] = replay_widening(entry)
+            assert entry["expect"]["cause"] == expected, (entry["name"], entry["expect"])
+            out.append(entry)
+
+        unsigned = "dist:widening-unsigned"
+        add(60, "widens_false_replacing_the_active_hash", None, replaces=active)
+        add(61, "widens_false_replacing_another_hash", unsigned, replaces=other)
+        add(61, "widens_true_without_a_statement", unsigned, replaces=active, widens=True)
+        add(62, "a_statement_from_the_active_hash", None, replaces=active, widens=True, froms=[active])
+        add(62, "a_statement_from_any", None, replaces=active, widens=True, froms=[])
+        add(62, "a_statement_from_another_hash_only", unsigned, replaces=active, widens=True, froms=[other])
+        add(63, "a_first_install_with_no_statement", unsigned, replaces="", widens=True, active_policy=None)
+        add(63, "a_first_install_with_a_statement", None, replaces="", widens=True, active_policy=None, froms=[])
+        add(109, "a_held_node_sent_a_larger_release_without_a_statement", unsigned, replaces=other)
+    return out
 
 
 def build_frames(spec: Dict[int, dict], cases: List[dict]) -> List[dict]:
@@ -564,7 +620,8 @@ def build() -> dict:
             "note": "Each case is bytes in and the Python verifier's result out. Every implementation named in "
                     "runs_on replays it and must report exactly the expected cause, unchanged flag, time floor "
                     "and envelope id. Keys come from fixed seeds (gen_distribution_corpus.test_key).",
-            "cases": cases, "release_ids": release_ids, "frames": build_frames(spec, cases)}
+            "cases": cases, "release_ids": release_ids, "frames": build_frames(spec, cases),
+            "widening": build_widening(spec)}
 
 
 def main() -> int:

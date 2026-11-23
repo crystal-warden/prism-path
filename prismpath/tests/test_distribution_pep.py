@@ -47,7 +47,7 @@ def test_case_016_an_unreadable_trust_store_decides_nothing(point):
         handle.truncate(10)
     pep = point.open()
     assert pep.state() == "no-policy" and pep.refusal() == "dist:policy-lapsed" and _host_active(pep) is None
-    assert _read(point, pep.stage(seal("policy.ppt", NEW, seq=2), NEW)).cause == "dist:unknown-key"
+    assert _read(point, point.stage(NEW, seq=2, pep=pep)).cause == "dist:unknown-key"
 
 
 def test_case_017_an_instance_key_that_is_a_trusted_key_is_refused_at_start(tmp_path):
@@ -82,7 +82,7 @@ def test_case_019_commit_abort_an_offer_and_a_state_record_never_change_the_trus
         return doc
     before = k1(point.pep)
     point.commit(OLD)
-    point.pep.stage(seal("policy.ppt", NEW, seq=2), NEW)
+    point.stage(NEW, seq=2)
     point.pep.abort(STREAM, 2, H(NEW))
     point.pep.needs([H(NEW), H(NEWER)])
     point.pep.record("beat")
@@ -95,7 +95,7 @@ def test_case_023_a_rollback_and_an_abort_leave_the_floor_where_it_was(point):
     """case_023: Q4, RB1, A1. The kept release carries a widening statement, so the rollback is not a silent
     widening (RB3)."""
     release = _dist.env.release_id([("policy.ppt", H(OLD))])
-    point.pep.stage(seal("policy.ppt", OLD, seq=1, release=release), OLD)
+    point.stage(OLD, seq=1, release=release)
     statement = _widening([])
     point.pep.stage(seal("trust.widening", statement, seq=1, release=release, policy_sha256=H(OLD)), statement)
     point.pep.commit(STREAM, 1, H(OLD))
@@ -103,12 +103,12 @@ def test_case_023_a_rollback_and_an_abort_leave_the_floor_where_it_was(point):
     record = _read(point, point.pep.rollback())
     assert record.event == "rolled-back" and record.active_seq == 1 and record.floor == 2
     assert _host_active(point.pep) == H(OLD) and point.pep.floor.seq == 2
-    point.pep.stage(seal("policy.ppt", NEWER, seq=3), NEWER)
+    point.stage(NEWER, seq=3)
     point.pep.abort(STREAM, 3, H(NEWER))
     pep = point.open()
     assert pep.floor.seq == 2 and pep.active.seq == 1 and pep.previous is None
-    assert _read(point, pep.stage(seal("policy.ppt", NEW, seq=2), NEW)).event == "beat"   # Q3, at the floor
-    assert _read(point, pep.stage(seal("policy.ppt", OLD, seq=1), OLD)).cause == "dist:seq-replay"
+    assert _read(point, point.stage(NEW, seq=2, pep=pep)).event == "beat"   # Q3, at the floor
+    assert _read(point, point.stage(OLD, seq=1, pep=pep)).cause == "dist:seq-replay"
 
 
 def test_case_024_a_floor_that_cannot_be_read_locks_the_pep(point):
@@ -118,7 +118,7 @@ def test_case_024_a_floor_that_cannot_be_read_locks_the_pep(point):
         handle.write(b"{")
     pep = point.open()
     assert pep.state() == "locked" and pep.refusal() == "dist:floor-lost" and _host_active(pep) is None
-    assert _read(point, pep.stage(seal("policy.ppt", NEW, seq=2), NEW)).cause == "dist:floor-lost"
+    assert _read(point, point.stage(NEW, seq=2, pep=pep)).cause == "dist:floor-lost"
     assert _read(point, pep.commit(STREAM, 1, H(OLD))).cause == "dist:floor-lost"
     assert _read(point, pep.record("beat")).state == "locked"
 
@@ -127,7 +127,7 @@ def test_case_026_a_clock_set_back_cannot_bring_an_expired_envelope_back(point):
     """case_026: T1, V13. The time floor is durable, so a restart with the clock set back still refuses."""
     late = _dist.EXPIRES - 100
     point.clock.now = late
-    point.pep.stage(seal("policy.ppt", OLD, seq=1, not_before=late), OLD)
+    point.stage(OLD, seq=1, not_before=late)
     point.clock.now = _dist.NOW
     early = seal("policy.ppt", NEW, seq=2, expires=late - 10)
     assert _read(point, point.pep.stage(early, NEW)).cause == "dist:expired"
@@ -136,7 +136,7 @@ def test_case_026_a_clock_set_back_cannot_bring_an_expired_envelope_back(point):
 
 def test_case_043_another_policy_at_the_staged_seq_is_incomplete(point):
     """case_043: E7, V10."""
-    point.pep.stage(seal("policy.ppt", OLD, seq=1), OLD)
+    point.stage(OLD, seq=1)
     other = seal("policy.ppt", OLD, seq=1, policy_sha256="ab" * 32)
     assert _read(point, point.pep.stage(other, OLD)).cause == "dist:incomplete"
     assert point.pep.staged.policy_sha256 == H(OLD)
@@ -144,21 +144,22 @@ def test_case_043_another_policy_at_the_staged_seq_is_incomplete(point):
 
 def test_case_046_staged_and_refused_are_acked_and_in_the_audit_log(point):
     """case_046: G1."""
-    record = _read(point, point.pep.stage(seal("policy.ppt", OLD), OLD))
+    record = _read(point, point.stage(OLD))
     assert record.event == "staged" and record.staged and record.staged_seq == 1 and record.cause is None
-    refused = _read(point, point.pep.stage(seal("policy.ppt", NEW, seq=2, signer="U"), NEW))
+    refused = _read(point, point.pep.stage(point.seal(NEW, seq=2, signer="U"), NEW))
     assert refused.event == "refused" and refused.cause == "dist:unknown-key"
     staged_events = [event for event in point.pep.audit.events if event["action"] in ("staged", "refused")]
-    assert [(event["action"], event["data"].get("cause")) for event in staged_events] == [
-        ("staged", None), ("refused", "dist:unknown-key")]
+    assert [(event["action"], event["data"].get("artifact"), event["data"].get("cause"))
+            for event in staged_events] == [("staged", "trust.widening", None), ("staged", "policy.ppt", None),
+                                            ("refused", None, "dist:unknown-key")]
     assert point.open().staged.seq == 1                              # durable before the ack
 
 
 def test_case_047_a_higher_seq_replaces_the_staged_release_and_a_lower_one_is_refused(point):
     """case_047: G2."""
-    point.pep.stage(seal("policy.ppt", OLD, seq=2), OLD)
-    assert _read(point, point.pep.stage(seal("policy.ppt", NEW, seq=3), NEW)).staged_seq == 3
-    assert _read(point, point.pep.stage(seal("policy.ppt", OLD, seq=2), OLD)).cause == "dist:seq-replay"
+    point.stage(OLD, seq=2)
+    assert _read(point, point.stage(NEW, seq=3)).staged_seq == 3
+    assert _read(point, point.stage(OLD, seq=2)).cause == "dist:seq-replay"
     assert point.pep.staged.seq == 3 and point.pep.store.get(H(OLD)) is None
 
 
@@ -166,18 +167,17 @@ def test_case_048_a_commit_that_names_nothing_staged(point):
     """case_048: C1."""
     record = _read(point, point.pep.commit(STREAM, 1, H(OLD)))
     assert record.cause == "dist:not-staged" and record.state == "no-policy"
-    point.pep.stage(seal("policy.ppt", OLD), OLD)
+    point.stage(OLD)
     assert _read(point, point.pep.commit(STREAM, 1, H(NEW))).cause == "dist:not-staged"
     assert point.pep.staged is not None
 
 
 def test_case_050_a_staged_release_that_expires_or_is_revoked_before_its_commit_is_dropped(point):
     """case_050: C3. The revoked half stands for a revocation applied after staging, as the store holds it."""
-    point.pep.stage(seal("policy.ppt", OLD, seq=1, expires=_dist.NOW + 10), OLD)
+    point.stage(OLD, seq=1, expires=_dist.NOW + 10)
     point.clock.now = _dist.NOW + 10
     assert _read(point, point.pep.commit(STREAM, 1, H(OLD))).cause == "dist:expired" and point.pep.staged is None
-    sealed = seal("policy.ppt", NEW, seq=2)
-    point.pep.stage(sealed, NEW)
+    point.stage(NEW, seq=2)
     point.pep.trust = replace(point.pep.trust, revoked_policies=frozenset({H(NEW)}))
     assert _read(point, point.pep.commit(STREAM, 2, H(NEW))).cause == "dist:revoked" and point.pep.staged is None
     assert point.pep.state() == "no-policy"
@@ -196,7 +196,7 @@ def test_case_052_a_commit_reports_committed_with_the_new_hash(point):
 def test_case_053_an_abort_drops_the_staged_release_and_an_abort_for_another_changes_nothing(point):
     """case_053: A1."""
     point.commit(OLD)
-    point.pep.stage(seal("policy.ppt", NEW, seq=2), NEW)
+    point.stage(NEW, seq=2)
     assert _read(point, point.pep.abort(STREAM, 3, H(NEW))).event == "beat" and point.pep.staged is not None
     record = _read(point, point.pep.abort(STREAM, 2, H(NEW)))
     assert record.event == "aborted" and not record.staged and record.active_seq == 1 and record.floor == 1
@@ -249,13 +249,13 @@ def test_case_083_an_anchor_the_operator_has_not_confirmed_follows_no_stream(tmp
     pep = point.open(provision=False)
     fingerprint = pep.provision(point.anchor())
     assert fingerprint == H(point.anchor())
-    assert _read(point, pep.stage(seal("policy.ppt", OLD), OLD)).cause == "dist:unknown-key"
+    assert _read(point, point.stage(OLD, pep=pep)).cause == "dist:unknown-key"
     pep = point.open(provision=False)
     assert not pep.provisioned
     with pytest.raises(PepRefused):
         pep.confirm("00" * 32)
     pep.confirm(fingerprint)
-    assert _read(point, pep.stage(seal("policy.ppt", OLD), OLD)).event == "staged"
+    assert _read(point, point.stage(OLD, pep=pep)).event == "staged"
 
 
 def test_case_084_provisioning_unlocks_a_locked_pep(point):
@@ -326,15 +326,16 @@ def test_case_126_a_declared_spiral_sidecar_is_needed_and_must_be_the_declared_o
                                (3, sidecar, None)):
         pairs = [("policy.ppt", H(OLD))] + ([("policy.spiral", H(spiral))] if spiral else [])
         release = _dist.env.release_id(pairs)
-        point.pep.stage(seal("policy.ppt", OLD, seq=seq, meta=meta, release=release, policy_sha256=H(OLD)), OLD)
+        point.stage(OLD, seq=seq, meta=meta, release=release, policy_sha256=H(OLD))
         if spiral:
-            ack = point.pep.stage(seal("policy.spiral", spiral, seq=seq, release=release, policy_sha256=H(OLD)), spiral)
+            ack = point.pep.stage(seal("policy.spiral", spiral, seq=seq, release=release, policy_sha256=H(OLD),
+                                       widens=True), spiral)
             assert _read(point, ack).event == "staged"
         record = _read(point, point.pep.commit(STREAM, seq, H(OLD)))
         assert record.cause == cause, seq
     assert point.pep.active.seq == 3 and point.pep.active.bodies["policy.spiral"] == sidecar
     other = {**_dist.GEN.image_meta(NEW), "packing": {"profile": "zigzag", "sidecar_sha256": H(sidecar)}}
-    assert _read(point, point.pep.stage(seal("policy.ppt", NEW, seq=4, meta=other), NEW)).cause == "packing:unknown-profile"
+    assert _read(point, point.stage(NEW, seq=4, meta=other)).cause == "packing:unknown-profile"
 
 
 def test_case_111_a_host_pep_refuses_to_start_with_hold(tmp_path):
@@ -391,7 +392,7 @@ def test_a_mesh_node_reads_a_table_with_its_own_parser_and_bound(tmp_path):
     make, bodies, _decide = _mesh(tmp_path)
     point = make()
     wrong = {**_dist.GEN.image_meta(bodies[0]), "wcet_cycles": 1, "qualification": "elsewhere"}
-    assert _read(point, point.pep.stage(point.seal(bodies[0], meta=wrong), bodies[0])).event == "staged"
+    assert _read(point, point.stage(bodies[0], meta=wrong)).event == "staged"
     big = bodies[0] + b"\0" * 700
     assert _read(point, point.pep.stage(point.seal(big, seq=2), big)).cause == "dist:too-large"
 
@@ -418,7 +419,7 @@ def test_the_mesh_evaluator_agrees_with_the_predicate_reference():
 def test_a_commit_with_an_unreadable_trust_store_never_activates_the_runtime(point):
     """K1, X3: a release staged before the store became unreadable is not committed, and the host stays
     without a policy."""
-    point.pep.stage(seal("policy.ppt", OLD), OLD)
+    point.stage(OLD)
     with open(point.pep.store.path("trust.json"), "wb") as handle:
         handle.write(b"")
     pep = point.open()
@@ -497,17 +498,19 @@ def test_a_rollback_on_a_target_that_cannot_decide_needs_a_covering_widening_sta
     """RB3, W2: the host cannot decide larger, so a rollback to the kept release is refused with
     dist:widening-unsigned unless that release holds a widening statement whose from is empty or holds the
     active policy hash. This is case 55's half for a target that cannot decide."""
-    point.commit(OLD, seq=1)
-    point.commit(NEW, seq=2)
-    assert _read(point, point.pep.rollback()).cause == "dist:widening-unsigned" and point.pep.active.seq == 2
-    for seq, froms, cause in ((3, [H(NEWER)], "dist:widening-unsigned"), (5, [H(NEW)], None), (7, [], None)):
+    point.commit(NEWER, seq=1)                   # the first install, with its statement
+    point.commit(OLD, seq=2)
+    point.commit(NEW, seq=3)
+    assert _read(point, point.pep.rollback()).cause == "dist:widening-unsigned" and point.pep.active.seq == 3
+    for seq, froms, cause in ((4, [H(NEWER)], "dist:widening-unsigned"), (6, [H(NEW)], None), (8, [], None)):
         point.pep = point.open()
         release = _dist.env.release_id([("policy.ppt", H(OLD))])
-        point.pep.stage(seal("policy.ppt", OLD, seq=seq, release=release), OLD)
         statement = _widening(froms)
-        point.pep.stage(seal("trust.widening", statement, seq=seq, release=release, policy_sha256=H(OLD)), statement)
+        point.pep.stage(seal("trust.widening", statement, seq=seq, release=release, policy_sha256=H(OLD),
+                             replaces=point.pep.active.policy_sha256), statement)
+        point.stage(OLD, seq=seq, release=release)
         point.pep.commit(STREAM, seq, H(OLD))
-        point.pep.stage(seal("policy.ppt", NEW, seq=seq + 1), NEW)
+        point.stage(NEW, seq=seq + 1)
         point.pep.commit(STREAM, seq + 1, H(NEW))
         record = _read(point, point.pep.rollback())
         assert record.cause == cause, froms
@@ -520,6 +523,7 @@ def test_a_mesh_node_reads_its_stored_envelopes_as_it_staged_them(tmp_path):
     point = make()
     doc = _dist.GEN.envelope_doc(bodies[0], targets=["mesh"], meta={**_dist.GEN.image_meta(bodies[0]), "counts": 7})
     sealed = _dist.env.seal(canon.canon2_bytes(doc), [_dist.GEN.test_key("A")])   # no writer emits it (F1)
+    point.widen(bodies[0])
     assert _read(point, point.pep.stage(sealed, bodies[0])).event == "staged"
     assert point.open().staged.seq == 1
 
@@ -566,7 +570,7 @@ def test_a_commit_with_a_delay_is_active_at_the_peps_time_plus_the_delay_and_not
     release until the PEP's own monotonic time passes the delay, then commits on the next entry point."""
     point.commit(OLD)
     pep, monotonic = _delayed(point)
-    pep.stage(seal("policy.ppt", NEW, seq=2), NEW)
+    point.stage(NEW, seq=2, pep=pep)
     record = _read(point, pep.commit(STREAM, 2, H(NEW), delay_ms=120))
     assert record.event == "beat" and record.active_seq == 1 and record.staged and _host_active(pep) == H(OLD)
     monotonic.now += 0.119
@@ -582,7 +586,7 @@ def test_a_delayed_commit_runs_its_checks_again_when_it_falls_due(point):
     becomes active, and the floor stays where it was."""
     point.commit(OLD)
     pep, monotonic = _delayed(point)
-    pep.stage(seal("policy.ppt", NEW, seq=2, expires=_dist.NOW + 10), NEW)
+    point.stage(NEW, seq=2, expires=_dist.NOW + 10, pep=pep)
     pep.commit(STREAM, 2, H(NEW), delay_ms=500)
     point.clock.now = _dist.NOW + 10
     monotonic.now += 1.0
@@ -596,7 +600,7 @@ def test_a_revocation_inside_the_delay_drops_the_release_before_it_falls_due(poi
     point.commit(OLD)
     pep, monotonic = _delayed(point)
     point.pep = pep
-    pep.stage(seal("policy.ppt", NEW, seq=2), NEW)
+    point.stage(NEW, seq=2, pep=pep)
     pep.commit(STREAM, 2, H(NEW), delay_ms=500)
     point.revoke(1, envelopes=sorted(pep.staged.envelope_ids))
     monotonic.now += 1.0
@@ -608,7 +612,7 @@ def test_an_abort_inside_the_delay_cancels_the_delayed_commit(point):
     """B8 with A1. An abort that names the staged release drops it, so nothing flips when the time comes."""
     point.commit(OLD)
     pep, monotonic = _delayed(point)
-    pep.stage(seal("policy.ppt", NEW, seq=2), NEW)
+    point.stage(NEW, seq=2, pep=pep)
     pep.commit(STREAM, 2, H(NEW), delay_ms=50)
     assert _read(point, pep.abort(STREAM, 2, H(NEW))).event == "aborted"
     monotonic.now += 1.0
@@ -618,7 +622,7 @@ def test_an_abort_inside_the_delay_cancels_the_delayed_commit(point):
 
 def test_a_commit_delay_out_of_range_is_refused(point):
     """B8: the delay is two bytes on the wire, 0 to 65535 milliseconds."""
-    point.pep.stage(seal("policy.ppt", NEW, seq=1), NEW)
+    point.stage(NEW, seq=1)
     for delay in (-1, 65536, 1.5, True):
         with pytest.raises(ValueError):
             point.pep.commit(STREAM, 1, H(NEW), delay_ms=delay)
@@ -630,10 +634,9 @@ def _kept(tmp_path, name, *, kept_expires=_dist.EXPIRES):
     point = _dist.HostPep(tmp_path / name, authorities=["A", "B"])
     release = _dist.env.release_id([("policy.ppt", H(OLD))])
     kept = seal("policy.ppt", OLD, seq=1, release=release, expires=kept_expires)
-    point.pep.stage(kept, OLD)
     statement = _widening([])
-    point.pep.stage(seal("trust.widening", statement, seq=1, release=release, policy_sha256=H(OLD),
-                         expires=kept_expires), statement)
+    point.pep.stage(seal("trust.widening", statement, seq=1, release=release, policy_sha256=H(OLD)), statement)
+    point.pep.stage(kept, OLD)
     point.pep.commit(STREAM, 1, H(OLD))
     point.commit(NEW, seq=2, signer="B")
     return point, _dist.env.envelope_id(_dist.env.unseal(kept)[0])

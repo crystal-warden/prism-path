@@ -50,7 +50,8 @@ class Clock:
 
 def seal(artifact: str, body: bytes, *, seq: int = 1, signer: str = "A", release: Optional[str] = None,
          policy_sha256: Optional[str] = None, not_before: int = NOT_BEFORE, expires: int = EXPIRES,
-         meta: Optional[dict] = None, stream: str = STREAM, targets=("host",)) -> bytes:
+         meta: Optional[dict] = None, stream: str = STREAM, targets=("host",), replaces: str = "",
+         widens: bool = False) -> bytes:
     """A sealed envelope for `body`, by default a `policy.ppt` release of one artifact."""
     if meta is None:
         meta = GEN.image_meta(body) if artifact == "policy.ppt" else {}
@@ -58,6 +59,7 @@ def seal(artifact: str, body: bytes, *, seq: int = 1, signer: str = "A", release
     envelope_bytes = env.build(
         artifact, body, stream=stream, seq=seq, targets=targets, not_before=not_before,
         expires=0 if artifact.startswith("trust.") else expires, meta=meta,
+        replaces=replaces, widens=widens,
         policy_sha256=env.ZERO_HASH if trust_kind else (policy_sha256 or canon.sha256_hex(body)),
         release=env.ZERO_HASH if trust_kind else (release or env.release_id([(artifact, canon.sha256_hex(body))])))
     return env.seal(envelope_bytes, [GEN.test_key(signer)])
@@ -68,6 +70,12 @@ def revocation(*, envelopes=(), keys=(), policies=(), floors=None) -> bytes:
     return canon.canon2_bytes({canon.ENCODING_KEY: canon.CANON2, "format": "prismpath.dist-revocation/1",
                                "envelopes": sorted(envelopes), "keys": sorted(keys), "policies": sorted(policies),
                                "floors": dict(floors or {})})
+
+
+def widening(froms=()) -> bytes:
+    """The canon/2 body of a widening statement (W4) that may replace the policy hashes `froms`, any when empty."""
+    return canon.canon2_bytes({canon.ENCODING_KEY: canon.CANON2, "format": "prismpath.dist-widening/1",
+                               "from": sorted(froms)})
 
 
 def rotation(add: str, retire: str = "") -> bytes:
@@ -126,11 +134,39 @@ class Point:
         return canon.sha256_hex(body)
 
     def seal(self, body: bytes, seq: int = 1, **seal_args) -> bytes:
+        """A release of `body` that replaces the active one (W2): its `replaces` is the active policy hash."""
         seal_args.setdefault("policy_sha256", self.policy_of(body))
+        active = getattr(self, "pep", None) and self.pep.active
+        seal_args.setdefault("replaces", active.policy_sha256 if active else "")
         return seal(self.artifact, body, seq=seq, targets=(self.kind,), **seal_args)
 
+    def widen(self, body: bytes, seq: int = 1, froms=(), *, pep: Optional[Pep] = None, **seal_args) -> bytes:
+        """Stage the owner's widening statement (W4) for the release `seal(body, seq)` would make. It shares the
+        release's stream, seq, policy hash, release id, `replaces` and `widens` (E7)."""
+        pep = pep or self.pep
+        policy = seal_args.get("policy_sha256") or self.policy_of(body)
+        release = seal_args.get("release") or env.release_id([(self.artifact, canon.sha256_hex(body))])
+        replaces = seal_args.get("replaces", pep.active.policy_sha256 if pep.active else "")
+        statement = widening(froms)
+        sealed = seal("trust.widening", statement, seq=seq, release=release, policy_sha256=policy,
+                      targets=(self.kind,), signer=seal_args.get("signer", "A"), replaces=replaces,
+                      widens=seal_args.get("widens", False), not_before=seal_args.get("not_before", NOT_BEFORE))
+        return pep.stage(sealed, statement)
+
+    def stage(self, body: bytes, seq: int = 1, *, pep: Optional[Pep] = None, **seal_args) -> bytes:
+        """Stage a release of `body` that replaces the active one. A first install is larger than no policy, so
+        the owner's widening statement covering any PEP is staged before it (W2, W3). Returns the release's
+        stage-ack."""
+        pep = pep or self.pep
+        if pep.active is None:
+            seal_args.setdefault("widens", True)        # it replaces nothing, so it allows more (W1, W6)
+            self.widen(body, seq, pep=pep, **seal_args)
+        seal_args.setdefault("replaces", pep.active.policy_sha256 if pep.active else "")
+        return pep.stage(self.seal(body, seq=seq, **seal_args), body)
+
     def commit(self, body: bytes, seq: int = 1, **seal_args) -> bytes:
-        self.pep.stage(self.seal(body, seq=seq, **seal_args), body)
+        """Stage and commit a release of `body` (`stage`)."""
+        self.stage(body, seq, **seal_args)
         return self.pep.commit(STREAM, seq, seal_args.get("policy_sha256") or self.policy_of(body))
 
     def rotate(self, seq: int, add: str, retire: str = "", signers=None) -> bytes:
@@ -166,6 +202,22 @@ class MeshPep(Point):
     def adapter(self):
         from prismpath.distribution.adapters.mesh import MeshAdapter
         return MeshAdapter()
+
+
+def release_with_statement(point: "Point", body: bytes, seq: int, *, widen: bool, replaces: str,
+                           froms=(), **seal_args) -> List[tuple]:
+    """The (sealed, body) pairs a controller stores for one release of `body` on `point`'s kind: the widening
+    statement first when `widen`, then the release, both with `replaces` (E7)."""
+    release = seal_args.get("release") or env.release_id([(point.artifact, canon.sha256_hex(body))])
+    policy = seal_args.get("policy_sha256") or point.policy_of(body)
+    pairs = []
+    if widen:
+        statement = widening(froms)
+        pairs.append((seal("trust.widening", statement, seq=seq, release=release, policy_sha256=policy,
+                           targets=(point.kind,), replaces=replaces, signer=seal_args.get("signer", "A")),
+                      statement))
+    pairs.append((point.seal(body, seq=seq, replaces=replaces, **seal_args), body))
+    return pairs
 
 
 # ------------------------------------------------------------------ the hold cases, on every kind with HOLD

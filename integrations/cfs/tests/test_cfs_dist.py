@@ -60,7 +60,7 @@ def test_a_cfs_table_is_checked_as_the_app_checks_it(tmp_path):
     """V11: the app's kernel check with its cause, and the core image's hash against the policy hash."""
     point = CfsPep(tmp_path)
     good = _body(1)
-    assert state_record.read(point.pep.stage(point.seal(good), good), point.key.public_raw).event == "staged"
+    assert state_record.read(point.stage(good), point.key.public_raw).event == "staged"
     for broken, cause in ((good[:-1], "image:truncated-header"),
                           (bytes(bytearray(good[:8]) + b"\x00\x00" + good[10:]), "image:truncated-header"),
                           (_body(0), "image:truncated-header")):
