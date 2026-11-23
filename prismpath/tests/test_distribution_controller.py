@@ -683,3 +683,36 @@ def test_case_136_the_sealing_tool_and_the_controller_hold_widens_to_what_they_h
     assert not renewal.widens and renewal.replaces == H(OLD)
     fleet.controller.put((tmp_path / "r3.sealed").read_bytes(), OLD)
     assert fleet.controller.offer("fleet", STREAM, 3).seq == 3
+
+
+def test_a_rollout_that_widens_is_marked_larger_by_rule_or_by_comparison_in_the_fleet_view(tmp_path):
+    """F4: a widening the owner pushed stands out. A mesh table that differs from the one it replaces is larger
+    only because a mesh node counts any change of a table as larger, a policy.core a comparator finds larger is
+    larger by comparison, as is a first install, and a renewal is no widening. The mark is in the state the
+    controller keeps."""
+    from prismpath.agent.policy import starter_path
+    from prismpath.distribution.controller import LARGER_BY_COMPARISON, LARGER_BY_RULE
+    fleet = Fleet(tmp_path / "mesh", names=("n1",), kind="mesh")
+    fleet.put(OLD, 1)
+    assert fleet.controller.offer("fleet", STREAM, 1).widening == LARGER_BY_COMPARISON
+    fleet.put(NEW, 2, widen=True)
+    assert fleet.controller.offer("fleet", STREAM, 2).widening == LARGER_BY_RULE
+    fleet.put(NEW, 3, widen=False, replaces=H(NEW), expires=_dist.EXPIRES + 10)
+    assert fleet.controller.offer("fleet", STREAM, 3).widening == ""
+    fleet.controller.save()
+    kept = Controller(str(fleet.dir), _dist.instance_key("C"), clock=fleet.clock)
+    assert [one["widening"] for one in kept.fleet()["rollouts"]] == [LARGER_BY_COMPARISON, LARGER_BY_RULE, ""]
+
+    strict, default = (starter_path(name).read_bytes().rstrip(b"\n") for name in ("strict", "default"))
+    point = _dist.AgentPep(tmp_path / "agent")
+    controller = Controller(str(tmp_path / "agents"), _dist.instance_key("C"), clock=_dist.Clock())
+    controller.add_anchor(point.anchor())
+    controller.enroll(point.key.public_raw, "agent", STREAM)
+    for seq, image, replaces in ((1, strict, ""), (2, default, H(strict))):
+        statement = _dist.widening()
+        release = point.release_of(image)
+        controller.put(_dist.seal("trust.widening", statement, seq=seq, release=release, policy_sha256=H(image),
+                                  targets=("agent",), widens=True, replaces=replaces), statement)
+        controller.put(point.seal(image, seq, widens=True, replaces=replaces), image)
+        controller.put(point.seal_hosts(image, seq, widens=True, replaces=replaces), point.hosts)
+        assert controller.offer("default", STREAM, seq).widening == LARGER_BY_COMPARISON

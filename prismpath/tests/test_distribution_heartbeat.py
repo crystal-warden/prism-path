@@ -100,6 +100,9 @@ def test_case_088_a_pep_on_the_expected_policy_sends_a_body_that_decodes(agents)
         next(iter(route.values())) for route in routes]
     empty = state_record.read(agents.record(point), point.key.public_raw)
     assert heartbeat.decode(DEFAULT, empty.body) == []                 # nothing decided since the last record
+    _decide(point, readings)
+    assert agents.controller.receive(agents.record(point)) is None and member.last["decisions"] == 3
+    assert agents.controller.receive(agents.record(point, body=b"")) is None and member.last["decisions"] == 0
 
 
 def test_case_089_a_pep_on_another_policy_is_found_from_the_hash_before_any_decode(agents, monkeypatch):
@@ -171,3 +174,32 @@ def test_a_body_at_another_tier_than_band_is_codebook_mismatch(agents):
         assert heartbeat.check(DEFAULT, other) == "wire:codebook-mismatch"
         assert agents.controller.receive(agents.record(point, body=other)) == "wire:codebook-mismatch"
     assert agents.controller.receive(agents.record(point)) is None and member.findings == {}
+
+
+def test_a_flip_drops_the_decisions_the_old_policy_made_so_none_is_reported_under_another(tmp_path):
+    """H5: the ring holds what the active policy decided. A commit, a rollback or a lapse that ends that policy
+    drops it, so the record built from the next policy's flow text carries none of the old decisions, and a
+    renewal of the same policy keeps them."""
+    point = _dist.AgentPep(tmp_path / "agent")
+    point.commit(DEFAULT, 1)
+
+    def frames(signed, image):
+        record = state_record.read(signed, point.key.public_raw)
+        return record.event, heartbeat.decode(image, record.body) if record.body else []
+
+    readings = _readings(DEFAULT, 6)
+    _decide(point, readings)
+    point.widen(STRICT, 2, widens=True)
+    point.stage(STRICT, 2, widens=True)
+    _decide(point, readings)                                     # decided under DEFAULT, after the staging
+    assert frames(point.pep.commit(STREAM, 2, H(STRICT)), STRICT) == ("committed", [])
+    _decide(point, _readings(STRICT, 4))
+    assert frames(point.pep.rollback(), DEFAULT) == ("rolled-back", [])
+    point.stage(DEFAULT, 3, widens=False)
+    _decide(point, readings)
+    assert frames(point.pep.commit(STREAM, 3, H(DEFAULT)), DEFAULT) == ("committed", heartbeat.decode(DEFAULT, heartbeat.body(DEFAULT, readings)))
+    _decide(point, readings)
+    point.revoke(1, policies=[H(DEFAULT)])
+    assert point.pep.state() == "no-policy"
+    point.widen(STRICT, 4, widens=True)
+    assert frames(point.commit(STRICT, 4, widens=True), STRICT) == ("committed", [])

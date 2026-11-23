@@ -651,6 +651,7 @@ class Pep:
                                                   "envelopes": sorted(release.envelope_ids), "result": event})
         self.store.write("active.json", _ACTIVE, {"release": release.document(),
                                                  "previous": previous.document() if previous else None})
+        self._end_ring(release)
         self.active, self.previous, self.held = release, previous, False
         if self.staged is not None and self.staged.seq <= release.seq:
             self.staged = None
@@ -661,6 +662,15 @@ class Pep:
             self.adapter.deactivate(cause)                           # X3: the runtime never runs what the PEP refuses
         self._cleanup()
         return self._record(event)
+
+    def _end_ring(self, release: Optional[Release]) -> None:
+        """H5: the decisions in the ring were made under the active policy, and the next record's stream is built
+        from the policy `release` makes active. When that is another policy or none, they are dropped, so no
+        decision is reported under a policy that did not make it."""
+        before = self.active.bodies.get("policy.core") if self.active is not None else None
+        after = release.bodies.get("policy.core") if release is not None else None
+        if before is None or before != after:
+            self.recent.clear()
 
     def _cleanup(self) -> None:
         if self.staged is None:
@@ -713,6 +723,7 @@ class Pep:
         lapsed = self.active
         self.store.write("active.json", _ACTIVE, {"release": None,
                                                  "previous": self.previous.document() if self.previous else None})
+        self._end_ring(None)
         self.active, self.held = None, False
         self.adapter.deactivate(cause)
         self._keep_blobs()
@@ -818,6 +829,7 @@ class Pep:
         self.store.remove("anchor.pending")
         self.stream, self.floor, self.locked, self.provisioned, self.held = read.stream, Floor(), False, True, False
         self.active = self.previous = self.staged = None
+        self.recent.clear()                                          # H5: no policy made what the ring holds
         self._keep_blobs()
         self.audit.append("distribution", "provisioned", {"fingerprint": read.fingerprint, "stream": read.stream,
                                                           "result": "provisioned"})

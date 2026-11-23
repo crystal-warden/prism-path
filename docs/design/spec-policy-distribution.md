@@ -818,7 +818,10 @@ staged and `abort` otherwise, which is the mesh's two phase commit.
 
 **F4.** `partial` and every finding of H6 and H7 stay open until a later record clears them. The fleet
 view shows, per PEP, the expected and the reported policy hash and `seq`, so a mixed fleet in mid swap is
-bounded by the windows of F3 and visible while it lasts.
+bounded by the windows of F3 and visible while it lasts. A rollout of a release that says it widens is
+marked in the view and in the state the controller keeps, so a widening the owner pushed stands out. It is
+larger by comparison when a comparator with an order finds it larger, or when nothing came before it, and
+larger by rule when it is larger only because a host or a mesh node counts any change of a table as larger.
 
 **F5.** The controller writes every offer, ack, commit, abort, finding and trust statement to its own
 audit log, signed with the controller's instance key.
