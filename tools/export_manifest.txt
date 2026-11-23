@@ -883,6 +883,7 @@ prismpath/tests/test_swarm_runner.py
 prismpath/tests/test_trail.py
 prismpath/tests/test_wait_event.py
 prismpath/tests/test_workflows_parse.py
+prismpath/tests/test_zone_index_protected.py
 prismpath/tests/test_zones.py
 prismpath/trail.py
 prismpath/workers/__init__.py

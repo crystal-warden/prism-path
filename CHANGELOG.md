@@ -8,6 +8,10 @@ spec stable.
 
 ## [Unreleased]
 
+### Fixed: the zone index is a control path and an index the agent could have written reads unknown (2026-11-22)
+
+- **The zone index, `.contextcloud/` by default, can no longer be edited by the agent to claim that protected code reaches nothing.** The hook refuses a write or a mutating command onto it as a control write, both per call sandbox backends hold it read only, and the zones information point answers `unknown` for every path when the agent could have written the index or the Context Cloud program that reads it. `prismpath agent zones set` now records the Context Cloud program and its package directory in the signed zone file, checks both again at hook time, runs the program in a fixed environment with no PYTHON variable, refuses a package the agent could change, and rebuilds an existing index after the zone file is signed.
+
 ### Added: the distribution verifier and state machine in C, tested natively against the shared corpus (2026-11-22)
 
 - **`prismpath-hw/dist/` is the C core of policy distribution for mesh nodes and the cFS app.** It reads the sealed container and the envelope with a strict canon/2 reader that allocates nothing, checks the signatures with Monocypher before it reads the envelope, and runs the one verifier, the frame reassembly and the enforcement point machine with its signed state records.

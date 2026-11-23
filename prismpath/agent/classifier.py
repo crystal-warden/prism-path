@@ -365,10 +365,21 @@ def _walk_names(top: str) -> List[str]:
     return found
 
 
-def _control_tests(workspace: Path, programs: List[str]):
-    """(control test, holder test) on a path: the path-name part of what is control, and of what holds control."""
+def zone_control_paths(config: Config) -> List[str]:
+    """The control paths the zone information point names (the directory of the zone index, zones.py
+    `control_paths`), absolute; none for a point that names none."""
+    try:
+        return [os.path.normpath(str(p)) for p in getattr(config.zones, "control_paths", ())]
+    except TypeError:
+        return []
+
+
+def _control_tests(workspace: Path, programs: List[str], extra: Tuple[str, ...] = ()):
+    """(control test, holder test) on a path: the path-name part of what is control, and of what holds control.
+    `extra` are the zone index paths, which are control paths wherever they are, with what is below them."""
     ws = _fold(str(workspace))
     hooks = [_fold(os.path.normpath(p)) for p in programs]
+    zone = [_fold(p) for p in extra]
 
     def parts_of(path: str):
         folded = _fold(path)
@@ -380,6 +391,8 @@ def _control_tests(workspace: Path, programs: List[str]):
 
     def control(path: str) -> bool:
         folded, parts = parts_of(path)
+        if any(folded == z or folded.startswith(z.rstrip("/") + "/") for z in zone):
+            return True
         if parts is None:
             return folded in hooks
         if not parts:
@@ -394,6 +407,8 @@ def _control_tests(workspace: Path, programs: List[str]):
 
     def holder(path: str) -> bool:
         folded, parts = parts_of(path)
+        if any(z.startswith(folded.rstrip("/") + "/") for z in zone):
+            return True
         if parts is None:
             return any(h.startswith(folded.rstrip("/") + "/") for h in hooks)
         return not parts or "/".join(parts) in CONTROL_ANCESTORS or any(h.startswith(folded + "/") for h in hooks)
@@ -405,8 +420,9 @@ def _control_inodes(config: Config, programs: List[str]) -> set:
     """(device, inode) of every control file that exists: the fixed ones, what is below the control trees and the
     CONTROL_NAMES files of the workspace."""
     files: List[str] = [str(config.workspace / name) for name in CONTROL_FILES] + list(programs)
-    for tree in CONTROL_TREES:
-        for here, _dirs, names in os.walk(str(config.workspace / tree)):
+    files.extend(zone_control_paths(config))
+    for tree in [str(config.workspace / t) for t in CONTROL_TREES] + zone_control_paths(config):
+        for here, _dirs, names in os.walk(tree):
             files.extend(os.path.join(here, name) for name in names)
     files.extend(_walk_names(str(config.workspace)))
     out = set()
@@ -426,7 +442,7 @@ def _control_facts(resolved: str, normal: str, config: Config) -> Tuple[bool, bo
     control file. holder: the workspace root, `.git`, a directory that holds a hook program, or a directory with
     a CLAUDE.md, CLAUDE.local.md or AGENTS.md below it."""
     programs = hook_programs(config)
-    control, holder = _control_tests(config.workspace, programs)
+    control, holder = _control_tests(config.workspace, programs, tuple(zone_control_paths(config)))
     is_control = control(resolved) or control(normal)
     is_holder = holder(resolved) or holder(normal)
     try:
