@@ -959,10 +959,11 @@ void pp_pep_provision(pp_pep_machine *pep, const pp_trust *anchor, const char *s
 /* trust.apply_revocation: the store after a verified revocation at the next trust sequence (R1). The PEP holds this
  * list and no other, so what it refuses is bounded by R7 (R2, R6), and a floor the list raises is kept for the
  * PEP's own stream and only rises (R4). */
-static void pp_apply_revocation(pp_pep_machine *pep, const pp_envelope *e, const uint8_t *body, size_t len) {
+static uint8_t pp_apply_revocation(pp_pep_machine *pep, const pp_envelope *e, const uint8_t *body, size_t len) {
     static pp_revocation_list list;
     pp_trust *t = &pep->d.trust;
-    pp_read_revocation(body, len, pep->d.stream, &list); /* V11 read it and held it to R6 and R7 */
+    uint8_t cause = pp_read_revocation(body, len, pep->d.stream, &list); /* V11 read it and held it to R6 and R7 */
+    if (cause) return cause;   /* the store is left exactly as it was */
     memcpy(t->revoked_envelopes, list.envelopes, 32 * list.n_envelopes);
     memcpy(t->revoked_keys, list.keys, 32 * list.n_keys);
     memcpy(t->revoked_policies, list.policies, 32 * list.n_policies);
@@ -981,6 +982,7 @@ static void pp_apply_revocation(pp_pep_machine *pep, const pp_envelope *e, const
     memcpy(t->trust_id, e->envelope_id, 32);
     t->has_trust_id = 1;
     pp_persist(pep);
+    return 0;
 }
 
 static void pp_refuse(pp_pep_machine *pep, uint8_t cause) {
@@ -1022,7 +1024,8 @@ void pp_pep_stage(pp_pep_machine *pep, const uint8_t *sealed, size_t sealed_len,
     if (verdict.unchanged) { pp_emit(pep, PP_EV_BEAT, 0); return; } /* Q3, R1 */
     const pp_envelope *e = &verdict.envelope;
     if (e->artifact == PP_ART_TRUST_REVOCATION) {
-        pp_apply_revocation(pep, e, body, body_len); /* B2: applied when it verifies, durable before reported (R3) */
+        uint8_t cause = pp_apply_revocation(pep, e, body, body_len); /* B2: applied when it verifies, durable before reported (R3) */
+        if (cause) { pp_refuse(pep, cause); return; }
         pp_drop_fallen_staged(pep);
         pp_check_expiry(pep);
         pp_emit(pep, PP_EV_TRUST_APPLIED, 0);

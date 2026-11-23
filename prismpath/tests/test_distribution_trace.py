@@ -39,9 +39,9 @@ C_KINDS = frozenset({"mesh", "cfs"})
 # request, so the replay does not claim them and they stay in PENDING until that half has its test.
 # 16: the Rust PEP allows nothing; 66, 70, 79, 130: the Rust verifier decides them, and applying the list is the
 # Rust PEP's (PR 14)
-PARTIAL = {"P": frozenset(), "R": frozenset({16, 66, 70, 79, 130}), "C": frozenset()}
+PARTIAL = {"P": frozenset({128, 130}), "R": frozenset({16, 66, 70, 79, 130}), "C": frozenset()}
 PENDING = {
-    "P": "30 32-34 45 49 54-65 72-76 80-81 86-98 100 102 104-105 109 113 120 123-125 129 131",
+    "P": "30 32-34 45 49 54-65 72-76 80-81 86-98 100 102 104-105 109 113 120 123-125 128-131",
     "R": "16-17 23-24 26 31 43 46-48 50-53 62-63 66 69-70 72-77 79 82 84-85 97 101 104 111 123 126 130-131",
     "C": "25 60-63 72-74 76 82 97 104-105 109 122-123 131",
 }

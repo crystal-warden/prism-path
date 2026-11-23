@@ -282,8 +282,8 @@ def test_case_127_a_meta_member_of_another_form_is_refused_where_it_is_read(tmp_
         assert pp.check_counts(manifest, image) == (["manifest:bad-format"] if member == "counts" else [])
 
 
-def test_case_128_a_kind_that_does_not_read_meta_only_bounds_it():
-    """case_128: E9, E11. One signed policy.ppt whose counts is an integer is accepted on mesh, whose reader skips
+def test_a_kind_that_does_not_read_meta_only_bounds_it():
+    """The PEP half of case 128 (the controller half is PR 4's), E9, E11. One signed policy.ppt whose counts is an integer is accepted on mesh, whose reader skips
     meta, and dist:bad-format on host, which reads it. On mesh a meta that is a string, one nested four levels and
     one running past the envelope are each dist:bad-format. The controller's part, which always reads meta in full
     (F1), is the controller's."""
