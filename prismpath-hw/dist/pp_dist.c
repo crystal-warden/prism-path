@@ -1127,6 +1127,37 @@ static void pp_refuse(pp_pep_machine *pep, uint8_t cause) {
     pp_emit(pep, PP_EV_REFUSED, cause);
 }
 
+/* W4: `kept` holds a widening statement whose `from` is empty or holds the active policy hash (widening.covers). */
+static int pp_covers(const pp_pep_machine *pep, const pp_release *kept) {
+    for (size_t k = 0; k < kept->n; k++) {
+        if (kept->held[k].envelope.artifact != PP_ART_TRUST_WIDENING) continue;
+        const uint8_t *body = pp_held_body((pp_release *)kept, k);
+        size_t len = kept->held[k].body_len;
+        static const char head[] = "{\"encoding\":\"canon/2\",\"format\":\"prismpath.dist-widening/1\",\"from\":[";
+        pp_c2 c = {body, len, 0, 1};
+        uint8_t hash[32];
+        if (!pp_c2_lit(&c, head)) return 0;
+        if (pp_c2_lit(&c, "]")) return 1; /* an empty `from` covers any rollback */
+        for (;;) {
+            if (!pp_scan_hash(&c, hash)) return 0;
+            if (pep->d.has_active && memcmp(hash, pep->d.active.policy_sha256, 32) == 0) return 1;
+            if (!pp_c2_lit(&c, ",")) return 0;
+        }
+    }
+    return 0;
+}
+
+/* V12 on a kind that cannot decide (W2, W3): a release is larger unless its `widens` is false and its `replaces`
+ * is the active policy hash, and a larger one needs a widening statement of the same release, staged before it,
+ * that covers the node (widening.check). */
+static uint8_t pp_widening(const pp_pep_machine *pep, int widens, const uint8_t replaces[32], int has_replaces,
+                           const pp_release *with) {
+    const pp_durable *d = &pep->d;
+    int larger = widens || !d->has_active || !has_replaces || memcmp(replaces, d->active.policy_sha256, 32) != 0;
+    if (!larger) return PP_CAUSE_NONE;
+    return with != NULL && pp_covers(pep, with) ? PP_CAUSE_NONE : PP_CAUSE_WIDENING_UNSIGNED;
+}
+
 void pp_pep_view(const pp_pep_machine *pep, pp_pep *out) {
     const pp_durable *d = &pep->d;
     memset(out, 0, sizeof *out);
@@ -1186,6 +1217,11 @@ void pp_pep_stage(pp_pep_machine *pep, const uint8_t *sealed, size_t sealed_len,
         pp_refuse(pep, PP_CAUSE_SEQ_REPLAY); /* G2 */
         return;
     }
+    if (e->artifact != PP_ART_TRUST_WIDENING) {
+        int same = d->has_staged && strcmp(d->staged.stream, e->stream) == 0 && d->staged.seq == e->seq;
+        uint8_t cause = pp_widening(pep, e->widens, e->replaces, e->has_replaces, same ? &d->staged : NULL);
+        if (cause) { pp_refuse(pep, cause); return; } /* V12 */
+    }
     if (!d->has_staged || d->staged.seq != e->seq) {
         memset(&d->staged, 0, sizeof d->staged);
         pp_copy_stream(d->staged.stream, e->stream);
@@ -1225,6 +1261,8 @@ static void pp_commit_now(pp_pep_machine *pep, const char *stream, long long seq
         pp_refuse(pep, cause);
         return;
     }
+    cause = pp_widening(pep, d->staged.widens, d->staged.replaces, d->staged.has_replaces, &d->staged);
+    if (cause) { pp_refuse(pep, cause); return; } /* V12 again, against what is active now */
     pp_flip(pep, 0);
 }
 
@@ -1261,27 +1299,6 @@ void pp_pep_abort(pp_pep_machine *pep, const char *stream, long long seq, const 
     pp_emit(pep, PP_EV_ABORTED, 0);
 }
 
-/* RB3: a rollback to `kept` is covered only by a widening statement it holds whose `from` is empty or holds
- * the active policy hash, since a mesh node cannot decide larger (W2). */
-static int pp_covers(const pp_pep_machine *pep, const pp_release *kept) {
-    for (size_t k = 0; k < kept->n; k++) {
-        if (kept->held[k].envelope.artifact != PP_ART_TRUST_WIDENING) continue;
-        const uint8_t *body = pp_held_body((pp_release *)kept, k);
-        size_t len = kept->held[k].body_len;
-        static const char head[] = "{\"encoding\":\"canon/2\",\"format\":\"prismpath.dist-widening/1\",\"from\":[";
-        pp_c2 c = {body, len, 0, 1};
-        uint8_t hash[32];
-        if (!pp_c2_lit(&c, head)) return 0;
-        if (pp_c2_lit(&c, "]")) return 1; /* an empty `from` covers any rollback */
-        for (;;) {
-            if (!pp_scan_hash(&c, hash)) return 0;
-            if (pep->d.has_active && memcmp(hash, pep->d.active.policy_sha256, 32) == 0) return 1;
-            if (!pp_c2_lit(&c, ",")) return 0;
-        }
-    }
-    return 0;
-}
-
 uint8_t pp_pep_rollback(pp_pep_machine *pep, long long now) {
     pp_begin(pep, now);
     pp_durable *d = &pep->d;
@@ -1292,7 +1309,8 @@ uint8_t pp_pep_rollback(pp_pep_machine *pep, long long now) {
     uint8_t cause = pp_still_valid(pep, &d->previous, 1); /* RB2: what a commit checks, as it is active anew */
     if (!cause && d->previous.seq < pp_raised(&d->trust, d->previous.stream)) cause = PP_CAUSE_SEQ_REPLAY; /* R4 */
     if (cause) { pp_refuse(pep, cause); return 0; }
-    if (!pp_covers(pep, &d->previous)) { pp_refuse(pep, PP_CAUSE_WIDENING_UNSIGNED); return 0; }
+    int same = d->has_active && memcmp(d->previous.release, d->active.release, 32) == 0; /* RB3: never larger */
+    if (!same && !pp_covers(pep, &d->previous)) { pp_refuse(pep, PP_CAUSE_WIDENING_UNSIGNED); return 0; }
     pp_flip(pep, 1);
     return 0;
 }

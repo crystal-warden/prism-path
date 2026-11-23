@@ -19,6 +19,7 @@ spec stable.
 - **A rollback falls under the same rule, and a rollback to a release identical to the active one is never a widening.**
 - **`prismpath dist widen` signs the statement, and `prismpath dist seal --held` fills in `replaces` and sets `widens` from the comparator.** The controller offers a release's statement before the release, and counts a member staged only once every envelope of the release is.
 - **The corpus gains the widening cases for a PEP that cannot decide, on a host for Rust and on a mesh node for the C core.**
+- **The C core holds a release to the same rule on a mesh node, at staging and at commit, and a rollback to an identical release is never a widening there either, step by step as the Python machine does.**
 
 ### Added: prismpath dist, the reference controller and the pull binding for hosts (2026-11-22)
 
