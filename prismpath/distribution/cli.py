@@ -57,8 +57,8 @@ def add_parser(subparsers) -> None:
                       help='the policy hash this release replaces (default, with --held, the latest release stored '
                            'on the stream below this seq, else none)')
     seal.add_argument('--widens', action='store_true',
-                      help='say the release allows more than the one it replaces; set as well when the comparator '
-                           'finds it larger')
+                      help='say the release allows more than the one it replaces; set as well unless the release is '
+                           'compared with the one --held holds for replaces and is not larger (W7)')
     seal.add_argument('--meta', default=None, metavar='FILE', help='the meta object, JSON')
     seal.add_argument('--qualification', default=None, metavar='FILE',
                       help='for policy.ppt, fill meta from the image and this qualification envelope')
@@ -294,17 +294,21 @@ def ingest(controller) -> list:
 
 # ------------------------------------------------------------------ the owner's commands
 
-def replaced(directory: Optional[str], artifact: str, stream: str, seq: int):
+def replaced(directory: Optional[str], artifact: str, stream: str, seq: int, policy: Optional[str] = None):
     """The (policy hash, body) of the release a new one at `seq` replaces: the latest one the controller in
-    `directory` stores on `stream` below `seq`, with its `artifact` body. ("", None) when there is none."""
+    `directory` stores on `stream` below `seq`, with its `artifact` body, or the latest whose policy hash is
+    `policy` when one is named. ("", None) when there is none, and (`policy`, None) when none is held for it."""
     if directory is None or artifact in kinds.TRUST_ARTIFACTS:
-        return "", None
-    return _replaced_in(_held(directory), artifact, stream, seq)
+        return policy or "", None
+    return _replaced_in(_held(directory), artifact, stream, seq, policy)
 
 
-def _replaced_in(controller, artifact: str, stream: str, seq: int):
+def _replaced_in(controller, artifact: str, stream: str, seq: int, policy: Optional[str] = None):
     below = [info for info in controller.stored.values()
-             if info["stream"] == stream and info["artifact"] == artifact and info["seq"] < seq]
+             if info["stream"] == stream and info["artifact"] == artifact and info["seq"] < seq
+             and (policy is None or info["policy"] == policy)]
+    if not below and policy is not None:
+        return policy, None
     if not below:
         return "", None
     latest = max(below, key=lambda info: info["seq"])
@@ -317,11 +321,11 @@ def seal_cmd(args) -> int:
     meta = _json(args.meta)
     if meta is None and args.artifact == "policy.ppt" and args.qualification:
         meta = policy_meta(body, _json(args.qualification))
-    replaces, previous = replaced(args.held, args.artifact, args.stream, args.seq)
-    if args.replaces is not None:
-        replaces = args.replaces
-    widens = args.widens or (args.artifact not in kinds.TRUST_ARTIFACTS and not replaces) or (
-        previous is not None and widening.compare_artifact(args.artifact, previous, body) == widening.LARGER)
+    replaces, previous = replaced(args.held, args.artifact, args.stream, args.seq, args.replaces)
+    # W7: `widens` is false only when the release is compared with the one it replaces and is not larger, so
+    # a release that replaces nothing, or one the directory holds nothing for, widens
+    widens = args.widens or args.artifact not in kinds.TRUST_ARTIFACTS and (
+        previous is None or widening.compare_artifact(args.artifact, previous, body) != widening.NOT_LARGER)
     try:
         sealed = build_sealed(args.artifact, body, stream=args.stream, seq=args.seq, targets=args.target,
                               signers=_authority(args.key), not_before=args.not_before or int(time.time()),
@@ -441,8 +445,10 @@ def rotate_cmd(args) -> int:
 
 def rekey_cmd(args) -> int:
     """Rotate to the new key retiring the old one, release under the new key, wait for the group to commit, then
-    revoke the old key (R5's order of work). Each statement is stored in the controller directory, which the
-    running `serve` offers."""
+    revoke the old key (R5's order of work). A release that is not the one it replaces goes with a widening
+    statement from that one (W3, W7). Each statement is stored in the controller directory, which the running
+    `serve` offers."""
+    from prismpath.distribution import widening
     from prismpath.hotswap import policy_pack
     controller = _controller(args)
     old, new = _authority([args.old])[0], _authority([args.new])[0]
@@ -458,10 +464,15 @@ def rekey_cmd(args) -> int:
                                         not_before=now, expires=0), rotation)
             body = _read(args.body)
             meta = policy_meta(body, _json(args.qualification)) if args.qualification else {}
-            replaces, _previous = _replaced_in(controller, "policy.ppt", args.stream, args.seq)
-            controller.put(build_sealed("policy.ppt", body, stream=args.stream, seq=args.seq, targets=args.target,
-                                        signers=[new], not_before=args.not_before or now, expires=args.expires,
-                                        meta=meta, replaces=replaces), body)
+            replaces, previous = _replaced_in(controller, "policy.ppt", args.stream, args.seq)
+            widens = previous is None or widening.compare_artifact("policy.ppt", previous, body) != widening.NOT_LARGER
+            release = build_sealed("policy.ppt", body, stream=args.stream, seq=args.seq, targets=args.target,
+                                   signers=[new], not_before=args.not_before or now, expires=args.expires,
+                                   meta=meta, replaces=replaces, widens=widens)
+            if widens:                                   # W3: it covers the release it replaces and no other
+                statement, statement_body = widening_sealed(release, [replaces] if replaces else [], [new])
+                controller.put(statement, statement_body)
+            controller.put(release, body)
             controller.offer(args.group, args.stream, args.seq)
         deadline = time.monotonic() + args.timeout
         while True:
