@@ -53,9 +53,11 @@ INTERVAL = 30.0                                    # B3, H4: seconds between a h
 STAGE_WINDOW = 120.0                               # F3, and 500 milliseconds on the mesh
 MESH_STAGE_WINDOW = 0.5
 COMMIT_WINDOW = 120.0
+MESH_COMMIT_SLACK = 2.0                            # F3: on the mesh the commit window is the delay plus 2 seconds
 SILENT_AFTER = 3                                   # H7: intervals with no accepted record
 STATE_INVALID, STATE_REPLAY, POLICY_MISMATCH, SILENT, HELD = (
     "fleet:state-invalid", "fleet:state-replay", "fleet:policy-mismatch", "fleet:silent", "dist:held")
+MAX_UNKNOWN = 64                                   # the senders of records from no enrolled PEP that are kept
 EAT = 1                                            # H10: the extension type of an Entity Attestation Token
 _ZERO = "0" * 32
 
@@ -239,7 +241,7 @@ class Controller:
 
     def __init__(self, directory: str, instance_key, *, clock: Callable[[], float] = _time.time,
                  interval: float = INTERVAL, stage_window: Optional[float] = None,
-                 commit_window: float = COMMIT_WINDOW):
+                 commit_window: Optional[float] = None):
         if instance_key is None:
             raise ValueError("a controller needs its own instance key to sign its audit log (F5)")
         self.dir, self.instance_key, self.clock = directory, instance_key, clock
@@ -258,7 +260,7 @@ class Controller:
             raise ValueError(f"{directory} holds no controller state")
         controller = cls.__new__(cls)
         controller.dir, controller.instance_key, controller.clock, controller.audit = directory, None, _time.time, None
-        controller.interval, controller.stage_window, controller.commit_window = INTERVAL, None, COMMIT_WINDOW
+        controller.interval, controller.stage_window, controller.commit_window = INTERVAL, None, None
         controller._load()
         return controller
 
@@ -292,7 +294,7 @@ class Controller:
         doc = {"format": FORMAT,
                "members": {pep: member.document() for pep, member in self.members.items()},
                "groups": self.groups, "rollouts": [one.document() for one in self.rollouts], "chain": self.chain,
-               "stored": self.stored, "unknown": self.unknown[-64:], "epoch": self.epoch, "epoch_at": self.epoch_at,
+               "stored": self.stored, "unknown": self.unknown[-MAX_UNKNOWN:], "epoch": self.epoch, "epoch_at": self.epoch_at,
                "anchors": self.anchors}
         canon.atomic_write_bytes(self._state_path, json.dumps(_plain(doc), sort_keys=True).encode("utf-8"))
         canon.fsync_dir(self.dir)
@@ -342,11 +344,8 @@ class Controller:
         """The trust store an anchor's PEPs hold after every trust statement stored, in order."""
         with open(os.path.join(self.dir, "anchors", fingerprint), "rb") as handle:
             store = read_anchor(handle.read()).store()
-        target = self.anchors[fingerprint]["target"]
-        for envelope_id in self.chain:
+        for envelope_id in self.chain:                               # V5, R1: every statement, whatever its targets
             sealed, body = self.sealed(envelope_id), self.blob(self.stored[envelope_id]["body_sha256"])
-            if target not in self.stored[envelope_id]["targets"]:
-                continue
             envelope = env.read(env.unseal(sealed)[0])
             store = (store.apply_revocation(envelope, body) if envelope.artifact == "trust.revocation"
                      else store.apply_rotation(envelope, body))
@@ -368,18 +367,18 @@ class Controller:
         sealed, body = bytes(sealed), bytes(body)
         try:
             envelope = env.read(env.unseal(sealed)[0], reads_meta=True)          # F1: E1 and E11 whatever the kind
+            chained = envelope.artifact in kinds.ON_TRUST_STREAM                # R1: one of the trust chain
             checked = 0
             for fingerprint, anchor in sorted(self.anchors.items()):
-                if anchor["target"] not in envelope.targets:
-                    continue
-                if not envelope.is_trust and anchor["stream"] != envelope.stream:
+                if not chained and (anchor["target"] not in envelope.targets
+                                              or anchor["stream"] != envelope.stream):
                     continue
                 verdict = verify(sealed, body, trust=self._anchor_store(fingerprint), pep=self._view(fingerprint),
                                  now=int(self.clock()), reads_meta=True)
                 if not verdict.ok:
                     raise Refused(verdict.cause, f"for the {anchor['target']} stream {anchor['stream']}")
                 if verdict.unchanged:
-                    raise Refused("dist:trust-replay" if envelope.is_trust else "dist:seq-replay", "already stored")
+                    raise Refused("dist:trust-replay" if chained else "dist:seq-replay", "already stored")
                 checked += 1
             if not checked:
                 raise Refused("dist:target-mismatch", "the controller serves no kind and stream this envelope names")
@@ -397,7 +396,7 @@ class Controller:
                                     "policy": envelope.policy_sha256, "release": envelope.release,
                                     "targets": list(envelope.targets), "body_sha256": envelope.body_sha256,
                                     "sealed_size": len(sealed), "body_size": len(body)}
-        if envelope.is_trust:
+        if envelope.artifact in kinds.ON_TRUST_STREAM:
             self.chain.append(envelope_id)
             self._log("trust", envelope_id=envelope_id, artifact=envelope.artifact, seq=envelope.seq, result="stored")
         else:
@@ -512,6 +511,13 @@ class Controller:
         kinds_of = {self.members[pep].kind for pep in rollout.members if pep in self.members}
         return MESH_STAGE_WINDOW if kinds_of == {"mesh"} else STAGE_WINDOW
 
+    def _commit_window(self, rollout: Rollout) -> float:
+        """F3: 120 seconds, and on the mesh the commit's delay plus 2 seconds, unless the controller sets one."""
+        if self.commit_window is not None:
+            return self.commit_window
+        kinds_of = {self.members[pep].kind for pep in rollout.members if pep in self.members}
+        return rollout.delay_ms / 1000.0 + MESH_COMMIT_SLACK if kinds_of == {"mesh"} else COMMIT_WINDOW
+
     def _send_commit(self, rollout: Rollout, pep: str) -> None:
         rollout.members[pep] = "committing"
         self.members[pep].expected = (rollout.policy, rollout.release, rollout.seq)
@@ -561,7 +567,7 @@ class Controller:
             self._commit_staged(rollout)                                  # a member that staged late
         if "committing" not in states.values():
             self._end(rollout, COMMITTED)
-        elif rollout.state == COMMITTING and now - rollout.committing_since >= self.commit_window:
+        elif rollout.state == COMMITTING and now - rollout.committing_since >= self._commit_window(rollout):
             self._end(rollout, PARTIAL)
 
     def _commit_staged(self, rollout: Rollout) -> None:
@@ -582,18 +588,19 @@ class Controller:
 
     # ------------------------------------------------------------------ what a PEP is sent
     def answer(self, pep: str) -> dict:
-        """B3: the `offers` answer for `pep`. The trust statements it lacks come first and in order (R1), then the
-        envelopes of its group's open rollout for its kind, then its `commit` and `abort` entries. An unknown
-        PEP is given the epoch and nothing else."""
+        """B3: the `offers` answer for `pep`. A PEP behind on the trust chain is offered the statements it lacks,
+        in order, and nothing else until it reports the chain's trust sequence (R1, F6). Then come the envelopes
+        of its group's open rollout for its kind, and its `commit` and `abort` entries. An unknown PEP is given
+        the epoch and nothing else."""
         self.tick()
         out: dict = {"epoch": self.epoch, "offers": [], "commit": [], "abort": []}
         member = self.members.get(pep)
         if member is None:
             return out
-        held = member.last["trust_seq"] if member.last else 0
-        for envelope_id in self.chain[held:]:
-            if member.kind in self.stored[envelope_id]["targets"]:
-                out["offers"].append(self._offer(envelope_id))
+        lacking = self.chain[self._trust_seq_of(member):]
+        if lacking:
+            out["offers"] = [self._offer(envelope_id) for envelope_id in lacking]
+            return out
         for rollout in self.rollouts:
             state = rollout.members.get(pep)
             if rollout.stream != member.stream or state is None:
@@ -607,6 +614,10 @@ class Controller:
             elif state == "aborting":
                 out["abort"].append(entry)
         return out
+
+    @staticmethod
+    def _trust_seq_of(member: Member) -> int:
+        return member.last["trust_seq"] if member.last else 0
 
     def _offer(self, envelope_id: str) -> dict:
         info = self.stored[envelope_id]
@@ -669,7 +680,18 @@ class Controller:
         return allowed
 
     def _progress(self, member: Member, record: state_record.StateRecord) -> None:
-        """F3: what one accepted record says of the rollouts its PEP is in."""
+        """F3: what one accepted record says of the rollouts its PEP is in. While the PEP is behind on the trust
+        chain it was offered only the next statements, so a refusal is that statement's and no rollout moves
+        (F6). Reaching the chain's end clears what was filed against a statement."""
+        if record.trust_seq < len(self.chain):
+            if record.event == "refused" and record.cause:
+                statement = self.chain[record.trust_seq]
+                self._file(member, record.cause,
+                           f"refused the trust statement {statement} at trust seq {record.trust_seq + 1}")
+            return
+        for code, detail in list(member.findings.items()):
+            if detail.startswith("refused the trust statement "):
+                self._clear(member, code)
         for rollout in self.rollouts:
             state = rollout.members.get(member.pep)
             if state is None or not (rollout.open or state == "aborting"):
@@ -679,7 +701,8 @@ class Controller:
                 if record.event == "staged" and record.staged_release == release:
                     rollout.members[member.pep] = "staged"
                 elif record.event == "refused" and record.cause:
-                    rollout.members[member.pep] = "refused"
+                    if record.cause not in kinds.RETRYABLE:          # else the PEP tries it again, still offered
+                        rollout.members[member.pep] = "refused"
                     self._file(member, record.cause, f"refused seq {rollout.seq} of {rollout.stream}")
             elif state == "committing" and record.active_release == release and record.active_seq == rollout.seq:
                 rollout.members[member.pep] = "committed"
@@ -701,8 +724,21 @@ class Controller:
             self._log("cleared", pep=member.pep, finding=code)
 
     def _file_unknown(self, pep: str, detail: str) -> str:
-        self.unknown.append({"pep": pep, "finding": STATE_INVALID, "detail": detail, "at": self.clock()})
-        self._log("finding", pep=pep, finding=STATE_INVALID, detail=detail)
+        """A record from no enrolled PEP, or one that does not read (`pep` empty). One entry per sender, at most
+        `MAX_UNKNOWN` of them with the oldest dropped, and its finding logged at most once an interval, so a
+        flood from outside grows neither the memory, the state file nor the audit log."""
+        now = self.clock()
+        entry = next((one for one in self.unknown if one["pep"] == pep), None)
+        if entry is None:
+            entry = {"pep": pep, "finding": STATE_INVALID, "detail": detail, "count": 0, "first": now, "at": now,
+                     "logged": None}
+            self.unknown.append(entry)
+            del self.unknown[:-MAX_UNKNOWN]
+        entry["count"] += 1
+        entry["at"], entry["detail"] = now, detail
+        if entry["logged"] is None or now - entry["logged"] >= self.interval:
+            entry["logged"] = now
+            self._log("finding", pep=pep, finding=STATE_INVALID, detail=detail, count=entry["count"])
         return STATE_INVALID
 
     # ------------------------------------------------------------------ F4: the fleet view

@@ -38,6 +38,7 @@ MAX_OFFERS = 64 * 1024                             # B9
 MAX_RECORD = 144 + 4 + state_record.MAX_BODY + state_record.MAX_EXTENSIONS + state_record.SIGNATURE_SIZE
 MAX_WAIT = 30.0                                    # a long poll waits at most one interval
 BODY_MISMATCH = "dist:body-mismatch"
+RETRY = kinds.RETRYABLE
 
 
 class FetchFailed(Exception):
@@ -236,7 +237,7 @@ class PullClient:
             return
         verdict = verify_envelope(sealed, trust=pep.trust, pep=pep.view(), now=int(pep.clock()))
         if not verdict.ok or verdict.unchanged:
-            pep.stage(sealed, b"")              # the same verifier refuses it, or answers unchanged, before V9
+            self._staged(envelope_id, pep.stage(sealed, b""))   # the verifier refuses it, or answers unchanged, before V9
             return
         envelope = verdict.envelope
         body = pep.blob(envelope.body_sha256)
@@ -254,7 +255,14 @@ class PullClient:
             if canon.sha256_hex(body) != envelope.body_sha256:
                 pep.refuse_fetched(BODY_MISMATCH, envelope.body_sha256)  # B4
                 return
-        pep.stage(sealed, body)
+        self._staged(envelope_id, pep.stage(sealed, body))
+
+    def _staged(self, envelope_id: str, signed: bytes) -> None:
+        """An envelope refused for a reason that time or the trust chain may remove is tried again on a later
+        poll. Every other envelope tried stays done."""
+        cause = state_record.read(signed, self.pep.instance_key.public_raw).cause
+        if cause in RETRY:
+            self.done.discard(envelope_id)
 
 
 def struct_epoch(record: bytes) -> int:

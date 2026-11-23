@@ -24,6 +24,8 @@ from prismpath import canon
 from prismpath.kernel import canon2, causes
 
 BAD_FORMAT = "dist:bad-format"
+# refusals a later clock or the next trust statement may remove, so the envelope is offered and tried again
+RETRYABLE = frozenset({"dist:not-yet-valid", "dist:unknown-key", "dist:trust-replay"})
 MAX_SEQ = 2 ** 53 - 1                              # E1 seq, and every integer the format carries
 _HEX64 = re.compile(r"[0-9a-f]{64}")
 _STREAM = re.compile(r"[a-z0-9._/-]{1,64}")

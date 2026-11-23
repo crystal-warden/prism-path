@@ -166,9 +166,12 @@ pub fn verify(sealed: &[u8], body: &[u8], trust: &TrustStore, pep: &PepView, now
         time_floor,
     };
     // V5: for this PEP's kind, an artifact its kind uses or a trust kind its machine applies, on its stream
-    // or `@trust`
-    let stream = if envelope.artifact.on_trust_stream() { env::TRUST_STREAM } else { pep.stream.as_str() };
-    if !envelope.targets.contains(&pep.kind.kind()) || envelope.stream != stream || !target.admits(envelope.artifact) {
+    // or `@trust`. A revocation or a rotation is for every PEP whatever `targets` says, since one trust
+    // sequence counts the same for all of them (R1)
+    let on_trust = envelope.artifact.on_trust_stream();
+    let stream = if on_trust { env::TRUST_STREAM } else { pep.stream.as_str() };
+    let named = on_trust || envelope.targets.contains(&pep.kind.kind());
+    if !named || envelope.stream != stream || !target.admits(envelope.artifact) {
         return refuse(TARGET_MISMATCH, envelope, None);
     }
     // ...then the signed size against the bound of that artifact, before any body is read (E6, B9)

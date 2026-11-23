@@ -314,7 +314,8 @@ def test_a_pep_on_another_policy_than_expected_is_policy_mismatch(tmp_path):
 
 
 def test_the_trust_statements_a_pep_lacks_are_offered_first_and_in_order(tmp_path):
-    """R1: the controller offers the trust chain from the PEP's trust sequence on, before any release."""
+    """R1, F6: the controller offers the trust chain from the PEP's trust sequence on, and the release only once
+    the PEP holds the whole chain."""
     fleet = Fleet(tmp_path, names=("p1",))
     first = _dist.trust_statement("trust.rotation", _dist.rotation("B"), seq=1, signers=("A", "B"))
     second = _dist.trust_statement("trust.revocation", _dist.revocation(keys=[_dist.key_id("R")]), seq=2)
@@ -326,8 +327,8 @@ def test_the_trust_statements_a_pep_lacks_are_offered_first_and_in_order(tmp_pat
     fleet.put(OLD, 1)
     fleet.controller.offer("fleet", STREAM, 1)
     answer = fleet.controller.answer(fleet.ids["p1"])
-    assert [offer["artifact"] for offer in answer["offers"]] == ["trust.rotation", "trust.revocation", "policy.ppt"]
-    for _ in range(2):
+    assert [offer["artifact"] for offer in answer["offers"]] == ["trust.rotation", "trust.revocation"]   # F6
+    for _ in range(3):
         fleet.round()
     pep = fleet.points["p1"].pep
     assert pep.trust.trust_seq == 2 and pep.active.seq == 1
@@ -483,3 +484,108 @@ def kinds_read(controller):
     from prismpath.distribution import kinds
     latest = controller.chain[-1]
     return kinds.read_revocation(controller.blob(controller.stored[latest]["body_sha256"]))
+
+
+def test_case_133_a_pep_behind_on_the_trust_chain_is_offered_only_the_statement_it_lacks(tmp_path):
+    """case_133: F6. The release is not offered until the PEP reports the chain's trust sequence, a refusal while
+    it is behind is filed against the statement and leaves the rollout where it was, and once the PEP takes the
+    statement the release is offered and commits."""
+    fleet = Fleet(tmp_path, names=("p1",))
+    controller = fleet.controller
+    body = _dist.rotation("B")
+    later = _dist.NOT_BEFORE + 4000
+    statement = env.seal(env.build("trust.rotation", body, stream=env.TRUST_STREAM, seq=1, targets=["host"],
+                                   not_before=later, expires=0, policy_sha256=env.ZERO_HASH, release=env.ZERO_HASH),
+                         [GEN.test_key("A"), GEN.test_key("B")])
+    fleet.clock.now = later
+    controller.put(statement, body)
+    statement_id = env.envelope_id(env.unseal(statement)[0])
+    fleet.put(OLD, 1)
+    rollout = controller.offer("fleet", STREAM, 1)
+    answer = controller.answer(fleet.ids["p1"])
+    assert [offer["envelope_id"] for offer in answer["offers"]] == [statement_id] and answer["commit"] == []
+    fleet.clock.now = _dist.NOW                       # the PEP's clock is behind the statement's not_before
+    controller.epoch_at = fleet.clock.now
+    fleet.round()
+    member = fleet.member("p1")
+    assert member.findings == {"dist:not-yet-valid": f"refused the trust statement {statement_id} at trust seq 1"}
+    assert rollout.state == "offered" and rollout.members[fleet.ids["p1"]] == "offered"
+    fleet.clock.now = later                           # PullClient tries it again once its clock has caught up
+    for _ in range(3):
+        fleet.round()
+    assert fleet.points["p1"].pep.trust.trust_seq == 1 and fleet.points["p1"].pep.active.seq == 1
+    assert rollout.state == "committed" and fleet.member("p1").findings == {}
+
+
+def test_case_134_the_controller_keeps_one_trust_chain_whatever_a_statement_targets(tmp_path):
+    """case_134: V5, R1, the controller half. A revocation naming only mesh is stored under a host anchor and
+    offered to a host PEP, which applies it, and the rotation after it follows at the next trust sequence."""
+    fleet = Fleet(tmp_path, names=("p1",))
+    controller = fleet.controller
+    body = _dist.revocation(keys=[_dist.key_id("R")])
+    controller.put(_dist.trust_statement("trust.revocation", body, seq=1, targets=("mesh",)), body)
+    rotation = _dist.rotation("B")
+    controller.put(_dist.trust_statement("trust.rotation", rotation, seq=2, signers=("A", "B")), rotation)
+    assert [offer["artifact"] for offer in controller.answer(fleet.ids["p1"])["offers"]] == [
+        "trust.revocation", "trust.rotation"]
+    for _ in range(3):
+        fleet.round()
+    assert fleet.points["p1"].pep.trust.trust_seq == 2 and controller.members[fleet.ids["p1"]].findings == {}
+
+
+def test_records_from_unknown_or_unreadable_senders_are_bounded_and_logged_once_an_interval(tmp_path):
+    """A flood of records that name no enrolled PEP, or that do not read, keeps at most 64 senders in the view
+    and the state, and writes each sender's finding to the audit log at most once an interval."""
+    fleet = Fleet(tmp_path, names=("p1",))
+    controller = fleet.controller
+    stranger = _dist.instance_key("S")
+    record = state_record.read(fleet.record("p1"), fleet.points["p1"].key.public_raw)
+    before = len(controller.audit.events)
+    for counter in range(300):
+        forged = replace(record, pep_id=state_record.pep_id(stranger.public_raw), counter=counter + 1)
+        assert controller.receive(state_record.build(forged, stranger)) == "fleet:state-invalid"
+        assert controller.receive(b"PPSR" + bytes(counter % 7)) == "fleet:state-invalid"
+    senders = {one["pep"]: one for one in controller.unknown}
+    assert senders[state_record.pep_id(stranger.public_raw).hex()]["count"] == 300 and senders[""]["count"] == 300
+    for name in range(100):
+        other = _dist.instance_key(f"S{name}")
+        controller.receive(state_record.build(replace(record, pep_id=state_record.pep_id(other.public_raw)), other))
+    assert len(controller.unknown) == 64
+    logged = [event for event in controller.audit.events[before:] if event["action"] == "finding"]
+    assert len(logged) == 102
+    fleet.clock.now += controller.interval
+    controller.receive(b"PPSR")
+    assert [event for event in controller.audit.events if event["action"] == "finding"][-1]["data"]["pep"] == ""
+    controller.save()
+    assert len(json.loads((fleet.dir / "controller.json").read_text())["unknown"]) <= 64
+
+
+def test_the_commit_window_on_the_mesh_is_the_delay_plus_2_seconds(tmp_path):
+    """F3: a mesh rollout committing with a 120 millisecond delay is partial 2.12 seconds after it began to
+    commit, and the member still out keeps being sent commit until it reports, so a node that restarted and
+    lost the delayed commit it held in memory commits on the next send."""
+    fleet = Fleet(tmp_path, names=("n1", "n2"), kind="mesh", rule="each")
+    fleet.put(OLD, 1)
+    rollout = fleet.controller.offer("fleet", STREAM, 1, delay_ms=120)
+    for name in ("n1", "n2"):
+        fleet.points[name].pep.monotonic = lambda: 0.0          # the delay never falls due before the window ends
+    fleet.round()
+    fleet.round()
+    assert rollout.state == "committing"
+    fleet.clock.now += 2
+    fleet.controller.tick()
+    assert rollout.state == "committing"
+    fleet.clock.now += 1
+    fleet.controller.tick()
+    assert rollout.state == "partial"
+    restarted = fleet.points["n1"].open()                        # B8: the delayed commit is lost on restart
+    assert restarted.due is None
+    fleet.clients["n1"] = PullClient(restarted, LocalTransport(fleet.controller))
+    for name in ("n1", "n2"):
+        fleet.points[name].pep = restarted if name == "n1" else fleet.points[name].pep
+    restarted.monotonic = lambda: 0.0
+    fleet.round()                                                  # n1 is sent commit again and holds it
+    assert restarted.due is not None
+    restarted.monotonic = fleet.points["n2"].pep.monotonic = lambda: 1.0
+    fleet.round()
+    assert rollout.state == "committed" and restarted.active.seq == 1

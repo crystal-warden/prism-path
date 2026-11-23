@@ -80,11 +80,20 @@ body, at most the signed `body_size` (B9). It stages the release, and the contro
 A group runs under one of two rules (F3). Under `each` a member is sent commit as soon as it staged, so one
 refusal stops only that member. Under `all` nobody commits until every member staged, and a refusal or the
 end of the stage window aborts the whole group. The stage window is 120 seconds, and 500 milliseconds on
-the mesh. A rollout whose commit window ends with a member still not committed is `partial` and stays open
-until that member reports.
+the mesh. The commit window is 120 seconds, and on the mesh the commit's delay plus 2 seconds. A rollout
+whose commit window ends with a member still not committed is `partial` and stays open until that member
+reports.
 
 `offer --delay` gives the commit a delay in milliseconds. Each PEP makes the release active at its own
-monotonic time plus the delay (B8), which is how a mesh flips together without a shared clock.
+monotonic time plus the delay (B8), which is how a mesh flips together without a shared clock. A PEP holds
+a delayed commit in memory only, so a restart before it falls due loses it. The controller keeps sending
+commit to every member that has not reported `committed`, after the commit window as well, so the PEP takes
+it again on its next poll or the next send.
+
+A PEP that is behind on the trust chain is offered the trust statements it lacks, in order, and nothing else
+until it holds them all (F6). A refusal in that time is filed against the statement, never against a
+rollout. A revocation or a rotation reaches every PEP whatever its `targets` says, since one trust sequence
+counts the same for all of them.
 
 ## 5. The fleet view
 

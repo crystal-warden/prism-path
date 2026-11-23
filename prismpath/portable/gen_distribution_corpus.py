@@ -469,6 +469,15 @@ def build_cases(kind: str, spec: Dict[int, dict]) -> List[dict]:
     def rotation_doc(rotated: bytes, seq: int) -> dict:
         return {**revocation_doc(rotated, seq), "artifact": "trust.rotation"}
 
+    # V5, R1: a trust statement reaches every PEP whatever its targets
+    only_mesh_sealed = sealed_by(raw(revocation_doc(first, 1, targets=["mesh"])), "A")
+    add(134, "a_revocation_naming_only_mesh", None, only_mesh_sealed, payload=first)
+    every_kind = rotation_body("U")
+    every_sealed = sealed_by(raw({**rotation_doc(every_kind, 2), "targets": sorted(verifier.kinds.TARGET_KINDS)}),
+                             "A", "U")
+    add(134, "then_a_rotation_naming_every_kind", None, every_sealed, payload=every_kind,
+        trust=applied(trust_store(), (only_mesh_sealed, first)))
+
     adding_b = rotation_body("U")
     rotate_sealed = sealed_by(raw(rotation_doc(adding_b, 1)), "A", "U")
     add(72, "signed_by_the_old_and_the_new_key", None, rotate_sealed, payload=adding_b)

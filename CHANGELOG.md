@@ -18,6 +18,9 @@ spec stable.
 - **Every offer, ack, commit, abort, finding and trust statement goes to the controller's own audit log, signed with its instance key.**
 - **A commit may carry a delay, and the PEP makes the release active at its own monotonic time plus that delay, checking it again when the time comes.** The controller drives a whole group over the frame binding with it, and the corpus gains the frame cases for the C core.
 - **The frame assembler admits an envelope through the verifier run to V8 as its own call.**
+- **A revocation or a rotation reaches every enforcement point whatever its `targets` says, in Python and Rust, so the one trust sequence counts the same everywhere.** A PEP behind on the trust chain is offered only the statements it lacks until it holds them all, and a refusal in that time is filed against the statement.
+- **A rollback is held to what a commit checks.** The kept release needs a counting signature and must not be below a floor a revocation raised, and the refusal names the check that failed.
+- **The pull client tries an envelope again only when it was refused for a reason a later clock or trust statement may remove.** The controller keeps at most 64 unknown senders and logs each at most once an interval.
 
 ### Changed: escape hatches work only in a dev build (2026-11-22)
 

@@ -331,8 +331,8 @@ def test_the_command_line_seals_serves_provisions_pulls_and_rekeys_a_host_pep(tm
     """`prismpath dist` end to end at the PEP's and the controller's real clocks: the owner seals into the
     controller's inbox, the controller enrols the PEP and offers, the PEP is provisioned with the fingerprint
     and pulls over HTTP, and `rekey` rotates to a new key, releases under it, waits for the commit and only
-    then revokes the old key, so the PEP never lapses. A host cannot decide larger, so a rollback with no
-    widening statement is refused (RB3)."""
+    then revokes the old key, so the PEP never lapses. A rollback to the release under the revoked key is
+    refused (RB2)."""
     import time as clock
     from prismpath import cli
     from prismpath.distribution import cli as dist_cli
@@ -401,7 +401,39 @@ def test_the_command_line_seals_serves_provisions_pulls_and_rekeys_a_host_pep(tm
     events = [json.loads(line) for line in (state / "dist" / "audit.log").read_text().splitlines() if line.strip()]
     assert "lapsed" not in [event["action"] for event in events]
     code, printed = run("pep", "rollback", "--state", str(state), "--key", keys["p1"])
-    assert code == 1 and printed["cause"] == "dist:widening-unsigned" and printed["active_seq"] == 2
+    assert code == 1 and printed["cause"] == "sig:revoked-key" and printed["active_seq"] == 2
     code, printed = run("fleet", "--dir", str(directory), "--key", keys["C"])
     assert [rollout["state"] for rollout in printed["rollouts"]] == ["committed", "committed"]
     assert printed["trust_seq"] == 2 and printed["peps"][0]["findings"] == {}
+
+
+def test_the_pull_client_tries_again_only_what_time_or_the_trust_chain_may_change(tmp_path):
+    """An envelope refused with dist:not-yet-valid is fetched again on a later poll and staged once the PEP's
+    clock reaches it. One refused for its signature is tried once and never fetched again."""
+    fleet = Fleet(tmp_path, names=("p1",))
+    later = _dist.NOT_BEFORE + 4000
+    fleet.clock.now = later
+    sealed = fleet.put(OLD, 1, not_before=later)
+    fleet.offer(1)
+    envelope_id = env.envelope_id(env.unseal(sealed)[0])
+    fleet.clock.now = _dist.NOW
+    between = Between(fleet.controller)
+    pep = fleet.points["p1"].pep
+    with listening(between) as (base, _server):
+        client = fleet.clients(base)["p1"]
+        client.poll()
+        assert pep.staged is None and envelope_id not in client.done
+        fleet.clock.now = later
+        client.poll()
+    assert pep.staged is not None and between.asked.count(envelope_id) == 2
+
+    other = Fleet(tmp_path / "other", names=("p1",))
+    other.put(OLD, 1)
+    other.offer(1)
+    spoiled = Between(other.controller, blob=lambda name, data: data[:38] + bytes([data[38] ^ 1]) + data[39:]
+                      if name in other.controller.stored else data)
+    with listening(spoiled) as (base, _server):
+        client = other.clients(base)["p1"]
+        for _ in range(3):
+            client.poll()
+    assert spoiled.asked.count(next(iter(other.controller.stored))) == 1

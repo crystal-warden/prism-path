@@ -119,9 +119,11 @@ def _verify(sealed: bytes, body: bytes, trust: TrustStore, pep: PepView, now: in
     except Refused as refused:
         return Verdict(refused.cause)
     # V5: for this PEP's kind, an artifact its kind uses or a trust kind its machine applies, on its stream or
-    # `@trust`
-    stream = env.TRUST_STREAM if envelope.artifact in kinds.ON_TRUST_STREAM else pep.stream
-    if (pep.kind not in envelope.targets or envelope.stream != stream
+    # `@trust`. A revocation or a rotation is for every PEP whatever `targets` says, since one trust sequence
+    # counts the same for all of them (R1)
+    on_trust = envelope.artifact in kinds.ON_TRUST_STREAM
+    stream = env.TRUST_STREAM if on_trust else pep.stream
+    if (not (on_trust or pep.kind in envelope.targets) or envelope.stream != stream
             or not (envelope.artifact in target.uses or envelope.artifact in target.applies)):
         return Verdict("dist:target-mismatch", envelope)
     # ...then the signed size against the bound of that artifact, before any body is read (E6, B9)
