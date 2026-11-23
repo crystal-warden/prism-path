@@ -8,6 +8,15 @@ spec stable.
 
 ## [Unreleased]
 
+### Added: a release that allows more needs the owner's signed widening statement (2026-11-22)
+
+- **An enforcement point stages a release that allows more than its active one only with a `trust.widening` statement of the same release, staged before it, whose `from` is empty or holds the active policy hash.** Otherwise the release is `dist:widening-unsigned`, at staging and again at commit. A first install allows more than no policy, so it needs one too.
+- **A host, a mesh node and the cFS app cannot decide, so they take a release on its signature alone only when its `widens` is false and its `replaces` is their active policy.**
+- **A target that can decide compares for itself and refuses a larger release that says it does not widen, even with a statement.** The comparator walks the finite reading domain of `policy.core` with the agent profile compiler's own walk, and compares host lists, route tables and zone files.
+- **A rollback falls under the same rule, and a rollback to a release identical to the active one is never a widening.**
+- **`prismpath dist widen` signs the statement, and `prismpath dist seal --held` fills in `replaces` and sets `widens` from the comparator.** The controller offers a release's statement before the release, and counts a member staged only once every envelope of the release is.
+- **The corpus gains the widening cases for a PEP that cannot decide, on a host for Rust and on a mesh node for the C core.**
+
 ### Added: prismpath dist, the reference controller and the pull binding for hosts (2026-11-22)
 
 - **`prismpath dist` seals, verifies, revokes, rotates and rekeys on the machine that holds the authority key, and runs the reference controller and a host enforcement point.** `anchor` writes a stream's trust anchor, `enroll`, `offer`, `commit`, `abort` and `fleet` work on the controller's directory beside `serve`, and `pep` provisions a host PEP by fingerprint, pulls, reports its state and rolls back.

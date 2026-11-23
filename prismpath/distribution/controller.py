@@ -466,8 +466,9 @@ class Controller:
         members = sorted(pep for pep, member in self.members.items() if member.group == group and member.stream == stream)
         if not members:
             raise ValueError(f"the group {group} has no member on {stream}")
-        ids = sorted(one for one, info in self.stored.items()
-                     if info["stream"] == stream and info["seq"] == seq and not info["artifact"].startswith("trust.r"))
+        ids = sorted((one for one, info in self.stored.items()
+                      if info["stream"] == stream and info["seq"] == seq and info["artifact"] not in kinds.ON_TRUST_STREAM),
+                     key=lambda one: (self.stored[one]["artifact"] != "trust.widening", one))   # W3: the statement first
         if not ids:
             raise ValueError(f"no release is stored at {stream} seq {seq}")
         releases = {(self.stored[one]["policy"], self.stored[one]["release"]) for one in ids}
