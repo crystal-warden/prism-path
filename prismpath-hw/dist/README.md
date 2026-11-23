@@ -8,8 +8,13 @@ Ed25519, vendored in `prismpath-hw/mesh/main`.
 | File | What it holds |
 |---|---|
 | `pp_canon2.h` | The canon/2 reader. It tells canonical bytes from canon/2 in another spelling and from bytes that are not canon/2, and then reads canonical bytes member by member |
-| `pp_dist.h`, `pp_dist.c` | The sealed container, the envelope scanner, the trust store, the verifier (V2 to V11), the frame reassembly, the enforcement point machine and the signed state record |
+| `pp_dist.h`, `pp_dist.c` | The sealed container, the envelope scanner, the trust store, the verifier (V2 to V11), the frame reassembly, the enforcement point machine with revocation applied, and the signed state record |
 | `host_check.c` | A stdio harness the Python tests drive |
+
+A revocation is applied as soon as it verifies. The PEP holds the latest list and no other, refuses a list that
+drops a key the current one holds with `dist:trust-replay` (R6), keeps the floor a list raises for its own stream,
+and lapses or drops a release that no longer stands (R5). A trust body is held to 16,384 bytes beside the kind's
+640 byte table bound, and the signed size is checked against the right bound before any body is read (E6, V5).
 
 The scanner reads the envelope's members in canonical order and checks of `meta` only that it is an
 object nesting at most three levels that ends inside the envelope, as E9 allows a constrained target. The

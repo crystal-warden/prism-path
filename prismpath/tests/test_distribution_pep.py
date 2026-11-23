@@ -370,6 +370,11 @@ def test_case_107_a_mesh_node_on_hold_keeps_deciding_and_marks_everything(tmp_pa
     _dist.case_107_hold_keeps_deciding_and_marks_everything(*_mesh(tmp_path))
 
 
+def test_case_108_a_revocation_ends_a_mesh_node_s_hold(tmp_path):
+    """case_108: X8, R5, on a modelled mesh node."""
+    _dist.case_108_a_revocation_ends_a_hold(*_mesh(tmp_path))
+
+
 def test_case_110_a_held_mesh_node_never_widens(tmp_path):
     """case_110: X9, on a modelled mesh node."""
     _dist.case_110_a_held_pep_never_widens(*_mesh(tmp_path))
@@ -470,11 +475,12 @@ def test_the_older_path_stays_closed_when_the_floor_file_is_missing(point, tmp_p
 
 
 def test_no_record_is_refused_without_a_cause(point):
-    """H1: a verified trust statement is refused with dist:target-mismatch until its kind is applied, a
-    rollback with nothing kept is an error and no record, and a refused record always carries its cause."""
-    revocation = canon.canon2_bytes({canon.ENCODING_KEY: canon.CANON2, "envelopes": [], "floors": {},
-                                     "format": "prismpath.dist-revocation/1", "keys": [], "policies": []})
-    record = _read(point, point.pep.stage(seal("trust.revocation", revocation, stream="@trust"), revocation))
+    """H1, V5: a trust kind the target's machine does not apply (a rotation, until it does) is refused with
+    dist:target-mismatch, a rollback with nothing kept is an error and no record, and a refused record always
+    carries its cause."""
+    rotation = canon.canon2_bytes({canon.ENCODING_KEY: canon.CANON2, "format": "prismpath.dist-rotation/1",
+                                   "add": _dist.GEN.public_raw(_dist.GEN.test_key("B")).hex(), "retire": ""})
+    record = _read(point, point.pep.stage(seal("trust.rotation", rotation, stream="@trust"), rotation))
     assert (record.event, record.cause) == ("refused", "dist:target-mismatch")
     counter = point.pep.counter
     with pytest.raises(PepRefused):
@@ -509,3 +515,34 @@ def test_a_rollback_on_a_target_that_cannot_decide_needs_a_covering_widening_sta
         record = _read(point, point.pep.rollback())
         assert record.cause == cause, froms
         assert point.pep.active.seq == (seq if cause is None else seq + 1)
+
+
+def test_a_mesh_node_reads_its_stored_envelopes_as_it_staged_them(tmp_path):
+    """E9: a mesh node that staged an envelope whose meta it skips reads it back the same way after a restart."""
+    make, bodies, _decide = _mesh(tmp_path)
+    point = make()
+    doc = _dist.GEN.envelope_doc(bodies[0], targets=["mesh"], meta={**_dist.GEN.image_meta(bodies[0]), "counts": 7})
+    sealed = _dist.env.seal(canon.canon2_bytes(doc), [_dist.GEN.test_key("A")])   # no writer emits it (F1)
+    assert _read(point, point.pep.stage(sealed, bodies[0])).event == "staged"
+    assert point.open().staged.seq == 1
+
+
+def test_case_132_a_mesh_node_takes_a_full_size_list_and_holds_a_table_to_its_own_bound(tmp_path):
+    """case_132: E6, V5, R7, B9, the PEP half (the frame half, a trust body offered over frames at 16,385 bytes,
+    is the frame binding's). A full-size revocation list is applied under the trust bound, and a 641 byte table
+    is dist:too-large from its signed size with no body given."""
+    make, bodies, _decide = _mesh(tmp_path)
+    point = make()
+    assert _dist.GEN.replay(_corpus_case("132_a_full_size_revocation_list_on_mesh"))["cause"] is None
+    assert _dist.GEN.replay(_corpus_case("132_a_641_byte_table_from_its_signed_size_on_mesh"))["cause"] == "dist:too-large"
+    full = bytes.fromhex(_corpus_case("132_a_full_size_revocation_list_on_mesh")["body"])
+    sealed = _dist.seal("trust.revocation", full, seq=1, stream="@trust", targets=("mesh",))
+    assert len(full) > 640 and _read(point, point.pep.stage(sealed, full)).event == "trust-applied"
+    big = bodies[0] + b"\0" * (641 - len(bodies[0]))
+    assert _read(point, point.pep.stage(point.seal(big, seq=2), b"")).cause == "dist:too-large"
+
+
+def _corpus_case(name):
+    import json
+    corpus = json.loads((_dist.REPO / "portable" / "conformance" / "distribution.json").read_text(encoding="utf-8"))
+    return next(case for case in corpus["cases"] if case["name"] == name)

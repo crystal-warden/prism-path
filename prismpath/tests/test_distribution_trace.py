@@ -37,11 +37,13 @@ RESEARCH_ONLY = {99: ROOT / "tools" / "tests" / "test_export.py"}
 C_KINDS = frozenset({"mesh", "cfs"})
 # Cases whose corpus half an implementation's replay decides while another half waits for a later pull
 # request, so the replay does not claim them and they stay in PENDING until that half has its test.
-PARTIAL = {"P": frozenset(), "R": frozenset({16}), "C": frozenset()}   # 16: the Rust PEP allows nothing (PR 14)
+# 16: the Rust PEP allows nothing; 66, 70, 79, 130: the Rust verifier decides them, and applying the list is the
+# Rust PEP's (PR 14)
+PARTIAL = {"P": frozenset({128, 130}), "R": frozenset({16, 66, 70, 79, 130}), "C": frozenset()}
 PENDING = {
-    "P": "30-34 45 49 54-76 79-81 86-98 100 102 104-105 108-109 113 120 123-125",
-    "R": "16-17 23-24 26 31 43 46-48 50-53 62-63 66-77 79 82 84-85 97 101 104 111 123 126",
-    "C": "25 31 60-63 66-74 76 79 82 97 104-105 108-109 122-123",
+    "P": "30 32-34 45 49 54-65 72-76 80-81 86-98 100 102 104-105 109 113 120 123-125 128-131",
+    "R": "16-17 23-24 26 31 43 46-48 50-53 62-63 66 69-70 72-77 79 82 84-85 97 101 104 111 123 126 130-131",
+    "C": "25 60-63 72-74 76 82 97 104-105 109 122-123 131",
 }
 
 
@@ -83,8 +85,8 @@ def _covered(impl: str) -> set:
     return covered
 
 
-def test_the_spec_has_127_numbered_cases_each_naming_rules_and_implementations():
-    assert sorted(SPEC) == list(range(1, 128))
+def test_the_spec_has_132_numbered_cases_each_naming_rules_and_implementations():
+    assert sorted(SPEC) == list(range(1, 133))
     assert all(case["rules"].strip() and case["runs_on"] for case in SPEC.values())
 
 

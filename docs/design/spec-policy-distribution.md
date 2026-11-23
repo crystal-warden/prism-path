@@ -86,7 +86,7 @@ version. An implementation holds them in one table so that a new kind is one row
 | Target | The PEP | Artifacts it needs before it commits | Can it decide "larger" itself |
 |---|---|---|---|
 | `host` | The software tier of `prismpath/hotswap/policy_host.py` | `policy.ppt`, and `policy.spiral` when the `policy.ppt` envelope's `meta` has `packing` | No |
-| `agent` | One agent home. The hook, the decider, the sandbox profile, the egress proxy and the MCP proxy all read it (`prismpath/agent/commands.py`, `load_checked`) | `policy.core`, `egress.hosts` | Yes |
+| `agent` | One agent home. The hook, the decider, the sandbox profile, the egress proxy and the MCP proxy all read it (`prismpath/agent/commands.py`, `load_checked`) | `policy.core`, `egress.hosts`, and `agent.zones` when the owner declares zones | Yes |
 | `gateway` | One gateway home (`prismpath/gateway/proxy.py`) | `policy.core`, `gateway.routes` | Yes for the policy. A changed route table is always a widening |
 | `xdp` | The host preloader in front of the XDP loader (`prismpath-ebpf/net_swap.py`) | `policy.core`, `net.dests`, `net.edge` | Yes |
 | `mesh` | One ESP32 node (`prismpath-hw/mesh/main/ppt_mesh.c`) | `policy.ppt` | No |
@@ -102,6 +102,7 @@ home holds one release, so they cannot hold different versions of one policy.
 | `policy.spiral` | The spiral sidecar bytes (`<name>.ppt.spiral`) | none | Its SHA-256 is the `sidecar_sha256` in the staged `policy.ppt` envelope's `meta.packing`. A missing one is `spiral:sidecar-missing` at commit and a wrong one `spiral:sidecar-hash-mismatch` |
 | `sandbox.profile` | A sandbox profile in canon/2 bytes (`Profile.canonical`) | `compiler` | The PEP compiles the profile from the staged `policy.core` and the bytes must be equal. Optional for `agent`, and checked when present |
 | `egress.hosts` | A canon/2 array of lower case host names, sorted, without repeats. It may be empty | none | Each name is one the egress proxy can read |
+| `agent.zones` | A canon/2 object with `encoding`, `format` `prismpath.dist-zones/1` and `protected`, the owner's protected names, sorted, without repeats, at most 10,000 names of at most 512 characters | none | Each name is one the zone point can read. The body names no path. Where the project and its index are is the home's own setting, and the index is one of the home's control paths. A release with no `agent.zones` declares no zone, and the release id (E10) signs that absence |
 | `gateway.routes` | A route table document in canon/2 bytes | none | `Routes.from_doc` accepts it |
 | `net.dests` | A `prismpath.net_dests/1` destination table in canonical form | none | The table is one the edge can use |
 | `net.edge` | The edge `.ppt` image | `flow_sha256`, `names_sha256`, `qualification` | The table recompiled from the staged `policy.core` and `net.dests` is byte for byte the body |
@@ -147,18 +148,27 @@ carry it, so every certified image hash stays what it was.
 
 **E5.** `expires` is greater than `not_before`, except on a trust kind where it is 0.
 
-**E6.** An envelope is at most 2,048 bytes. A PEP may set a lower bound for the body and refuses a larger
-one with `dist:too-large`. The `mesh` bound is 640 bytes (`TBL_MAX`) and the `cfs` bound is the table
-size.
+**E6.** An envelope is at most 2,048 bytes. A target kind has two bounds for a body, one for the body of an
+artifact it uses and one for the body of a trust kind, and a PEP refuses a larger body with
+`dist:too-large`. For `mesh` the artifact bound is 640 bytes (`TBL_MAX`), and for `cfs` it is the table
+size. The trust bound of every kind is 16,384 bytes, which holds a revocation list of the full size R7
+allows, so the smallest PEP of this version can take any list the authority may write. A PEP may set a
+lower artifact bound of its own and never a lower trust bound.
 
 **E7.** Every envelope of one release carries the same `stream`, `seq`, `policy_sha256`, `release`,
 `replaces` and `widens`.
 
 **E8.** A reader ignores nothing. An unknown artifact kind or target kind is `dist:bad-format`.
 
-**E9.** A PEP on a constrained target reads the envelope with a strict scanner that accepts the members in
-canonical order and skips the value of `meta`. It runs the scanner only on bytes whose signature it has
-already checked (V3 comes before V4).
+**E9.** A target kind whose own check does not read `meta`, which is `mesh` and `cfs`, reads the envelope
+with a strict scanner. The scanner accepts the members in canonical order and skips the value of `meta`
+after checking three things only. It is an object, it nests at most three levels, and it ends inside the
+envelope. The `meta` object counts as level one, and each object or array inside it one level more. Anything else is `dist:bad-format`. The member list of `meta` (E1) and the forms of E11 are not
+checked on those kinds, because nothing there uses the members. Every other reader checks them, and so
+does the controller for every envelope it stores, whatever its targets (F1). The reference
+implementation reads an envelope for a `mesh` or `cfs` PEP the same way the scanner does, so the corpus
+gives one answer per kind. The scanner runs only on bytes whose signature has already been checked (V3
+comes before V4).
 
 **E10.** The release id is the SHA-256 of the canon/2 bytes of the array of `[artifact, body_sha256]`
 pairs of every artifact in the release other than a trust kind, sorted. A `trust.widening` envelope is
@@ -169,8 +179,8 @@ other bodies to use it. It requires the same `release` on every envelope it stag
 reports it (H1), and that is what stops a mix of artifacts that were never released together (TUF's mix
 and match, section 1.5.2).
 
-**E11.** Each `meta` member has a fixed form, and a reader checks the form when it reads the envelope
-(V4), before any check uses the member. Another form is `dist:bad-format`.
+**E11.** Each `meta` member has a fixed form, and a reader that uses `meta` (every kind but those of E9)
+checks the form when it reads the envelope (V4), before any check uses the member. Another form is `dist:bad-format`.
 
 | Artifact | Member | Form |
 |---|---|---|
@@ -254,6 +264,11 @@ envelope and V3 runs before the envelope is read, a version with more than one r
 V3 finds every role under which the envelope is signed (S4) and fails only when there is none. V5 then
 requires the role its artifact needs to be one of them, with `dist:unknown-key` otherwise. The scanner
 still reads only bytes that a held key signed (E9).
+
+**K5.** A trust store holds at most 8 keys and remembers at most 16 retired key ids. A rotation that would
+make a ninth key is refused with `dist:too-large`. When a seventeenth key is retired the oldest retired id
+is forgotten, and a signature by it then reads as one by an unknown key, which is refused all the same.
+The bounds are the same in every implementation, so the smallest PEP and the reference agree.
 
 ## 6. Sequence numbers and the floor
 
@@ -406,10 +421,10 @@ cause reported and nothing is staged.
 
 | Rule | Check | Cause when it fails |
 |---|---|---|
-| V2 | The sealed container reads (S2) and the envelope and body fit the PEP's bounds (E6) | `dist:bad-format`, `dist:too-large` |
+| V2 | The sealed container reads (S2), and the body is no longer than the larger of the PEP's two bounds (E6) | `dist:bad-format`, `dist:too-large` |
 | V3 | The signatures (S3 to S5) | `dist:unknown-key`, `sig:invalid`, `sig:revoked-key` |
 | V4 | The envelope reads (E1, E2, E5, E8, E11) | `document:not-canonical`, `dist:bad-format` |
-| V5 | `targets` holds this PEP's kind, `artifact` is one this kind uses or a trust kind, and `stream` is this PEP's stream or `@trust` for a trust kind | `dist:target-mismatch` |
+| V5 | `targets` holds this PEP's kind, `artifact` is one this kind uses or a trust kind, and `stream` is this PEP's stream or `@trust` for a trust kind. Then the signed `body_size` is within the bound for that artifact (E6), which is checked before any body is read (B9) | `dist:target-mismatch`, then `dist:too-large` |
 | V6 | Time (T3, T4, and X4 for a trust kind) | `dist:not-yet-valid`, `dist:expired` |
 | V7 | The envelope id and the policy hash are not on the revocation list | `dist:revoked` |
 | V8 | The sequence (Q2, Q3, or R1 and O1 for a trust kind) | `dist:seq-replay`, `dist:trust-replay` |
@@ -465,7 +480,8 @@ A release is **larger** than another when some request is treated more permissiv
 order is refuse, then escalate, then allow, and a release is larger when any reading of the finite reading
 domain moves up that order, or when the two policies do not have the same fields. For `egress.hosts` and
 for the address set of `net.dests`, larger means not a subset. For `gateway.routes` any change is larger,
-because a path that loses its route reads as another class. Going from no policy to any policy is larger.
+because a path that loses its route reads as another class. For `agent.zones`, larger means a protected
+name is gone, and a release that drops the artifact drops every name. Going from no policy to any policy is larger.
 
 **W1.** A PEP that can decide (section 3) computes whether the staged release is larger than the active
 one. It does not trust `widens` for that.
@@ -531,9 +547,18 @@ is listed, when its `seq` is below a raised floor, or when it no longer has a co
 release is dropped on the same test. The owner avoids an outage by order of work. Rotate, release under
 the new key, commit, then revoke the old key.
 
-**R6.** A revocation list never restores trust. Removing an entry from a later list does not make a
-refused key or envelope acceptable again unless a floor has passed it, and a key id once in `keys` stays
-refused for the life of the trust store.
+**R6.** A revocation list never restores trust, and a PEP holds the latest list and no more, so its
+memory is bounded by R7. A later list drops an envelope or a policy only after a floor has passed it.
+The PEP cannot check that, since an id does not tell its `seq`, so the tool that seals a list and the
+controller that stores one both check it against the earlier lists and the envelopes they hold, and
+refuse a list that drops an entry no floor has passed or that they cannot place (R8). A key is never
+dropped. A PEP refuses a list that lacks a key id its current list holds with `dist:trust-replay`, so a
+key id once in `keys` stays refused for the life of the trust store. A PEP keeps the entry of `floors`
+for its own stream and need not keep the others.
+
+**R8.** The sealing tool refuses to write, and a controller refuses to store, a revocation list that drops
+a key, or that drops an envelope id or a policy hash whose every envelope it cannot show to be below a
+floor that list or an earlier one raised.
 
 ## 11. Rotation
 
@@ -730,7 +755,8 @@ A record with bit 5 from a target that has no HOLD setting is filed as `fleet:st
 
 **F1.** A controller holds no authority private key. It stores sealed envelopes and bodies and cannot make
 one. It runs the same verifier a PEP runs (V2 to V11, with the target taken from the envelope) before it
-offers anything, and refuses to store what does not verify.
+offers anything, and refuses to store what does not verify. It always reads `meta` in full (E1, E11),
+also for an envelope whose targets all skip it (E9).
 
 **F2.** A controller keeps, per PEP, the enrolled instance key, the target kind, the stream, the group,
 the expected policy hash and `seq`, the last accepted record and the open findings.
@@ -783,8 +809,8 @@ the marker present in the checkout to show that.
 
 Today each substrate has its own signed form. They are `ppt-pack/1` (packs), the `prismpath.core-image/1`
 attestation (agent and gateway homes, and `ImageSig` in the cFS table), `prismpath.net_dests_pack/1`
-(destination tables), `prismpath.grant/1` (grants), `prismpath.cfs-table/1` (`TableSig`) and the mesh's
-`PPTM1` message. Each has its own revocation or none.
+(destination tables), `prismpath.grant/1` (grants), `prismpath.zones.attestation/1` (the agent home's zone
+file), `prismpath.cfs-table/1` (`TableSig`) and the mesh's `PPTM1` message. Each has its own revocation or none.
 
 **L1.** From package version 0.3.0 every writer emits only distribution envelopes. The bodies are the same
 bytes as before, so an image, a table or a core image keeps its hash.
@@ -925,7 +951,7 @@ reports exactly the cause given, or none, and its state after is the one given.
 | 67 | After a key is revoked, a pack signed by it | `sig:revoked-key` | R2 | P R C |
 | 68 | A revocation raises a stream's floor to 9, then a release at 8 | `dist:seq-replay` | R4, Q4 | P R C |
 | 69 | A revocation lists the active envelope, the active policy hash, the only signing key, and a floor above the active `seq` | `no-policy`, event `lapsed`, `dist:revoked`, each time | R5 | P R C |
-| 70 | A later revocation drops a key id an earlier one listed | the key is still refused | R6 | P R C |
+| 70 | A later revocation drops a key id an earlier one listed | `dist:trust-replay`, the list is not applied and the key is still refused | R6 | P R C |
 | 71 | A revocation list with 65 entries | `dist:too-large` | R7 | P R C |
 | 72 | A rotation signed by the old and the new key, then a pack under the new key | applied, committed | O1, O2, O3 | P R C |
 | 73 | After a rotation that retires the old key, a pack signed by the old key, while the release active under it keeps deciding | `sig:revoked-key`, still active | O3, S5 | P R C |
@@ -983,3 +1009,8 @@ reports exactly the cause given, or none, and its state after is the one given.
 | 125 | A record with a type 1 extension whose `eat_nonce` matches, one with an unknown type, and one whose extension was changed after signing | read, skipped, `fleet:state-invalid` | H10 | P |
 | 126 | A `host` release whose `policy.ppt` declares `packing`, with no `policy.spiral`, with a wrong one and with the right one | `spiral:sidecar-missing`, `spiral:sidecar-hash-mismatch`, committed | V11, C2 | P R |
 | 127 | A `policy.ppt` envelope whose `fields` is a string, whose `counts` is an integer, whose `counts` lacks a member, whose `packing` has no `sidecar_sha256`, and a `ppt-pack/1` manifest whose `fields` is a string | `dist:bad-format` four times, then `manifest:bad-format`, and no check raises | E11, V4 | P R |
+| 128 | One signed `policy.ppt` envelope whose `counts` is an integer, read by a `mesh` PEP, by a `host` PEP and by the controller, then for the `mesh` PEP a `meta` that is a string, one nested four levels, and one that runs past the envelope | staged on `mesh`, `dist:bad-format` on `host`, refused by the controller, then `dist:bad-format` three times | E9, E11, F1 | P C |
+| 129 | An `agent` PEP is offered a release whose `agent.zones` lacks a name the active one protects, one with no `agent.zones` at all, and one that adds a name, each with no statement | `dist:widening-unsigned`, `dist:widening-unsigned`, committed | W1, W3, V11 | P |
+| 130 | A list raises a floor past a revoked envelope, the next list drops that envelope, and the envelope is sent again. Then a list that drops an envelope no floor has passed is given to the sealing tool and to a controller | applied, applied with the PEP holding only the latest list, `dist:seq-replay`, then refused by both | R6, R8 | P R C |
+| 131 | A rotation that would make a ninth key, and seventeen keys retired one after another, then a pack signed by the first retired | `dist:too-large`, then `dist:unknown-key` | K5 | P R C |
+| 132 | A `mesh` PEP is sent a revocation list of 64 entries in each list and 16 streams, a `policy.ppt` of 641 bytes, and over frames a trust body offered at 16,385 bytes | applied, `dist:too-large` from the signed `body_size` with no body read, and the transfer dropped with `dist:too-large` | E6, V5, R7, B9 | P C |

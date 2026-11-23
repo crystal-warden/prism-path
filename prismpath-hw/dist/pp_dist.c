@@ -68,7 +68,7 @@ void pp_sha256(const uint8_t *data, size_t len, uint8_t out[32]) {
 /* ------------------------------------------------------------------ the kind table */
 
 static const char *const pp_artifact_names[PP_ART_COUNT] = {
-    "policy.core", "policy.ppt", "policy.spiral", "sandbox.profile", "egress.hosts", "gateway.routes",
+    "policy.core", "policy.ppt", "policy.spiral", "sandbox.profile", "egress.hosts", "agent.zones", "gateway.routes",
     "net.dests", "net.edge", "cfs.table", "grant", "trust.widening", "trust.revocation", "trust.rotation"};
 static const char *const pp_target_names[PP_TGT_COUNT] = {"agent", "cfs", "gateway", "host", "mesh", "xdp"};
 
@@ -82,17 +82,32 @@ const char *pp_target_name(pp_target target) {
 
 #define PP_BIT(kind) (1u << (kind))
 
+/* What a kind's own check (V11) is given: the artifact and its body, and the store and the PEP it is checked
+ * for, which a revocation is held against (R6). */
+struct pp_check_args {
+    pp_artifact artifact;
+    const uint8_t *body;
+    size_t len;
+    const pp_trust *trust;
+    const pp_pep *pep;
+};
+
 /* A target row (kinds.TARGETS): what V5 admits, the trust kinds the machine applies, its body bound and its
  * own V11 check. This core has `mesh`. */
 typedef struct {
     uint32_t uses;     /* a bit per pp_artifact */
     uint32_t applies;  /* the trust kinds its machine applies */
-    long long body_bound;
-    uint8_t (*check)(pp_artifact artifact, const uint8_t *body, size_t len);
+    long long body_bound;  /* the bound on the body of an artifact it uses (E6) */
+    long long trust_bound; /* the bound on a trust body, PP_TRUST_BOUND on every kind (E6) */
+    uint8_t (*check)(const struct pp_check_args *args);
 } pp_row;
 
 static int pp_is_trust(pp_artifact artifact) {
     return artifact == PP_ART_TRUST_WIDENING || artifact == PP_ART_TRUST_REVOCATION || artifact == PP_ART_TRUST_ROTATION;
+}
+
+uint8_t *pp_held_body(pp_release *release, size_t k) {
+    return pp_is_trust(release->held[k].envelope.artifact) ? release->trust_body : release->artifact_body;
 }
 
 static int pp_on_trust_stream(pp_artifact artifact) {
@@ -100,17 +115,23 @@ static int pp_on_trust_stream(pp_artifact artifact) {
 }
 
 static uint8_t pp_read_widening(const uint8_t *body, size_t len);
+static uint8_t pp_check_revocation(const uint8_t *body, size_t len, const pp_trust *trust);
 
 /* `policy.ppt` on a mesh node: the node runs its own table parser and ignores `meta`, so the check is the image
- * check alone (kinds.check_mesh_table). A widening statement is read as its format (W4). */
-static uint8_t pp_mesh_check(pp_artifact artifact, const uint8_t *body, size_t len) {
-    if (artifact == PP_ART_POLICY_PPT) return pp_validate_image(body, len);
-    if (artifact == PP_ART_TRUST_WIDENING) return pp_read_widening(body, len);
-    return PP_CAUSE_TARGET_MISMATCH; /* unreachable: V5 admits nothing else */
+ * check alone (kinds.check_mesh_table). A trust statement is read as its format (W4, section 10), and a revocation
+ * list must hold every key the current one holds (R6). */
+static uint8_t pp_mesh_check(const struct pp_check_args *a) {
+    switch (a->artifact) {
+    case PP_ART_POLICY_PPT: return pp_validate_image(a->body, a->len);
+    case PP_ART_TRUST_WIDENING: return pp_read_widening(a->body, a->len);
+    case PP_ART_TRUST_REVOCATION: return pp_check_revocation(a->body, a->len, a->trust);
+    default: return PP_CAUSE_TARGET_MISMATCH; /* unreachable: V5 admits nothing else */
+    }
 }
 
 static const pp_row *pp_row_of(pp_target kind) {
-    static const pp_row mesh = {PP_BIT(PP_ART_POLICY_PPT), PP_BIT(PP_ART_TRUST_WIDENING), PP_MESH_TABLE_MAX, pp_mesh_check};
+    static const pp_row mesh = {PP_BIT(PP_ART_POLICY_PPT), PP_BIT(PP_ART_TRUST_WIDENING) | PP_BIT(PP_ART_TRUST_REVOCATION),
+                                PP_MESH_TABLE_MAX, PP_TRUST_BOUND, pp_mesh_check};
     return kind == PP_TGT_MESH ? &mesh : NULL;
 }
 
@@ -283,6 +304,84 @@ static uint8_t pp_read_widening(const uint8_t *body, size_t len) {
     return pp_c2_lit(&c, "}") && c.i == c.n ? PP_CAUSE_NONE : PP_CAUSE_BAD_FORMAT;
 }
 
+static int pp_listed(const uint8_t (*list)[32], size_t n, const uint8_t id[32]);
+
+/* A revocation list as read (section 10): its three lists, sorted without repeats, and the floor it raises for one
+ * stream. Counts past 64 are kept so R7 can be told from a list that does not read. */
+typedef struct {
+    uint8_t envelopes[PP_REVOCATION_ENTRIES][32], keys[PP_REVOCATION_ENTRIES][32], policies[PP_REVOCATION_ENTRIES][32];
+    size_t n_envelopes, n_keys, n_policies, n_floors;
+    long long floor;     /* the floor it raises for the stream asked about, 0 for none */
+} pp_revocation_list;
+
+/* A sorted list of hashes without repeats at the cursor, the first 64 kept in `list`, its count in *n. */
+static int pp_hash_list(pp_c2 *c, uint8_t (*list)[32], size_t *n) {
+    uint8_t last[32], hash[32];
+    *n = 0;
+    if (!pp_c2_lit(c, "[")) return 0;
+    if (pp_c2_lit(c, "]")) return 1;
+    for (;;) {
+        if (!pp_scan_hash(c, hash) || (*n && memcmp(last, hash, 32) >= 0)) return 0;
+        memcpy(last, hash, 32);
+        if (*n < PP_REVOCATION_ENTRIES) memcpy(list[*n], hash, 32);
+        (*n)++;
+        if (pp_c2_lit(c, "]")) return 1;
+        if (!pp_c2_lit(c, ",")) return 0;
+    }
+}
+
+/* kinds.read_revocation: the list in `body`, `dist:too-large` past 64 entries a list or 16 streams (R7), and in
+ * `out->floor` the floor it raises for `stream`. */
+static uint8_t pp_read_revocation(const uint8_t *body, size_t len, const char *stream, pp_revocation_list *out) {
+    int form = pp_c2_check(body, len);
+    if (form == PP_C2_NOT_CANONICAL) return PP_CAUSE_NOT_CANONICAL;
+    if (form != PP_C2_OK) return PP_CAUSE_BAD_FORMAT;
+    pp_c2 c = {body, len, 0, 1};
+    memset(out, 0, sizeof *out);
+    if (!pp_c2_lit(&c, "{\"encoding\":\"canon/2\",\"envelopes\":") || !pp_hash_list(&c, out->envelopes, &out->n_envelopes))
+        return PP_CAUSE_BAD_FORMAT;
+    if (!pp_c2_lit(&c, ",\"floors\":{")) return PP_CAUSE_BAD_FORMAT;
+    if (!pp_c2_lit(&c, "}")) {
+        for (;;) {
+            const uint8_t *s;
+            size_t slen;
+            long long seq;
+            if (!pp_c2_plain_string(&c, &s, &slen) || !pp_is_stream(s, slen) || !pp_c2_lit(&c, ":") ||
+                !pp_scan_int(&c, 1, PP_MAX_SEQ, &seq))
+                return PP_CAUSE_BAD_FORMAT;
+            out->n_floors++;
+            if (stream && strlen(stream) == slen && memcmp(stream, s, slen) == 0) out->floor = seq;
+            if (pp_c2_lit(&c, "}")) break;
+            if (!pp_c2_lit(&c, ",")) return PP_CAUSE_BAD_FORMAT;
+        }
+    }
+    if (!pp_c2_lit(&c, ",\"format\":\"prismpath.dist-revocation/1\",\"keys\":") || !pp_hash_list(&c, out->keys, &out->n_keys))
+        return PP_CAUSE_BAD_FORMAT;
+    if (!pp_c2_lit(&c, ",\"policies\":") || !pp_hash_list(&c, out->policies, &out->n_policies)) return PP_CAUSE_BAD_FORMAT;
+    if (!pp_c2_lit(&c, "}") || c.i != c.n) return PP_CAUSE_BAD_FORMAT;
+    if (out->n_envelopes > PP_REVOCATION_ENTRIES || out->n_keys > PP_REVOCATION_ENTRIES ||
+        out->n_policies > PP_REVOCATION_ENTRIES || out->n_floors > PP_REVOCATION_FLOORS)
+        return PP_CAUSE_TOO_LARGE; /* R7 */
+    return PP_CAUSE_NONE;
+}
+
+/* V11 for a revocation: it reads as its format (R7), and it holds every key id the current list holds, since a key
+ * once revoked stays revoked (R6, trust.check_revocation). */
+static uint8_t pp_check_revocation(const uint8_t *body, size_t len, const pp_trust *trust) {
+    static pp_revocation_list list;
+    uint8_t cause = pp_read_revocation(body, len, NULL, &list);
+    if (cause) return cause;
+    for (size_t k = 0; k < trust->n_revoked_keys; k++)
+        if (!pp_listed((const uint8_t (*)[32])list.keys, list.n_keys, trust->revoked_keys[k])) return PP_CAUSE_TRUST_REPLAY;
+    return PP_CAUSE_NONE;
+}
+
+static const pp_key *pp_held_key(const pp_trust *trust, const uint8_t id[32]) {
+    for (size_t k = 0; k < trust->n_keys; k++)
+        if (memcmp(trust->keys[k].id, id, 32) == 0) return &trust->keys[k];
+    return NULL;
+}
+
 /* ------------------------------------------------------------------ the trust store (S3 to S5) */
 
 static int pp_listed(const uint8_t (*list)[32], size_t n, const uint8_t id[32]) {
@@ -405,8 +504,11 @@ void pp_verify(const uint8_t *sealed, size_t sealed_len, const uint8_t *body, si
     size_t envelope_len, n_entries;
     pp_entry entries[PP_MAX_ENTRIES];
     if ((out->cause = pp_unseal(sealed, sealed_len, &envelope, &envelope_len, entries, &n_entries))) return;
-    long long bound = pep->body_bound < row->body_bound ? pep->body_bound : row->body_bound;
-    if ((long long)body_len > bound) { out->cause = PP_CAUSE_TOO_LARGE; return; }
+    long long artifact_bound = pep->body_bound < row->body_bound ? pep->body_bound : row->body_bound;
+    if ((long long)body_len > (artifact_bound > row->trust_bound ? artifact_bound : row->trust_bound)) {
+        out->cause = PP_CAUSE_TOO_LARGE; /* E6: no body past the larger of the two bounds is read */
+        return;
+    }
     /* V3: the signatures, over the bytes as they came and before the scanner reads them (E9) */
     size_t message_len = pp_signed_message(envelope, envelope_len, message);
     if ((out->cause = pp_counting(trust, entries, n_entries, message, message_len))) return;
@@ -419,6 +521,11 @@ void pp_verify(const uint8_t *sealed, size_t sealed_len, const uint8_t *body, si
     if (!(e->targets & PP_BIT(pep->kind)) || strcmp(e->stream, stream) != 0 ||
         !((row->uses | row->applies) & PP_BIT(e->artifact))) {
         out->cause = PP_CAUSE_TARGET_MISMATCH;
+        return;
+    }
+    /* ...then the signed size against the bound of that artifact, before any body is read (E6, B9) */
+    if (e->body_size > (pp_is_trust(e->artifact) ? row->trust_bound : artifact_bound)) {
+        out->cause = PP_CAUSE_TOO_LARGE;
         return;
     }
     /* V6: time, against the larger of the clock and the time floor (T1, T3, T4; X4) */
@@ -451,7 +558,8 @@ void pp_verify(const uint8_t *sealed, size_t sealed_len, const uint8_t *body, si
         return;
     }
     /* V11: the artifact's own check on this kind */
-    out->cause = row->check(e->artifact, body, body_len);
+    struct pp_check_args args = {e->artifact, body, body_len, trust, pep};
+    out->cause = row->check(&args);
 }
 
 /* ------------------------------------------------------------------ the frame binding (B6, B7, B9, B11) */
@@ -459,13 +567,14 @@ void pp_verify(const uint8_t *sealed, size_t sealed_len, const uint8_t *body, si
 static uint32_t pp_u32(const uint8_t *p) { return (uint32_t)p[0] | (uint32_t)p[1] << 8 | (uint32_t)p[2] << 16 | (uint32_t)p[3] << 24; }
 
 void pp_assembler_init(pp_assembler *a, pp_admit_fn admit, void *context, int ordered, size_t limit,
-                       long long body_bound) {
+                       long long artifact_bound) {
     memset(a, 0, sizeof *a);
     a->admit = admit;
     a->context = context;
     a->ordered = ordered;
     a->limit = limit;
-    a->body_bound = body_bound;
+    a->artifact_bound = artifact_bound;
+    a->trust_bound = PP_TRUST_BOUND;
 }
 
 /* The frame layouts of section 8.3: 0 when `frame` is one, else PP_CAUSE_FRAME_INVALID (frames.decode). */
@@ -530,8 +639,9 @@ int pp_assembler_receive(pp_assembler *a, const uint8_t *f, size_t len, uint32_t
             t->sealed_len == sealed_len && t->body_len == body_len)
             return PP_ASM_NONE; /* a repeated offer */
         if (sealed_len < 1 || sealed_len > PP_MAX_SEALED) return pp_drop(a, transfer, PP_CAUSE_FRAME_INVALID, cause);
-        if ((long long)body_len > a->body_bound) return pp_drop(a, transfer, PP_CAUSE_TOO_LARGE, cause);
-        if (body_len > PP_ASSEMBLER_BODY_MAX) return pp_drop(a, transfer, PP_CAUSE_TOO_LARGE, cause);
+        long long larger = a->artifact_bound > a->trust_bound ? a->artifact_bound : a->trust_bound;
+        if ((long long)body_len > larger || body_len > PP_ASSEMBLER_BODY_MAX) /* E6: past both bounds */
+            return pp_drop(a, transfer, PP_CAUSE_TOO_LARGE, cause);
         memset(t, 0, sizeof *t);
         t->active = 1;
         t->transfer = transfer;
@@ -567,9 +677,12 @@ int pp_assembler_receive(pp_assembler *a, const uint8_t *f, size_t len, uint32_t
     pp_sha256(envelope, envelope_len, id);
     if (memcmp(id, t->envelope_prefix, 16) != 0) return pp_drop(a, transfer, PP_CAUSE_FRAME_INVALID, cause); /* B6 */
     long long body_size = 0;
-    if ((why = a->admit(a->context, t->sealed, t->sealed_len, &body_size, t->body_sha256)))
+    pp_artifact artifact = PP_ART_COUNT;
+    if ((why = a->admit(a->context, t->sealed, t->sealed_len, &body_size, t->body_sha256, &artifact)))
         return pp_drop(a, transfer, why, cause);
     if ((size_t)body_size != t->body_len) return pp_drop(a, transfer, PP_CAUSE_FRAME_INVALID, cause);
+    if (body_size > (pp_is_trust(artifact) ? a->trust_bound : a->artifact_bound)) /* E6: the artifact's own bound */
+        return pp_drop(a, transfer, PP_CAUSE_TOO_LARGE, cause);
     t->body_open = 1;
     t->body_missing = t->body_len;
     return pp_body_whole(a, transfer, cause);
@@ -631,7 +744,8 @@ static void pp_emit(pp_pep_machine *pep, uint8_t event, uint8_t cause) {
     pp_prefix(r + 64, d->active.policy_sha256, d->has_active);
     pp_prefix(r + 80, d->active.release, d->has_active);
     pp_le64(r + 96, (uint64_t)(d->has_active ? d->active.seq : 0));
-    pp_le64(r + 104, (uint64_t)d->floor_seq);
+    long long raised = d->trust_reads ? pp_raised(&d->trust, d->stream) : 0;
+    pp_le64(r + 104, (uint64_t)(d->floor_seq > raised ? d->floor_seq : raised)); /* H1, R4: the floor V8 holds */
     pp_prefix(r + 112, d->staged.release, d->has_staged);
     pp_le64(r + 128, (uint64_t)(d->has_staged ? d->staged.seq : 0));
     pp_le64(r + 136, (uint64_t)(d->trust_reads ? d->trust.trust_seq : 0));
@@ -689,9 +803,54 @@ static void pp_lapse(pp_pep_machine *pep, uint8_t cause) {
     pp_emit(pep, PP_EV_LAPSED, cause);
 }
 
-/* X1, X6, X7: an active release past its expiry lapses, or under HOLD is held. */
+/* R5, O3: a held key in the authority role that is not revoked signs the sealed envelope. A retired key still
+ * holds up a release already active under it (trust.holds_up). */
+static int pp_holds_up(const pp_trust *trust, const pp_artifact_held *held) {
+    static uint8_t message[PP_MAX_ENVELOPE + 64];
+    const uint8_t *envelope;
+    size_t envelope_len, n_entries;
+    pp_entry entries[PP_MAX_ENTRIES];
+    if (pp_unseal(held->sealed, held->sealed_len, &envelope, &envelope_len, entries, &n_entries)) return 0;
+    size_t message_len = pp_signed_message(envelope, envelope_len, message);
+    for (size_t k = 0; k < n_entries; k++) {
+        const pp_key *key = pp_held_key(trust, entries[k].key_id);
+        if (key == NULL || key->role != PP_ROLE_AUTHORITY ||
+            pp_listed(trust->revoked_keys, trust->n_revoked_keys, key->id))
+            continue;
+        if (crypto_ed25519_check(entries[k].signature, key->public_key, message, message_len) == 0) return 1;
+    }
+    return 0;
+}
+
+/* R5: a release still stands when no envelope of it is listed by id or policy hash, its seq is not below a floor
+ * a revocation raised, and every envelope of it is still signed by a held key that is not revoked. */
+static int pp_stands(const pp_pep_machine *pep, const pp_release *release) {
+    const pp_trust *t = &pep->d.trust;
+    if (release->seq < pp_raised(t, release->stream)) return 0;
+    for (size_t k = 0; k < release->n; k++) {
+        if (pp_listed(t->revoked_envelopes, t->n_revoked_envelopes, release->held[k].envelope.envelope_id) ||
+            pp_listed(t->revoked_policies, t->n_revoked_policies, release->policy_sha256) ||
+            !pp_holds_up(t, &release->held[k]))
+            return 0;
+    }
+    return 1;
+}
+
+static void pp_drop_fallen_staged(pp_pep_machine *pep) {
+    if (pep->d.has_staged && pep->d.trust_reads && !pp_stands(pep, &pep->d.staged)) {
+        pep->d.has_staged = 0;
+        pp_persist(pep);
+    }
+}
+
+/* What every entry point and the tick run first (pep._check_active): an active release that no longer stands lapses
+ * with dist:revoked (R5, X8), and an expired one lapses or under HOLD is held (X1, X6, X7). */
 static void pp_check_expiry(pp_pep_machine *pep) {
     if (!pep->d.has_active || pep->locked || !pep->d.trust_reads) return;
+    if (!pp_stands(pep, &pep->d.active)) {
+        pp_lapse(pep, PP_CAUSE_REVOKED);
+        return;
+    }
     if (pp_still_valid(pep, &pep->d.active, 0) != PP_CAUSE_EXPIRED) return;
     if (pep->config.expiry_hold) {
         if (pep->held) return;
@@ -769,9 +928,10 @@ int pp_pep_open(pp_pep_machine *pep, const pp_config *config, const pp_durable *
         pep->d.has_pending = 0;
         pp_persist(pep);
     }
-    pp_runtime(pep);
     pep->n_out = 0;
+    pp_drop_fallen_staged(pep); /* R5 and X1 before the runtime, so a release that fell while down never runs */
     pp_check_expiry(pep);
+    pp_runtime(pep);
     return 0;
 }
 
@@ -794,6 +954,35 @@ void pp_pep_provision(pp_pep_machine *pep, const pp_trust *anchor, const char *s
     pp_runtime(pep);
     pp_persist(pep);
     pp_emit(pep, PP_EV_PROVISIONED, 0);
+}
+
+/* trust.apply_revocation: the store after a verified revocation at the next trust sequence (R1). The PEP holds this
+ * list and no other, so what it refuses is bounded by R7 (R2, R6), and a floor the list raises is kept for the
+ * PEP's own stream and only rises (R4). */
+static uint8_t pp_apply_revocation(pp_pep_machine *pep, const pp_envelope *e, const uint8_t *body, size_t len) {
+    static pp_revocation_list list;
+    pp_trust *t = &pep->d.trust;
+    uint8_t cause = pp_read_revocation(body, len, pep->d.stream, &list); /* V11 read it and held it to R6 and R7 */
+    if (cause) return cause;   /* the store is left exactly as it was */
+    memcpy(t->revoked_envelopes, list.envelopes, 32 * list.n_envelopes);
+    memcpy(t->revoked_keys, list.keys, 32 * list.n_keys);
+    memcpy(t->revoked_policies, list.policies, 32 * list.n_policies);
+    t->n_revoked_envelopes = list.n_envelopes;
+    t->n_revoked_keys = list.n_keys;
+    t->n_revoked_policies = list.n_policies;
+    long long raised = pp_raised(t, pep->d.stream);
+    if (list.floor > raised) raised = list.floor;
+    t->n_floors = 0;
+    if (raised) {
+        pp_copy_stream(t->floors[0].stream, pep->d.stream);
+        t->floors[0].seq = raised;
+        t->n_floors = 1;
+    }
+    t->trust_seq = e->seq;
+    memcpy(t->trust_id, e->envelope_id, 32);
+    t->has_trust_id = 1;
+    pp_persist(pep);
+    return 0;
 }
 
 static void pp_refuse(pp_pep_machine *pep, uint8_t cause) {
@@ -832,8 +1021,16 @@ void pp_pep_stage(pp_pep_machine *pep, const uint8_t *sealed, size_t sealed_len,
         pp_persist(pep);
     }
     if (verdict.cause) { pp_refuse(pep, verdict.cause); return; }
-    if (verdict.unchanged) { pp_emit(pep, PP_EV_BEAT, 0); return; } /* Q3 */
+    if (verdict.unchanged) { pp_emit(pep, PP_EV_BEAT, 0); return; } /* Q3, R1 */
     const pp_envelope *e = &verdict.envelope;
+    if (e->artifact == PP_ART_TRUST_REVOCATION) {
+        uint8_t cause = pp_apply_revocation(pep, e, body, body_len); /* B2: applied when it verifies, durable before reported (R3) */
+        if (cause) { pp_refuse(pep, cause); return; }
+        pp_drop_fallen_staged(pep);
+        pp_check_expiry(pep);
+        pp_emit(pep, PP_EV_TRUST_APPLIED, 0);
+        return;
+    }
     if (d->has_staged && strcmp(d->staged.stream, e->stream) == 0 && e->seq < d->staged.seq) {
         pp_refuse(pep, PP_CAUSE_SEQ_REPLAY); /* G2 */
         return;
@@ -854,8 +1051,10 @@ void pp_pep_stage(pp_pep_machine *pep, const uint8_t *sealed, size_t sealed_len,
         if (d->staged.held[k].envelope.artifact == e->artifact) slot = k;
     if (slot == d->staged.n) d->staged.n++;
     d->staged.held[slot].envelope = *e;
+    d->staged.held[slot].sealed_len = sealed_len;
+    memcpy(d->staged.held[slot].sealed, sealed, sealed_len);
     d->staged.held[slot].body_len = body_len;
-    memcpy(d->staged.held[slot].body, body, body_len); /* V2 held the body to the kind's bound */
+    memcpy(pp_held_body(&d->staged, slot), body, body_len); /* V5 held the signed size to the artifact's bound */
     pp_persist(pep);
     pp_emit(pep, PP_EV_STAGED, 0);
 }
@@ -919,7 +1118,7 @@ void pp_pep_abort(pp_pep_machine *pep, const char *stream, long long seq, const 
 static int pp_covers(const pp_pep_machine *pep, const pp_release *kept) {
     for (size_t k = 0; k < kept->n; k++) {
         if (kept->held[k].envelope.artifact != PP_ART_TRUST_WIDENING) continue;
-        const uint8_t *body = kept->held[k].body;
+        const uint8_t *body = pp_held_body((pp_release *)kept, k);
         size_t len = kept->held[k].body_len;
         static const char head[] = "{\"encoding\":\"canon/2\",\"format\":\"prismpath.dist-widening/1\",\"from\":[";
         pp_c2 c = {body, len, 0, 1};

@@ -6,8 +6,9 @@ trust sequence, the threshold and the time floor (T1), and its durable file, a c
 `prismpath.dist-trust-store/1` (K1).
 
 `counting` is S3 to S5, which entries of a sealed envelope count and the one cause when too few do. A store
-that cannot be read refuses every envelope with `dist:unknown-key` (K1). The store changes only by provisioning, a rotation and a revocation
-(K3), applied by the code that owns them. Nothing here verifies any other part of an envelope.
+that cannot be read refuses every envelope with `dist:unknown-key` (K1). The store changes only by provisioning,
+a rotation and a revocation (K3). `apply_revocation` is the store after a verified revocation (R1 to R6). Nothing
+here verifies any other part of an envelope.
 """
 from __future__ import annotations
 
@@ -60,8 +61,9 @@ def _keys_document(keys: Mapping[str, "Key"]) -> dict:
 
 @dataclass(frozen=True)
 class TrustStore:
-    """What an enforcement point holds about keys. `keys` maps a key id to its `Key`. The `revoked_*` sets and `floors` are cumulative (R6): a later list never removes one. A store
-    whose file could not be read has `readable` False and counts nothing."""
+    """What an enforcement point holds about keys. `keys` maps a key id to its `Key`. The `revoked_*` sets are the
+    latest revocation list, which holds every key id an earlier one held (R6), and `floors` the floor revocation
+    raised for the PEP's stream. A store whose file could not be read has `readable` False and counts nothing."""
     keys: Mapping[str, Key] = field(default_factory=dict)
     retired: FrozenSet[str] = frozenset()
     revoked_keys: FrozenSet[str] = frozenset()
@@ -136,6 +138,47 @@ class TrustStore:
     def with_keys(cls, public_keys: Sequence[bytes], role: str = kinds.AUTHORITY, **members) -> "TrustStore":
         """A store holding `public_keys` (32 raw bytes each) in `role`, for provisioning and tests."""
         return cls(keys={canon.sha256_hex(bytes(raw)): Key(bytes(raw), role) for raw in public_keys}, **members)
+
+    # ------------------------------------------------------------------ R1 to R7: revocation
+    def check_revocation(self, body: bytes) -> Optional[str]:
+        """R6 for a revocation list that already reads (V11): it holds every key id the current list holds, since a
+        key once revoked stays revoked. None, or `dist:trust-replay`."""
+        listed = kinds.read_revocation(body)
+        return None if self.revoked_keys <= frozenset(listed["keys"]) else "dist:trust-replay"
+
+    def apply_revocation(self, envelope, body: bytes, stream: Optional[str] = None) -> "TrustStore":
+        """The store after a verified `trust.revocation` (`envelope`, already through V2 to V11, so its `seq` is the
+        trust sequence plus one, R1, and it drops no key, R6). The PEP holds this list and no other, so what it
+        refuses is bounded by R7 (R2, R6). A floor it raises is kept for `stream`, the PEP's own, and only rises
+        (R4). The caller makes the result durable before it reports it (R3)."""
+        if envelope.artifact != "trust.revocation" or envelope.seq != self.trust_seq + 1:
+            raise ValueError("only a verified revocation at the next trust sequence is applied (R1)")
+        if self.check_revocation(body) is not None:
+            raise ValueError("a revocation list that drops a revoked key is never applied (R6)")
+        listed = kinds.read_revocation(body)
+        floors = {name: seq for name, seq in self.floors.items() if stream is None or name == stream}
+        for name, seq in listed["floors"].items():
+            if stream is None or name == stream:
+                floors[name] = max(floors.get(name, 0), seq)
+        return replace(self, revoked_keys=frozenset(listed["keys"]), revoked_envelopes=frozenset(listed["envelopes"]),
+                       revoked_policies=frozenset(listed["policies"]), floors=floors, trust_seq=envelope.seq,
+                       trust_id=envelope.envelope_id)
+
+    def holds_up(self, entries: Sequence[Tuple[str, bytes]], message: bytes, role: str = kinds.AUTHORITY) -> bool:
+        """R5, O3: an entry by a key the store holds in `role`, not revoked, verifies. A retired key still holds up
+        a release already active under it, where it no longer counts for a new envelope (S5)."""
+        from prismpath.hotswap import policy_pack
+        _priv, Public, _ser, InvalidSignature = policy_pack._ed25519()
+        for kid, signature in entries:
+            key = self.keys.get(kid)
+            if key is None or key.role != role or kid in self.revoked_keys:
+                continue
+            try:
+                Public.from_public_bytes(key.public).verify(signature, message)
+                return True
+            except InvalidSignature:
+                continue
+        return False
 
     # ------------------------------------------------------------------ S3 to S5
     def counting(self, entries: Sequence[Tuple[str, bytes]], message: bytes, role: str = kinds.AUTHORITY) -> Verdict:

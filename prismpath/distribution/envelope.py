@@ -106,10 +106,22 @@ def _check_meta(artifact: str, meta: Any) -> None:
         _require(kinds.FORMS[name](value), f"meta {name} is not of its form")
 
 
-def read(envelope_bytes: bytes) -> Envelope:
-    """E1, E2, E5 and E8: the envelope in `envelope_bytes`, or `Refused` with `document:not-canonical` for
+META_DEPTH = 3                                     # E9: the levels of `meta` a scanner that skips it accepts
+
+
+def _depth(value: Any) -> int:
+    if isinstance(value, dict):
+        return 1 + max((_depth(inner) for inner in value.values()), default=0)
+    if isinstance(value, list):
+        return 1 + max((_depth(inner) for inner in value), default=0)
+    return 0
+
+
+def read(envelope_bytes: bytes, *, reads_meta: bool = True) -> Envelope:
+    """E1, E2, E5, E8 and E11: the envelope in `envelope_bytes`, or `Refused` with `document:not-canonical` for
     canon/2 that is not its canonical spelling and `dist:bad-format` for anything else that is not the
-    format."""
+    format. A reader for a kind that does not read `meta` (`reads_meta` false, E9) checks only that `meta` is an
+    object nesting at most three levels inside the envelope, and skips its members."""
     raw = bytes(envelope_bytes)
     _require(0 < len(raw) <= MAX_ENVELOPE, f"an envelope of {len(raw)} bytes")
     doc = load_canonical(raw, "envelope")
@@ -137,7 +149,10 @@ def read(envelope_bytes: bytes) -> Envelope:
         _require(doc["expires"] == 0, "a trust kind's expires is 0")                       # E5, X4
     else:
         _require(doc["expires"] > doc["not_before"], "expires is not above not_before")      # E5
-    _check_meta(artifact, doc["meta"])
+    if reads_meta:
+        _check_meta(artifact, doc["meta"])
+    else:
+        _require(isinstance(doc["meta"], dict) and _depth(doc["meta"]) <= META_DEPTH, "meta is not a bounded object")
     return Envelope(artifact=artifact, body_sha256=doc["body_sha256"], body_size=doc["body_size"],
                     expires=doc["expires"], meta=doc["meta"], not_before=doc["not_before"],
                     policy_sha256=doc["policy_sha256"], release=doc["release"], replaces=doc["replaces"], seq=doc["seq"], stream=stream,

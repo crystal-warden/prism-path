@@ -494,7 +494,8 @@ fn cause_of(refused: Refused) -> String {
 
 /// A target kind's row: the artifacts it needs before it commits (C2), those it needs only when another
 /// artifact of the release asks for them (`policy.spiral`, when the `policy.ppt` declares packing),
-/// whether it can decide larger (W1), the trust kinds its machine applies, and its bound on a body (E6).
+/// whether it can decide larger (W1), the trust kinds its machine applies, its bound on the body of an
+/// artifact it uses and its bound on a trust body, 16,384 bytes for every kind (E6).
 #[derive(Debug, Clone, Copy)]
 pub struct Target {
     pub needs: &'static [ArtifactKind],
@@ -502,7 +503,14 @@ pub struct Target {
     pub when_declared: &'static [ArtifactKind],
     pub applies: &'static [ArtifactKind],
     pub body_bound: i64,
+    pub trust_bound: i64,
 }
+
+/// E6: every kind takes the largest revocation list R7 allows.
+pub const TRUST_BOUND: i64 = 16_384;
+/// R7: the entries of each list of a revocation, and the streams of its floors.
+pub const REVOCATION_ENTRIES: usize = 64;
+pub const REVOCATION_FLOORS: usize = 16;
 
 impl Target {
     /// The artifacts this kind uses, besides the trust kinds it applies.
@@ -524,8 +532,9 @@ impl TargetKind {
                 needs: &[ArtifactKind::PolicyPpt],
                 decides: false,
                 when_declared: &[ArtifactKind::PolicySpiral],
-                applies: &[ArtifactKind::TrustWidening],
+                applies: &[ArtifactKind::TrustWidening, ArtifactKind::TrustRevocation],
                 body_bound: envelope::MAX_BODY,
+                trust_bound: TRUST_BOUND,
             }),
             TargetKind::Agent | TargetKind::Cfs | TargetKind::Gateway | TargetKind::Mesh | TargetKind::Xdp => None,
         }
@@ -712,6 +721,11 @@ pub struct Widening {
 pub fn read_revocation(body: &[u8]) -> Result<Revocation, Refused> {
     let doc: Revocation = load(body, "revocation body")?;
     require(doc.floors.values().all(|seq| (1..=MAX_SEQ).contains(seq)), "revocation floors")?;
+    if [doc.envelopes.len(), doc.keys.len(), doc.policies.len()].iter().any(|length| *length > REVOCATION_ENTRIES)
+        || doc.floors.len() > REVOCATION_FLOORS
+    {
+        return Err(Refused::new(TOO_LARGE, "a revocation list beyond 64 entries or 16 streams")); // R7
+    }
     Ok(doc)
 }
 
@@ -756,6 +770,7 @@ mod tests {
                 assert_eq!(artifact.is_trust(), target.applies.contains(artifact), "{artifact} is used or applied by its kind");
             }
             assert!((0..=envelope::MAX_BODY).contains(&target.body_bound));
+            assert_eq!(target.trust_bound, TRUST_BOUND);
         }
         assert!(ArtifactKind::ALL.iter().all(|artifact| ROLES.contains(&artifact.row().role)));
     }

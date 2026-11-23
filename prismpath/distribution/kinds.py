@@ -84,15 +84,19 @@ class Target:
     artifact of the release asks for them (`policy.spiral`, when the `policy.ppt` declares packing), and
     whether it can decide larger (W1). `uses` is what V5 admits besides the trust kinds in `applies`, the ones
     its machine applies. `expiry_hold` is whether a deployment may choose HOLD at expiry (X6), true only for
-    `mesh` and `cfs`. `body_bound` is the kind's bound on a body (E6), and `checks` the kind's own V11 checks
-    where they differ from the artifact's."""
+    `mesh` and `cfs`. `body_bound` is the kind's bound on the body of an artifact it uses and `trust_bound` its
+    bound on a trust body, 16,384 bytes for every kind, which holds the largest list R7 allows (E6), and `checks` the kind's own V11 checks
+    where they differ from the artifact's. `reads_meta` is false for a kind whose own check does not read `meta`,
+    so its reader only bounds `meta` and skips its members (E9)."""
     needs: FrozenSet[str]
     decides: bool
     when_declared: FrozenSet[str] = frozenset()
     expiry_hold: bool = False
-    applies: FrozenSet[str] = frozenset({"trust.widening"})
+    applies: FrozenSet[str] = frozenset({"trust.widening", "trust.revocation"})
     body_bound: int = 16777215
+    trust_bound: int = 16384
     checks: Any = None
+    reads_meta: bool = True
 
     @property
     def uses(self) -> FrozenSet[str]:
@@ -208,13 +212,15 @@ def _sorted_hashes(value: Any) -> bool:
 
 
 REVOCATION_FORMAT = "prismpath.dist-revocation/1"
+REVOCATION_ENTRIES, REVOCATION_FLOORS = 64, 16       # section 10, R7
 ROTATION_FORMAT = "prismpath.dist-rotation/1"
 WIDENING_FORMAT = "prismpath.dist-widening/1"
 
 
 def read_revocation(body: bytes) -> dict:
     """Section 10: a revocation list, its `envelopes`, `keys` and `policies` sorted hash lists without
-    repeats and `floors` an object of stream names to a `seq`. `Refused` when it does not read."""
+    repeats and `floors` an object of stream names to a `seq`. `Refused` when it does not read, and with
+    `dist:too-large` when a list holds more than 64 entries or `floors` more than 16 streams (R7)."""
     doc = _trust_body(body, REVOCATION_FORMAT, frozenset({"encoding", "envelopes", "floors", "format", "keys",
                                                           "policies"}))
     if not all(_sorted_hashes(doc[name]) for name in ("envelopes", "keys", "policies")):
@@ -223,6 +229,9 @@ def read_revocation(body: bytes) -> dict:
     if not isinstance(floors, dict) or not all(is_stream(stream) and is_int(seq, 1, MAX_SEQ)
                                                for stream, seq in floors.items()):
         raise Refused(BAD_FORMAT, "revocation floors")
+    if any(len(doc[name]) > REVOCATION_ENTRIES for name in ("envelopes", "keys", "policies")) \
+            or len(floors) > REVOCATION_FLOORS:
+        raise Refused("dist:too-large", "a revocation list beyond 64 entries or 16 streams")       # R7
     return doc
 
 
@@ -261,6 +270,7 @@ ARTIFACTS: Dict[str, Artifact] = {
     "policy.spiral": Artifact(check=check_policy_spiral),
     "sandbox.profile": Artifact(frozenset({"compiler"})),
     "egress.hosts": Artifact(),
+    "agent.zones": Artifact(),
     "gateway.routes": Artifact(),
     "net.dests": Artifact(),
     "net.edge": Artifact(frozenset({"flow_sha256", "names_sha256", "qualification"})),
@@ -273,12 +283,13 @@ ARTIFACTS: Dict[str, Artifact] = {
 TRUST_ARTIFACTS = frozenset({"trust.widening", "trust.revocation", "trust.rotation"})
 ON_TRUST_STREAM = frozenset({"trust.revocation", "trust.rotation"})     # R1, O1: they travel on `@trust`
 
+TRUST_BOUND = 16384                                # E6: every kind takes the largest revocation list R7 allows
 MESH_TABLE_MAX = 640                               # E6: TBL_MAX in prismpath-hw/mesh/main/ppt_mesh.c
 
 TARGETS: Dict[str, Target] = {
     "host": Target(needs=frozenset({"policy.ppt"}), decides=False, when_declared=frozenset({"policy.spiral"})),
     "mesh": Target(needs=frozenset({"policy.ppt"}), decides=False, expiry_hold=True, body_bound=MESH_TABLE_MAX,
-                   checks={"policy.ppt": check_mesh_table}),
+                   checks={"policy.ppt": check_mesh_table}, reads_meta=False),
 }
 
 
@@ -287,6 +298,8 @@ def _check_row(name: str, target: Target) -> None:
     trust kinds it applies that are, and a check for every artifact it may verify."""
     if name not in TARGET_KINDS:
         raise ValueError(f"{name!r} is not a target kind of this format")
+    if target.trust_bound != TRUST_BOUND:
+        raise ValueError(f"the {name} row's trust bound is {TRUST_BOUND} bytes, as every kind's (E6)")
     if not target.uses <= set(ARTIFACTS) - TRUST_ARTIFACTS or not target.applies <= TRUST_ARTIFACTS:
         raise ValueError(f"the {name} row names an artifact or a trust kind that is not one")
     if any(target.check_for(artifact) is None for artifact in target.uses | target.applies):

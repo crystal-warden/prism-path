@@ -8,6 +8,14 @@ spec stable.
 
 ## [Unreleased]
 
+### Added: signed revocation lists with a sequence, and fail toward expiry (2026-11-22)
+
+- **An enforcement point applies a signed `trust.revocation` as soon as it verifies, durably before it reports it.** A list is taken only at the trust sequence plus one, and the PEP holds that list and no other, so what it remembers is bounded. Its keys, envelopes and policies are refused, its floor for the PEP's stream only rises, and a list that drops a revoked key is `dist:trust-replay`. A list over 64 entries or 16 streams is `dist:too-large`.
+- **A revocation that removes the ground of the active release lapses it to no policy with `dist:revoked`, and drops a staged release on the same test.** That ends a hold as well. A PEP that never hears of a revocation still stops at the release's expiry.
+- **Every kind takes a trust body up to 16,384 bytes, the largest revocation list allows, beside its own bound for an artifact's body.** The signed `body_size` is held to the bound for its artifact before any body is read, by the verifier, the frame assembler and the Rust host alike.
+- **The Rust host applies the same checks of a revocation list as Python and replays the new revocation cases.**
+- **A mesh node or a cFS app, whose own check does not read `meta`, only checks that it is an object nested at most three levels inside the envelope.** Every other reader checks its members and their forms.
+- **The C core in `prismpath-hw/dist/` applies revocations as the Python machine does.** A mesh node holds the latest list, refuses one that drops a revoked key, keeps the floor a list raises for its own stream, holds a trust body to 16,384 bytes, and is held step by step to the Python machine and frame by frame to `frames.py`.
 ### Fixed: the zone index is a control path and an index the agent could have written reads unknown (2026-11-22)
 
 - **The zone index, `.contextcloud/` by default, can no longer be edited by the agent to claim that protected code reaches nothing.** The hook refuses a write or a mutating command onto it as a control write, both per call sandbox backends hold it read only, and the zones information point answers `unknown` for every path when the agent could have written the index or the Context Cloud program that reads it. `prismpath agent zones set` now records the Context Cloud program and its package directory in the signed zone file, checks both again at hook time, runs the program in a fixed environment with no PYTHON variable, refuses a package the agent could change, and rebuilds an existing index after the zone file is signed.

@@ -12,7 +12,7 @@
 use super::envelope::{self as env, Envelope};
 use super::trust::TrustStore;
 use super::{
-    Hex64, MaybeHex64, Stream, Target, TargetKind, Verdict, AUTHORITY, BODY_MISMATCH, EXPIRED, INCOMPLETE,
+    ArtifactKind, Hex64, MaybeHex64, Stream, Target, TargetKind, Verdict, AUTHORITY, BODY_MISMATCH, EXPIRED, INCOMPLETE,
     NOT_YET_VALID, REVOKED, SEQ_REPLAY, TARGET_MISMATCH, TOO_LARGE, TRUST_REPLAY,
 };
 use serde::{Deserialize, Serialize};
@@ -139,8 +139,10 @@ pub fn verify(sealed: &[u8], body: &[u8], trust: &TrustStore, pep: &PepView, now
         Ok(unsealed) => unsealed,
         Err(refused) => return Verdict::refused(refused.cause),
     };
-    let bound = pep.body_bound.min(pep.kind.target().body_bound); // E6: the PEP's bound, within its kind's
-    if i64::try_from(body.len()).map_or(true, |length| length > bound) {
+    // E6: the PEP's artifact bound within its kind's, and the trust bound every kind has; V2 keeps the larger
+    let target = pep.kind.target();
+    let artifact_bound = pep.body_bound.min(target.body_bound);
+    if i64::try_from(body.len()).map_or(true, |length| length > artifact_bound.max(target.trust_bound)) {
         return Verdict::refused(TOO_LARGE);
     }
     // V3: the signatures, over the bytes as they came and before anything reads them (E9)
@@ -161,10 +163,14 @@ pub fn verify(sealed: &[u8], body: &[u8], trust: &TrustStore, pep: &PepView, now
     };
     // V5: for this PEP's kind, an artifact its kind uses or a trust kind its machine applies, on its stream
     // or `@trust`
-    let target = pep.kind.target();
     let stream = if envelope.artifact.on_trust_stream() { env::TRUST_STREAM } else { pep.stream.as_str() };
     if !envelope.targets.contains(&pep.kind.kind()) || envelope.stream != stream || !target.admits(envelope.artifact) {
         return refuse(TARGET_MISMATCH, envelope, None);
+    }
+    // ...then the signed size against the bound of that artifact, before any body is read (E6, B9)
+    let bound = if envelope.artifact.is_trust() { target.trust_bound } else { artifact_bound };
+    if envelope.body_size > bound {
+        return refuse(TOO_LARGE, envelope, None);
     }
     // V6: time, against the larger of the clock and the time floor (T1, T3, T4; X4 a trust kind never
     // expires). A PEP with no clock has no ground to call an envelope early (T3) and catches up by V13 (T2).
@@ -201,6 +207,14 @@ pub fn verify(sealed: &[u8], body: &[u8], trust: &TrustStore, pep: &PepView, now
     // V11: the artifact's own check
     if let Some(cause) = envelope.artifact.row().check.and_then(|check| check(&envelope, body, pep)) {
         return refuse(&cause, envelope, time_floor);
+    }
+    // R6: a revocation list holds every key id the current one holds, so a revoked key stays revoked
+    if envelope.artifact == ArtifactKind::TrustRevocation {
+        if let Ok(listed) = super::read_revocation(body) {
+            if !trust.revoked_keys.iter().all(|kid| listed.keys.contains(kid)) {
+                return refuse(TRUST_REPLAY, envelope, time_floor);
+            }
+        }
     }
     Verdict { cause: None, envelope: Some(envelope), unchanged: false, time_floor }
 }

@@ -196,7 +196,8 @@ def _python_steps(script: list, *, hold: bool, tmp_path) -> list:
         op, args = step[0], step[1:]
         if op == "provision":
             clock = _dist.Clock(args[1])
-            point = _dist.MeshPep(tmp_path, clock=clock, expiry_response="hold" if hold else "refuse")
+            point = _dist.MeshPep(tmp_path, clock=clock, expiry_response="hold" if hold else "refuse",
+                                  authorities=list(args[2]) if len(args) > 2 else ["A"])
         elif op == "lose":
             names = {"floor": "floor.json", "counter": "counter.json", "trust": "trust.json", "setting": "setting.json"}
             with open(point.pep.store.path(names[args[0]]), "wb") as handle:
@@ -204,11 +205,6 @@ def _python_steps(script: list, *, hold: bool, tmp_path) -> list:
             continue
         elif op == "setting":
             point.expiry_response = "hold" if args[0] else "refuse"
-            continue
-        elif op == "revoke_policy":             # the store as a revocation applied after staging leaves it
-            from dataclasses import replace
-            point.pep.trust = replace(point.pep.trust, revoked_policies=point.pep.trust.revoked_policies | {args[0]})
-            out.append("records")
             continue
         elif op == "restart":
             point.clock.now = args[0]
@@ -246,12 +242,18 @@ def _python_steps(script: list, *, hold: bool, tmp_path) -> list:
 
 
 def _c_lines(script: list, *, hold: bool) -> list:
-    key = _generator().test_key("A")
-    public = _generator().public_raw(key)
-    lines = [f"key {env.key_id(public)} {public.hex()} 0", f"machine {int(hold)} 1 {INSTANCE_SEED}"]
+    first = script[0]
+    authorities = first[3] if first[0] == "provision" and len(first) > 3 else ("A",)
+    lines = []
+    for name in authorities:
+        public = _generator().public_raw(_generator().test_key(name))
+        lines.append(f"key {env.key_id(public)} {public.hex()} 0")
+    lines.append(f"machine {int(hold)} 1 {INSTANCE_SEED}")
     for step in script:
         op, args = step[0], step[1:]
-        if op == "commit":
+        if op == "provision":
+            lines.append(f"provision {args[0]} {args[1]}")
+        elif op == "commit":
             lines.append(f"commit {args[0]} {args[1]} {args[2]} 0 0 {args[3]}")
         elif op == "tick":
             lines.append(f"tick 0 {args[0]}")
@@ -327,9 +329,8 @@ def test_case_024_026_050_077_a_lost_floor_a_clock_set_back_and_expiry_answer_as
               ("commit", S, 4, H[2], N), ("record", "beat", N), ("decide", N)]
     lines = _same(host_check, tmp_path, script)
     revoked = _same(host_check, tmp_path / "revoked", [("provision", S, N), ("stage", _sealed(1, 1), BODIES[1].hex(), N),
-                                                        ("revoke_policy", H[1]), ("commit", S, 1, H[1], N),
-                                                        ("commit", S, 1, H[1], N)])
-    assert _records(revoked[3])[0].cause == "dist:revoked" and _records(revoked[4])[0].cause == "dist:not-staged"
+                                                        _revoke(1, N, policies=[H[1]]), ("commit", S, 1, H[1], N)])
+    assert _records(revoked[2])[-1].event == "trust-applied" and _records(revoked[3])[0].cause == "dist:not-staged"
     assert _records(lines[2])[0].cause == "dist:expired"
     assert _records(lines[6])[0].event == "lapsed" and lines[7] == f"decide {causes.NAMES['dist:policy-lapsed']} 0"
     assert _records(lines[10])[0].cause == "dist:expired"        # the time floor held over the restart
@@ -404,7 +405,7 @@ def _python_events(frames, case: dict, sequence: list, *, ordered: bool, limit: 
     clock = {"ms": 0}
     assembler = frames.Assembler(frames.admit_through_v8(
         lambda sealed, body: verifier.verify(sealed, body, trust=trust, pep=pep, now=case["now"])),
-        clock=lambda: clock["ms"] / 1000, ordered=ordered, limit=limit, body_bound=640)
+        clock=lambda: clock["ms"] / 1000, ordered=ordered, limit=limit, artifact_bound=640)
     out = []
     for data, now_ms in sequence:
         clock["ms"] = now_ms
@@ -489,3 +490,88 @@ def test_case_035_036_037_120_121_the_assembler_answers_frame_for_frame_as_frame
             assert _c_events(host_check, case, sequence, ordered=ordered, limit=limit) == python, (name, limit)
             staged += sum(line.startswith("whole") for line in python)
     assert staged >= (2 if ordered else 5)
+
+
+
+# ------------------------------------------------------------------ the trust statements, against pep.py
+
+def _revoke(seq: int, now: int, signer: str = "A", **lists) -> tuple:
+    body = _dist.revocation(**lists)
+    sealed = _dist.seal("trust.revocation", body, seq=seq, stream="@trust", signer=signer, targets=("mesh",))
+    return ("stage", sealed.hex(), body.hex(), now)
+
+
+def _events(line: str) -> list:
+    return [(record.event, record.cause) for record in _records(line)]
+
+
+def test_case_031_066_067_068_070_071_079_revocations_answer_as_the_python_machine(host_check, tmp_path):
+    """case_031: B2, R3. case_066: R1. case_067: R2. case_068: R4, Q4. case_070: R6, a list that drops a revoked
+    key is dist:trust-replay and the key stays refused. case_071: R7. case_079: X4, E5, a revocation read ten years
+    after it was made. Each step's signed state records are the Python machine's."""
+    many = [hashlib.sha256(bytes([index])).hexdigest() for index in range(65)]
+    b = [_dist.key_id("B")]
+    first = _revoke(1, N, keys=b)
+    script = [("provision", S, N, ("A", "B")), first, first, _revoke(2, N, keys=b, floors={S: 9}),
+              _revoke(3, N), _revoke(1, N, keys=b), _revoke(5, N, keys=b),
+              ("stage", _sealed(1, 8, signer="B"), BODIES[1].hex(), N), ("stage", _sealed(1, 9), BODIES[1].hex(), N),
+              ("stage", _sealed(1, 10), BODIES[1].hex(), N), _revoke(3, N, keys=b, floors={S: 5}), ("record", "beat", N),
+              _revoke(4, N, keys=b, envelopes=many), _revoke(4, N, keys=b, floors={f"s{index}": 1 for index in range(17)}),
+              _revoke(4, N + 10 * 365 * 86400, keys=b, envelopes=many[:4], floors={f"s{index}": 1 for index in range(2)}),
+              ("stage", _sealed(2, 11, signer="B"), BODIES[2].hex(), N), ("restart", N),
+              ("stage", _sealed(2, 11, signer="B"), BODIES[2].hex(), N)]
+    lines = _same(host_check, tmp_path, script)
+    assert _events(lines[1]) == [("trust-applied", None)] and _events(lines[2]) == [("beat", None)]
+    assert _events(lines[3]) == [("trust-applied", None)]
+    assert _events(lines[4])[0][1] == "dist:trust-replay"                  # case 70: a list that drops the key
+    assert _events(lines[5])[0][1] == _events(lines[6])[0][1] == "dist:trust-replay"
+    assert _events(lines[7])[0][1] == "sig:revoked-key" and _events(lines[8])[0][1] == "dist:seq-replay"
+    assert _events(lines[9]) == [("staged", None)] and _events(lines[10]) == [("trust-applied", None)]
+    assert _records(lines[11])[0].floor == 9                               # a lower number never lowers it
+    assert _events(lines[12])[0][1] == _events(lines[13])[0][1] == "dist:too-large"
+    assert _events(lines[14]) == [("trust-applied", None)] and _events(lines[17])[0][1] == "sig:revoked-key"
+
+
+@pytest.mark.parametrize("ground", ["envelope", "policy", "key", "floor"])
+def test_case_069_108_a_revocation_that_removes_the_ground_lapses_the_release_held_or_not(host_check, tmp_path, ground):
+    """case_069: R5. case_108: X8, R5. The active envelope, the policy hash, the only key that signed it or a floor
+    above its seq: the release lapses with dist:revoked and a staged release on that ground is dropped, and a held
+    PEP lapses the same way, which ends the hold."""
+    staged = _dist.seal("policy.ppt", BODIES[0], seq=4, signer="B", targets=("mesh",))
+    active = _dist.seal("policy.ppt", BODIES[0], seq=3, signer="B", targets=("mesh",))
+    lists = {"envelope": {"envelopes": [env.envelope_id(env.unseal(active)[0]), env.envelope_id(env.unseal(staged)[0])]},
+             "policy": {"policies": [H[0]]}, "key": {"keys": [_dist.key_id("B")]}, "floor": {"floors": {S: 5}}}[ground]
+    for hold in (False, True):
+        script = [("provision", S, N, ("A", "B")), ("stage", active.hex(), BODIES[0].hex(), N), ("commit", S, 3, H[0], N),
+                  ("stage", staged.hex(), BODIES[0].hex(), N)]
+        if hold:
+            script += [("tick", E)]
+        script += [_revoke(1, E if hold else N, **lists), ("decide", E if hold else N), ("restart", N), ("decide", N)]
+        lines = _same(host_check, tmp_path / f"{ground}_{hold}", script, hold=hold)
+        applied = _records(lines[-4])
+        assert [(record.event, record.cause) for record in applied] == [("lapsed", "dist:revoked"), ("trust-applied", None)]
+        assert applied[-1].state == "no-policy" and not applied[-1].held and not applied[-1].staged
+
+
+def test_case_132_the_assembler_holds_a_trust_body_and_a_table_to_their_own_bounds(host_check):
+    """case_132: E6, B9, the frame half on a mesh node. A full size revocation list assembles over frames, a body
+    offered at 16,385 bytes drops the transfer, and a 641 byte table is dropped from its signed size once its
+    envelope is admitted, frame for frame as frames.Assembler answers."""
+    frames = _frames_module()
+    full = next(case for case in C_CASES if case["name"].startswith("132_a_full_size_revocation_list"))
+    table = next(case for case in C_CASES if case["name"].startswith("132_a_641_byte_table"))
+    sealed, body = bytes.fromhex(full["sealed"]), bytes.fromhex(full["body"])
+    assert len(body) > 640
+    whole = [(data, 1) for data in frames.frames_for(3, sealed, body, frames.ESPNOW_LIMIT)]
+    prefix = whole[0][0][4:20]
+    past = [(frames.encode(frames.Offer(4, prefix, len(sealed), 16385)), 1)]
+    big = [(data, 1) for data in frames.frames_for(5, bytes.fromhex(table["sealed"]), bytes.fromhex(table["body"]),
+                                                    frames.ESPNOW_LIMIT)]
+    for case, sequence in ((full, whole), (full, past), (table, big)):
+        python = _python_events(frames, case, sequence, ordered=False, limit=frames.ESPNOW_LIMIT)
+        assert _c_events(host_check, case, sequence, ordered=False, limit=frames.ESPNOW_LIMIT) == python
+    assert _python_events(frames, full, whole, ordered=False, limit=frames.ESPNOW_LIMIT)[-1].startswith("whole")
+    assert _python_events(frames, full, past, ordered=False, limit=frames.ESPNOW_LIMIT) == [
+        f"dropped {causes.NAMES['dist:too-large']}"]
+    assert f"dropped {causes.NAMES['dist:too-large']}" in _python_events(frames, table, big, ordered=False,
+                                                                        limit=frames.ESPNOW_LIMIT)
