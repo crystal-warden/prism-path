@@ -381,6 +381,9 @@ def build_cases(kind: str, spec: Dict[int, dict]) -> List[dict]:
     adding_revoked = rotation_body("R")
     add(75, "adding_a_revoked_key", "dist:rotation-invalid", sealed_by(raw(rotation_doc(adding_revoked, 1)), "A", "R"),
         payload=adding_revoked)
+    adding_retired = rotation_body("Q")
+    add(75, "adding_a_retired_key", "dist:rotation-invalid", sealed_by(raw(rotation_doc(adding_retired, 1)), "A", "Q"),
+        payload=adding_retired)
     add(76, "a_rotation_after_a_revocation_at_its_seq", "dist:trust-replay", rotate_sealed, payload=adding_b,
         trust=after_first)
     # K5: at most 8 keys and 16 retired ids

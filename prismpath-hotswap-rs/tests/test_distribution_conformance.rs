@@ -235,6 +235,8 @@ rust_cases! {
     case_075_retiring_an_unknown_key => "075_retiring_an_unknown_key",
     /// case_075: O3, O4.
     case_075_adding_a_revoked_key => "075_adding_a_revoked_key",
+    /// case_075: O4, a retired key never added again.
+    case_075_adding_a_retired_key => "075_adding_a_retired_key",
     /// case_076: O1.
     case_076_a_rotation_after_a_revocation_at_its_seq => "076_a_rotation_after_a_revocation_at_its_seq",
     /// case_131: K5.

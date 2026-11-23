@@ -234,8 +234,8 @@ impl TrustStore {
         let Ok(rotation) = super::read_rotation(body) else { return None };
         let added = rotation.add.raw();
         let added_id = Hex64::of(&added);
-        if instance_key_id == Some(&added_id) || self.revoked_keys.contains(&added_id) {
-            return Some(ROTATION_INVALID); // O4
+        if instance_key_id == Some(&added_id) || self.revoked_keys.contains(&added_id) || self.retired.contains(&added_id) {
+            return Some(ROTATION_INVALID); // O4: never the instance key, a revoked key or a retired one
         }
         if let Some(retire) = &rotation.retire.0 {
             if !self.keys.contains_key(retire) {

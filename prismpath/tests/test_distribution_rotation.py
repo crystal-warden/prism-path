@@ -67,6 +67,14 @@ def test_case_075_a_rotation_that_names_a_key_it_may_not(point):
     assert point.pep.trust.trust_seq == 1
 
 
+def test_case_075_a_rotation_that_adds_a_key_the_store_retired_is_refused(point):
+    """case_075: O4. A retired key does not come back: a rotation adding it is dist:rotation-invalid and the
+    trust sequence does not move."""
+    assert _read(point, point.rotate(1, add="B", retire="A", signers=("A", "B"))).event == "trust-applied"
+    assert _read(point, point.rotate(2, add="A", signers=("B", "A"))).cause == "dist:rotation-invalid"
+    assert point.pep.trust.trust_seq == 1 and _dist.key_id("A") in point.pep.trust.retired
+
+
 def test_case_076_a_rotation_and_a_revocation_share_one_trust_sequence(point):
     """case_076: O1. Whichever comes second at the same seq is dist:trust-replay."""
     point.rotate(1, add="B")

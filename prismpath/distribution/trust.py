@@ -198,14 +198,14 @@ class TrustStore:
                        instance_key_id: Optional[str] = None) -> Optional[str]:
         """O2 to O4 for a rotation whose envelope already counts under this store (V3) and reads (V11): the key in
         `add` signs it too, so it is signed under the store it leaves as well, `add` is neither the PEP's own
-        instance key nor a revoked key, and `retire` names a key the store holds. None, or
-        `dist:rotation-invalid`."""
+        instance key, a revoked key nor a key the store retired, since a retired key does not come back, and
+        `retire` names a key the store holds. None, or `dist:rotation-invalid`."""
         from prismpath.hotswap import policy_pack
         _priv, Public, _ser, InvalidSignature = policy_pack._ed25519()
         doc = kinds.read_rotation(body)
         added = bytes.fromhex(doc["add"])
         added_id = canon.sha256_hex(added)
-        if added_id == instance_key_id or added_id in self.revoked_keys:
+        if added_id == instance_key_id or added_id in self.revoked_keys or added_id in self.retired:
             return ROTATION_INVALID                                  # O4
         if doc["retire"] and doc["retire"] not in self.keys:
             return ROTATION_INVALID                                  # O3
