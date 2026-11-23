@@ -741,3 +741,19 @@ def test_case_082_a_node_never_provisioned_takes_no_rotation(host_check):
     """case_082: P1. It holds no key, so no rotation installs a first one."""
     unprovisioned = _c_steps(host_check, [_rotate(1, N, "B", signers=("B",))], hold=False)
     assert _events(unprovisioned[0]) == [("refused", "dist:unknown-key")]
+
+
+def test_a_rotation_into_a_full_store_holds_the_new_key_as_the_python_machine_does(host_check, tmp_path):
+    """K5 at its bound. With 8 keys that count and 16 retired held, a rotation that adds a key and retires one
+    forgets the oldest retired key and its slot before the new key is held, so the C core keeps the new key as the
+    Python machine does and a pack signed by it is staged on both."""
+    live = ["B", "C", "D", "E", "F", "G", "H"]
+    script = [("provision", S, N, ("A", *live))]
+    for seq in range(1, 18):                                          # 16 to fill the retired ids, then one more
+        name = f"K{seq}"
+        script.append(_rotate(seq, N, name, retire=live.pop(0), signers=("A", name)))
+        live.append(name)
+    script.append(("stage", _sealed(0, 1, signer="K17"), BODIES[0].hex(), N))
+    lines = _same(host_check, tmp_path, script)
+    assert all(_events(line) == [("trust-applied", None)] for line in lines[1:18])
+    assert _events(lines[18]) == [("staged", None)]

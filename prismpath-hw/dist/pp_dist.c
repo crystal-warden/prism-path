@@ -1086,22 +1086,15 @@ static uint8_t pp_apply_revocation(pp_pep_machine *pep, const pp_envelope *e, co
     return 0;
 }
 
-/* trust.apply_rotation: the store after a verified rotation at the next trust sequence (O1). The new key is held in
- * the authority role and the one it names is retired (O3), its id kept in order, oldest first. A seventeenth
- * retired id forgets the oldest, and its key with it (K5). */
+/* trust.apply_rotation: the store after a verified rotation at the next trust sequence (O1). The one it names is
+ * retired (O3), its id kept in order, oldest first, and a seventeenth retired id forgets the oldest and its key
+ * (K5). Only then is the new key held in the authority role, so a store at its bound of 8 keys that count and 16
+ * retired has the slot the forgotten key freed. */
 static void pp_apply_rotation(pp_pep_machine *pep, const pp_envelope *e, const uint8_t *body, size_t len) {
     pp_trust *t = &pep->d.trust;
     uint8_t add[32], retire[32], id[32];
     int has_retire = 0;
     pp_read_rotation(body, len, add, &has_retire, retire); /* V11 read it and held it to O2 to O4 and K5 */
-    pp_sha256(add, 32, id);
-    pp_key *held = (pp_key *)pp_held_key(t, id);
-    if (held == NULL && t->n_keys < PP_MAX_HELD_KEYS) held = &t->keys[t->n_keys++];
-    if (held != NULL) {
-        memcpy(held->id, id, 32);
-        memcpy(held->public_key, add, 32);
-        held->role = PP_ROLE_AUTHORITY;
-    }
     if (has_retire && !pp_listed(t->retired, t->n_retired, retire)) {
         if (t->n_retired == PP_MAX_RETIRED) { /* K5: forget the oldest retired id and its key */
             for (size_t k = 0; k < t->n_keys; k++)
@@ -1114,6 +1107,14 @@ static void pp_apply_rotation(pp_pep_machine *pep, const pp_envelope *e, const u
             t->n_retired--;
         }
         memcpy(t->retired[t->n_retired++], retire, 32);
+    }
+    pp_sha256(add, 32, id);
+    pp_key *held = (pp_key *)pp_held_key(t, id);
+    if (held == NULL && t->n_keys < PP_MAX_HELD_KEYS) held = &t->keys[t->n_keys++];
+    if (held != NULL) {
+        memcpy(held->id, id, 32);
+        memcpy(held->public_key, add, 32);
+        held->role = PP_ROLE_AUTHORITY;
     }
     t->trust_seq = e->seq;
     memcpy(t->trust_id, e->envelope_id, 32);
