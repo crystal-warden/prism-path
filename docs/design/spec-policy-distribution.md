@@ -493,7 +493,11 @@ the core image inside it, as a `policy.core` is, and any other change of the tab
 one. It does not trust `widens` for that.
 
 **W2.** A PEP that cannot decide treats the release as not larger only when `widens` is `false` and
-`replaces` is the policy hash it has active. In every other case it treats the release as larger.
+`replaces` is the policy hash it has active. In every other case it treats the release as larger. It
+still makes every comparison it can, and what it computes as larger is larger whatever `widens` says
+(W6). A `host` or a `mesh` PEP can make one. A table has no order, so a staged table that is not byte
+for byte the active one is larger. On those kinds a release goes in on its signature alone only when it
+is a renewal.
 
 **W3.** A release that is larger is staged only when a `trust.widening` envelope of the same release is
 staged with it. Otherwise the cause is `dist:widening-unsigned`.
@@ -959,8 +963,8 @@ reports exactly the cause given, or none, and its state after is the one given.
 | 57 | An `agent` PEP is offered a policy that allows less | committed on its ordinary signature | W1 | P |
 | 58 | An `agent` PEP is offered a policy that moves a reading from refuse to escalate | `dist:widening-unsigned` | W1 | P |
 | 59 | An `agent` PEP is offered a host list with one more host, and a `gateway` PEP a changed route table | `dist:widening-unsigned` each | W1 | P |
-| 60 | A `mesh` PEP is offered `widens` false with `replaces` equal to its active hash | committed | W2 | P C |
-| 61 | A `mesh` PEP is offered `widens` false with `replaces` another hash, and `widens` true, each without a statement | `dist:widening-unsigned` each | W2, W3 | P C |
+| 60 | A `mesh` PEP is offered the table it has active again at a higher `seq`, with `widens` false and `replaces` its active hash, and a `cfs` PEP a table with another core image, `widens` false and `replaces` its active hash | committed each, the first as a renewal and the second on the signer's word | W2 | P C |
+| 61 | A `mesh` PEP is offered `widens` false with `replaces` another hash, `widens` true, and another table with `widens` false and `replaces` its active hash, each without a statement, and the last again with a covering statement | `dist:widening-unsigned` each time, the last because the signer's word is wrong | W2, W3, W6 | P C |
 | 62 | A widening statement whose `from` holds the active hash, one whose `from` is empty, and one whose `from` holds only another hash | committed, committed, `dist:widening-unsigned` | W4, W5 | P R C |
 | 63 | A first install with no statement, and with one | `dist:widening-unsigned`, committed | W2, W3 | P R C |
 | 64 | A statement is present and a deciding PEP computes larger while `widens` is false | `dist:widening-unsigned` | W6 | P |
