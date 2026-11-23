@@ -215,19 +215,20 @@ class Rollout:
     started: float
     members: Dict[str, str]
     previous: Dict[str, List] = field(default_factory=dict)
+    acks: Dict[str, int] = field(default_factory=dict)             # staged acks per member, one per envelope
     committing_since: float = 0.0
     delay_ms: int = 0
 
     def document(self) -> dict:
         return {"group": self.group, "rule": self.rule, "stream": self.stream, "seq": self.seq, "policy": self.policy,
                 "release": self.release, "envelopes": list(self.envelopes), "state": self.state,
-                "started": self.started, "members": dict(self.members), "previous": dict(self.previous),
+                "started": self.started, "members": dict(self.members), "previous": dict(self.previous), "acks": dict(self.acks),
                 "committing_since": self.committing_since, "delay_ms": self.delay_ms}
 
     @classmethod
     def from_document(cls, doc: dict) -> "Rollout":
         return cls(**{**doc, "envelopes": list(doc["envelopes"]), "members": dict(doc["members"]),
-                      "previous": dict(doc["previous"])})
+                      "previous": dict(doc["previous"]), "acks": dict(doc["acks"])})
 
     @property
     def open(self) -> bool:
@@ -699,7 +700,10 @@ class Controller:
             release = bytes.fromhex(_prefix(rollout.release))
             if state == OFFERED:
                 if record.event == "staged" and record.staged_release == release:
-                    rollout.members[member.pep] = "staged"
+                    rollout.acks[member.pep] = rollout.acks.get(member.pep, 0) + 1     # one ack per envelope
+                    offered = sum(1 for one in rollout.envelopes if member.kind in self.stored[one]["targets"])
+                    if rollout.acks[member.pep] >= offered:
+                        rollout.members[member.pep] = "staged"
                 elif record.event == "refused" and record.cause:
                     if record.cause not in kinds.RETRYABLE:          # else the PEP tries it again, still offered
                         rollout.members[member.pep] = "refused"

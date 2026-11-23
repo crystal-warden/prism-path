@@ -23,6 +23,7 @@ import hashlib
 import http.client
 import json
 import threading
+import time
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Optional, Tuple
@@ -340,9 +341,10 @@ class _Handler(BaseHTTPRequestHandler):
                 wait = 0.0
             data, etag = self._answer(pep)
             asked = self.headers.get("If-None-Match")
-            if asked == etag and wait:
+            deadline = time.monotonic() + wait
+            while asked == etag and time.monotonic() < deadline:       # a long poll ends when the answer changes
                 with self.server.changed:
-                    self.server.changed.wait(wait)
+                    self.server.changed.wait(max(0.0, deadline - time.monotonic()))
                 data, etag = self._answer(pep)
             if asked == etag:
                 return self._send(304, etag=etag)

@@ -589,3 +589,26 @@ def test_the_commit_window_on_the_mesh_is_the_delay_plus_2_seconds(tmp_path):
     restarted.monotonic = fleet.points["n2"].pep.monotonic = lambda: 1.0
     fleet.round()
     assert rollout.state == "committed" and restarted.active.seq == 1
+
+
+def test_a_member_is_staged_only_once_every_envelope_of_the_release_is(tmp_path):
+    """F3: a release of two envelopes, an image and its spiral sidecar, is staged on a member only when both
+    acks came, so the commit is not sent early and the release commits whole."""
+    fleet = Fleet(tmp_path, names=("p1",))
+    sidecar = b"spiral sidecar bytes"
+    meta = {**GEN.image_meta(OLD), "packing": {"profile": "spiral", "sidecar_sha256": H(sidecar)}}
+    release = env.release_id([("policy.ppt", H(OLD)), ("policy.spiral", H(sidecar))])
+    fleet.controller.put(_dist.seal("policy.ppt", OLD, meta=meta, release=release), OLD)
+    fleet.controller.put(_dist.seal("policy.spiral", sidecar, release=release, policy_sha256=H(OLD)), sidecar)
+    rollout = fleet.controller.offer("fleet", STREAM, 1)
+    pep = fleet.points["p1"].pep
+    pep.see_epoch(fleet.controller.epoch)
+    first = rollout.envelopes[0]
+    info = fleet.controller.stored[first]
+    pep.stage(fleet.controller.sealed(first), fleet.controller.blob(info["body_sha256"]))
+    for record in pep.drain():
+        fleet.controller.receive(record)
+    assert rollout.members[fleet.ids["p1"]] == "offered" and fleet.controller.answer(fleet.ids["p1"])["commit"] == []
+    for _ in range(3):
+        fleet.round()
+    assert rollout.state == "committed" and pep.active.bodies["policy.spiral"] == sidecar

@@ -477,9 +477,7 @@ def test_the_older_path_stays_closed_when_the_floor_file_is_missing(point, tmp_p
 def test_no_record_is_refused_without_a_cause(point):
     """H1: a refusal always carries its cause, a rollback with nothing kept is an error and no record, and a
     refused record without a cause cannot be built."""
-    rotation = _dist.rotation("B")
-    sealed = _dist.trust_statement("trust.rotation", rotation, seq=1, signers=("A", "B"), targets=("mesh",))
-    record = _read(point, point.pep.stage(sealed, rotation))
+    record = _read(point, point.pep.stage(seal("policy.ppt", OLD, targets=("mesh",)), OLD))
     assert (record.event, record.cause) == ("refused", "dist:target-mismatch")
     counter = point.pep.counter
     with pytest.raises(PepRefused):

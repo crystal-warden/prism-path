@@ -256,7 +256,12 @@ def test_the_offers_answer_carries_an_etag_and_answers_304_or_waits_while_nothin
         thread = threading.Thread(target=lambda: waited.append(transport.offers(pep_id, wait=10)))
         thread.start()
         client = PullClient(fleet.points["p1"].pep, HttpTransport(base))
-        client.poll()                                   # stages, and its record wakes the long poll
+        import time
+        time.sleep(0.5)                                 # the long poll is waiting by now
+        with fleet.controller.locked() as controller:   # a state record that changes nothing in the answer
+            controller.receive(b"PPSR")
+        server.notify()
+        client.poll()                                   # stages, and its record changes the answer
         thread.join(15)
         assert waited and waited[0] is not None and waited[0]["commit"]
 
