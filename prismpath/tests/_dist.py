@@ -13,6 +13,7 @@ from typing import Callable, List, Optional
 from prismpath import canon
 from prismpath.distribution import envelope as env
 from prismpath.distribution import trust as trust_module
+from prismpath.distribution.adapters import Adapter
 from prismpath.distribution.adapters.host import HostAdapter
 from prismpath.distribution import state_record
 from prismpath.distribution.pep import Pep, PepRefused
@@ -205,19 +206,87 @@ class MeshPep(Point):
 
 
 def release_with_statement(point: "Point", body: bytes, seq: int, *, widen: bool, replaces: str,
-                           froms=(), **seal_args) -> List[tuple]:
-    """The (sealed, body) pairs a controller stores for one release of `body` on `point`'s kind: the widening
-    statement first when `widen`, then the release, both with `replaces` (E7)."""
+                           froms=None, **seal_args) -> List[tuple]:
+    """The (sealed, body) pairs a controller stores for one release of `body` on `point`'s kind. With `widen`
+    the release says it widens and its widening statement, from `replaces` (any policy when it replaces
+    nothing) unless `froms` is given, comes first (W3, W7). Every envelope shares `replaces` and `widens` (E7)."""
+    seal_args.setdefault("widens", widen)
     release = seal_args.get("release") or env.release_id([(point.artifact, canon.sha256_hex(body))])
     policy = seal_args.get("policy_sha256") or point.policy_of(body)
     pairs = []
     if widen:
-        statement = widening(froms)
+        statement = widening(([replaces] if replaces else []) if froms is None else froms)
         pairs.append((seal("trust.widening", statement, seq=seq, release=release, policy_sha256=policy,
-                           targets=(point.kind,), replaces=replaces, signer=seal_args.get("signer", "A")),
-                      statement))
+                           targets=(point.kind,), replaces=replaces, widens=seal_args["widens"],
+                           signer=seal_args.get("signer", "A")), statement))
     pairs.append((point.seal(body, seq=seq, replaces=replaces, **seal_args), body))
     return pairs
+
+
+HOSTS = canon.canon2_bytes(["api.example.com"])
+
+
+class ModelAgent(Adapter):
+    """A model of an agent home that holds the committed release in memory, as the mesh model holds its table.
+    The agent home itself is PR 9's."""
+    kind = "agent"
+
+    def __init__(self):
+        self.running = None
+
+    def activate(self, release) -> None:
+        self.running = release
+
+    def deactivate(self, cause: str) -> None:
+        self.running = None
+
+
+@dataclass
+class AgentPep(Point):
+    """A PEP of the `agent` row over `ModelAgent`. A release is its `policy.core` and its `egress.hosts`,
+    `hosts` unless a call names others."""
+    kind: str = "agent"
+    artifact: str = "policy.core"
+    hosts: bytes = HOSTS
+
+    def adapter(self):
+        return ModelAgent()
+
+    def release_of(self, body: bytes, hosts: Optional[bytes] = None) -> str:
+        return env.release_id([("egress.hosts", canon.sha256_hex(hosts or self.hosts)),
+                               ("policy.core", canon.sha256_hex(body))])
+
+    def seal(self, body: bytes, seq: int = 1, hosts: Optional[bytes] = None, **seal_args) -> bytes:
+        seal_args.setdefault("release", self.release_of(body, hosts))
+        return super().seal(body, seq, **seal_args)
+
+    def seal_hosts(self, body: bytes, seq: int = 1, hosts: Optional[bytes] = None, **seal_args) -> bytes:
+        """The `egress.hosts` envelope of the release of `body` at `seq`."""
+        hosts = hosts or self.hosts
+        seal_args.setdefault("release", self.release_of(body, hosts))
+        seal_args.setdefault("policy_sha256", self.policy_of(body))
+        active = self.pep.active
+        seal_args.setdefault("replaces", active.policy_sha256 if active else "")
+        return seal("egress.hosts", hosts, seq=seq, targets=(self.kind,), **seal_args)
+
+    def widen(self, body: bytes, seq: int = 1, froms=(), *, pep: Optional[Pep] = None, hosts: Optional[bytes] = None,
+              **seal_args) -> bytes:
+        seal_args.setdefault("release", self.release_of(body, hosts))
+        return super().widen(body, seq, froms, pep=pep, **seal_args)
+
+    def stage(self, body: bytes, seq: int = 1, *, pep: Optional[Pep] = None, hosts: Optional[bytes] = None,
+              **seal_args) -> bytes:
+        """Stage both envelopes of the release, the statement first on a first install. Returns the first
+        refusal among the acks, or the last ack."""
+        pep = pep or self.pep
+        seal_args.setdefault("release", self.release_of(body, hosts))
+        if pep.active is None:
+            seal_args.setdefault("widens", True)
+        seal_args.setdefault("replaces", pep.active.policy_sha256 if pep.active else "")
+        acks = [super().stage(body, seq, pep=pep, **seal_args),
+                pep.stage(self.seal_hosts(body, seq, hosts, **seal_args), hosts or self.hosts)]
+        refused = [ack for ack in acks if state_record.read(ack, self.key.public_raw).event == "refused"]
+        return refused[0] if refused else acks[-1]
 
 
 # ------------------------------------------------------------------ the hold cases, on every kind with HOLD

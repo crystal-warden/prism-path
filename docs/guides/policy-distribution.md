@@ -87,8 +87,9 @@ controller offers a release's widening statement before the release itself.
 ## 4. Releases that allow more
 
 `seal --held ctl` fills in `replaces`, the policy hash of the release stored on the stream just below the new
-`seq`, and sets `widens` when the comparator finds the new body allows more, or when the release replaces
-nothing. `--widens` sets it by hand. A PEP that can decide whether a policy allows more walks every reading of
+`seq`, and sets `widens` unless it holds that release and finds the new body allows no more. A `policy.ppt`
+image has no order, so for a host or a mesh table `widens` is false only on a renewal of the same table. The
+controller holds a release to the same test before it offers it to a target that cannot decide (W7). A PEP that can decide whether a policy allows more walks every reading of
 the policy's finite domain and compares the verdicts, so it does not trust `widens` (W1), and it refuses a
 release it finds larger whose `widens` is false even with a statement (W6). A host, a mesh node and the cFS app
 cannot decide. They take a release on its signature alone only when `widens` is false and `replaces` is the

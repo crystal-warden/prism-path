@@ -82,7 +82,7 @@ class Fleet:
         """Store a release of `body` at `seq`, replacing the one put before it. The first, or one put with
         `widen`, goes with a widening statement that covers any PEP (W2, W3)."""
         previous = getattr(self, "previous", None)
-        widen = previous is None if widen is None else widen
+        widen = self.first.policy_of(body) != previous if widen is None else widen      # W7: only a renewal does not
         replaces = (previous or "") if replaces is None else replaces
         pairs = _dist.release_with_statement(self.first, body, seq, widen=widen, replaces=replaces, **args)
         with self.controller.locked() as controller:
@@ -122,21 +122,21 @@ def test_case_032_a_host_pep_stages_and_commits_with_the_controller_never_openin
 
 
 def test_case_033_a_blob_that_is_not_its_name_and_a_sealed_envelope_of_another_id_are_body_mismatch(tmp_path):
-    """case_033: B4, V9. Nothing is staged in either."""
+    """case_033: B4, V9. The release is never staged in either, beside the widening statement that came first."""
     fleet = Fleet(tmp_path, names=("p1",))
-    fleet.put(OLD, 1, widen=False)                   # each refusal comes before the widening rule
+    release_id = env.envelope_id(env.unseal(fleet.put(OLD, 1))[0])
     other = fleet.first.seal(NEW, seq=2)
     fleet.offer(1)
-    for name, change in (("body", lambda name, data: data if name in fleet.controller.stored
-                          else data[:-1] + bytes([data[-1] ^ 1])),
-                         ("sealed", lambda name, data: other if name in fleet.controller.stored else data)):
+    for name, change in (("body", lambda name, data: data[:-1] + bytes([data[-1] ^ 1]) if name == H(OLD) else data),
+                         ("sealed", lambda name, data: other if name == release_id else data)):
         point = _dist.HostPep(tmp_path / f"q_{name}", clock=fleet.clock, key=_dist.instance_key("p1"))
         fleet.offer(1)                                  # the refusal before ended the last rollout
         between = Between(fleet.controller, blob=change)
         with listening(between) as (base, _server):
             PullClient(point.pep, HttpTransport(base)).poll()
         refused = [event["data"]["cause"] for event in point.pep.audit.events if event["action"] == "refused"]
-        assert refused == ["dist:body-mismatch"] and point.pep.staged is None and point.pep.active is None
+        assert refused == ["dist:body-mismatch"] and "policy.ppt" not in point.pep.staged.held
+        assert point.pep.active is None
 
 
 def test_case_034_an_offer_for_an_envelope_the_controller_does_not_hold_is_a_failed_fetch(tmp_path):
@@ -214,9 +214,12 @@ def test_case_120_the_pull_client_never_reads_more_than_it_was_promised(tmp_path
     2,441 bytes and an offers answer of 65 kilobytes are each refused with nothing read past the bound, and the
     body of an envelope that fails its signature is never asked for."""
     fleet = Fleet(tmp_path, names=("p1",))
-    sealed = fleet.put(OLD, 1, widen=False)          # each refusal comes before the widening rule
+    sealed = fleet.put(OLD, 1)
     fleet.offer(1)
     envelope_id = env.envelope_id(env.unseal(sealed)[0])
+    statement_id, info = next((one, info) for one, info in fleet.controller.stored.items()
+                              if info["artifact"] == "trust.widening")
+    statement = [statement_id, info["body_sha256"]]
     pep = fleet.points["p1"].pep
 
     def run(**change):
@@ -228,10 +231,11 @@ def test_case_120_the_pull_client_never_reads_more_than_it_was_promised(tmp_path
         return between, client
 
     between, client = run(blob=lambda name, data: data + b"\0" if name == H(OLD) else data)
-    assert client.transport.blob_reads == len(sealed) and between.asked == [envelope_id, H(OLD)] and pep.staged is None
+    assert client.transport.blob_reads == len(sealed) + info["sealed_size"] + info["body_size"]
+    assert between.asked == statement + [envelope_id, H(OLD)] and "policy.ppt" not in pep.staged.held
     between, client = run(blob=lambda name, data: data + b"\0" * (env.MAX_SEALED + 1 - len(data))
                           if name == envelope_id else data)
-    assert client.transport.blob_reads == 0 and between.asked == [envelope_id] and pep.staged is None
+    assert client.transport.blob_reads == 0 and between.asked == [envelope_id] and "policy.ppt" not in pep.staged.held
     between, client = run(answer=lambda answer: {**answer, "pad": "x" * (65 * 1024)})
     assert client.transport.blob_reads == 0 and between.asked == [] and client.failures[0][0] == "offers"
     refused = [event["data"]["cause"] for event in pep.audit.events if event["action"] == "refused"]
@@ -243,7 +247,7 @@ def test_case_120_the_pull_client_never_reads_more_than_it_was_promised(tmp_path
     between = Between(fleet.controller, blob=lambda name, data: forged if name == envelope_id else data)
     with listening(between) as (base, _server):
         PullClient(other.pep, HttpTransport(base)).poll()
-    assert between.asked == [envelope_id] and other.pep.staged is None
+    assert between.asked == statement + [envelope_id] and "policy.ppt" not in other.pep.staged.held
     assert [event["data"]["cause"] for event in other.pep.audit.events if event["action"] == "refused"] == ["sig:invalid"]
 
 

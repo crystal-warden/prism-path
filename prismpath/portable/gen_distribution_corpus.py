@@ -525,6 +525,17 @@ def build_cases(kind: str, spec: Dict[int, dict]) -> List[dict]:
     def rotation_doc(rotated: bytes, seq: int) -> dict:
         return {**revocation_doc(rotated, seq), "artifact": "trust.rotation"}
 
+    # W4: a widening statement lists at most 64 hashes
+    def widening_sealed(count: int):
+        listed = canon.canon2_bytes({canon.ENCODING_KEY: canon.CANON2, "format": "prismpath.dist-widening/1",
+                                     "from": sorted(canon.sha256_hex(bytes([n])) for n in range(count))})
+        doc = {**kind_doc(body), "artifact": "trust.widening", "body_sha256": canon.sha256_hex(listed),
+               "body_size": len(listed), "expires": 0, "meta": {}, "widens": True}
+        return sealed_by(raw(doc), "A"), listed
+    for count, expected in ((64, None), (65, "dist:too-large")):
+        sealed_statement, listed = widening_sealed(count)
+        add(135, f"a_statement_from_{count}_hashes", expected, sealed_statement, payload=listed)
+
     # V5, R1: a trust statement reaches every PEP whatever its targets
     only_mesh_sealed = sealed_by(raw(revocation_doc(first, 1, targets=["mesh"])), "A")
     add(134, "a_revocation_naming_only_mesh", None, only_mesh_sealed, payload=first)

@@ -41,7 +41,7 @@ C_KINDS = frozenset({"mesh", "cfs"})
 # trust statement, a commit or a release staying active is the Rust PEP's (PR 14)
 PARTIAL = {"P": frozenset(), "R": frozenset({16, 66, 70, 72, 73, 79, 123, 130, 134}), "C": frozenset()}
 PENDING = {
-    "P": "45 49 56-59 64-65 81 88-91 100 102 104-105 129",
+    "P": "45 49 59 81 88-91 100 102 104-105 129",
     "R": "16-17 23-24 26 31 43 46-48 50-53 62-63 66 69-70 72-73 77 79 82 84-85 101 104 111 123 126 130 134",
     "C": "25 60-63 97 104-105 109 122",
 }
@@ -85,8 +85,8 @@ def _covered(impl: str) -> set:
     return covered
 
 
-def test_the_spec_has_134_numbered_cases_each_naming_rules_and_implementations():
-    assert sorted(SPEC) == list(range(1, 135))
+def test_the_spec_has_136_numbered_cases_each_naming_rules_and_implementations():
+    assert sorted(SPEC) == list(range(1, 137))
     assert all(case["rules"].strip() and case["runs_on"] for case in SPEC.values())
 
 

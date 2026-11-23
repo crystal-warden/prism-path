@@ -119,3 +119,25 @@ def test_case_113_a_controller_files_a_cfs_app_held_while_its_records_carry_bit_
     for record in point.pep.drain():
         controller.receive(record)
     assert "dist:held" not in controller.members[pep_id].findings
+
+
+def test_a_cfs_table_is_ordered_by_its_core_image_and_any_other_change_is_larger():
+    """Case 136's cFS part (W1): a table whose core image allows less is not larger, a table with the same core
+    image and other rules is larger, and the same table is not."""
+    from prismpath.distribution import widening
+    core = gen_image.CORE.read_bytes().rstrip(b"\n")
+    base = _body(1)
+    assert dist_kind.compare_cfs_tables(base, base) == widening.NOT_LARGER
+    other_rules = bytearray(base)
+    other_rules[table.OFF["ImageSig"] - 1] ^= 1                         # a byte outside the core image
+    assert table.core_of(bytes(other_rules)) == table.core_of(base)
+    assert dist_kind.compare_cfs_tables(base, bytes(other_rules)) == widening.LARGER
+    assert widening.COMPARATORS["cfs.table"] is dist_kind.compare_cfs_tables
+    from prismpath.kernel import canon2
+    doc = canon2.loads(core)
+    doc["rules"][-1]["target"] = "escalate_34"                          # the last allow asks instead
+    narrower = table.pack(gen_image.build(canon2.dumps(doc)))
+    table.set_version(narrower, 1)
+    narrower = bytes(narrower[:dist_kind.BODY_SIZE])
+    assert dist_kind.compare_cfs_tables(base, narrower) == widening.NOT_LARGER
+    assert dist_kind.compare_cfs_tables(narrower, base) == widening.LARGER

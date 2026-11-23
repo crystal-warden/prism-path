@@ -340,14 +340,14 @@ def test_case_126_a_declared_spiral_sidecar_is_needed_and_must_be_the_declared_o
 
 def test_case_111_a_host_pep_refuses_to_start_with_hold(tmp_path):
     """case_111: X6, X10. A host has no HOLD setting, so a host PEP given one refuses to start, and so does a
-    PEP of a kind with no row yet (the agent, gateway and xdp rows join the table with their adapters)."""
+    PEP of a kind with no row yet (the gateway and xdp rows join the table with their adapters)."""
     with pytest.raises(PepRefused):
         _dist.HostPep(tmp_path, expiry_response="hold")
 
-    class Agent(HostAdapter):
-        kind = "agent"
+    class Gateway(HostAdapter):
+        kind = "gateway"
     with pytest.raises(PepRefused):
-        Pep(str(tmp_path / "agent"), Agent(_dist.HostPep(tmp_path / "h").host()), _dist.instance_key(), _dist.Clock())
+        Pep(str(tmp_path / "gateway"), Gateway(_dist.HostPep(tmp_path / "h").host()), _dist.instance_key(), _dist.Clock())
 
 
 def _mesh(tmp_path):
