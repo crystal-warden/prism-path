@@ -407,6 +407,17 @@ class Pep:
         self.audit.append("distribution", "refused", {**details, "cause": cause, "result": "refused"})
         return self._record("refused", cause)
 
+    def refuse_fetched(self, cause: str, name: str) -> bytes:
+        """B4, B9: the binding refused the blob `name` before anything was staged, for a hash that is not the
+        one asked for or more bytes than were promised. The refusal is the PEP's own, in its audit log and its
+        records, and nothing else changes."""
+        self._check_active()
+        return self._refuse(cause, blob=name)
+
+    def blob(self, name: str) -> Optional[bytes]:
+        """X5: a blob the PEP already holds under its SHA-256, so a renewal fetches no body it has."""
+        return self.store.get(name)
+
     def stage(self, sealed: bytes, body: bytes) -> bytes:
         """Verify one sealed envelope and its body and hold it (G1). Returns the stage-ack state record."""
         self._check_active()

@@ -135,6 +135,12 @@ def _parse(data: bytes) -> Tuple[StateRecord, bytes, bytes]:
     return record, data[:end], data[end:]
 
 
+def named_pep(data: bytes) -> bytes:
+    """The PEP id a record names, read before its signature is checked, so a controller can find the enrolled
+    key to check it with (H6 step 1). `Refused` with `fleet:state-invalid` when it does not read."""
+    return _parse(bytes(data))[0].pep_id
+
+
 def read(data: bytes, instance_public: bytes) -> StateRecord:
     """H1, H2, H6 step 1: the record in `data`, signed by the instance key whose 32 raw public bytes are
     `instance_public` and naming that key's PEP id. Anything else is `fleet:state-invalid`."""

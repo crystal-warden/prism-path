@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field, replace
-from typing import Dict, FrozenSet, Mapping, Optional, Sequence, Tuple
+from typing import Any, Dict, FrozenSet, Iterable, Mapping, Optional, Sequence, Tuple
 
 from prismpath import canon
 from prismpath.distribution import kinds
@@ -273,6 +273,38 @@ class TrustStore:
 
 
 # ------------------------------------------------------------------ the trust anchor (P2, P3)
+
+def check_drops(body: bytes, earlier: Sequence[bytes], held: Iterable[Any]) -> None:
+    """R8, what the sealing tool and a controller check before they write or store the revocation list `body`,
+    since a PEP cannot (R6). `earlier` is the bodies of the lists before it, oldest first, and `held` the
+    envelopes the caller holds (`envelope.Envelope`). Against the latest earlier list, the new one keeps every
+    key, and every envelope id or policy hash it drops is shown to be below a floor this list or an earlier one
+    raised: each envelope of it the caller holds has a `seq` below its stream's floor, and the caller holds at
+    least one. Raises `Refused` with `dist:trust-replay` and the entry it cannot place."""
+    new = kinds.read_revocation(body)
+    if not earlier:
+        return
+    lists = [kinds.read_revocation(raw) for raw in earlier]
+    floors: Dict[str, int] = {}
+    for listed in lists + [new]:
+        for stream, seq in listed["floors"].items():
+            floors[stream] = max(floors.get(stream, 0), seq)
+    previous = lists[-1]
+    dropped_keys = set(previous["keys"]) - set(new["keys"])
+    if dropped_keys:
+        raise Refused("dist:trust-replay", f"the list drops the revoked key {sorted(dropped_keys)[0]} (R6, R8)")
+    held = list(held)
+
+    def passed(envelopes) -> bool:
+        return bool(envelopes) and all(one.seq < floors.get(one.stream, 0) for one in envelopes)
+
+    for envelope_id in sorted(set(previous["envelopes"]) - set(new["envelopes"])):
+        if not passed([one for one in held if one.envelope_id == envelope_id]):
+            raise Refused("dist:trust-replay", f"the list drops the envelope {envelope_id}, which no floor has passed (R8)")
+    for policy in sorted(set(previous["policies"]) - set(new["policies"])):
+        if not passed([one for one in held if one.policy_sha256 == policy]):
+            raise Refused("dist:trust-replay", f"the list drops the policy {policy}, which no floor has passed (R8)")
+
 
 ANCHOR_FORMAT = "prismpath.dist-trust/1"
 _ANCHOR_MEMBERS = frozenset({"encoding", "format", "keys", "stream", "target", "threshold"})
