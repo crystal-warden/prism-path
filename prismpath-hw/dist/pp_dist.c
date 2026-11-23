@@ -1169,9 +1169,11 @@ static uint8_t pp_widening(const pp_pep_machine *pep, int widens, const uint8_t 
     const pp_durable *d = &pep->d;
     size_t active_len = 0;
     const uint8_t *active = pp_active_table(pep, &active_len);
-    int changed = table != NULL && active != NULL && (table_len != active_len || memcmp(table, active, table_len) != 0);
-    int larger = changed || widens || !d->has_active || !has_replaces ||
-                 memcmp(replaces, d->active.policy_sha256, 32) != 0;
+    /* Going from no policy to any is a comparison every PEP makes, so a first install is larger and one that says
+     * it does not widen is refused even with a statement (W6), as another table is. */
+    int changed = !d->has_active ||
+                  (table != NULL && active != NULL && (table_len != active_len || memcmp(table, active, table_len) != 0));
+    int larger = changed || widens || !has_replaces || memcmp(replaces, d->active.policy_sha256, 32) != 0;
     if (!larger) return PP_CAUSE_NONE;
     if (changed && !widens) return PP_CAUSE_WIDENING_UNSIGNED; /* W6 */
     return with != NULL && pp_covers(pep, with) ? PP_CAUSE_NONE : PP_CAUSE_WIDENING_UNSIGNED;
@@ -1267,6 +1269,58 @@ void pp_pep_stage(pp_pep_machine *pep, const uint8_t *sealed, size_t sealed_len,
     pp_emit(pep, PP_EV_STAGED, 0);
 }
 
+/* The table `release` holds, or NULL when it holds none. */
+static const uint8_t *pp_release_table(const pp_release *release, size_t *len) {
+    for (size_t k = 0; k < release->n; k++)
+        if (release->held[k].envelope.artifact == PP_ART_POLICY_PPT) {
+            *len = release->held[k].body_len;
+            return pp_held_body((pp_release *)release, k);
+        }
+    return NULL;
+}
+
+/* C2, E10: the artifacts staged, trust kinds left out, are the whole release the authority signed. Their release
+ * id, the SHA-256 of the canon/2 array of sorted [artifact, body_sha256] pairs, computed again over what is staged,
+ * is the `release` the envelopes carry, so a transport that withholds an artifact of a signed release cannot commit
+ * the rest (pep._whole). */
+static int pp_whole(const pp_release *staged) {
+    static const char hex[] = "0123456789abcdef";
+    const pp_envelope *pairs[2];
+    size_t n = 0;
+    for (size_t k = 0; k < staged->n; k++)
+        if (!pp_is_trust(staged->held[k].envelope.artifact)) pairs[n++] = &staged->held[k].envelope;
+    if (n == 0) return 0;
+    if (n == 2 && strcmp(pp_artifact_name(pairs[0]->artifact), pp_artifact_name(pairs[1]->artifact)) > 0) {
+        const pp_envelope *first = pairs[0];
+        pairs[0] = pairs[1];
+        pairs[1] = first;
+    }
+    uint8_t text[2 + 2 * (4 + 32 + 64 + 3)];
+    size_t at = 0;
+    text[at++] = '[';
+    for (size_t i = 0; i < n; i++) {
+        const char *name = pp_artifact_name(pairs[i]->artifact);
+        size_t name_len = strlen(name);
+        if (i) text[at++] = ',';
+        text[at++] = '[';
+        text[at++] = '"';
+        memcpy(text + at, name, name_len);
+        at += name_len;
+        memcpy(text + at, "\",\"", 3);
+        at += 3;
+        for (size_t b = 0; b < 32; b++) {
+            text[at++] = (uint8_t)hex[pairs[i]->body_sha256[b] >> 4];
+            text[at++] = (uint8_t)hex[pairs[i]->body_sha256[b] & 15];
+        }
+        text[at++] = '"';
+        text[at++] = ']';
+    }
+    text[at++] = ']';
+    uint8_t id[32];
+    pp_sha256(text, at, id);
+    return memcmp(id, staged->release, 32) == 0;
+}
+
 static void pp_commit_now(pp_pep_machine *pep, const char *stream, long long seq, const uint8_t policy[32]) {
     pp_durable *d = &pep->d;
     if (pep->locked) { pp_refuse(pep, PP_CAUSE_FLOOR_LOST); return; }
@@ -1274,7 +1328,7 @@ static void pp_commit_now(pp_pep_machine *pep, const char *stream, long long seq
     if (!d->has_staged || !pp_names(&d->staged, stream, seq, policy)) { pp_emit(pep, PP_EV_REFUSED, PP_CAUSE_NOT_STAGED); return; }
     int has_ppt = 0;
     for (size_t k = 0; k < d->staged.n; k++) has_ppt |= d->staged.held[k].envelope.artifact == PP_ART_POLICY_PPT;
-    if (!has_ppt) { pp_refuse(pep, PP_CAUSE_INCOMPLETE); return; } /* C2: the mesh row needs policy.ppt */
+    if (!has_ppt || !pp_whole(&d->staged)) { pp_refuse(pep, PP_CAUSE_INCOMPLETE); return; } /* C2: the mesh row needs policy.ppt */
     uint8_t cause = pp_still_valid(pep, &d->staged, 1); /* C3 */
     if (cause) {
         d->has_staged = 0;
@@ -1339,7 +1393,13 @@ uint8_t pp_pep_rollback(pp_pep_machine *pep, long long now) {
     if (!cause && d->previous.seq < pp_raised(&d->trust, d->previous.stream)) cause = PP_CAUSE_SEQ_REPLAY; /* R4 */
     if (cause) { pp_refuse(pep, cause); return 0; }
     int same = d->has_active && memcmp(d->previous.release, d->active.release, 32) == 0; /* RB3: never larger */
-    if (!same && !pp_covers(pep, &d->previous)) { pp_refuse(pep, PP_CAUSE_WIDENING_UNSIGNED); return 0; }
+    if (!same) { /* RB3: W1 to W7 as at a commit, so a kept table that says it does not widen is refused (W6) */
+        size_t table_len = 0;
+        const uint8_t *table = pp_release_table(&d->previous, &table_len);
+        cause = pp_widening(pep, d->previous.widens, d->previous.replaces, d->previous.has_replaces, &d->previous,
+                            table, table_len);
+        if (cause) { pp_refuse(pep, cause); return 0; }
+    }
     pp_flip(pep, 1);
     return 0;
 }

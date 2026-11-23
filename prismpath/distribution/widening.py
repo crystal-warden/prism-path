@@ -43,7 +43,9 @@ Comparator = Callable[[bytes, bytes], str]       # (active body, staged body) ->
 
 def compare_policies(active: bytes, staged: bytes) -> str:
     """W1 for `policy.core`: walk the finite reading domain once for both images, a class at a time, and find
-    the first reading the staged policy treats more permissively."""
+    the first reading the staged policy treats more permissively. A combination the classifier never gives
+    (`profile.unproduced`) is larger when the two policies answer it differently in either direction, since no
+    reading of it was ever accounted for (9.4)."""
     from prismpath.agent import profile
     from prismpath.agent.policy import Policy
     if active == staged:
@@ -60,12 +62,12 @@ def compare_policies(active: bytes, staged: bytes) -> str:
         return CANNOT_DECIDE
     import itertools
     for combo in itertools.product(*groups):
-        if profile.unproduced(names, combo):
-            continue
         reading = dict(zip(names, (group[0] for group in combo)), **constant)
         before, after = RANK[profile.kind_of(old, reading)], RANK[profile.kind_of(new, reading)]
         if after > before:
             return LARGER
+        if after != before and profile.unproduced(names, combo):
+            return LARGER                              # 9.4: a reading the classifier never gives, answered anew
     return NOT_LARGER
 
 
@@ -136,9 +138,10 @@ def register_comparator(artifact: str, comparator: Comparator) -> None:
 
 
 def compare_artifact(artifact: str, active: Optional[bytes], staged: Optional[bytes]) -> str:
-    """W1 for one artifact. An artifact with no comparator compares only as unchanged bytes. The derived ones,
-    `sandbox.profile` and `net.edge`, are recompiled from the policy at V11, so they follow it and answer
-    not larger."""
+    """W1 for one artifact. An artifact with no comparator compares only as unchanged bytes. Three follow the
+    policy of their release and answer not larger: `sandbox.profile` and `net.edge`, which a kind that uses
+    them holds to what it compiles from the staged policy (`dist:derived-mismatch`), and `policy.spiral`, which
+    the host's adapter holds at commit to the sidecar hash the `policy.ppt` envelope signs (C2)."""
     if artifact in ("sandbox.profile", "net.edge", "policy.spiral"):
         return NOT_LARGER
     if artifact in OPTIONAL:
@@ -194,7 +197,10 @@ def check(target: kinds.Target, *, widens: bool, replaces: str, active_policy: O
     that cannot of the artifacts in its row's `compares`, a table any change of which is larger, which no
     statement saves when `widens` is false (W6). `statement` is the body of the `trust.widening` envelope staged
     for the same release, or None. None when the release may be staged or committed, else
-    `dist:widening-unsigned`."""
+    `dist:widening-unsigned`. Going from no policy to any is a comparison every PEP makes, so a first install
+    whose `widens` is false is refused on every kind, with a statement or without (W6)."""
+    if active_policy is None:
+        answer = LARGER
     if not larger(target, widens=widens, replaces=replaces, active_policy=active_policy, answer=answer):
         return None
     if not widens and (target.decides or answer == LARGER):

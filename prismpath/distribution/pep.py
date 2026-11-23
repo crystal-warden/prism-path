@@ -613,6 +613,8 @@ class Pep:
             cause = self.adapter.check(artifact, staged.bodies[artifact], whole)
             if cause is not None:
                 return self._refuse(cause, seq=seq)
+        if not self._whole(staged):
+            return self._refuse("dist:incomplete", seq=seq)          # C2, E10: an artifact of the release is not staged
         cause = self._still_valid(staged, early=True)                 # C3
         if cause is not None:
             self._drop_staged()
@@ -621,6 +623,15 @@ class Pep:
         if cause is not None:
             return self._refuse(cause, seq=seq)                       # V12 again, against what is active now
         return self._flip("commit", staged, previous=self.active, floor=Floor(staged.seq, staged.envelope_ids))
+
+    @staticmethod
+    def _whole(staged: Release) -> bool:
+        """C2, E10: the artifacts staged, trust kinds left out, are the whole release the authority signed. Their
+        release id, computed again over what is staged, is the `release` every envelope carries, so a transport
+        that withholds one artifact of a signed release, such as its `agent.zones`, cannot commit the rest."""
+        pairs = [(artifact, envelope.body_sha256) for artifact, envelope in staged.envelopes.items()
+                 if artifact not in kinds.TRUST_ARTIFACTS]
+        return bool(pairs) and env.release_id(pairs) == staged.release
 
     def _flip(self, op: str, release: Release, *, previous: Optional[Release], floor: Floor) -> bytes:
         """C4, one step after another, each synced: intent, floor (a commit only), evidence, the artifacts
@@ -745,20 +756,16 @@ class Pep:
         return self._flip("rollback", kept, previous=None, floor=self.floor)
 
     def _covers(self, kept: Release) -> bool:
-        """RB3: a rollback to `kept` does not widen silently. A release identical to the active one is never
-        larger. A PEP that can decide compares the two (W1) and needs nothing more when `kept` is not larger,
-        and refuses a larger one whose `widens` is false (W6). Otherwise `kept` must hold a widening statement
-        whose `from` is empty or holds the active policy hash (W4). Going from no policy to any is larger."""
+        """RB3: a rollback to `kept` falls under W1 to W7 as a release staged against the active one would. A
+        release identical to the active one is never larger. A PEP that can decide compares the two (W1), and
+        one that cannot compares what its row compares, so on a `host` or a `mesh` node a kept table that is not
+        the active one is larger (W2). A larger `kept` whose `widens` is false is refused even with a statement
+        (W6), and otherwise needs a widening statement whose `from` is empty or holds the active policy hash
+        (W4). Going from no policy to any is larger."""
         active = self.active
         if active is not None and kept.release == active.release:
             return True
-        if self.target.decides:
-            answer = widening.compare_release(None if active is None else active.bodies, kept.bodies)
-            if answer == NOT_LARGER:
-                return True
-            if not kept.widens:
-                return False
-        return widening.covers(kept.bodies.get("trust.widening"), active.policy_sha256 if active else None)
+        return self._widening(kept.widens, kept.replaces, kept.bodies, kept.bodies, whole=True) is None
 
     # ------------------------------------------------------------------ P2, P3: provisioning
     def provision(self, anchor: bytes) -> str:

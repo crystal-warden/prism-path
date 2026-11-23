@@ -875,3 +875,53 @@ def test_case_060_061_062_063_109_the_widening_rule_answers_as_the_python_machin
                                                                expires=N + 1000)
     lines = _same(host_check, tmp_path / "held", held, hold=True, statements=False)
     assert _events(lines[-1]) == [("refused", "dist:widening-unsigned")] and _records(lines[-1])[0].held
+
+
+COMMITS = [entry for entry in CORPUS["commits"] if "C" in entry["runs_on"]]
+
+
+def test_case_137_138_every_commit_case_of_the_corpus_answers_on_the_c_core_as_recorded(host_check, tmp_path):
+    """case_137, case_138: C2, E10. Each commit case of the corpus on a mesh node: a table whose signed release id
+    also names a `policy.spiral` the transport withheld is dist:incomplete at commit, on a first install with
+    nothing active after and on an update with the old release still active, and the same update without the
+    spiral in its id commits. The C core answers as the Python machine and as the corpus records."""
+    assert {entry["case"] for entry in COMMITS} == {137, 138} and all(e["kind"] == "mesh" for e in COMMITS)
+    for entry in COMMITS:
+        script = [("provision", S, entry["now"])]
+        for step in entry["steps"]:
+            if step["op"] == "stage":
+                script.append(("stage", step["sealed"], step["body"], entry["now"]))
+            else:
+                script.append(("commit", S, step["seq"], step["policy_sha256"], entry["now"]))
+        lines = _same(host_check, tmp_path / entry["name"], script, statements=False)
+        last = _records(lines[-1])[-1]
+        assert {"cause": last.cause, "active_seq": last.active_seq} == entry["expect"], entry["name"]
+
+
+def _release_steps(index: int, seq: int, froms=None, **args) -> list:
+    """The steps that stage a mesh release of BODIES[index] at `seq`, its widening statement of `froms` first
+    when `froms` is given, with `args` on both envelopes."""
+    steps = []
+    if froms is not None:
+        body = _dist.widening(froms)
+        steps.append(("stage", _dist.seal("trust.widening", body, seq=seq, release=env.release_id(
+            [("policy.ppt", H[index])]), policy_sha256=H[index], targets=("mesh",), **args).hex(), body.hex(), N))
+    return steps + [("stage", _sealed(index, seq, **args), BODIES[index].hex(), N)]
+
+
+def test_case_139_140_a_first_install_or_a_rollback_that_says_it_does_not_widen_is_refused_on_the_c_core(
+        host_check, tmp_path):
+    """case_139: W2, W6. A first install with `widens` false is refused at staging even with a statement whose
+    `from` is empty, so nothing commits. case_140: RB3, W6. A rollback from table B to a kept renewal of table A
+    that says it does not widen is refused even though the kept release holds a statement whose `from` is empty,
+    and B stays active. The C core answers as the Python machine."""
+    first = [("provision", S, N)] + _release_steps(0, 1, [], widens=False) + [("commit", S, 1, H[0], N)]
+    events = [_events(line) for line in _same(host_check, tmp_path / "first", first, statements=False)]
+    assert events[1] == [("staged", None)] and events[2] == [("refused", "dist:widening-unsigned")]
+    assert events[3] == [("refused", "dist:incomplete")]
+    back = ([("provision", S, N)] + _release_steps(0, 1, [], widens=True) + [("commit", S, 1, H[0], N)]
+            + _release_steps(0, 2, [], replaces=H[0], widens=False) + [("commit", S, 2, H[0], N)]
+            + _release_steps(1, 3, [], replaces=H[0], widens=True) + [("commit", S, 3, H[1], N), ("rollback", N)])
+    lines = _same(host_check, tmp_path / "back", back, statements=False)
+    assert [_events(lines[index]) for index in (3, 6, 9)] == [[("committed", None)]] * 3
+    assert _events(lines[-1]) == [("refused", "dist:widening-unsigned")] and _records(lines[-1])[0].active_seq == 3

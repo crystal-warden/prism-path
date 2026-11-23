@@ -122,7 +122,7 @@ def test_case_113_a_controller_files_a_cfs_app_held_while_its_records_carry_bit_
 
 
 def test_a_cfs_table_is_ordered_by_its_core_image_and_any_other_change_is_larger():
-    """Case 136's cFS part (W1): a table whose core image allows less is not larger, a table with the same core
+    """case_136, the cFS part (W1): a table whose core image allows less is not larger, a table with the same core
     image and other rules is larger, and the same table is not."""
     from prismpath.distribution import widening
     core = gen_image.CORE.read_bytes().rstrip(b"\n")
@@ -144,7 +144,7 @@ def test_a_cfs_table_is_ordered_by_its_core_image_and_any_other_change_is_larger
 
 
 def test_a_cfs_table_with_another_core_image_is_taken_on_the_signers_word():
-    """Case 60's cFS half (W2): the cFS app compares nothing itself, so a table whose core image differs, with
+    """case_060, the cFS half (W2): the cFS app compares nothing itself, so a table whose core image differs, with
     `widens` false and `replaces` its active hash, commits on its signature alone."""
     import tempfile
     from pathlib import Path

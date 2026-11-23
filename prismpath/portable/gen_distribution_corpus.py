@@ -20,6 +20,11 @@ whose `widens` and `replaces` are read, `table` its body and `active_table` the 
 byte for byte (W2), `active_policy` the PEP's active policy hash or null, `statement` the body of the
 `trust.widening` envelope staged for the same release or null, and `expect` the cause, null when it may stage.
 
+`commits` holds the commit cases of C2 and E10 for the PEP machine: `{case, name, runs_on, kind, now, steps,
+expect}`. A PEP of `kind` provisioned to trust A on the corpus stream runs each step, `{op: "stage", sealed,
+body}` or `{op: "commit", seq, policy_sha256}`, at `now`, and `expect` is `{cause, active_seq}`, the cause of the
+last state record and the seq of the release active after it, 0 for none.
+
 `frames` holds the frame binding's cases (B6, B7, B9, B10) for a PEP that assembles a transfer from frames:
 `{case, name, runs_on, trust, pep, now, limit, ordered, steps, expect}`, where each step is `{at, frame}`, the
 receiver's monotonic time in milliseconds and one frame's bytes, and `expect` lists each event the receiver
@@ -227,6 +232,87 @@ def build_widening(spec: Dict[int, dict]) -> List[dict]:
         add(63, "a_first_install_with_no_statement", unsigned, replaces="", widens=True, active_policy=None)
         add(63, "a_first_install_with_a_statement", None, replaces="", widens=True, active_policy=None, froms=[])
         add(109, "a_held_node_sent_a_larger_release_without_a_statement", unsigned, replaces=other)
+        add(139, "a_first_install_that_says_it_does_not_widen_with_a_statement", unsigned, replaces="",
+            active_policy=None, froms=[])
+        renewal = canon.sha256_hex(body)                                # a kept renewal replaces its own table
+        add(140, "a_rollback_to_a_kept_renewal_that_says_it_does_not_widen_with_a_statement", unsigned,
+            replaces=renewal, froms=[])
+    return out
+
+
+def replay_commits(entry: dict) -> dict:
+    """The Python PEP machine on one commit case: a PEP of `entry["kind"]` provisioned to trust A on STREAM runs
+    each step, `stage` or `commit`, at `now`. The result is the cause of the last state record and the seq of the
+    release active after it, 0 for none."""
+    import tempfile
+    from prismpath.distribution.pep import Pep
+    from prismpath.distribution import state_record
+    from prismpath.ledgers.root_statement import InstanceKey
+    from prismpath.distribution import trust as trust_module
+    private = test_key("I")
+    key = InstanceKey(private, public_raw(private))
+    with tempfile.TemporaryDirectory() as state_dir:
+        if entry["kind"] == "host":
+            from prismpath.distribution.adapters.host import HostAdapter
+            from prismpath.hotswap.policy_host import PolicyHost
+            adapter = HostAdapter(PolicyHost(state_dir, [], dict(QUALIFICATION), instance_key=key))
+        else:
+            from prismpath.distribution.adapters.mesh import MeshAdapter
+            adapter = MeshAdapter()
+        pep = Pep(state_dir, adapter, key, lambda: entry["now"])
+        pep.confirm(pep.provision(trust_module.anchor_bytes([public_raw(test_key("A"))], target=entry["kind"],
+                                                            stream=STREAM)))
+        record = None
+        for step in entry["steps"]:
+            if step["op"] == "stage":
+                record = pep.stage(bytes.fromhex(step["sealed"]), bytes.fromhex(step["body"]))
+            else:
+                record = pep.commit(STREAM, step["seq"], step["policy_sha256"])
+        cause = state_record.read(record, key.public_raw).cause
+        return {"cause": cause, "active_seq": pep.active.seq if pep.active is not None else 0}
+
+
+def build_commits(spec: Dict[int, dict]) -> List[dict]:
+    """C2 and E10 at commit: releases whose signed release id names an artifact that is not staged, a first
+    install and an update, on `host` (Python and Rust) and on `mesh` (Python and the C core). Each `policy.ppt`
+    declares no packing, so a `policy.spiral` its release id names may be left out by the transport, and only the
+    recomputed release id finds it."""
+    out = []
+    first, second = image(), ppt_compile.compile_predicate("when x >= 3").serialize()
+    spiral = canon.sha256_hex(b"a spiral sidecar the transport withheld")
+    for kind in ("host", "mesh"):
+        implementations = {"host": "PR", "mesh": "PC"}[kind]
+
+        def release(body, seq, *, replaces, names_spiral):
+            artifacts = [("policy.ppt", canon.sha256_hex(body))] + ([("policy.spiral", spiral)] if names_spiral else [])
+            release_id = env.release_id(artifacts)
+            common = {"targets": [kind], "seq": seq, "release": release_id, "replaces": replaces, "widens": True}
+            statement = canon.canon2_bytes({canon.ENCODING_KEY: canon.CANON2, "format": "prismpath.dist-widening/1",
+                                            "from": []})
+            statement_doc = {**envelope_doc(body, **common), "artifact": "trust.widening",
+                             "body_sha256": canon.sha256_hex(statement), "body_size": len(statement), "expires": 0,
+                             "meta": {}}
+            return [{"op": "stage", "sealed": env.seal(canon2.dumps(statement_doc), [test_key("A")]).hex(),
+                     "body": statement.hex()},
+                    {"op": "stage", "sealed": env.seal(canon2.dumps(envelope_doc(body, **common)), [test_key("A")]).hex(),
+                     "body": body.hex()},
+                    {"op": "commit", "seq": seq, "policy_sha256": canon.sha256_hex(body)}]
+
+        def add(number, name, steps, expected, active_seq):
+            runs_on = [one for one in spec[number]["runs_on"] if one in implementations]
+            entry = {"case": number, "name": f"{number:03d}_{name}" + ("" if kind == "host" else f"_on_{kind}"),
+                     "runs_on": runs_on, "kind": kind, "now": NOW, "steps": steps}
+            entry["expect"] = replay_commits(entry)
+            assert entry["expect"] == {"cause": expected, "active_seq": active_seq}, (entry["name"], entry["expect"])
+            out.append(entry)
+
+        add(137, "a_first_install_whose_release_id_names_a_withheld_spiral",
+            release(first, 1, replaces="", names_spiral=True), "dist:incomplete", 0)
+        installed = release(first, 1, replaces="", names_spiral=False)
+        add(138, "an_update_whose_release_id_names_a_withheld_spiral",
+            installed + release(second, 2, replaces=canon.sha256_hex(first), names_spiral=True), "dist:incomplete", 1)
+        add(138, "the_same_update_without_the_spiral_in_its_release_id",
+            installed + release(second, 2, replaces=canon.sha256_hex(first), names_spiral=False), None, 2)
     return out
 
 
@@ -643,7 +729,7 @@ def build() -> dict:
                     "runs_on replays it and must report exactly the expected cause, unchanged flag, time floor "
                     "and envelope id. Keys come from fixed seeds (gen_distribution_corpus.test_key).",
             "cases": cases, "release_ids": release_ids, "frames": build_frames(spec, cases),
-            "widening": build_widening(spec)}
+            "widening": build_widening(spec), "commits": build_commits(spec)}
 
 
 def main() -> int:

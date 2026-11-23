@@ -520,9 +520,10 @@ def test_a_mesh_node_reads_its_stored_envelopes_as_it_staged_them(tmp_path):
     """E9: a mesh node that staged an envelope whose meta it skips reads it back the same way after a restart."""
     make, bodies, _decide = _mesh(tmp_path)
     point = make()
-    doc = _dist.GEN.envelope_doc(bodies[0], targets=["mesh"], meta={**_dist.GEN.image_meta(bodies[0]), "counts": 7})
+    doc = _dist.GEN.envelope_doc(bodies[0], targets=["mesh"], meta={**_dist.GEN.image_meta(bodies[0]), "counts": 7},
+                                 widens=True)
     sealed = _dist.env.seal(canon.canon2_bytes(doc), [_dist.GEN.test_key("A")])   # no writer emits it (F1)
-    point.widen(bodies[0])
+    point.widen(bodies[0], widens=True)
     assert _read(point, point.pep.stage(sealed, bodies[0])).event == "staged"
     assert point.open().staged.seq == 1
 
@@ -632,9 +633,10 @@ def _kept(tmp_path, name, *, kept_expires=_dist.EXPIRES):
     rollback (RB3), was replaced by seq 2 signed by B."""
     point = _dist.HostPep(tmp_path / name, authorities=["A", "B"])
     release = _dist.env.release_id([("policy.ppt", H(OLD))])
-    kept = seal("policy.ppt", OLD, seq=1, release=release, expires=kept_expires)
+    kept = seal("policy.ppt", OLD, seq=1, release=release, expires=kept_expires, widens=True)
     statement = _widening([])
-    point.pep.stage(seal("trust.widening", statement, seq=1, release=release, policy_sha256=H(OLD)), statement)
+    point.pep.stage(seal("trust.widening", statement, seq=1, release=release, policy_sha256=H(OLD), widens=True),
+                    statement)
     point.pep.stage(kept, OLD)
     point.pep.commit(STREAM, 1, H(OLD))
     point.commit(NEW, seq=2, signer="B")

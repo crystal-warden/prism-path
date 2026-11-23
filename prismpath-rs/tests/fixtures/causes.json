@@ -1,7 +1,7 @@
 {
  "version": 1,
  "comment": "FROZEN. The cause registry of prismpath.kernel.causes: every row, its hash, the engine stop mapping and the lookups a consumer must answer. prismpath-rs/src/causes.rs is generated from the same registry and prismpath-rs/tests/test_causes.rs replays this file. Appending a row regenerates it.",
- "registry_sha256": "dbd8fde7d3f8a90aa98fdf6faa4e7bf5d87ef662d942398644f4aa0610d68631",
+ "registry_sha256": "ec2ea6dafaa3f2230a34314887d653d42055dd218ae7cab91031b1ba6e54a37b",
  "registry": [
   {
    "code": 1,
@@ -752,6 +752,12 @@
    "name": "dist:held",
    "class": "state",
    "description": "an enforcement point deciding under an expired release because its deployment chose to hold at expiry, or an action refused because of that hold; marked in every state record and receipt while it lasts"
+  },
+  {
+   "code": 160,
+   "name": "policy:out-of-domain",
+   "class": "envelope",
+   "description": "a policy whose rule names a value outside its field's reading domain, the values the installer defined for it (a tool or a category value the classifier does not produce, a bool constant that is not true or false, an int named outside its min and max); refused when the policy is loaded and when it is checked, since such a value is a resource nobody accounted for"
   }
  ],
  "engine_stop_to_cause": {

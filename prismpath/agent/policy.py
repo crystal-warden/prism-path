@@ -326,6 +326,11 @@ def target_decision(target: str):
     return ("refuse" if match.group(2) else "escalate"), name, code
 
 
+class OutsideDomain(ValueError):
+    """The policy names a value outside its reading domain (`profile.outside_domain`), cause
+    `policy:out-of-domain`."""
+
+
 class Policy:
     def __init__(self, image: bytes):
         if image.endswith(b"\n"):
@@ -342,6 +347,10 @@ class Policy:
         for rule in self.doc["rules"]:
             if target_decision(rule["target"]) is None:
                 raise ValueError(f"the policy names a target the harness does not know: {rule['target']}")
+        from prismpath.agent import profile
+        outside = profile.outside_domain(self.doc)
+        if outside is not None:
+            raise OutsideDomain(f"policy:out-of-domain: {outside}")
 
     @classmethod
     def load(cls, path: Path = POLICY_PATH) -> "Policy":

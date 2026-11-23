@@ -93,12 +93,25 @@ controller holds a release to the same test before it offers it to a target that
 the policy's finite domain and compares the verdicts, so it does not trust `widens` (W1), and it refuses a
 release it finds larger whose `widens` is false even with a statement (W6). A host, a mesh node and the cFS app
 cannot decide. They take a release on its signature alone only when `widens` is false and `replaces` is the
-policy they have active (W2). Every other release needs a widening statement that covers them.
+policy they have active (W2). Every other release needs a widening statement that covers them. A first install
+goes from no policy to one, so every PEP counts it as larger and refuses one whose `widens` is false, even with
+a statement (W6).
+
+The reading domain an agent policy is compared over is the one the engineer who installs PrismPath defines: the
+values the classifier produces for each category, true and false, and each int's min to max. A policy whose
+rule names a value outside it, such as a tool the classifier does not produce, is refused when it is loaded and
+when a PEP checks it, with `policy:out-of-domain`. A release that answers a combination the classifier never
+gives otherwise than the active one is larger, whichever way it changes.
+
+A PEP commits a release only whole. It computes the release id again over the artifacts it staged, and when
+that is not the signed `release`, because a transport left out an `agent.zones`, a `sandbox.profile` or a
+`policy.spiral`, the commit is refused with `dist:incomplete` (C2).
 
 A rollback is held to the same rule (RB3). A rollback to a release identical to the active one is never a
-widening. On a host or a mesh node a local rollback to an older table works only when the kept release holds a
-widening statement that covers the newer policy. When the owner signed the older release, the newer policy's
-hash was not known, so in practice that is a statement with an empty `from`. Without one the owner releases
+widening. On a host or a mesh node a local rollback to an older table works only when the kept release says it
+widens and holds a widening statement that covers the newer policy. When the owner signed the older release,
+the newer policy's hash was not known, so in practice that is a statement with an empty `from`. A kept renewal
+says it does not widen, so it is never a rollback target from another table. Without one the owner releases
 the older policy again at a higher `seq`.
 
 ## 5. Groups and the two rules

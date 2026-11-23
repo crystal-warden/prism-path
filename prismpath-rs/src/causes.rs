@@ -11,7 +11,7 @@
 pub const CAUSE_NONE: u8 = 0;
 
 /// `registry_sha256()` of the Python registry when this file was generated.
-pub const REGISTRY_SHA256: &str = "dbd8fde7d3f8a90aa98fdf6faa4e7bf5d87ef662d942398644f4aa0610d68631";
+pub const REGISTRY_SHA256: &str = "ec2ea6dafaa3f2230a34314887d653d42055dd218ae7cab91031b1ba6e54a37b";
 
 /// The cause class, the semantic axis of the registry.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -295,6 +295,8 @@ pub const FLEET_POLICY_MISMATCH: u8 = 157;
 pub const FLEET_SILENT: u8 = 158;
 /// `dist:held`
 pub const DIST_HELD: u8 = 159;
+/// `policy:out-of-domain`
+pub const POLICY_OUT_OF_DOMAIN: u8 = 160;
 
 /// Every registered cause, in registry order.
 pub const REGISTRY: &[Cause] = &[
@@ -423,6 +425,7 @@ pub const REGISTRY: &[Cause] = &[
     Cause { code: 157, name: "fleet:policy-mismatch", class: CauseClass::Wire, description: "an enforcement point reports a policy hash, a seq or a Facet preamble other than the one the controller expects for it; filed by the controller" },
     Cause { code: 158, name: "fleet:silent", class: CauseClass::Wire, description: "no accepted state record from an enforcement point for three heartbeat intervals; filed by the controller" },
     Cause { code: 159, name: "dist:held", class: CauseClass::State, description: "an enforcement point deciding under an expired release because its deployment chose to hold at expiry, or an action refused because of that hold; marked in every state record and receipt while it lasts" },
+    Cause { code: 160, name: "policy:out-of-domain", class: CauseClass::Envelope, description: "a policy whose rule names a value outside its field's reading domain, the values the installer defined for it (a tool or a category value the classifier does not produce, a bool constant that is not true or false, an int named outside its min and max); refused when the policy is loaded and when it is checked, since such a value is a resource nobody accounted for" },
 ];
 
 /// The engine's stop vocabulary mapped onto the registry; `terminal` and `waiting` are clean and have no cause.

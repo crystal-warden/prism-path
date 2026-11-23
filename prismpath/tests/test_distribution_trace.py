@@ -6,7 +6,8 @@ row names, and no test names a case that is not there.
 A test covers a case when its name or docstring carries `case_NNN`, or when it is an implementation's replay
 of the corpus and the corpus holds the case for that implementation. The C core has only the `mesh` and
 `cfs` kinds (I1), so a corpus case counts for C only when its PEP is one of those. Python's tests are
-prismpath/tests/test_distribution_*.py and tools/tests/test_export.py, the C core's is
+prismpath/tests/test_distribution_*.py, integrations/cfs/tests/test_cfs_dist.py (the `cfs` kind's halves) and
+tools/tests/test_export.py, the C core's is
 prismpath/tests/test_distribution_c.py and Rust's are prismpath-hotswap-rs/tests/test_distribution_*.rs.
 
 `PENDING` lists, per implementation, the cases whose pull request has not landed. Each pull request
@@ -23,7 +24,8 @@ ROOT = Path(__file__).resolve().parents[2]
 REPO = ROOT / "prismpath"
 CASE = re.compile(r"\bcase_(\d{3})\b")
 SOURCES = {
-    "P": [*sorted((REPO / "tests").glob("test_distribution_*.py")), ROOT / "tools" / "tests" / "test_export.py"],
+    "P": [*sorted((REPO / "tests").glob("test_distribution_*.py")), ROOT / "integrations" / "cfs" / "tests" / "test_cfs_dist.py",
+          ROOT / "tools" / "tests" / "test_export.py"],
     "C": [REPO / "tests" / "test_distribution_c.py"],
     "R": sorted((ROOT / "prismpath-hotswap-rs" / "tests").glob("test_distribution_*.rs")),
 }
@@ -35,15 +37,16 @@ REPLAYERS = {"P": REPO / "tests" / "test_distribution_corpus.py",
 # carry; the product's own boundary check covers its packages.
 RESEARCH_ONLY = {99: ROOT / "tools" / "tests" / "test_export.py"}
 C_KINDS = frozenset({"mesh", "cfs"})
-# Cases whose corpus half an implementation's replay decides while another half waits for a later pull
-# request, so the replay does not claim them and they stay in PENDING until that half has its test.
-# 16: the Rust PEP allows nothing; 66, 70, 72, 73, 79, 123, 130, 134: the Rust verifier decides them, and applying the
-# trust statement, a commit or a release staying active is the Rust PEP's (PR 14)
-PARTIAL = {"P": frozenset(), "R": frozenset({16, 66, 70, 72, 73, 79, 123, 130, 134}), "C": frozenset()}
+# Cases one half of which an implementation runs, by its replay of the corpus or by a test that names the case,
+# while another half waits for a later pull request. Neither claims them, and they stay in PENDING until that half
+# has its test. 16: the Rust PEP allows nothing; 66, 70, 72, 73, 79, 123, 130, 134: the Rust verifier decides them,
+# and applying the trust statement, a commit or a release staying active is the Rust PEP's (PR 14). 60: the C core
+# runs the mesh half, and the cfs half, a table taken on the signer's word, waits for the cfs kind in the C core.
+PARTIAL = {"P": frozenset(), "R": frozenset({16, 66, 70, 72, 73, 79, 123, 130, 134}), "C": frozenset({60})}
 PENDING = {
     "P": "45 49 59 81 88-91 100 102 104-105 129",
-    "R": "16-17 23-24 26 31 43 46-48 50-53 62-63 66 69-70 72-73 77 79 82 84-85 101 104 111 123 126 130 134",
-    "C": "25 97 104-105 122",
+    "R": "16-17 23-24 26 31 43 46-48 50-53 62-63 66 69-70 72-73 77 79 82 84-85 101 104 111 123 126 130 134 137-140",
+    "C": "25 60 97 104-105 122",
 }
 
 
@@ -81,12 +84,12 @@ def _covered(impl: str) -> set:
     covered = set(_named(impl))
     if REPLAYERS[impl].exists():
         covered |= {case["case"] for case in CORPUS["cases"] if impl in case["runs_on"]
-                    and (impl != "C" or case["pep"]["kind"] in C_KINDS)} - PARTIAL[impl]
-    return covered
+                    and (impl != "C" or case["pep"]["kind"] in C_KINDS)}
+    return covered - PARTIAL[impl]
 
 
-def test_the_spec_has_136_numbered_cases_each_naming_rules_and_implementations():
-    assert sorted(SPEC) == list(range(1, 137))
+def test_the_spec_has_142_numbered_cases_each_naming_rules_and_implementations():
+    assert sorted(SPEC) == list(range(1, 143))
     assert all(case["rules"].strip() and case["runs_on"] for case in SPEC.values())
 
 
@@ -120,7 +123,7 @@ def test_the_corpus_runs_each_case_where_the_spec_says():
     """I1: each case runs only where its row says, a C case only on a kind the C core has, a Rust case only on
     `host`, and the copies of one case together run everywhere its row names."""
     where = {}
-    for case in CORPUS["cases"] + CORPUS["release_ids"] + CORPUS["frames"] + CORPUS["widening"]:
+    for case in CORPUS["cases"] + CORPUS["release_ids"] + CORPUS["frames"] + CORPUS["widening"] + CORPUS["commits"]:
         number = case["case"]
         assert number in SPEC and set(case["runs_on"]) <= set(SPEC[number]["runs_on"]), case["name"]
         assert case["name"].startswith(f"{number:03d}_")

@@ -425,6 +425,65 @@ def domain_classes(docs, read_also: Tuple[str, ...] = (), boundary_ints: bool = 
 unproduced = _unproduced          # the classifier's impossible combinations, for a walk of `domain_classes`
 
 
+def _bounds(name: str, text: str):
+    """The values a rule may name for a field: a set for a category the classifier produces and for a bool, the
+    (low, high) range of an int, or None for a field whose definition sets no bounds here."""
+    words = text.split()
+    kind = words[0] if words else ""
+    if kind == "category":
+        return frozenset(KNOWN_CATEGORIES[name]) if name in KNOWN_CATEGORIES else None
+    if kind == "bool":
+        return frozenset({False, True})
+    if kind == "int":
+        options = dict(word.split("=", 1) for word in words[1:] if "=" in word)
+        try:
+            return int(options["min"]), int(options["max"])
+        except (KeyError, ValueError):
+            return None
+    return None
+
+
+def outside_domain(doc) -> Optional[str]:
+    """The first value a rule of the policy document names outside its field's reading domain, as a sentence, or
+    None when every value it names is inside. The domain is what the installer defined: the values the classifier
+    produces for a category (`KNOWN_CATEGORIES`), true and false for a bool, and min to max for an int, where an
+    equality or a membership names a value and an ordering only bounds one. A value outside the domain is a
+    resource nobody accounted for. The walk of `domain_classes` never meets it, so the widening comparator could
+    not see a rule that allows it (spec-policy-distribution.md, 9.4)."""
+    fields = doc.get("fields") if isinstance(doc, dict) else None
+    if not isinstance(fields, dict):
+        return None
+    for rule in doc.get("rules") or ():
+        stack = [rule.get("when") if isinstance(rule, dict) else None]
+        while stack:
+            item = stack.pop()
+            if not isinstance(item, list) or not item:
+                continue
+            head = item[0]
+            if head == "cmp" and len(item) == 4 and item[1] in fields:
+                name, op, constants = item[1], item[2], [item[3]]
+            elif head in ("in", "not in") and len(item) == 3 and item[1] in fields and isinstance(item[2], list):
+                name, op, constants = item[1], head, item[2]
+            else:
+                stack.extend(item)
+                continue
+            bounds = _bounds(name, fields[name])
+            if bounds is None:
+                continue
+            for constant in constants:
+                value = constant[1] if isinstance(constant, list) and len(constant) == 2 else constant
+                if value is None:
+                    continue                    # absence is the kernel's to check (policy:none)
+                if isinstance(bounds, tuple):
+                    inside = (op not in ("==", "!=", "in", "not in") or not isinstance(value, int)
+                              or isinstance(value, bool) or bounds[0] <= value <= bounds[1])
+                else:
+                    inside = value in bounds and type(value) is type(next(iter(bounds)))
+                if not inside:
+                    return f"a rule names {name} {value!r}, which is outside the field's reading domain"
+    return None
+
+
 def needs(policy) -> Tuple[bool, bool, bool]:
     """(outside, outside_write, network) of `needs_all`, the three a bash role profile is made from."""
     return needs_all(policy)[:3]

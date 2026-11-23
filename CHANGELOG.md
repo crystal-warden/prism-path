@@ -20,6 +20,11 @@ spec stable.
 - **`prismpath dist widen` signs the statement, and `prismpath dist seal --held` fills in `replaces` and sets `widens` from the comparator.** The controller offers a release's statement before the release, and counts a member staged only once every envelope of the release is.
 - **The corpus gains the widening cases for a PEP that cannot decide, on a host for Rust and on a mesh node for the C core.**
 - **The C core holds a release to the same rule on a mesh node, at staging and at commit, and a rollback to an identical release is never a widening there either, step by step as the Python machine does.**
+- **A first install that says it does not widen is refused on every kind, even with a statement, in Python and the C core.** Going from no policy to one is a comparison every enforcement point makes (W6).
+- **A rollback on a host or a mesh node is held to W1 to W7 as a staged release is, so a kept renewal that says it does not widen is refused from another table even with a statement, in Python and the C core.**
+- **An enforcement point commits a release only whole.** It computes the release id again over the artifacts it staged and refuses with `dist:incomplete` when that is not the signed `release`, so a transport cannot withhold a signed `agent.zones`, `sandbox.profile` or `policy.spiral`, in Python and the C core. The corpus gains its commit cases, 137 and 138.
+- **An agent policy whose rule names a value outside its field's reading domain, such as a tool the classifier does not produce, is refused when it is loaded and at V11 with the new cause 160 `policy:out-of-domain`.** The engineer who installs PrismPath defines that domain. A release that answers a combination the classifier never gives otherwise than the active one is larger whichever way it changes, so the strict starter replacing the default one now needs a widening statement.
+- **The conformance cases run to 142, and the trace test counts a case one implementation runs only half of as pending, as case 60 is for the C core until it has the `cfs` kind.**
 
 ### Added: prismpath dist, the reference controller and the pull binding for hosts (2026-11-22)
 

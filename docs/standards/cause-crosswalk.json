@@ -2589,6 +2589,25 @@
     "ids": [],
     "none": "A deployment's chosen response to expiry, marked in every record the enforcement point signs. It records a condition, not a weakness or an attack."
    }
+  },
+  "160": {
+   "name": "policy:out-of-domain",
+   "class": "envelope",
+   "kind": "internal",
+   "owasp_asi": {
+    "ids": [],
+    "none": "A refusal of a policy document when it is loaded or checked; no agent behaviour is involved."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "Policy validation is not an adversary technique in the ATLAS catalogue."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-1287"
+    ],
+    "rationale": "A rule names a value its field's reading domain does not hold."
+   }
   }
  }
 }

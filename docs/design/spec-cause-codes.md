@@ -72,9 +72,11 @@ compiles are `envelope` at 148 and 149. The frame binding's refusal is `wire` at
 that names nothing, its incomplete release, its lapsed policy and its lost floor are `state` at 151 to 154. The four
 findings the controller files from state records are `wire` at 155 to 158, under the `fleet:` prefix because the
 controller files them and no enforcement point emits them. The hold at expiry that a `mesh` or `cfs` deployment may
-choose is `state` at 159. So the occupied ranges today are `authority` 1 to 10, 87 to 88 and 135 to 147, `envelope`
-16 to 19, 69 to 86, 89 to 98, 101, 103 and 148 to 149, `routing` 32 to 37, 99 to 100, 102 and 104 to 134, `wire`
-48 to 56, 150 and 155 to 158, and `state` 64 to 68, 151 to 154 and 159.
+choose is `state` at 159. The refusal of a policy whose rule names a value outside its field's reading domain,
+which the engineer who installs PrismPath defines (`spec-policy-distribution.md`, section 9.4), took 160 in
+`envelope` beside the other policy refusals. So the occupied ranges today are `authority` 1 to 10, 87 to 88 and 135
+to 147, `envelope` 16 to 19, 69 to 86, 89 to 98, 101, 103, 148 to 149 and 160, `routing` 32 to 37, 99 to 100, 102
+and 104 to 134, `wire` 48 to 56, 150 and 155 to 158, and `state` 64 to 68, 151 to 154 and 159.
 The first `state` band stops at 68. It never reached 79, and 69 to 86 is envelope, not state. Read a code's class
 off the `class` column in `prismpath/kernel/causes.py` and never infer it from the number: the next
 append lands after the highest code present, in whatever band that falls, and nothing already

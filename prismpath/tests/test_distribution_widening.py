@@ -92,11 +92,13 @@ def test_the_walk_decides_each_reading_as_the_reference_does():
 @pytest.mark.checkpoint
 def test_the_starters_compare_as_their_rules_say():
     """W1 over the shipped starters, every reading of their domain: the default asks the person about what the
-    strict refuses, so it is larger, the strict is not larger than the default, the review asks about a change
+    strict refuses, so it is larger. The strict refuses what the default asks about on combinations the
+    classifier never gives too, such as a protected zone reach for an unknown tool, and a change there in either
+    direction is larger (9.4), so the strict is larger than the default as well. The review asks about a change
     the strict allows, and the session reads fields the others do not. Every reading is decided as the reference
     decides it."""
     assert widening.compare_policies(STARTERS["strict"], STARTERS["default"]) == LARGER
-    assert widening.compare_policies(STARTERS["default"], STARTERS["strict"]) == NOT_LARGER
+    assert widening.compare_policies(STARTERS["default"], STARTERS["strict"]) == LARGER
     assert widening.compare_policies(STARTERS["review"], STARTERS["strict"]) == LARGER
     assert widening.compare_policies(STARTERS["default"], STARTERS["session"]) == LARGER
     for image in STARTERS.values():
@@ -367,3 +369,155 @@ def test_the_agent_row_needs_its_host_list_and_reads_a_declared_zone_file(agent)
     zone = seal("agent.zones", bad, release=release, policy_sha256=H(NARROW), targets=("agent",), widens=True)
     assert _read(agent, agent.pep.stage(zone, bad)).cause == "dist:bad-format"
     assert kinds.read_zones(_zones("a", "b"))["protected"] == ["a", "b"]
+
+
+# ------------------------------------------------------------------ C2, E10: a release commits whole
+
+SPIRAL = b"a spiral sidecar the transport withheld"
+
+
+def _with_spiral(point, body, seq, **args):
+    """Stage a `policy.ppt` release of `body` at `seq` whose signed release id also names a `policy.spiral` that
+    is never staged, with the widening statement it needs, the table declaring no packing."""
+    release = _dist.env.release_id([("policy.ppt", H(body)), ("policy.spiral", H(SPIRAL))])
+    args = {"release": release, "widens": True, **args}
+    point.widen(body, seq, [], **args)
+    return _read(point, point.pep.stage(point.seal(body, seq=seq, **args), body))
+
+
+def _agent_release(point, body, seq, hosts, zones, *, replaces, withheld=()):
+    """Stage an agent release of `body`, `hosts` and `zones`, with its widening statement, leaving out the
+    envelopes of `withheld`. Returns the last stage-ack."""
+    arts = {"policy.core": body, "egress.hosts": hosts, "agent.zones": zones}
+    release = _dist.env.release_id([(name, H(data)) for name, data in arts.items()])
+    common = dict(seq=seq, release=release, policy_sha256=H(body), targets=("agent",), widens=True, replaces=replaces)
+    statement = _dist.widening([])
+    ack = point.pep.stage(seal("trust.widening", statement, **common), statement)
+    for name, data in arts.items():
+        if name not in withheld:
+            ack = point.pep.stage(seal(name, data, **common), data)
+    return _read(point, ack)
+
+
+def test_case_137_a_first_install_without_an_artifact_its_release_id_names_is_incomplete(tmp_path):
+    """case_137: C2, E10. A host release whose table declares no packing but whose signed release id names a
+    `policy.spiral`, the same on a mesh node, and an agent release whose `agent.zones` envelope is withheld each
+    stage what they carry and are refused at commit, with nothing active."""
+    for make in (_dist.HostPep, _dist.MeshPep):
+        point = make(tmp_path / make.__name__)
+        assert _with_spiral(point, OLD, 1).event == "staged"
+        assert _read(point, point.pep.commit(STREAM, 1, H(OLD))).cause == "dist:incomplete", make.__name__
+        assert point.pep.active is None
+    agent = _dist.AgentPep(tmp_path / "agent")
+    assert _agent_release(agent, NARROW, 1, _dist.HOSTS, _zones("billing"), replaces="",
+                          withheld=("agent.zones",)).event == "staged"
+    assert _read(agent, agent.pep.commit(STREAM, 1, H(NARROW))).cause == "dist:incomplete"
+    assert agent.pep.active is None and agent.pep.adapter.running is None
+
+
+def test_case_138_an_update_without_an_artifact_its_release_id_names_is_incomplete(tmp_path):
+    """case_138: C2, E10. After a first install, an update whose release id names a withheld `policy.spiral` on a
+    host and a mesh node, and an agent update that keeps the protected zones and adds a host with its
+    `agent.zones` envelope withheld, are refused at commit and the old release stays active. The same agent
+    update with every envelope commits."""
+    for make in (_dist.HostPep, _dist.MeshPep):
+        point = make(tmp_path / make.__name__)
+        point.commit(OLD)
+        assert _with_spiral(point, NEW, 2, replaces=H(OLD)).event == "staged"
+        assert _read(point, point.pep.commit(STREAM, 2, H(NEW))).cause == "dist:incomplete", make.__name__
+        assert point.pep.active.seq == 1
+    zones, more = _zones("billing", "payroll"), _hosts("api.example.com", "b.example.com")
+    agent = _dist.AgentPep(tmp_path / "agent")
+    _agent_release(agent, NARROW, 1, _dist.HOSTS, zones, replaces="")
+    assert _read(agent, agent.pep.commit(STREAM, 1, H(NARROW))).event == "committed"
+    assert "agent.zones" in agent.pep.active.bodies
+    assert _agent_release(agent, NARROW, 2, more, zones, replaces=H(NARROW), withheld=("agent.zones",)).event == "staged"
+    assert _read(agent, agent.pep.commit(STREAM, 2, H(NARROW))).cause == "dist:incomplete"
+    assert agent.pep.active.seq == 1 and agent.pep.adapter.running.seq == 1
+    assert _agent_release(agent, NARROW, 3, more, zones, replaces=H(NARROW)).event == "staged"
+    assert _read(agent, agent.pep.commit(STREAM, 3, H(NARROW))).event == "committed"
+    assert agent.pep.active.bodies["agent.zones"] == zones
+
+
+def test_case_139_a_first_install_that_says_it_does_not_widen_is_refused_even_with_a_statement(tmp_path):
+    """case_139: W2, W6. Going from no policy to one is larger on every kind, so on a host and a mesh node a
+    first install with `widens` false is dist:widening-unsigned at staging, with a statement whose `from` is empty
+    staged first, and nothing goes active."""
+    for make in (_dist.HostPep, _dist.MeshPep):
+        point = make(tmp_path / make.__name__)
+        assert _read(point, point.widen(OLD, 1, [], widens=False)).event == "staged"
+        record = _read(point, point.pep.stage(point.seal(OLD, widens=False), OLD))
+        assert record.cause == "dist:widening-unsigned", make.__name__
+        assert _read(point, point.pep.commit(STREAM, 1, H(OLD))).cause == "dist:incomplete"
+        assert point.pep.active is None
+
+
+def test_case_140_a_rollback_to_a_renewal_that_says_it_does_not_widen_is_refused_on_a_host_and_a_mesh_node(tmp_path):
+    """case_140: RB3, W2, W6. The kept release renews table A with `widens` false and carries a statement whose
+    `from` is empty. From table B a rollback to it is another table, so larger, and its signer said it does not
+    widen: dist:widening-unsigned, and B stays active."""
+    for make in (_dist.HostPep, _dist.MeshPep):
+        point = make(tmp_path / make.__name__)
+        point.commit(OLD, 1)
+        point.widen(OLD, 2, [], replaces=H(OLD), widens=False)
+        assert _read(point, point.pep.stage(point.seal(OLD, seq=2, widens=False), OLD)).event == "staged"
+        assert _read(point, point.pep.commit(STREAM, 2, H(OLD))).event == "committed"
+        point.commit(NEW, 3)
+        assert point.pep.previous.seq == 2 and not point.pep.previous.widens
+        assert "trust.widening" in point.pep.previous.bodies
+        assert _read(point, point.pep.rollback()).cause == "dist:widening-unsigned", make.__name__
+        assert point.pep.active.seq == 3 and point.pep.active.bodies["policy.ppt"] == NEW
+
+
+# ------------------------------------------------------------------ 9.4: the reading domain
+
+OUTSIDE = _policy('-> allow: when tool == "mcp__x"')
+
+
+def test_case_141_a_policy_that_names_a_tool_outside_the_domain_is_refused(agent):
+    """case_141: 9.4, V11. A rule that allows a tool the classifier does not produce names a resource nobody
+    accounted for. The agent's policy loader refuses the image with policy:out-of-domain, and so does an agent
+    PEP at V11, so the comparator never has to see it. A value outside the domain is refused for a bool and for
+    an int named outside its range as well, and a policy naming only values inside the domain loads."""
+    from prismpath.agent.policy import OutsideDomain
+    with pytest.raises(OutsideDomain, match="policy:out-of-domain"):
+        Policy(OUTSIDE)
+    assert _read(agent, agent.stage(OUTSIDE, 1)).cause == "policy:out-of-domain"
+    assert agent.pep.active is None
+    assert profile.outside_domain(Policy(WIDER).doc) is None
+    listed = {"fields": {"tool": "category"}, "rules": [{"target": "allow", "when": ["in", "tool", [["str", "git"], ["str", "mcp__y"]]]}]}
+    assert "mcp__y" in profile.outside_domain(listed)
+    counted = {"fields": {"n": "int min=0 max=9"}, "rules": [{"target": "allow", "when": ["cmp", "n", "==", ["num", 12]]}]}
+    assert "12" in profile.outside_domain(counted)
+    bounded = {"fields": {"n": "int min=0 max=9"}, "rules": [{"target": "allow", "when": ["cmp", "n", "<", ["num", 12]]}]}
+    assert profile.outside_domain(bounded) is None
+    free = {"fields": {"label": "category"}, "rules": [{"target": "allow", "when": ["cmp", "label", "==", ["str", "x"]]}]}
+    assert profile.outside_domain(free) is None                       # a category the installer set no bounds for
+
+
+NET = "field.tool: category\nfield.path_scope: category\nfield.net_dest: category\n"
+
+
+def _net(*rules: str) -> bytes:
+    return compile_source("---\nname: small\nstart: core_decision\n" + NET + "---\n## core_decision\n"
+                          '-> allow: when tool == "read_file" and path_scope == "workspace"\n'
+                          + "".join(rule + "\n" for rule in rules))
+
+
+def test_case_142_a_change_on_a_combination_the_classifier_never_gives_is_larger(agent, tmp_path):
+    """case_142: 9.4, W1, W6. A `net_dest` other than none comes only with a `connect`, so a `read_file` with
+    one is a combination the classifier never gives. A release that allows it, and one that refuses what the
+    active one asks about there, each answer it otherwise than the active one, so each is larger, and with
+    `widens` false each is dist:widening-unsigned. A change only on combinations the classifier gives keeps the
+    old order."""
+    base, unproduced = _net(), _net('-> allow: when tool == "read_file" and net_dest == "other"')
+    assert widening.compare_policies(base, unproduced) == LARGER
+    asks = _net('-> escalate agent:change-asked: when tool == "read_file" and net_dest == "other"')
+    assert widening.compare_policies(asks, base) == LARGER
+    connects = _net('-> allow: when tool == "connect" and net_dest == "model_api"')
+    assert widening.compare_policies(connects, base) == NOT_LARGER
+    agent.commit(base)
+    assert _read(agent, agent.stage(unproduced, 2)).cause == "dist:widening-unsigned"
+    other = _dist.AgentPep(tmp_path / "asks")
+    other.commit(asks)
+    assert _read(other, other.stage(base, 2)).cause == "dist:widening-unsigned"

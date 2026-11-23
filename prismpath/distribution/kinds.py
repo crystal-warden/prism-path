@@ -199,14 +199,17 @@ def check_policy_spiral(_envelope, _body: bytes, _pep) -> Optional[str]:
 
 def check_policy_core(envelope, body: bytes, _pep) -> Optional[str]:
     """`policy.core` (V11): the image loads as the core reads it, with the core's own cause when it does not,
-    the harness knows every target it names, and its SHA-256 is the envelope's `policy_sha256`."""
+    the harness knows every target it names, every value a rule names is inside its field's reading domain
+    (`policy:out-of-domain`, 9.4), and its SHA-256 is the envelope's `policy_sha256`."""
     from prismpath.kernel import core_policy
     refusal = core_policy.load_policy(bytes(body))
     if refusal is not None:
         return refusal[0]
+    from prismpath.agent.policy import OutsideDomain, Policy
     try:
-        from prismpath.agent.policy import Policy
         Policy(bytes(body))
+    except OutsideDomain:
+        return "policy:out-of-domain"
     except ValueError:
         return "policy:unreadable"
     return None if hashlib.sha256(bytes(body)).hexdigest() == envelope.policy_sha256 else "image:sha256-mismatch"
