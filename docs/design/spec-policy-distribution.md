@@ -378,7 +378,9 @@ epoch        4  8  the epoch id
 
 **B6.** A PEP assembles the chunks of a transfer into the lengths the offer gave. A chunk outside those
 lengths, a chunk for a transfer with no offer, or an assembled part whose hash is wrong drops the
-transfer with `dist:frame-invalid`. Chunks may arrive in any order and may repeat.
+transfer with `dist:frame-invalid`. Chunks of one part may arrive in any order and may repeat. The sealed envelope comes first. A body
+chunk that arrives before the sealed envelope is whole and has passed V8 is not read (B9), and the
+sender sends it again.
 
 **B7.** A PEP holds at most one transfer per part at a time and a transfer that is not complete after 5
 seconds is dropped silently, so lost frames cost a retry and never a partial stage.
@@ -391,7 +393,8 @@ against endless data (TUF section 1.5.2).
 **B10.** A relay passes frames between a medium and a PEP that has no radio of its own, such as an
 ESP32-C6 in front of a board on a serial line. A relay holds no key, verifies nothing, and is not a PEP.
 It is part of the untrusted transport, so what it drops or changes is caught by the PEP behind it. The
-frame binding runs unchanged on the link behind a relay, with that link's own frame limit.
+frame binding runs unchanged on the link behind a relay, with that link's own frame limit. A state
+record travels in one frame, so a link's limit is at least 216 bytes.
 
 **B11.** A link may be declared ordered. On an ordered link the sender sends the chunks of a part in
 offset order without repeats, and the PEP drops a transfer whose chunk is out of order with

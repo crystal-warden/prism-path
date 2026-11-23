@@ -760,6 +760,7 @@ prismpath/tests/test_crypto_host.py
 prismpath/tests/test_crypto_migration.py
 prismpath/tests/test_crypto_registry.py
 prismpath/tests/test_deferral.py
+prismpath/tests/test_distribution_c.py
 prismpath/tests/test_distribution_corpus.py
 prismpath/tests/test_distribution_crash.py
 prismpath/tests/test_distribution_envelope.py

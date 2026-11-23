@@ -17,6 +17,10 @@ spec stable.
 - **A mesh node or a cFS app, whose own check does not read `meta`, only checks that it is an object nested at most three levels inside the envelope.** Every other reader checks its members and their forms.
 
 
+### Added: the distribution verifier and state machine in C, tested natively against the shared corpus (2026-11-22)
+
+- **`prismpath-hw/dist/` is the C core of policy distribution for mesh nodes and the cFS app.** It reads the sealed container and the envelope with a strict canon/2 reader that allocates nothing, checks the signatures with Monocypher before it reads the envelope, and runs the one verifier, the frame reassembly and the enforcement point machine with its signed state records.
+- **The C core answers as the Python reference does.** `prismpath/tests/test_distribution_c.py` builds it with the host compiler and its sanitizers, replays every mesh case of the corpus, requires the machine's signed state records byte for byte beside the Python machine, and runs the reassembly frame for frame beside `frames.py`.
 ### Added: the frame binding of policy distribution for broadcast media (2026-11-22)
 
 - **`prismpath.distribution.frames` writes and reads the six frames of a broadcast medium.** They are the offer, the chunk, the state record, the commit with its delay, the abort and the epoch, each within the link's limit of 250 bytes on ESP-NOW, and anything a reader refuses is `dist:frame-invalid`.
