@@ -181,20 +181,22 @@ def larger(target: kinds.Target, *, widens: bool, replaces: str, active_policy: 
            answer: Optional[str]) -> bool:
     """Whether the PEP treats a release as larger. `answer` is its own comparison when it can decide (W1), and
     anything but not larger counts as larger. A PEP that cannot decide reads the release's `widens` and
-    `replaces` (W2)."""
+    `replaces` (W2), and still counts as larger what a comparison it can make, `answer`, finds larger."""
     if target.decides:
         return answer != NOT_LARGER
-    return widens or active_policy is None or replaces != active_policy
+    return widens or active_policy is None or replaces != active_policy or answer == LARGER
 
 
 def check(target: kinds.Target, *, widens: bool, replaces: str, active_policy: Optional[str],
           answer: Optional[str], statement: Optional[bytes]) -> Optional[str]:
     """V12 for a release with these `widens` and `replaces`, on a PEP whose active policy hash is
-    `active_policy`. `answer` is the PEP's own comparison when it can decide, and `statement` the body of the
-    `trust.widening` envelope staged for the same release, or None. None when the release may be staged or
-    committed, else `dist:widening-unsigned`."""
+    `active_policy`. `answer` is the PEP's own comparison: of the whole release when it can decide, and on a kind
+    that cannot of the artifacts in its row's `compares`, a table any change of which is larger, which no
+    statement saves when `widens` is false (W6). `statement` is the body of the `trust.widening` envelope staged
+    for the same release, or None. None when the release may be staged or committed, else
+    `dist:widening-unsigned`."""
     if not larger(target, widens=widens, replaces=replaces, active_policy=active_policy, answer=answer):
         return None
-    if target.decides and not widens:
+    if not widens and (target.decides or answer == LARGER):
         return UNSIGNED                                # W6: the signer said it does not widen, and it does
     return None if covers(statement, active_policy) else UNSIGNED

@@ -184,21 +184,26 @@ def host(tmp_path):
     return _dist.HostPep(tmp_path / "host")
 
 
-def test_case_060_widens_false_replacing_the_active_hash_commits_on_its_signature(mesh):
-    """case_060: W2. No statement is needed."""
+def test_case_060_a_renewal_commits_on_its_signature(mesh):
+    """case_060: W2, the mesh half. The table active again at a higher seq, with `widens` false and `replaces` the
+    active hash, needs no statement. The cFS half, a table taken on the signer's word, is in
+    integrations/cfs/tests/test_cfs_dist.py."""
     mesh.commit(OLD)
-    record = _read(mesh, mesh.pep.stage(mesh.seal(NEW, seq=2, replaces=H(OLD)), NEW))
+    record = _read(mesh, mesh.pep.stage(mesh.seal(OLD, seq=2, replaces=H(OLD), expires=_dist.EXPIRES + 10), OLD))
     assert record.event == "staged"
-    assert _read(mesh, mesh.pep.commit(STREAM, 2, H(NEW))).event == "committed" and mesh.pep.active.seq == 2
+    assert _read(mesh, mesh.pep.commit(STREAM, 2, H(OLD))).event == "committed" and mesh.pep.active.seq == 2
 
 
 def test_case_061_another_replaces_or_widens_true_without_a_statement_is_widening_unsigned(mesh):
     """case_061: W2, W3."""
     mesh.commit(OLD)
-    for args in ({"replaces": H(NEWER)}, {"replaces": H(OLD), "widens": True}, {"replaces": ""}):
+    for args in ({"replaces": H(NEWER)}, {"replaces": H(OLD), "widens": True}, {"replaces": ""},
+                 {"replaces": H(OLD)}):                               # the last another table, said not to widen
         record = _read(mesh, mesh.pep.stage(mesh.seal(NEW, seq=2, **args), NEW))
         assert record.cause == "dist:widening-unsigned", args
-    assert mesh.pep.staged is None and mesh.pep.active.seq == 1
+    mesh.widen(NEW, 3, [], replaces=H(OLD))                           # W6: the signer's word is wrong
+    assert _read(mesh, mesh.pep.stage(mesh.seal(NEW, seq=3, replaces=H(OLD)), NEW)).cause == "dist:widening-unsigned"
+    assert mesh.pep.active.seq == 1
 
 
 def test_case_062_a_statement_covers_when_from_holds_the_active_hash_or_is_empty(tmp_path):
@@ -230,7 +235,8 @@ def test_a_statement_is_checked_again_at_commit_against_what_is_active_then(host
     changed under it since, here by a rollback."""
     host.commit(OLD)
     host.commit(NEW, seq=2)
-    host.pep.stage(host.seal(NEWER, seq=3), NEWER)                   # replaces NEW, which is active
+    host.widen(NEWER, 3, [H(NEW)], widens=True)                       # it covers NEW alone
+    host.pep.stage(host.seal(NEWER, seq=3, widens=True), NEWER)      # replaces NEW, which is active
     host.pep.active = host.pep.previous                              # as a rollback would leave it
     assert _read(host, host.pep.commit(STREAM, 3, H(NEWER))).cause == "dist:widening-unsigned"
 

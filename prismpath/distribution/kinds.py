@@ -90,7 +90,8 @@ class Target:
     `mesh` and `cfs`. `body_bound` is the kind's bound on the body of an artifact it uses and `trust_bound` its
     bound on a trust body, 16,384 bytes for every kind, which holds the largest list R7 allows (E6), and `checks` the kind's own V11 checks
     where they differ from the artifact's. `reads_meta` is false for a kind whose own check does not read `meta`,
-    so its reader only bounds `meta` and skips its members (E9)."""
+    so its reader only bounds `meta` and skips its members (E9). `compares` is what a kind that cannot decide
+    still compares with the active release (W2): a `policy.ppt` table, any change of which is larger."""
     needs: FrozenSet[str]
     decides: bool
     when_declared: FrozenSet[str] = frozenset()
@@ -100,6 +101,7 @@ class Target:
     trust_bound: int = 16384
     checks: Any = None
     reads_meta: bool = True
+    compares: FrozenSet[str] = frozenset()
 
     @property
     def uses(self) -> FrozenSet[str]:
@@ -345,11 +347,12 @@ TRUST_BOUND = 16384                                # E6: every kind takes the la
 MESH_TABLE_MAX = 640                               # E6: TBL_MAX in prismpath-hw/mesh/main/ppt_mesh.c
 
 TARGETS: Dict[str, Target] = {
-    "host": Target(needs=frozenset({"policy.ppt"}), decides=False, when_declared=frozenset({"policy.spiral"})),
+    "host": Target(needs=frozenset({"policy.ppt"}), decides=False, when_declared=frozenset({"policy.spiral"}),
+                   compares=frozenset({"policy.ppt"})),
     "agent": Target(needs=frozenset({"policy.core", "egress.hosts"}), decides=True,
                     when_declared=frozenset({"agent.zones"})),
     "mesh": Target(needs=frozenset({"policy.ppt"}), decides=False, expiry_hold=True, body_bound=MESH_TABLE_MAX,
-                   checks={"policy.ppt": check_mesh_table}, reads_meta=False),
+                   checks={"policy.ppt": check_mesh_table}, reads_meta=False, compares=frozenset({"policy.ppt"})),
 }
 
 

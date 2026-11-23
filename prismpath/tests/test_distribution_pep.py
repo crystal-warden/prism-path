@@ -499,22 +499,21 @@ def test_a_rollback_on_a_target_that_cannot_decide_needs_a_covering_widening_sta
     dist:widening-unsigned unless that release holds a widening statement whose from is empty or holds the
     active policy hash. This is case 55's half for a target that cannot decide."""
     point.commit(NEWER, seq=1)                   # the first install, with its statement
-    point.commit(OLD, seq=2)
-    point.commit(NEW, seq=3)
+    point.widen(OLD, 2, [H(NEWER)], widens=True)  # each change of the table with a statement for what it replaces
+    point.commit(OLD, seq=2, widens=True)
+    point.widen(NEW, 3, [H(OLD)], widens=True)
+    point.commit(NEW, seq=3, widens=True)
     assert _read(point, point.pep.rollback()).cause == "dist:widening-unsigned" and point.pep.active.seq == 3
-    for seq, froms, cause in ((4, [H(NEWER)], "dist:widening-unsigned"), (6, [H(NEW)], None), (8, [], None)):
-        point.pep = point.open()
-        release = _dist.env.release_id([("policy.ppt", H(OLD))])
-        statement = _widening(froms)
-        point.pep.stage(seal("trust.widening", statement, seq=seq, release=release, policy_sha256=H(OLD),
-                             replaces=point.pep.active.policy_sha256), statement)
-        point.stage(OLD, seq=seq, release=release)
-        point.pep.commit(STREAM, seq, H(OLD))
-        point.stage(NEW, seq=seq + 1)
-        point.pep.commit(STREAM, seq + 1, H(NEW))
-        record = _read(point, point.pep.rollback())
+    for name, froms, cause in (("another", [H(NEW)], "dist:widening-unsigned"), ("active", [H(NEWER)], None),
+                               ("any", [], None)):
+        other = _dist.HostPep(point.state_dir.parent / name)
+        other.commit(NEW, seq=1)
+        other.widen(OLD, 2, sorted({H(NEW), *froms}) if froms else [], widens=True)
+        other.commit(OLD, seq=2, widens=True)                          # kept, with its statement
+        other.commit(NEWER, seq=3)                                     # the release a rollback leaves
+        record = _read(other, other.pep.rollback())
         assert record.cause == cause, froms
-        assert point.pep.active.seq == (seq if cause is None else seq + 1)
+        assert other.pep.active.seq == (2 if cause is None else 3)
 
 
 def test_a_mesh_node_reads_its_stored_envelopes_as_it_staged_them(tmp_path):

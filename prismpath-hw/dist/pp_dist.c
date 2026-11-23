@@ -1147,14 +1147,33 @@ static int pp_covers(const pp_pep_machine *pep, const pp_release *kept) {
     return 0;
 }
 
-/* V12 on a kind that cannot decide (W2, W3): a release is larger unless its `widens` is false and its `replaces`
- * is the active policy hash, and a larger one needs a widening statement of the same release, staged before it,
- * that covers the node (widening.check). */
-static uint8_t pp_widening(const pp_pep_machine *pep, int widens, const uint8_t replaces[32], int has_replaces,
-                           const pp_release *with) {
+/* The active release's table, or NULL when there is none. */
+static const uint8_t *pp_active_table(const pp_pep_machine *pep, size_t *len) {
     const pp_durable *d = &pep->d;
-    int larger = widens || !d->has_active || !has_replaces || memcmp(replaces, d->active.policy_sha256, 32) != 0;
+    if (!d->has_active) return NULL;
+    for (size_t k = 0; k < d->active.n; k++)
+        if (d->active.held[k].envelope.artifact == PP_ART_POLICY_PPT) {
+            *len = d->active.held[k].body_len;
+            return pp_held_body((pp_release *)&d->active, k);
+        }
+    return NULL;
+}
+
+/* V12 on a kind that cannot decide (W2, W3, W6): a release is larger unless its `widens` is false and its
+ * `replaces` is the active policy hash, and a larger one needs a widening statement of the same release, staged
+ * before it, that covers the node (widening.check). The node still compares the table: one that is not byte for
+ * byte the active table is larger, and when its `widens` is false the signer's word is wrong and no statement
+ * saves it. `table` is the staged table, or NULL when the envelope judged carries none. */
+static uint8_t pp_widening(const pp_pep_machine *pep, int widens, const uint8_t replaces[32], int has_replaces,
+                           const pp_release *with, const uint8_t *table, size_t table_len) {
+    const pp_durable *d = &pep->d;
+    size_t active_len = 0;
+    const uint8_t *active = pp_active_table(pep, &active_len);
+    int changed = table != NULL && active != NULL && (table_len != active_len || memcmp(table, active, table_len) != 0);
+    int larger = changed || widens || !d->has_active || !has_replaces ||
+                 memcmp(replaces, d->active.policy_sha256, 32) != 0;
     if (!larger) return PP_CAUSE_NONE;
+    if (changed && !widens) return PP_CAUSE_WIDENING_UNSIGNED; /* W6 */
     return with != NULL && pp_covers(pep, with) ? PP_CAUSE_NONE : PP_CAUSE_WIDENING_UNSIGNED;
 }
 
@@ -1219,7 +1238,9 @@ void pp_pep_stage(pp_pep_machine *pep, const uint8_t *sealed, size_t sealed_len,
     }
     if (e->artifact != PP_ART_TRUST_WIDENING) {
         int same = d->has_staged && strcmp(d->staged.stream, e->stream) == 0 && d->staged.seq == e->seq;
-        uint8_t cause = pp_widening(pep, e->widens, e->replaces, e->has_replaces, same ? &d->staged : NULL);
+        int table = e->artifact == PP_ART_POLICY_PPT;
+        uint8_t cause = pp_widening(pep, e->widens, e->replaces, e->has_replaces, same ? &d->staged : NULL,
+                                    table ? body : NULL, table ? body_len : 0);
         if (cause) { pp_refuse(pep, cause); return; } /* V12 */
     }
     if (!d->has_staged || d->staged.seq != e->seq) {
@@ -1261,7 +1282,15 @@ static void pp_commit_now(pp_pep_machine *pep, const char *stream, long long seq
         pp_refuse(pep, cause);
         return;
     }
-    cause = pp_widening(pep, d->staged.widens, d->staged.replaces, d->staged.has_replaces, &d->staged);
+    const uint8_t *table = NULL;
+    size_t table_len = 0;
+    for (size_t k = 0; k < d->staged.n; k++)
+        if (d->staged.held[k].envelope.artifact == PP_ART_POLICY_PPT) {
+            table = pp_held_body(&d->staged, k);
+            table_len = d->staged.held[k].body_len;
+        }
+    cause = pp_widening(pep, d->staged.widens, d->staged.replaces, d->staged.has_replaces, &d->staged, table,
+                        table_len);
     if (cause) { pp_refuse(pep, cause); return; } /* V12 again, against what is active now */
     pp_flip(pep, 0);
 }

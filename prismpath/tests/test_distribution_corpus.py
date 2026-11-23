@@ -70,7 +70,8 @@ def test_every_case_names_its_inputs_and_one_result():
     for vector in CORPUS["release_ids"]:
         assert set(vector) == {"case", "name", "runs_on", "artifacts", "release"}
     for entry in CORPUS["widening"]:
-        assert set(entry) == {"case", "name", "runs_on", "kind", "active_policy", "sealed", "statement", "expect"}
+        assert set(entry) == {"case", "name", "runs_on", "kind", "active_policy", "active_table", "table", "sealed",
+                              "statement", "expect"}
     for entry in CORPUS["frames"]:
         assert set(entry) == {"case", "name", "runs_on", "trust", "pep", "now", "limit", "ordered", "steps", "expect"}
         assert {entry["case"] for entry in CORPUS["frames"]} == {35, 36, 37, 120, 121}

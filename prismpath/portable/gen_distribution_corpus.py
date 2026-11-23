@@ -14,9 +14,10 @@ is the trust store document, or null for a store that cannot be read. `expect` i
 decides, and the generator also asserts that it is the cause the spec gives, so the file never freezes a
 wrong verdict. `release_ids` holds the release id vectors of E10.
 
-`widening` holds the widening rule's cases (V12, W2 to W4) for a PEP that cannot decide: `{case, name,
-runs_on, kind, active_policy, sealed, statement, expect}`. `sealed` is the release envelope whose `widens` and
-`replaces` are read, `active_policy` the PEP's active policy hash or null, `statement` the body of the
+`widening` holds the widening rule's cases (V12, W2 to W4, W6) for a PEP that cannot decide: `{case, name,
+runs_on, kind, active_policy, active_table, table, sealed, statement, expect}`. `sealed` is the release envelope
+whose `widens` and `replaces` are read, `table` its body and `active_table` the active one, which the PEP compares
+byte for byte (W2), `active_policy` the PEP's active policy hash or null, `statement` the body of the
 `trust.widening` envelope staged for the same release or null, and `expect` the cause, null when it may stage.
 
 `frames` holds the frame binding's cases (B6, B7, B9, B10) for a PEP that assembles a transfer from frames:
@@ -174,8 +175,13 @@ def replay_widening(entry: dict) -> dict:
     """V12 on a PEP that cannot decide, as the Python PEP runs it, in the corpus's `expect` form."""
     envelope = env.read(env.unseal(bytes.fromhex(entry["sealed"]))[0], reads_meta=False)
     statement = None if entry["statement"] is None else bytes.fromhex(entry["statement"])
-    cause = widening_rule.check(dist_kinds.TARGETS[entry["kind"]], widens=envelope.widens, replaces=envelope.replaces,
-                                active_policy=entry["active_policy"], answer=None, statement=statement)
+    target = dist_kinds.TARGETS[entry["kind"]]
+    answer = None
+    if entry["active_table"] is not None and envelope.artifact in target.compares:     # W2: the table compared
+        answer = widening_rule.compare_artifact(envelope.artifact, bytes.fromhex(entry["active_table"]),
+                                                bytes.fromhex(entry["table"]))
+    cause = widening_rule.check(target, widens=envelope.widens, replaces=envelope.replaces,
+                                active_policy=entry["active_policy"], answer=answer, statement=statement)
     return {"cause": cause}
 
 
@@ -184,7 +190,8 @@ def build_widening(spec: Dict[int, dict]) -> List[dict]:
     out = []
     body = image()
     other = canon.sha256_hex(b"another policy")
-    active = canon.sha256_hex(ppt_compile.compile_predicate("when x >= 3").serialize())
+    active_table = ppt_compile.compile_predicate("when x >= 3").serialize()
+    active = canon.sha256_hex(active_table)
 
     def statement(froms):
         return canon.canon2_bytes({canon.ENCODING_KEY: canon.CANON2, "format": "prismpath.dist-widening/1",
@@ -193,13 +200,15 @@ def build_widening(spec: Dict[int, dict]) -> List[dict]:
     for kind in ("host", "mesh"):
         implementations = {"host": "PR", "mesh": "PC"}[kind]
 
-        def add(number, name, expected, *, replaces, widens=False, active_policy=active, froms=None):
+        def add(number, name, expected, *, replaces, widens=False, active_policy=active, froms=None, table=body,
+                active_body=active_table):
             if implementations[1] not in spec[number]["runs_on"]:       # host for Rust, mesh for the C core
                 return
             runs_on = [one for one in spec[number]["runs_on"] if one in implementations]
-            doc = envelope_doc(body, targets=[kind], replaces=replaces, widens=widens)
+            doc = envelope_doc(table, targets=[kind], replaces=replaces, widens=widens)
             entry = {"case": number, "name": f"{number:03d}_{name}" + ("" if kind == "host" else f"_on_{kind}"),
                      "runs_on": runs_on, "kind": kind, "active_policy": active_policy,
+                     "active_table": None if active_policy is None else active_body.hex(), "table": table.hex(),
                      "sealed": env.seal(canon2.dumps(doc), [test_key("A")]).hex(),
                      "statement": None if froms is None else statement(froms).hex()}
             entry["expect"] = replay_widening(entry)
@@ -207,9 +216,11 @@ def build_widening(spec: Dict[int, dict]) -> List[dict]:
             out.append(entry)
 
         unsigned = "dist:widening-unsigned"
-        add(60, "widens_false_replacing_the_active_hash", None, replaces=active)
+        add(60, "a_renewal_of_the_active_table", None, replaces=active, table=active_table)
         add(61, "widens_false_replacing_another_hash", unsigned, replaces=other)
         add(61, "widens_true_without_a_statement", unsigned, replaces=active, widens=True)
+        add(61, "another_table_that_says_it_does_not_widen", unsigned, replaces=active)
+        add(61, "another_table_that_says_it_does_not_widen_with_a_statement", unsigned, replaces=active, froms=[])
         add(62, "a_statement_from_the_active_hash", None, replaces=active, widens=True, froms=[active])
         add(62, "a_statement_from_any", None, replaces=active, widens=True, froms=[])
         add(62, "a_statement_from_another_hash_only", unsigned, replaces=active, widens=True, froms=[other])

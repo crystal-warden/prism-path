@@ -155,12 +155,16 @@ class Point:
         return pep.stage(sealed, statement)
 
     def stage(self, body: bytes, seq: int = 1, *, pep: Optional[Pep] = None, **seal_args) -> bytes:
-        """Stage a release of `body` that replaces the active one. A first install is larger than no policy, so
-        the owner's widening statement covering any PEP is staged before it (W2, W3). Returns the release's
-        stage-ack."""
+        """Stage a release of `body` that replaces the active one. A first install is larger than no policy, and
+        on a kind that cannot decide another table than the active one is larger (W2), so the owner's widening
+        statement covering any PEP is staged before it (W3) unless the caller says how it widens. A renewal of
+        the active table goes in on its signature. Returns the release's stage-ack."""
         pep = pep or self.pep
-        if pep.active is None:
-            seal_args.setdefault("widens", True)        # it replaces nothing, so it allows more (W1, W6)
+        active = pep.active
+        changed = (active is None or not pep.target.decides
+                   and active.bodies.get(self.artifact, b"") != bytes(body))
+        if changed and "widens" not in seal_args:
+            seal_args["widens"] = True                   # it allows more than what it replaces (W1, W2, W6)
             self.widen(body, seq, pep=pep, **seal_args)
         seal_args.setdefault("replaces", pep.active.policy_sha256 if pep.active else "")
         return pep.stage(self.seal(body, seq=seq, **seal_args), body)
@@ -280,8 +284,9 @@ class AgentPep(Point):
         refusal among the acks, or the last ack."""
         pep = pep or self.pep
         seal_args.setdefault("release", self.release_of(body, hosts))
-        if pep.active is None:
-            seal_args.setdefault("widens", True)
+        if pep.active is None and "widens" not in seal_args:
+            seal_args["widens"] = True                   # a first install allows more than no policy
+            self.widen(body, seq, pep=pep, hosts=hosts, **seal_args)
         seal_args.setdefault("replaces", pep.active.policy_sha256 if pep.active else "")
         acks = [super().stage(body, seq, pep=pep, **seal_args),
                 pep.stage(self.seal_hosts(body, seq, hosts, **seal_args), hosts or self.hosts)]
@@ -318,8 +323,8 @@ def case_107_hold_keeps_deciding_and_marks_everything(make: Callable[..., Point]
     assert held == {**before, "mark": "held"}
     sent = [_read(point, data) for data in point.pep.drain()]
     assert [(record.event, record.cause) for record in sent] == [("held", "dist:held")] and sent[0].state == "active"
-    later = point.seal(bodies[1], seq=2, not_before=EXPIRES, expires=EXPIRES + 1000)
-    for signed in (point.pep.record("beat"), point.pep.stage(later, bodies[1]), point.pep.abort(STREAM, 9, "00" * 32)):
+    for signed in (point.pep.record("beat"), point.stage(bodies[1], 2, not_before=EXPIRES, expires=EXPIRES + 1000),
+                   point.pep.abort(STREAM, 9, "00" * 32)):
         assert _read(point, signed).held
     point.pep = point.open()                                                        # a restart is still held
     assert point.pep.decide(lambda: decide(point.pep))["mark"] == "held"
@@ -338,8 +343,7 @@ def case_110_a_held_pep_never_widens(make: Callable[..., Point], bodies, decide:
     point.pep.tick()
     record = _read(point, point.pep.rollback())
     assert (record.cause, record.held, record.active_seq) == ("dist:held", True, 2)
-    fresh = point.seal(bodies[0], seq=3, not_before=EXPIRES, expires=EXPIRES + 1000)
-    point.pep.stage(fresh, bodies[0])
+    point.stage(bodies[0], 3, not_before=EXPIRES, expires=EXPIRES + 1000)
     committed = _read(point, point.pep.commit(STREAM, 3, point.policy_of(bodies[0])))
     assert (committed.event, committed.held, committed.active_seq) == ("committed", False, 3)
 

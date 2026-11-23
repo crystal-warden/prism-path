@@ -311,6 +311,10 @@ def _with_statements(script: list) -> tuple:
 
 
 def _same(host_check, tmp_path, script, *, hold=False, statements=True) -> list:
+    """`script` run on the Python machine and on the C core, which must print the same lines, returned with the
+    lines of the statements `_with_statements` staged left out. A statement staged for a release that is then
+    refused for another reason leaves a staged release that holds only the statement, which displaces what was
+    staged before, so a release meant to be refused before V12 is sealed with `widens` false and gets none."""
     script, quiet = _with_statements(script) if statements else (script, set())
     python = _python_steps(script, hold=hold, tmp_path=tmp_path)
     c = _c_steps(host_check, [step for step in script if step[0] not in ()], hold=hold)
@@ -834,10 +838,13 @@ def test_a_rollback_is_held_to_what_a_commit_checks_on_the_c_core(host_check, tm
 
 
 def test_case_060_061_062_063_109_the_widening_rule_answers_as_the_python_machine(host_check, tmp_path):
-    """case_060: W2. case_061: W2, W3. case_062: W4, W5. case_063: W2, W3. case_109: X8. On a mesh node, which cannot
-    decide, a release is taken on its signature only when `widens` is false and `replaces` is the active hash; a
-    first install, another `replaces` and `widens` true need a widening statement whose `from` is empty or holds
-    the active hash, checked at staging and again at commit; and a held node keeps the rule."""
+    """case_060: W2. case_061: W2, W3, W6. case_062: W4, W5. case_063: W2, W3. case_109: X8. A mesh node cannot decide
+    whether a table allows more, but a table has no order, so one that is not byte for byte the active table is
+    larger. A release goes in on its signature alone only as a renewal, with `widens` false and `replaces` the
+    active hash. Another `replaces`, `widens` true, or another table need a covering statement, and another table
+    that says it does not widen is refused even with one. It is checked at staging and again at commit, and a
+    held node keeps the rule. The cFS half of case 60, a table taken on the signer's word, is in
+    integrations/cfs/tests."""
     def release(index, seq, statement=None, **args):
         steps = []
         if statement is not None:
@@ -849,19 +856,22 @@ def test_case_060_061_062_063_109_the_widening_rule_answers_as_the_python_machin
     script = [("provision", S, N)]
     script += release(0, 1)                                                    # 63: a first install, no statement
     script += release(0, 1, [], widens=True) + [("commit", S, 1, H[0], N)]     # 63: with one
-    script += release(1, 2, replaces=H[0], widens=False) + [("commit", S, 2, H[1], N)]    # 60
-    script += release(2, 3, replaces=H[0], widens=False)                       # 61: another replaces
-    script += release(2, 4, replaces=H[1], widens=True)                        # 61: widens, no statement
-    script += release(2, 5, [H[1]], replaces=H[1], widens=True)                # 62: from the active hash
-    script += release(2, 6, [H[0]], replaces=H[1], widens=True)                # 62: from another only
+    script += release(0, 2, replaces=H[0], widens=False) + [("commit", S, 2, H[0], N)]    # 60: a renewal
+    script += release(2, 3, replaces=H[2], widens=False)                       # 61: another replaces
+    script += release(2, 4, replaces=H[0], widens=True)                        # 61: widens, no statement
+    script += release(2, 5, replaces=H[0], widens=False)                       # 61: another table, no statement
+    script += release(2, 6, [], replaces=H[0], widens=False)                   # 61: and with one (W6)
+    script += release(2, 7, [H[0]], replaces=H[0], widens=True)                # 62: from the active hash
+    script += release(1, 8, [H[1]], replaces=H[0], widens=True)                # 62: from another only
     lines = _same(host_check, tmp_path, script, statements=False)
     events = [_events(line) for line in lines]
     assert events[1] == [("refused", "dist:widening-unsigned")]
     assert events[4] == events[6] == [("committed", None)]
-    assert events[7] == events[8] == [("refused", "dist:widening-unsigned")]
-    assert events[10] == [("staged", None)] and events[12] == [("refused", "dist:widening-unsigned")]
+    assert events[7] == events[8] == events[9] == [("refused", "dist:widening-unsigned")]
+    assert events[10] == [("staged", None)] and events[11] == [("refused", "dist:widening-unsigned")]
+    assert events[13] == [("staged", None)] and events[15] == [("refused", "dist:widening-unsigned")]
     held = [("provision", S, N)] + release(0, 1, [], widens=True, expires=N + 100) + [
-        ("commit", S, 1, H[0], N), ("tick", N + 100)] + release(1, 2, replaces=H[2], widens=False,
+        ("commit", S, 1, H[0], N), ("tick", N + 100)] + release(1, 2, replaces=H[0], widens=False,
                                                                expires=N + 1000)
     lines = _same(host_check, tmp_path / "held", held, hold=True, statements=False)
     assert _events(lines[-1]) == [("refused", "dist:widening-unsigned")] and _records(lines[-1])[0].held

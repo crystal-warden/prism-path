@@ -469,6 +469,11 @@ class Pep:
         at staging and, at commit (`whole`), the whole release, which also sees an artifact the release drops."""
         active = self.active
         answer = None
+        if not self.target.decides and active is not None:              # W2: the comparisons it can make (W6)
+            for name in sorted(self.target.compares & set(artifacts)):
+                if name in active.bodies and widening.compare_artifact(name, active.bodies[name],
+                                                                       artifacts[name]) != NOT_LARGER:
+                    answer = LARGER
         if self.target.decides:
             if whole:
                 answer = widening.compare_release(None if active is None else active.bodies, artifacts)

@@ -141,3 +141,25 @@ def test_a_cfs_table_is_ordered_by_its_core_image_and_any_other_change_is_larger
     narrower = bytes(narrower[:dist_kind.BODY_SIZE])
     assert dist_kind.compare_cfs_tables(base, narrower) == widening.NOT_LARGER
     assert dist_kind.compare_cfs_tables(narrower, base) == widening.LARGER
+
+
+def test_a_cfs_table_with_another_core_image_is_taken_on_the_signers_word():
+    """Case 60's cFS half (W2): the cFS app compares nothing itself, so a table whose core image differs, with
+    `widens` false and `replaces` its active hash, commits on its signature alone."""
+    import tempfile
+    from pathlib import Path
+    from prismpath.kernel import canon2
+    point = CfsPep(Path(tempfile.mkdtemp()) / "app")
+    base = _body(1)
+    point.commit(base)
+    doc = canon2.loads(gen_image.CORE.read_bytes().rstrip(b"\n"))
+    doc["rules"][-1]["target"] = "escalate_34"
+    other = table.pack(gen_image.build(canon2.dumps(doc)))
+    table.set_version(other, 2)
+    other = bytes(other[:dist_kind.BODY_SIZE])
+    active = point.policy_of(base)
+    record = state_record.read(point.pep.stage(point.seal(other, seq=2, replaces=active, widens=False), other),
+                               point.key.public_raw)
+    assert record.event == "staged"
+    committed = point.pep.commit(_dist.STREAM, 2, point.policy_of(other))
+    assert state_record.read(committed, point.key.public_raw).event == "committed"
