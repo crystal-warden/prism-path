@@ -502,7 +502,8 @@ staged with it. Otherwise the cause is `dist:widening-unsigned`.
 {"encoding":"canon/2","format":"prismpath.dist-widening/1","from":["<policy hash>", "..."]}
 ```
 
-`from` is sorted. It lists the policy hashes the release may replace. An empty list means any, including
+`from` is sorted and holds at most 64 hashes. A longer one is `dist:too-large`. It lists the policy hashes
+the release may replace. An empty list means any, including
 none. The statement covers a PEP when `from` is empty or holds the PEP's active policy hash.
 
 **W5.** A widening statement is signed by the authority. In this version every envelope is, so the rule
@@ -1027,3 +1028,4 @@ reports exactly the cause given, or none, and its state after is the one given.
 | 132 | A `mesh` PEP is sent a revocation list of 64 entries in each list and 16 streams, a `policy.ppt` of 641 bytes, and over frames a trust body offered at 16,385 bytes | applied, `dist:too-large` from the signed `body_size` with no body read, and the transfer dropped with `dist:too-large` | E6, V5, R7, B9 | P C |
 | 133 | A PEP one trust statement behind is offered that statement and a release, refuses the statement, then takes it and the release | only the statement is offered first, the refusal is filed against the statement and the rollout is unmoved, then the release is offered and commits | F6 | P |
 | 134 | A revocation whose `targets` names only `mesh` is sent to a `host` PEP and a `mesh` PEP, then a rotation naming every kind | applied on both, and both then take the rotation at the next trust sequence | V5, R1 | P R C |
+| 135 | A widening statement whose `from` holds 64 hashes, and one with 65 | staged, `dist:too-large` | W4 | P R C |
