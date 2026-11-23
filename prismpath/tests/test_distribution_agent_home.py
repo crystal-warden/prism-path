@@ -163,11 +163,13 @@ def test_a_commit_changes_the_hook_and_the_egress_proxy_together(tmp_path, monke
     project.mkdir()
     (project / "a.txt").write_text("x\n")
     hook_env = {"HOME": str(tmp_path), "CLAUDE_PROJECT_DIR": str(project)}
+    answers = []
 
     def hook(session):
         data = {"session_id": session, "hook_event_name": "PreToolUse", "tool_name": "Read",
                 "tool_input": {"file_path": str(project / "a.txt")}, "cwd": str(project)}
         answer = commands.hook(json.dumps(data).encode(), hook_env)
+        answers.append(answer)
         return answer["hookSpecificOutput"]["permissionDecision"]
 
     policy, store = commands.load_checked(home_dir)
@@ -191,7 +193,7 @@ def test_a_commit_changes_the_hook_and_the_egress_proxy_together(tmp_path, monke
         assert point.release(ALLOW_HOSTS, 3, hosts=docs)[-1].event == "committed"
         status, body = _connect_status(proxy, "docs.example.com:443")
         assert status == 403 and b"policy-changed" in body
-        assert hook("s3") == "allow"
+        assert hook("s3") == "allow", answers[-1]
     finally:
         proxy.close()
         echo.server.close()
@@ -397,8 +399,8 @@ def test_the_hook_s_decision_reaches_the_heartbeat(tmp_path, monkeypatch):
     (project / "a.txt").write_text("x\n")
     hook = {"session_id": "s", "hook_event_name": "PreToolUse", "tool_name": "Read",
             "tool_input": {"file_path": str(project / "a.txt")}, "cwd": str(project)}
-    commands.hook(json.dumps(hook).encode(), {"HOME": str(tmp_path), "CLAUDE_PROJECT_DIR": str(project)})
-    assert len(agent_home.take_readings(home_dir)) == 1
+    answer = commands.hook(json.dumps(hook).encode(), {"HOME": str(tmp_path), "CLAUDE_PROJECT_DIR": str(project)})
+    assert len(agent_home.take_readings(home_dir)) == 1, answer
 
 
 def test_a_long_running_decider_follows_a_revocation_and_an_expiry(tmp_path, monkeypatch):
