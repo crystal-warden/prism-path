@@ -24,6 +24,7 @@ docs/guides/frontier-agent-integration.md
 docs/guides/governed-agent.md
 docs/guides/mission-control-api.md
 docs/guides/operator.md
+docs/guides/policy-distribution.md
 docs/guides/process-owner.md
 docs/guides/tour.md
 docs/guides/workers.md
@@ -248,9 +249,12 @@ prismpath/distribution/__init__.py
 prismpath/distribution/adapters/__init__.py
 prismpath/distribution/adapters/host.py
 prismpath/distribution/adapters/mesh.py
+prismpath/distribution/cli.py
+prismpath/distribution/controller.py
 prismpath/distribution/devbuild.py
 prismpath/distribution/envelope.py
 prismpath/distribution/frames.py
+prismpath/distribution/http.py
 prismpath/distribution/kinds.py
 prismpath/distribution/pep.py
 prismpath/distribution/state_record.py
@@ -761,11 +765,13 @@ prismpath/tests/test_crypto_migration.py
 prismpath/tests/test_crypto_registry.py
 prismpath/tests/test_deferral.py
 prismpath/tests/test_distribution_c.py
+prismpath/tests/test_distribution_controller.py
 prismpath/tests/test_distribution_corpus.py
 prismpath/tests/test_distribution_crash.py
 prismpath/tests/test_distribution_envelope.py
 prismpath/tests/test_distribution_frames.py
 prismpath/tests/test_distribution_hatches.py
+prismpath/tests/test_distribution_http.py
 prismpath/tests/test_distribution_pep.py
 prismpath/tests/test_distribution_revocation.py
 prismpath/tests/test_distribution_rotation.py

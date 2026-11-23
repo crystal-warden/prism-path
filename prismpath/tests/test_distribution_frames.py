@@ -40,6 +40,12 @@ def _verify(sealed, body):
                            pep=verifier.PepView("host", GEN.STREAM, qualification=GEN.QUALIFICATION), now=GEN.NOW)
 
 
+def _through_v8(sealed):
+    return verifier.verify_envelope(sealed, trust=GEN.trust_store(),
+                                      pep=verifier.PepView("host", GEN.STREAM, qualification=GEN.QUALIFICATION),
+                                      now=GEN.NOW)
+
+
 class Clock:
     def __init__(self):
         self.now = 100.0
@@ -49,7 +55,7 @@ class Clock:
 
 
 def _assembler(ordered=False, clock=None, artifact_bound=env.MAX_BODY):
-    return frames.Assembler(frames.admit_through_v8(_verify), clock=clock or Clock(), ordered=ordered,
+    return frames.Assembler(frames.admit_through_v8(_through_v8), clock=clock or Clock(), ordered=ordered,
                             limit=LIMIT, artifact_bound=artifact_bound)
 
 
@@ -253,10 +259,10 @@ def test_case_132_a_trust_body_offered_past_the_trust_bound_drops_the_transfer()
     bytes is past both bounds and the transfer is dropped with dist:too-large before any part is read. A trust
     bound below 16,384 bytes cannot be set."""
     prefix = frames.hash_prefix(env.envelope_id(env.unseal(SEALED)[0]))
-    node = frames.Assembler(frames.admit_through_v8(_verify), clock=Clock(), limit=LIMIT, artifact_bound=640)
+    node = frames.Assembler(frames.admit_through_v8(_through_v8), clock=Clock(), limit=LIMIT, artifact_bound=640)
     assert node.receive(frames.encode(frames.Offer(9, prefix, len(SEALED), 16385))) == frames.Dropped(9, "dist:too-large")
     assert node.transfer is None
     node.receive(frames.encode(frames.Offer(9, prefix, len(SEALED), 16384)))
     assert node.transfer is not None
     with pytest.raises(ValueError):
-        frames.Assembler(frames.admit_through_v8(_verify), clock=Clock(), trust_bound=16383)
+        frames.Assembler(frames.admit_through_v8(_through_v8), clock=Clock(), trust_bound=16383)

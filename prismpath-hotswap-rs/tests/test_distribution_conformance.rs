@@ -237,6 +237,9 @@ rust_cases! {
     case_075_adding_a_revoked_key => "075_adding_a_revoked_key",
     /// case_075: O4, a retired key never added again.
     case_075_adding_a_retired_key => "075_adding_a_retired_key",
+    // case 134's verdicts; applying the two statements is the Rust PEP's (PR 14), so it is not claimed here
+    case_134_a_revocation_naming_only_mesh => "134_a_revocation_naming_only_mesh",
+    case_134_then_a_rotation_naming_every_kind => "134_then_a_rotation_naming_every_kind",
     /// case_076: O1.
     case_076_a_rotation_after_a_revocation_at_its_seq => "076_a_rotation_after_a_revocation_at_its_seq",
     /// case_131: K5.

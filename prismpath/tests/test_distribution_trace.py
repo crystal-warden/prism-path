@@ -37,12 +37,12 @@ RESEARCH_ONLY = {99: ROOT / "tools" / "tests" / "test_export.py"}
 C_KINDS = frozenset({"mesh", "cfs"})
 # Cases whose corpus half an implementation's replay decides while another half waits for a later pull
 # request, so the replay does not claim them and they stay in PENDING until that half has its test.
-# 16: the Rust PEP allows nothing; 66, 70, 72, 73, 79, 123, 130: the Rust verifier decides them, and applying the
+# 16: the Rust PEP allows nothing; 66, 70, 72, 73, 79, 123, 130, 134: the Rust verifier decides them, and applying the
 # trust statement, a commit or a release staying active is the Rust PEP's (PR 14)
-PARTIAL = {"P": frozenset({128, 130}), "R": frozenset({16, 66, 70, 72, 73, 79, 123, 130}), "C": frozenset()}
+PARTIAL = {"P": frozenset(), "R": frozenset({16, 66, 70, 72, 73, 79, 123, 130, 134}), "C": frozenset()}
 PENDING = {
-    "P": "30 32-34 45 49 54-65 80-81 86-96 100 102 104-105 109 113 120 124-125 128-130",
-    "R": "16-17 23-24 26 31 43 46-48 50-53 62-63 66 69-70 72-73 77 79 82 84-85 101 104 111 123 126 130",
+    "P": "45 49 55-65 81 88-91 100 102 104-105 109 129",
+    "R": "16-17 23-24 26 31 43 46-48 50-53 62-63 66 69-70 72-73 77 79 82 84-85 101 104 111 123 126 130 134",
     "C": "25 60-63 97 104-105 109 122",
 }
 
@@ -85,8 +85,8 @@ def _covered(impl: str) -> set:
     return covered
 
 
-def test_the_spec_has_132_numbered_cases_each_naming_rules_and_implementations():
-    assert sorted(SPEC) == list(range(1, 133))
+def test_the_spec_has_134_numbered_cases_each_naming_rules_and_implementations():
+    assert sorted(SPEC) == list(range(1, 135))
     assert all(case["rules"].strip() and case["runs_on"] for case in SPEC.values())
 
 
@@ -120,7 +120,7 @@ def test_the_corpus_runs_each_case_where_the_spec_says():
     """I1: each case runs only where its row says, a C case only on a kind the C core has, a Rust case only on
     `host`, and the copies of one case together run everywhere its row names."""
     where = {}
-    for case in CORPUS["cases"] + CORPUS["release_ids"]:
+    for case in CORPUS["cases"] + CORPUS["release_ids"] + CORPUS["frames"]:
         number = case["case"]
         assert number in SPEC and set(case["runs_on"]) <= set(SPEC[number]["runs_on"]), case["name"]
         assert case["name"].startswith(f"{number:03d}_")

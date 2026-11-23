@@ -477,9 +477,7 @@ def test_the_older_path_stays_closed_when_the_floor_file_is_missing(point, tmp_p
 def test_no_record_is_refused_without_a_cause(point):
     """H1: a refusal always carries its cause, a rollback with nothing kept is an error and no record, and a
     refused record without a cause cannot be built."""
-    rotation = _dist.rotation("B")
-    sealed = _dist.trust_statement("trust.rotation", rotation, seq=1, signers=("A", "B"), targets=("mesh",))
-    record = _read(point, point.pep.stage(sealed, rotation))
+    record = _read(point, point.pep.stage(seal("policy.ppt", OLD, targets=("mesh",)), OLD))
     assert (record.event, record.cause) == ("refused", "dist:target-mismatch")
     counter = point.pep.counter
     with pytest.raises(PepRefused):
@@ -545,3 +543,125 @@ def _corpus_case(name):
     import json
     corpus = json.loads((_dist.REPO / "portable" / "conformance" / "distribution.json").read_text(encoding="utf-8"))
     return next(case for case in corpus["cases"] if case["name"] == name)
+
+
+class _Monotonic:
+    """A monotonic clock the test moves by hand, in seconds."""
+
+    def __init__(self):
+        self.now = 100.0
+
+    def __call__(self) -> float:
+        return self.now
+
+
+def _delayed(point):
+    monotonic = _Monotonic()
+    point.pep = Pep(str(point.state_dir), point.adapter(), point.key, point.clock, monotonic=monotonic)
+    return point.pep, monotonic
+
+
+def test_a_commit_with_a_delay_is_active_at_the_peps_time_plus_the_delay_and_not_before(point):
+    """B8 on the host (case 38 is the C core's). A commit with a delay of 120 milliseconds keeps the old
+    release until the PEP's own monotonic time passes the delay, then commits on the next entry point."""
+    point.commit(OLD)
+    pep, monotonic = _delayed(point)
+    pep.stage(seal("policy.ppt", NEW, seq=2), NEW)
+    record = _read(point, pep.commit(STREAM, 2, H(NEW), delay_ms=120))
+    assert record.event == "beat" and record.active_seq == 1 and record.staged and _host_active(pep) == H(OLD)
+    monotonic.now += 0.119
+    assert pep.tick() is None and pep.active.seq == 1 and _host_active(pep) == H(OLD)
+    monotonic.now += 0.001
+    pep.tick()
+    assert pep.active.seq == 2 and pep.floor.seq == 2 and _host_active(pep) == H(NEW) and pep.due is None
+    assert "committed" in _actions(pep)
+
+
+def test_a_delayed_commit_runs_its_checks_again_when_it_falls_due(point):
+    """B8 with C3. A staged release that expires inside the delay is dropped when the delay ends and never
+    becomes active, and the floor stays where it was."""
+    point.commit(OLD)
+    pep, monotonic = _delayed(point)
+    pep.stage(seal("policy.ppt", NEW, seq=2, expires=_dist.NOW + 10), NEW)
+    pep.commit(STREAM, 2, H(NEW), delay_ms=500)
+    point.clock.now = _dist.NOW + 10
+    monotonic.now += 1.0
+    pep.tick()
+    assert pep.active.seq == 1 and pep.floor.seq == 1 and _host_active(pep) == H(OLD)
+    assert pep.staged is None and pep.due is None
+
+
+def test_a_revocation_inside_the_delay_drops_the_release_before_it_falls_due(point):
+    """B8 with R5. A revocation of the staged envelope inside the delay drops it at once."""
+    point.commit(OLD)
+    pep, monotonic = _delayed(point)
+    point.pep = pep
+    pep.stage(seal("policy.ppt", NEW, seq=2), NEW)
+    pep.commit(STREAM, 2, H(NEW), delay_ms=500)
+    point.revoke(1, envelopes=sorted(pep.staged.envelope_ids))
+    monotonic.now += 1.0
+    pep.tick()
+    assert pep.active.seq == 1 and pep.staged is None and pep.due is None and _host_active(pep) == H(OLD)
+
+
+def test_an_abort_inside_the_delay_cancels_the_delayed_commit(point):
+    """B8 with A1. An abort that names the staged release drops it, so nothing flips when the time comes."""
+    point.commit(OLD)
+    pep, monotonic = _delayed(point)
+    pep.stage(seal("policy.ppt", NEW, seq=2), NEW)
+    pep.commit(STREAM, 2, H(NEW), delay_ms=50)
+    assert _read(point, pep.abort(STREAM, 2, H(NEW))).event == "aborted"
+    monotonic.now += 1.0
+    pep.tick()
+    assert pep.active.seq == 1 and _host_active(pep) == H(OLD) and pep.due is None
+
+
+def test_a_commit_delay_out_of_range_is_refused(point):
+    """B8: the delay is two bytes on the wire, 0 to 65535 milliseconds."""
+    point.pep.stage(seal("policy.ppt", NEW, seq=1), NEW)
+    for delay in (-1, 65536, 1.5, True):
+        with pytest.raises(ValueError):
+            point.pep.commit(STREAM, 1, H(NEW), delay_ms=delay)
+
+
+def _kept(tmp_path, name, *, kept_expires=_dist.EXPIRES):
+    """A host PEP trusting A and B whose kept release, seq 1 signed by A with a widening statement that covers any
+    rollback (RB3), was replaced by seq 2 signed by B."""
+    point = _dist.HostPep(tmp_path / name, authorities=["A", "B"])
+    release = _dist.env.release_id([("policy.ppt", H(OLD))])
+    kept = seal("policy.ppt", OLD, seq=1, release=release, expires=kept_expires)
+    point.pep.stage(kept, OLD)
+    statement = _widening([])
+    point.pep.stage(seal("trust.widening", statement, seq=1, release=release, policy_sha256=H(OLD),
+                         expires=kept_expires), statement)
+    point.pep.commit(STREAM, 1, H(OLD))
+    point.commit(NEW, seq=2, signer="B")
+    return point, _dist.env.envelope_id(_dist.env.unseal(kept)[0])
+
+
+def test_case_054_a_rollback_is_held_to_what_a_commit_is_held_to(tmp_path):
+    """case_054: RB2. A rollback to a kept release that has expired, that is revoked, whose only signing key is
+    revoked, whose only signing key was retired, and that is below a raised floor is refused with the cause of
+    the failed check, and the release active under B keeps deciding."""
+    def refused(point):
+        record = _read(point, point.pep.rollback())
+        assert record.event == "refused" and point.pep.active.seq == 2 and _host_active(point.pep) == H(NEW)
+        return record.cause
+
+    point, _kept_id = _kept(tmp_path, "expired", kept_expires=_dist.NOW + 10)
+    point.clock.now = _dist.NOW + 10
+    assert refused(point) == "dist:expired"
+    point, kept_id = _kept(tmp_path, "revoked")
+    point.revoke(1, envelopes=[kept_id])
+    assert refused(point) == "dist:revoked"
+    point, _kept_id = _kept(tmp_path, "revoked_key")
+    point.revoke(1, keys=[_dist.key_id("A")])
+    assert refused(point) == "sig:revoked-key"
+    point, _kept_id = _kept(tmp_path, "retired_key")
+    point.rotate(1, add="C", retire="A")
+    assert refused(point) == "sig:revoked-key"
+    point, _kept_id = _kept(tmp_path, "floor")
+    point.revoke(1, floors={STREAM: 2})
+    assert refused(point) == "dist:seq-replay"
+    point, _kept_id = _kept(tmp_path, "standing")
+    assert _read(point, point.pep.rollback()).event == "rolled-back"

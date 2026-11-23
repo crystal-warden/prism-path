@@ -192,3 +192,17 @@ def test_a_pep_holds_only_the_latest_list_and_a_floor_keeps_out_what_it_dropped(
     assert _read(point, point.revoke(2, floors={STREAM: 6})).event == "trust-applied"
     assert point.pep.trust.revoked_envelopes == frozenset() and point.pep.trust.trust_seq == 2
     assert _read(point, point.pep.stage(revoked, OLD)).cause == "dist:seq-replay"
+
+
+def test_case_134_a_trust_statement_reaches_every_pep_whatever_its_targets(tmp_path):
+    """case_134: V5, R1. A revocation whose targets names only mesh is applied by a host PEP and a mesh PEP alike,
+    so the one trust sequence counts the same for both, and both take the rotation that follows."""
+    host, mesh = _dist.HostPep(tmp_path / "host"), _dist.MeshPep(tmp_path / "mesh")
+    body = revocation(keys=[_dist.key_id("R")])
+    only_mesh = _dist.trust_statement("trust.revocation", body, seq=1, targets=("mesh",))
+    rotation = _dist.rotation("B")
+    every = _dist.trust_statement("trust.rotation", rotation, seq=2, signers=("A", "B"), targets=("host", "mesh"))
+    for point in (host, mesh):
+        assert _read(point, point.pep.stage(only_mesh, body)).event == "trust-applied"
+        assert _read(point, point.pep.stage(every, rotation)).event == "trust-applied"
+        assert point.pep.trust.trust_seq == 2 and _dist.key_id("B") in point.pep.trust.keys

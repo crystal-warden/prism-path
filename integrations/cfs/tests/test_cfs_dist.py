@@ -93,3 +93,29 @@ def test_case_110_a_held_cfs_app_never_widens(tmp_path):
 def test_case_112_no_message_changes_a_cfs_app_s_setting(tmp_path):
     """case_112: X10, on a modelled cFS app."""
     _dist.case_112_no_message_changes_the_setting(*_cfs(tmp_path))
+
+
+def test_case_113_a_controller_files_a_cfs_app_held_while_its_records_carry_bit_5(tmp_path):
+    """case_113: H8, the cFS half. A cFS app on hold past expiry reports bit 5, which the controller files as
+    dist:held, and its first record without the bit clears it."""
+    from prismpath.distribution.controller import Controller
+    point = CfsPep(tmp_path / "app", expiry_response="hold")
+    controller = Controller(str(tmp_path / "controller"), _dist.instance_key("C"), clock=point.clock)
+    controller.add_anchor(point.anchor())
+    pep_id = controller.enroll(point.key.public_raw, "cfs", _dist.STREAM)
+    first, second = _body(1), _body(2)
+    point.commit(first)
+    point.clock.now = _dist.EXPIRES
+    controller.tick()
+    point.pep.see_epoch(controller.epoch)
+    point.pep.tick()
+    controller.members[pep_id].expected = (point.policy_of(first), point.pep.active.release, 1)
+    held = point.pep.drain()
+    assert held and controller.receive(held[-1]) is None and "dist:held" in controller.members[pep_id].findings
+    later = point.seal(second, seq=2, not_before=_dist.EXPIRES, expires=_dist.EXPIRES + 1000)
+    point.pep.stage(later, second)
+    point.pep.commit(_dist.STREAM, 2, point.policy_of(second))
+    controller.members[pep_id].expected = (point.policy_of(second), point.pep.active.release, 2)
+    for record in point.pep.drain():
+        controller.receive(record)
+    assert "dist:held" not in controller.members[pep_id].findings

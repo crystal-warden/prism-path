@@ -8,6 +8,21 @@ spec stable.
 
 ## [Unreleased]
 
+### Added: prismpath dist, the reference controller and the pull binding for hosts (2026-11-22)
+
+- **`prismpath dist` seals, verifies, revokes, rotates and rekeys on the machine that holds the authority key, and runs the reference controller and a host enforcement point.** `anchor` writes a stream's trust anchor, `enroll`, `offer`, `commit`, `abort` and `fleet` work on the controller's directory beside `serve`, and `pep` provisions a host PEP by fingerprint, pulls, reports its state and rolls back.
+- **The controller holds no authority key and stores only what the one verifier passed, reading `meta` in full.** It refuses a revocation list that drops a key, or an envelope or a policy no floor has passed, and the sealing tool refuses the same list.
+- **Each group's rollout runs under `each` or `all`.** Under `each` a member commits as soon as it staged, and under `all` nobody commits until every member staged and a refusal or the end of the stage window aborts the group. A commit window that ends with a member still out leaves the rollout `partial` until it reports.
+- **Every state record is checked in a fixed order.** A record not signed by the enrolled instance key, or with the hold bit from a host, is `fleet:state-invalid`. A counter that did not rise or an old epoch is `fleet:state-replay`, another policy than expected is `fleet:policy-mismatch`, and three silent intervals are `fleet:silent`. An attestation token in a record must be bound to that record.
+- **A host PEP pulls and the controller only listens.** It never reads more than it was promised, fetches a body only after its sealed envelope passed the verifier through V8, refuses a blob that is not the one it asked for with `dist:body-mismatch`, and fetches no body it already holds. The offers answer carries an ETag and may be long polled.
+- **Every offer, ack, commit, abort, finding and trust statement goes to the controller's own audit log, signed with its instance key.**
+- **A commit may carry a delay, and the PEP makes the release active at its own monotonic time plus that delay, checking it again when the time comes.** The controller drives a whole group over the frame binding with it, and the corpus gains the frame cases for the C core.
+- **The frame assembler admits an envelope through the verifier run to V8 as its own call.**
+- **A revocation or a rotation reaches every enforcement point whatever its `targets` says, in Python and Rust, so the one trust sequence counts the same everywhere.** A PEP behind on the trust chain is offered only the statements it lacks until it holds them all, and a refusal in that time is filed against the statement.
+- **A rollback is held to what a commit checks.** The kept release needs a counting signature and must not be below a floor a revocation raised, and the refusal names the check that failed.
+- **The C core takes a revocation or a rotation whatever its `targets` says, and holds a rollback to the same checks, as the Python machine does step by step.**
+- **The pull client tries an envelope again only when it was refused for a reason a later clock or trust statement may remove.** The controller keeps at most 64 unknown senders and logs each at most once an interval.
+
 ### Changed: escape hatches work only in a dev build (2026-11-22)
 
 - **`--allow-unsigned` on a swap and on the XDP preloader, `PPT_NET_ALLOW_UNVERIFIED=1` in the XDP loader, and a verify of evidence or of in-toto envelopes without both keys pinned now pass through `devbuild.hatch`.** A production build refuses each with `dist:hatch-refused`, writes that to the audit log, and runs the check the hatch would have skipped. A dev build, a checkout holding `.prismpath-dev-build`, lets them through and marks every hatch event `dev_build`.

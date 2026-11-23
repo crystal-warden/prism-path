@@ -575,9 +575,10 @@ void pp_verify(const uint8_t *sealed, size_t sealed_len, const uint8_t *body, si
     pp_envelope *e = &out->envelope;
     if ((out->cause = pp_read_envelope(envelope, envelope_len, e))) return;
     out->has_envelope = 1;
-    /* V5: for this kind, an artifact it uses or a trust kind it applies, on its stream or `@trust` */
+    /* V5: for this kind, an artifact it uses or a trust kind it applies, on its stream or `@trust`. A revocation or
+     * a rotation is for every PEP whatever `targets` says, since one trust sequence counts the same for all (R1) */
     const char *stream = pp_on_trust_stream(e->artifact) ? "@trust" : pep->stream;
-    if (!(e->targets & PP_BIT(pep->kind)) || strcmp(e->stream, stream) != 0 ||
+    if (!(pp_on_trust_stream(e->artifact) || (e->targets & PP_BIT(pep->kind))) || strcmp(e->stream, stream) != 0 ||
         !((row->uses | row->applies) & PP_BIT(e->artifact))) {
         out->cause = PP_CAUSE_TARGET_MISMATCH;
         return;
@@ -1288,7 +1289,8 @@ uint8_t pp_pep_rollback(pp_pep_machine *pep, long long now) {
     if (pep->locked) { pp_refuse(pep, PP_CAUSE_FLOOR_LOST); return 0; }
     if (!d->trust_reads) { pp_refuse(pep, PP_CAUSE_UNKNOWN_KEY); return 0; }
     if (!d->has_previous) return PP_CAUSE_NOT_STAGED;
-    uint8_t cause = pp_still_valid(pep, &d->previous, 0);
+    uint8_t cause = pp_still_valid(pep, &d->previous, 1); /* RB2: what a commit checks, as it is active anew */
+    if (!cause && d->previous.seq < pp_raised(&d->trust, d->previous.stream)) cause = PP_CAUSE_SEQ_REPLAY; /* R4 */
     if (cause) { pp_refuse(pep, cause); return 0; }
     if (!pp_covers(pep, &d->previous)) { pp_refuse(pep, PP_CAUSE_WIDENING_UNSIGNED); return 0; }
     pp_flip(pep, 1);
