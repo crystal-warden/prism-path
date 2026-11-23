@@ -293,7 +293,23 @@ def load(home: Path, policy_image: bytes, workspace: Optional[Path] = None) -> O
     return doc
 
 
-LOCAL_SETTINGS = "zones.local.json"     # a distributed home's own setting: where the project and its index are
+LOCAL_SETTINGS = "zones.local.json"     # a distributed home's own setting: the project, its index, the program
+
+
+def set_local(home: Path, project: Path, index: Optional[Path], program: Mapping[str, str]) -> Dict[str, Any]:
+    """Record a distributed home's own zone setting: the project, its index and the Context Cloud program
+    `find_program` found. The protected names are the committed `agent.zones`, never this file's."""
+    import json
+    project = Path(os.path.realpath(project))
+    index = Path(os.path.realpath(index)) if index is not None else project / ".contextcloud" / "index.sqlite"
+    settings = {"index": str(index), "program": {"package": str(program["package"]), "path": str(program["path"])},
+                "project": str(project)}
+    fd, tmp = tempfile.mkstemp(dir=home, prefix=LOCAL_SETTINGS + ".")
+    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        json.dump(settings, handle, sort_keys=True)
+    os.chmod(tmp, 0o600)
+    os.replace(tmp, home / LOCAL_SETTINGS)
+    return settings
 
 
 def _load_distributed(home: Path, policy_image: bytes, workspace: Optional[Path]) -> Optional[Dict[str, Any]]:
@@ -317,14 +333,21 @@ def _load_distributed(home: Path, policy_image: bytes, workspace: Optional[Path]
     except kinds.Refused as refused:
         raise ZoneError(f"the committed zone file does not read: {refused}") from None
     settings_path = home / LOCAL_SETTINGS
+    program = None
     if settings_path.is_file():
-        settings = json.loads(settings_path.read_text(encoding="utf-8"))
-        project, index = Path(settings["project"]), Path(settings["index"]) if settings.get("index") else None
+        try:
+            settings = json.loads(settings_path.read_text(encoding="utf-8"))
+            project = Path(settings["project"])
+            index = Path(settings["index"]) if settings.get("index") else None
+            if settings.get("program") is not None:
+                program = {"path": str(settings["program"]["path"]), "package": str(settings["program"]["package"])}
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            raise ZoneError(f"{settings_path} does not read ({type(exc).__name__}); run `prismpath agent zones set`") from None
     elif workspace is not None:
         project, index = Path(workspace), None
     else:
-        raise ZoneError(f"the home names no project for its zones; write {settings_path}")
-    doc = zone_document(names, project, index, policy_image)
+        raise ZoneError(f"the home names no project for its zones; run `prismpath agent zones set`")
+    doc = zone_document(names, project, index, policy_image, program=program)
     if workspace is not None and os.path.realpath(workspace) != doc["project"]:
         raise ZoneError("the zone file is for another project")
     return doc

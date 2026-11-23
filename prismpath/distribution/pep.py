@@ -70,6 +70,98 @@ def _signed_by_a_held_key(trust: TrustStore, entries, message: bytes) -> bool:
     return False
 
 
+def read_release(store: "_Store", trust: TrustStore, reads_meta: bool, doc: Optional[dict]) -> Optional["Release"]:
+    """A release document read back with every blob it names, or `Refused` when one is missing, not its name's, or
+    no longer carries a signature by a key the store holds. Nothing the record does not name is ever read (C4)."""
+    if doc is None:
+        return None
+    release = Release(stream=doc["stream"], seq=doc["seq"], policy_sha256=doc["policy_sha256"],
+                      release=doc["release"], replaces=doc["replaces"], widens=doc["widens"])
+    for artifact, held in doc["held"].items():
+        sealed, body = store.get(held["sealed"]), store.get(held["body"])
+        if sealed is None or body is None:
+            raise Refused(kinds.BAD_FORMAT, f"a blob of {artifact} is missing or not its name's")
+        envelope_bytes, entries = env.unseal(sealed)
+        envelope = env.read(envelope_bytes, reads_meta=reads_meta)
+        if envelope.envelope_id != held["envelope_id"] or envelope.artifact != artifact:
+            raise Refused(kinds.BAD_FORMAT, f"the blob of {artifact} is another envelope")
+        if trust.readable and not _signed_by_a_held_key(trust, entries, env.signed_message(envelope_bytes)):
+            raise Refused(kinds.BAD_FORMAT, f"the stored blob of {artifact} is not signed by a key the store holds")
+        release.held[artifact] = Held(held["envelope_id"], held["sealed"], held["body"])
+        release.envelopes[artifact], release.bodies[artifact] = envelope, body
+        release.paths[artifact] = store.blob_path(held["body"])
+    return release
+
+
+def stands(trust: TrustStore, release: "Release", sealed_of: Callable[[str], Optional[bytes]], *, active: bool) -> bool:
+    """R5: a release still stands when no envelope of it is listed by id or policy hash, its `seq` is not below a
+    floor a revocation raised, and every envelope of it is still signed. A key that was only retired still holds up
+    a release already active under it (O3), and a staged release needs a counting signature (S5), as at commit.
+    `sealed_of(name)` reads a sealed blob. The machine and every reader of a committed release ask this."""
+    if release.seq < trust.floors.get(release.stream, 0):
+        return False
+    for held in release.held.values():
+        if held.envelope_id in trust.revoked_envelopes or release.policy_sha256 in trust.revoked_policies:
+            return False
+        sealed = sealed_of(held.sealed)
+        if sealed is None:
+            return False
+        envelope_bytes, entries = env.unseal(sealed)
+        message = env.signed_message(envelope_bytes)
+        if not (trust.holds_up(entries, message, kinds.AUTHORITY) if active
+                else trust.counting(entries, message, kinds.AUTHORITY).ok):
+            return False
+    return True
+
+
+def standing(trust: TrustStore, release: "Release", sealed_of: Callable[[str], Optional[bytes]],
+             time: int) -> Optional[str]:
+    """Why an active release no longer decides at the PEP's `time`: `dist:revoked` when it no longer stands (R5),
+    `dist:expired` when an envelope of it has expired (X1), else None."""
+    if not stands(trust, release, sealed_of, active=True):
+        return "dist:revoked"
+    if any(envelope.expires and time >= envelope.expires for envelope in release.envelopes.values()):
+        return "dist:expired"
+    return None
+
+
+def read_committed(state_dir: str, kind: str, now: int) -> Dict[str, bytes]:
+    """The bodies of the release the PEP over `state_dir` has active, read as a restart reads them and held to the
+    tests the machine holds it to on every entry point, for a reader in another process (the agent home's hook and
+    proxies). `Refused`: `dist:floor-lost` when the anchor, the setting, the counter or the floor does not read,
+    since the PEP is then locked (Q5); `dist:unknown-key` when the trust store does not read (K1);
+    `dist:policy-lapsed` with nothing active; and the cause of `standing` when the release no longer decides. A
+    HOLD past expiry is the machine's to mark, so a reader refuses an expired release."""
+    store = _Store(os.path.join(state_dir, "dist"))
+    if not store.exists("anchor.json"):
+        raise Refused("dist:policy-lapsed", "the PEP is not provisioned")
+    trust = TrustStore.load(store.path("trust.json"))
+    if not trust.readable:
+        raise Refused("dist:unknown-key", "the trust store cannot be read")
+    try:
+        with open(store.path("anchor.json"), "rb") as handle:
+            stream = read_anchor(handle.read()).stream
+        counter = store.read("counter.json", _COUNTER)["counter"]
+        floor = store.read("floor.json", _FLOOR)
+        store.read("setting.json", _SETTING)["expiry"]
+        if (not kinds.is_int(counter, 0, 2 ** 64 - 1) or floor["stream"] != stream
+                or not kinds.is_int(floor["seq"], 0, kinds.MAX_SEQ)):
+            raise Refused(kinds.BAD_FORMAT, "counter.json or floor.json")
+    except (OSError, Refused, KeyError, TypeError):
+        raise Refused("dist:floor-lost", "the PEP's anchor, setting, counter or floor cannot be read") from None
+    try:
+        release = read_release(store, trust, kinds.TARGETS[kind].reads_meta,
+                               store.read("active.json", _ACTIVE)["release"])
+    except (Refused, KeyError, TypeError):
+        release = None
+    if release is None:
+        raise Refused("dist:policy-lapsed", "no release is active")
+    cause = standing(trust, release, store.get, max(int(now), trust.time_floor))
+    if cause is not None:
+        raise Refused(cause, "the active release no longer decides")
+    return dict(release.bodies)
+
+
 class PepRefused(Exception):
     """The PEP refuses to start or to be provisioned (K2, X10, an anchor for another kind)."""
 
@@ -288,26 +380,8 @@ class Pep:
             raise PepRefused(f"this PEP was provisioned to {provisioned} at expiry, not to {self.expiry_response} (X10)")
 
     def _release(self, doc: Optional[dict]) -> Optional[Release]:
-        """A release document read back with every blob it names, or `Refused` when one is missing or not
-        its name's. Nothing the record does not name is ever read (C4)."""
-        if doc is None:
-            return None
-        release = Release(stream=doc["stream"], seq=doc["seq"], policy_sha256=doc["policy_sha256"],
-                          release=doc["release"], replaces=doc["replaces"], widens=doc["widens"])
-        for artifact, held in doc["held"].items():
-            sealed, body = self.store.get(held["sealed"]), self.store.get(held["body"])
-            if sealed is None or body is None:
-                raise Refused(kinds.BAD_FORMAT, f"a blob of {artifact} is missing or not its name's")
-            envelope_bytes, entries = env.unseal(sealed)
-            envelope = env.read(envelope_bytes, reads_meta=self.target.reads_meta)
-            if envelope.envelope_id != held["envelope_id"] or envelope.artifact != artifact:
-                raise Refused(kinds.BAD_FORMAT, f"the blob of {artifact} is another envelope")
-            if self.trust.readable and not _signed_by_a_held_key(self.trust, entries, env.signed_message(envelope_bytes)):
-                raise Refused(kinds.BAD_FORMAT, f"the stored blob of {artifact} is not signed by a key the store holds")
-            release.held[artifact] = Held(held["envelope_id"], held["sealed"], held["body"])
-            release.envelopes[artifact], release.bodies[artifact] = envelope, body
-            release.paths[artifact] = self.store.blob_path(held["body"])
-        return release
+        """A release document read back with every blob it names (`read_release`)."""
+        return read_release(self.store, self.trust, self.target.reads_meta, doc)
 
     def _check_separation(self, trust: TrustStore) -> None:
         """K2: the instance key is never a trusted key, and the home holds no private half of one."""
@@ -555,24 +629,8 @@ class Pep:
             self._drop_staged()
 
     def _stands(self, release: Release, *, active: bool = True) -> bool:
-        """R5: a release still stands when no envelope of it is listed by id or policy hash, its `seq` is not
-        below a floor a revocation raised, and every envelope of it is still signed. A key that was only retired
-        still holds up a release already active under it (O3), and a staged release needs a counting signature
-        (S5), as it would at commit."""
-        if release.seq < self.trust.floors.get(release.stream, 0):
-            return False
-        for held in release.held.values():
-            if held.envelope_id in self.trust.revoked_envelopes or release.policy_sha256 in self.trust.revoked_policies:
-                return False
-            sealed = self.store.get(held.sealed)
-            if sealed is None:
-                return False
-            envelope_bytes, entries = env.unseal(sealed)
-            message = env.signed_message(envelope_bytes)
-            if not (self.trust.holds_up(entries, message, kinds.AUTHORITY) if active
-                    else self.trust.counting(entries, message, kinds.AUTHORITY).ok):
-                return False
-        return True
+        """R5 for `release` under the store as it is now (`stands`)."""
+        return stands(self.trust, release, self.store.get, active=active)
 
     # ------------------------------------------------------------------ C1 to C5: commit
     def _drop_staged(self) -> None:
@@ -741,9 +799,10 @@ class Pep:
             return None
         if self.active is None:
             return None
-        if not self._stands(self.active):
-            return self.lapse("dist:revoked")
-        if self._still_valid(self.active, early=False) != "dist:expired":
+        cause = standing(self.trust, self.active, self.store.get, self.time())
+        if cause == "dist:revoked":
+            return self.lapse(cause)
+        if cause != "dist:expired":
             return None
         if self.expiry_response == HOLD:
             if self.held:

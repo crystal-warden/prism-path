@@ -20,7 +20,6 @@ from pathlib import Path
 from typing import Any, Dict, Mapping, Optional, Tuple
 
 from prismpath import canon
-from prismpath.distribution import envelope as env
 from prismpath.distribution import kinds
 from prismpath.distribution.adapters import Adapter
 from prismpath.distribution.kinds import Refused
@@ -104,52 +103,11 @@ def is_distributed(home) -> bool:
 
 
 def committed(home, now: Optional[int] = None) -> Dict[str, bytes]:
-    """The bodies of the release the home's PEP has active, {artifact: body}, each envelope checked again as it is
-    read: its blobs are their names', it is signed by a key the trust store holds that is not revoked (a retired
-    key still holds up a release already active under it, O3), it has not expired at the larger of the clock and
-    the time floor (X1), neither its id nor its policy hash is revoked, and its seq is not below a floor a
-    revocation raised (R5). `Refused` with the cause otherwise, and `dist:policy-lapsed` when nothing is active.
-    No authority key is read."""
-    from prismpath.distribution.trust import TrustStore
-    store = Path(home) / "dist"
-    trust = TrustStore.load(str(store / "trust.json"))
-    if not trust.readable:
-        raise Refused("dist:unknown-key", "the home's trust store cannot be read")
-    try:
-        doc = kinds.load_canonical((store / "active.json").read_bytes(), "active.json")
-    except OSError:
-        raise Refused("dist:policy-lapsed", "the home follows a stream and has no active release") from None
-    release = doc.get("release") if isinstance(doc, dict) else None
-    if not isinstance(release, dict):
-        raise Refused("dist:policy-lapsed", "the home follows a stream and has no active release")
-    time = max(int(clock() if now is None else now), trust.time_floor)
-    if release["seq"] < trust.floors.get(release["stream"], 0):
-        raise Refused("dist:revoked", "the active release is below a floor a revocation raised")
-    bodies: Dict[str, bytes] = {}
-    for artifact, held in sorted(release["held"].items()):
-        sealed, body = _blob(store, held["sealed"]), _blob(store, held["body"])
-        envelope_bytes, entries = env.unseal(sealed)
-        envelope = env.read(envelope_bytes, reads_meta=True)
-        if envelope.envelope_id != held["envelope_id"] or envelope.artifact != artifact:
-            raise Refused(kinds.BAD_FORMAT, f"the blob of {artifact} is another envelope")
-        if not trust.holds_up(entries, env.signed_message(envelope_bytes), kinds.AUTHORITY):
-            raise Refused("dist:revoked", f"no key the trust store holds signs {artifact} any more")
-        if envelope.expires and time >= envelope.expires:
-            raise Refused("dist:expired", f"{artifact} expired")
-        if envelope.envelope_id in trust.revoked_envelopes or envelope.policy_sha256 in trust.revoked_policies:
-            raise Refused("dist:revoked", f"{artifact} is revoked")
-        bodies[artifact] = body
-    return bodies
-
-
-def _blob(store: Path, name: str) -> bytes:
-    try:
-        data = (store / "blobs" / name).read_bytes()
-    except OSError:
-        raise Refused(kinds.BAD_FORMAT, f"the blob {name} is missing") from None
-    if canon.sha256_hex(data) != name:
-        raise Refused(kinds.BAD_FORMAT, f"the blob {name} is not its name's")
-    return data
+    """The bodies of the release the home's PEP has active, {artifact: body}, held on every load to what the PEP
+    machine holds it to (`pep.read_committed`): a locked PEP, an expired or revoked release, a floor a revocation
+    raised and a signer the store no longer holds each refuse. No authority key is read."""
+    from prismpath.distribution.pep import read_committed
+    return read_committed(str(home), "agent", int(clock() if now is None else now))
 
 
 def hosts(bodies: Mapping[str, bytes]) -> Tuple[str, ...]:

@@ -4,6 +4,7 @@
 PEP machine over `AgentHomeAdapter`, with the hook, the egress proxy and the zone point reading the committed
 release through `commands.load_checked`. Each test names the conformance case of section 20 it covers."""
 import json
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -202,3 +203,78 @@ def test_init_follow_provisions_a_home_with_no_authority_key(tmp_path, monkeypat
     assert json.loads("".join(out))["state"] == "no-policy" and agent_home.is_distributed(home)
     assert (home / "instance.key").is_file() and not (home / "authority.key").exists()
     assert (project / ".claude" / "settings.json").is_file()
+
+
+@pytest.mark.parametrize("part", ["floor.json", "counter.json", "setting.json"])
+def test_a_locked_pep_s_hook_decides_nothing(home, part):
+    """Q5: when the floor, the counter or the setting does not read the PEP is locked, and every load of the home
+    refuses with dist:floor-lost."""
+    home.release(STRICT, 1)
+    (home.state_dir / "dist" / part).write_bytes(b"{")
+    assert home.open().state() == "locked"
+    with pytest.raises(commands.AgentError, match="dist:floor-lost"):
+        commands.load_checked(home.state_dir)
+
+
+@pytest.mark.parametrize("ground", ["envelope", "policy", "key", "floor", "retired", "expired"])
+def test_a_reader_of_the_home_and_the_machine_judge_the_active_release_alike(tmp_path, ground, monkeypatch):
+    """R5, X1, O3: one test of whether the active release still decides, asked by the machine at a restart and by
+    every load of the home (`pep.standing`). A release active under a key only retired keeps deciding on both."""
+    point = HomePep(tmp_path / ground, authorities=["A", "B"])
+    point.release(STRICT, 3)
+    envelope = point.pep.active.held["policy.core"].envelope_id
+    if ground == "retired":
+        point.rotate(1, add="C", retire="A", signers=("A", "C"))
+    elif ground == "expired":
+        point.clock.now = _dist.EXPIRES
+        monkeypatch.setattr(agent_home, "clock", lambda: _dist.EXPIRES)
+    else:
+        lists = {"envelope": {"envelopes": [envelope]}, "policy": {"policies": [H(STRICT)]},
+                 "key": {"keys": [_dist.key_id("A")]}, "floor": {"floors": {STREAM: 5}}}[ground]
+        point.revoke(1, signer="B", **lists)
+    decides = point.open().state() == "active"
+    try:
+        commands.load_checked(point.state_dir)
+        loads = True
+    except commands.AgentError:
+        loads = False
+    assert decides == loads == (ground == "retired")
+
+
+def test_zones_answer_protected_and_none_in_a_home_that_follows_a_stream(tmp_path, monkeypatch):
+    """Section 3 with the zone point of #118: a distributed home with a committed zone file, a trusted index and the
+    program `zones set` recorded answers protected and none, not only unknown, and a zone setting that does not
+    read makes the point say unknown, never an error out of the hook."""
+    from prismpath.tests.test_zones import World
+    point = HomePep(tmp_path / "home")
+    point.release(STRICT, 1, extra=[("agent.zones", _zones("pkg.secure.check"))])
+    world = World(tmp_path, monkeypatch, point.state_dir, STRICT)
+    world.add("pkg/secure.py", "def check():\n    return 1\n", ["check"])
+    world.add("pkg/mod.py", "def other():\n    return 2\n", ["other"])
+    world.answer(pkg__secure__check="no", pkg__mod__other="no")
+    zones.set_local(point.state_dir, world.project, world.index,
+                    {"path": os.path.realpath(world.exe), "package": str(world.pkg)})
+    env = {"CONTEXTCLOUD": str(world.exe), "PATH": os.environ.get("PATH", "")}
+    hook_point = zones.information_point(point.state_dir, STRICT, world.project, env)
+    assert isinstance(hook_point, zones.ContextCloudZones)
+    assert hook_point.reach("pkg/secure.py", world.config()) == "protected"
+    assert hook_point.reach("pkg/mod.py", world.config()) == "none"
+    (point.state_dir / zones.LOCAL_SETTINGS).write_text("{not json")
+    broken = zones.information_point(point.state_dir, STRICT, world.project, env)
+    assert broken.reach("pkg/mod.py", world.config()) == "unknown"
+
+
+def test_the_hook_s_decision_reaches_the_heartbeat(tmp_path, monkeypatch):
+    """H5: the hook notes the reading it decided, as the proxies do, so the next state record carries it."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr(commands.sys, "platform", "linux")
+    home_dir = commands.config_dir()
+    point = HomePep(home_dir)
+    point.release(STRICT, 1)
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "a.txt").write_text("x\n")
+    hook = {"session_id": "s", "hook_event_name": "PreToolUse", "tool_name": "Read",
+            "tool_input": {"file_path": str(project / "a.txt")}, "cwd": str(project)}
+    commands.hook(json.dumps(hook).encode(), {"HOME": str(tmp_path), "CLAUDE_PROJECT_DIR": str(project)})
+    assert len(agent_home.take_readings(home_dir)) == 1

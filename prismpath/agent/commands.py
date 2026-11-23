@@ -256,8 +256,8 @@ def _settings_text(settings: Dict[str, Any]) -> str:
 
 # ------------------------------------------------------------------------------------------------- init
 def _write_hook_entries(project, yes: bool, as_json: bool, confirm, out):
-    """Show and, with consent, write the hook entries into the project's `.claude/settings.json`. Returns the path
-    and what became of it: unchanged, written or not written."""
+    """Show and, with consent, write the hook entries into the project's `.claude/settings.json`. Returns the path,
+    what became of it (unchanged, written or not written) and the diff shown."""
     import difflib
     path = Path(project) / ".claude" / "settings.json"
     before_text = path.read_text(encoding="utf-8") if path.exists() else ""
@@ -293,7 +293,7 @@ def _write_hook_entries(project, yes: bool, as_json: bool, confirm, out):
             settings_state = "written"
         else:
             settings_state = "not written"
-    return path, settings_state
+    return path, settings_state, diff
 
 
 def follow(project: Path, stream: str, anchor: Optional[Path], fingerprint: Optional[str], yes: bool,
@@ -326,7 +326,7 @@ def follow(project: Path, stream: str, anchor: Optional[Path], fingerprint: Opti
                       "next": "compare it with the owner's, then run again with --confirm FINGERPRINT"}
         else:
             pep.confirm(fingerprint)
-            path, settings_state = _write_hook_entries(project, yes, as_json, confirm, out)
+            path, settings_state, _diff = _write_hook_entries(project, yes, as_json, confirm, out)
             report = {"config_dir": str(home), "stream": pep.stream, "state": pep.state(),
                       "settings": {"path": str(path), "state": settings_state}}
     except PepRefused as exc:
@@ -377,7 +377,7 @@ def init(project: Path, yes: bool, as_json: bool, confirm=None, out=None, policy
         except sandbox_hook.SandboxRefused as exc:      # the hook denies Bash with cause 129 until this is fixed
             sandbox_problem = str(exc) or type(exc).__name__
 
-    path, settings_state = _write_hook_entries(project, yes, as_json, confirm, out)
+    path, settings_state, diff = _write_hook_entries(project, yes, as_json, confirm, out)
     report = {"config_dir": str(home),
               "keys": {role: {"id": _key_id(home, role), "state": keys[role]} for role in KEY_ROLES},
               "policy": {"name": starter, "image": STARTERS[starter], "sha256": _sha256_hex(image),
@@ -556,6 +556,8 @@ def hook(raw: bytes, env: Optional[Mapping[str, str]] = None, nested=None,
                 continue
         else:
             raise AgentError(f"the session's journal changed under {STATE_ATTEMPTS} decisions in a row, so none was made")
+        from prismpath.distribution.adapters import agent_home
+        agent_home.note(home, result.reading)           # the decision made, for a following home's heartbeat (H5)
         if profile is not None:
             # the receipt is written first so the runner can bind what the command shows to it (observe.py)
             from prismpath.ledgers import core_evidence
@@ -761,11 +763,28 @@ def zones_cmd(action: str, project: Path, protected: Optional[List[str]], protec
     from prismpath.agent import zones
     out = out or sys.stdout
     home = config_dir()
-    load_checked(home)                                     # keys and a recorded policy that verifies, or AgentError
-    image = (home / POLICY_FILE).read_bytes()
+    from prismpath.distribution.adapters import agent_home
+    distributed = agent_home.is_distributed(home)
+    policy, _store = load_checked(home)                    # keys and a policy that verifies, or AgentError
+    image = policy.image if distributed else (home / POLICY_FILE).read_bytes()
     project = Path(os.path.realpath(project))
     try:
-        if action == "set":
+        if action == "set" and distributed:
+            if protected or protected_file:
+                raise zones.ZoneError("this home follows a stream, so its protected names are the committed "
+                                      "agent.zones; `zones set` records only where the project and Context Cloud are")
+            exe = zones.contextcloud_executable()
+            if exe is None:
+                raise zones.ZoneError("Context Cloud is not installed (no `contextcloud` on the PATH and no $CONTEXTCLOUD), "
+                                      "and `zones set` records where it is")
+            program = zones.find_program(exe, home)
+            from prismpath.agent import sandbox_hook
+            confined = sandbox_hook.supported() and not zones._host_write(home, image)
+            problem = zones.package_tree_problem(program["package"], project, confined)
+            if problem:
+                raise zones.ZoneError(problem)
+            result = {"recorded": True, **zones.set_local(home, project, Path(index) if index else None, program)}
+        elif action == "set":
             names = [n for item in (protected or []) for n in item.split(",") if n]
             if protected_file:
                 names += [line.strip() for line in Path(protected_file).read_text(encoding="utf-8").split("\n")
