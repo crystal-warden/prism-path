@@ -527,6 +527,14 @@ jobs:
           python3 prismpath-ebpf/cert_corpus.py --boundary /tmp/cert_boundary.bin
           python3 prismpath-ebpf/net_compile.py prismpath-ebpf/net_triage.md \
             prismpath-ebpf/build/seed.ppt prismpath-ebpf/build/seed.names
+      # The loader's own gate and the dev-only bypass need the built loaders; formal.yml deselects them, so they run here,
+      # and a skip for want of a loader is as red as a failure.
+      - name: The loader refuses an unverified table, and only the dev loader takes the bypass
+        run: |
+          make -C prismpath-ebpf dev
+          set -o pipefail
+          python3 -m pytest -q -rs prismpath/tests/test_net_from_policy.py -k "loaders_own_gate_refuses or unverified_bypass_works_only_in_the_dev_loader" | tee /tmp/loader-gate.txt
+          ! grep -q "SKIPPED" /tmp/loader-gate.txt
       - name: The verifier's limits as the repo models them, on the objects about to be loaded
         run: python3 prismpath-ebpf/verifier_budget.py prismpath-ebpf/ppt_xdp.bpf.o prismpath-ebpf/ppt_net.bpf.o prismpath-ebpf/ppt_select.bpf.o prismpath-ebpf/a6/ppt_xdp.bpf.o prismpath-ebpf/facet_decode.bpf.o
       - name: In-kernel corpus conformance (147/147, BPF_PROG_TEST_RUN)
