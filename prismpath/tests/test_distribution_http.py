@@ -318,3 +318,88 @@ def test_case_095_three_host_peps_over_http_one_commits_one_refuses_a_downgrade_
     assert {entry["labels"]["id"]: [error["code"] for error in entry["bundles"][STREAM]["errors"]]
             for entry in view["peps"]} == {fleet.ids["p1"]: [], fleet.ids["p2"]: ["dist:seq-replay"],
                                            fleet.ids["p3"]: ["sig:invalid"]}
+
+
+def _pem(path, name):
+    from prismpath.hotswap import policy_pack
+    _priv, _pub, ser, _invalid = policy_pack._ed25519()
+    path.write_bytes(GEN.test_key(name).private_bytes(ser.Encoding.PEM, ser.PrivateFormat.PKCS8, ser.NoEncryption()))
+    return str(path)
+
+
+def test_the_command_line_seals_serves_provisions_pulls_and_rekeys_a_host_pep(tmp_path, capsys):
+    """`prismpath dist` end to end at the PEP's and the controller's real clocks: the owner seals into the
+    controller's inbox, the controller enrols the PEP and offers, the PEP is provisioned with the fingerprint
+    and pulls over HTTP, and `rekey` rotates to a new key, releases under it, waits for the commit and only
+    then revokes the old key, so the PEP never lapses. A host cannot decide larger, so a rollback with no
+    widening statement is refused (RB3)."""
+    import time as clock
+    from prismpath import cli
+    from prismpath.distribution import cli as dist_cli
+    from prismpath.distribution import trust as trust_module
+
+    def run(*argv):
+        args = cli.build_parser().parse_args(["dist", *argv])
+        code = args.func(args)
+        out = capsys.readouterr().out
+        return code, (json.loads(out) if out.strip().startswith("{") else out)
+
+    keys = {name: _pem(tmp_path / f"{name}.pem", name) for name in ("A", "B", "C", "p1")}
+    pub = tmp_path / "p1.pub"
+    pub.write_bytes(GEN.public_raw(GEN.test_key("p1")))
+    anchor = tmp_path / "anchor.json"
+    anchor.write_bytes(trust_module.anchor_bytes([GEN.public_raw(GEN.test_key("A"))], target="host", stream=STREAM))
+    qualification = tmp_path / "qualification.json"
+    qualification.write_text(json.dumps(GEN.QUALIFICATION))
+    directory, state = tmp_path / "controller", tmp_path / "pep"
+    now = int(clock.time())
+
+    code, printed = run("pep", "provision", "--state", str(state), "--key", keys["p1"], "--anchor", str(anchor),
+                        "--qualification", str(qualification))
+    assert code == 0
+    assert run("pep", "provision", "--state", str(state), "--key", keys["p1"],
+               "--confirm", printed["fingerprint"])[1]["state"] == "no-policy"
+    assert run("enroll", "--dir", str(directory), "--key", keys["C"], "--pub", str(pub), "--anchor", str(anchor),
+               "--qualification", str(qualification), "--group", "g")[0] == 0
+    (directory / "inbox").mkdir()
+    body = tmp_path / "policy.ppt"
+    body.write_bytes(OLD)
+    sealed = directory / "inbox" / "r1.sealed"
+    assert run("seal", "--artifact", "policy.ppt", "--body", str(body), "--stream", STREAM, "--seq", "1",
+               "--target", "host", "--key", keys["A"], "--not-before", str(now - 60), "--expires", str(now + 86400),
+               "--qualification", str(qualification), "--out", str(sealed))[0] == 0
+    (directory / "inbox" / "r1.body").write_bytes(OLD)
+    code, printed = run("offer", "--dir", str(directory), "--key", keys["C"], "--group", "g", "--stream", STREAM,
+                        "--seq", "1")
+    assert code == 0 and printed["stored"][0]["seq"] == 1 and printed["rollout"]["state"] == "offered"
+
+    from prismpath.distribution.controller import Controller
+    serving = dist_cli._Ingesting(Controller(str(directory), dist_cli._instance(keys["C"])))
+    with listening(serving) as (base, _server):
+        for _ in range(2):
+            code, printed = run("pep", "poll", "--state", str(state), "--key", keys["p1"], "--url", base, "--once")
+        assert printed["state"] == "active" and printed["active_seq"] == 1
+        new_body = tmp_path / "policy2.ppt"
+        new_body.write_bytes(NEW)
+        result = {}
+        rekey = threading.Thread(target=lambda: result.update(code=run(
+            "rekey", "--dir", str(directory), "--key", keys["C"], "--old", keys["A"], "--new", keys["B"],
+            "--body", str(new_body), "--qualification", str(qualification), "--group", "g", "--stream", STREAM,
+            "--seq", "2", "--target", "host", "--not-before", str(now - 60), "--expires", str(now + 86400),
+            "--timeout", "60")[0]))
+        rekey.start()
+        deadline = clock.monotonic() + 60
+        while rekey.is_alive() and clock.monotonic() < deadline:
+            run("pep", "poll", "--state", str(state), "--key", keys["p1"], "--url", base, "--once")
+            clock.sleep(0.2)
+        rekey.join(5)
+        assert result.get("code") == 0
+        code, printed = run("pep", "poll", "--state", str(state), "--key", keys["p1"], "--url", base, "--once")
+    assert printed["state"] == "active" and printed["active_seq"] == 2 and printed["trust_seq"] == 2
+    events = [json.loads(line) for line in (state / "dist" / "audit.log").read_text().splitlines() if line.strip()]
+    assert "lapsed" not in [event["action"] for event in events]
+    code, printed = run("pep", "rollback", "--state", str(state), "--key", keys["p1"])
+    assert code == 1 and printed["cause"] == "dist:widening-unsigned" and printed["active_seq"] == 2
+    code, printed = run("fleet", "--dir", str(directory), "--key", keys["C"])
+    assert [rollout["state"] for rollout in printed["rollouts"]] == ["committed", "committed"]
+    assert printed["trust_seq"] == 2 and printed["peps"][0]["findings"] == {}

@@ -433,3 +433,53 @@ def test_the_frame_driver_carries_a_rollout_to_mesh_nodes_and_their_records_back
             driver.receive(reply)
     assert rollout.state == "committed" and all(point.pep.active.seq == 1 for point in fleet.points.values())
     assert all(member.findings == {} for member in fleet.controller.members.values())
+
+
+def test_case_130_the_sealing_tool_refuses_a_list_that_drops_an_entry_no_floor_has_passed(tmp_path):
+    """case_130: R8, the tool half. `prismpath dist revoke --drop` against the controller directory seals a list
+    that leaves out an envelope a floor has passed, and refuses one that leaves out an envelope no floor has
+    passed, writing nothing. `seal` of a revocation list without the directory is refused."""
+    from prismpath.distribution import cli as dist_cli
+    from prismpath.hotswap import policy_pack
+    _priv, _pub, ser, _invalid = policy_pack._ed25519()
+    pem = tmp_path / "A.pem"
+    pem.write_bytes(GEN.test_key("A").private_bytes(ser.Encoding.PEM, ser.PrivateFormat.PKCS8, ser.NoEncryption()))
+    fleet = Fleet(tmp_path, names=("p1",))
+    old = env.read(env.unseal(fleet.put(OLD, 1))[0])
+    later = env.read(env.unseal(fleet.put(NEW, 5))[0])
+    fleet.controller.save()
+    held = str(fleet.dir)
+
+    def revoke(seq, *flags):
+        out = tmp_path / f"list{seq}.sealed"
+        args = dist_cli_parser().parse_args(["dist", "revoke", "--held", held, "--key", str(pem), "--target", "host",
+                                             "--not-before", str(_dist.NOT_BEFORE), "--out", str(out), *flags])
+        code = args.func(args)
+        if code == 0:
+            with fleet.controller.locked() as controller:
+                controller.put(out.read_bytes(), (tmp_path / f"list{seq}.body").read_bytes())
+        return code, out
+
+    assert revoke(1, "--entry", f"envelope={old.envelope_id}", "--entry", f"envelope={later.envelope_id}")[0] == 0
+    assert revoke(2, "--floor", f"{STREAM}=2")[0] == 0
+    code, out = revoke(3, "--drop", f"envelope={later.envelope_id}")
+    assert code == 1 and not out.exists()
+    assert revoke(3, "--drop", f"envelope={old.envelope_id}")[0] == 0
+    assert fleet.controller.trust_seq() == 3
+    listed = kinds_read(fleet.controller)
+    assert listed["envelopes"] == [later.envelope_id] and listed["floors"] == {STREAM: 2}
+    with pytest.raises(Refused) as refused:
+        dist_cli.build_sealed("trust.revocation", _dist.revocation(), stream=env.TRUST_STREAM, seq=4, targets=["host"],
+                              signers=[GEN.test_key("A")], not_before=_dist.NOT_BEFORE, expires=0)
+    assert refused.value.cause == "dist:trust-replay"
+
+
+def dist_cli_parser():
+    from prismpath import cli
+    return cli.build_parser()
+
+
+def kinds_read(controller):
+    from prismpath.distribution import kinds
+    latest = controller.chain[-1]
+    return kinds.read_revocation(controller.blob(controller.stored[latest]["body_sha256"]))

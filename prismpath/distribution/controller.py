@@ -247,8 +247,20 @@ class Controller:
         for name in ("anchors", "blobs"):
             os.makedirs(os.path.join(directory, name), exist_ok=True)
         self.audit = AuditLog(os.path.join(directory, "audit.log"), instance_key=instance_key, sign_appends=True)
-        self._loaded_at: Optional[float] = None
+        self._audit_seen = self._audit_size()
         self._load()
+
+    @classmethod
+    def reader(cls, directory: str) -> "Controller":
+        """The state of the controller in `directory`, for reading only: the sealing tool checks a revocation
+        list against it (R8) and signs nothing with it."""
+        if not os.path.exists(os.path.join(directory, "controller.json")):
+            raise ValueError(f"{directory} holds no controller state")
+        controller = cls.__new__(cls)
+        controller.dir, controller.instance_key, controller.clock, controller.audit = directory, None, _time.time, None
+        controller.interval, controller.stage_window, controller.commit_window = INTERVAL, None, COMMIT_WINDOW
+        controller._load()
+        return controller
 
     # ------------------------------------------------------------------ the durable state
     @property
@@ -275,7 +287,6 @@ class Controller:
         self.rollouts = [Rollout.from_document(one) for one in doc["rollouts"]]
         self.chain, self.stored, self.unknown = list(doc["chain"]), dict(doc["stored"]), list(doc["unknown"])
         self.epoch, self.epoch_at, self.anchors = doc["epoch"], doc["epoch_at"], dict(doc["anchors"])
-        self._loaded_at = os.stat(self._state_path).st_mtime_ns
 
     def save(self) -> None:
         doc = {"format": FORMAT,
@@ -285,22 +296,27 @@ class Controller:
                "anchors": self.anchors}
         canon.atomic_write_bytes(self._state_path, json.dumps(_plain(doc), sort_keys=True).encode("utf-8"))
         canon.fsync_dir(self.dir)
-        self._loaded_at = os.stat(self._state_path).st_mtime_ns
 
-    def refresh(self) -> None:
-        """Read the state again when another process (a command) changed it since this one last did."""
-        if os.path.exists(self._state_path) and os.stat(self._state_path).st_mtime_ns != self._loaded_at:
-            self._load()
+    def _audit_size(self) -> int:
+        try:
+            return os.path.getsize(self.audit.path)
+        except OSError:
+            return 0
 
     @contextmanager
     def locked(self) -> Iterator["Controller"]:
-        """Hold the directory's lock, with the state as the last writer left it, and save it after."""
+        """Hold the directory's lock, with the state and the audit log as the last writer left them, which may
+        be another process (a command beside `serve`), and save the state after."""
         with open(os.path.join(self.dir, "lock"), "a+b") as handle:
             fcntl.flock(handle, fcntl.LOCK_EX)
             try:
-                self.refresh()
+                if os.path.exists(self._state_path):
+                    self._load()
+                if self._audit_size() != self._audit_seen:
+                    self.audit = AuditLog(self.audit.path, instance_key=self.instance_key, sign_appends=True)
                 yield self
                 self.save()
+                self._audit_seen = self._audit_size()
             finally:
                 fcntl.flock(handle, fcntl.LOCK_UN)
 
