@@ -34,7 +34,11 @@
  *   epoch <epoch id>
  *   decide <now>
  *   restart <now>
- *   lose floor | counter | trust | setting
+ *   lose anchor | setting | counter | trust | floor | active | previous | staged | pending   (that part's bytes do not read)
+ *   stop <n>  after n more part writes nothing reaches the store, as a power loss; a restart restores the power
+ *   state     the durable state as read back: active, previous and staged, each its seq or "-"
+ *   written   the bytes the durable writes took since the last "written": total, writes, the largest
+ *   sizes     sizeof the durable state, a release and the machine
  *   done
  *
  * and prints one line per step: "records" and the hex of each state record the step made, oldest first,
@@ -77,13 +81,53 @@ static void hash32(const char *text, uint8_t out[32]) {
     if (unhex(text, out, 32) != 32) exit(2);
 }
 
+/* The durable state as a store that keeps each part under its own name keeps it: each part the PEP says changed
+ * is packed and kept, a restart reads every part back, and `written` counts the bytes each write took. */
+#define N_PARTS 8
+static uint8_t parts[N_PARTS][PP_PART_PACKED_MAX];
+static size_t part_len[N_PARTS];
+static int part_kept[N_PARTS];
+static size_t written, writes, largest_write;
 static pp_durable saved;
-static int have_saved;
+static long stop_after = -1; /* the writes that still reach the store before a power loss, or -1 for no loss */
 
-static void persist(void *context, const pp_durable *durable) {
+static void persist(void *context, const pp_durable *durable, int changed) {
     (void)context;
-    saved = *durable;
-    have_saved = 1;
+    size_t bytes = 0;
+    for (int k = 0; k < N_PARTS; k++) { /* a store writes the parts it is given one after another */
+        if (!(changed & (1 << k))) continue;
+        if (stop_after == 0) break;      /* the power is gone: nothing more is written */
+        if (stop_after > 0) stop_after--;
+        size_t n = pp_durable_pack(durable, 1 << k, parts[k], sizeof parts[k]);
+        if (n == 0) {
+            fprintf(stderr, "host_check: part %d of the durable state does not pack\n", 1 << k);
+            exit(3);
+        }
+        part_len[k] = n;
+        part_kept[k] = 1;
+        bytes += n;
+    }
+    written += bytes;
+    writes++;
+    if (bytes > largest_write) largest_write = bytes;
+}
+
+/* Read every part back into `saved`, as a restart does. */
+static const pp_durable *reread(void) {
+    memset(&saved, 0, sizeof saved);
+    for (int k = 0; k < N_PARTS; k++)
+        if (pp_durable_unpack(&saved, 1 << k, part_kept[k] ? parts[k] : NULL, part_len[k]) != 0) {
+            fprintf(stderr, "host_check: part %d does not read back\n", 1 << k);
+        }
+    return saved.provisioned ? &saved : NULL;
+}
+
+static int part_index(const char *name) {
+    static const char *const names[N_PARTS] = {"anchor", "counter", "trust", "floor", "active", "previous", "staged",
+                                               "pending"};
+    for (int k = 0; k < N_PARTS; k++)
+        if (strcmp(names[k], name) == 0) return k;
+    return -1;
 }
 
 static void print_records(const pp_pep_machine *pep) {
@@ -107,7 +151,8 @@ static int machine(const char *args, pp_trust *anchor) {
     hash32(seed, config.instance_seed);
     config.kind = PP_TGT_MESH;
     config.persist = persist;
-    have_saved = 0;
+    memset(part_kept, 0, sizeof part_kept);
+    written = writes = largest_write = 0;
     int started = pp_pep_open(&pep, &config, NULL, 0) == 0;
     while (fgets(line, sizeof line, stdin)) {
         line[strcspn(line, "\n")] = 0;
@@ -159,16 +204,33 @@ static int machine(const char *args, pp_trust *anchor) {
             int mark = 0;
             uint8_t cause = pp_pep_decide(&pep, &mark, strtoll(rest, NULL, 10));
             printf("decide %u %d\n", cause, mark);
+        } else if (strcmp(word, "stop") == 0) {
+            stop_after = strtol(rest, NULL, 10);
+            printf("records\n");
+        } else if (strcmp(word, "state") == 0) {
+            const pp_durable *d = reread();
+            if (d == NULL) printf("state - - -\n");
+            else {
+                printf("state ");
+                if (d->has_active) printf("%lld ", d->active.seq); else printf("- ");
+                if (d->has_previous) printf("%lld ", d->previous.seq); else printf("- ");
+                if (d->has_staged) printf("%lld\n", d->staged.seq); else printf("-\n");
+            }
         } else if (strcmp(word, "restart") == 0) {
-            started = pp_pep_open(&pep, &config, have_saved ? &saved : NULL, strtoll(rest, NULL, 10)) == 0;
+            stop_after = -1;
+            started = pp_pep_open(&pep, &config, reread(), strtoll(rest, NULL, 10)) == 0;
             if (started) print_records(&pep);
             else printf("refused-start\n");
         } else if (strcmp(word, "lose") == 0) {
-            if (strcmp(rest, "floor") == 0) saved.floor_reads = 0;
-            else if (strcmp(rest, "counter") == 0) saved.counter_reads = 0;
-            else if (strcmp(rest, "trust") == 0) saved.trust_reads = 0;
-            else if (strcmp(rest, "setting") == 0) saved.setting_reads = 0;
-            else return 2;
+            int k = part_index(strcmp(rest, "setting") == 0 ? "anchor" : rest);
+            if (k < 0) return 2;
+            memcpy(parts[k], "PPD", 3); /* bytes that are not the part */
+            part_len[k] = 3;
+        } else if (strcmp(word, "written") == 0) {
+            printf("written %zu %zu %zu\n", written, writes, largest_write); /* since the last "written" */
+            written = writes = largest_write = 0;
+        } else if (strcmp(word, "sizes") == 0) {
+            printf("sizes %zu %zu %zu\n", sizeof(pp_durable), sizeof(pp_release), sizeof(pp_pep_machine));
         } else if (strcmp(word, "setting") == 0) {
             config.expiry_hold = atoi(rest); /* the next restart asks for this expiry response */
         } else {

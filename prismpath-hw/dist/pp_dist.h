@@ -242,9 +242,9 @@ typedef struct {
     uint8_t body_sha256[32];
     uint32_t started_ms;
     uint8_t sealed[PP_MAX_SEALED];
-    uint8_t sealed_have[PP_MAX_SEALED];
+    uint8_t sealed_have[(PP_MAX_SEALED + 7) / 8];         /* a bit per byte that has arrived */
     uint8_t body[PP_ASSEMBLER_BODY_MAX];
-    uint8_t body_have[PP_ASSEMBLER_BODY_MAX];
+    uint8_t body_have[(PP_ASSEMBLER_BODY_MAX + 7) / 8];
 } pp_transfer;
 
 typedef struct {
@@ -271,6 +271,10 @@ int pp_assembler_receive(pp_assembler *a, const uint8_t *frame, size_t len, uint
 /* ------------------------------------------------------------------ the enforcement point machine (section 9) */
 
 #define PP_RELEASE_BODY_MAX PP_MESH_TABLE_MAX /* every body of a mesh release is within the kind's bound */
+#define PP_WIDENING_HASHES 64                 /* W4: the hashes a widening statement's `from` holds at most */
+/* W4: the canonical bytes of a widening statement whose `from` holds 64 hashes, the most a release slot keeps */
+#define PP_WIDENING_MAX (sizeof("{\"encoding\":\"canon/2\",\"format\":\"prismpath.dist-widening/1\",\"from\":[]}") - 1 + \
+                         PP_WIDENING_HASHES * 67 - 1)
 #define PP_RECORD_MAX (148 + 64)              /* a state record with no Facet body and no extension (H1, H5) */
 
 /* H1 event and state codes, in the order of state_record.EVENTS and STATES. */
@@ -297,14 +301,26 @@ typedef struct {
     size_t n;
     pp_artifact_held held[2]; /* a mesh release holds a policy.ppt and may hold a trust.widening */
     uint8_t artifact_body[PP_RELEASE_BODY_MAX]; /* the body of the artifact, within the kind's bound */
-    uint8_t trust_body[PP_TRUST_BOUND];         /* the body of a trust statement it holds, within the trust bound */
+    uint8_t trust_body[PP_WIDENING_MAX];        /* the widening statement it holds, at most 64 hashes (W4) */
 } pp_release;
 
 /* The body of the release's k-th artifact, in the buffer for its kind. */
 uint8_t *pp_held_body(pp_release *release, size_t k);
 
-/* Everything the PEP keeps durably, each part with whether it reads. The caller's `persist` writes it, the
- * whole of it or nothing (C4), and a restart opens the PEP from it. */
+/* Everything the PEP keeps durably, in parts, each with whether it reads. The caller's `persist` is told which
+ * parts changed and writes each of them whole, the old one or the new one (C4), so a state record writes the
+ * counter alone. A restart opens the PEP from the parts it can read. A commit and a rollback write the intent
+ * (pending), a commit the floor, then one call each in this order: previous, active, staged, then the intent
+ * cleared. Each call names one part, so a power loss between two calls leaves a known state (pp_flip). */
+#define PP_PART_ANCHOR 1     /* provisioned, the stream and the expiry response (P2, X10) */
+#define PP_PART_COUNTER 2    /* the state record counter (H3) */
+#define PP_PART_TRUST 4      /* the trust store (K1) */
+#define PP_PART_FLOOR 8      /* the floor (Q1) */
+#define PP_PART_ACTIVE 16    /* the active release */
+#define PP_PART_PREVIOUS 32  /* the release the active one replaced (RB1) */
+#define PP_PART_STAGED 64    /* the staged release */
+#define PP_PART_PENDING 128  /* a commit or rollback under way, by release id and seq (C4) */
+#define PP_PARTS 255
 typedef struct {
     int provisioned;            /* the anchor is confirmed (P2) */
     int setting_reads, expiry_hold; /* X10: the expiry response the PEP was provisioned with */
@@ -317,11 +333,15 @@ typedef struct {
     size_t n_floor_ids;
     int counter_reads;
     uint64_t counter;
-    int has_active, has_previous, has_staged, has_pending, pending_rollback;
-    pp_release active, previous, staged, pending;
+    int has_active, has_previous, has_staged;
+    pp_release active, previous, staged;
+    int has_pending, pending_rollback;  /* a commit or rollback under way (C4), named by its release and seq */
+    uint8_t pending_release[32];
+    long long pending_seq;
 } pp_durable;
 
-typedef void (*pp_persist_fn)(void *context, const pp_durable *durable);
+/* Write the `parts` (PP_PART_* bits) of `durable` that changed, each whole. */
+typedef void (*pp_persist_fn)(void *context, const pp_durable *durable, int parts);
 typedef void (*pp_runtime_fn)(void *context, const pp_release *active); /* NULL: the runtime refuses (X3) */
 
 /* The PEP's configuration, fixed for its life (X10). */
@@ -354,6 +374,15 @@ typedef struct {
     uint8_t out[PP_OUTBOX][PP_RECORD_MAX]; /* the records made by the last call, oldest first (H4) */
 } pp_pep_machine;
 
+/* One part of the durable state as bytes, for a store that keeps each part under its own name, such as NVS: only
+ * what is used is written. pp_durable_pack answers the length of `part`, 0 when `room` is too small.
+ * pp_durable_unpack reads one part into `out`, given NULL when the store holds none of it: answered 0, or -1 for
+ * bytes that are not the part, which leaves that part as one that does not read (an anchor or a floor that does
+ * not read locks the PEP, a trust store that does not read counts nothing, Q5, K1). Clear `out` before the first. */
+#define PP_PART_PACKED_MAX (PP_MAX_SEALED * 2 + PP_RELEASE_BODY_MAX + PP_WIDENING_MAX + 1024) /* the largest part */
+size_t pp_durable_pack(const pp_durable *d, int part, uint8_t *out, size_t room);
+int pp_durable_unpack(pp_durable *out, int part, const uint8_t *bytes, size_t len);
+
 /* Open the PEP from what it holds durably (NULL for a PEP never provisioned), finishing or reporting an
  * interrupted commit (C4). 0, or -1 when the PEP refuses to start: HOLD on a kind without it, an expiry
  * response other than the one provisioned (X10), or an instance key that is a trusted key (K2). */
@@ -361,6 +390,13 @@ int pp_pep_open(pp_pep_machine *pep, const pp_config *config, const pp_durable *
 
 /* P2 step 4, P3: start again from a confirmed anchor's trust store and stream, a locked PEP included. */
 void pp_pep_provision(pp_pep_machine *pep, const pp_trust *anchor, const char *stream, long long now);
+
+/* What the verifier needs of this PEP now (verify.PepView), for a caller that verifies ahead of staging, as the
+ * frame assembler's admit check does (B9). */
+void pp_pep_view(const pp_pep_machine *pep, pp_pep *out);
+
+/* The trust store the PEP holds now. */
+static inline const pp_trust *pp_pep_trust(const pp_pep_machine *pep) { return &pep->d.trust; }
 
 /* G1, G2: verify one sealed envelope and its body and hold it. */
 void pp_pep_stage(pp_pep_machine *pep, const uint8_t *sealed, size_t sealed_len, const uint8_t *body, size_t body_len,
@@ -383,6 +419,10 @@ uint8_t pp_pep_rollback(pp_pep_machine *pep, long long now);
 
 /* A state record of the PEP as it is now, after the expiry check (X1). */
 void pp_pep_record(pp_pep_machine *pep, uint8_t event, long long now);
+
+/* T2: a PEP with no clock saves the time it has counted from its time floor, at least once an hour, so a restart
+ * after a power loss runs slow by the time without power and never fast. */
+void pp_pep_save_time(pp_pep_machine *pep, long long now);
 
 /* H9: keep the highest epoch id the controller sent. */
 void pp_pep_see_epoch(pp_pep_machine *pep, uint64_t epoch);

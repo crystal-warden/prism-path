@@ -8,6 +8,12 @@ spec stable.
 
 ## [Unreleased]
 
+### Changed: the C core of policy distribution persists its state in parts (2026-11-23)
+
+- **A state record now writes the 12 byte counter and nothing else.** The core tells the store which parts of its durable state changed, the anchor, the counter, the trust store, the floor, each release and a pending commit named by its release id and seq, and packs each part on its own for a store such as NVS.
+- **The durable state is 39,720 bytes where it was 98,456.** A release keeps a widening statement at its real size, which W4 now bounds at 64 hashes, and the frame assembler marks arrived bytes with one bit each.
+- **A commit and a rollback write the releases one part at a time, the previous release, then the active one, then the staged one.** A power loss between two of them leaves the node on one of the two releases with a previous that is its own or the right one, and a commit cut off can be made again.
+
 ### Added: signed revocation lists with a sequence, and fail toward expiry (2026-11-22)
 
 - **An enforcement point applies a signed `trust.revocation` as soon as it verifies, durably before it reports it.** A list is taken only at the trust sequence plus one, and the PEP holds that list and no other, so what it remembers is bounded. Its keys, envelopes and policies are refused, its floor for the PEP's stream only rises, and a list that drops a revoked key is `dist:trust-replay`. A list over 64 entries or 16 streams is `dist:too-large`.

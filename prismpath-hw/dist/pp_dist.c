@@ -3,6 +3,7 @@
 /* pp_dist.c: the C core of policy distribution. See pp_dist.h. */
 #include "pp_dist.h"
 
+#include <stddef.h>
 #include <string.h>
 
 #include "monocypher-ed25519.h"
@@ -282,26 +283,28 @@ uint8_t pp_read_envelope(const uint8_t *bytes, size_t len, pp_envelope *out) {
     return PP_CAUSE_NONE;
 }
 
-/* W4: a widening statement, `from` a sorted list of hashes without repeats, as canonical canon/2. */
+/* W4: a widening statement, `from` a sorted list of at most 64 hashes without repeats, as canonical canon/2. */
 static uint8_t pp_read_widening(const uint8_t *body, size_t len) {
     int form = pp_c2_check(body, len);
     if (form == PP_C2_NOT_CANONICAL) return PP_CAUSE_NOT_CANONICAL;
     if (form != PP_C2_OK) return PP_CAUSE_BAD_FORMAT;
     pp_c2 c = {body, len, 0, 1};
     uint8_t last[32], hash[32];
-    int have = 0;
+    size_t n = 0;
     if (!pp_c2_lit(&c, "{\"encoding\":\"canon/2\",\"format\":\"prismpath.dist-widening/1\",\"from\":["))
         return PP_CAUSE_BAD_FORMAT;
     if (!pp_c2_lit(&c, "]")) {
         for (;;) {
-            if (!pp_scan_hash(&c, hash) || (have && memcmp(last, hash, 32) >= 0)) return PP_CAUSE_BAD_FORMAT;
+            if (!pp_scan_hash(&c, hash) || (n && memcmp(last, hash, 32) >= 0)) return PP_CAUSE_BAD_FORMAT;
             memcpy(last, hash, 32);
-            have = 1;
+            n++;
             if (pp_c2_lit(&c, "]")) break;
             if (!pp_c2_lit(&c, ",")) return PP_CAUSE_BAD_FORMAT;
         }
     }
-    return pp_c2_lit(&c, "}") && c.i == c.n ? PP_CAUSE_NONE : PP_CAUSE_BAD_FORMAT;
+    if (!pp_c2_lit(&c, "}") || c.i != c.n) return PP_CAUSE_BAD_FORMAT;
+    return n > PP_WIDENING_HASHES ? PP_CAUSE_TOO_LARGE : PP_CAUSE_NONE; /* W4: at most 64 hashes, so a release slot
+                                                                         holds every statement it takes */
 }
 
 static int pp_listed(const uint8_t (*list)[32], size_t n, const uint8_t id[32]);
@@ -606,7 +609,7 @@ static uint8_t pp_part_put(uint8_t *buf, uint8_t *have, size_t part_len, size_t 
     if (ordered && offset != *next) return PP_CAUSE_FRAME_INVALID; /* B11 */
     memcpy(buf + offset, data, n);
     for (size_t k = offset; k < offset + n; k++)
-        if (!have[k]) { have[k] = 1; (*missing)--; }
+        if (!(have[k / 8] & (1u << (k % 8)))) { have[k / 8] |= (uint8_t)(1u << (k % 8)); (*missing)--; }
     *next = offset + n;
     return 0;
 }
@@ -709,8 +712,8 @@ static int pp_state(const pp_pep_machine *pep) {
     return pep->d.has_active && pep->d.trust_reads ? PP_ST_ACTIVE : PP_ST_NO_POLICY;
 }
 
-static void pp_persist(pp_pep_machine *pep) {
-    if (pep->config.persist) pep->config.persist(pep->config.context, &pep->d);
+static void pp_persist(pp_pep_machine *pep, int parts) {
+    if (pep->config.persist) pep->config.persist(pep->config.context, &pep->d, parts);
 }
 
 /* Make one signed record, its counter durable first (H3), and put it in the outbox. */
@@ -720,7 +723,7 @@ static void pp_emit(pp_pep_machine *pep, uint8_t event, uint8_t cause) {
     pep->d.counter++;
     if (pep->d.provisioned) {
         pep->d.counter_reads = 1;
-        pp_persist(pep);
+        pp_persist(pep, PP_PART_COUNTER);
     }
     const pp_durable *d = &pep->d;
     uint8_t stream_hash[32];
@@ -798,7 +801,7 @@ static uint8_t pp_still_valid(const pp_pep_machine *pep, const pp_release *relea
 static void pp_lapse(pp_pep_machine *pep, uint8_t cause) {
     pep->d.has_active = 0;
     pep->held = 0;
-    pp_persist(pep);
+    pp_persist(pep, PP_PART_ACTIVE);
     pp_runtime(pep);
     pp_emit(pep, PP_EV_LAPSED, cause);
 }
@@ -839,7 +842,7 @@ static int pp_stands(const pp_pep_machine *pep, const pp_release *release) {
 static void pp_drop_fallen_staged(pp_pep_machine *pep) {
     if (pep->d.has_staged && pep->d.trust_reads && !pp_stands(pep, &pep->d.staged)) {
         pep->d.has_staged = 0;
-        pp_persist(pep);
+        pp_persist(pep, PP_PART_STAGED);
     }
 }
 
@@ -867,45 +870,66 @@ static void pp_begin(pp_pep_machine *pep, long long now) {
     pp_check_expiry(pep);
 }
 
-/* C4: intent, floor (a commit only), the active record, the runtime, the clean up, each persisted. */
-static void pp_flip(pp_pep_machine *pep, int rollback, const pp_release *release, const pp_release *previous) {
+/* C4: intent, floor (a commit only), then the releases one part at a time in a fixed order, previous, active,
+ * staged, then the runtime and the clean up, each persisted. A commit makes the staged release active and keeps
+ * the active one as the previous (RB1); a rollback makes the previous one active and keeps none. The releases
+ * move in place, so nothing is copied but the one that moves.
+ *
+ * The order is what a power loss between two parts leaves. After the previous part alone the old release is
+ * still active, its previous is itself, and the staged release is still there to commit again, which Q3 lets
+ * through since the floor names it. After the active part the new release is active with its right previous,
+ * and the staged release left beside it is dropped at the restart (G2). The staged part goes last, so the
+ * release being committed is never lost before it is active. A rollback loses at most the rollback itself. */
+static void pp_flip(pp_pep_machine *pep, int rollback) {
     pp_durable *d = &pep->d;
-    d->pending = *release;
+    const pp_release *next = rollback ? &d->previous : &d->staged;
     d->has_pending = 1;
     d->pending_rollback = rollback;
-    pp_persist(pep);
+    memcpy(d->pending_release, next->release, 32);
+    d->pending_seq = next->seq;
+    pp_persist(pep, PP_PART_PENDING);
     if (!rollback) {
-        d->floor_seq = release->seq;
-        d->n_floor_ids = release->n;
-        for (size_t k = 0; k < release->n; k++) memcpy(d->floor_ids[k], release->held[k].envelope.envelope_id, 32);
-        pp_persist(pep);
+        d->floor_seq = d->staged.seq;
+        d->n_floor_ids = d->staged.n;
+        for (size_t k = 0; k < d->staged.n; k++) memcpy(d->floor_ids[k], d->staged.held[k].envelope.envelope_id, 32);
+        pp_persist(pep, PP_PART_FLOOR);
+        d->has_previous = d->has_active;
+        if (d->has_active) d->previous = d->active;
+        d->active = d->staged;
+        d->has_staged = 0; /* the staged release is the active one now (staged.seq <= active.seq) */
+    } else {
+        d->active = d->previous;
+        d->has_previous = 0;
     }
-    pp_release next = *release;
-    d->has_previous = previous != NULL;
-    if (previous) d->previous = *previous;
-    d->active = next;
     d->has_active = 1;
     pep->held = 0;
-    if (d->has_staged && d->staged.seq <= next.seq) d->has_staged = 0;
-    pp_persist(pep);
+    pp_persist(pep, PP_PART_PREVIOUS);
+    pp_persist(pep, PP_PART_ACTIVE);
+    pp_persist(pep, PP_PART_STAGED);
     pp_runtime(pep);
     d->has_pending = 0;
-    pp_persist(pep);
+    pp_persist(pep, PP_PART_PENDING);
     pp_emit(pep, rollback ? PP_EV_ROLLED_BACK : PP_EV_COMMITTED, 0);
 }
 
 int pp_pep_open(pp_pep_machine *pep, const pp_config *config, const pp_durable *durable, long long now) {
-    memset(pep, 0, sizeof *pep);
+    if (durable == &pep->d) { /* opened from its own durable state, read in place: clear all but that */
+        size_t at = offsetof(pp_pep_machine, d), after = at + sizeof pep->d;
+        memset(pep, 0, at);
+        memset((uint8_t *)pep + after, 0, sizeof *pep - after);
+    } else {
+        memset(pep, 0, sizeof *pep);
+    }
     pep->config = *config;
     pep->now = now;
     if (pp_row_of(config->kind) == NULL) return -1;
     if (config->expiry_hold && config->kind != PP_TGT_MESH && config->kind != PP_TGT_CFS) return -1; /* X6 */
     crypto_ed25519_key_pair(pep->instance_secret, pep->instance_public, pep->config.instance_seed);
     if (durable == NULL || !durable->provisioned) {
-        pep->d.trust_reads = 0;
+        memset(&pep->d, 0, sizeof pep->d);
         return 0; /* P1: nothing to believe yet */
     }
-    pep->d = *durable;
+    if (durable != &pep->d) pep->d = *durable;
     if (!pep->d.counter_reads) {
         /* a counter that cannot be read never repeats: the PEP locks and counts on from its time in microseconds */
         pep->d.counter = (uint64_t)pp_time(pep) * 1000000u;
@@ -926,7 +950,11 @@ int pp_pep_open(pp_pep_machine *pep, const pp_config *config, const pp_durable *
         if (memcmp(pep->d.trust.keys[k].id, id, 32) == 0) return -1; /* K2 */
     if (pep->d.has_pending) { /* C4: finish or report an interrupted commit */
         pep->d.has_pending = 0;
-        pp_persist(pep);
+        pp_persist(pep, PP_PART_PENDING);
+    }
+    if (pep->d.has_staged && pep->d.has_active && pep->d.staged.seq <= pep->d.active.seq) {
+        pep->d.has_staged = 0; /* a commit cut off after its active part left the release staged as well */
+        pp_persist(pep, PP_PART_STAGED);
     }
     pep->n_out = 0;
     pp_drop_fallen_staged(pep); /* R5 and X1 before the runtime, so a release that fell while down never runs */
@@ -952,7 +980,7 @@ void pp_pep_provision(pp_pep_machine *pep, const pp_trust *anchor, const char *s
     pep->locked = pep->held = 0;
     pep->commit_due = 0;
     pp_runtime(pep);
-    pp_persist(pep);
+    pp_persist(pep, PP_PARTS);
     pp_emit(pep, PP_EV_PROVISIONED, 0);
 }
 
@@ -981,12 +1009,34 @@ static uint8_t pp_apply_revocation(pp_pep_machine *pep, const pp_envelope *e, co
     t->trust_seq = e->seq;
     memcpy(t->trust_id, e->envelope_id, 32);
     t->has_trust_id = 1;
-    pp_persist(pep);
+    pp_persist(pep, PP_PART_TRUST);
     return 0;
 }
 
 static void pp_refuse(pp_pep_machine *pep, uint8_t cause) {
     pp_emit(pep, PP_EV_REFUSED, cause);
+}
+
+void pp_pep_view(const pp_pep_machine *pep, pp_pep *out) {
+    const pp_durable *d = &pep->d;
+    memset(out, 0, sizeof *out);
+    out->kind = pep->config.kind;
+    pp_copy_stream(out->stream, d->stream);
+    out->floor_seq = d->floor_seq;
+    out->n_floor_ids = d->n_floor_ids;
+    memcpy(out->floor_ids, d->floor_ids, sizeof out->floor_ids);
+    out->body_bound = PP_MAX_BODY;
+    out->has_clock = pep->config.has_clock;
+    if (d->has_staged) {
+        out->has_staged = 1;
+        pp_copy_stream(out->staged.stream, d->staged.stream);
+        out->staged.seq = d->staged.seq;
+        memcpy(out->staged.policy_sha256, d->staged.policy_sha256, 32);
+        memcpy(out->staged.release, d->staged.release, 32);
+        memcpy(out->staged.replaces, d->staged.replaces, 32);
+        out->staged.has_replaces = d->staged.has_replaces;
+        out->staged.widens = d->staged.widens;
+    }
 }
 
 void pp_pep_stage(pp_pep_machine *pep, const uint8_t *sealed, size_t sealed_len, const uint8_t *body, size_t body_len,
@@ -997,28 +1047,11 @@ void pp_pep_stage(pp_pep_machine *pep, const uint8_t *sealed, size_t sealed_len,
     if (!d->provisioned) { pp_refuse(pep, PP_CAUSE_UNKNOWN_KEY); return; }
     static pp_pep view;
     static pp_verdict verdict;
-    memset(&view, 0, sizeof view);
-    view.kind = pep->config.kind;
-    pp_copy_stream(view.stream, d->stream);
-    view.floor_seq = d->floor_seq;
-    view.n_floor_ids = d->n_floor_ids;
-    memcpy(view.floor_ids, d->floor_ids, sizeof view.floor_ids);
-    view.body_bound = PP_MAX_BODY;
-    view.has_clock = pep->config.has_clock;
-    if (d->has_staged) {
-        view.has_staged = 1;
-        pp_copy_stream(view.staged.stream, d->staged.stream);
-        view.staged.seq = d->staged.seq;
-        memcpy(view.staged.policy_sha256, d->staged.policy_sha256, 32);
-        memcpy(view.staged.release, d->staged.release, 32);
-        memcpy(view.staged.replaces, d->staged.replaces, 32);
-        view.staged.has_replaces = d->staged.has_replaces;
-        view.staged.widens = d->staged.widens;
-    }
+    pp_pep_view(pep, &view);
     pp_verify(sealed, sealed_len, body, body_len, &d->trust, &view, now, &verdict);
     if (verdict.has_time_floor && d->trust_reads && verdict.time_floor > d->trust.time_floor) {
         d->trust.time_floor = verdict.time_floor; /* V13, T1 */
-        pp_persist(pep);
+        pp_persist(pep, PP_PART_TRUST);
     }
     if (verdict.cause) { pp_refuse(pep, verdict.cause); return; }
     if (verdict.unchanged) { pp_emit(pep, PP_EV_BEAT, 0); return; } /* Q3, R1 */
@@ -1055,7 +1088,7 @@ void pp_pep_stage(pp_pep_machine *pep, const uint8_t *sealed, size_t sealed_len,
     memcpy(d->staged.held[slot].sealed, sealed, sealed_len);
     d->staged.held[slot].body_len = body_len;
     memcpy(pp_held_body(&d->staged, slot), body, body_len); /* V5 held the signed size to the artifact's bound */
-    pp_persist(pep);
+    pp_persist(pep, PP_PART_STAGED);
     pp_emit(pep, PP_EV_STAGED, 0);
 }
 
@@ -1070,14 +1103,11 @@ static void pp_commit_now(pp_pep_machine *pep, const char *stream, long long seq
     uint8_t cause = pp_still_valid(pep, &d->staged, 1); /* C3 */
     if (cause) {
         d->has_staged = 0;
-        pp_persist(pep);
+        pp_persist(pep, PP_PART_STAGED);
         pp_refuse(pep, cause);
         return;
     }
-    static pp_release release, previous;
-    release = d->staged;
-    previous = d->active;
-    pp_flip(pep, 0, &release, d->has_active ? &previous : NULL);
+    pp_flip(pep, 0);
 }
 
 void pp_pep_commit(pp_pep_machine *pep, const char *stream, long long seq, const uint8_t policy_sha256[32],
@@ -1109,7 +1139,7 @@ void pp_pep_abort(pp_pep_machine *pep, const char *stream, long long seq, const 
         return;
     }
     pep->d.has_staged = 0;
-    pp_persist(pep);
+    pp_persist(pep, PP_PART_STAGED);
     pp_emit(pep, PP_EV_ABORTED, 0);
 }
 
@@ -1144,15 +1174,19 @@ uint8_t pp_pep_rollback(pp_pep_machine *pep, long long now) {
     uint8_t cause = pp_still_valid(pep, &d->previous, 0);
     if (cause) { pp_refuse(pep, cause); return 0; }
     if (!pp_covers(pep, &d->previous)) { pp_refuse(pep, PP_CAUSE_WIDENING_UNSIGNED); return 0; }
-    static pp_release kept;
-    kept = d->previous;
-    pp_flip(pep, 1, &kept, NULL);
+    pp_flip(pep, 1);
     return 0;
 }
 
 void pp_pep_record(pp_pep_machine *pep, uint8_t event, long long now) {
     pp_begin(pep, now);
     pp_emit(pep, event, 0);
+}
+
+void pp_pep_save_time(pp_pep_machine *pep, long long now) {
+    if (!pep->d.provisioned || !pep->d.trust_reads || now <= pep->d.trust.time_floor) return;
+    pep->d.trust.time_floor = now;
+    pp_persist(pep, PP_PART_TRUST);
 }
 
 void pp_pep_see_epoch(pp_pep_machine *pep, uint64_t epoch) {
@@ -1166,4 +1200,137 @@ uint8_t pp_pep_decide(pp_pep_machine *pep, int *held_mark, long long now) {
     if (pp_state(pep) != PP_ST_ACTIVE) return PP_CAUSE_POLICY_LAPSED;
     *held_mark = pep->held;
     return PP_CAUSE_NONE;
+}
+
+/* ------------------------------------------------------------------ the durable state, part by part */
+
+typedef struct {
+    uint8_t *p;
+    const uint8_t *q;
+    size_t n, i;
+    int ok;
+} pp_io;
+
+static void pp_io_bytes(pp_io *io, void *data, size_t len) {
+    if (!io->ok || io->i + len > io->n) { io->ok = 0; return; }
+    if (io->p) memcpy(io->p + io->i, data, len);
+    else memcpy(data, io->q + io->i, len);
+    io->i += len;
+}
+
+/* A count followed by that many items of `size` bytes, at most `max`. */
+static void pp_io_array(pp_io *io, void *items, size_t *count, size_t size, size_t max) {
+    uint32_t n = (uint32_t)*count;
+    pp_io_bytes(io, &n, sizeof n);
+    if (!io->ok || n > max) { io->ok = 0; return; }
+    *count = n;
+    pp_io_bytes(io, items, size * n);
+}
+
+static void pp_io_release(pp_io *io, pp_release *r) {
+    pp_io_bytes(io, r->stream, sizeof r->stream);
+    pp_io_bytes(io, &r->seq, sizeof r->seq);
+    pp_io_bytes(io, r->policy_sha256, 32);
+    pp_io_bytes(io, r->release, 32);
+    pp_io_bytes(io, r->replaces, 32);
+    pp_io_bytes(io, &r->has_replaces, sizeof r->has_replaces);
+    pp_io_bytes(io, &r->widens, sizeof r->widens);
+    uint32_t n = (uint32_t)r->n;
+    pp_io_bytes(io, &n, sizeof n);
+    if (!io->ok || n > 2) { io->ok = 0; return; }
+    r->n = n;
+    for (size_t k = 0; k < r->n; k++) {
+        pp_artifact_held *h = &r->held[k];
+        pp_io_bytes(io, &h->envelope, sizeof h->envelope);
+        uint32_t sl = (uint32_t)h->sealed_len, bl = (uint32_t)h->body_len;
+        pp_io_bytes(io, &sl, sizeof sl);
+        pp_io_bytes(io, &bl, sizeof bl);
+        size_t room = pp_is_trust(h->envelope.artifact) ? PP_WIDENING_MAX : PP_RELEASE_BODY_MAX;
+        if (!io->ok || sl > PP_MAX_SEALED || bl > room) { io->ok = 0; return; }
+        h->sealed_len = sl;
+        h->body_len = bl;
+        pp_io_bytes(io, h->sealed, sl);
+        pp_io_bytes(io, pp_held_body(r, k), bl);
+    }
+}
+
+static void pp_io_part(pp_io *io, pp_durable *d, int part) {
+    uint8_t tag[4] = {'P', 'P', 'D', (uint8_t)part};
+    pp_io_bytes(io, tag, 4);
+    if (!(tag[0] == 'P' && tag[1] == 'P' && tag[2] == 'D' && tag[3] == (uint8_t)part)) io->ok = 0;
+    pp_trust *t = &d->trust;
+    switch (part) {
+    case PP_PART_ANCHOR:
+        pp_io_bytes(io, &d->provisioned, sizeof(int));
+        pp_io_bytes(io, &d->expiry_hold, sizeof(int));
+        pp_io_bytes(io, d->stream, sizeof d->stream);
+        break;
+    case PP_PART_COUNTER: pp_io_bytes(io, &d->counter, sizeof d->counter); break;
+    case PP_PART_TRUST:
+        pp_io_array(io, t->keys, &t->n_keys, sizeof t->keys[0], PP_MAX_KEYS);
+        pp_io_array(io, t->retired, &t->n_retired, 32, PP_MAX_RETIRED);
+        pp_io_array(io, t->revoked_keys, &t->n_revoked_keys, 32, PP_MAX_LIST);
+        pp_io_array(io, t->revoked_envelopes, &t->n_revoked_envelopes, 32, PP_MAX_LIST);
+        pp_io_array(io, t->revoked_policies, &t->n_revoked_policies, 32, PP_MAX_LIST);
+        pp_io_array(io, t->floors, &t->n_floors, sizeof t->floors[0], PP_MAX_FLOORS);
+        pp_io_bytes(io, &t->trust_seq, sizeof t->trust_seq);
+        pp_io_bytes(io, t->trust_id, 32);
+        pp_io_bytes(io, &t->has_trust_id, sizeof t->has_trust_id);
+        pp_io_bytes(io, &t->time_floor, sizeof t->time_floor);
+        break;
+    case PP_PART_FLOOR:
+        pp_io_bytes(io, &d->floor_seq, sizeof d->floor_seq);
+        pp_io_array(io, d->floor_ids, &d->n_floor_ids, 32, PP_MAX_FLOOR_IDS);
+        break;
+    case PP_PART_ACTIVE: pp_io_bytes(io, &d->has_active, sizeof(int)); if (d->has_active) pp_io_release(io, &d->active); break;
+    case PP_PART_PREVIOUS: pp_io_bytes(io, &d->has_previous, sizeof(int)); if (d->has_previous) pp_io_release(io, &d->previous); break;
+    case PP_PART_STAGED: pp_io_bytes(io, &d->has_staged, sizeof(int)); if (d->has_staged) pp_io_release(io, &d->staged); break;
+    case PP_PART_PENDING:
+        pp_io_bytes(io, &d->has_pending, sizeof(int));
+        pp_io_bytes(io, &d->pending_rollback, sizeof(int));
+        pp_io_bytes(io, d->pending_release, 32);
+        pp_io_bytes(io, &d->pending_seq, sizeof d->pending_seq);
+        break;
+    default: io->ok = 0;
+    }
+}
+
+size_t pp_durable_pack(const pp_durable *d, int part, uint8_t *out, size_t room) {
+    pp_io io = {out, NULL, room, 0, 1};
+    pp_io_part(&io, (pp_durable *)d, part); /* packing only reads d */
+    return io.ok ? io.i : 0;
+}
+
+/* What a part that is absent or does not read leaves: a part that must read for the PEP to decide reads as lost. */
+static void pp_part_lost(pp_durable *d, int part, int absent) {
+    switch (part) {
+    case PP_PART_ANCHOR: d->provisioned = !absent; d->setting_reads = 0; break; /* no anchor: never provisioned */
+    case PP_PART_COUNTER: d->counter_reads = 0; break;
+    case PP_PART_TRUST: d->trust_reads = 0; break;
+    case PP_PART_FLOOR: d->floor_reads = 0; break;
+    case PP_PART_ACTIVE: d->has_active = 0; break;
+    case PP_PART_PREVIOUS: d->has_previous = 0; break;
+    case PP_PART_STAGED: d->has_staged = 0; break;
+    case PP_PART_PENDING: d->has_pending = !absent; break; /* an intent that does not read is an interrupted one */
+    }
+}
+
+int pp_durable_unpack(pp_durable *out, int part, const uint8_t *bytes, size_t len) {
+    if (bytes == NULL) {
+        pp_part_lost(out, part, 1);
+        return 0;
+    }
+    pp_io io = {NULL, bytes, len, 0, 1};
+    pp_io_part(&io, out, part);
+    if (!io.ok || io.i != len) {
+        pp_part_lost(out, part, 0);
+        return -1;
+    }
+    switch (part) {
+    case PP_PART_ANCHOR: out->setting_reads = 1; break;
+    case PP_PART_COUNTER: out->counter_reads = 1; break;
+    case PP_PART_TRUST: out->trust_reads = out->trust.readable = 1; break;
+    case PP_PART_FLOOR: out->floor_reads = 1; break;
+    }
+    return 0;
 }
