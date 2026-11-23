@@ -342,7 +342,47 @@ def _unproduced(names: List[str], combo) -> bool:
     return False
 
 
-def domain_classes(docs, read_also: Tuple[str, ...] = ()):
+def _wide_atoms(when, out) -> bool:
+    """`_atoms`, also reading `not in`, for the boundary walk of a wide integer field."""
+    head = when[0] if isinstance(when, list) and when else None
+    if head in ("and", "or"):
+        return all(_wide_atoms(part, out) for part in when[1:])
+    if head == "not":
+        return _wide_atoms(when[1], out)
+    if head in ("always", "never"):
+        return True
+    if head in ("cmp", "in", "not in", "truthy"):
+        out.append(when)
+        return True
+    return False
+
+
+def _boundary_domain(name: str, text: str, atoms: List[list]) -> List[Any]:
+    """The values of a wide integer field that stand for all of them: its ends and each constant an atom on it
+    compares with, with its neighbours, inside the declared range. Between two of them every atom is true or
+    false alike, so they meet every class `_classes` makes of the whole range. ProfileError when an atom is not
+    a comparison with integer constants."""
+    options = dict(word.split("=", 1) for word in text.split()[1:] if "=" in word)
+    low, high = int(options["min"]), int(options["max"])
+    points = {low, high}
+    for atom in atoms:
+        if atom[0] == "cmp" and isinstance(atom[3], list) and isinstance(atom[3][1], int):
+            constants = [atom[3][1]]
+        elif atom[0] in ("in", "not in") and all(isinstance(const, list) and isinstance(const[1], int) for const in atom[2]):
+            constants = [const[1] for const in atom[2]]
+        elif atom[0] == "truthy":
+            constants = [0]
+        else:
+            raise ProfileError(f"field {name!r} is an int with an atom the boundary walk does not read")
+        for const in constants:
+            points.update(value for value in (const - 1, const, const + 1) if low <= value <= high)
+    values: List[Any] = sorted(points)
+    if options.get("absent") == "allowed":
+        values.append(None)
+    return values
+
+
+def domain_classes(docs, read_also: Tuple[str, ...] = (), boundary_ints: bool = False):
     """The finite reading domain of one or more policy documents over the same fields, as value classes:
     `(names, constant, groups)`. `names` are the fields some rule of some document reads (and `read_also`),
     `constant` gives every other field its first value, and `groups[i]` are the classes of `names[i]`, grouped
@@ -350,9 +390,10 @@ def domain_classes(docs, read_also: Tuple[str, ...] = ()):
     `_classes`). A first rule that holds is then a function of the classes, so each document decides a
     combination of classes as one, by its first values, and `_unproduced` names the combinations the
     classifier never gives. Raises ProfileError when a field has no finite domain. `needs_all` walks it for one
-    image, and the widening comparator (`prismpath.distribution.widening`) for two."""
+    image, and the widening comparator (`prismpath.distribution.widening`) for two. With `boundary_ints` an
+    integer field whose range is too wide to list stands for itself by its boundary values
+    (`_boundary_domain`), which is exact when every rule is read as atoms; the profile compiler does not use it."""
     fields = docs[0]["fields"]
-    domains = {name: _domain(name, text) for name, text in sorted(fields.items())}
     atoms: Dict[str, List[list]] = {name: [] for name in fields}
     understood = True
     read = set(read_also)
@@ -364,6 +405,17 @@ def domain_classes(docs, read_also: Tuple[str, ...] = ()):
                 if atom[1] in atoms:
                     atoms[atom[1]].append(atom)
             read |= _names_read(rule["when"], fields)
+    domains = {}
+    for name, text in sorted(fields.items()):
+        try:
+            domains[name] = _domain(name, text)
+        except ProfileError:
+            if not (boundary_ints and text.split()[0] == "int"):
+                raise
+            wide: List[list] = []
+            if not all(_wide_atoms(rule["when"], wide) for doc in docs for rule in doc["rules"]):
+                raise
+            domains[name] = _boundary_domain(name, text, [atom for atom in wide if atom[1] == name])
     names = sorted(read)
     constant = {name: values[0] for name, values in domains.items() if name not in read}
     groups = [_classes(domains[n], atoms[n]) if understood else [[v] for v in domains[n]] for n in names]

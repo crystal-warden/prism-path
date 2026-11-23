@@ -278,11 +278,34 @@ def read_rotation(body: bytes) -> dict:
     return doc
 
 
+WIDENING_FROM = 64                                 # W4: the hashes a widening statement may list
+
+
 def read_widening(body: bytes) -> dict:
-    """W4: a widening statement, the sorted policy hashes it may replace in `from`."""
+    """W4: a widening statement, the sorted policy hashes it may replace in `from`, at most 64 of them
+    (`dist:too-large` past that)."""
     doc = _trust_body(body, WIDENING_FORMAT, frozenset({"encoding", "format", "from"}))
     if not _sorted_hashes(doc["from"]):
         raise Refused(BAD_FORMAT, "a widening statement whose from is not sorted hashes without repeats")
+    if len(doc["from"]) > WIDENING_FROM:
+        raise Refused("dist:too-large", f"a widening statement from {len(doc['from'])} hashes, past {WIDENING_FROM}")
+    return doc
+
+
+ZONES_FORMAT = "prismpath.dist-zones/1"
+ZONES_MAX, ZONE_NAME_MAX = 10000, 512
+
+
+def read_zones(body: bytes) -> dict:
+    """`agent.zones`: a canon/2 object with `encoding`, `format` and `protected`, the owner's protected names,
+    sorted, without repeats, at most 10,000 names of 1 to 512 characters, none of them a path. `Refused` with
+    `dist:bad-format` otherwise. Where the names are looked up is the home's own setting (section 3)."""
+    doc = _trust_body(body, ZONES_FORMAT, frozenset({"encoding", "format", "protected"}))
+    names = doc["protected"]
+    if (not isinstance(names, list) or len(names) > ZONES_MAX or names != sorted(set(names))
+            or not all(isinstance(name, str) and 1 <= len(name) <= ZONE_NAME_MAX and "/" not in name
+                       and name not in (".", "..") for name in names)):
+        raise Refused(BAD_FORMAT, "agent.zones protects sorted names without repeats, none of them a path")
     return doc
 
 
@@ -305,7 +328,7 @@ ARTIFACTS: Dict[str, Artifact] = {
     "policy.spiral": Artifact(check=check_policy_spiral),
     "sandbox.profile": Artifact(frozenset({"compiler"})),
     "egress.hosts": Artifact(check=_reads(read_hosts)),
-    "agent.zones": Artifact(),
+    "agent.zones": Artifact(check=_reads(read_zones)),
     "gateway.routes": Artifact(),
     "net.dests": Artifact(),
     "net.edge": Artifact(frozenset({"flow_sha256", "names_sha256", "qualification"})),
@@ -323,6 +346,8 @@ MESH_TABLE_MAX = 640                               # E6: TBL_MAX in prismpath-hw
 
 TARGETS: Dict[str, Target] = {
     "host": Target(needs=frozenset({"policy.ppt"}), decides=False, when_declared=frozenset({"policy.spiral"})),
+    "agent": Target(needs=frozenset({"policy.core", "egress.hosts"}), decides=True,
+                    when_declared=frozenset({"agent.zones"})),
     "mesh": Target(needs=frozenset({"policy.ppt"}), decides=False, expiry_hold=True, body_bound=MESH_TABLE_MAX,
                    checks={"policy.ppt": check_mesh_table}, reads_meta=False),
 }

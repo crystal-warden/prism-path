@@ -11,6 +11,9 @@ answer that per artifact, `LARGER`, `NOT_LARGER` or `CANNOT_DECIDE`:
     egress.hosts     larger when the staged list is not a subset of the active one
     gateway.routes   any change is larger
     agent.zones      larger when a protected name is gone, and a release that drops the artifact drops them all
+    policy.ppt       any change is larger, since the table format gives its nodes no meaning and nothing in
+                     the image says which outcome is the more permissive one
+    cfs.table        ordered by the core image inside it, registered from `integrations/cfs/dist_kind.py`
 
 Going from no policy to any policy is larger, and an answer that cannot be reached is treated as larger. A
 kind registered from outside this package, such as the XDP edge's `net.dests`, adds its comparator with
@@ -52,7 +55,7 @@ def compare_policies(active: bytes, staged: bytes) -> str:
     if old.doc["fields"] != new.doc["fields"]:
         return LARGER                                  # 9.4: two policies without the same fields
     try:
-        names, constant, groups = profile.domain_classes([old.doc, new.doc])
+        names, constant, groups = profile.domain_classes([old.doc, new.doc], boundary_ints=True)
     except profile.ProfileError:
         return CANNOT_DECIDE
     import itertools
@@ -98,6 +101,11 @@ def compare_routes(active: bytes, staged: bytes) -> str:
     return NOT_LARGER if bytes(active) == bytes(staged) else LARGER
 
 
+def compare_ppt(active: bytes, staged: bytes) -> str:
+    """W1 for `policy.ppt`: the same image is not larger and any other is (section 9.4)."""
+    return NOT_LARGER if bytes(active) == bytes(staged) else LARGER
+
+
 def compare_zones(active: Optional[bytes], staged: Optional[bytes]) -> str:
     """W1 for `agent.zones`: larger when a name the active file protects is gone. No file protects nothing."""
     old = frozenset() if active is None else _names(active, _protected)
@@ -112,6 +120,7 @@ COMPARATORS: Dict[str, Comparator] = {
     "egress.hosts": compare_hosts,
     "gateway.routes": compare_routes,
     "agent.zones": compare_zones,
+    "policy.ppt": compare_ppt,
 }
 OPTIONAL = frozenset({"agent.zones"})              # an artifact whose absence is a value: it drops every name
 
