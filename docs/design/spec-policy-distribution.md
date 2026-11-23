@@ -134,7 +134,7 @@ an extra member or a value outside the stated form is refused with `dist:bad-for
 | `replaces` | 64 lower case hex digits, or the empty string | The policy hash the signer compared against when setting `widens` |
 | `seq` | integer, 1 to 2^53 - 1 | The sequence number on the stream |
 | `stream` | a stream name | |
-| `targets` | array of target kinds, sorted, at least one, no repeats | The PEP kinds this envelope is valid for |
+| `targets` | array of target kinds, sorted, at least one, no repeats | The PEP kinds this envelope is valid for. On a `@trust` envelope the writer names every kind and a reader does not check it (V5) |
 | `widens` | `true` or `false` | The signer's statement that the release allows something `replaces` did not |
 
 **E2.** The envelope bytes are the canon/2 bytes of that object (`prismpath.kernel.canon2.dumps`). A reader
@@ -424,7 +424,7 @@ cause reported and nothing is staged.
 | V2 | The sealed container reads (S2), and the body is no longer than the larger of the PEP's two bounds (E6) | `dist:bad-format`, `dist:too-large` |
 | V3 | The signatures (S3 to S5) | `dist:unknown-key`, `sig:invalid`, `sig:revoked-key` |
 | V4 | The envelope reads (E1, E2, E5, E8, E11) | `document:not-canonical`, `dist:bad-format` |
-| V5 | `targets` holds this PEP's kind, `artifact` is one this kind uses or a trust kind, and `stream` is this PEP's stream or `@trust` for a trust kind. Then the signed `body_size` is within the bound for that artifact (E6), which is checked before any body is read (B9) | `dist:target-mismatch`, then `dist:too-large` |
+| V5 | `targets` holds this PEP's kind, `artifact` is one this kind uses or a trust kind, and `stream` is this PEP's stream or `@trust` for a trust kind. A `trust.revocation` or a `trust.rotation` is for every PEP whatever `targets` says, because one trust sequence must count the same for all of them (R1). Then the signed `body_size` is within the bound for that artifact (E6), which is checked before any body is read (B9) | `dist:target-mismatch`, then `dist:too-large` |
 | V6 | Time (T3, T4, and X4 for a trust kind) | `dist:not-yet-valid`, `dist:expired` |
 | V7 | The envelope id and the policy hash are not on the revocation list | `dist:revoked` |
 | V8 | The sequence (Q2, Q3, or R1 and O1 for a trust kind) | `dist:seq-replay`, `dist:trust-replay` |
@@ -469,7 +469,10 @@ An `abort` that names anything else changes nothing. Abort never touches the act
 **RB1.** A PEP may keep the release it replaced and return to it on a local operator command, as
 `PolicyHost.rollback` does. A rollback never lowers the floor.
 
-**RB2.** A rollback is refused unless every envelope of the kept release still passes T4 and V7.
+**RB2.** A rollback is refused unless every envelope of the kept release still passes T4 and V7, has a
+counting signature (S3) and is not below a floor a revocation raised (R4). It is held to what a staged
+release is held to at its commit, since it becomes active anew. The cause is the one the failed check
+gives.
 
 **RB3.** A rollback to a release that allows more than the active one is a widening and falls under W1 to
 W7. A PEP that cannot decide refuses it unless it holds a widening statement that covers it.
@@ -580,8 +583,8 @@ not know is `dist:unknown-key`. One that lacks the new key's signature is `dist:
 A retired key's signatures no longer count (S5), and a release already active under it stays active
 until it expires or is replaced. `retire` that names an unknown key is `dist:rotation-invalid`.
 
-**O4.** `add` is never the PEP's own instance key, and never a key id on the revocation list. Either is
-`dist:rotation-invalid`.
+**O4.** `add` is never the PEP's own instance key, never a key id on the revocation list, and never a key
+the store has retired, since a retired key does not come back. Each is `dist:rotation-invalid`.
 
 ## 12. Expiry
 
@@ -745,6 +748,8 @@ The instance key's signature covers them. Type 1 is an Entity Attestation Token 
 `eat_nonce` is the SHA-256 of bytes 0 to 146+m of the record, so hardware evidence is bound to one state
 record. Type 2 is reserved for the record of a member a PEP speaks for. A PEP in this version sends none.
 A controller skips a type it does not know and never treats an extension as a signature on the record.
+A type 1 entry that does not read, or whose `eat_nonce` is not that hash, makes the record
+`fleet:state-invalid` at step 1 of H6.
 
 **H7.** A PEP with no accepted record for three intervals is filed as `fleet:silent`.
 
@@ -769,7 +774,7 @@ the expected policy hash and `seq`, the last accepted record and the open findin
 | `staging` | the group's rule is met | `committing` |
 | `staging` | a member refuses, or the stage window (default 120 seconds, 500 milliseconds on the mesh) ends, under rule `all` | `aborted` |
 | `committing` | every member that staged reports `committed` | `committed` |
-| `committing` | the commit window ends first | `partial` |
+| `committing` | the commit window (default 120 seconds, and on the mesh the commit's delay plus 2 seconds) ends first | `partial` |
 
 A group's rule is `each` or `all`. Under `each` the controller sends `commit` to a member as soon as that
 member staged, and a single PEP is a group of one. Under `all` it sends `commit` only when every member
@@ -781,6 +786,12 @@ bounded by the windows of F3 and visible while it lasts.
 
 **F5.** The controller writes every offer, ack, commit, abort, finding and trust statement to its own
 audit log, signed with the controller's instance key.
+
+**F6.** A controller offers a PEP the trust statements it lacks, in order, and offers it nothing else until
+the PEP reports the trust sequence of the chain's end. A state record does not say which envelope it
+refused, so this order is what tells a refused trust statement from a refused release. A refusal that
+comes while the PEP is behind on the chain is filed against the trust statement and never against a
+rollout. One controller serves one trust chain.
 
 ## 16. Dev builds and escape hatches
 
@@ -842,7 +853,7 @@ written. If another change lands first the numbers move up together and the name
 | 141 | `dist:expired` | authority | The PEP's time is at or past `expires` |
 | 142 | `dist:revoked` | authority | The envelope id or the policy hash is on the revocation list, or the active release's seq is below a raised floor |
 | 143 | `dist:widening-unsigned` | authority | A release that is larger, or cannot be shown not to be, without a covering widening statement |
-| 144 | `dist:trust-replay` | authority | A revocation or rotation whose `seq` is not the trust sequence plus one |
+| 144 | `dist:trust-replay` | authority | A revocation or rotation whose `seq` is not the trust sequence plus one, or a revocation list that would restore trust by dropping a key, or by dropping an entry no floor has passed (R6, R8) |
 | 145 | `dist:rotation-invalid` | authority | A rotation without the new key's signature, or that names a key it may not |
 | 146 | `dist:legacy-refused` | authority | An older signed form where a distribution envelope is required |
 | 147 | `dist:hatch-refused` | authority | An escape hatch asked for in a production build |
@@ -854,7 +865,7 @@ written. If another change lands first the numbers move up together and the name
 | 153 | `dist:policy-lapsed` | state | A decision asked of a PEP with no active release |
 | 154 | `dist:floor-lost` | state | The floor cannot be read, so the PEP is locked |
 | 155 | `fleet:state-invalid` | wire | A state record that does not read, is from no enrolled PEP or is not signed by its instance key |
-| 156 | `fleet:state-replay` | wire | A state record whose counter is not above the last accepted |
+| 156 | `fleet:state-replay` | wire | A state record whose counter is not above the last accepted, or whose epoch is neither the controller's current one nor the one before |
 | 157 | `fleet:policy-mismatch` | wire | A PEP reports a policy hash, `seq` or Facet preamble other than the expected one |
 | 158 | `fleet:silent` | wire | No accepted state record from a PEP for three intervals |
 | 159 | `dist:held` | state | A PEP deciding under an expired release because its deployment chose HOLD, or an action refused because of that hold |
@@ -935,7 +946,7 @@ reports exactly the cause given, or none, and its state after is the one given.
 | 51 | The process is killed at each step of a commit and restarted | the old release before the flip, the new one after, never a mix | C4 | P R |
 | 52 | A commit is followed by a state record with event `committed` and the new hash | as stated | C5, H4 | P R C |
 | 53 | An abort for the staged release, and an abort for another | dropped with event `aborted`, unchanged | A1 | P R C |
-| 54 | A rollback to a kept release that has expired, and to one that is revoked | refused with `dist:expired`, `dist:revoked` | RB2 | P |
+| 54 | A rollback to a kept release that has expired, to one that is revoked, to one whose only signing key is revoked, to one whose only signing key was retired, and to one below a raised floor | refused with `dist:expired`, `dist:revoked`, `sig:revoked-key`, `sig:revoked-key`, `dist:seq-replay` | RB2 | P |
 | 55 | A rollback to a kept release that allows more, without and with a covering statement | `dist:widening-unsigned`, rolled back | RB3 | P |
 | 56 | An `agent` PEP is offered a policy that allows one more reading with `widens` false and no statement | `dist:widening-unsigned` | W1, W3, W6, V12 | P |
 | 57 | An `agent` PEP is offered a policy that allows less | committed on its ordinary signature | W1 | P |
@@ -956,7 +967,7 @@ reports exactly the cause given, or none, and its state after is the one given.
 | 72 | A rotation signed by the old and the new key, then a pack under the new key | applied, committed | O1, O2, O3 | P R C |
 | 73 | After a rotation that retires the old key, a pack signed by the old key, while the release active under it keeps deciding | `sig:revoked-key`, still active | O3, S5 | P R C |
 | 74 | A rotation signed only by an unknown key, and one without the new key's signature | `dist:unknown-key`, `dist:rotation-invalid` | O2 | P R C |
-| 75 | A rotation whose `retire` is unknown, whose `add` is the PEP's instance key, and whose `add` is revoked | `dist:rotation-invalid` each | O3, O4 | P R |
+| 75 | A rotation whose `retire` is unknown, whose `add` is the PEP's instance key, whose `add` is revoked, and whose `add` is a key the store retired | `dist:rotation-invalid` each | O3, O4 | P R |
 | 76 | A rotation and a revocation with the same `seq` | the second is `dist:trust-replay` | O1 | P R C |
 | 77 | The active release passes `expires` with no message at all | `no-policy`, event `lapsed`, `dist:expired`, and every decision refused with `dist:policy-lapsed` | X1, X2, X3 | P R C |
 | 78 | A cut off PEP holds a revoked release it never heard was revoked | it decides until `expires` and not after | X2 | P |
@@ -1014,3 +1025,5 @@ reports exactly the cause given, or none, and its state after is the one given.
 | 130 | A list raises a floor past a revoked envelope, the next list drops that envelope, and the envelope is sent again. Then a list that drops an envelope no floor has passed is given to the sealing tool and to a controller | applied, applied with the PEP holding only the latest list, `dist:seq-replay`, then refused by both | R6, R8 | P R C |
 | 131 | A rotation that would make a ninth key, and seventeen keys retired one after another, then a pack signed by the first retired | `dist:too-large`, then `dist:unknown-key` | K5 | P R C |
 | 132 | A `mesh` PEP is sent a revocation list of 64 entries in each list and 16 streams, a `policy.ppt` of 641 bytes, and over frames a trust body offered at 16,385 bytes | applied, `dist:too-large` from the signed `body_size` with no body read, and the transfer dropped with `dist:too-large` | E6, V5, R7, B9 | P C |
+| 133 | A PEP one trust statement behind is offered that statement and a release, refuses the statement, then takes it and the release | only the statement is offered first, the refusal is filed against the statement and the rollout is unmoved, then the release is offered and commits | F6 | P |
+| 134 | A revocation whose `targets` names only `mesh` is sent to a `host` PEP and a `mesh` PEP, then a rotation naming every kind | applied on both, and both then take the rotation at the next trust sequence | V5, R1 | P R C |
