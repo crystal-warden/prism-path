@@ -631,3 +631,42 @@ def test_a_widening_statement_holds_at_most_64_hashes(host_check):
         steps.append(f"stage {sealed.hex()} {body.hex()} {N}")
     out = _machine(host_check, steps)
     assert _events(out[1]) == [("staged", None)] and _events(out[2]) == [("refused", "dist:too-large")]
+
+
+def _after_loss(host_check, steps: list, cut: list) -> str:
+    """Run `steps`, then `cut` with the power lost after each count of writes in turn, then a restart and the
+    durable state read back. One line per count."""
+    out = []
+    for writes in range(12):
+        script = steps + [("stop", writes)] + cut + [("restart", N), ("state",)]
+        lines = _c_steps(host_check, script, hold=False)
+        out.append(lines[-1])
+    return out
+
+
+def test_a_power_loss_at_each_write_of_a_commit_or_a_rollback_leaves_one_release_with_a_known_previous(host_check):
+    """C4 on the C core. A commit writes its parts one at a time, previous, active, staged, so after a power loss
+    at any write the restarted node holds either the old release, with the new one still staged to commit again,
+    or the new one with the old one as its previous. A rollback cut off holds either release, and never a
+    previous that is neither the old previous nor the release itself."""
+    built = [("provision", S, N)]
+    statement = canon.canon2_bytes({canon.ENCODING_KEY: canon.CANON2, "format": "prismpath.dist-widening/1", "from": []})
+    for index, seq in ((0, 1), (1, 2)):
+        release = env.release_id([("policy.ppt", H[index])])         # seq 2 may be rolled back to (RB3)
+        widening = _dist.seal("trust.widening", statement, seq=seq, release=release, policy_sha256=H[index],
+                              targets=("mesh",)).hex()
+        built += [("stage", widening, statement.hex(), N), ("stage", _sealed(index, seq), BODIES[index].hex(), N),
+                  ("commit", S, seq, H[index], N)]
+    built += [("stage", _sealed(2, 3), BODIES[2].hex(), N)]
+    states = _after_loss(host_check, built, [("commit", S, 3, H[2], N)])
+    assert set(states) <= {"state 2 1 3", "state 2 2 3", "state 3 2 -"}, states
+    assert states[0] == "state 2 1 3" and states[-1] == "state 3 2 -"
+    for writes, state in enumerate(states):
+        if state != "state 3 2 -":                                   # committed again after the restart
+            again = built + [("stop", writes), ("commit", S, 3, H[2], N), ("restart", N),
+                             ("commit", S, 3, H[2], N), ("state",)]
+            assert _c_steps(host_check, again, hold=False)[-1] == "state 3 2 -", writes
+    committed = built + [("commit", S, 3, H[2], N)]
+    rolled = _after_loss(host_check, committed, [("rollback", N)])
+    assert set(rolled) <= {"state 3 2 -", "state 3 - -", "state 2 - -"}, rolled
+    assert rolled[0] == "state 3 2 -" and rolled[-1] == "state 2 - -"

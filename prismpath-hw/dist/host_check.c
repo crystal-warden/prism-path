@@ -35,6 +35,8 @@
  *   decide <now>
  *   restart <now>
  *   lose anchor | setting | counter | trust | floor | active | previous | staged | pending   (that part's bytes do not read)
+ *   stop <n>  after n more part writes nothing reaches the store, as a power loss; a restart restores the power
+ *   state     the durable state as read back: active, previous and staged, each its seq or "-"
  *   written   the bytes the durable writes took since the last "written": total, writes, the largest
  *   sizes     sizeof the durable state, a release and the machine
  *   done
@@ -87,12 +89,15 @@ static size_t part_len[N_PARTS];
 static int part_kept[N_PARTS];
 static size_t written, writes, largest_write;
 static pp_durable saved;
+static long stop_after = -1; /* the writes that still reach the store before a power loss, or -1 for no loss */
 
 static void persist(void *context, const pp_durable *durable, int changed) {
     (void)context;
     size_t bytes = 0;
-    for (int k = 0; k < N_PARTS; k++) {
+    for (int k = 0; k < N_PARTS; k++) { /* a store writes the parts it is given one after another */
         if (!(changed & (1 << k))) continue;
+        if (stop_after == 0) break;      /* the power is gone: nothing more is written */
+        if (stop_after > 0) stop_after--;
         size_t n = pp_durable_pack(durable, 1 << k, parts[k], sizeof parts[k]);
         if (n == 0) {
             fprintf(stderr, "host_check: part %d of the durable state does not pack\n", 1 << k);
@@ -199,7 +204,20 @@ static int machine(const char *args, pp_trust *anchor) {
             int mark = 0;
             uint8_t cause = pp_pep_decide(&pep, &mark, strtoll(rest, NULL, 10));
             printf("decide %u %d\n", cause, mark);
+        } else if (strcmp(word, "stop") == 0) {
+            stop_after = strtol(rest, NULL, 10);
+            printf("records\n");
+        } else if (strcmp(word, "state") == 0) {
+            const pp_durable *d = reread();
+            if (d == NULL) printf("state - - -\n");
+            else {
+                printf("state ");
+                if (d->has_active) printf("%lld ", d->active.seq); else printf("- ");
+                if (d->has_previous) printf("%lld ", d->previous.seq); else printf("- ");
+                if (d->has_staged) printf("%lld\n", d->staged.seq); else printf("-\n");
+            }
         } else if (strcmp(word, "restart") == 0) {
+            stop_after = -1;
             started = pp_pep_open(&pep, &config, reread(), strtoll(rest, NULL, 10)) == 0;
             if (started) print_records(&pep);
             else printf("refused-start\n");

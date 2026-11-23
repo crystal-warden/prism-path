@@ -870,9 +870,16 @@ static void pp_begin(pp_pep_machine *pep, long long now) {
     pp_check_expiry(pep);
 }
 
-/* C4: intent, floor (a commit only), the active record, the runtime, the clean up, each persisted. A commit makes
- * the staged release active and keeps the active one as the previous (RB1); a rollback makes the previous one
- * active and keeps none. The releases move in place, so nothing is copied but the one that moves. */
+/* C4: intent, floor (a commit only), then the releases one part at a time in a fixed order, previous, active,
+ * staged, then the runtime and the clean up, each persisted. A commit makes the staged release active and keeps
+ * the active one as the previous (RB1); a rollback makes the previous one active and keeps none. The releases
+ * move in place, so nothing is copied but the one that moves.
+ *
+ * The order is what a power loss between two parts leaves. After the previous part alone the old release is
+ * still active, its previous is itself, and the staged release is still there to commit again, which Q3 lets
+ * through since the floor names it. After the active part the new release is active with its right previous,
+ * and the staged release left beside it is dropped at the restart (G2). The staged part goes last, so the
+ * release being committed is never lost before it is active. A rollback loses at most the rollback itself. */
 static void pp_flip(pp_pep_machine *pep, int rollback) {
     pp_durable *d = &pep->d;
     const pp_release *next = rollback ? &d->previous : &d->staged;
@@ -896,7 +903,9 @@ static void pp_flip(pp_pep_machine *pep, int rollback) {
     }
     d->has_active = 1;
     pep->held = 0;
-    pp_persist(pep, PP_PART_ACTIVE | PP_PART_PREVIOUS | PP_PART_STAGED);
+    pp_persist(pep, PP_PART_PREVIOUS);
+    pp_persist(pep, PP_PART_ACTIVE);
+    pp_persist(pep, PP_PART_STAGED);
     pp_runtime(pep);
     d->has_pending = 0;
     pp_persist(pep, PP_PART_PENDING);
@@ -942,6 +951,10 @@ int pp_pep_open(pp_pep_machine *pep, const pp_config *config, const pp_durable *
     if (pep->d.has_pending) { /* C4: finish or report an interrupted commit */
         pep->d.has_pending = 0;
         pp_persist(pep, PP_PART_PENDING);
+    }
+    if (pep->d.has_staged && pep->d.has_active && pep->d.staged.seq <= pep->d.active.seq) {
+        pep->d.has_staged = 0; /* a commit cut off after its active part left the release staged as well */
+        pp_persist(pep, PP_PART_STAGED);
     }
     pep->n_out = 0;
     pp_drop_fallen_staged(pep); /* R5 and X1 before the runtime, so a release that fell while down never runs */

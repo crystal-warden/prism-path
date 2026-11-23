@@ -309,7 +309,9 @@ uint8_t *pp_held_body(pp_release *release, size_t k);
 
 /* Everything the PEP keeps durably, in parts, each with whether it reads. The caller's `persist` is told which
  * parts changed and writes each of them whole, the old one or the new one (C4), so a state record writes the
- * counter alone. A restart opens the PEP from the parts it can read. */
+ * counter alone. A restart opens the PEP from the parts it can read. A commit and a rollback write the intent
+ * (pending), a commit the floor, then one call each in this order: previous, active, staged, then the intent
+ * cleared. Each call names one part, so a power loss between two calls leaves a known state (pp_flip). */
 #define PP_PART_ANCHOR 1     /* provisioned, the stream and the expiry response (P2, X10) */
 #define PP_PART_COUNTER 2    /* the state record counter (H3) */
 #define PP_PART_TRUST 4      /* the trust store (K1) */
