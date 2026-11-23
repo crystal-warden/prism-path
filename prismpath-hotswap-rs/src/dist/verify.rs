@@ -89,6 +89,9 @@ pub struct PepView {
     pub qualification: Option<serde_json::Value>,
     pub body_bound: i64,
     pub has_clock: bool,
+    /// The PEP's own instance key id, which a rotation may never add (O4).
+    #[serde(default)]
+    pub instance_key_id: Option<Hex64>,
 }
 
 impl PepView {
@@ -103,6 +106,7 @@ impl PepView {
             qualification: None,
             body_bound: env::MAX_BODY,
             has_clock: true,
+            instance_key_id: None,
         })
     }
 }
@@ -207,6 +211,12 @@ pub fn verify(sealed: &[u8], body: &[u8], trust: &TrustStore, pep: &PepView, now
     // V11: the artifact's own check
     if let Some(cause) = envelope.artifact.row().check.and_then(|check| check(&envelope, body, pep)) {
         return refuse(&cause, envelope, time_floor);
+    }
+    // O2 to O4, K5: the rotation's own rules
+    if envelope.artifact == ArtifactKind::TrustRotation {
+        if let Some(cause) = trust.check_rotation(body, &entries, &env::signed_message(envelope_bytes), pep.instance_key_id.as_ref()) {
+            return refuse(cause, envelope, time_floor);
+        }
     }
     // R6: a revocation list holds every key id the current one holds, so a revoked key stays revoked
     if envelope.artifact == ArtifactKind::TrustRevocation {

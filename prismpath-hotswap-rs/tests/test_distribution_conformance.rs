@@ -221,6 +221,32 @@ rust_cases! {
     case_117_unsigned_with_a_failing_entry_added => "117_unsigned_with_a_failing_entry_added",
     /// case_118: K4, S3.
     case_118_unknown_role_signs => "118_unknown_role_signs",
+    // case 72's verdict; applying the rotation and the commit are the Rust PEP's (PR 14), so it is not claimed here
+    case_072_signed_by_the_old_and_the_new_key => "072_signed_by_the_old_and_the_new_key",
+    // case 72's verdict; applying the rotation and the commit are the Rust PEP's (PR 14), so it is not claimed here
+    case_072_a_pack_under_the_new_key => "072_a_pack_under_the_new_key",
+    // case 73's verdict; the release staying active is the Rust PEP's (PR 14), so it is not claimed here
+    case_073_a_pack_signed_by_the_retired_key => "073_a_pack_signed_by_the_retired_key",
+    /// case_074: O2.
+    case_074_signed_only_by_an_unknown_key => "074_signed_only_by_an_unknown_key",
+    /// case_074: O2.
+    case_074_without_the_new_key => "074_without_the_new_key",
+    /// case_075: O3, O4.
+    case_075_retiring_an_unknown_key => "075_retiring_an_unknown_key",
+    /// case_075: O3, O4.
+    case_075_adding_a_revoked_key => "075_adding_a_revoked_key",
+    /// case_075: O4, a retired key never added again.
+    case_075_adding_a_retired_key => "075_adding_a_retired_key",
+    /// case_076: O1.
+    case_076_a_rotation_after_a_revocation_at_its_seq => "076_a_rotation_after_a_revocation_at_its_seq",
+    /// case_131: K5.
+    case_131_a_ninth_key => "131_a_ninth_key",
+    /// case_131: K5.
+    case_131_a_pack_by_the_first_of_seventeen_retired => "131_a_pack_by_the_first_of_seventeen_retired",
+    // case 123's verdict; applying the rotations is the Rust PEP's (PR 14), so it is not claimed here
+    case_123_two_above_the_trust_sequence => "123_two_above_the_trust_sequence",
+    // case 123's verdict; applying the rotations is the Rust PEP's (PR 14), so it is not claimed here
+    case_123_the_same_once_the_skipped_one_is_in => "123_the_same_once_the_skipped_one_is_in",
     // case 66's verdict; applying the list is the Rust PEP's (PR 14), so it is not claimed here
     case_066_one_above_the_trust_sequence => "066_one_above_the_trust_sequence",
     // case 66's verdict; applying the list is the Rust PEP's (PR 14), so it is not claimed here
@@ -404,10 +430,10 @@ fn as_trust_kind(artifact: &str, stream: &str) -> Option<String> {
 
 #[test]
 fn v5_admits_only_the_trust_kinds_the_host_machine_applies() {
-    // the host applies trust.widening and trust.revocation, and rotation comes with its application. A revocation
-    // passes V5 to V9, since its body is the image it names, and V11 then reads no revocation list there
+    // the host applies all three trust kinds. A revocation or a rotation passes V5 to V9, since its body is the
+    // image it names, and V11 then reads no trust body there
     assert_eq!(as_trust_kind("trust.revocation", env::TRUST_STREAM).as_deref(), Some("dist:bad-format"));
-    assert_eq!(as_trust_kind("trust.rotation", env::TRUST_STREAM).as_deref(), Some("dist:target-mismatch"));
+    assert_eq!(as_trust_kind("trust.rotation", env::TRUST_STREAM).as_deref(), Some("dist:bad-format"));
     // a widening passes V5 to V9, since its body is the image it names, and V11 then reads no widening there
     assert_eq!(as_trust_kind("trust.widening", "host/demo").as_deref(), Some("dist:bad-format"));
 }

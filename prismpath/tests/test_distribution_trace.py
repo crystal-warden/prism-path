@@ -37,13 +37,13 @@ RESEARCH_ONLY = {99: ROOT / "tools" / "tests" / "test_export.py"}
 C_KINDS = frozenset({"mesh", "cfs"})
 # Cases whose corpus half an implementation's replay decides while another half waits for a later pull
 # request, so the replay does not claim them and they stay in PENDING until that half has its test.
-# 16: the Rust PEP allows nothing; 66, 70, 79, 130: the Rust verifier decides them, and applying the list is the
-# Rust PEP's (PR 14)
-PARTIAL = {"P": frozenset({128, 130}), "R": frozenset({16, 66, 70, 79, 130}), "C": frozenset()}
+# 16: the Rust PEP allows nothing; 66, 70, 72, 73, 79, 123, 130: the Rust verifier decides them, and applying the
+# trust statement, a commit or a release staying active is the Rust PEP's (PR 14)
+PARTIAL = {"P": frozenset({128, 130}), "R": frozenset({16, 66, 70, 72, 73, 79, 123, 130}), "C": frozenset()}
 PENDING = {
-    "P": "30 32-34 45 49 54-65 72-76 80-81 86-98 100 102 104-105 109 113 120 123-125 128-131",
-    "R": "16-17 23-24 26 31 43 46-48 50-53 62-63 66 69-70 72-77 79 82 84-85 97 101 104 111 123 126 130-131",
-    "C": "25 60-63 72-74 76 82 97 104-105 109 122-123 131",
+    "P": "30 32-34 45 49 54-65 80-81 86-98 100 102 104-105 109 113 120 124-125 128-130",
+    "R": "16-17 23-24 26 31 43 46-48 50-53 62-63 66 69-70 72-73 77 79 82 84-85 97 101 104 111 123 126 130",
+    "C": "25 60-63 97 104-105 109 122",
 }
 
 

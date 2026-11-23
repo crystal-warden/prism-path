@@ -92,7 +92,7 @@ class Target:
     decides: bool
     when_declared: FrozenSet[str] = frozenset()
     expiry_hold: bool = False
-    applies: FrozenSet[str] = frozenset({"trust.widening", "trust.revocation"})
+    applies: FrozenSet[str] = frozenset({"trust.widening", "trust.revocation", "trust.rotation"})
     body_bound: int = 16777215
     trust_bound: int = 16384
     checks: Any = None

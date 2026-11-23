@@ -327,7 +327,7 @@ int main(void) {
             memset(&pep, 0, sizeof pep);
             sealed_len = body_len = 0;
             snprintf(name, sizeof name, "%s", rest);
-        } else if (strcmp(word, "key") == 0 && trust.n_keys < PP_MAX_KEYS) {
+        } else if (strcmp(word, "key") == 0 && trust.n_keys < PP_MAX_HELD_KEYS) {
             int role = 0;
             if (sscanf(rest, "%255s %255s %d", a, b, &role) != 3) return 2;
             hash32(a, trust.keys[trust.n_keys].id);

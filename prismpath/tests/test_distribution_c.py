@@ -670,3 +670,97 @@ def test_a_power_loss_at_each_write_of_a_commit_or_a_rollback_leaves_one_release
     rolled = _after_loss(host_check, committed, [("rollback", N)])
     assert set(rolled) <= {"state 3 2 -", "state 3 - -", "state 2 - -"}, rolled
     assert rolled[0] == "state 3 2 -" and rolled[-1] == "state 2 - -"
+
+
+# ------------------------------------------------------------------ rotations, against pep.py
+
+def _rotate(seq: int, now: int, add: str, retire: str = "", signers=("A",)) -> tuple:
+    body = _dist.rotation(add, retire)
+    sealed = _dist.trust_statement("trust.rotation", body, seq=seq, signers=signers, targets=("mesh",))
+    return ("stage", sealed.hex(), body.hex(), now)
+
+
+def test_case_072_073_074_076_123_rotations_answer_as_the_python_machine(host_check, tmp_path):
+    """case_072: O1, O2, O3. case_073: O3, S5. case_074: O2. case_076: O1. case_123: O1, R1. A rotation signed by the
+    old and the new key is applied, a release under the new key commits, the retired key no longer counts while the
+    release active under it keeps deciding, a rotation by an unknown key or without the new key's signature is
+    refused, a rotation and a revocation share one trust sequence, and one that skips a number is refused."""
+    script = [("provision", S, N), ("stage", _sealed(0, 1, signer="A"), BODIES[0].hex(), N), ("commit", S, 1, H[0], N),
+              _rotate(1, N, "B", signers=("B",)), _rotate(1, N, "B", signers=("A",)), _rotate(1, N, "B", signers=("A", "U")),
+              _rotate(2, N, "Q", signers=("A", "Q")), _rotate(1, N, "B", retire="A", signers=("A", "B")),
+              ("stage", _sealed(1, 2, signer="A"), BODIES[1].hex(), N), ("decide", N), ("restart", N), ("decide", N),
+              _rotate(2, N, "Q", signers=("B", "Q")), _revoke(2, N, signer="B"), _rotate(4, N, "U", signers=("B", "U")),
+              ("stage", _sealed(1, 2, signer="B"), BODIES[1].hex(), N), ("commit", S, 2, H[1], N)]
+    lines = _same(host_check, tmp_path, script)
+    assert _events(lines[3])[0][1] == "dist:unknown-key"
+    assert _events(lines[4])[0][1] == _events(lines[5])[0][1] == "dist:rotation-invalid"
+    assert _events(lines[6])[0][1] == "dist:trust-replay" and _events(lines[7]) == [("trust-applied", None)]
+    assert _events(lines[8])[0][1] == "sig:revoked-key" and lines[9] == lines[11] == "decide 0 0"
+    assert _events(lines[12]) == [("trust-applied", None)] and _events(lines[13])[0][1] == "dist:trust-replay"
+    assert _events(lines[14])[0][1] == "dist:trust-replay"
+    assert _events(lines[16]) == [("committed", None)]
+
+
+def test_a_rotation_that_names_a_key_it_may_not_answers_as_the_python_machine(host_check, tmp_path):
+    """O3, O4 on the C core (case 75 runs in Python and Rust). A retire of an unknown key, an add of the node's
+    own instance key, of a revoked key and of a key the store retired are each dist:rotation-invalid, and the trust sequence does not move."""
+    body = canon.canon2_bytes({canon.ENCODING_KEY: canon.CANON2, "format": "prismpath.dist-rotation/1",
+                               "add": _generator().public_raw(_generator().test_key("I")).hex(), "retire": ""})
+    own = ("stage", _dist.trust_statement("trust.rotation", body, seq=1, signers=("A", "I"), targets=("mesh",)).hex(),
+           body.hex(), N)
+    script = [("provision", S, N), _rotate(1, N, "B", retire="U", signers=("A", "B")), own,
+              _revoke(1, N, keys=[_dist.key_id("C")]), _rotate(2, N, "C", signers=("A", "C")),
+              _rotate(2, N, "B", retire="A", signers=("A", "B")), _rotate(3, N, "A", signers=("B", "A"))]
+    lines = _same(host_check, tmp_path, script)
+    assert [_events(lines[k])[0][1] for k in (1, 2, 4, 6)] == ["dist:rotation-invalid"] * 4
+    assert _records(lines[6])[0].trust_seq == 2
+
+
+def test_case_131_a_ninth_key_and_a_seventeenth_retired_answer_as_the_python_machine(host_check, tmp_path):
+    """case_131: K5. Seventeen rotations, each adding a key and retiring the one before, forget the first retired key,
+    so a pack it signed is dist:unknown-key where it was sig:revoked-key, and a rotation that would hold a ninth key
+    that is not retired is dist:too-large."""
+    names = [f"K{index}" for index in range(18)]
+    script = [("provision", S, N, ("A",))]
+    previous = "A"
+    for seq, name in enumerate(names[:17], start=1):
+        script.append(_rotate(seq, N, name, retire=previous, signers=(previous, name)))
+        previous = name
+    script += [("stage", _sealed(0, 1, signer="A"), BODIES[0].hex(), N),
+               ("stage", _sealed(0, 1, signer="K0"), BODIES[0].hex(), N)]
+    lines = _same(host_check, tmp_path, script)
+    assert all(_events(line) == [("trust-applied", None)] for line in lines[1:18])
+    assert _events(lines[18])[0][1] == "dist:unknown-key" and _events(lines[19])[0][1] == "sig:revoked-key"
+    eight = [("provision", S, N, ("A", "B", "C", "D", "E", "F", "G", "R"))]
+    eight += [_rotate(1, N, "U", signers=("A", "U")), _rotate(1, N, "U", retire="B", signers=("A", "U"))]
+    lines = _same(host_check, tmp_path / "eight", eight)
+    assert _events(lines[1])[0][1] == "dist:too-large" and _events(lines[2]) == [("trust-applied", None)]
+
+
+def test_case_082_a_node_never_provisioned_takes_no_rotation(host_check):
+    """case_082: P1. It holds no key, so no rotation installs a first one."""
+    unprovisioned = _c_steps(host_check, [_rotate(1, N, "B", signers=("B",))], hold=False)
+    assert _events(unprovisioned[0]) == [("refused", "dist:unknown-key")]
+
+
+def test_a_rotation_into_a_full_store_holds_the_new_key_as_the_python_machine_does(host_check, tmp_path):
+    """K5 at its bound. With 8 keys that count and 16 retired held, a rotation that adds a key and retires one
+    forgets the oldest retired key and its slot before the new key is held, so the C core keeps the new key as the
+    Python machine does and a pack signed by it is staged on both. A pack signed by the first retired key, now
+    forgotten, is dist:unknown-key, and one signed by the key the last rotation retired is sig:revoked-key."""
+    live = ["B", "C", "D", "E", "F", "G", "H"]
+    script = [("provision", S, N, ("A", *live))]
+    retired = []
+    for seq in range(1, 18):                                          # 16 to fill the retired ids, then one more
+        name = f"K{seq}"
+        retired.append(live.pop(0))
+        script.append(_rotate(seq, N, name, retire=retired[-1], signers=("A", name)))
+        live.append(name)
+    script += [("stage", _sealed(0, 1, signer="K17"), BODIES[0].hex(), N),
+               ("stage", _sealed(1, 2, signer=retired[0]), BODIES[1].hex(), N),      # forgotten at the seventeenth
+               ("stage", _sealed(1, 2, signer=retired[-1]), BODIES[1].hex(), N)]     # retired by the seventeenth
+    lines = _same(host_check, tmp_path, script)
+    assert all(_events(line) == [("trust-applied", None)] for line in lines[1:18])
+    assert _events(lines[18]) == [("staged", None)]
+    assert _events(lines[19]) == [("refused", "dist:unknown-key")]
+    assert _events(lines[20]) == [("refused", "sig:revoked-key")]

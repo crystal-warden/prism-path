@@ -350,7 +350,7 @@ class Pep:
                        staged=None if staged is None else Staged(staged.stream, staged.seq, staged.policy_sha256,
                                                                  staged.release, staged.replaces, staged.widens),
                        qualification=self.adapter.qualification, body_bound=self.adapter.body_bound,
-                       has_clock=self.has_clock)
+                       has_clock=self.has_clock, instance_key_id=self.instance_key.key_id)
 
     def record(self, event: str, cause: Optional[str] = None) -> bytes:
         """A signed state record of the PEP as it is now (H1), after the expiry check every report comes
@@ -421,6 +421,8 @@ class Pep:
             return self._record("beat")                               # Q3, R1: changes nothing, reports its state
         if envelope.artifact == "trust.revocation":
             return self._apply_revocation(envelope, body)
+        if envelope.artifact == "trust.rotation":
+            return self._apply_rotation(envelope, body)
         staged = self.staged
         if staged is not None and staged.stream == envelope.stream and envelope.seq < staged.seq:
             return self._refuse("dist:seq-replay", envelope_id=envelope_id)   # G2
@@ -439,27 +441,39 @@ class Pep:
                                                      "result": "staged"})
         return self._record("staged")
 
-    # ------------------------------------------------------------------ B2, R1 to R6: a revocation
-    def _apply_revocation(self, envelope, body: bytes) -> bytes:
-        """Apply a verified revocation at once, durably before it is reported (B2, R3), then lapse the active
-        release and drop the staged one when the revocation removed the ground they stand on (R5). A held PEP
-        lapses the same way, which ends the hold (X8)."""
-        self.trust = self.trust.apply_revocation(envelope, body, self.stream).save()
+    # ------------------------------------------------------------------ B2: the trust statements
+    def _adopt(self, envelope, store: TrustStore) -> None:
+        """Make the store a verified trust statement leaves durable before anything reports it (B2, R3)."""
+        self.trust = store.save()
         self.audit.append("distribution", "trust-applied", {"envelope_id": envelope.envelope_id, "seq": envelope.seq,
                                                            "artifact": envelope.artifact, "result": "applied"})
+
+    def _apply_revocation(self, envelope, body: bytes) -> bytes:
+        """Apply a verified revocation at once, then drop the staged release and lapse the active one when the
+        revocation removed the ground they stand on (R5). A held PEP lapses the same way, which ends the hold
+        (X8)."""
+        self._adopt(envelope, self.trust.apply_revocation(envelope, body, self.stream))
         self._drop_fallen_staged()
         self._check_active()
         return self._record("trust-applied")
 
+    def _apply_rotation(self, envelope, body: bytes) -> bytes:
+        """Apply a verified rotation at once (O3). A release active under a key it retires stays active until it
+        expires or is replaced, and a staged one that no longer has a counting signature is dropped (S5)."""
+        self._adopt(envelope, self.trust.apply_rotation(envelope, body))
+        self._drop_fallen_staged()
+        return self._record("trust-applied")
+
     def _drop_fallen_staged(self) -> None:
         """R5: a staged release that no longer stands is dropped."""
-        if self.staged is not None and self.trust.readable and not self._stands(self.staged):
+        if self.staged is not None and self.trust.readable and not self._stands(self.staged, active=False):
             self._drop_staged()
 
-    def _stands(self, release: Release) -> bool:
+    def _stands(self, release: Release, *, active: bool = True) -> bool:
         """R5: a release still stands when no envelope of it is listed by id or policy hash, its `seq` is not
-        below a floor a revocation raised, and every envelope of it is still signed by a held key that is not
-        revoked. A key that was only retired still holds up a release already active under it (O3)."""
+        below a floor a revocation raised, and every envelope of it is still signed. A key that was only retired
+        still holds up a release already active under it (O3), and a staged release needs a counting signature
+        (S5), as it would at commit."""
         if release.seq < self.trust.floors.get(release.stream, 0):
             return False
         for held in release.held.values():
@@ -469,7 +483,9 @@ class Pep:
             if sealed is None:
                 return False
             envelope_bytes, entries = env.unseal(sealed)
-            if not self.trust.holds_up(entries, env.signed_message(envelope_bytes), kinds.AUTHORITY):
+            message = env.signed_message(envelope_bytes)
+            if not (self.trust.holds_up(entries, message, kinds.AUTHORITY) if active
+                    else self.trust.counting(entries, message, kinds.AUTHORITY).ok):
                 return False
         return True
 
@@ -484,9 +500,16 @@ class Pep:
         self.store.keep_only(name for release in held for one in release.held.values() for name in (one.sealed, one.body))
 
     def _still_valid(self, release: Release, *, early: bool) -> Optional[str]:
-        """C3, RB2: time (T3 when `early`, T4) and revocation (V7) again for every envelope of `release`."""
+        """C3, RB2: time (T3 when `early`, T4) and revocation (V7) again for every envelope of `release`, and at a
+        commit (`early`) a counting signature again (V3), since a rotation may have retired its key."""
         time = self.time()
-        for envelope in release.envelopes.values():
+        for artifact, envelope in release.envelopes.items():
+            if early:
+                sealed = self.store.get(release.held[artifact].sealed)
+                envelope_bytes, entries = env.unseal(sealed) if sealed is not None else (b"", [])
+                counted = self.trust.counting(entries, env.signed_message(envelope_bytes), kinds.AUTHORITY)
+                if not counted.ok:
+                    return counted.cause
             if early and self.has_clock and envelope.not_before - time > SKEW:
                 return "dist:not-yet-valid"
             if envelope.expires and time >= envelope.expires:

@@ -8,6 +8,15 @@ spec stable.
 
 ## [Unreleased]
 
+### Added: authority key rotation, signed by the old key and the new (2026-11-22)
+
+- **An enforcement point applies a signed `trust.rotation` as soon as it verifies.** It is taken only at the next trust sequence, which revocations share, and only when the key it adds signed it too. It may never add the PEP's own instance key or a revoked key, nor retire a key the store does not hold.
+- **A retired key's signatures no longer count, and a release already active under it keeps deciding until it expires or is replaced.**
+- **The Rust host applies the same checks of a rotation and the same bounds of the trust store, and replays the rotation cases.**
+- **A retired key does not come back.** A rotation that adds a key the store retired is `dist:rotation-invalid` in Python and Rust.
+- **The C core applies the same rotation with the same checks and bounds, step by step as the Python machine does.** It keeps a retired key beside the 8 it may count, so a store holds 24 keys at most.
+- **A trust store holds at most 8 keys and remembers at most 16 retired ones.** A rotation that would add a ninth is `dist:too-large`, and the oldest retired key is forgotten when a seventeenth is retired.
+
 ### Changed: the C core of policy distribution persists its state in parts (2026-11-23)
 
 - **A state record now writes the 12 byte counter and nothing else.** The core tells the store which parts of its durable state changed, the anchor, the counter, the trust store, the floor, each release and a pending commit named by its release id and seq, and packs each part on its own for a store such as NVS.

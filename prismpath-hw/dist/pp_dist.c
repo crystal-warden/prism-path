@@ -83,14 +83,19 @@ const char *pp_target_name(pp_target target) {
 
 #define PP_BIT(kind) (1u << (kind))
 
-/* What a kind's own check (V11) is given: the artifact and its body, and the store and the PEP it is checked
- * for, which a revocation is held against (R6). */
+/* What a kind's own check (V11) is given: the artifact and its body, the store and the PEP it is checked for,
+ * which a revocation is held against (R6), and the entries and the signed message a rotation's own rules read
+ * (O2). */
 struct pp_check_args {
     pp_artifact artifact;
     const uint8_t *body;
     size_t len;
     const pp_trust *trust;
     const pp_pep *pep;
+    const pp_entry *entries;
+    size_t n_entries;
+    const uint8_t *message;
+    size_t message_len;
 };
 
 /* A target row (kinds.TARGETS): what V5 admits, the trust kinds the machine applies, its body bound and its
@@ -117,6 +122,7 @@ static int pp_on_trust_stream(pp_artifact artifact) {
 
 static uint8_t pp_read_widening(const uint8_t *body, size_t len);
 static uint8_t pp_check_revocation(const uint8_t *body, size_t len, const pp_trust *trust);
+static uint8_t pp_check_rotation(const struct pp_check_args *a);
 
 /* `policy.ppt` on a mesh node: the node runs its own table parser and ignores `meta`, so the check is the image
  * check alone (kinds.check_mesh_table). A trust statement is read as its format (W4, section 10), and a revocation
@@ -126,12 +132,14 @@ static uint8_t pp_mesh_check(const struct pp_check_args *a) {
     case PP_ART_POLICY_PPT: return pp_validate_image(a->body, a->len);
     case PP_ART_TRUST_WIDENING: return pp_read_widening(a->body, a->len);
     case PP_ART_TRUST_REVOCATION: return pp_check_revocation(a->body, a->len, a->trust);
+    case PP_ART_TRUST_ROTATION: return pp_check_rotation(a);
     default: return PP_CAUSE_TARGET_MISMATCH; /* unreachable: V5 admits nothing else */
     }
 }
 
 static const pp_row *pp_row_of(pp_target kind) {
-    static const pp_row mesh = {PP_BIT(PP_ART_POLICY_PPT), PP_BIT(PP_ART_TRUST_WIDENING) | PP_BIT(PP_ART_TRUST_REVOCATION),
+    static const pp_row mesh = {PP_BIT(PP_ART_POLICY_PPT),
+                                PP_BIT(PP_ART_TRUST_WIDENING) | PP_BIT(PP_ART_TRUST_REVOCATION) | PP_BIT(PP_ART_TRUST_ROTATION),
                                 PP_MESH_TABLE_MAX, PP_TRUST_BOUND, pp_mesh_check};
     return kind == PP_TGT_MESH ? &mesh : NULL;
 }
@@ -393,6 +401,54 @@ static int pp_listed(const uint8_t (*list)[32], size_t n, const uint8_t id[32]) 
     return 0;
 }
 
+/* Section 11 (kinds.read_rotation): the new public key in `add` and the key id it retires, or none. */
+static uint8_t pp_read_rotation(const uint8_t *body, size_t len, uint8_t add[32], int *has_retire, uint8_t retire[32]) {
+    int form = pp_c2_check(body, len);
+    if (form == PP_C2_NOT_CANONICAL) return PP_CAUSE_NOT_CANONICAL;
+    if (form != PP_C2_OK) return PP_CAUSE_BAD_FORMAT;
+    pp_c2 c = {body, len, 0, 1};
+    if (!pp_c2_lit(&c, "{\"add\":") || !pp_scan_hash(&c, add) ||
+        !pp_c2_lit(&c, ",\"encoding\":\"canon/2\",\"format\":\"prismpath.dist-rotation/1\",\"retire\":"))
+        return PP_CAUSE_BAD_FORMAT;
+    if (pp_c2_lit(&c, "\"\"")) *has_retire = 0;
+    else if (pp_scan_hash(&c, retire)) *has_retire = 1;
+    else return PP_CAUSE_BAD_FORMAT;
+    return pp_c2_lit(&c, "}") && c.i == c.n ? PP_CAUSE_NONE : PP_CAUSE_BAD_FORMAT;
+}
+
+/* O2 to O4 and K5 (trust.check_rotation), in its order: `add` is not the PEP's own instance key, a revoked key or
+ * a key the store retired, `retire` names a key the store holds, the keys left that are not retired are at most
+ * PP_MAX_KEYS (dist:too-large past that), and the entry under the added key verifies, so the rotation is signed
+ * under the store it leaves and the store it makes. */
+static uint8_t pp_check_rotation(const struct pp_check_args *a) {
+    uint8_t add[32], retire[32], added_id[32];
+    int has_retire = 0;
+    uint8_t cause = pp_read_rotation(a->body, a->len, add, &has_retire, retire);
+    if (cause) return cause;
+    const pp_trust *t = a->trust;
+    pp_sha256(add, 32, added_id);
+    if ((a->pep->has_instance_key_id && memcmp(added_id, a->pep->instance_key_id, 32) == 0) ||
+        pp_listed(t->revoked_keys, t->n_revoked_keys, added_id) || pp_listed(t->retired, t->n_retired, added_id))
+        return PP_CAUSE_ROTATION_INVALID; /* O4 */
+    if (has_retire && pp_held_key(t, retire) == NULL) return PP_CAUSE_ROTATION_INVALID; /* O3 */
+    size_t live = 0;
+    int added_live = 0, retire_live = 0;
+    for (size_t k = 0; k < t->n_keys; k++) {
+        if (pp_listed(t->retired, t->n_retired, t->keys[k].id)) continue;
+        live++;
+        if (memcmp(t->keys[k].id, added_id, 32) == 0) added_live = 1;
+        if (has_retire && memcmp(t->keys[k].id, retire, 32) == 0) retire_live = 1;
+    }
+    if (!added_live) live++;
+    if (has_retire && (retire_live || memcmp(retire, added_id, 32) == 0)) live--;
+    if (live > PP_MAX_KEYS) return PP_CAUSE_TOO_LARGE; /* K5: a ninth key */
+    for (size_t k = 0; k < a->n_entries; k++)
+        if (memcmp(a->entries[k].key_id, added_id, 32) == 0)
+            return crypto_ed25519_check(a->entries[k].signature, add, a->message, a->message_len) == 0
+                       ? PP_CAUSE_NONE : PP_CAUSE_ROTATION_INVALID; /* O2 */
+    return PP_CAUSE_ROTATION_INVALID;
+}
+
 uint8_t pp_counting(const pp_trust *trust, const pp_entry *entries, size_t n_entries, const uint8_t *message,
                     size_t message_len) {
     if (!trust->readable) return PP_CAUSE_UNKNOWN_KEY;
@@ -561,7 +617,7 @@ void pp_verify(const uint8_t *sealed, size_t sealed_len, const uint8_t *body, si
         return;
     }
     /* V11: the artifact's own check on this kind */
-    struct pp_check_args args = {e->artifact, body, body_len, trust, pep};
+    struct pp_check_args args = {e->artifact, body, body_len, trust, pep, entries, n_entries, message, message_len};
     out->cause = row->check(&args);
 }
 
@@ -783,12 +839,17 @@ static int pp_names(const pp_release *r, const char *stream, long long seq, cons
     return strcmp(r->stream, stream) == 0 && r->seq == seq && memcmp(r->policy_sha256, policy, 32) == 0;
 }
 
-/* C3, RB2: time (T3 when `early`, T4) and revocation (V7) again for every envelope of `release`. */
+static uint8_t pp_counts(const pp_trust *trust, const pp_artifact_held *held);
+
+/* C3, RB2: time (T3 when `early`, T4) and revocation (V7) again for every envelope of `release`, and at a commit
+ * (`early`) a counting signature again (V3), since a rotation may have retired its key. */
 static uint8_t pp_still_valid(const pp_pep_machine *pep, const pp_release *release, int early) {
     long long time = pp_time(pep);
     const pp_trust *t = &pep->d.trust;
     for (size_t k = 0; k < release->n; k++) {
         const pp_envelope *e = &release->held[k].envelope;
+        uint8_t counted = early ? pp_counts(t, &release->held[k]) : PP_CAUSE_NONE;
+        if (counted) return counted;
         if (early && pep->config.has_clock && e->not_before - time > PP_SKEW) return PP_CAUSE_NOT_YET_VALID;
         if (e->expires && time >= e->expires) return PP_CAUSE_EXPIRED;
         if (pp_listed(t->revoked_envelopes, t->n_revoked_envelopes, e->envelope_id) ||
@@ -825,22 +886,34 @@ static int pp_holds_up(const pp_trust *trust, const pp_artifact_held *held) {
     return 0;
 }
 
+/* S3 to S5 again for one held envelope: the cause its signatures give under the store as it is now. */
+static uint8_t pp_counts(const pp_trust *trust, const pp_artifact_held *held) {
+    static uint8_t message[PP_MAX_ENVELOPE + 64];
+    const uint8_t *envelope;
+    size_t envelope_len, n_entries;
+    pp_entry entries[PP_MAX_ENTRIES];
+    if (pp_unseal(held->sealed, held->sealed_len, &envelope, &envelope_len, entries, &n_entries)) return PP_CAUSE_BAD_FORMAT;
+    size_t message_len = pp_signed_message(envelope, envelope_len, message);
+    return pp_counting(trust, entries, n_entries, message, message_len);
+}
+
 /* R5: a release still stands when no envelope of it is listed by id or policy hash, its seq is not below a floor
- * a revocation raised, and every envelope of it is still signed by a held key that is not revoked. */
-static int pp_stands(const pp_pep_machine *pep, const pp_release *release) {
+ * a revocation raised, and every envelope of it is still signed. A key that was only retired still holds up a
+ * release already active under it (O3), and a staged release needs a counting signature (S5), as at commit. */
+static int pp_stands(const pp_pep_machine *pep, const pp_release *release, int active) {
     const pp_trust *t = &pep->d.trust;
     if (release->seq < pp_raised(t, release->stream)) return 0;
     for (size_t k = 0; k < release->n; k++) {
         if (pp_listed(t->revoked_envelopes, t->n_revoked_envelopes, release->held[k].envelope.envelope_id) ||
             pp_listed(t->revoked_policies, t->n_revoked_policies, release->policy_sha256) ||
-            !pp_holds_up(t, &release->held[k]))
+            !(active ? pp_holds_up(t, &release->held[k]) : pp_counts(t, &release->held[k]) == PP_CAUSE_NONE))
             return 0;
     }
     return 1;
 }
 
 static void pp_drop_fallen_staged(pp_pep_machine *pep) {
-    if (pep->d.has_staged && pep->d.trust_reads && !pp_stands(pep, &pep->d.staged)) {
+    if (pep->d.has_staged && pep->d.trust_reads && !pp_stands(pep, &pep->d.staged, 0)) {
         pep->d.has_staged = 0;
         pp_persist(pep, PP_PART_STAGED);
     }
@@ -850,7 +923,7 @@ static void pp_drop_fallen_staged(pp_pep_machine *pep) {
  * with dist:revoked (R5, X8), and an expired one lapses or under HOLD is held (X1, X6, X7). */
 static void pp_check_expiry(pp_pep_machine *pep) {
     if (!pep->d.has_active || pep->locked || !pep->d.trust_reads) return;
-    if (!pp_stands(pep, &pep->d.active)) {
+    if (!pp_stands(pep, &pep->d.active, 1)) {
         pp_lapse(pep, PP_CAUSE_REVOKED);
         return;
     }
@@ -1013,6 +1086,42 @@ static uint8_t pp_apply_revocation(pp_pep_machine *pep, const pp_envelope *e, co
     return 0;
 }
 
+/* trust.apply_rotation: the store after a verified rotation at the next trust sequence (O1). The one it names is
+ * retired (O3), its id kept in order, oldest first, and a seventeenth retired id forgets the oldest and its key
+ * (K5). Only then is the new key held in the authority role, so a store at its bound of 8 keys that count and 16
+ * retired has the slot the forgotten key freed. */
+static void pp_apply_rotation(pp_pep_machine *pep, const pp_envelope *e, const uint8_t *body, size_t len) {
+    pp_trust *t = &pep->d.trust;
+    uint8_t add[32], retire[32], id[32];
+    int has_retire = 0;
+    pp_read_rotation(body, len, add, &has_retire, retire); /* V11 read it and held it to O2 to O4 and K5 */
+    if (has_retire && !pp_listed(t->retired, t->n_retired, retire)) {
+        if (t->n_retired == PP_MAX_RETIRED) { /* K5: forget the oldest retired id and its key */
+            for (size_t k = 0; k < t->n_keys; k++)
+                if (memcmp(t->keys[k].id, t->retired[0], 32) == 0) {
+                    memmove(&t->keys[k], &t->keys[k + 1], (t->n_keys - k - 1) * sizeof t->keys[0]);
+                    t->n_keys--;
+                    break;
+                }
+            memmove(t->retired[0], t->retired[1], (PP_MAX_RETIRED - 1) * 32);
+            t->n_retired--;
+        }
+        memcpy(t->retired[t->n_retired++], retire, 32);
+    }
+    pp_sha256(add, 32, id);
+    pp_key *held = (pp_key *)pp_held_key(t, id);
+    if (held == NULL && t->n_keys < PP_MAX_HELD_KEYS) held = &t->keys[t->n_keys++];
+    if (held != NULL) {
+        memcpy(held->id, id, 32);
+        memcpy(held->public_key, add, 32);
+        held->role = PP_ROLE_AUTHORITY;
+    }
+    t->trust_seq = e->seq;
+    memcpy(t->trust_id, e->envelope_id, 32);
+    t->has_trust_id = 1;
+    pp_persist(pep, PP_PART_TRUST);
+}
+
 static void pp_refuse(pp_pep_machine *pep, uint8_t cause) {
     pp_emit(pep, PP_EV_REFUSED, cause);
 }
@@ -1027,6 +1136,8 @@ void pp_pep_view(const pp_pep_machine *pep, pp_pep *out) {
     memcpy(out->floor_ids, d->floor_ids, sizeof out->floor_ids);
     out->body_bound = PP_MAX_BODY;
     out->has_clock = pep->config.has_clock;
+    out->has_instance_key_id = 1;
+    pp_sha256(pep->instance_public, 32, out->instance_key_id);
     if (d->has_staged) {
         out->has_staged = 1;
         pp_copy_stream(out->staged.stream, d->staged.stream);
@@ -1061,6 +1172,12 @@ void pp_pep_stage(pp_pep_machine *pep, const uint8_t *sealed, size_t sealed_len,
         if (cause) { pp_refuse(pep, cause); return; }
         pp_drop_fallen_staged(pep);
         pp_check_expiry(pep);
+        pp_emit(pep, PP_EV_TRUST_APPLIED, 0);
+        return;
+    }
+    if (e->artifact == PP_ART_TRUST_ROTATION) {
+        pp_apply_rotation(pep, e, body, body_len); /* B2, O3: applied when it verifies, durable before reported */
+        pp_drop_fallen_staged(pep);                /* S5: a staged release needs a counting signature */
         pp_emit(pep, PP_EV_TRUST_APPLIED, 0);
         return;
     }
@@ -1267,7 +1384,7 @@ static void pp_io_part(pp_io *io, pp_durable *d, int part) {
         break;
     case PP_PART_COUNTER: pp_io_bytes(io, &d->counter, sizeof d->counter); break;
     case PP_PART_TRUST:
-        pp_io_array(io, t->keys, &t->n_keys, sizeof t->keys[0], PP_MAX_KEYS);
+        pp_io_array(io, t->keys, &t->n_keys, sizeof t->keys[0], PP_MAX_HELD_KEYS);
         pp_io_array(io, t->retired, &t->n_retired, 32, PP_MAX_RETIRED);
         pp_io_array(io, t->revoked_keys, &t->n_revoked_keys, 32, PP_MAX_LIST);
         pp_io_array(io, t->revoked_envelopes, &t->n_revoked_envelopes, 32, PP_MAX_LIST);

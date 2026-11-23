@@ -62,8 +62,9 @@
 #define PP_MAX_SEQ 9007199254740991LL
 #define PP_SKEW 300           /* section 7 */
 #define PP_STREAM_MAX 64
-#define PP_MAX_KEYS 8         /* K5: keys a trust store holds */
-#define PP_MAX_RETIRED 16     /* K5: retired key ids a trust store remembers */
+#define PP_MAX_KEYS 8         /* K5: keys a trust store holds that are not retired */
+#define PP_MAX_RETIRED 16     /* K5: retired key ids a trust store remembers, each with its key */
+#define PP_MAX_HELD_KEYS (PP_MAX_KEYS + PP_MAX_RETIRED) /* the keys a store keeps, the retired ones among them */
 #define PP_MAX_LIST 64        /* R6, R7: a PEP holds the latest revocation list, at most 64 entries a list */
 #define PP_MAX_FLOORS 1       /* R6: a PEP keeps the floor a revocation raised for its own stream only */
 #define PP_REVOCATION_ENTRIES 64 /* R7: the entries of one revocation list */
@@ -127,7 +128,7 @@ typedef struct {
 /* The trust store (K1). `readable` 0 is a store whose durable form could not be read: it counts nothing. */
 typedef struct {
     int readable;
-    pp_key keys[PP_MAX_KEYS];
+    pp_key keys[PP_MAX_HELD_KEYS]; /* at most PP_MAX_KEYS of them not retired (K5) */
     size_t n_keys;
     uint8_t retired[PP_MAX_RETIRED][32];
     size_t n_retired;
@@ -168,6 +169,8 @@ typedef struct {
     long long body_bound;           /* the PEP's own bound on the body of an artifact, within its kind's, never on a
                                        trust body (E6) */
     int has_clock;                  /* 0 for a PEP with no real time clock (T2), which never applies T3 */
+    int has_instance_key_id;        /* the PEP's own instance key id, which a rotation may never add (O4) */
+    uint8_t instance_key_id[32];
 } pp_pep;
 
 /* A verifier's answer: `cause` 0 when it passed. `has_envelope` once the envelope read, with its id.

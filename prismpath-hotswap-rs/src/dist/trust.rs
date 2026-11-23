@@ -13,7 +13,7 @@
 use super::envelope::Entry;
 use super::{
     load, require, Canon2Tag, Hex64, MaybeHex64, Refused, SortedSet, Stream, TrustStoreFormat, Verdict, AUTHORITY,
-    MAX_SEQ, SIG_INVALID, SIG_REVOKED_KEY, UNKNOWN_KEY,
+    MAX_SEQ, ROTATION_INVALID, SIG_INVALID, SIG_REVOKED_KEY, TOO_LARGE, UNKNOWN_KEY,
 };
 use crate::host::HostError;
 use prismpath_rs::canon2::codec;
@@ -59,6 +59,10 @@ impl From<Role> for String {
     }
 }
 
+/// K5: the same bounds in every implementation, at most 8 keys that are not retired and 16 retired ids.
+pub const MAX_KEYS: usize = 8;
+pub const MAX_RETIRED: usize = 16;
+
 /// A key the store holds: its 32 raw public bytes in hex and its role (K4). A key in a role this
 /// version does not know is kept and never counts.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -69,8 +73,10 @@ pub struct Key {
 }
 
 /// What an enforcement point holds about keys, as its durable file is written. `keys` maps a key id to
-/// its key. The `revoked_*` sets and `floors` are cumulative (R6): a later list never removes one. A
-/// store whose file could not be read has `readable` false and counts nothing.
+/// its key. The `revoked_*` sets are the latest revocation list, which holds every key id an earlier one
+/// held (R6), and `floors` the floor revocation raised for the PEP's stream. `retired` is the retired key
+/// ids, oldest first, at most 16, and `keys` holds at most 8 keys that are not retired (K5). A store whose
+/// file could not be read has `readable` false and counts nothing.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct TrustStore {
@@ -78,7 +84,7 @@ pub struct TrustStore {
     pub floors: BTreeMap<Stream, i64>,
     pub format: TrustStoreFormat,
     pub keys: BTreeMap<Hex64, Key>,
-    pub retired: SortedSet<Hex64>,
+    pub retired: Vec<Hex64>,
     pub revoked_envelopes: SortedSet<Hex64>,
     pub revoked_keys: SortedSet<Hex64>,
     pub revoked_policies: SortedSet<Hex64>,
@@ -101,7 +107,7 @@ impl Default for TrustStore {
             floors: BTreeMap::new(),
             format: TrustStoreFormat,
             keys: BTreeMap::new(),
-            retired: SortedSet::default(),
+            retired: Vec::new(),
             revoked_envelopes: SortedSet::default(),
             revoked_keys: SortedSet::default(),
             revoked_policies: SortedSet::default(),
@@ -154,6 +160,14 @@ impl TrustStore {
             store.keys.iter().all(|(kid, key)| Hex64::of(&key.public.raw()) == *kid),
             "a trust store key id that is not its key's",
         )?;
+        let retired: std::collections::BTreeSet<&Hex64> = store.retired.iter().collect();
+        require(
+            retired.len() == store.retired.len()
+                && store.retired.len() <= MAX_RETIRED
+                && store.retired.iter().all(|kid| store.keys.contains_key(kid)),
+            "trust store retired",
+        )?;
+        require(store.keys.keys().filter(|kid| !retired.contains(kid)).count() <= MAX_KEYS, "trust store keys beyond the bound")?;
         Ok(store)
     }
 
@@ -210,6 +224,36 @@ impl TrustStore {
             Verdict::refused(SIG_INVALID)
         } else {
             Verdict::refused(UNKNOWN_KEY)
+        }
+    }
+
+    /// O2 to O4 and K5 for a rotation whose envelope already counts under this store (V3) and reads (V11): the
+    /// key in `add` signs it too, so it is signed under the store it leaves as well, `add` is neither the PEP's
+    /// own instance key nor a revoked key, `retire` names a key the store holds, and no ninth key is made.
+    pub fn check_rotation(&self, body: &[u8], entries: &[Entry], message: &[u8], instance_key_id: Option<&Hex64>) -> Option<&'static str> {
+        let Ok(rotation) = super::read_rotation(body) else { return None };
+        let added = rotation.add.raw();
+        let added_id = Hex64::of(&added);
+        if instance_key_id == Some(&added_id) || self.revoked_keys.contains(&added_id) || self.retired.contains(&added_id) {
+            return Some(ROTATION_INVALID); // O4: never the instance key, a revoked key or a retired one
+        }
+        if let Some(retire) = &rotation.retire.0 {
+            if !self.keys.contains_key(retire) {
+                return Some(ROTATION_INVALID); // O3
+            }
+        }
+        let mut live: std::collections::BTreeSet<&Hex64> = self.keys.keys().filter(|kid| !self.retired.contains(kid)).collect();
+        live.insert(&added_id);
+        if let Some(retire) = &rotation.retire.0 {
+            live.remove(retire);
+        }
+        if live.len() > MAX_KEYS {
+            return Some(TOO_LARGE); // K5: a ninth key
+        }
+        let signed = entries.iter().find(|entry| entry.key_id_hex() == added_id);
+        match signed {
+            Some(entry) if crate::verify_ed25519(&added, message, &entry.signature) => None, // O2
+            _ => Some(ROTATION_INVALID),
         }
     }
 }
