@@ -3,7 +3,8 @@
 """`prismpath dist`, the command line of policy distribution (spec-policy-distribution.md and
 docs/guides/policy-distribution.md).
 
-The owner's commands run where the authority key is and never on the controller (F1): `seal` signs an
+The owner's commands run where the authority key is and never on the controller (F1): `anchor` writes the
+trust anchor of a stream from the authority public keys, `seal` signs an
 envelope, `revoke` and `rotate` seal the trust statements, and `rekey` runs rotate, release, commit and
 revoke in that order, so the active release never stands on a key that is already revoked (R5). `seal`
 and `revoke` refuse a revocation list that drops an entry no floor has passed (R8), against the controller
@@ -42,7 +43,7 @@ def add_parser(subparsers) -> None:
     dist = subparsers.add_parser(
         'dist', help='Policy distribution: seal and verify signed releases, run the reference controller, and run a '
                      'host enforcement point that pulls from it (seal, verify, serve, enroll, offer, commit, abort, '
-                     'pep, fleet, revoke, rotate, rekey)')
+                     'pep, fleet, revoke, rotate, rekey, anchor)')
     commands = dist.add_subparsers(dest='dist_command', metavar='<action>')
     commands.required = True
 
@@ -58,6 +59,14 @@ def add_parser(subparsers) -> None:
     seal.add_argument('--qualification', default=None, metavar='FILE',
                       help='for policy.ppt, fill meta from the image and this qualification envelope')
     seal.set_defaults(func=seal_cmd)
+
+    anchor = commands.add_parser('anchor', help='write the trust anchor of a stream from authority public keys')
+    anchor.add_argument('--pub', action='append', required=True, metavar='FILE',
+                        help='an authority public key, 32 raw bytes (`swap keygen`), repeatable')
+    anchor.add_argument('--target', required=True, help='the target kind of the stream\'s PEPs')
+    anchor.add_argument('--stream', required=True)
+    anchor.add_argument('--out', required=True, metavar='FILE')
+    anchor.set_defaults(func=anchor_cmd)
 
     verify = commands.add_parser('verify', help='run the verifier on a sealed envelope and its body')
     verify.add_argument('--sealed', required=True, metavar='FILE')
@@ -409,6 +418,18 @@ def rekey_cmd(args) -> int:
     except Refused as refused:
         return _fail(refused.cause, str(refused))
     _print({"rotated": old_id, "released": args.seq, "revoked": old_id})
+    return 0
+
+
+def anchor_cmd(args) -> int:
+    from prismpath.distribution.trust import anchor_bytes, read_anchor
+    try:
+        raw = anchor_bytes([_read(path) for path in args.pub], target=args.target, stream=args.stream)
+    except Refused as refused:
+        return _fail(refused.cause, str(refused))
+    _write(args.out, raw)
+    _print({"anchor": args.out, "fingerprint": read_anchor(raw).fingerprint, "target": args.target,
+            "stream": args.stream})
     return 0
 
 

@@ -336,7 +336,6 @@ def test_the_command_line_seals_serves_provisions_pulls_and_rekeys_a_host_pep(tm
     import time as clock
     from prismpath import cli
     from prismpath.distribution import cli as dist_cli
-    from prismpath.distribution import trust as trust_module
 
     def run(*argv):
         args = cli.build_parser().parse_args(["dist", *argv])
@@ -347,8 +346,11 @@ def test_the_command_line_seals_serves_provisions_pulls_and_rekeys_a_host_pep(tm
     keys = {name: _pem(tmp_path / f"{name}.pem", name) for name in ("A", "B", "C", "p1")}
     pub = tmp_path / "p1.pub"
     pub.write_bytes(GEN.public_raw(GEN.test_key("p1")))
+    authority = tmp_path / "A.pub"
+    authority.write_bytes(GEN.public_raw(GEN.test_key("A")))
     anchor = tmp_path / "anchor.json"
-    anchor.write_bytes(trust_module.anchor_bytes([GEN.public_raw(GEN.test_key("A"))], target="host", stream=STREAM))
+    assert run("anchor", "--pub", str(authority), "--target", "host", "--stream", STREAM,
+               "--out", str(anchor))[0] == 0
     qualification = tmp_path / "qualification.json"
     qualification.write_text(json.dumps(GEN.QUALIFICATION))
     directory, state = tmp_path / "controller", tmp_path / "pep"
