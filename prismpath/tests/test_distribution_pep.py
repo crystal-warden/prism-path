@@ -624,3 +624,46 @@ def test_a_commit_delay_out_of_range_is_refused(point):
     for delay in (-1, 65536, 1.5, True):
         with pytest.raises(ValueError):
             point.pep.commit(STREAM, 1, H(NEW), delay_ms=delay)
+
+
+def _kept(tmp_path, name, *, kept_expires=_dist.EXPIRES):
+    """A host PEP trusting A and B whose kept release, seq 1 signed by A with a widening statement that covers any
+    rollback (RB3), was replaced by seq 2 signed by B."""
+    point = _dist.HostPep(tmp_path / name, authorities=["A", "B"])
+    release = _dist.env.release_id([("policy.ppt", H(OLD))])
+    kept = seal("policy.ppt", OLD, seq=1, release=release, expires=kept_expires)
+    point.pep.stage(kept, OLD)
+    statement = _widening([])
+    point.pep.stage(seal("trust.widening", statement, seq=1, release=release, policy_sha256=H(OLD),
+                         expires=kept_expires), statement)
+    point.pep.commit(STREAM, 1, H(OLD))
+    point.commit(NEW, seq=2, signer="B")
+    return point, _dist.env.envelope_id(_dist.env.unseal(kept)[0])
+
+
+def test_case_054_a_rollback_is_held_to_what_a_commit_is_held_to(tmp_path):
+    """case_054: RB2. A rollback to a kept release that has expired, that is revoked, whose only signing key is
+    revoked, whose only signing key was retired, and that is below a raised floor is refused with the cause of
+    the failed check, and the release active under B keeps deciding."""
+    def refused(point):
+        record = _read(point, point.pep.rollback())
+        assert record.event == "refused" and point.pep.active.seq == 2 and _host_active(point.pep) == H(NEW)
+        return record.cause
+
+    point, _kept_id = _kept(tmp_path, "expired", kept_expires=_dist.NOW + 10)
+    point.clock.now = _dist.NOW + 10
+    assert refused(point) == "dist:expired"
+    point, kept_id = _kept(tmp_path, "revoked")
+    point.revoke(1, envelopes=[kept_id])
+    assert refused(point) == "dist:revoked"
+    point, _kept_id = _kept(tmp_path, "revoked_key")
+    point.revoke(1, keys=[_dist.key_id("A")])
+    assert refused(point) == "sig:revoked-key"
+    point, _kept_id = _kept(tmp_path, "retired_key")
+    point.rotate(1, add="C", retire="A")
+    assert refused(point) == "sig:revoked-key"
+    point, _kept_id = _kept(tmp_path, "floor")
+    point.revoke(1, floors={STREAM: 2})
+    assert refused(point) == "dist:seq-replay"
+    point, _kept_id = _kept(tmp_path, "standing")
+    assert _read(point, point.pep.rollback()).event == "rolled-back"

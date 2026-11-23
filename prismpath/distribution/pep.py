@@ -688,7 +688,8 @@ class Pep:
     # ------------------------------------------------------------------ RB1, RB2, X9: rollback
     def rollback(self) -> bytes:
         """Return to the release the active one replaced (RB1), never lowering the floor. Refused while held
-        (X9), when an envelope of the kept release has expired or is revoked (RB2), and when the kept release
+        (X9), when an envelope of the kept release has expired, is revoked, has no counting signature or is
+        below a floor a revocation raised, each with that check's own cause (RB2), and when the kept release
         may allow more than the active one without a widening statement that covers it (RB3). With no
         release kept there is nothing to return to, and `PepRefused` says so."""
         self._check_active()
@@ -701,7 +702,9 @@ class Pep:
         kept = self.previous
         if kept is None:
             raise PepRefused("no release is kept to roll back to (RB1)")
-        cause = self._still_valid(kept, early=False)
+        cause = self._still_valid(kept, early=True)                  # RB2: what a commit checks, as it is active anew
+        if cause is None and kept.seq < self.trust.floors.get(kept.stream, 0):
+            cause = "dist:seq-replay"                                 # R4: below a floor a revocation raised
         if cause is not None:
             return self._refuse(cause, seq=kept.seq)
         if not self._covers(kept):
