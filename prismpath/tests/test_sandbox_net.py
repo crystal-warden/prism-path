@@ -113,7 +113,7 @@ buf = b""
 while b"\\r\\n\\r\\n" not in buf:
     buf += s.recv(4096)
 assert b" 200 " in buf.split(b"\\r\\n")[0], buf
-data = b""
+data = buf.split(b"\\r\\n\\r\\n", 1)[1]      # the server's bytes can arrive in the same read as the proxy's reply
 while True:
     c = s.recv(4096)
     if not c:
