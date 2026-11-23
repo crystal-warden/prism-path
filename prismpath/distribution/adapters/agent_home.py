@@ -11,10 +11,15 @@ keeps nothing of its own: activating a release is the PEP's active record, which
 deactivating it is the lapse that record shows.
 
 Its own check at commit (V11, C2) holds a staged `sandbox.profile` to the profile compiled from the staged
-`policy.core` (`dist:derived-mismatch`), and reads a staged `agent.zones` as the zone point reads it.
+`policy.core` (`dist:derived-mismatch`). A staged `agent.zones` is read by the artifact's own V11 check at staging
+(`kinds.read_zones`), and the adapter adds nothing to it.
+
+A decider that runs long, the egress proxy's gate and the MCP proxy, follows the committed state through
+`commands.Committed`, so a revocation, an expiry or a commit reaches it at its next decision.
 """
 from __future__ import annotations
 
+import os
 import time as _time
 from pathlib import Path
 from typing import Any, Dict, Mapping, Optional, Tuple
@@ -80,12 +85,15 @@ def note(home, reading: Mapping[str, Any]) -> None:
 
 
 def take_readings(home) -> list:
-    """The spooled readings, the last 64, and the spool emptied."""
+    """The spooled readings, the last 64, and the spool emptied. The spool is moved aside before it is read, so a
+    reading noted meanwhile starts a new spool rather than being removed unread."""
     from prismpath.kernel import canon2
     path = Path(home) / "dist" / SPOOL
+    taking = path.with_name(SPOOL + ".taking")
     try:
-        lines = path.read_bytes().splitlines()
-        path.unlink()
+        os.replace(path, taking)
+        lines = taking.read_bytes().splitlines()
+        taking.unlink()
     except OSError:
         return []
     out = []
@@ -100,6 +108,14 @@ def take_readings(home) -> list:
 def is_distributed(home) -> bool:
     """A home that follows a stream: its PEP store holds a trust store."""
     return (Path(home) / "dist" / "trust.json").is_file()
+
+
+def committed_until(home, now: Optional[int] = None) -> Tuple[Dict[str, bytes], int]:
+    """`committed`, and the earliest `expires` of the release's envelopes, 0 when none expires."""
+    from prismpath.distribution.pep import read_committed_release
+    release = read_committed_release(str(home), "agent", int(clock() if now is None else now))
+    expiries = [envelope.expires for envelope in release.envelopes.values() if envelope.expires]
+    return dict(release.bodies), min(expiries, default=0)
 
 
 def committed(home, now: Optional[int] = None) -> Dict[str, bytes]:

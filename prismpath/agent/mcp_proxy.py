@@ -116,12 +116,15 @@ class Governor:
                  policy_path: Optional[Path] = None):
         self.session, self.server_cwd, self.home = session, server_cwd, home
         self.failure: Optional[str] = None
-        self.policy = self.run = self.config = None
+        self.policy = self.run = self.config = self.follow = None
         store = None
         try:
             from prismpath.agent import commands
+            from prismpath.distribution.adapters import agent_home
             self.config = classifier.Config.for_workspace(workspace)
             self.policy, store = commands.load_checked(home)
+            if agent_home.is_distributed(home):
+                self.follow = commands.Committed(home)        # every call follows the committed release
             if policy_path is not None and policymod.Policy.load(policy_path).image != self.policy.image:
                 raise ValueError(f"{policy_path} is not the recorded, attested policy")
         except Exception as exc:   # noqa: BLE001 - a policy that does not load or verify refuses every call
@@ -136,6 +139,15 @@ class Governor:
     def decide(self, params: Any) -> Outcome:
         if self.failure:
             return Outcome("refuse", failure=self.failure)
+        if self.follow is not None:
+            from prismpath.agent import commands
+            try:
+                committed = self.follow.current()[0]
+            except commands.AgentError as exc:
+                return Outcome("refuse", failure=f"the home's release no longer decides ({exc})")
+            if committed.image != self.policy.image:
+                return Outcome("refuse", failure="the home committed another policy since this run began, and one "
+                                                 "run is decided by one policy")
         try:
             call = mcp_map.classifier_call(params, self.server_cwd)
             reading = classifier.classify(call, self.config)

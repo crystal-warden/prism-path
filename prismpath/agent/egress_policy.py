@@ -50,12 +50,20 @@ def hosts_digest(allowed_hosts: Iterable[str]) -> str:
 
 
 class PolicyGate:
+    """`follow`, a `commands.Committed`, is given for a home that follows a stream: each CONNECT then reads the
+    committed state first, refuses with `policy-lapsed` when the release no longer decides and with
+    `policy-changed` when another policy was committed since the run began, and takes its hosts from the committed
+    `egress.hosts`, so a commit that removes a host closes it at the next connection."""
+
     def __init__(self, policy, store, session: str, workspace, profile: Profile, allowed_hosts: Iterable[str] = (),
-                 home=None):
+                 home=None, follow=None):
         self.policy, self.store, self.session, self.profile = policy, store, session, profile
         self.home = home        # a home that follows a stream is told each reading, for its heartbeat
+        self.follow = follow
         self.run = None         # opened by the first receipt, so a run with no connection leaves no run behind
-        self.config = classifier.Config.for_workspace(Path(workspace), allowed_hosts=tuple(allowed_hosts))
+        self.workspace = Path(workspace)
+        self._hosts = tuple(allowed_hosts)
+        self.config = classifier.Config.for_workspace(self.workspace, allowed_hosts=self._hosts)
         self.profile_sha256 = profile.hash()
         self.hosts_sha256 = hosts_digest(allowed_hosts)
         self._lock = threading.Lock()
@@ -64,8 +72,30 @@ class PolicyGate:
         host, port = split_authority(authority)
         return classifier.classify({"tool": "connect", "args": {"host": host, "port": port}}, self.config)
 
+    def _follow(self) -> Optional[str]:
+        """The committed state for this connection: None to decide, else the refusal's reason."""
+        from prismpath.agent import commands
+        from prismpath.distribution.adapters import agent_home
+        try:
+            policy, bodies = self.follow.current()
+        except commands.AgentError:
+            return "policy-lapsed"
+        if policy.image != self.policy.image:
+            return "policy-changed"
+        hosts = tuple(host.lower() for host in agent_home.hosts(bodies))
+        if hosts != self._hosts:
+            with self._lock:
+                self._hosts = hosts
+                self.config = classifier.Config.for_workspace(self.workspace, allowed_hosts=hosts)
+                self.hosts_sha256 = hosts_digest(hosts)
+        return None
+
     def __call__(self, authority: str) -> Tuple[bool, str]:
         try:
+            if self.follow is not None:
+                refused = self._follow()
+                if refused is not None:
+                    return False, refused
             reading = self.reading(authority)
             raw = self.policy.reading_bytes(reading)
             decision = self.policy.decide(raw)

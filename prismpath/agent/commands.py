@@ -148,10 +148,11 @@ def _attestation(home: Path, image: bytes, case: str = POLICY_CASE) -> bytes:
                          "sig": signer.sign(core_evidence.IMAGE_DOMAIN + image).hex()}) + b"\n"
 
 
-def load_distributed(home: Path):
+def load_distributed(home: Path, *, until: Optional[list] = None):
     """The policy of a home that follows a stream (spec-policy-distribution.md, section 3): the committed
     `policy.core`, every envelope of the release checked again on this load (`agent_home.committed`). Such a home
-    holds its instance key and no authority key. Returns the policy and the committed bodies."""
+    holds its instance key and no authority key. Returns the policy and the committed bodies, and appends to
+    `until`, when given, the earliest `expires` of the release (0 when none expires)."""
     from prismpath.agent.policy import Policy
     from prismpath.distribution.adapters import agent_home
     from prismpath.distribution.kinds import Refused
@@ -165,10 +166,52 @@ def load_distributed(home: Path):
     if instance.key_id != _key_id(home, "instance"):
         raise AgentError("instance.key and instance.pub are not one key pair")
     try:
-        bodies = agent_home.committed(home)
+        bodies, expires = agent_home.committed_until(home)
     except Refused as refused:
         raise AgentError(f"the home's release does not stand: {refused}") from None
+    if until is not None:
+        until.append(expires)
     return Policy(bodies["policy.core"]), bodies
+
+
+class Committed:
+    """The committed release of a home that follows a stream, for a decider that runs long (the egress proxy's
+    gate, the MCP proxy). `current()` answers (policy, bodies) as `load_distributed` does, or raises its
+    AgentError, and loads again only when a file of the PEP's store changed (a commit, a rollback, a lapse, a
+    revocation, a lock) or the release's earliest expiry has come, so a decision costs a few `stat` calls and a
+    release that no longer stands stops deciding at the next one (section 9, X3, R5)."""
+    WATCHED = ("anchor.json", "setting.json", "counter.json", "floor.json", "trust.json", "active.json")
+
+    def __init__(self, home: Path):
+        self.home = Path(home)
+        self._stamp: Any = None
+        self._until = 0
+        self._loaded: Any = None
+        self._error: Optional[AgentError] = None
+
+    def _files(self) -> tuple:
+        out = []
+        for name in self.WATCHED:
+            try:
+                stat = os.stat(self.home / "dist" / name)
+                out.append((stat.st_ino, stat.st_mtime_ns, stat.st_size))
+            except OSError:
+                out.append(None)
+        return tuple(out)
+
+    def current(self):
+        from prismpath.distribution.adapters import agent_home
+        stamp = self._files()
+        if stamp != self._stamp or (self._until and agent_home.clock() >= self._until):
+            self._stamp, until = stamp, []
+            try:
+                self._loaded, self._error = load_distributed(self.home, until=until), None
+                self._until = until[0]
+            except AgentError as exc:
+                self._loaded, self._error, self._until = None, exc, 0
+        if self._error is not None:
+            raise self._error
+        return self._loaded
 
 
 def hosts_of(home: Path):

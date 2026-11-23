@@ -87,15 +87,111 @@ def test_a_home_that_follows_a_stream_decides_under_its_committed_release(home):
         commands.load_checked(home.state_dir)
 
 
-def test_a_commit_changes_the_hook_and_the_egress_proxy_together(home):
-    """Section 3: one home holds one release, so the hook's policy and the egress proxy's hosts move in one
-    commit."""
-    home.release(STRICT, 1)
-    before = (commands.load_checked(home.state_dir)[0].image, commands.hosts_of(home.state_dir))
-    more = canon.canon2_bytes(["api.example.com", "docs.example.com"])
-    assert home.release(DEFAULT, 2, hosts=more, froms=[H(STRICT)])[-1].event == "committed"
-    after = (commands.load_checked(home.state_dir)[0].image, commands.hosts_of(home.state_dir))
-    assert before == (STRICT, ("api.example.com",)) and after == (DEFAULT, ("api.example.com", "docs.example.com"))
+def _connect_rule(target, dest):
+    return {"target": target, "when": ["and", ["cmp", "tool", "==", ["str", "connect"]],
+                                       ["cmp", "net_dest", "==", ["str", dest]],
+                                       ["cmp", "command_class", "==", ["str", "none"]],
+                                       ["cmp", "git_op", "==", ["str", "none"]],
+                                       ["cmp", "path_scope", "==", ["str", "none"]]]}
+
+
+def _with_rules(image, *rules):
+    from prismpath.kernel import canon2
+    doc = canon2.loads(image)
+    doc["rules"] = list(rules) + doc["rules"]
+    return canon2.dumps(doc)
+
+
+ALLOW_HOSTS = _with_rules(DEFAULT, _connect_rule("allow", "allowed_host"))
+NO_READS = _with_rules(ALLOW_HOSTS, {"target": "refuse_104", "when": ["cmp", "tool", "==", ["str", "read_file"]]})
+# a larger policy, so the comparator's walk ends at the first reading it allows more, and the test stays quick
+
+
+class _Echo:
+    """A loopback TCP server standing in for every destination the egress proxy dials."""
+
+    def __init__(self):
+        import socket
+        import threading
+        self.server = socket.socket()
+        self.server.bind(("127.0.0.1", 0))
+        self.server.listen(16)
+        self.port = self.server.getsockname()[1]
+        threading.Thread(target=self._serve, daemon=True).start()
+
+    def _serve(self):
+        while True:
+            try:
+                client, _ = self.server.accept()
+            except OSError:
+                return
+            client.close()
+
+
+def _connect_status(proxy, target):
+    import socket
+    client = socket.socket(socket.AF_UNIX)
+    client.settimeout(5)
+    client.connect(proxy.socket_path)
+    client.sendall(f"CONNECT {target} HTTP/1.1\r\nHost: {target}\r\n\r\n".encode())
+    data = b""
+    while b"\r\n\r\n" not in data:
+        chunk = client.recv(4096)
+        if not chunk:
+            break
+        data += chunk
+    client.close()
+    return int(data.split(b" ", 2)[1]), data
+
+
+def test_a_commit_changes_the_hook_and_the_egress_proxy_together(tmp_path, monkeypatch):
+    """Section 3, X3: one home holds one release. The egress proxy's gate is built as the launcher builds it and
+    decides real CONNECTs while the hook decides tool calls. A commit that removes a host closes it at the gate's
+    next connection, and a commit of another policy moves the hook's decision and the gate's at once: the gate's
+    run was begun under the old policy, so it refuses rather than deciding under a policy its run does not name."""
+    from prismpath.agent import egress, egress_policy
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr(commands.sys, "platform", "linux")
+    home_dir = commands.config_dir()
+    point = HomePep(home_dir)
+    both = canon.canon2_bytes(["docs.example.com", "other.example.com"])
+    assert point.release(NO_READS, 1, hosts=both)[-1].event == "committed"
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "a.txt").write_text("x\n")
+    hook_env = {"HOME": str(tmp_path), "CLAUDE_PROJECT_DIR": str(project)}
+
+    def hook(session):
+        data = {"session_id": session, "hook_event_name": "PreToolUse", "tool_name": "Read",
+                "tool_input": {"file_path": str(project / "a.txt")}, "cwd": str(project)}
+        answer = commands.hook(json.dumps(data).encode(), hook_env)
+        return answer["hookSpecificOutput"]["permissionDecision"]
+
+    policy, store = commands.load_checked(home_dir)
+    profile = compile_profile(policy, "agent")
+    gate = egress_policy.PolicyGate(policy, store, "egress-s", project, profile, commands.hosts_of(home_dir),
+                                    home=home_dir, follow=commands.Committed(home_dir))
+    echo = _Echo()
+    sockets = tmp_path / "sock"
+    sockets.mkdir()
+    proxy = egress.EgressProxy(sockets / "e.sock", sockets / "e.log", gate=gate, resolver=lambda name: ["93.184.216.34"],
+                               connect=lambda address, port, timeout: __import__("socket").create_connection(
+                                   ("127.0.0.1", echo.port), timeout=timeout)).start()
+    try:
+        assert hook("s1") == "deny"
+        assert [_connect_status(proxy, f"{host}:443")[0] for host in ("docs.example.com", "other.example.com")] == [200, 200]
+        docs = canon.canon2_bytes(["docs.example.com"])
+        assert point.release(NO_READS, 2, hosts=docs, widens=False)[-1].event == "committed"
+        status, body = _connect_status(proxy, "other.example.com:443")
+        assert status == 403 and b"refused-130" in body                 # the removed host, at the next connection
+        assert _connect_status(proxy, "docs.example.com:443")[0] == 200 and hook("s2") == "deny"
+        assert point.release(ALLOW_HOSTS, 3, hosts=docs)[-1].event == "committed"
+        status, body = _connect_status(proxy, "docs.example.com:443")
+        assert status == 403 and b"policy-changed" in body
+        assert hook("s3") == "allow"
+    finally:
+        proxy.close()
+        echo.server.close()
 
 
 def test_every_load_checks_the_release_again(home, monkeypatch):
@@ -278,3 +374,72 @@ def test_the_hook_s_decision_reaches_the_heartbeat(tmp_path, monkeypatch):
             "tool_input": {"file_path": str(project / "a.txt")}, "cwd": str(project)}
     commands.hook(json.dumps(hook).encode(), {"HOME": str(tmp_path), "CLAUDE_PROJECT_DIR": str(project)})
     assert len(agent_home.take_readings(home_dir)) == 1
+
+
+def test_a_long_running_decider_follows_a_revocation_and_an_expiry(tmp_path, monkeypatch):
+    """Section 9, X3, R5: the MCP proxy's Governor and the egress gate are built once and decide many calls. A
+    revocation of the policy, and the release's expiry, stop both at their next decision, as a fresh load would."""
+    from prismpath.agent import egress_policy, mcp_proxy
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    (workspace / "f.txt").write_text("x")
+    params = {"name": "read_file", "arguments": {"path": str(workspace / "f.txt")}}
+
+    def deciders(name):
+        home = HomePep(tmp_path / name, authorities=["A", "B"])
+        assert home.release(ALLOW_HOSTS, 1, hosts=canon.canon2_bytes(["docs.example.com"]))[-1].event == "committed"
+        governor = mcp_proxy.Governor(home.state_dir, tmp_path / f"runs-{name}", "s1", workspace, str(workspace))
+        policy, store = commands.load_checked(home.state_dir)
+        gate = egress_policy.PolicyGate(policy, store, "egress-s", workspace, compile_profile(policy, "agent"),
+                                        commands.hosts_of(home.state_dir), follow=commands.Committed(home.state_dir))
+        assert governor.decide(params).kind == "allow" and gate("docs.example.com:443") == (True, "policy-allow")
+        return home, governor, gate
+
+    home, governor, gate = deciders("revoked")
+    home.revoke(1, signer="B", policies=[H(ALLOW_HOSTS)])
+    assert home.pep.state() == "no-policy"
+    outcome = governor.decide(params)
+    assert outcome.kind == "refuse" and "no release is active" in outcome.failure
+    assert gate("docs.example.com:443") == (False, "policy-lapsed")
+    _home, governor, gate = deciders("expired")
+    monkeypatch.setattr(agent_home, "clock", lambda: _dist.EXPIRES)        # no file changed, only the time
+    assert governor.decide(params).failure.startswith("the home's release no longer decides")
+    assert gate("docs.example.com:443") == (False, "policy-lapsed")
+
+
+@pytest.mark.parametrize("line, carried, bad", [(b"5\n", 2, 1), (b'["read_file"]\n', 2, 1), (b'"text"\n', 2, 1),
+                                               (b"\xff\xfe\n", 2, 0), (b'{"tool":5}\n', 3, 0)])
+def test_a_spool_line_that_is_not_a_reading_is_counted_and_never_stops_the_records(home, line, carried, bad):
+    """H5: a reading another process of the home spooled is held to what `decide` holds a reading to. One the Facet
+    codec cannot encode is skipped and counted, the readings beside it are carried, and the next record is made. A
+    torn line never reads, and an object the codec encodes, as a reading no rule routes, is carried."""
+    home.release(STRICT, 1)
+    from prismpath.distribution import heartbeat
+    from prismpath.tests.test_distribution_heartbeat import _readings
+    good = _readings(STRICT, 2)
+    from prismpath.kernel import canon2
+    spool = home.state_dir / "dist" / agent_home.SPOOL
+    spool.write_bytes(canon2.dumps(good[0]) + b"\n" + line + canon2.dumps(good[1]) + b"\n")
+    before = home.pep.bad_readings
+    record = _read(home, home.pep.record("beat"))
+    assert len(heartbeat.decode(STRICT, record.body)) == carried and home.pep.bad_readings == before + bad
+    assert _read(home, home.pep.record("beat")).event == "beat"
+
+
+def test_a_commit_of_another_policy_drops_what_the_home_s_deciders_spooled_under_the_old_one(home):
+    """H5: a reading spooled under the active policy and taken after a commit of another one is not reported under
+    the new policy."""
+    from prismpath.distribution import heartbeat
+    from prismpath.kernel import canon2
+    from prismpath.tests.test_distribution_heartbeat import _readings
+    home.release(STRICT, 1)
+    release = _dist.env.release_id([("egress.hosts", H(home.hosts)), ("policy.core", H(DEFAULT))])
+    args = {"release": release, "policy_sha256": H(DEFAULT), "replaces": H(STRICT), "widens": True}
+    statement = _dist.widening([])
+    home.pep.stage(seal("trust.widening", statement, seq=2, targets=("agent",), **args), statement)
+    for name, data in (("egress.hosts", home.hosts), ("policy.core", DEFAULT)):
+        home.pep.stage(seal(name, data, seq=2, targets=("agent",), **args), data)
+    (home.state_dir / "dist" / agent_home.SPOOL).write_bytes(
+        b"".join(canon2.dumps(reading) + b"\n" for reading in _readings(STRICT, 3)))
+    record = _read(home, home.pep.commit(STREAM, 2, H(DEFAULT)))
+    assert record.event == "committed" and heartbeat.decode(DEFAULT, record.body) == []

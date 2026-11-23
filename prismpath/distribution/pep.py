@@ -126,7 +126,12 @@ def standing(trust: TrustStore, release: "Release", sealed_of: Callable[[str], O
 
 
 def read_committed(state_dir: str, kind: str, now: int) -> Dict[str, bytes]:
-    """The bodies of the release the PEP over `state_dir` has active, read as a restart reads them and held to the
+    """The bodies of `read_committed_release`."""
+    return dict(read_committed_release(state_dir, kind, now).bodies)
+
+
+def read_committed_release(state_dir: str, kind: str, now: int) -> "Release":
+    """The release the PEP over `state_dir` has active, read as a restart reads them and held to the
     tests the machine holds it to on every entry point, for a reader in another process (the agent home's hook and
     proxies). `Refused`: `dist:floor-lost` when the anchor, the setting, the counter or the floor does not read,
     since the PEP is then locked (Q5); `dist:unknown-key` when the trust store does not read (K1);
@@ -159,7 +164,7 @@ def read_committed(state_dir: str, kind: str, now: int) -> Dict[str, bytes]:
     cause = standing(trust, release, store.get, max(int(now), trust.time_floor))
     if cause is not None:
         raise Refused(cause, "the active release no longer decides")
-    return dict(release.bodies)
+    return release
 
 
 class PepRefused(Exception):
@@ -307,6 +312,7 @@ class Pep:
         self.due: Optional[Tuple[str, int, str, float]] = None      # B8: a commit with a delay, and when it falls
         self.outbox: list = []
         self.recent: deque = deque(maxlen=heartbeat.MAX_FRAMES)    # H5: the readings decided since the last record
+        self.bad_readings = 0                                        # readings the Facet codec refused, not carried
         self._load()
         self._check_setting()
         self._check_separation(self.trust)
@@ -485,8 +491,13 @@ class Pep:
         active, staged = self.active, self.staged
         image = active.bodies.get("policy.core") if active is not None and self.state() == "active" else None
         if image is not None and hasattr(self.adapter, "readings"):
-            self.recent.extend(self.adapter.readings())               # decided in another process of the home
-        body = heartbeat.body(image, self.recent) if image is not None else b""
+            for reading in self.adapter.readings():                   # decided in another process of the home
+                self._keep(image, reading)
+        try:
+            body = heartbeat.body(image, self.recent) if image is not None else b""
+        except (ValueError, KeyError, TypeError, AttributeError):
+            self.bad_readings += len(self.recent)                     # never a ring that stops every record
+            body = b""
         self.recent.clear()
         record = state_record.StateRecord(
             event=event, state=self.state(), cause=cause, pep_id=state_record.pep_id(self.instance_key.public_raw),
@@ -501,6 +512,21 @@ class Pep:
         signed = state_record.build(record, self.instance_key)
         self.outbox.append(signed)
         return signed
+
+    def _keep(self, image: bytes, reading: Any) -> bool:
+        """H5: put `reading` in the ring when the Facet codec of `image` encodes it, as `decide` and the readings
+        another process of the home noted are both held. A reading it refuses is counted in `bad_readings` and
+        not carried."""
+        from prismpath.telemetry.spiral_groups import TIER_BAND
+        try:
+            if not isinstance(reading, dict):
+                raise TypeError("a reading is an object")
+            heartbeat.facet(image).encode_reading(reading, TIER_BAND)
+        except (ValueError, KeyError, TypeError, AttributeError):
+            self.bad_readings += 1
+            return False
+        self.recent.append(dict(reading))
+        return True
 
     def reported_floor(self) -> int:
         """H1, R4: the floor V8 holds, the larger of the committed floor and the one a revocation raised."""
@@ -764,6 +790,8 @@ class Pep:
         after = release.bodies.get("policy.core") if release is not None else None
         if before is None or before != after:
             self.recent.clear()
+            if hasattr(self.adapter, "readings"):
+                self.adapter.readings()                               # and what the home's other deciders noted
 
     def _cleanup(self) -> None:
         if self.staged is None:
@@ -842,12 +870,7 @@ class Pep:
         decision = under_release()
         image = self.active.bodies.get("policy.core") if reading is not None else None
         if image is not None:
-            from prismpath.telemetry.spiral_groups import TIER_BAND
-            try:
-                heartbeat.facet(image).encode_reading(reading, TIER_BAND)
-                self.recent.append(dict(reading))
-            except (ValueError, KeyError, TypeError):
-                pass
+            self._keep(image, reading)
         return {"decision": decision, "cause": None, "mark": self.receipt_mark()}
 
     # ------------------------------------------------------------------ RB1, RB2, X9: rollback
