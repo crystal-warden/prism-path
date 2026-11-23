@@ -184,7 +184,23 @@ prismpath dist rekey --dir ctl --key controller/instance.key --old owner/authori
 
 The controller offers the trust statements a PEP lacks before any release, and in order (R1).
 
-## 8. What this version does not do
+## 8. An agent home
+
+An agent home follows a stream the same way. The home holds its instance key and no authority key.
+
+```bash
+prismpath agent init --follow web/agents --anchor anchor.json
+prismpath agent init --follow web/agents --confirm <fingerprint> --yes
+prismpath dist pep poll --kind agent --state ~/.config/prismpath/agent --key ~/.config/prismpath/agent/instance.key \
+    --url http://127.0.0.1:8471
+```
+
+A release for it holds `policy.core` and `egress.hosts`, and may hold `agent.zones` and `sandbox.profile`. The
+hook, the egress proxy and the MCP proxy read the committed release on every load and check it again. The
+egress proxy reaches the committed hosts and no others, so `--allow-host` is refused. The project and the index
+of the zones are the home's own setting in `zones.local.json`.
+
+## 9. What this version does not do
 
 A host, a mesh node and the cFS app send a state record with no Facet body, since their releases carry no
 flow text to build one from (H5). A rollback with `prismpath dist pep rollback` follows RB1 to RB3, so on a
