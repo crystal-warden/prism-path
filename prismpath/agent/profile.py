@@ -443,6 +443,25 @@ def _bounds(name: str, text: str):
     return None
 
 
+def reading_outside_domain(fields, reading) -> Optional[str]:
+    """The first category value of a reading outside its field's reading domain, the values the classifier
+    produces (`KNOWN_CATEGORIES`), as a sentence, or None. A bool or an int out of its declared kind or range is
+    the core's to refuse, as it always has (`route:contract-violation`), and so is a key that is not one of the
+    policy's fields, an absent value and a category with no known values."""
+    if not isinstance(reading, dict):
+        return None
+    for name, text in fields.items():
+        if name not in reading or reading[name] is None:
+            continue
+        if not text.split()[:1] == ["category"] or name not in KNOWN_CATEGORIES:
+            continue
+        value = reading[name]
+        inside = isinstance(value, str) and value in KNOWN_CATEGORIES[name]
+        if not inside:
+            return f"the reading gives {name} {value!r}, which is outside the field's reading domain"
+    return None
+
+
 def outside_domain(doc) -> Optional[str]:
     """The first value a rule of the policy document names outside its field's reading domain, as a sentence, or
     None when every value it names is inside. The domain is what the installer defined: the values the classifier

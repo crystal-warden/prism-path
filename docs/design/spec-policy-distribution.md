@@ -456,7 +456,11 @@ or its `policy.spiral`, cannot commit the rest. Otherwise the cause is `dist:inc
 changes.
 
 **C3.** At commit the PEP checks time (T3, T4) and revocation (V7) again for every staged envelope, since
-both can change after staging. A failure drops the staged release and reports the cause.
+both can change after staging. A failure drops the staged release and reports the cause. It then holds the
+release to the widening rule (V12) again against the release active at that moment, since a lapse, a
+rollback or another commit may have changed it since staging. A release staged as a renewal of a policy
+that lapsed before the commit goes from no policy to one, which is larger, so without a covering statement
+it is refused with `dist:widening-unsigned` and stays staged.
 
 **C4.** A commit is durable in a fixed order, each step synced before the next. The intent record, the
 floor, the audit event, the artifacts under content addressed names, the active record that names them,
@@ -501,9 +505,11 @@ The reading domain is set by the engineer who installs PrismPath. For a category
 classifier produces, for a bool true and false, and for an int its declared min to max. A tool or any
 other value outside that domain is a resource nobody accounted for, so it is never allowed. A policy
 whose rule names a value outside its domain is refused when it is loaded and when it is checked (V11),
-with `policy:out-of-domain`. Some combinations of values in the domain are ones the classifier never
-gives, such as a `net_dest` for a tool that is not `connect`. Nobody accounted for those either, so a
-release that answers one of them differently from the active one, in either direction, is larger.
+with `policy:out-of-domain`. A reading whose category value is outside the domain is refused with the
+same cause before the policy decides it, and an int or a bool outside its range or kind is refused by the
+core as before. Some combinations of values in the domain are ones the classifier never
+gives, such as a `net_dest` for a tool that is not `connect`. The walk covers them as well, so a release
+that allows more on one of them is larger, and one that refuses more there is a tightening.
 
 **W1.** A PEP that can decide (section 3) computes whether the staged release is larger than the active
 one. It does not trust `widens` for that. It walks the reading domain and holds each policy to it as the
@@ -1065,4 +1071,5 @@ reports exactly the cause given, or none, and its state after is the one given.
 | 139 | A `host` and a `mesh` PEP are offered a first install with `widens` false and a widening statement whose `from` is empty | `dist:widening-unsigned`, and no release is active | W2, W6 | P R C |
 | 140 | A `host` and a `mesh` PEP roll back from another table to a kept renewal that says it does not widen and holds a widening statement whose `from` is empty | `dist:widening-unsigned`, the active release stays | RB3, W2, W6 | P R C |
 | 141 | An `agent` PEP is sent a `policy.core` whose rule allows a tool the classifier does not produce, and the agent's policy loader is given the same image | `policy:out-of-domain` both times | 9.4, V11 | P |
-| 142 | An `agent` PEP is offered a `policy.core` that answers a combination the classifier never gives otherwise than the active one, once allowing it and once refusing what the active one asks about, each with `widens` false | `dist:widening-unsigned` both times | 9.4, W1, W6 | P |
+| 142 | An `agent` PEP is offered a `policy.core` that allows a combination the classifier never gives, and one that refuses there what the active one asks about, each with `widens` false, and a policy whose rules name only values in the domain decides a reading whose tool is outside it | `dist:widening-unsigned`, committed, and the reading is refused with `policy:out-of-domain` | 9.4, W1, W6 | P |
+| 143 | A renewal staged on a `host` and a `mesh` PEP with `widens` false and no statement, whose active release then expires before the commit | `dist:widening-unsigned` at commit, and nothing is active | C3, V12, W2 | P R C |

@@ -44,8 +44,8 @@ Comparator = Callable[[bytes, bytes], str]       # (active body, staged body) ->
 def compare_policies(active: bytes, staged: bytes) -> str:
     """W1 for `policy.core`: walk the finite reading domain once for both images, a class at a time, and find
     the first reading the staged policy treats more permissively. A combination the classifier never gives
-    (`profile.unproduced`) is larger when the two policies answer it differently in either direction, since no
-    reading of it was ever accounted for (9.4)."""
+    (`profile.unproduced`) is walked too, so a release that allows more there is larger, and one that refuses
+    more there is a tightening (9.4)."""
     from prismpath.agent import profile
     from prismpath.agent.policy import Policy
     if active == staged:
@@ -65,9 +65,7 @@ def compare_policies(active: bytes, staged: bytes) -> str:
         reading = dict(zip(names, (group[0] for group in combo)), **constant)
         before, after = RANK[profile.kind_of(old, reading)], RANK[profile.kind_of(new, reading)]
         if after > before:
-            return LARGER
-        if after != before and profile.unproduced(names, combo):
-            return LARGER                              # 9.4: a reading the classifier never gives, answered anew
+            return LARGER                              # 9.4: on a combination the classifier never gives as well
     return NOT_LARGER
 
 

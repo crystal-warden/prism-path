@@ -45,7 +45,7 @@ C_KINDS = frozenset({"mesh", "cfs"})
 PARTIAL = {"P": frozenset(), "R": frozenset({16, 66, 70, 72, 73, 79, 123, 130, 134}), "C": frozenset({60})}
 PENDING = {
     "P": "45 49 59 81 88-91 100 102 104-105 129",
-    "R": "16-17 23-24 26 31 43 46-48 50-53 62-63 66 69-70 72-73 77 79 82 84-85 101 104 111 123 126 130 134 137-140",
+    "R": "16-17 23-24 26 31 43 46-48 50-53 62-63 66 69-70 72-73 77 79 82 84-85 101 104 111 123 126 130 134 137-140 143",
     "C": "25 60 97 104-105 122",
 }
 
@@ -88,8 +88,8 @@ def _covered(impl: str) -> set:
     return covered - PARTIAL[impl]
 
 
-def test_the_spec_has_142_numbered_cases_each_naming_rules_and_implementations():
-    assert sorted(SPEC) == list(range(1, 143))
+def test_the_spec_has_143_numbered_cases_each_naming_rules_and_implementations():
+    assert sorted(SPEC) == list(range(1, 144))
     assert all(case["rules"].strip() and case["runs_on"] for case in SPEC.values())
 
 

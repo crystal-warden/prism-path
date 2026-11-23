@@ -100,8 +100,12 @@ a statement (W6).
 The reading domain an agent policy is compared over is the one the engineer who installs PrismPath defines: the
 values the classifier produces for each category, true and false, and each int's min to max. A policy whose
 rule names a value outside it, such as a tool the classifier does not produce, is refused when it is loaded and
-when a PEP checks it, with `policy:out-of-domain`. A release that answers a combination the classifier never
-gives otherwise than the active one is larger, whichever way it changes.
+when a PEP checks it, with `policy:out-of-domain`, and a reading whose category value is outside it is refused with
+the same cause before the policy decides it. The comparison walks the combinations the classifier never gives as well, so
+a release that allows more on one of them is larger, and one that refuses more there is a tightening.
+
+A commit holds the release to the widening rule again against what is active then (C3). A renewal staged against
+a release that lapses before the commit goes from no policy to one, so it needs a statement that covers that.
 
 A PEP commits a release only whole. It computes the release id again over the artifacts it staged, and when
 that is not the signed `release`, because a transport left out an `agent.zones`, a `sandbox.profile` or a

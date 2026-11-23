@@ -91,14 +91,13 @@ def test_the_walk_decides_each_reading_as_the_reference_does():
 
 @pytest.mark.checkpoint
 def test_the_starters_compare_as_their_rules_say():
-    """W1 over the shipped starters, every reading of their domain: the default asks the person about what the
-    strict refuses, so it is larger. The strict refuses what the default asks about on combinations the
-    classifier never gives too, such as a protected zone reach for an unknown tool, and a change there in either
-    direction is larger (9.4), so the strict is larger than the default as well. The review asks about a change
-    the strict allows, and the session reads fields the others do not. Every reading is decided as the reference
-    decides it."""
+    """W1 over the shipped starters, every reading of their domain, the combinations the classifier never gives
+    included: the default asks the person about what the strict refuses, so it is larger, and the strict is not
+    larger than the default, since where it differs it refuses more. The review asks about a change the strict
+    allows, and the session reads fields the others do not. Every reading is decided as the reference decides
+    it."""
     assert widening.compare_policies(STARTERS["strict"], STARTERS["default"]) == LARGER
-    assert widening.compare_policies(STARTERS["default"], STARTERS["strict"]) == LARGER
+    assert widening.compare_policies(STARTERS["default"], STARTERS["strict"]) == NOT_LARGER
     assert widening.compare_policies(STARTERS["review"], STARTERS["strict"]) == LARGER
     assert widening.compare_policies(STARTERS["default"], STARTERS["session"]) == LARGER
     for image in STARTERS.values():
@@ -504,20 +503,46 @@ def _net(*rules: str) -> bytes:
                           + "".join(rule + "\n" for rule in rules))
 
 
-def test_case_142_a_change_on_a_combination_the_classifier_never_gives_is_larger(agent, tmp_path):
-    """case_142: 9.4, W1, W6. A `net_dest` other than none comes only with a `connect`, so a `read_file` with
-    one is a combination the classifier never gives. A release that allows it, and one that refuses what the
-    active one asks about there, each answer it otherwise than the active one, so each is larger, and with
-    `widens` false each is dist:widening-unsigned. A change only on combinations the classifier gives keeps the
-    old order."""
+def test_case_142_only_allowing_more_on_a_combination_the_classifier_never_gives_is_larger(agent, tmp_path):
+    """case_142: 9.4, W1, W6. A `net_dest` other than none comes only with a `connect`, so a `read_file` with one
+    is a combination the classifier never gives. The walk covers it: a release that allows it is larger, and with
+    `widens` false it is dist:widening-unsigned, while one that refuses there what the active one asks about is a
+    tightening and commits on its signature. A policy whose rules name only values in the domain, the complement
+    of the tools it knows, still refuses a reading whose tool is outside the domain, with policy:out-of-domain,
+    before the policy runs."""
     base, unproduced = _net(), _net('-> allow: when tool == "read_file" and net_dest == "other"')
     assert widening.compare_policies(base, unproduced) == LARGER
     asks = _net('-> escalate agent:change-asked: when tool == "read_file" and net_dest == "other"')
-    assert widening.compare_policies(asks, base) == LARGER
-    connects = _net('-> allow: when tool == "connect" and net_dest == "model_api"')
-    assert widening.compare_policies(connects, base) == NOT_LARGER
+    assert widening.compare_policies(asks, base) == NOT_LARGER
     agent.commit(base)
     assert _read(agent, agent.stage(unproduced, 2)).cause == "dist:widening-unsigned"
     other = _dist.AgentPep(tmp_path / "asks")
     other.commit(asks)
-    assert _read(other, other.stage(base, 2)).cause == "dist:widening-unsigned"
+    assert _read(other, other.stage(base, 2)).event == "staged"
+    assert _read(other, other.pep.commit(STREAM, 2, H(base))).event == "committed"
+    known = " and ".join(f'tool != "{tool}"' for tool in profile.KNOWN_CATEGORIES["tool"])
+    complement = Policy(compile_source("---\nname: small\nstart: core_decision\nfield.tool: category\n"
+                                       "field.path_scope: category\n---\n## core_decision\n"
+                                       f"-> allow: when {known}\n"))
+    outside = complement.decide(complement.reading_bytes({"tool": "zzz", "path_scope": "none"}))
+    assert (outside.kind, outside.cause) == ("refuse", "policy:out-of-domain") and not outside.runs
+    inside = complement.decide(complement.reading_bytes({"tool": "read_file", "path_scope": "none"}))
+    assert inside.cause != "policy:out-of-domain"
+    scoped = complement.decide(complement.reading_bytes({"tool": "git", "path_scope": "elsewhere"}))
+    assert scoped.cause == "policy:out-of-domain"
+
+
+def test_case_143_a_renewal_whose_active_release_lapsed_before_its_commit_needs_a_statement(tmp_path):
+    """case_143: C3, V12, W2. A renewal staged on a host and a mesh node with `widens` false and no statement
+    stages against the active release, which then expires before the commit. The commit holds it to the widening
+    rule again against what is active then, nothing, so it goes from no policy to one and is
+    dist:widening-unsigned, nothing goes active, and the renewal stays staged."""
+    for make in (_dist.HostPep, _dist.MeshPep):
+        point = make(tmp_path / make.__name__)
+        point.commit(OLD, 1, expires=_dist.NOW + 100)
+        record = _read(point, point.pep.stage(point.seal(OLD, seq=2, widens=False), OLD))
+        assert record.event == "staged", make.__name__
+        point.clock.now = _dist.NOW + 100
+        assert _read(point, point.pep.tick()).event == "lapsed"
+        assert _read(point, point.pep.commit(STREAM, 2, H(OLD))).cause == "dist:widening-unsigned", make.__name__
+        assert point.pep.active is None and point.pep.staged.seq == 2

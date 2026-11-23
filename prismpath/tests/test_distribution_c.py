@@ -925,3 +925,14 @@ def test_case_139_140_a_first_install_or_a_rollback_that_says_it_does_not_widen_
     lines = _same(host_check, tmp_path / "back", back, statements=False)
     assert [_events(lines[index]) for index in (3, 6, 9)] == [[("committed", None)]] * 3
     assert _events(lines[-1]) == [("refused", "dist:widening-unsigned")] and _records(lines[-1])[0].active_seq == 3
+
+
+def test_case_143_a_renewal_whose_active_release_lapsed_before_its_commit_is_refused_on_the_c_core(host_check, tmp_path):
+    """case_143: C3, V12, W2. A renewal staged with `widens` false and no statement, whose active release then
+    expires, is dist:widening-unsigned at commit on the C core as on the Python machine, and nothing is active."""
+    script = ([("provision", S, N)] + _release_steps(0, 1, [], widens=True, expires=N + 100) + [("commit", S, 1, H[0], N)]
+              + _release_steps(0, 2, replaces=H[0], widens=False) + [("tick", N + 100), ("commit", S, 2, H[0], N + 100)])
+    lines = _same(host_check, tmp_path, script, statements=False)
+    assert _events(lines[4]) == [("staged", None)] and _events(lines[5])[0][0] == "lapsed"
+    last = _records(lines[-1])[-1]
+    assert (last.event, last.cause, last.state) == ("refused", "dist:widening-unsigned", "no-policy")
