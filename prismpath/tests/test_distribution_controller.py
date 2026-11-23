@@ -97,7 +97,8 @@ def test_case_093_a_controller_refuses_to_store_an_envelope_with_a_bad_signature
 def test_case_128_the_controller_reads_meta_in_full_where_every_target_skips_it(tmp_path):
     """case_128: E9, E11, F1, the controller half. The one signed envelope whose counts is an integer, which a
     mesh PEP stages, is refused by the controller serving that mesh stream."""
-    loose = next(case for case in GEN.build()["cases"] if case["name"].startswith("128_counts_an_integer_where_meta_is_skipped"))
+    corpus = json.loads((_dist.REPO / "portable" / "conformance" / "distribution.json").read_text(encoding="utf-8"))
+    loose = next(case for case in corpus["cases"] if case["name"].startswith("128_counts_an_integer_where_meta_is_skipped"))
     assert loose["expect"]["cause"] is None and loose["pep"]["kind"] == "mesh"
     controller = Controller(str(tmp_path / "controller"), _dist.instance_key("C"), clock=lambda: loose["now"])
     anchor = trust_module.anchor_bytes([GEN.public_raw(GEN.test_key(name)) for name in ("A", "B")],
