@@ -303,6 +303,35 @@ def _first_allows(policy, reading: Dict[str, Any]) -> bool:
         return True
 
 
+def kind_of(policy, reading: Dict[str, Any]) -> str:
+    """The kind `Policy.decide` gives `reading`, `allow`, `refuse` or `escalate`, by the reference's two steps
+    (`core_reference._python_verdict`): the system boundary, then the first deterministic rule that holds, found
+    as `engine.first_deterministic` finds it but with each condition parsed once (`_holds`), and the policy check
+    left out, which does not change a verdict. A reading the session fields are missing from is given them at
+    their most restrictive, as `Policy.reading_bytes` does. The widening comparator walks a whole domain with
+    it, and `prismpath/tests/test_distribution_widening.py` holds it to `Policy.decide`."""
+    from prismpath.agent import session_state
+    from prismpath.agent.policy import target_decision
+    from prismpath.kernel import field_definitions, predicates
+    if policy.stateful and not all(name in reading for name in session_state.FIELDS):
+        reading = {**session_state.RESTRICTIVE, **reading}
+    try:
+        if field_definitions.system_boundary(policy.graph, reading) is not None:
+            return "refuse"
+        for target, condition in policy.graph.nodes[policy.graph.start].edges:
+            if not predicates.is_deterministic(condition):
+                continue
+            try:
+                if _holds(condition, reading):
+                    decision = target_decision(target)
+                    return decision[0] if decision is not None else "refuse"
+            except predicates.PredicateError:
+                pass
+    except Exception:  # noqa: BLE001 - the reference refuses a reading it cannot decide
+        return "refuse"
+    return "refuse"
+
+
 def _unproduced(names: List[str], combo) -> bool:
     """True when a combination of value groups is one the classifier never gives (`CLASSIFIER_ONLY`)."""
     groups = dict(zip(names, combo))
@@ -311,6 +340,37 @@ def _unproduced(names: List[str], combo) -> bool:
                 and not any(value in groups[gate] for value in values):
             return True
     return False
+
+
+def domain_classes(docs, read_also: Tuple[str, ...] = ()):
+    """The finite reading domain of one or more policy documents over the same fields, as value classes:
+    `(names, constant, groups)`. `names` are the fields some rule of some document reads (and `read_also`),
+    `constant` gives every other field its first value, and `groups[i]` are the classes of `names[i]`, grouped
+    so that every atom any of the documents has on that field is true of all of a class or of none (see
+    `_classes`). A first rule that holds is then a function of the classes, so each document decides a
+    combination of classes as one, by its first values, and `_unproduced` names the combinations the
+    classifier never gives. Raises ProfileError when a field has no finite domain. `needs_all` walks it for one
+    image, and the widening comparator (`prismpath.distribution.widening`) for two."""
+    fields = docs[0]["fields"]
+    domains = {name: _domain(name, text) for name, text in sorted(fields.items())}
+    atoms: Dict[str, List[list]] = {name: [] for name in fields}
+    understood = True
+    read = set(read_also)
+    for doc in docs:
+        for rule in doc["rules"]:
+            found: List[list] = []
+            understood = _atoms(rule["when"], found) and understood
+            for atom in found:
+                if atom[1] in atoms:
+                    atoms[atom[1]].append(atom)
+            read |= _names_read(rule["when"], fields)
+    names = sorted(read)
+    constant = {name: values[0] for name, values in domains.items() if name not in read}
+    groups = [_classes(domains[n], atoms[n]) if understood else [[v] for v in domains[n]] for n in names]
+    return names, constant, groups
+
+
+unproduced = _unproduced          # the classifier's impossible combinations, for a walk of `domain_classes`
 
 
 def needs(policy) -> Tuple[bool, bool, bool]:
@@ -327,23 +387,7 @@ def needs_all(policy, read_also: Tuple[str, ...] = ()) -> Tuple[bool, bool, bool
     when it is allowed, every value of the group is allowed alike, and the need of each reading of the group
     (a product of its members) is counted. A group whose readings need nothing not already found is not
     decided at all, since its answer could not change the result."""
-    doc = policy.doc
-    fields = doc["fields"]
-    domains = {name: _domain(name, text) for name, text in sorted(fields.items())}
-    atoms: Dict[str, List[list]] = {name: [] for name in fields}
-    understood = True
-    for rule in doc["rules"]:
-        found: List[list] = []
-        understood = _atoms(rule["when"], found) and understood
-        for atom in found:
-            if atom[1] in atoms:
-                atoms[atom[1]].append(atom)
-    read = set(read_also)
-    for rule in doc["rules"]:
-        read |= _names_read(rule["when"], fields)
-    names = sorted(read)
-    constant = {name: values[0] for name, values in domains.items() if name not in read}
-    groups = [_classes(domains[n], atoms[n]) if understood else [[v] for v in domains[n]] for n in names]
+    names, constant, groups = domain_classes([policy.doc], read_also)
     found = [False] * 5
     for combo in itertools.product(*groups):
         if _unproduced(names, combo):
