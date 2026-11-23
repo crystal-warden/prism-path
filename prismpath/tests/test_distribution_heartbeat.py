@@ -158,3 +158,16 @@ def test_a_pep_with_no_policy_core_sends_an_empty_body(tmp_path):
     point.commit(_dist.image(5))
     point.pep.decide(lambda: True, {"x": 6})
     assert state_record.read(point.pep.record("beat"), point.key.public_raw).body == b""
+
+
+def test_a_body_at_another_tier_than_band_is_codebook_mismatch(agents):
+    """H5: the body is a band tier stream. One whose preamble names the signature or the refinement tier, with the
+    expected policy and layout hashes, is wire:codebook-mismatch."""
+    point = agents.pep("a1")
+    member = agents.release(point, DEFAULT)
+    good = heartbeat.body(DEFAULT, _readings(DEFAULT, 2))
+    for tier in (2, 3):
+        other = good[:5] + bytes([tier]) + good[6:]
+        assert heartbeat.check(DEFAULT, other) == "wire:codebook-mismatch"
+        assert agents.controller.receive(agents.record(point, body=other)) == "wire:codebook-mismatch"
+    assert agents.controller.receive(agents.record(point)) is None and member.findings == {}

@@ -57,7 +57,7 @@ def check(image: Optional[bytes], data: bytes) -> Optional[str]:
     """H6 steps 4 and 5 for a record whose header named the expected policy: the body's preamble carries the
     policy hash and layout hash the controller computes from that policy (`fleet:policy-mismatch`), and the body
     decodes under it (`wire:codebook-mismatch`). None for an empty body or one that decodes."""
-    from prismpath.telemetry.spiral_groups import MAGIC, StreamMismatch
+    from prismpath.telemetry.spiral_groups import MAGIC, TIER_BAND, StreamMismatch
     if not data:
         return None
     if image is None:
@@ -65,6 +65,8 @@ def check(image: Optional[bytes], data: bytes) -> Optional[str]:
     codec = facet(image)
     if len(data) >= 38 and data[:4] == MAGIC and (data[6:22] != codec.policy_hash or data[22:38] != codec.layout_hash):
         return POLICY_MISMATCH                         # step 4, from the hashes and before any decode
+    if len(data) < 6 or data[5] != TIER_BAND:
+        return CODEBOOK_MISMATCH                       # H5: a band tier stream and no other
     try:
         codec.decode(bytes(data))
     except StreamMismatch:
