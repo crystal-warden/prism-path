@@ -21,9 +21,9 @@ Its directory:
     audit.log        the controller's audit log
     lock             held while a command or a request reads or changes the state
 
-H6 steps 4 and 5 read the Facet body of a record. Every PEP of this version sends an empty body (H5 names
-the grouped spiral profile, which the heartbeat body PR adds), so a record with a body is held to the hash
-steps only and the decode joins with that body.
+H6 steps 4 and 5 read the Facet body of a record (`heartbeat.check`): its preamble must carry the hashes of
+the policy the header names, and it must decode under that policy. A body is checked only after the header's
+hashes matched, so a PEP on another policy is filed from the hashes and never from a failed decode.
 """
 from __future__ import annotations
 
@@ -39,7 +39,7 @@ from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 
 from prismpath import canon
 from prismpath.distribution import envelope as env
-from prismpath.distribution import frames, kinds, state_record, widening
+from prismpath.distribution import frames, heartbeat, kinds, state_record, widening
 from prismpath.distribution.kinds import Refused
 from prismpath.distribution.trust import TrustStore, check_drops, read_anchor
 from prismpath.distribution.verify import PepView, verify
@@ -695,11 +695,26 @@ class Controller:
             self._clear(member, HELD)
         self._progress(member, record)
         reported = (_hex(record.active_policy), _hex(record.active_release), record.active_seq)
-        if reported in self._allowed(member):                             # step 3
-            self._clear(member, POLICY_MISMATCH)
-            return None
-        return self._file(member, POLICY_MISMATCH, f"reports seq {record.active_seq} policy {reported[0]}, "
-                                                   f"expected seq {member.expected[2]} policy {_prefix(member.expected[0])}")
+        if reported not in self._allowed(member):                         # step 3
+            return self._file(member, POLICY_MISMATCH, f"reports seq {record.active_seq} policy {reported[0]}, "
+                                                       f"expected seq {member.expected[2]} policy {_prefix(member.expected[0])}")
+        if record.body:                                                   # steps 4 and 5 (H5)
+            cause = heartbeat.check(self._image(reported[0]), record.body)
+            if cause == POLICY_MISMATCH:
+                return self._file(member, cause, "the Facet body's preamble names another policy or layout")
+            if cause is not None:
+                return self._file(member, cause, "the Facet body does not decode under the policy it names")
+            member.last["decisions"] = len(heartbeat.decode(self._image(reported[0]), record.body))
+        self._clear(member, POLICY_MISMATCH)
+        self._clear(member, heartbeat.CODEBOOK_MISMATCH)
+        return None
+
+    def _image(self, policy_prefix: str) -> Optional[bytes]:
+        """The stored `policy.core` image whose policy hash starts with `policy_prefix`, or None."""
+        for info in self.stored.values():
+            if info["artifact"] == "policy.core" and info["policy"][:32] == policy_prefix:
+                return self.blob(info["body_sha256"])
+        return None
 
     def _allowed(self, member: Member) -> List[Tuple[str, str, int]]:
         """Step 3: the expected policy, release and `seq`, as prefixes. While the member's rollout is committing,

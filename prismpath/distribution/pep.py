@@ -32,11 +32,12 @@ from __future__ import annotations
 
 import os
 import time as _time
+from collections import deque
 from dataclasses import dataclass, field, replace
 from typing import Any, Callable, Dict, FrozenSet, Iterable, Optional, Tuple
 
 from prismpath import canon
-from prismpath.distribution import devbuild, kinds, state_record, widening
+from prismpath.distribution import devbuild, heartbeat, kinds, state_record, widening
 from prismpath.distribution.adapters import LARGER, NOT_LARGER
 from prismpath.distribution import envelope as env
 from prismpath.distribution.kinds import Refused
@@ -194,6 +195,7 @@ class Pep:
         self.monotonic = monotonic
         self.due: Optional[Tuple[str, int, str, float]] = None      # B8: a commit with a delay, and when it falls
         self.outbox: list = []
+        self.recent: deque = deque(maxlen=heartbeat.MAX_FRAMES)    # H5: the readings decided since the last record
         self._load()
         self._check_setting()
         self._check_separation(self.trust)
@@ -374,6 +376,9 @@ class Pep:
         if self.provisioned:
             self.store.write("counter.json", _COUNTER, {"counter": self.counter})
         active, staged = self.active, self.staged
+        image = active.bodies.get("policy.core") if active is not None and self.state() == "active" else None
+        body = heartbeat.body(image, self.recent) if image is not None else b""
+        self.recent.clear()
         record = state_record.StateRecord(
             event=event, state=self.state(), cause=cause, pep_id=state_record.pep_id(self.instance_key.public_raw),
             counter=self.counter, time=self.time(), epoch=self.epoch,
@@ -383,7 +388,7 @@ class Pep:
             active_seq=active.seq if active else 0, floor=self.reported_floor(),
             staged_release=state_record.prefix(staged.release if staged else None),
             staged_seq=staged.seq if staged else 0, trust_seq=self.trust.trust_seq if self.trust.readable else 0,
-            staged=staged is not None, dev_build=devbuild.is_dev_build(), held=self.held)
+            staged=staged is not None, dev_build=devbuild.is_dev_build(), held=self.held, body=body)
         signed = state_record.build(record, self.instance_key)
         self.outbox.append(signed)
         return signed
@@ -719,15 +724,26 @@ class Pep:
         """X7: `held` on every receipt written while the PEP holds an expired release, else None."""
         return "held" if self.held else None
 
-    def decide(self, under_release: Callable[[], Any]) -> dict:
+    def decide(self, under_release: Callable[[], Any], reading: Optional[Dict[str, Any]] = None) -> dict:
         """One decision through the PEP, after the expiry check (X1). With no active release, or locked, it is
         refused with the cause of X3 and `under_release` is not called. Otherwise its answer is the decision,
-        and the receipt carries the hold mark while the PEP is held (X7)."""
+        and the receipt carries the hold mark while the PEP is held (X7). The adapter hands the `reading` it
+        decided, which the next state record carries in its Facet body when the active release has a
+        `policy.core` (H5). A reading the Facet codec refuses is decided and not carried."""
         self._check_active()
         cause = self.refusal()
         if cause is not None:
             return {"decision": None, "cause": cause, "mark": None}
-        return {"decision": under_release(), "cause": None, "mark": self.receipt_mark()}
+        decision = under_release()
+        image = self.active.bodies.get("policy.core") if reading is not None else None
+        if image is not None:
+            from prismpath.telemetry.spiral_groups import TIER_BAND
+            try:
+                heartbeat.facet(image).encode_reading(reading, TIER_BAND)
+                self.recent.append(dict(reading))
+            except (ValueError, KeyError, TypeError):
+                pass
+        return {"decision": decision, "cause": None, "mark": self.receipt_mark()}
 
     # ------------------------------------------------------------------ RB1, RB2, X9: rollback
     def rollback(self) -> bytes:
