@@ -13,6 +13,12 @@ on (I1). The C core has only `mesh` and `cfs`, so a case on `host` is replayed b
 is the trust store document, or null for a store that cannot be read. `expect` is what the Python verifier
 decides, and the generator also asserts that it is the cause the spec gives, so the file never freezes a
 wrong verdict. `release_ids` holds the release id vectors of E10.
+
+`frames` holds the frame binding's cases (B6, B7, B9, B10) for a PEP that assembles a transfer from frames:
+`{case, name, runs_on, trust, pep, now, limit, ordered, steps, expect}`, where each step is `{at, frame}`, the
+receiver's monotonic time in milliseconds and one frame's bytes, and `expect` lists each event the receiver
+reports, `{step, event, transfer}` with the cause of a drop and the hashes of what was assembled. The sealed
+envelope is admitted through V8 by the verifier under `trust`, `pep` and `now`.
 """
 from __future__ import annotations
 
@@ -30,6 +36,7 @@ sys.path.insert(0, str(REPO))
 
 from prismpath import canon  # noqa: E402
 from prismpath.distribution import envelope as env  # noqa: E402
+from prismpath.distribution import frames as framing  # noqa: E402
 from prismpath.distribution import verify as verifier  # noqa: E402
 from prismpath.distribution.trust import TrustStore  # noqa: E402
 from prismpath.hotswap import policy_pack as pp  # noqa: E402
@@ -134,6 +141,105 @@ def replay(case: dict) -> dict:
                               now=case["now"])
     return {"cause": verdict.cause, "unchanged": verdict.unchanged, "time_floor": verdict.time_floor,
             "envelope_id": verdict.envelope.envelope_id if verdict.envelope is not None else None}
+
+
+def replay_frames(entry: dict) -> List[dict]:
+    """The events a Python receiver reports for one frame case, in its `expect` form."""
+    view, trust = pep_from_document(entry["pep"]), trust_from_document(entry["trust"])
+    at = {"now": 0}
+    assembler = framing.Assembler(
+        framing.admit_through_v8(lambda sealed: verifier.verify_envelope(sealed, trust=trust, pep=view, now=entry["now"])),
+        clock=lambda: at["now"] / 1000.0, ordered=entry["ordered"], limit=entry["limit"],
+        artifact_bound=min(view.body_bound, verifier.kinds.TARGETS[view.kind].body_bound))
+    events = []
+    for index, step in enumerate(entry["steps"]):
+        at["now"] = step["at"]
+        event = assembler.receive(bytes.fromhex(step["frame"]))
+        if isinstance(event, framing.Assembled):
+            events.append({"step": index, "event": "assembled", "transfer": event.transfer,
+                           "sealed_sha256": canon.sha256_hex(event.sealed), "body_sha256": canon.sha256_hex(event.body)})
+        elif isinstance(event, framing.Dropped):
+            events.append({"step": index, "event": "dropped", "transfer": event.transfer, "cause": event.cause})
+    return events
+
+
+def build_frames(spec: Dict[int, dict], cases: List[dict]) -> List[dict]:
+    """The frame cases, on the mesh round trip release, each frame at most `limit` bytes so a part takes
+    several chunks."""
+    import random
+    base = next(case for case in cases if case["name"] == "001_round_trip_on_mesh")
+    sealed, body = bytes.fromhex(base["sealed"]), bytes.fromhex(base["body"])
+    limit, transfer = 64, 7
+    whole = list(framing.frames_for(transfer, sealed, body, limit))
+    offer, chunks = whole[0], whole[1:]
+    out = []
+
+    def add(number, name, sequence, expect_last, *, ordered=False):
+        steps = [{"at": at, "frame": data.hex()} for at, data in sequence]
+        entry = {"case": number, "name": f"{number:03d}_{name}", "runs_on": spec[number]["runs_on"],
+                 "trust": base["trust"], "pep": base["pep"], "now": base["now"], "limit": limit, "ordered": ordered,
+                 "steps": steps}
+        entry["expect"] = replay_frames(entry)
+        assert entry["expect"] and {key: entry["expect"][-1][key] for key in expect_last} == expect_last, (
+            name, entry["expect"])
+        out.append(entry)
+
+    def at_zero(sequence):
+        return [(0, data) for data in sequence]
+
+    assembled = {"event": "assembled", "sealed_sha256": canon.sha256_hex(sealed), "body_sha256": canon.sha256_hex(body)}
+    shuffled = chunks * 2
+    random.Random(35).shuffle(shuffled)
+    add(35, "chunks_out_of_order_and_repeated", at_zero([offer] + shuffled + chunks), assembled)
+
+    invalid = {"event": "dropped", "cause": "dist:frame-invalid"}
+    past = framing.encode(framing.Chunk(transfer, framing.SEALED, len(sealed) - 2, b"xyz"), limit)
+    add(36, "chunk_past_the_offered_length", at_zero([offer, past]), invalid)
+    add(36, "chunk_with_no_offer", at_zero(chunks[:1]), invalid)
+    tampered = bytearray(sealed)
+    tampered[-1] ^= 1
+    add(36, "sealed_part_with_another_id", at_zero([offer] + list(framing.frames_for(transfer, bytes(tampered), body,
+                                                                                     limit))[1:]), invalid)
+    bad_body = body[:-1] + bytes([body[-1] ^ 1])
+    add(36, "body_with_a_wrong_hash", at_zero([offer] + list(framing.frames_for(transfer, sealed, bad_body, limit))[1:]),
+        invalid)
+
+    add(37, "incomplete_for_5_seconds_then_sent_whole",
+        at_zero(whole[:-1]) + [(5001, whole[-1])] + [(6001, data) for data in whole], assembled)
+
+    prefix = framing.hash_prefix(env.envelope_id(env.unseal(sealed)[0]))
+    add(120, "frame_sealed_offered_at_2441_bytes",
+        at_zero([framing.encode(framing.Offer(transfer, prefix, env.MAX_SEALED + 1, len(body)), limit)]), invalid)
+    add(120, "frame_body_offered_past_both_bounds",
+        at_zero([framing.encode(framing.Offer(transfer, prefix, len(sealed), 16385), limit)]),
+        {"event": "dropped", "cause": "dist:too-large"})
+    add(120, "frame_body_longer_than_its_body_size",
+        at_zero([framing.encode(framing.Offer(transfer, prefix, len(sealed), len(body) + 1), limit)] + chunks), invalid)
+    entries = env.unseal(sealed)[1]
+    forged = env.seal_entries(env.unseal(sealed)[0], [(entries[0][0], bytes(64))])
+    forged_frames = list(framing.frames_for(transfer, forged, body, limit))
+    sealed_only = [data for data in forged_frames[1:] if framing.decode(data, limit).part == framing.SEALED]
+    add(120, "frame_body_never_read_for_a_bad_signature", at_zero(forged_frames[:1] + sealed_only),
+        {"event": "dropped", "cause": "sig:invalid"})
+
+    rng = random.Random(121)
+    relayed = []
+    for _ in range(3):
+        for data in whole:
+            roll = rng.random()
+            if roll < 0.2:
+                continue
+            if roll < 0.4:
+                relayed += [data, data]
+            elif roll < 0.6:
+                relayed.append(data[:-1] + bytes([data[-1] ^ 0xFF]))
+            else:
+                relayed.append(data)
+    add(121, "relay_drops_repeats_and_corrupts_then_passes", at_zero(relayed + whole), assembled)
+    entry = out[-1]
+    assert sum(1 for event in entry["expect"] if event["event"] == "assembled") == 1
+    assert entry["expect"][-1]["step"] >= len(relayed)
+    return out
 
 
 def build_cases(kind: str, spec: Dict[int, dict]) -> List[dict]:
@@ -449,7 +555,7 @@ def build() -> dict:
             "note": "Each case is bytes in and the Python verifier's result out. Every implementation named in "
                     "runs_on replays it and must report exactly the expected cause, unchanged flag, time floor "
                     "and envelope id. Keys come from fixed seeds (gen_distribution_corpus.test_key).",
-            "cases": cases, "release_ids": release_ids}
+            "cases": cases, "release_ids": release_ids, "frames": build_frames(spec, cases)}
 
 
 def main() -> int:

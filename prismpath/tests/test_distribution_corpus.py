@@ -38,6 +38,13 @@ def test_every_python_case_replays_to_its_recorded_result(case):
     assert GEN.replay(case) == case["expect"]
 
 
+@pytest.mark.parametrize("entry", CORPUS["frames"], ids=[entry["name"] for entry in CORPUS["frames"]])
+def test_every_frame_case_replays_to_its_recorded_events(entry):
+    """The frame binding's cases (B6, B7, B9, B10), which the C core replays on a mesh node as well."""
+    assert "P" in entry["runs_on"] and entry["pep"]["kind"] == "mesh"
+    assert GEN.replay_frames(entry) == entry["expect"]
+
+
 def test_the_committed_corpus_is_what_the_reference_writes_and_it_is_byte_stable():
     repo_file("docs", "design", "spec-policy-distribution.md")       # the generator reads each case's row
     first, second = GEN.build(), GEN.build()
@@ -56,3 +63,7 @@ def test_every_case_names_its_inputs_and_one_result():
         assert set(case["expect"]) == {"cause", "unchanged", "time_floor", "envelope_id"}
     for vector in CORPUS["release_ids"]:
         assert set(vector) == {"case", "name", "runs_on", "artifacts", "release"}
+    for entry in CORPUS["frames"]:
+        assert set(entry) == {"case", "name", "runs_on", "trust", "pep", "now", "limit", "ordered", "steps", "expect"}
+        assert {entry["case"] for entry in CORPUS["frames"]} == {35, 36, 37, 120, 121}
+        assert all(set(step) == {"at", "frame"} for step in entry["steps"])
