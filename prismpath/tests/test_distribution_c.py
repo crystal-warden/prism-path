@@ -746,14 +746,21 @@ def test_case_082_a_node_never_provisioned_takes_no_rotation(host_check):
 def test_a_rotation_into_a_full_store_holds_the_new_key_as_the_python_machine_does(host_check, tmp_path):
     """K5 at its bound. With 8 keys that count and 16 retired held, a rotation that adds a key and retires one
     forgets the oldest retired key and its slot before the new key is held, so the C core keeps the new key as the
-    Python machine does and a pack signed by it is staged on both."""
+    Python machine does and a pack signed by it is staged on both. A pack signed by the first retired key, now
+    forgotten, is dist:unknown-key, and one signed by the key the last rotation retired is sig:revoked-key."""
     live = ["B", "C", "D", "E", "F", "G", "H"]
     script = [("provision", S, N, ("A", *live))]
+    retired = []
     for seq in range(1, 18):                                          # 16 to fill the retired ids, then one more
         name = f"K{seq}"
-        script.append(_rotate(seq, N, name, retire=live.pop(0), signers=("A", name)))
+        retired.append(live.pop(0))
+        script.append(_rotate(seq, N, name, retire=retired[-1], signers=("A", name)))
         live.append(name)
-    script.append(("stage", _sealed(0, 1, signer="K17"), BODIES[0].hex(), N))
+    script += [("stage", _sealed(0, 1, signer="K17"), BODIES[0].hex(), N),
+               ("stage", _sealed(1, 2, signer=retired[0]), BODIES[1].hex(), N),      # forgotten at the seventeenth
+               ("stage", _sealed(1, 2, signer=retired[-1]), BODIES[1].hex(), N)]     # retired by the seventeenth
     lines = _same(host_check, tmp_path, script)
     assert all(_events(line) == [("trust-applied", None)] for line in lines[1:18])
     assert _events(lines[18]) == [("staged", None)]
+    assert _events(lines[19]) == [("refused", "dist:unknown-key")]
+    assert _events(lines[20]) == [("refused", "sig:revoked-key")]
