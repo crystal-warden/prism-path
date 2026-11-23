@@ -73,6 +73,7 @@ class HttpTransport:
         self.host, self.port, self.timeout = parts.hostname, parts.port or 80, timeout
         self.etag: Optional[str] = None
         self.reads = 0                              # bytes read from answers, for the bound of B9
+        self.blob_reads = 0                         # of which from blobs
 
     def _get(self, path: str, bound: int, headers: Optional[dict] = None, timeout: Optional[float] = None):
         connection = http.client.HTTPConnection(self.host, self.port, timeout=timeout or self.timeout)
@@ -106,7 +107,9 @@ class HttpTransport:
         return answer
 
     def blob(self, name: str, bound: int) -> bytes:
-        return self._get(f"{PREFIX}/blob/{name}", bound)[1]
+        data = self._get(f"{PREFIX}/blob/{name}", bound)[1]
+        self.blob_reads += len(data)
+        return data
 
     def post(self, record: bytes) -> None:
         connection = http.client.HTTPConnection(self.host, self.port, timeout=self.timeout)
@@ -226,7 +229,8 @@ class PullClient:
         try:
             contained = env.envelope_id(env.unseal(sealed)[0])
         except Refused:
-            contained = None
+            pep.stage(sealed, b"")                  # a container that does not read: the verifier's V2 cause
+            return
         if contained != envelope_id:
             pep.refuse_fetched(BODY_MISMATCH, envelope_id)                # B4
             return
