@@ -484,7 +484,10 @@ order is refuse, then escalate, then allow, and a release is larger when any rea
 domain moves up that order, or when the two policies do not have the same fields. For `egress.hosts` and
 for the address set of `net.dests`, larger means not a subset. For `gateway.routes` any change is larger,
 because a path that loses its route reads as another class. For `agent.zones`, larger means a protected
-name is gone, and a release that drops the artifact drops every name. Going from no policy to any policy is larger.
+name is gone, and a release that drops the artifact drops every name. A `policy.ppt` image has no order.
+The table format gives its nodes no meaning (the substrate does), so nothing in the image says which
+outcome is the more permissive one, and any change of the image is larger. A `cfs.table` is ordered by
+the core image inside it, as a `policy.core` is, and any other change of the table is larger. Going from no policy to any policy is larger.
 
 **W1.** A PEP that can decide (section 3) computes whether the staged release is larger than the active
 one. It does not trust `widens` for that.
@@ -514,7 +517,10 @@ purpose and what the audit log records.
 with `dist:widening-unsigned` even when a statement is present, because the signer's claim is wrong.
 
 **W7.** A controller checks W1 itself before it offers a release to a target that cannot decide, and
-refuses to offer one whose `widens` is `false` and which it computes as larger.
+refuses to offer one whose `widens` is `false` and which it computes as larger. It compares the release
+with the one it holds whose policy hash is `replaces`, and a `replaces` it holds no release for is
+treated as larger. The sealing tool applies the same test when it sets `widens`, so for a `mesh` or a
+`host` table `widens` is `false` only on a renewal.
 
 ## 10. Revocation
 
@@ -1029,3 +1035,4 @@ reports exactly the cause given, or none, and its state after is the one given.
 | 133 | A PEP one trust statement behind is offered that statement and a release, refuses the statement, then takes it and the release | only the statement is offered first, the refusal is filed against the statement and the rollout is unmoved, then the release is offered and commits | F6 | P |
 | 134 | A revocation whose `targets` names only `mesh` is sent to a `host` PEP and a `mesh` PEP, then a rotation naming every kind | applied on both, and both then take the rotation at the next trust sequence | V5, R1 | P R C |
 | 135 | A widening statement whose `from` holds 64 hashes, and one with 65 | staged, `dist:too-large` | W4 | P R C |
+| 136 | The sealing tool and a controller are given a `mesh` release whose table differs from the one it replaces by one constant, with `widens` false, then the same table again with a later `expires`, then a `cfs` table whose core image allows less and one whose core image is the same and whose rules differ | the tool writes `widens` true and the controller refuses the false one, the renewal is offered with `widens` false, the narrower `cfs` table is not larger, and the last is larger | W7, W1 | P |
