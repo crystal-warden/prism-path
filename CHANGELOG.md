@@ -8,6 +8,14 @@ spec stable.
 
 ## [Unreleased]
 
+### Added: signed state records with a Facet body, and a fleet view that finds a wrong policy by its hash (2026-11-22)
+
+- **A PEP whose active release has a `policy.core` puts the decisions it made since its last record, at most 64, in the record's body as a grouped Facet stream of that policy at the band tier.** The stream's preamble names the policy and its layout. A record with no decision in it still carries the preamble. A commit, a rollback or a lapse to another policy drops the decisions the old one made, so no decision is reported under a policy that did not make it.
+- **The fleet view marks a rollout of a release that says it widens as larger by comparison or larger by rule.** Larger by rule is a table a host or a mesh node counts as larger only because it changed, so a widening the owner pushed stands out.
+- **The controller finds a PEP on another policy from the hashes in the record's header, before it reads any body.** A body built from another policy is `fleet:policy-mismatch`, and one that does not decode under the policy it names is `wire:codebook-mismatch`.
+- **A host, a mesh node and the cFS app send no body, since their releases carry no flow text.**
+- **A record with 64 decisions in it is about 310 bytes on the shipped agent policies, against 212 bytes with no body.**
+
 ### Added: a release that allows more needs the owner's signed widening statement (2026-11-22)
 
 - **An enforcement point stages a release that allows more than its active one only with a `trust.widening` statement of the same release, staged before it, whose `from` is empty or holds the active policy hash.** Otherwise the release is `dist:widening-unsigned`, at staging and again at commit. A first install allows more than no policy, so it needs one too.

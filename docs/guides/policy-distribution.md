@@ -148,7 +148,11 @@ For each PEP it shows the policy and `seq` the controller expects, the ones the 
 open findings. The controller checks every state record in the order of H6. A record that does not verify
 under the enrolled key is `fleet:state-invalid`. A counter that did not rise, or an epoch older than the one
 before the current, is `fleet:state-replay`. A policy other than the expected one is
-`fleet:policy-mismatch`. Three intervals with no record is `fleet:silent`. A refusal is filed under the
+`fleet:policy-mismatch`, found from the hashes the record's header carries. A PEP whose active release has a
+`policy.core` also sends the decisions it made since its last record, at most 64, as a Facet stream of that
+policy (H5). The stream's preamble names the policy and its layout, so a body built from another policy is
+`fleet:policy-mismatch` too, and a body that does not decode under the policy it names is
+`wire:codebook-mismatch`. Three intervals with no record is `fleet:silent`. A refusal is filed under the
 cause the PEP gave. Each finding stays open until a later record clears it (F4). The same view is served at
 `GET /dist/v1/fleet`, and its field names follow the OPA status API where they fit.
 
@@ -182,8 +186,8 @@ The controller offers the trust statements a PEP lacks before any release, and i
 
 ## 8. What this version does not do
 
-The controller reads the hashes of a state record and not yet its Facet body, since every PEP of this
-version sends an empty one (H5). A rollback with `prismpath dist pep rollback` follows RB1 to RB3, so on a
+A host, a mesh node and the cFS app send a state record with no Facet body, since their releases carry no
+flow text to build one from (H5). A rollback with `prismpath dist pep rollback` follows RB1 to RB3, so on a
 host, which cannot decide whether a policy allows more, it needs a widening statement that covers it. The
 mesh and the cFS app use the frame binding of section 8.3, which the controller drives as a broadcast to
 the whole group.

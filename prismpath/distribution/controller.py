@@ -21,9 +21,9 @@ Its directory:
     audit.log        the controller's audit log
     lock             held while a command or a request reads or changes the state
 
-H6 steps 4 and 5 read the Facet body of a record. Every PEP of this version sends an empty body (H5 names
-the grouped spiral profile, which the heartbeat body PR adds), so a record with a body is held to the hash
-steps only and the decode joins with that body.
+H6 steps 4 and 5 read the Facet body of a record (`heartbeat.check`): its preamble must carry the hashes of
+the policy the header names, and it must decode under that policy. A body is checked only after the header's
+hashes matched, so a PEP on another policy is filed from the hashes and never from a failed decode.
 """
 from __future__ import annotations
 
@@ -39,7 +39,7 @@ from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 
 from prismpath import canon
 from prismpath.distribution import envelope as env
-from prismpath.distribution import frames, kinds, state_record, widening
+from prismpath.distribution import frames, heartbeat, kinds, state_record, widening
 from prismpath.distribution.kinds import Refused
 from prismpath.distribution.trust import TrustStore, check_drops, read_anchor
 from prismpath.distribution.verify import PepView, verify
@@ -201,6 +201,10 @@ class Member:
                    findings=dict(doc["findings"]))
 
 
+LARGER_BY_RULE, LARGER_BY_COMPARISON = "larger by rule", "larger by comparison"
+BY_RULE = frozenset({"policy.ppt", "gateway.routes"})             # 9.4: any change of these is larger
+
+
 @dataclass
 class Rollout:
     """F3: one release to one group. `members` maps a PEP id to offered, staged, refused, committed or aborted."""
@@ -218,12 +222,13 @@ class Rollout:
     acks: Dict[str, int] = field(default_factory=dict)             # staged acks per member, one per envelope
     committing_since: float = 0.0
     delay_ms: int = 0
+    widening: str = ""                                             # LARGER_BY_RULE, LARGER_BY_COMPARISON or ""
 
     def document(self) -> dict:
         return {"group": self.group, "rule": self.rule, "stream": self.stream, "seq": self.seq, "policy": self.policy,
                 "release": self.release, "envelopes": list(self.envelopes), "state": self.state,
                 "started": self.started, "members": dict(self.members), "previous": dict(self.previous), "acks": dict(self.acks),
-                "committing_since": self.committing_since, "delay_ms": self.delay_ms}
+                "committing_since": self.committing_since, "delay_ms": self.delay_ms, "widening": self.widening}
 
     @classmethod
     def from_document(cls, doc: dict) -> "Rollout":
@@ -487,30 +492,57 @@ class Controller:
                 self._end(rollout, ABORTED, send_abort=not same)
         rollout = Rollout(group=group, rule=self.groups[group], stream=stream, seq=seq, policy=policy, release=release,
                           envelopes=ids, state=OFFERED, started=self.clock(), members={pep: OFFERED for pep in members},
-                          previous={pep: list(self.members[pep].expected) for pep in members}, delay_ms=delay_ms)
+                          previous={pep: list(self.members[pep].expected) for pep in members}, delay_ms=delay_ms,
+                          widening=self._widening(ids))
         self.rollouts.append(rollout)
         for pep in members:
             self._log("offered", pep=pep, group=group, stream=stream, seq=seq, envelopes=ids)
         return rollout
 
-    def _widens_unsaid(self, ids: List[str]) -> Optional[str]:
-        """W7: the release of `ids` says it does not widen, and it is compared with the release the controller
-        holds whose policy hash is its `replaces`. A `replaces` it holds nothing for is larger. The cause when
-        the release is larger with `widens` false, else None."""
+    def _releases(self, ids: List[str]):
+        """The artifact envelopes of `ids` and the release the controller holds whose policy hash is their
+        `replaces`, as {artifact: body}, or None when it holds none."""
         envelopes = [env.read(env.unseal(self.sealed(one))[0]) for one in ids]
         releases = [one for one in envelopes if one.artifact not in kinds.TRUST_ARTIFACTS]
-        if not releases or releases[0].widens:
-            return None
+        if not releases:
+            return releases, None
         first = releases[0]
-        staged = {one.artifact: self.blob(one.body_sha256) for one in releases}
         held = [info for info in self.stored.values() if first.replaces and info["policy"] == first.replaces
                 and info["stream"] == first.stream and info["seq"] < first.seq
                 and info["artifact"] not in kinds.TRUST_ARTIFACTS]
         if not held:
-            return widening.UNSIGNED
+            return releases, None
         latest = max(info["seq"] for info in held)
-        active = {info["artifact"]: self.blob(info["body_sha256"]) for info in held if info["seq"] == latest}
+        return releases, {info["artifact"]: self.blob(info["body_sha256"]) for info in held if info["seq"] == latest}
+
+    def _widens_unsaid(self, ids: List[str]) -> Optional[str]:
+        """W7: the release of `ids` says it does not widen, and it is compared with the release the controller
+        holds whose policy hash is its `replaces`. A `replaces` it holds nothing for is larger. The cause when
+        the release is larger with `widens` false, else None."""
+        releases, active = self._releases(ids)
+        if not releases or releases[0].widens:
+            return None
+        if active is None:
+            return widening.UNSIGNED
+        staged = {one.artifact: self.blob(one.body_sha256) for one in releases}
         return None if widening.compare_release(active, staged) == widening.NOT_LARGER else widening.UNSIGNED
+
+    def _widening(self, ids: List[str]) -> str:
+        """How a release that says it widens is larger, so the fleet view shows a widening the owner pushed:
+        `larger by comparison` when a comparator with an order (or no release before it) finds it larger, and
+        `larger by rule` when it is larger only because a host or a mesh node counts any change of a table
+        (`BY_RULE`) as larger. Empty for a release that says it does not widen."""
+        releases, active = self._releases(ids)
+        if not releases or not releases[0].widens:
+            return ""
+        if active is None:
+            return LARGER_BY_COMPARISON
+        staged = {one.artifact: self.blob(one.body_sha256) for one in releases}
+        larger = {name for name in sorted(set(active) | set(staged))
+                  if widening.compare_artifact(name, active.get(name), staged.get(name)) != widening.NOT_LARGER}
+        if larger - BY_RULE:
+            return LARGER_BY_COMPARISON
+        return LARGER_BY_RULE if larger else ""
 
     def commit(self, group: str) -> Rollout:
         """The operator's commit: send `commit` to every member of the group's open rollout that staged."""
@@ -695,11 +727,27 @@ class Controller:
             self._clear(member, HELD)
         self._progress(member, record)
         reported = (_hex(record.active_policy), _hex(record.active_release), record.active_seq)
-        if reported in self._allowed(member):                             # step 3
-            self._clear(member, POLICY_MISMATCH)
-            return None
-        return self._file(member, POLICY_MISMATCH, f"reports seq {record.active_seq} policy {reported[0]}, "
-                                                   f"expected seq {member.expected[2]} policy {_prefix(member.expected[0])}")
+        if reported not in self._allowed(member):                         # step 3
+            return self._file(member, POLICY_MISMATCH, f"reports seq {record.active_seq} policy {reported[0]}, "
+                                                       f"expected seq {member.expected[2]} policy {_prefix(member.expected[0])}")
+        member.last["decisions"] = 0                                      # an empty body carries no decision
+        if record.body:                                                   # steps 4 and 5 (H5)
+            cause = heartbeat.check(self._image(reported[0]), record.body)
+            if cause == POLICY_MISMATCH:
+                return self._file(member, cause, "the Facet body's preamble names another policy or layout")
+            if cause is not None:
+                return self._file(member, cause, "the Facet body does not decode under the policy it names")
+            member.last["decisions"] = len(heartbeat.decode(self._image(reported[0]), record.body))
+        self._clear(member, POLICY_MISMATCH)
+        self._clear(member, heartbeat.CODEBOOK_MISMATCH)
+        return None
+
+    def _image(self, policy_prefix: str) -> Optional[bytes]:
+        """The stored `policy.core` image whose policy hash starts with `policy_prefix`, or None."""
+        for info in self.stored.values():
+            if info["artifact"] == "policy.core" and info["policy"][:32] == policy_prefix:
+                return self.blob(info["body_sha256"])
+        return None
 
     def _allowed(self, member: Member) -> List[Tuple[str, str, int]]:
         """Step 3: the expected policy, release and `seq`, as prefixes. While the member's rollout is committing,
