@@ -153,6 +153,7 @@ def test_a_commit_changes_the_hook_and_the_egress_proxy_together(tmp_path, monke
     next connection, and a commit of another policy moves the hook's decision and the gate's at once: the gate's
     run was begun under the old policy, so it refuses rather than deciding under a policy its run does not name."""
     from prismpath.agent import egress, egress_policy
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)    # the hook is given HOME only, so both find one home
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setattr(commands.sys, "platform", "linux")
     home_dir = commands.config_dir()
@@ -389,6 +390,7 @@ def test_zones_answer_protected_and_none_in_a_home_that_follows_a_stream(tmp_pat
 
 def test_the_hook_s_decision_reaches_the_heartbeat(tmp_path, monkeypatch):
     """H5: the hook notes the reading it decided, as the proxies do, so the next state record carries it."""
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)    # the hook is given HOME only, so both find one home
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setattr(commands.sys, "platform", "linux")
     home_dir = commands.config_dir()
