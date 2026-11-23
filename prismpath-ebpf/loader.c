@@ -531,13 +531,20 @@ static void config_set_drop_mask(struct bpf_object *obj, const char *names_path,
  * holds the keys): it verifies the pack, the envelope, the version floor and the signed destination table, and
  * only then runs this loader with PPT_NET_VERIFIED_SHA256 set to the SHA-256 of the exact table it verified.
  * The loader hashes the file it is about to load and refuses unless the two agree, so a table that was not the
- * one verified, or a bare invocation, loads nothing. PPT_NET_ALLOW_UNVERIFIED=1 is the operator's explicit
- * bypass for the observe-only demos and says so on stderr. */
+ * one verified, or a bare invocation, loads nothing. PPT_NET_ALLOW_UNVERIFIED=1 is an escape hatch for the
+ * observe-only demos. It works only in a dev build, the `loader-dev` binary `make dev` compiles with
+ * PPT_DEV_BUILD, and says so on stderr. A production build answers it with dist:hatch-refused and runs the gate
+ * (docs/design/spec-policy-distribution.md, D1, D2). */
 static int net_gate(const char *ppt_path, const char *verb) {
     const char *bypass = getenv("PPT_NET_ALLOW_UNVERIFIED");
     if (bypass && strcmp(bypass, "1") == 0) {
-        fprintf(stderr, "warning: %s loading %s UNVERIFIED (PPT_NET_ALLOW_UNVERIFIED=1)\n", verb, ppt_path);
+#ifdef PPT_DEV_BUILD
+        fprintf(stderr, "warning: %s loading %s UNVERIFIED (PPT_NET_ALLOW_UNVERIFIED=1, dev build)\n", verb, ppt_path);
         return 0;
+#else
+        fprintf(stderr, "error: %s refuses PPT_NET_ALLOW_UNVERIFIED: dist:hatch-refused, the escape hatch works only "
+                        "in a dev build (make dev); the table is checked as without it\n", verb);
+#endif
     }
     const char *want = getenv("PPT_NET_VERIFIED_SHA256");
     long len = 0; uint8_t *bytes = read_file(ppt_path, &len);

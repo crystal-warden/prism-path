@@ -447,3 +447,40 @@ fn the_body_bound_is_the_smaller_of_the_peps_and_its_kinds() {
     let verdict = verify::verify(&bytes(case, "sealed"), &body, &trust_of(case), &pep, case["now"].as_i64().unwrap());
     assert_eq!(verdict.cause.as_deref(), Some("dist:too-large"));
 }
+
+#[path = "common/mod.rs"]
+mod common;
+
+/// The host's `allow_unsigned` swap, in whichever build this test is compiled for: the image of case 001, which
+/// carries no pack signature.
+fn unsigned_swap() -> (Value, Value) {
+    use prismpath_hotswap_rs::host::PolicyHost;
+    let case = case("001_round_trip");
+    let work = common::Scratch::new("dist_hatch");
+    let image = work.join("raw.ppt");
+    std::fs::write(&image, bytes(case, "body")).unwrap();
+    let state = work.join("host");
+    let host = PolicyHost::new(state.to_str().unwrap(), Vec::new(), case["pep"]["qualification"].clone(), Vec::new()).unwrap();
+    let result = host.swap(image.to_str().unwrap(), true).unwrap();
+    let hatch = host.audit.events().into_iter().find(|event| event["action"] == "hatch").unwrap();
+    (result, hatch["data"].clone())
+}
+
+/// case_097: D1, D2. Without the `dev-hatches` feature the host refuses `allow_unsigned` with dist:hatch-refused,
+/// writes that to its audit log, and checks the pack as signed, which an unsigned image is not.
+#[cfg(not(feature = "dev-hatches"))]
+#[test]
+fn case_097_a_production_build_refuses_the_unsigned_swap_and_checks_the_pack() {
+    let (result, hatch) = unsigned_swap();
+    assert_eq!(result, json!({"ok": false, "reasons": ["sig:missing"]}));
+    assert_eq!(hatch, json!({"hatch": "--allow-unsigned", "dev_build": false, "result": "refused", "cause": "dist:hatch-refused"}));
+}
+
+/// D2, D3. With the `dev-hatches` feature the hatch works and its audit event says dev_build.
+#[cfg(feature = "dev-hatches")]
+#[test]
+fn a_dev_build_takes_the_unsigned_swap_and_says_so() {
+    let (result, hatch) = unsigned_swap();
+    assert_eq!(result["ok"], json!(true));
+    assert_eq!(hatch, json!({"hatch": "--allow-unsigned", "dev_build": true, "result": "allowed"}));
+}

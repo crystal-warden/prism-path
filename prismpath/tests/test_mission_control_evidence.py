@@ -378,7 +378,8 @@ def test_a_produced_run_verifies_under_pinned_keys(run, root):
     report = evidence.run_report(str(run_dir), pins)
     assert report["ok"] is True and report["status"] == "signed" and report["verdict_of"] == "console"
     assert report["disagree"] == 0 and report["replayed"] == min(report["receipts"], mc_config.SETTINGS.evidence_sample)
-    assert evidence.run_report(str(run_dir))["status"] == "signed-unpinned"
+    unpinned = evidence.run_report(str(run_dir))
+    assert unpinned["ok"] is False and "dist:hatch-refused" in unpinned["problem"]     # D1: unpinned is a hatch
     assert _listing(root) == before
 
 

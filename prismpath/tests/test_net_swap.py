@@ -97,12 +97,19 @@ def test_loader_failure_is_audited(env):
     assert any(event["action"] == "loader_failed" for event in audit.events)
 
 
-def test_unsigned_requires_flag_and_is_stamped(env):
+def test_unsigned_requires_flag_and_is_stamped(env, monkeypatch):
+    """--allow-unsigned is an escape hatch: a production build refuses it and checks the signature, and only a
+    dev build loads the unsigned table (spec-policy-distribution.md, D1, D2)."""
     # strip the signature so only the unsigned path can proceed
     Path(env["ppt"] + ".manifest.sig").unlink()
     loader = FakeLoader()
     blocked = _swap(env, loader)
     assert not blocked["ok"] and loader.calls == []      # signed path refuses
+    refused = ns.preload_swap(env["ppt"], "lo", [env["keys"]["public"]], env["envbase"], env["state"],
+                              allow_unsigned=True, run=loader)
+    assert not refused["ok"] and refused["reasons"] == ["sig:missing"] and loader.calls == []
+    from prismpath.distribution import devbuild
+    monkeypatch.setattr(devbuild, "is_dev_build", lambda package_dir=None: True)
     loader2 = FakeLoader()
     swap_result = ns.preload_swap(env["ppt"], "lo", [env["keys"]["public"]], env["envbase"],
                         env["state"], allow_unsigned=True, run=loader2)

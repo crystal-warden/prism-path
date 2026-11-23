@@ -134,7 +134,8 @@ def test_sealing_twice_is_idempotent_and_an_append_after_the_seal_reseals(tmp_pa
     raw = _reading(1)
     run.append(raw, POL.decide(raw).verdict)
     assert run.is_open()
-    assert core_evidence.verify(run.dir, sample=None)["receipts"] == 1    # the old seal still stands as it was
+    assert core_evidence.verify(run.dir, sample=None, pin_authority=keys / "authority.pub",
+                                pin_instance=keys / "instance.pub")["receipts"] == 1   # the old seal still stands
     assert run.verify(keys)["receipts"] == 2
 
 

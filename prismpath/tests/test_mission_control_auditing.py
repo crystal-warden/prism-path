@@ -326,11 +326,13 @@ def run(root, tmp_path):
                           "instance": _pin(root, keys_dir / "instance.pub", "instance.pub")}
 
 
-def test_a_run_verifies_unpinned_by_default_and_signed_under_pin_files(client, run):
+def test_a_run_unpinned_is_refused_and_signed_under_pin_files(client, run):
+    """An unpinned verify is an escape hatch a production build refuses with dist:hatch-refused, after every check
+    ran (spec-policy-distribution.md, D1). Pinned, the run is signed."""
     run_dir, pins = run
     unpinned = client.post(API_V1 + "/evidence/run", json={"path": "run", "sample": 3})
     assert unpinned.status_code == 200, unpinned.text
-    assert unpinned.json()["ok"] is True and unpinned.json()["status"] == "signed-unpinned"
+    assert unpinned.json()["ok"] is False and "dist:hatch-refused" in unpinned.json()["problem"]
     assert unpinned.json()["verdict_of"] == "console" and "prismpath evidence verify" in unpinned.json()["command"]
     pinned = client.post(API_V1 + "/evidence/run", json={"path": "run", "sample": 3, "pins": pins}).json()
     assert pinned["ok"] is True and pinned["status"] == "signed"

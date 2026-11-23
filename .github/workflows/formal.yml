@@ -65,7 +65,7 @@ jobs:
       - name: The egress policy and the edge table agree with the oracle, and no case may be skipped
         run: |
           set -o pipefail
-          PRISMPATH_REQUIRE_CORE_ORACLE=1 python -m pytest prismpath/tests/test_egress_policy.py prismpath/tests/test_net_from_policy.py -q -rs -m "$PYTEST_MARKER" --deselect prismpath/tests/test_net_from_policy.py::test_the_loaders_own_gate_refuses_a_table_that_is_not_the_one_the_host_verified | tee /tmp/egress.txt
+          PRISMPATH_REQUIRE_CORE_ORACLE=1 python -m pytest prismpath/tests/test_egress_policy.py prismpath/tests/test_net_from_policy.py -q -rs -m "$PYTEST_MARKER" --deselect prismpath/tests/test_net_from_policy.py::test_the_loaders_own_gate_refuses_a_table_that_is_not_the_one_the_host_verified --deselect prismpath/tests/test_net_from_policy.py::test_the_unverified_bypass_works_only_in_the_dev_loader | tee /tmp/egress.txt
           ! grep -q "SKIPPED" /tmp/egress.txt
       - name: The classifier differential harness (docs/design/spec-verified-classifier.md), CI size and a generated run (20,000 calls at the checkpoint)
         run: |

@@ -41,10 +41,14 @@ pub const INCOMPLETE: &str = "dist:incomplete";
 pub const SIG_INVALID: &str = "sig:invalid";
 pub const SIG_REVOKED_KEY: &str = "sig:revoked-key";
 pub const ROTATION_INVALID: &str = "dist:rotation-invalid";
+pub const HATCH_REFUSED: &str = "dist:hatch-refused";
+/// D2: a dev build is the cargo feature `dev-hatches`, off by default, and no environment or setting makes one.
+pub const DEV_BUILD: bool = cfg!(feature = "dev-hatches");
 /// Every cause this module reports itself, each a registered name (`tests` checks the registry).
-pub const CAUSES: [&str; 15] = [
+pub const CAUSES: [&str; 16] = [
     BAD_FORMAT, NOT_CANONICAL, UNKNOWN_KEY, TARGET_MISMATCH, BODY_MISMATCH, SEQ_REPLAY, NOT_YET_VALID,
     EXPIRED, REVOKED, TRUST_REPLAY, TOO_LARGE, INCOMPLETE, SIG_INVALID, SIG_REVOKED_KEY, ROTATION_INVALID,
+    HATCH_REFUSED,
 ];
 
 /// E1 `seq`, and every integer the format carries: canon/2's exact range.

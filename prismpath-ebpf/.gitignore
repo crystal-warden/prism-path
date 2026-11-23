@@ -19,3 +19,4 @@ test_merkle
 test_merkle_ext
 # the collector crate's build directory (cargo)
 collector/target/
+loader-dev
