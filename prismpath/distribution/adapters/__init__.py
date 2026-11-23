@@ -3,10 +3,11 @@
 """The adapter interface between the one enforcement point machine (`prismpath.distribution.pep`) and the
 runtime a target kind protects.
 
-An adapter has four calls. `kind` names the target. `check(artifact, body, staged)` is the target's own
-part of V11, run at commit over the whole staged release, since one artifact may name another (C2).
-`compare(active, staged)` answers whether the staged release allows more (W1), `LARGER`, `NOT_LARGER` or
-`CANNOT_DECIDE`. `activate(release)` makes the runtime use a committed release and `deactivate()` makes
+`kind` names the target. `check(artifact, body, staged)` is the target's own part of V11, run at commit over
+the whole staged release, since one artifact may name another (C2). Whether a staged release allows more
+(W1) is not an adapter's: a kind that can decide compares with the comparators of
+`prismpath.distribution.widening`, one per artifact, which answer `LARGER`, `NOT_LARGER` or `CANNOT_DECIDE`.
+`activate(release)` makes the runtime use a committed release and `deactivate()` makes
 it refuse. An adapter never verifies a signature, reads a clock or touches a floor. Those are the
 machine's.
 
@@ -32,10 +33,6 @@ class Adapter:
         """The target's own check of one staged artifact against the rest of the staged release, which maps
         each artifact to its (envelope, body). None when it holds, else the cause."""
         return None
-
-    def compare(self, active: Any, staged: Any) -> str:
-        """W1: whether `staged` allows more than `active`. A target that cannot decide answers so (W2)."""
-        return CANNOT_DECIDE
 
     def activate(self, release: Any) -> None:
         raise NotImplementedError

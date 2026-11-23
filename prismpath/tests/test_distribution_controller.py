@@ -56,10 +56,17 @@ class Fleet:
                         for name, point in self.points.items()}
         self.first = first
 
-    def put(self, body, seq, **args):
-        sealed = self.first.seal(body, seq=seq, **args)
-        self.controller.put(sealed, body)
-        return sealed
+    def put(self, body, seq, *, widen=None, replaces=None, **args):
+        """Store a release of `body` at `seq`. It replaces the release put before it, and the first one, or one
+        put with `widen`, goes with a widening statement that covers any PEP (W2, W3)."""
+        previous = getattr(self, "previous", None)
+        widen = self.first.policy_of(body) != previous if widen is None else widen      # W7: only a renewal does not
+        replaces = (previous or "") if replaces is None else replaces
+        pairs = _dist.release_with_statement(self.first, body, seq, widen=widen, replaces=replaces, **args)
+        for sealed, data in pairs:
+            self.controller.put(sealed, data)
+        self.previous = self.first.policy_of(body)
+        return pairs[-1][0]
 
     def round(self, *names):
         for name in names or self.clients:
@@ -123,7 +130,7 @@ def test_case_095_a_group_under_each_commits_where_it_can_and_files_the_two_refu
     assert fleet.points["p2"].pep.active.seq == 3
     controller.enroll(fleet.points["p2"].key.public_raw, "host", STREAM, "fleet", "each")
     fleet.clients["p3"].transport = Tampering(controller)
-    fleet.put(NEW, 2)
+    fleet.put(NEW, 2, widen=True, replaces="")         # a first install for p1 and p3
     rollout = controller.offer("fleet", STREAM, 2)
     for _ in range(3):
         fleet.round()
@@ -135,7 +142,7 @@ def test_case_095_a_group_under_each_commits_where_it_can_and_files_the_two_refu
     assert set(fleet.member("p3").findings) == {"sig:invalid"}
     causes = {name: [event["data"].get("cause") for event in point.pep.audit.events if event["action"] == "refused"]
               for name, point in fleet.points.items()}
-    assert causes == {"p1": [], "p2": ["dist:seq-replay"], "p3": ["sig:invalid"]}
+    assert causes == {"p1": [], "p2": ["dist:seq-replay"] * 2, "p3": ["sig:invalid"] * 2}   # the statement, the release
     assert "committed" in [event["action"] for event in fleet.points["p1"].pep.audit.events]
     logged = [(event["action"], event["data"].get("pep"), event["data"].get("finding"))
               for event in controller.audit.events]
@@ -385,10 +392,11 @@ def test_a_command_in_another_process_is_seen_by_the_controller_that_serves(tmp_
     fleet.controller.save()
     command = Controller(str(fleet.dir), _dist.instance_key("C"), clock=fleet.clock)
     with command.locked():
-        command.put(fleet.first.seal(OLD), OLD)
+        for sealed, body in _dist.release_with_statement(fleet.first, OLD, 1, widen=True, replaces=""):
+            command.put(sealed, body)
         command.offer("fleet", STREAM, 1)
     with fleet.controller.locked() as serving:
-        assert [offer["seq"] for offer in serving.answer(fleet.ids["p1"])["offers"]] == [1]
+        assert [offer["seq"] for offer in serving.answer(fleet.ids["p1"])["offers"]] == [1, 1]
 
 
 def test_the_frame_driver_carries_a_rollout_to_mesh_nodes_and_their_records_back(tmp_path):
@@ -593,14 +601,19 @@ def test_the_commit_window_on_the_mesh_is_the_delay_plus_2_seconds(tmp_path):
 
 
 def test_a_member_is_staged_only_once_every_envelope_of_the_release_is(tmp_path):
-    """F3: a release of two envelopes, an image and its spiral sidecar, is staged on a member only when both
-    acks came, so the commit is not sent early and the release commits whole."""
+    """F3: a release of three envelopes, the widening statement of a first install, an image and its spiral
+    sidecar, is staged on a member only when every ack came, so the commit is not sent early and the release
+    commits whole."""
     fleet = Fleet(tmp_path, names=("p1",))
     sidecar = b"spiral sidecar bytes"
     meta = {**GEN.image_meta(OLD), "packing": {"profile": "spiral", "sidecar_sha256": H(sidecar)}}
     release = env.release_id([("policy.ppt", H(OLD)), ("policy.spiral", H(sidecar))])
-    fleet.controller.put(_dist.seal("policy.ppt", OLD, meta=meta, release=release), OLD)
-    fleet.controller.put(_dist.seal("policy.spiral", sidecar, release=release, policy_sha256=H(OLD)), sidecar)
+    statement = _dist.widening()
+    fleet.controller.put(_dist.seal("trust.widening", statement, release=release, policy_sha256=H(OLD),
+                                    widens=True), statement)
+    fleet.controller.put(_dist.seal("policy.ppt", OLD, meta=meta, release=release, widens=True), OLD)
+    fleet.controller.put(_dist.seal("policy.spiral", sidecar, release=release, policy_sha256=H(OLD), widens=True),
+                         sidecar)
     rollout = fleet.controller.offer("fleet", STREAM, 1)
     pep = fleet.points["p1"].pep
     pep.see_epoch(fleet.controller.epoch)
@@ -613,3 +626,60 @@ def test_a_member_is_staged_only_once_every_envelope_of_the_release_is(tmp_path)
     for _ in range(3):
         fleet.round()
     assert rollout.state == "committed" and pep.active.bodies["policy.spiral"] == sidecar
+
+
+def test_case_065_a_controller_refuses_to_offer_a_larger_release_that_says_it_does_not_widen(tmp_path):
+    """case_065: W7. A mesh node cannot decide, so the controller compares the release with the one it holds for
+    its `replaces`. A table that is not that one, with `widens` false, is not offered."""
+    fleet = Fleet(tmp_path, names=("n1",), kind="mesh")
+    fleet.put(OLD, 1)
+    fleet.controller.offer("fleet", STREAM, 1)
+    fleet.put(NEW, 2, widen=False)                                    # replaces OLD, says it does not widen
+    with pytest.raises(Refused) as refused:
+        fleet.controller.offer("fleet", STREAM, 2)
+    assert refused.value.cause == "dist:widening-unsigned"
+    assert [rollout.seq for rollout in fleet.controller.rollouts] == [1]
+    assert fleet.controller.audit.events[-1]["data"]["cause"] == "dist:widening-unsigned"
+    fleet.put(OLD, 3, widen=False, expires=_dist.EXPIRES + 10)       # a renewal of OLD is not larger
+    with pytest.raises(Refused):
+        fleet.controller.offer("fleet", STREAM, 3)                     # it replaces NEW, which it is not
+    fleet.put(NEW, 4, widen=False, replaces=H(NEW))
+    assert fleet.controller.offer("fleet", STREAM, 4).seq == 4
+
+
+def test_case_136_the_sealing_tool_and_the_controller_hold_widens_to_what_they_hold(tmp_path):
+    """case_136: W7, W1, the mesh part. A table that differs from the one it replaces by one constant is written
+    with `widens` true by the tool and refused by the controller when it says false, and the same table again
+    with a later `expires` is written with `widens` false and offered. The cFS part, a narrower core image and one
+    whose rules alone differ, is in integrations/cfs/tests/test_cfs_dist.py."""
+    import json
+    from prismpath import cli
+    from prismpath.hotswap import policy_pack
+    _priv, _pub, ser, _invalid = policy_pack._ed25519()
+    pem = tmp_path / "A.pem"
+    pem.write_bytes(GEN.test_key("A").private_bytes(ser.Encoding.PEM, ser.PrivateFormat.PKCS8, ser.NoEncryption()))
+    fleet = Fleet(tmp_path, names=("n1",), kind="mesh")
+    fleet.put(OLD, 1)
+    fleet.controller.save()
+    one_constant = _dist.image(6)
+
+    def seal_with_tool(body, seq, expires):
+        (tmp_path / "body").write_bytes(body)
+        (tmp_path / "meta.json").write_text(json.dumps(GEN.image_meta(body)))
+        args = cli.build_parser().parse_args([
+            "dist", "seal", "--artifact", "policy.ppt", "--body", str(tmp_path / "body"), "--stream", STREAM,
+            "--seq", str(seq), "--target", "mesh", "--key", str(pem), "--held", str(fleet.dir),
+            "--not-before", str(_dist.NOT_BEFORE), "--expires", str(expires), "--meta", str(tmp_path / "meta.json"),
+            "--out", str(tmp_path / f"r{seq}.sealed")])
+        assert args.func(args) == 0
+        return env.read(env.unseal((tmp_path / f"r{seq}.sealed").read_bytes())[0])
+
+    changed = seal_with_tool(one_constant, 2, _dist.EXPIRES)
+    assert changed.widens and changed.replaces == H(OLD)
+    fleet.put(one_constant, 2, widen=False)
+    with pytest.raises(Refused):
+        fleet.controller.offer("fleet", STREAM, 2)
+    renewal = seal_with_tool(OLD, 3, _dist.EXPIRES + 10)
+    assert not renewal.widens and renewal.replaces == H(OLD)
+    fleet.controller.put((tmp_path / "r3.sealed").read_bytes(), OLD)
+    assert fleet.controller.offer("fleet", STREAM, 3).seq == 3

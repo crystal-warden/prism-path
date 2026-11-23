@@ -39,7 +39,7 @@ def test_case_031_a_revocation_is_applied_when_it_verifies_with_no_commit(point)
 def test_case_013_a_key_revoked_by_an_applied_list_does_not_count(point):
     """case_013: S5, the revoked half through an applied list (the retired half is rotation's)."""
     point.revoke(1, keys=[_dist.key_id("B")])
-    assert _read(point, point.pep.stage(seal("policy.ppt", OLD, signer="B"), OLD)).cause == "sig:revoked-key"
+    assert _read(point, point.stage(OLD, signer="B")).cause == "sig:revoked-key"
 
 
 def test_case_041_an_applied_list_revokes_by_envelope_id_and_by_policy_hash(point):
@@ -47,8 +47,8 @@ def test_case_041_an_applied_list_revokes_by_envelope_id_and_by_policy_hash(poin
     by_id = seal("policy.ppt", OLD, seq=1)
     point.revoke(1, envelopes=[env.envelope_id(env.unseal(by_id)[0])], policies=[H(NEW)])
     assert _read(point, point.pep.stage(by_id, OLD)).cause == "dist:revoked"
-    assert _read(point, point.pep.stage(seal("policy.ppt", NEW, seq=2), NEW)).cause == "dist:revoked"
-    assert _read(point, point.pep.stage(seal("policy.ppt", OLD, seq=3), OLD)).event == "staged"
+    assert _read(point, point.stage(NEW, seq=2)).cause == "dist:revoked"
+    assert _read(point, point.stage(OLD, seq=3)).event == "staged"
 
 
 def test_case_066_a_revocation_is_taken_at_the_next_trust_sequence_only(point):
@@ -68,16 +68,16 @@ def test_case_066_a_revocation_is_taken_at_the_next_trust_sequence_only(point):
 def test_case_067_after_a_key_is_revoked_a_pack_it_signed_is_refused(point):
     """case_067: R2."""
     point.revoke(1, keys=[_dist.key_id("B")])
-    assert _read(point, point.pep.stage(seal("policy.ppt", NEW, signer="B"), NEW)).cause == "sig:revoked-key"
-    assert _read(point, point.pep.stage(seal("policy.ppt", NEW, signer="A"), NEW)).event == "staged"
+    assert _read(point, point.stage(NEW, signer="B")).cause == "sig:revoked-key"
+    assert _read(point, point.stage(NEW, signer="A")).event == "staged"
 
 
 def test_case_068_a_raised_floor_refuses_a_release_below_it(point):
     """case_068: R4, Q4."""
     point.revoke(1, floors={STREAM: 9})
-    assert _read(point, point.pep.stage(seal("policy.ppt", OLD, seq=8), OLD)).cause == "dist:seq-replay"
-    assert _read(point, point.pep.stage(seal("policy.ppt", OLD, seq=9), OLD)).cause == "dist:seq-replay"
-    assert _read(point, point.pep.stage(seal("policy.ppt", OLD, seq=10), OLD)).event == "staged"
+    assert _read(point, point.stage(OLD, seq=8)).cause == "dist:seq-replay"
+    assert _read(point, point.stage(OLD, seq=9)).cause == "dist:seq-replay"
+    assert _read(point, point.stage(OLD, seq=10)).event == "staged"
     point.revoke(2, floors={STREAM: 5})
     assert point.pep.trust.floors[STREAM] == 9                       # a lower number never lowers it
 
@@ -115,7 +115,7 @@ def test_case_070_a_later_list_that_drops_a_key_is_refused(point):
     point.revoke(1, keys=[_dist.key_id("B")])
     assert _read(point, point.revoke(2)).cause == "dist:trust-replay"
     assert point.pep.trust.trust_seq == 1 and _dist.key_id("B") in point.pep.trust.revoked_keys
-    assert _read(point, point.pep.stage(seal("policy.ppt", NEW, signer="B"), NEW)).cause == "sig:revoked-key"
+    assert _read(point, point.stage(NEW, signer="B")).cause == "sig:revoked-key"
 
 
 def test_case_071_a_revocation_list_past_its_bounds_is_too_large(point):
@@ -145,7 +145,7 @@ def test_a_death_between_saving_a_revocation_and_the_lapse_comes_back_lapsed(poi
     """R5, fail closed: the store is durable before the lapse, so a PEP killed between the two finds on restart
     that the active release no longer stands, lapses it with dist:revoked and drops the staged one."""
     point.commit(OLD, seq=1)
-    point.pep.stage(seal("policy.ppt", NEW, seq=2), NEW)
+    point.stage(NEW, seq=2)
 
     class Died(Exception):
         pass

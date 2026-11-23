@@ -326,6 +326,11 @@ def target_decision(target: str):
     return ("refuse" if match.group(2) else "escalate"), name, code
 
 
+class OutsideDomain(ValueError):
+    """The policy names a value outside its reading domain (`profile.outside_domain`), cause
+    `policy:out-of-domain`."""
+
+
 class Policy:
     def __init__(self, image: bytes):
         if image.endswith(b"\n"):
@@ -342,6 +347,10 @@ class Policy:
         for rule in self.doc["rules"]:
             if target_decision(rule["target"]) is None:
                 raise ValueError(f"the policy names a target the harness does not know: {rule['target']}")
+        from prismpath.agent import profile
+        outside = profile.outside_domain(self.doc)
+        if outside is not None:
+            raise OutsideDomain(f"policy:out-of-domain: {outside}")
 
     @classmethod
     def load(cls, path: Path = POLICY_PATH) -> "Policy":
@@ -362,6 +371,18 @@ class Policy:
         return verdict
 
     def decide(self, raw: bytes) -> Decision:
+        """The decision on one reading's bytes. A reading with a value outside its field's reading domain is a
+        resource nobody accounted for, so it is refused with `policy:out-of-domain` before the policy runs
+        (spec-policy-distribution.md, 9.4)."""
+        from prismpath.agent import profile
+        try:
+            reading = canon2.loads(raw)
+        except Exception:  # noqa: BLE001 - a reading that does not read is the core's to refuse
+            reading = None
+        outside = profile.reading_outside_domain(self.doc["fields"], reading)
+        if outside is not None:
+            return Decision("refuse", "policy:out-of-domain", causes.code("policy:out-of-domain"),
+                            {"verdict": "refuse", "cause": "policy:out-of-domain", "detail": outside})
         verdict = self.verdict(raw)
         if verdict.get("verdict") == "route":
             kind, cause, code = target_decision(verdict["target"])

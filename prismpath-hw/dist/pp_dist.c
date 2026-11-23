@@ -1127,6 +1127,58 @@ static void pp_refuse(pp_pep_machine *pep, uint8_t cause) {
     pp_emit(pep, PP_EV_REFUSED, cause);
 }
 
+/* W4: `kept` holds a widening statement whose `from` is empty or holds the active policy hash (widening.covers). */
+static int pp_covers(const pp_pep_machine *pep, const pp_release *kept) {
+    for (size_t k = 0; k < kept->n; k++) {
+        if (kept->held[k].envelope.artifact != PP_ART_TRUST_WIDENING) continue;
+        const uint8_t *body = pp_held_body((pp_release *)kept, k);
+        size_t len = kept->held[k].body_len;
+        static const char head[] = "{\"encoding\":\"canon/2\",\"format\":\"prismpath.dist-widening/1\",\"from\":[";
+        pp_c2 c = {body, len, 0, 1};
+        uint8_t hash[32];
+        if (!pp_c2_lit(&c, head)) return 0;
+        if (pp_c2_lit(&c, "]")) return 1; /* an empty `from` covers any rollback */
+        for (;;) {
+            if (!pp_scan_hash(&c, hash)) return 0;
+            if (pep->d.has_active && memcmp(hash, pep->d.active.policy_sha256, 32) == 0) return 1;
+            if (!pp_c2_lit(&c, ",")) return 0;
+        }
+    }
+    return 0;
+}
+
+/* The active release's table, or NULL when there is none. */
+static const uint8_t *pp_active_table(const pp_pep_machine *pep, size_t *len) {
+    const pp_durable *d = &pep->d;
+    if (!d->has_active) return NULL;
+    for (size_t k = 0; k < d->active.n; k++)
+        if (d->active.held[k].envelope.artifact == PP_ART_POLICY_PPT) {
+            *len = d->active.held[k].body_len;
+            return pp_held_body((pp_release *)&d->active, k);
+        }
+    return NULL;
+}
+
+/* V12 on a kind that cannot decide (W2, W3, W6): a release is larger unless its `widens` is false and its
+ * `replaces` is the active policy hash, and a larger one needs a widening statement of the same release, staged
+ * before it, that covers the node (widening.check). The node still compares the table: one that is not byte for
+ * byte the active table is larger, and when its `widens` is false the signer's word is wrong and no statement
+ * saves it. `table` is the staged table, or NULL when the envelope judged carries none. */
+static uint8_t pp_widening(const pp_pep_machine *pep, int widens, const uint8_t replaces[32], int has_replaces,
+                           const pp_release *with, const uint8_t *table, size_t table_len) {
+    const pp_durable *d = &pep->d;
+    size_t active_len = 0;
+    const uint8_t *active = pp_active_table(pep, &active_len);
+    /* Going from no policy to any is a comparison every PEP makes, so a first install is larger and one that says
+     * it does not widen is refused even with a statement (W6), as another table is. */
+    int changed = !d->has_active ||
+                  (table != NULL && active != NULL && (table_len != active_len || memcmp(table, active, table_len) != 0));
+    int larger = changed || widens || !has_replaces || memcmp(replaces, d->active.policy_sha256, 32) != 0;
+    if (!larger) return PP_CAUSE_NONE;
+    if (changed && !widens) return PP_CAUSE_WIDENING_UNSIGNED; /* W6 */
+    return with != NULL && pp_covers(pep, with) ? PP_CAUSE_NONE : PP_CAUSE_WIDENING_UNSIGNED;
+}
+
 void pp_pep_view(const pp_pep_machine *pep, pp_pep *out) {
     const pp_durable *d = &pep->d;
     memset(out, 0, sizeof *out);
@@ -1186,6 +1238,13 @@ void pp_pep_stage(pp_pep_machine *pep, const uint8_t *sealed, size_t sealed_len,
         pp_refuse(pep, PP_CAUSE_SEQ_REPLAY); /* G2 */
         return;
     }
+    if (e->artifact != PP_ART_TRUST_WIDENING) {
+        int same = d->has_staged && strcmp(d->staged.stream, e->stream) == 0 && d->staged.seq == e->seq;
+        int table = e->artifact == PP_ART_POLICY_PPT;
+        uint8_t cause = pp_widening(pep, e->widens, e->replaces, e->has_replaces, same ? &d->staged : NULL,
+                                    table ? body : NULL, table ? body_len : 0);
+        if (cause) { pp_refuse(pep, cause); return; } /* V12 */
+    }
     if (!d->has_staged || d->staged.seq != e->seq) {
         memset(&d->staged, 0, sizeof d->staged);
         pp_copy_stream(d->staged.stream, e->stream);
@@ -1210,6 +1269,58 @@ void pp_pep_stage(pp_pep_machine *pep, const uint8_t *sealed, size_t sealed_len,
     pp_emit(pep, PP_EV_STAGED, 0);
 }
 
+/* The table `release` holds, or NULL when it holds none. */
+static const uint8_t *pp_release_table(const pp_release *release, size_t *len) {
+    for (size_t k = 0; k < release->n; k++)
+        if (release->held[k].envelope.artifact == PP_ART_POLICY_PPT) {
+            *len = release->held[k].body_len;
+            return pp_held_body((pp_release *)release, k);
+        }
+    return NULL;
+}
+
+/* C2, E10: the artifacts staged, trust kinds left out, are the whole release the authority signed. Their release
+ * id, the SHA-256 of the canon/2 array of sorted [artifact, body_sha256] pairs, computed again over what is staged,
+ * is the `release` the envelopes carry, so a transport that withholds an artifact of a signed release cannot commit
+ * the rest (pep._whole). */
+static int pp_whole(const pp_release *staged) {
+    static const char hex[] = "0123456789abcdef";
+    const pp_envelope *pairs[2];
+    size_t n = 0;
+    for (size_t k = 0; k < staged->n; k++)
+        if (!pp_is_trust(staged->held[k].envelope.artifact)) pairs[n++] = &staged->held[k].envelope;
+    if (n == 0) return 0;
+    if (n == 2 && strcmp(pp_artifact_name(pairs[0]->artifact), pp_artifact_name(pairs[1]->artifact)) > 0) {
+        const pp_envelope *first = pairs[0];
+        pairs[0] = pairs[1];
+        pairs[1] = first;
+    }
+    uint8_t text[2 + 2 * (4 + 32 + 64 + 3)];
+    size_t at = 0;
+    text[at++] = '[';
+    for (size_t i = 0; i < n; i++) {
+        const char *name = pp_artifact_name(pairs[i]->artifact);
+        size_t name_len = strlen(name);
+        if (i) text[at++] = ',';
+        text[at++] = '[';
+        text[at++] = '"';
+        memcpy(text + at, name, name_len);
+        at += name_len;
+        memcpy(text + at, "\",\"", 3);
+        at += 3;
+        for (size_t b = 0; b < 32; b++) {
+            text[at++] = (uint8_t)hex[pairs[i]->body_sha256[b] >> 4];
+            text[at++] = (uint8_t)hex[pairs[i]->body_sha256[b] & 15];
+        }
+        text[at++] = '"';
+        text[at++] = ']';
+    }
+    text[at++] = ']';
+    uint8_t id[32];
+    pp_sha256(text, at, id);
+    return memcmp(id, staged->release, 32) == 0;
+}
+
 static void pp_commit_now(pp_pep_machine *pep, const char *stream, long long seq, const uint8_t policy[32]) {
     pp_durable *d = &pep->d;
     if (pep->locked) { pp_refuse(pep, PP_CAUSE_FLOOR_LOST); return; }
@@ -1217,7 +1328,7 @@ static void pp_commit_now(pp_pep_machine *pep, const char *stream, long long seq
     if (!d->has_staged || !pp_names(&d->staged, stream, seq, policy)) { pp_emit(pep, PP_EV_REFUSED, PP_CAUSE_NOT_STAGED); return; }
     int has_ppt = 0;
     for (size_t k = 0; k < d->staged.n; k++) has_ppt |= d->staged.held[k].envelope.artifact == PP_ART_POLICY_PPT;
-    if (!has_ppt) { pp_refuse(pep, PP_CAUSE_INCOMPLETE); return; } /* C2: the mesh row needs policy.ppt */
+    if (!has_ppt || !pp_whole(&d->staged)) { pp_refuse(pep, PP_CAUSE_INCOMPLETE); return; } /* C2: the mesh row needs policy.ppt */
     uint8_t cause = pp_still_valid(pep, &d->staged, 1); /* C3 */
     if (cause) {
         d->has_staged = 0;
@@ -1225,6 +1336,16 @@ static void pp_commit_now(pp_pep_machine *pep, const char *stream, long long seq
         pp_refuse(pep, cause);
         return;
     }
+    const uint8_t *table = NULL;
+    size_t table_len = 0;
+    for (size_t k = 0; k < d->staged.n; k++)
+        if (d->staged.held[k].envelope.artifact == PP_ART_POLICY_PPT) {
+            table = pp_held_body(&d->staged, k);
+            table_len = d->staged.held[k].body_len;
+        }
+    cause = pp_widening(pep, d->staged.widens, d->staged.replaces, d->staged.has_replaces, &d->staged, table,
+                        table_len);
+    if (cause) { pp_refuse(pep, cause); return; } /* V12 again, against what is active now */
     pp_flip(pep, 0);
 }
 
@@ -1261,27 +1382,6 @@ void pp_pep_abort(pp_pep_machine *pep, const char *stream, long long seq, const 
     pp_emit(pep, PP_EV_ABORTED, 0);
 }
 
-/* RB3: a rollback to `kept` is covered only by a widening statement it holds whose `from` is empty or holds
- * the active policy hash, since a mesh node cannot decide larger (W2). */
-static int pp_covers(const pp_pep_machine *pep, const pp_release *kept) {
-    for (size_t k = 0; k < kept->n; k++) {
-        if (kept->held[k].envelope.artifact != PP_ART_TRUST_WIDENING) continue;
-        const uint8_t *body = pp_held_body((pp_release *)kept, k);
-        size_t len = kept->held[k].body_len;
-        static const char head[] = "{\"encoding\":\"canon/2\",\"format\":\"prismpath.dist-widening/1\",\"from\":[";
-        pp_c2 c = {body, len, 0, 1};
-        uint8_t hash[32];
-        if (!pp_c2_lit(&c, head)) return 0;
-        if (pp_c2_lit(&c, "]")) return 1; /* an empty `from` covers any rollback */
-        for (;;) {
-            if (!pp_scan_hash(&c, hash)) return 0;
-            if (pep->d.has_active && memcmp(hash, pep->d.active.policy_sha256, 32) == 0) return 1;
-            if (!pp_c2_lit(&c, ",")) return 0;
-        }
-    }
-    return 0;
-}
-
 uint8_t pp_pep_rollback(pp_pep_machine *pep, long long now) {
     pp_begin(pep, now);
     pp_durable *d = &pep->d;
@@ -1292,7 +1392,14 @@ uint8_t pp_pep_rollback(pp_pep_machine *pep, long long now) {
     uint8_t cause = pp_still_valid(pep, &d->previous, 1); /* RB2: what a commit checks, as it is active anew */
     if (!cause && d->previous.seq < pp_raised(&d->trust, d->previous.stream)) cause = PP_CAUSE_SEQ_REPLAY; /* R4 */
     if (cause) { pp_refuse(pep, cause); return 0; }
-    if (!pp_covers(pep, &d->previous)) { pp_refuse(pep, PP_CAUSE_WIDENING_UNSIGNED); return 0; }
+    int same = d->has_active && memcmp(d->previous.release, d->active.release, 32) == 0; /* RB3: never larger */
+    if (!same) { /* RB3: W1 to W7 as at a commit, so a kept table that says it does not widen is refused (W6) */
+        size_t table_len = 0;
+        const uint8_t *table = pp_release_table(&d->previous, &table_len);
+        cause = pp_widening(pep, d->previous.widens, d->previous.replaces, d->previous.has_replaces, &d->previous,
+                            table, table_len);
+        if (cause) { pp_refuse(pep, cause); return 0; }
+    }
     pp_flip(pep, 1);
     return 0;
 }

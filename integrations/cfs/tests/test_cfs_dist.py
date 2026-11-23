@@ -60,7 +60,7 @@ def test_a_cfs_table_is_checked_as_the_app_checks_it(tmp_path):
     """V11: the app's kernel check with its cause, and the core image's hash against the policy hash."""
     point = CfsPep(tmp_path)
     good = _body(1)
-    assert state_record.read(point.pep.stage(point.seal(good), good), point.key.public_raw).event == "staged"
+    assert state_record.read(point.stage(good), point.key.public_raw).event == "staged"
     for broken, cause in ((good[:-1], "image:truncated-header"),
                           (bytes(bytearray(good[:8]) + b"\x00\x00" + good[10:]), "image:truncated-header"),
                           (_body(0), "image:truncated-header")):
@@ -119,3 +119,47 @@ def test_case_113_a_controller_files_a_cfs_app_held_while_its_records_carry_bit_
     for record in point.pep.drain():
         controller.receive(record)
     assert "dist:held" not in controller.members[pep_id].findings
+
+
+def test_a_cfs_table_is_ordered_by_its_core_image_and_any_other_change_is_larger():
+    """case_136, the cFS part (W1): a table whose core image allows less is not larger, a table with the same core
+    image and other rules is larger, and the same table is not."""
+    from prismpath.distribution import widening
+    core = gen_image.CORE.read_bytes().rstrip(b"\n")
+    base = _body(1)
+    assert dist_kind.compare_cfs_tables(base, base) == widening.NOT_LARGER
+    other_rules = bytearray(base)
+    other_rules[table.OFF["ImageSig"] - 1] ^= 1                         # a byte outside the core image
+    assert table.core_of(bytes(other_rules)) == table.core_of(base)
+    assert dist_kind.compare_cfs_tables(base, bytes(other_rules)) == widening.LARGER
+    assert widening.COMPARATORS["cfs.table"] is dist_kind.compare_cfs_tables
+    from prismpath.kernel import canon2
+    doc = canon2.loads(core)
+    doc["rules"][-1]["target"] = "escalate_34"                          # the last allow asks instead
+    narrower = table.pack(gen_image.build(canon2.dumps(doc)))
+    table.set_version(narrower, 1)
+    narrower = bytes(narrower[:dist_kind.BODY_SIZE])
+    assert dist_kind.compare_cfs_tables(base, narrower) == widening.NOT_LARGER
+    assert dist_kind.compare_cfs_tables(narrower, base) == widening.LARGER
+
+
+def test_a_cfs_table_with_another_core_image_is_taken_on_the_signers_word():
+    """case_060, the cFS half (W2): the cFS app compares nothing itself, so a table whose core image differs, with
+    `widens` false and `replaces` its active hash, commits on its signature alone."""
+    import tempfile
+    from pathlib import Path
+    from prismpath.kernel import canon2
+    point = CfsPep(Path(tempfile.mkdtemp()) / "app")
+    base = _body(1)
+    point.commit(base)
+    doc = canon2.loads(gen_image.CORE.read_bytes().rstrip(b"\n"))
+    doc["rules"][-1]["target"] = "escalate_34"
+    other = table.pack(gen_image.build(canon2.dumps(doc)))
+    table.set_version(other, 2)
+    other = bytes(other[:dist_kind.BODY_SIZE])
+    active = point.policy_of(base)
+    record = state_record.read(point.pep.stage(point.seal(other, seq=2, replaces=active, widens=False), other),
+                               point.key.public_raw)
+    assert record.event == "staged"
+    committed = point.pep.commit(_dist.STREAM, 2, point.policy_of(other))
+    assert state_record.read(committed, point.key.public_raw).event == "committed"

@@ -71,7 +71,7 @@ def test_case_051_a_commit_killed_at_each_step_leaves_one_policy(tmp_path, monke
     point = _dist.HostPep(tmp_path)
     old, new = _dist.image(5), _dist.image(7)
     point.commit(old, seq=1)
-    point.pep.stage(_dist.seal("policy.ppt", new, seq=2), new)
+    point.stage(new, 2)
     _fault(point.pep, step, monkeypatch)
     with pytest.raises(Died):
         point.pep.commit(_dist.STREAM, 2, canon.sha256_hex(new))

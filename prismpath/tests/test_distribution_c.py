@@ -274,11 +274,52 @@ def _c_steps(host_check, script: list, *, hold: bool) -> list:
     return done.stdout.splitlines()
 
 
-def _same(host_check, tmp_path, script, *, hold=False) -> list:
+_SIGNERS = {}
+
+
+def _signer_of(sealed: bytes) -> str:
+    """The test key name whose key id signs `sealed` first."""
+    if not _SIGNERS:
+        for name in ["A", "B", "C", "D", "E", "F", "G", "H", "Q", "R", "U", *(f"K{n}" for n in range(20))]:
+            _SIGNERS[_dist.key_id(name)] = name
+    return _SIGNERS.get(env.unseal(sealed)[1][0][0], "A")
+
+
+def _with_statements(script: list) -> tuple:
+    """`script` with a widening statement covering any node staged before each release that says it widens, so
+    the widening rule (V12) passes as the step under test intends. Returns the script and the indexes of the
+    steps it added, whose output the tests do not read."""
+    out, quiet, printed = [], set(), 0                     # `printed`: the output lines before this step
+    for step in script:
+        if step[0] == "stage":
+            sealed = bytes.fromhex(step[1])
+            try:
+                envelope = env.read(env.unseal(sealed)[0], reads_meta=False)
+            except Refused:
+                envelope = None
+            if envelope is not None and envelope.artifact == "policy.ppt" and envelope.widens:
+                statement = _dist.widening()
+                quiet.add(printed)
+                printed += 1
+                out.append(("stage", _dist.seal("trust.widening", statement, seq=envelope.seq, release=envelope.release,
+                                                policy_sha256=envelope.policy_sha256, targets=("mesh",),
+                                                replaces=envelope.replaces, widens=True,
+                                                signer=_signer_of(sealed)).hex(), statement.hex(), step[-1]))
+        out.append(step)
+        printed += step[0] not in ("lose", "setting")      # the two steps that print nothing
+    return out, quiet
+
+
+def _same(host_check, tmp_path, script, *, hold=False, statements=True) -> list:
+    """`script` run on the Python machine and on the C core, which must print the same lines, returned with the
+    lines of the statements `_with_statements` staged left out. A statement staged for a release that is then
+    refused for another reason leaves a staged release that holds only the statement, which displaces what was
+    staged before, so a release meant to be refused before V12 is sealed with `widens` false and gets none."""
+    script, quiet = _with_statements(script) if statements else (script, set())
     python = _python_steps(script, hold=hold, tmp_path=tmp_path)
     c = _c_steps(host_check, [step for step in script if step[0] not in ()], hold=hold)
     assert c == python
-    return python
+    return [line for index, line in enumerate(python) if index not in quiet]
 
 
 def _records(line: str) -> list:
@@ -292,6 +333,9 @@ S = _dist.STREAM
 
 
 def _sealed(index: int, seq: int, **args) -> str:
+    """A mesh release of BODIES[index] at `seq`. It says it widens unless told otherwise, and `_same` stages the
+    widening statement that covers it (W3), so a script reads as if the widening rule were met."""
+    args.setdefault("widens", True)
     return _dist.seal("policy.ppt", BODIES[index], seq=seq, targets=("mesh",), **args).hex()
 
 
@@ -321,11 +365,12 @@ def test_case_024_026_050_077_a_lost_floor_a_clock_set_back_and_expiry_answer_as
     """case_024: Q5, X3. case_026: T1, V13. case_050: C3, the staged release dropped when it expired or was
     revoked before its commit. case_077: X1, X2, X3."""
     late = E - 100
+    # a release refused before the widening rule says it does not widen, so no statement is staged for it
     script = [("provision", S, N), ("stage", _sealed(0, 1, not_before=late), BODIES[0].hex(), late),
-              ("stage", _sealed(1, 2, expires=late - 10), BODIES[1].hex(), N),
+              ("stage", _sealed(1, 2, expires=late - 10, widens=False), BODIES[1].hex(), N),
               ("commit", S, 1, H[0], N), ("tick", E - 1), ("decide", E - 1), ("tick", E), ("decide", E),
-              ("stage", _sealed(1, 2, expires=N + 10), BODIES[1].hex(), E), ("restart", N),
-              ("stage", _sealed(2, 3, expires=late - 10), BODIES[2].hex(), N),
+              ("stage", _sealed(1, 2, expires=N + 10, widens=False), BODIES[1].hex(), E), ("restart", N),
+              ("stage", _sealed(2, 3, expires=late - 10, widens=False), BODIES[2].hex(), N),
               ("lose", "floor"), ("restart", N), ("stage", _sealed(2, 4), BODIES[2].hex(), N),
               ("commit", S, 4, H[2], N), ("record", "beat", N), ("decide", N)]
     lines = _same(host_check, tmp_path, script)
@@ -364,8 +409,9 @@ def test_case_106_107_110_112_hold_and_refuse_answer_as_the_python_machine(host_
 def test_case_085_the_core_s_state_records_read_under_its_instance_key(host_check, tmp_path):
     """case_085: H1, H2, H6. Every record the C core signed reads back under its instance key, and a changed
     byte does not."""
-    lines = _c_steps(host_check, [("provision", S, N), ("stage", _sealed(0, 1), BODIES[0].hex(), N),
-                                  ("commit", S, 1, H[0], N)], hold=False)
+    script, _quiet = _with_statements([("provision", S, N), ("stage", _sealed(0, 1), BODIES[0].hex(), N),
+                                       ("commit", S, 1, H[0], N)])
+    lines = _c_steps(host_check, script, hold=False)
     signed = bytes.fromhex(lines[-1].split()[1])
     assert state_record.read(signed, _dist.instance_key().public_raw).event == "committed"
     with pytest.raises(Refused):
@@ -379,14 +425,18 @@ def test_case_027_038_a_pep_with_no_clock_and_a_delayed_commit(host_check):
     key = _generator().test_key("A")
     public = _generator().public_raw(key)
     late = E - 100
+    first = ("stage", _sealed(0, 1, not_before=late), BODIES[0].hex(), N)
+    (statement, _release), _quiet = _with_statements([first])
     lines = [f"key {env.key_id(public)} {public.hex()} 0", f"machine 0 0 {INSTANCE_SEED}", f"provision {S} {N}",
-             f"stage {_sealed(0, 1, not_before=late)} {BODIES[0].hex()} {N}", f"restart {N - 86400 * 40}",
-             f"stage {_sealed(1, 2, expires=late - 10)} {BODIES[1].hex()} {N - 86400 * 40}",
+             f"stage {statement[1]} {statement[2]} {N}",
+             f"stage {first[1]} {BODIES[0].hex()} {N}", f"restart {N - 86400 * 40}",
+             f"stage {_sealed(1, 2, expires=late - 10, widens=False)} {BODIES[1].hex()} {N - 86400 * 40}",
              f"commit {S} 1 {H[0]} 120 1000 {late}", f"tick 1119 {late}", f"decide {late}", f"tick 1120 {late}",
              f"decide {late}", "done"]
     done = subprocess.run([str(host_check)], input="\n".join(lines) + "\n", capture_output=True, text=True, timeout=60)
     assert done.returncode == 0, done.stderr
     out = done.stdout.splitlines()
+    out = out[:1] + out[2:]                                  # the widening statement's ack
     assert _records(out[3])[0].cause == "dist:expired"
     assert out[4] == "records" and out[5] == "records" and out[6] == f"decide {causes.NAMES['dist:policy-lapsed']} 0"
     assert _records(out[7])[0].event == "committed" and out[8] == "decide 0 0"
@@ -538,8 +588,8 @@ def test_case_069_108_a_revocation_that_removes_the_ground_lapses_the_release_he
     """case_069: R5. case_108: X8, R5. The active envelope, the policy hash, the only key that signed it or a floor
     above its seq: the release lapses with dist:revoked and a staged release on that ground is dropped, and a held
     PEP lapses the same way, which ends the hold."""
-    staged = _dist.seal("policy.ppt", BODIES[0], seq=4, signer="B", targets=("mesh",))
-    active = _dist.seal("policy.ppt", BODIES[0], seq=3, signer="B", targets=("mesh",))
+    staged = _dist.seal("policy.ppt", BODIES[0], seq=4, signer="B", targets=("mesh",), widens=True)
+    active = _dist.seal("policy.ppt", BODIES[0], seq=3, signer="B", targets=("mesh",), widens=True)
     lists = {"envelope": {"envelopes": [env.envelope_id(env.unseal(active)[0]), env.envelope_id(env.unseal(staged)[0])]},
              "policy": {"policies": [H[0]]}, "key": {"keys": [_dist.key_id("B")]}, "floor": {"floors": {S: 5}}}[ground]
     for hold in (False, True):
@@ -638,7 +688,7 @@ def _after_loss(host_check, steps: list, cut: list) -> str:
     durable state read back. One line per count."""
     out = []
     for writes in range(12):
-        script = steps + [("stop", writes)] + cut + [("restart", N), ("state",)]
+        script, _quiet = _with_statements(steps + [("stop", writes)] + cut + [("restart", N), ("state",)])
         lines = _c_steps(host_check, script, hold=False)
         out.append(lines[-1])
     return out
@@ -649,22 +699,17 @@ def test_a_power_loss_at_each_write_of_a_commit_or_a_rollback_leaves_one_release
     at any write the restarted node holds either the old release, with the new one still staged to commit again,
     or the new one with the old one as its previous. A rollback cut off holds either release, and never a
     previous that is neither the old previous nor the release itself."""
-    built = [("provision", S, N)]
-    statement = canon.canon2_bytes({canon.ENCODING_KEY: canon.CANON2, "format": "prismpath.dist-widening/1", "from": []})
+    built = [("provision", S, N)]                                     # each release with its statement (RB3)
     for index, seq in ((0, 1), (1, 2)):
-        release = env.release_id([("policy.ppt", H[index])])         # seq 2 may be rolled back to (RB3)
-        widening = _dist.seal("trust.widening", statement, seq=seq, release=release, policy_sha256=H[index],
-                              targets=("mesh",)).hex()
-        built += [("stage", widening, statement.hex(), N), ("stage", _sealed(index, seq), BODIES[index].hex(), N),
-                  ("commit", S, seq, H[index], N)]
+        built += [("stage", _sealed(index, seq), BODIES[index].hex(), N), ("commit", S, seq, H[index], N)]
     built += [("stage", _sealed(2, 3), BODIES[2].hex(), N)]
     states = _after_loss(host_check, built, [("commit", S, 3, H[2], N)])
     assert set(states) <= {"state 2 1 3", "state 2 2 3", "state 3 2 -"}, states
     assert states[0] == "state 2 1 3" and states[-1] == "state 3 2 -"
     for writes, state in enumerate(states):
         if state != "state 3 2 -":                                   # committed again after the restart
-            again = built + [("stop", writes), ("commit", S, 3, H[2], N), ("restart", N),
-                             ("commit", S, 3, H[2], N), ("state",)]
+            again, _quiet = _with_statements(built + [("stop", writes), ("commit", S, 3, H[2], N), ("restart", N),
+                                                      ("commit", S, 3, H[2], N), ("state",)])
             assert _c_steps(host_check, again, hold=False)[-1] == "state 3 2 -", writes
     committed = built + [("commit", S, 3, H[2], N)]
     rolled = _after_loss(host_check, committed, [("rollback", N)])
@@ -782,11 +827,7 @@ def test_case_134_a_trust_statement_reaches_the_node_whatever_its_targets_say(ho
 def test_a_rollback_is_held_to_what_a_commit_checks_on_the_c_core(host_check, tmp_path):
     """RB2 on the C core (case 54 runs in Python): a rollback to a kept release whose only signing key is revoked,
     or that is below a raised floor, is refused with that check's cause as the Python machine refuses it."""
-    statement = canon.canon2_bytes({canon.ENCODING_KEY: canon.CANON2, "format": "prismpath.dist-widening/1", "from": []})
-    release = env.release_id([("policy.ppt", H[0])])
-    widening = _dist.seal("trust.widening", statement, seq=1, release=release, policy_sha256=H[0],
-                          targets=("mesh",)).hex()
-    kept = [("provision", S, N, ("A", "B")), ("stage", widening, statement.hex(), N),
+    kept = [("provision", S, N, ("A", "B")),                          # each release with its statement (RB3)
             ("stage", _sealed(0, 1), BODIES[0].hex(), N), ("commit", S, 1, H[0], N),
             ("stage", _sealed(1, 2, signer="B"), BODIES[1].hex(), N), ("commit", S, 2, H[1], N)]
     for name, revoke, cause in (("key", _revoke(1, N, keys=[_dist.key_id("A")]), "sig:revoked-key"),
@@ -794,3 +835,104 @@ def test_a_rollback_is_held_to_what_a_commit_checks_on_the_c_core(host_check, tm
         lines = _same(host_check, tmp_path / name, kept + [revoke, ("rollback", N)])
         assert _events(lines[-1]) == [("refused", cause)], name
 
+
+
+def test_case_060_061_062_063_109_the_widening_rule_answers_as_the_python_machine(host_check, tmp_path):
+    """case_060: W2. case_061: W2, W3, W6. case_062: W4, W5. case_063: W2, W3. case_109: X8. A mesh node cannot decide
+    whether a table allows more, but a table has no order, so one that is not byte for byte the active table is
+    larger. A release goes in on its signature alone only as a renewal, with `widens` false and `replaces` the
+    active hash. Another `replaces`, `widens` true, or another table need a covering statement, and another table
+    that says it does not widen is refused even with one. It is checked at staging and again at commit, and a
+    held node keeps the rule. The cFS half of case 60, a table taken on the signer's word, is in
+    integrations/cfs/tests."""
+    def release(index, seq, statement=None, **args):
+        steps = []
+        if statement is not None:
+            body = _dist.widening(statement)
+            steps.append(("stage", _dist.seal("trust.widening", body, seq=seq, release=env.release_id(
+                [("policy.ppt", H[index])]), policy_sha256=H[index], targets=("mesh",), **args).hex(), body.hex(), N))
+        return steps + [("stage", _sealed(index, seq, **args), BODIES[index].hex(), N)]
+
+    script = [("provision", S, N)]
+    script += release(0, 1)                                                    # 63: a first install, no statement
+    script += release(0, 1, [], widens=True) + [("commit", S, 1, H[0], N)]     # 63: with one
+    script += release(0, 2, replaces=H[0], widens=False) + [("commit", S, 2, H[0], N)]    # 60: a renewal
+    script += release(2, 3, replaces=H[2], widens=False)                       # 61: another replaces
+    script += release(2, 4, replaces=H[0], widens=True)                        # 61: widens, no statement
+    script += release(2, 5, replaces=H[0], widens=False)                       # 61: another table, no statement
+    script += release(2, 6, [], replaces=H[0], widens=False)                   # 61: and with one (W6)
+    script += release(2, 7, [H[0]], replaces=H[0], widens=True)                # 62: from the active hash
+    script += release(1, 8, [H[1]], replaces=H[0], widens=True)                # 62: from another only
+    lines = _same(host_check, tmp_path, script, statements=False)
+    events = [_events(line) for line in lines]
+    assert events[1] == [("refused", "dist:widening-unsigned")]
+    assert events[4] == events[6] == [("committed", None)]
+    assert events[7] == events[8] == events[9] == [("refused", "dist:widening-unsigned")]
+    assert events[10] == [("staged", None)] and events[11] == [("refused", "dist:widening-unsigned")]
+    assert events[13] == [("staged", None)] and events[15] == [("refused", "dist:widening-unsigned")]
+    held = [("provision", S, N)] + release(0, 1, [], widens=True, expires=N + 100) + [
+        ("commit", S, 1, H[0], N), ("tick", N + 100)] + release(1, 2, replaces=H[0], widens=False,
+                                                               expires=N + 1000)
+    lines = _same(host_check, tmp_path / "held", held, hold=True, statements=False)
+    assert _events(lines[-1]) == [("refused", "dist:widening-unsigned")] and _records(lines[-1])[0].held
+
+
+COMMITS = [entry for entry in CORPUS["commits"] if "C" in entry["runs_on"]]
+
+
+def test_case_137_138_every_commit_case_of_the_corpus_answers_on_the_c_core_as_recorded(host_check, tmp_path):
+    """case_137, case_138: C2, E10. Each commit case of the corpus on a mesh node: a table whose signed release id
+    also names a `policy.spiral` the transport withheld is dist:incomplete at commit, on a first install with
+    nothing active after and on an update with the old release still active, and the same update without the
+    spiral in its id commits. The C core answers as the Python machine and as the corpus records."""
+    assert {entry["case"] for entry in COMMITS} == {137, 138} and all(e["kind"] == "mesh" for e in COMMITS)
+    for entry in COMMITS:
+        script = [("provision", S, entry["now"])]
+        for step in entry["steps"]:
+            if step["op"] == "stage":
+                script.append(("stage", step["sealed"], step["body"], entry["now"]))
+            else:
+                script.append(("commit", S, step["seq"], step["policy_sha256"], entry["now"]))
+        lines = _same(host_check, tmp_path / entry["name"], script, statements=False)
+        last = _records(lines[-1])[-1]
+        assert {"cause": last.cause, "active_seq": last.active_seq} == entry["expect"], entry["name"]
+
+
+def _release_steps(index: int, seq: int, froms=None, **args) -> list:
+    """The steps that stage a mesh release of BODIES[index] at `seq`, its widening statement of `froms` first
+    when `froms` is given, with `args` on both envelopes."""
+    steps = []
+    if froms is not None:
+        body = _dist.widening(froms)
+        steps.append(("stage", _dist.seal("trust.widening", body, seq=seq, release=env.release_id(
+            [("policy.ppt", H[index])]), policy_sha256=H[index], targets=("mesh",), **args).hex(), body.hex(), N))
+    return steps + [("stage", _sealed(index, seq, **args), BODIES[index].hex(), N)]
+
+
+def test_case_139_140_a_first_install_or_a_rollback_that_says_it_does_not_widen_is_refused_on_the_c_core(
+        host_check, tmp_path):
+    """case_139: W2, W6. A first install with `widens` false is refused at staging even with a statement whose
+    `from` is empty, so nothing commits. case_140: RB3, W6. A rollback from table B to a kept renewal of table A
+    that says it does not widen is refused even though the kept release holds a statement whose `from` is empty,
+    and B stays active. The C core answers as the Python machine."""
+    first = [("provision", S, N)] + _release_steps(0, 1, [], widens=False) + [("commit", S, 1, H[0], N)]
+    events = [_events(line) for line in _same(host_check, tmp_path / "first", first, statements=False)]
+    assert events[1] == [("staged", None)] and events[2] == [("refused", "dist:widening-unsigned")]
+    assert events[3] == [("refused", "dist:incomplete")]
+    back = ([("provision", S, N)] + _release_steps(0, 1, [], widens=True) + [("commit", S, 1, H[0], N)]
+            + _release_steps(0, 2, [], replaces=H[0], widens=False) + [("commit", S, 2, H[0], N)]
+            + _release_steps(1, 3, [], replaces=H[0], widens=True) + [("commit", S, 3, H[1], N), ("rollback", N)])
+    lines = _same(host_check, tmp_path / "back", back, statements=False)
+    assert [_events(lines[index]) for index in (3, 6, 9)] == [[("committed", None)]] * 3
+    assert _events(lines[-1]) == [("refused", "dist:widening-unsigned")] and _records(lines[-1])[0].active_seq == 3
+
+
+def test_case_143_a_renewal_whose_active_release_lapsed_before_its_commit_is_refused_on_the_c_core(host_check, tmp_path):
+    """case_143: C3, V12, W2. A renewal staged with `widens` false and no statement, whose active release then
+    expires, is dist:widening-unsigned at commit on the C core as on the Python machine, and nothing is active."""
+    script = ([("provision", S, N)] + _release_steps(0, 1, [], widens=True, expires=N + 100) + [("commit", S, 1, H[0], N)]
+              + _release_steps(0, 2, replaces=H[0], widens=False) + [("tick", N + 100), ("commit", S, 2, H[0], N + 100)])
+    lines = _same(host_check, tmp_path, script, statements=False)
+    assert _events(lines[4]) == [("staged", None)] and _events(lines[5])[0][0] == "lapsed"
+    last = _records(lines[-1])[-1]
+    assert (last.event, last.cause, last.state) == ("refused", "dist:widening-unsigned", "no-policy")

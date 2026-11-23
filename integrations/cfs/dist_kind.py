@@ -42,9 +42,32 @@ def check_cfs_table(envelope, body: bytes, _pep) -> Optional[str]:
     return None
 
 
+def compare_cfs_tables(active: bytes, staged: bytes) -> str:
+    """W1 for `cfs.table` (section 9.4): ordered by the core image inside it, as a `policy.core` is. Two tables
+    with one core image and any other difference are larger, and so is a table whose core image does not read."""
+    from prismpath.distribution import widening
+    if bytes(active) == bytes(staged):
+        return widening.NOT_LARGER
+    try:
+        old, new = table.core_of(active), table.core_of(staged)
+    except (ValueError, IndexError, struct.error):
+        return widening.CANNOT_DECIDE
+    if old == new:
+        return widening.LARGER
+    return widening.compare_policies(old, new)
+
+
 TARGET = kinds.Target(needs=frozenset({"cfs.table"}), decides=False, expiry_hold=True, body_bound=BODY_SIZE,
                       checks={"cfs.table": check_cfs_table}, reads_meta=False)
 kinds.register_target("cfs", TARGET)
+
+
+def _register_comparator() -> None:
+    from prismpath.distribution import widening
+    widening.register_comparator("cfs.table", compare_cfs_tables)
+
+
+_register_comparator()
 
 
 class CfsAdapter(Adapter):

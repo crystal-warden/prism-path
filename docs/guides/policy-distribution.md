@@ -72,10 +72,53 @@ cp policy.ppt ctl/inbox/r1.body
 prismpath dist offer --dir ctl --key controller/instance.key --group web --stream web/prod --seq 1
 ```
 
-Each PEP fetches the sealed envelope by its envelope id, checks it through V8, and only then fetches the
-body, at most the signed `body_size` (B9). It stages the release, and the controller sends commit.
+A first release allows more than no policy at all, so it goes with the owner's widening statement (W3). `widen`
+signs one for a sealed release. With no `--from` it covers any PEP, and with `--from` only a PEP whose active
+policy is one of those hashes (W4).
 
-## 4. Groups and the two rules
+```bash
+prismpath dist widen --sealed ctl/inbox/r1.sealed --key owner/authority.key --out ctl/inbox/w1.sealed
+```
+
+Each PEP fetches the sealed envelope by its envelope id, checks it through V8, and only then fetches the
+body, at most the signed `body_size` (B9). It stages the release, and the controller sends commit. The
+controller offers a release's widening statement before the release itself.
+
+## 4. Releases that allow more
+
+`seal --held ctl` fills in `replaces`, the policy hash of the release stored on the stream just below the new
+`seq`, and sets `widens` unless it holds that release and finds the new body allows no more. A `policy.ppt`
+image has no order, so for a host or a mesh table `widens` is false only on a renewal of the same table. The
+controller holds a release to the same test before it offers it to a target that cannot decide (W7). A PEP that can decide whether a policy allows more walks every reading of
+the policy's finite domain and compares the verdicts, so it does not trust `widens` (W1), and it refuses a
+release it finds larger whose `widens` is false even with a statement (W6). A host, a mesh node and the cFS app
+cannot decide. They take a release on its signature alone only when `widens` is false and `replaces` is the
+policy they have active (W2). Every other release needs a widening statement that covers them. A first install
+goes from no policy to one, so every PEP counts it as larger and refuses one whose `widens` is false, even with
+a statement (W6).
+
+The reading domain an agent policy is compared over is the one the engineer who installs PrismPath defines: the
+values the classifier produces for each category, true and false, and each int's min to max. A policy whose
+rule names a value outside it, such as a tool the classifier does not produce, is refused when it is loaded and
+when a PEP checks it, with `policy:out-of-domain`, and a reading whose category value is outside it is refused with
+the same cause before the policy decides it. The comparison walks the combinations the classifier never gives as well, so
+a release that allows more on one of them is larger, and one that refuses more there is a tightening.
+
+A commit holds the release to the widening rule again against what is active then (C3). A renewal staged against
+a release that lapses before the commit goes from no policy to one, so it needs a statement that covers that.
+
+A PEP commits a release only whole. It computes the release id again over the artifacts it staged, and when
+that is not the signed `release`, because a transport left out an `agent.zones`, a `sandbox.profile` or a
+`policy.spiral`, the commit is refused with `dist:incomplete` (C2).
+
+A rollback is held to the same rule (RB3). A rollback to a release identical to the active one is never a
+widening. On a host or a mesh node a local rollback to an older table works only when the kept release says it
+widens and holds a widening statement that covers the newer policy. When the owner signed the older release,
+the newer policy's hash was not known, so in practice that is a statement with an empty `from`. A kept renewal
+says it does not widen, so it is never a rollback target from another table. Without one the owner releases
+the older policy again at a higher `seq`.
+
+## 5. Groups and the two rules
 
 A group runs under one of two rules (F3). Under `each` a member is sent commit as soon as it staged, so one
 refusal stops only that member. Under `all` nobody commits until every member staged, and a refusal or the
@@ -95,7 +138,7 @@ until it holds them all (F6). A refusal in that time is filed against the statem
 rollout. A revocation or a rotation reaches every PEP whatever its `targets` says, since one trust sequence
 counts the same for all of them.
 
-## 5. The fleet view
+## 6. The fleet view
 
 ```bash
 prismpath dist fleet --dir ctl --key controller/instance.key
@@ -112,7 +155,7 @@ cause the PEP gave. Each finding stays open until a later record clears it (F4).
 The controller writes every offer, ack, commit, abort, finding and trust statement to its own audit log,
 signed with its instance key (F5).
 
-## 6. Revoking and rotating keys
+## 7. Revoking and rotating keys
 
 A revocation list replaces the one before it and is applied as soon as a PEP verifies it. `revoke` starts
 from the latest list the controller holds, adds and drops what it is told, and refuses a list that drops a
@@ -137,7 +180,7 @@ prismpath dist rekey --dir ctl --key controller/instance.key --old owner/authori
 
 The controller offers the trust statements a PEP lacks before any release, and in order (R1).
 
-## 7. What this version does not do
+## 8. What this version does not do
 
 The controller reads the hashes of a state record and not yet its Facet body, since every PEP of this
 version sends an empty one (H5). A rollback with `prismpath dist pep rollback` follows RB1 to RB3, so on a

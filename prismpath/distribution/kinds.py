@@ -16,6 +16,7 @@ with `dist:target-mismatch`, so a statement is never verified and then left unap
 """
 from __future__ import annotations
 
+import hashlib
 import re
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, FrozenSet, Optional
@@ -89,7 +90,8 @@ class Target:
     `mesh` and `cfs`. `body_bound` is the kind's bound on the body of an artifact it uses and `trust_bound` its
     bound on a trust body, 16,384 bytes for every kind, which holds the largest list R7 allows (E6), and `checks` the kind's own V11 checks
     where they differ from the artifact's. `reads_meta` is false for a kind whose own check does not read `meta`,
-    so its reader only bounds `meta` and skips its members (E9)."""
+    so its reader only bounds `meta` and skips its members (E9). `compares` is what a kind that cannot decide
+    still compares with the active release (W2): a `policy.ppt` table, any change of which is larger."""
     needs: FrozenSet[str]
     decides: bool
     when_declared: FrozenSet[str] = frozenset()
@@ -99,6 +101,7 @@ class Target:
     trust_bound: int = 16384
     checks: Any = None
     reads_meta: bool = True
+    compares: FrozenSet[str] = frozenset()
 
     @property
     def uses(self) -> FrozenSet[str]:
@@ -152,7 +155,8 @@ FORMS: Dict[str, Callable[[Any], bool]] = {
 @dataclass(frozen=True)
 class Artifact:
     """An artifact kind: its `meta` members, each of the form `FORMS` gives it (E11), and its own check (V11),
-    None when no target in `TARGETS` uses it yet."""
+    None for an artifact whose reader lives with a target not built yet. A target registered from outside the
+    package names the check in its row (`Target.checks`)."""
     meta_required: FrozenSet[str] = frozenset()
     meta_optional: FrozenSet[str] = frozenset()
     check: Optional[Callable[[Any, bytes, Any], Optional[str]]] = None
@@ -191,6 +195,40 @@ def check_policy_spiral(_envelope, _body: bytes, _pep) -> Optional[str]:
     `sidecar_sha256` of the staged `policy.ppt` envelope's `meta.packing` when the release commits (C2), with
     `spiral:sidecar-missing` and `spiral:sidecar-hash-mismatch`, by the host's adapter."""
     return None
+
+
+def check_policy_core(envelope, body: bytes, _pep) -> Optional[str]:
+    """`policy.core` (V11): the image loads as the core reads it, with the core's own cause when it does not,
+    the harness knows every target it names, every value a rule names is inside its field's reading domain
+    (`policy:out-of-domain`, 9.4), and its SHA-256 is the envelope's `policy_sha256`."""
+    from prismpath.kernel import core_policy
+    refusal = core_policy.load_policy(bytes(body))
+    if refusal is not None:
+        return refusal[0]
+    from prismpath.agent.policy import OutsideDomain, Policy
+    try:
+        Policy(bytes(body))
+    except OutsideDomain:
+        return "policy:out-of-domain"
+    except ValueError:
+        return "policy:unreadable"
+    return None if hashlib.sha256(bytes(body)).hexdigest() == envelope.policy_sha256 else "image:sha256-mismatch"
+
+
+def read_hosts(body: bytes) -> list:
+    """`egress.hosts`: a canon/2 array of lower case host names, sorted, without repeats, each one the egress proxy
+    reads as itself. `Refused` with `dist:bad-format` otherwise."""
+    from prismpath.agent.egress import Refusal, parse_authority
+    doc = load_canonical(body, "egress.hosts")
+    if not isinstance(doc, list) or not all(isinstance(name, str) for name in doc) or doc != sorted(set(doc)):
+        raise Refused(BAD_FORMAT, "egress.hosts is not a sorted list of names without repeats")
+    for name in doc:
+        try:
+            if parse_authority(f"{name}:443") != (name, 443):
+                raise Refused(BAD_FORMAT, f"{name!r} is not a lower case host name")
+        except Refusal:
+            raise Refused(BAD_FORMAT, f"{name!r} is not a host name the egress proxy reads") from None
+    return doc
 
 
 def check_mesh_table(_envelope, body: bytes, _pep) -> Optional[str]:
@@ -245,11 +283,34 @@ def read_rotation(body: bytes) -> dict:
     return doc
 
 
+WIDENING_FROM = 64                                 # W4: the hashes a widening statement may list
+
+
 def read_widening(body: bytes) -> dict:
-    """W4: a widening statement, the sorted policy hashes it may replace in `from`."""
+    """W4: a widening statement, the sorted policy hashes it may replace in `from`, at most 64 of them
+    (`dist:too-large` past that)."""
     doc = _trust_body(body, WIDENING_FORMAT, frozenset({"encoding", "format", "from"}))
     if not _sorted_hashes(doc["from"]):
         raise Refused(BAD_FORMAT, "a widening statement whose from is not sorted hashes without repeats")
+    if len(doc["from"]) > WIDENING_FROM:
+        raise Refused("dist:too-large", f"a widening statement from {len(doc['from'])} hashes, past {WIDENING_FROM}")
+    return doc
+
+
+ZONES_FORMAT = "prismpath.dist-zones/1"
+ZONES_MAX, ZONE_NAME_MAX = 10000, 512
+
+
+def read_zones(body: bytes) -> dict:
+    """`agent.zones`: a canon/2 object with `encoding`, `format` and `protected`, the owner's protected names,
+    sorted, without repeats, at most 10,000 names of 1 to 512 characters, none of them a path. `Refused` with
+    `dist:bad-format` otherwise. Where the names are looked up is the home's own setting (section 3)."""
+    doc = _trust_body(body, ZONES_FORMAT, frozenset({"encoding", "format", "protected"}))
+    names = doc["protected"]
+    if (not isinstance(names, list) or len(names) > ZONES_MAX or names != sorted(set(names))
+            or not all(isinstance(name, str) and 1 <= len(name) <= ZONE_NAME_MAX and "/" not in name
+                       and name not in (".", "..") for name in names)):
+        raise Refused(BAD_FORMAT, "agent.zones protects sorted names without repeats, none of them a path")
     return doc
 
 
@@ -266,13 +327,13 @@ def _reads(reader: Callable[[bytes], dict]) -> Callable[[Any, bytes, Any], Optio
 # ------------------------------------------------------------------ the table
 
 ARTIFACTS: Dict[str, Artifact] = {
-    "policy.core": Artifact(),
+    "policy.core": Artifact(check=check_policy_core),
     "policy.ppt": Artifact(frozenset({"fields", "counts", "wcet_cycles", "qualification"}),
                            frozenset({"packing", "flow_sha256", "overlay_of"}), check_policy_ppt),
     "policy.spiral": Artifact(check=check_policy_spiral),
     "sandbox.profile": Artifact(frozenset({"compiler"})),
-    "egress.hosts": Artifact(),
-    "agent.zones": Artifact(),
+    "egress.hosts": Artifact(check=_reads(read_hosts)),
+    "agent.zones": Artifact(check=_reads(read_zones)),
     "gateway.routes": Artifact(),
     "net.dests": Artifact(),
     "net.edge": Artifact(frozenset({"flow_sha256", "names_sha256", "qualification"})),
@@ -289,9 +350,12 @@ TRUST_BOUND = 16384                                # E6: every kind takes the la
 MESH_TABLE_MAX = 640                               # E6: TBL_MAX in prismpath-hw/mesh/main/ppt_mesh.c
 
 TARGETS: Dict[str, Target] = {
-    "host": Target(needs=frozenset({"policy.ppt"}), decides=False, when_declared=frozenset({"policy.spiral"})),
+    "host": Target(needs=frozenset({"policy.ppt"}), decides=False, when_declared=frozenset({"policy.spiral"}),
+                   compares=frozenset({"policy.ppt"})),
+    "agent": Target(needs=frozenset({"policy.core", "egress.hosts"}), decides=True,
+                    when_declared=frozenset({"agent.zones"})),
     "mesh": Target(needs=frozenset({"policy.ppt"}), decides=False, expiry_hold=True, body_bound=MESH_TABLE_MAX,
-                   checks={"policy.ppt": check_mesh_table}, reads_meta=False),
+                   checks={"policy.ppt": check_mesh_table}, reads_meta=False, compares=frozenset({"policy.ppt"})),
 }
 
 

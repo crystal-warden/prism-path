@@ -39,7 +39,7 @@ from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 
 from prismpath import canon
 from prismpath.distribution import envelope as env
-from prismpath.distribution import frames, kinds, state_record
+from prismpath.distribution import frames, kinds, state_record, widening
 from prismpath.distribution.kinds import Refused
 from prismpath.distribution.trust import TrustStore, check_drops, read_anchor
 from prismpath.distribution.verify import PepView, verify
@@ -466,17 +466,25 @@ class Controller:
         members = sorted(pep for pep, member in self.members.items() if member.group == group and member.stream == stream)
         if not members:
             raise ValueError(f"the group {group} has no member on {stream}")
-        ids = sorted(one for one, info in self.stored.items()
-                     if info["stream"] == stream and info["seq"] == seq and not info["artifact"].startswith("trust.r"))
+        ids = sorted((one for one, info in self.stored.items()
+                      if info["stream"] == stream and info["seq"] == seq and info["artifact"] not in kinds.ON_TRUST_STREAM),
+                     key=lambda one: (self.stored[one]["artifact"] != "trust.widening", one))   # W3: the statement first
         if not ids:
             raise ValueError(f"no release is stored at {stream} seq {seq}")
         releases = {(self.stored[one]["policy"], self.stored[one]["release"]) for one in ids}
         if len(releases) != 1:
             raise ValueError(f"the envelopes stored at {stream} seq {seq} name more than one release")
+        undecided = sorted({self.members[pep].kind for pep in members if not kinds.TARGETS[self.members[pep].kind].decides})
+        cause = self._widens_unsaid(ids) if undecided else None
+        if cause is not None:
+            self._log("refused", group=group, stream=stream, seq=seq, cause=cause, result="not offered")
+            raise Refused(cause, f"seq {seq} allows more than the release it replaces and says it does not (W7)")
+        policy, release = next(iter(releases))
         for rollout in self.rollouts:
-            if rollout.group == group and rollout.open:
-                self._end(rollout, ABORTED)
-        policy, release = releases.pop()
+            same = (rollout.stream, rollout.seq, rollout.release) == (stream, seq, release)
+            if rollout.group == group and (rollout.open or same and "aborting" in rollout.members.values()):
+                # the same release offered again is not aborted on the members, who are offered it anew
+                self._end(rollout, ABORTED, send_abort=not same)
         rollout = Rollout(group=group, rule=self.groups[group], stream=stream, seq=seq, policy=policy, release=release,
                           envelopes=ids, state=OFFERED, started=self.clock(), members={pep: OFFERED for pep in members},
                           previous={pep: list(self.members[pep].expected) for pep in members}, delay_ms=delay_ms)
@@ -484,6 +492,25 @@ class Controller:
         for pep in members:
             self._log("offered", pep=pep, group=group, stream=stream, seq=seq, envelopes=ids)
         return rollout
+
+    def _widens_unsaid(self, ids: List[str]) -> Optional[str]:
+        """W7: the release of `ids` says it does not widen, and it is compared with the release the controller
+        holds whose policy hash is its `replaces`. A `replaces` it holds nothing for is larger. The cause when
+        the release is larger with `widens` false, else None."""
+        envelopes = [env.read(env.unseal(self.sealed(one))[0]) for one in ids]
+        releases = [one for one in envelopes if one.artifact not in kinds.TRUST_ARTIFACTS]
+        if not releases or releases[0].widens:
+            return None
+        first = releases[0]
+        staged = {one.artifact: self.blob(one.body_sha256) for one in releases}
+        held = [info for info in self.stored.values() if first.replaces and info["policy"] == first.replaces
+                and info["stream"] == first.stream and info["seq"] < first.seq
+                and info["artifact"] not in kinds.TRUST_ARTIFACTS]
+        if not held:
+            return widening.UNSIGNED
+        latest = max(info["seq"] for info in held)
+        active = {info["artifact"]: self.blob(info["body_sha256"]) for info in held if info["seq"] == latest}
+        return None if widening.compare_release(active, staged) == widening.NOT_LARGER else widening.UNSIGNED
 
     def commit(self, group: str) -> Rollout:
         """The operator's commit: send `commit` to every member of the group's open rollout that staged."""
@@ -525,9 +552,13 @@ class Controller:
         self._log("commit", pep=pep, group=rollout.group, stream=rollout.stream, seq=rollout.seq,
                   policy=rollout.policy, delay_ms=rollout.delay_ms)
 
-    def _end(self, rollout: Rollout, state: str) -> None:
+    def _end(self, rollout: Rollout, state: str, send_abort: bool = True) -> None:
         rollout.state = state
-        if state == ABORTED:
+        if state == ABORTED and not send_abort:
+            for pep, member_state in rollout.members.items():
+                if member_state in ("staged", "committing", OFFERED, "aborting"):
+                    rollout.members[pep] = "aborted"
+        elif state == ABORTED:
             for pep, member_state in rollout.members.items():
                 if member_state in ("staged", "committing", OFFERED):
                     if member_state == "committing":

@@ -8,6 +8,25 @@ spec stable.
 
 ## [Unreleased]
 
+### Added: a release that allows more needs the owner's signed widening statement (2026-11-22)
+
+- **An enforcement point stages a release that allows more than its active one only with a `trust.widening` statement of the same release, staged before it, whose `from` is empty or holds the active policy hash.** Otherwise the release is `dist:widening-unsigned`, at staging and again at commit. A first install allows more than no policy, so it needs one too.
+- **A host, a mesh node and the cFS app cannot decide, so they take a release on its signature alone only when its `widens` is false and its `replaces` is their active policy.** A host and a mesh node still compare the table, which has no order, so another table than the active one is larger and one that says it does not widen is refused even with a statement. A table goes in on its signature only as a renewal. The cFS app goes by the signer's word.
+- **A target that can decide compares for itself and refuses a larger release that says it does not widen, even with a statement.** The comparator walks the finite reading domain of `policy.core` with the agent profile compiler's own walk, a wide integer field by its boundary values, and compares host lists, route tables and zone files. Any change of a `policy.ppt` image is larger, and a `cfs.table` is ordered by the core image inside it.
+- **The `agent` row joins the kind table.** An agent release needs `policy.core` and `egress.hosts` and takes `agent.zones` when the owner declares zones, each with its check, and an agent PEP decides for itself. The agent home that runs it comes later.
+- **A widening statement lists at most 64 policy hashes, in Python and Rust.**
+- **A controller refuses to offer a release that says it does not widen when the release it holds for `replaces` shows it does, or when it holds none.** The sealing tool sets `widens` by the same test, so a host or a mesh table is written with `widens` false only on a renewal.
+- **A rollback falls under the same rule, and a rollback to a release identical to the active one is never a widening.**
+- **`prismpath dist widen` signs the statement, and `prismpath dist seal --held` fills in `replaces` and sets `widens` from the comparator.** The controller offers a release's statement before the release, and counts a member staged only once every envelope of the release is.
+- **The corpus gains the widening cases for a PEP that cannot decide, on a host for Rust and on a mesh node for the C core.**
+- **The C core holds a release to the same rule on a mesh node, at staging and at commit, and a rollback to an identical release is never a widening there either, step by step as the Python machine does.**
+- **A first install that says it does not widen is refused on every kind, even with a statement, in Python and the C core.** Going from no policy to one is a comparison every enforcement point makes (W6).
+- **A rollback on a host or a mesh node is held to W1 to W7 as a staged release is, so a kept renewal that says it does not widen is refused from another table even with a statement, in Python and the C core.**
+- **An enforcement point commits a release only whole.** It computes the release id again over the artifacts it staged and refuses with `dist:incomplete` when that is not the signed `release`, so a transport cannot withhold a signed `agent.zones`, `sandbox.profile` or `policy.spiral`, in Python and the C core. The corpus gains its commit cases, 137 and 138.
+- **An agent policy whose rule names a value outside its field's reading domain, such as a tool the classifier does not produce, is refused when it is loaded and at V11 with the new cause 160 `policy:out-of-domain`.** The engineer who installs PrismPath defines that domain, and a reading whose category value is outside it is refused with the same cause before the policy decides it. The comparator walks the combinations the classifier never gives too, so a release that allows more on one of them is larger.
+- **A commit holds a release to the widening rule again against what is active then (C3), so a renewal whose active release lapsed before its commit needs a statement, case 143.**
+- **The conformance cases run to 143, and the trace test counts a case one implementation runs only half of as pending, as case 60 is for the C core until it has the `cfs` kind.**
+
 ### Added: prismpath dist, the reference controller and the pull binding for hosts (2026-11-22)
 
 - **`prismpath dist` seals, verifies, revokes, rotates and rekeys on the machine that holds the authority key, and runs the reference controller and a host enforcement point.** `anchor` writes a stream's trust anchor, `enroll`, `offer`, `commit`, `abort` and `fleet` work on the controller's directory beside `serve`, and `pep` provisions a host PEP by fingerprint, pulls, reports its state and rolls back.

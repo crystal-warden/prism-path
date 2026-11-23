@@ -205,6 +205,7 @@ _REGISTRY: Tuple[Tuple[int, str, str, str], ...] = (
     (157, "fleet:policy-mismatch",       "wire",      "an enforcement point reports a policy hash, a seq or a Facet preamble other than the one the controller expects for it; filed by the controller"),
     (158, "fleet:silent",                "wire",      "no accepted state record from an enforcement point for three heartbeat intervals; filed by the controller"),
     (159, "dist:held",                   "state",     "an enforcement point deciding under an expired release because its deployment chose to hold at expiry, or an action refused because of that hold; marked in every state record and receipt while it lasts"),
+    (160, "policy:out-of-domain",        "envelope",  "a policy whose rule names a value outside its field's reading domain, the values the installer defined for it (a tool or a category value the classifier does not produce, a bool constant that is not true or false, an int named outside its min and max); refused when the policy is loaded and when it is checked, since such a value is a resource nobody accounted for"),
 )
 
 CODES: Dict[int, Tuple[str, str, str]] = {cause_code: (canonical_name, class_name, description)

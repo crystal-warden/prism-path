@@ -738,8 +738,15 @@ pub fn read_rotation(body: &[u8]) -> Result<Rotation, Refused> {
     load(body, "rotation body")
 }
 
+/// W4: a widening statement lists at most 64 policy hashes in `from`.
+pub const WIDENING_FROM: usize = 64;
+
 pub fn read_widening(body: &[u8]) -> Result<Widening, Refused> {
-    load(body, "widening body")
+    let doc: Widening = load(body, "widening body")?;
+    if doc.from.len() > WIDENING_FROM {
+        return Err(Refused::new(TOO_LARGE, "a widening statement from more than 64 hashes")); // W4
+    }
+    Ok(doc)
 }
 
 #[cfg(test)]

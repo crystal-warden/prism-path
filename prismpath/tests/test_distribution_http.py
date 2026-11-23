@@ -78,11 +78,18 @@ class Fleet:
                     for name, point in self.points.items()}
         self.controller.save()
 
-    def put(self, body, seq, **args):
-        sealed = self.first.seal(body, seq=seq, **args)
+    def put(self, body, seq, *, widen=None, replaces=None, **args):
+        """Store a release of `body` at `seq`, replacing the one put before it. The first, or one put with
+        `widen`, goes with a widening statement that covers any PEP (W2, W3)."""
+        previous = getattr(self, "previous", None)
+        widen = self.first.policy_of(body) != previous if widen is None else widen      # W7: only a renewal does not
+        replaces = (previous or "") if replaces is None else replaces
+        pairs = _dist.release_with_statement(self.first, body, seq, widen=widen, replaces=replaces, **args)
         with self.controller.locked() as controller:
-            controller.put(sealed, body)
-        return sealed
+            for sealed, data in pairs:
+                controller.put(sealed, data)
+        self.previous = self.first.policy_of(body)
+        return pairs[-1][0]
 
     def offer(self, seq, group="fleet"):
         with self.controller.locked() as controller:
@@ -115,21 +122,21 @@ def test_case_032_a_host_pep_stages_and_commits_with_the_controller_never_openin
 
 
 def test_case_033_a_blob_that_is_not_its_name_and_a_sealed_envelope_of_another_id_are_body_mismatch(tmp_path):
-    """case_033: B4, V9. Nothing is staged in either."""
+    """case_033: B4, V9. The release is never staged in either, beside the widening statement that came first."""
     fleet = Fleet(tmp_path, names=("p1",))
-    fleet.put(OLD, 1)
+    release_id = env.envelope_id(env.unseal(fleet.put(OLD, 1))[0])
     other = fleet.first.seal(NEW, seq=2)
     fleet.offer(1)
-    for name, change in (("body", lambda name, data: data if name in fleet.controller.stored
-                          else data[:-1] + bytes([data[-1] ^ 1])),
-                         ("sealed", lambda name, data: other if name in fleet.controller.stored else data)):
+    for name, change in (("body", lambda name, data: data[:-1] + bytes([data[-1] ^ 1]) if name == H(OLD) else data),
+                         ("sealed", lambda name, data: other if name == release_id else data)):
         point = _dist.HostPep(tmp_path / f"q_{name}", clock=fleet.clock, key=_dist.instance_key("p1"))
         fleet.offer(1)                                  # the refusal before ended the last rollout
         between = Between(fleet.controller, blob=change)
         with listening(between) as (base, _server):
             PullClient(point.pep, HttpTransport(base)).poll()
         refused = [event["data"]["cause"] for event in point.pep.audit.events if event["action"] == "refused"]
-        assert refused == ["dist:body-mismatch"] and point.pep.staged is None and point.pep.active is None
+        assert refused == ["dist:body-mismatch"] and "policy.ppt" not in point.pep.staged.held
+        assert point.pep.active is None
 
 
 def test_case_034_an_offer_for_an_envelope_the_controller_does_not_hold_is_a_failed_fetch(tmp_path):
@@ -155,7 +162,7 @@ def test_case_030_a_forged_commit_and_a_forged_abort_run_only_what_the_authority
     fleet = Fleet(tmp_path, names=("p1",))
     fleet.put(OLD, 1)
     pep = fleet.points["p1"].pep
-    pep.stage(fleet.first.seal(OLD), OLD)
+    fleet.points["p1"].stage(OLD)
     forged = Between(fleet.controller, answer=lambda answer: {
         "epoch": answer["epoch"], "offers": [], "abort": [],
         "commit": [{"stream": STREAM, "seq": 1, "policy": H(OLD), "delay": 0}]})
@@ -210,6 +217,9 @@ def test_case_120_the_pull_client_never_reads_more_than_it_was_promised(tmp_path
     sealed = fleet.put(OLD, 1)
     fleet.offer(1)
     envelope_id = env.envelope_id(env.unseal(sealed)[0])
+    statement_id, info = next((one, info) for one, info in fleet.controller.stored.items()
+                              if info["artifact"] == "trust.widening")
+    statement = [statement_id, info["body_sha256"]]
     pep = fleet.points["p1"].pep
 
     def run(**change):
@@ -221,10 +231,11 @@ def test_case_120_the_pull_client_never_reads_more_than_it_was_promised(tmp_path
         return between, client
 
     between, client = run(blob=lambda name, data: data + b"\0" if name == H(OLD) else data)
-    assert client.transport.blob_reads == len(sealed) and between.asked == [envelope_id, H(OLD)] and pep.staged is None
+    assert client.transport.blob_reads == len(sealed) + info["sealed_size"] + info["body_size"]
+    assert between.asked == statement + [envelope_id, H(OLD)] and "policy.ppt" not in pep.staged.held
     between, client = run(blob=lambda name, data: data + b"\0" * (env.MAX_SEALED + 1 - len(data))
                           if name == envelope_id else data)
-    assert client.transport.blob_reads == 0 and between.asked == [envelope_id] and pep.staged is None
+    assert client.transport.blob_reads == 0 and between.asked == [envelope_id] and "policy.ppt" not in pep.staged.held
     between, client = run(answer=lambda answer: {**answer, "pad": "x" * (65 * 1024)})
     assert client.transport.blob_reads == 0 and between.asked == [] and client.failures[0][0] == "offers"
     refused = [event["data"]["cause"] for event in pep.audit.events if event["action"] == "refused"]
@@ -236,7 +247,7 @@ def test_case_120_the_pull_client_never_reads_more_than_it_was_promised(tmp_path
     between = Between(fleet.controller, blob=lambda name, data: forged if name == envelope_id else data)
     with listening(between) as (base, _server):
         PullClient(other.pep, HttpTransport(base)).poll()
-    assert between.asked == [envelope_id] and other.pep.staged is None
+    assert between.asked == statement + [envelope_id] and "policy.ppt" not in other.pep.staged.held
     assert [event["data"]["cause"] for event in other.pep.audit.events if event["action"] == "refused"] == ["sig:invalid"]
 
 
@@ -251,7 +262,7 @@ def test_the_offers_answer_carries_an_etag_and_answers_304_or_waits_while_nothin
         assert transport.offers(pep_id) is None
         fleet.put(OLD, 1)
         fleet.offer(1)
-        assert [offer["seq"] for offer in transport.offers(pep_id)["offers"]] == [1]
+        assert [offer["artifact"] for offer in transport.offers(pep_id)["offers"]] == ["trust.widening", "policy.ppt"]
         waited = []
         thread = threading.Thread(target=lambda: waited.append(transport.offers(pep_id, wait=10)))
         thread.start()
@@ -291,7 +302,7 @@ def test_case_095_three_host_peps_over_http_one_commits_one_refuses_a_downgrade_
         assert fleet.points["p2"].pep.active.seq == 3
         with controller.locked():
             controller.enroll(fleet.points["p2"].key.public_raw, "host", STREAM, "fleet", "each")
-        fleet.put(NEW, 2)
+        fleet.put(NEW, 2, widen=True, replaces="")      # a first install for p1 and p3
         fleet.offer(2)
         for _ in range(3):
             for client in clients.values():
@@ -311,8 +322,8 @@ def test_case_095_three_host_peps_over_http_one_commits_one_refuses_a_downgrade_
     outcomes = {name: [(event["action"], event["data"].get("cause")) for event in point.pep.audit.events
                        if event["action"] in ("committed", "refused")] for name, point in fleet.points.items()}
     assert outcomes["p1"] == [("committed", None)]
-    assert outcomes["p2"] == [("committed", None), ("refused", "dist:seq-replay")]
-    assert outcomes["p3"] == [("refused", "sig:invalid")]
+    assert outcomes["p2"] == [("committed", None)] + [("refused", "dist:seq-replay")] * 2   # statement, release
+    assert outcomes["p3"] == [("refused", "sig:invalid")] * 2
     assert ("commit", fleet.ids["p1"], None) in logged
     assert ("finding", fleet.ids["p2"], "dist:seq-replay") in logged
     assert ("finding", fleet.ids["p3"], "sig:invalid") in logged
@@ -376,9 +387,12 @@ def test_the_command_line_seals_serves_provisions_pulls_and_rekeys_a_host_pep(tm
                "--target", "host", "--key", keys["A"], "--not-before", str(now - 60), "--expires", str(now + 86400),
                "--qualification", str(qualification), "--out", str(sealed))[0] == 0
     (directory / "inbox" / "r1.body").write_bytes(OLD)
+    assert run("widen", "--sealed", str(sealed), "--key", keys["A"],              # W2, W3: a first install
+               "--out", str(directory / "inbox" / "w1.sealed"))[0] == 0
     code, printed = run("offer", "--dir", str(directory), "--key", keys["C"], "--group", "g", "--stream", STREAM,
                         "--seq", "1")
-    assert code == 0 and printed["stored"][0]["seq"] == 1 and printed["rollout"]["state"] == "offered"
+    assert code == 0 and [one["artifact"] for one in printed["stored"]] == ["policy.ppt", "trust.widening"]
+    assert printed["rollout"]["state"] == "offered"
 
     from prismpath.distribution.controller import Controller
     serving = dist_cli._Ingesting(Controller(str(directory), dist_cli._instance(keys["C"])))
@@ -427,7 +441,7 @@ def test_the_pull_client_tries_again_only_what_time_or_the_trust_chain_may_chang
     with listening(between) as (base, _server):
         client = fleet.clients(base)["p1"]
         client.poll()
-        assert pep.staged is None and envelope_id not in client.done
+        assert "policy.ppt" not in pep.staged.held and envelope_id not in client.done
         fleet.clock.now = later
         client.poll()
     assert pep.staged is not None and between.asked.count(envelope_id) == 2

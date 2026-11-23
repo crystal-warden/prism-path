@@ -97,7 +97,7 @@ home holds one release, so they cannot hold different versions of one policy.
 
 | Artifact | Body | `meta` members | Check beyond the hash (V11) |
 |---|---|---|---|
-| `policy.core` | A `prismpath.core/1` image in canon/2 bytes with no trailing line feed | none | The image loads (`prismpath.agent.policy.Policy`) and its SHA-256 is `policy_sha256` |
+| `policy.core` | A `prismpath.core/1` image in canon/2 bytes with no trailing line feed | none | The image loads (`prismpath.agent.policy.Policy`), every value a rule names is inside its field's reading domain (9.4, `policy:out-of-domain`), and its SHA-256 is `policy_sha256` |
 | `policy.ppt` | A `.ppt` image | `fields`, `counts`, `wcet_cycles`, `qualification`, and when present `packing`, `flow_sha256`, `overlay_of`. They mean what the same members of a `ppt-pack/1` manifest mean, and `qualification` is its `envelope_id` | `validate_image`, the counts, the recomputed WCET and the qualification envelope gate, with their existing causes. A `mesh` target runs its own table parser and ignores `meta` |
 | `policy.spiral` | The spiral sidecar bytes (`<name>.ppt.spiral`) | none | Its SHA-256 is the `sidecar_sha256` in the staged `policy.ppt` envelope's `meta.packing`. A missing one is `spiral:sidecar-missing` at commit and a wrong one `spiral:sidecar-hash-mismatch` |
 | `sandbox.profile` | A sandbox profile in canon/2 bytes (`Profile.canonical`) | `compiler` | The PEP compiles the profile from the staged `policy.core` and the bytes must be equal. Optional for `agent`, and checked when present |
@@ -174,10 +174,11 @@ comes before V4).
 pairs of every artifact in the release other than a trust kind, sorted. A `trust.widening` envelope is
 bound to its release by carrying the same `release` (E7) and is not part of the id, so the owner can sign
 a widening statement for a release that is already sealed without signing the release again. The signer computes it over the whole release, so two
-envelopes belong to one release only when the authority signed them as one set. A PEP does not need the
-other bodies to use it. It requires the same `release` on every envelope it stages together (E7) and
-reports it (H1), and that is what stops a mix of artifacts that were never released together (TUF's mix
-and match, section 1.5.2).
+envelopes belong to one release only when the authority signed them as one set. A PEP verifies each envelope without the
+other bodies. It requires the same `release` on every envelope it stages together (E7) and reports it
+(H1), and that is what stops a mix of artifacts that were never released together (TUF's mix and match,
+section 1.5.2). At commit it computes the id again over the artifacts it staged, so a release commits
+whole or not at all (C2).
 
 **E11.** Each `meta` member has a fixed form, and a reader that uses `meta` (every kind but those of E9)
 checks the form when it reads the envelope (V4), before any check uses the member. Another form is `dist:bad-format`.
@@ -448,10 +449,18 @@ written to the PEP's audit log.
 `dist:not-staged`, and nothing changes.
 
 **C2.** A PEP commits only when every artifact its target kind needs (section 3) is staged with one
-stream, one `seq` and one policy hash. Otherwise the cause is `dist:incomplete` and nothing changes.
+stream, one `seq` and one policy hash, and when the artifacts it staged are the whole release. The release
+id computed again over the staged artifacts, trust kinds left out (E10), must be the signed `release`. So a
+transport that withholds an artifact of a signed release, such as its `agent.zones`, its `sandbox.profile`
+or its `policy.spiral`, cannot commit the rest. Otherwise the cause is `dist:incomplete` and nothing
+changes.
 
 **C3.** At commit the PEP checks time (T3, T4) and revocation (V7) again for every staged envelope, since
-both can change after staging. A failure drops the staged release and reports the cause.
+both can change after staging. A failure drops the staged release and reports the cause. It then holds the
+release to the widening rule (V12) again against the release active at that moment, since a lapse, a
+rollback or another commit may have changed it since staging. A release staged as a renewal of a policy
+that lapsed before the commit goes from no policy to one, which is larger, so without a covering statement
+it is refused with `dist:widening-unsigned` and stays staged.
 
 **C4.** A commit is durable in a fixed order, each step synced before the next. The intent record, the
 floor, the audit event, the artifacts under content addressed names, the active record that names them,
@@ -475,7 +484,10 @@ release is held to at its commit, since it becomes active anew. The cause is the
 gives.
 
 **RB3.** A rollback to a release that allows more than the active one is a widening and falls under W1 to
-W7. A PEP that cannot decide refuses it unless it holds a widening statement that covers it.
+W7, as the kept release would if it were staged against the active one. A PEP that cannot decide treats it
+as W2 says, so on a `host` or a `mesh` node a kept table that is not the active one is larger. It refuses
+the rollback unless the kept release holds a widening statement that covers it, and refuses a kept release
+that is larger and says it does not widen even with one (W6).
 
 ### 9.4 The widening rule
 
@@ -484,13 +496,31 @@ order is refuse, then escalate, then allow, and a release is larger when any rea
 domain moves up that order, or when the two policies do not have the same fields. For `egress.hosts` and
 for the address set of `net.dests`, larger means not a subset. For `gateway.routes` any change is larger,
 because a path that loses its route reads as another class. For `agent.zones`, larger means a protected
-name is gone, and a release that drops the artifact drops every name. Going from no policy to any policy is larger.
+name is gone, and a release that drops the artifact drops every name. A `policy.ppt` image has no order.
+The table format gives its nodes no meaning (the substrate does), so nothing in the image says which
+outcome is the more permissive one, and any change of the image is larger. A `cfs.table` is ordered by
+the core image inside it, as a `policy.core` is, and any other change of the table is larger. Going from no policy to any policy is larger.
+
+The reading domain is set by the engineer who installs PrismPath. For a category it is the values the
+classifier produces, for a bool true and false, and for an int its declared min to max. A tool or any
+other value outside that domain is a resource nobody accounted for, so it is never allowed. A policy
+whose rule names a value outside its domain is refused when it is loaded and when it is checked (V11),
+with `policy:out-of-domain`. A reading whose category value is outside the domain is refused with the
+same cause before the policy decides it, and an int or a bool outside its range or kind is refused by the
+core as before. Some combinations of values in the domain are ones the classifier never
+gives, such as a `net_dest` for a tool that is not `connect`. The walk covers them as well, so a release
+that allows more on one of them is larger, and one that refuses more there is a tightening.
 
 **W1.** A PEP that can decide (section 3) computes whether the staged release is larger than the active
-one. It does not trust `widens` for that.
+one. It does not trust `widens` for that. It walks the reading domain and holds each policy to it as the
+paragraph above says.
 
 **W2.** A PEP that cannot decide treats the release as not larger only when `widens` is `false` and
-`replaces` is the policy hash it has active. In every other case it treats the release as larger.
+`replaces` is the policy hash it has active. In every other case it treats the release as larger. It
+still makes every comparison it can, and what it computes as larger is larger whatever `widens` says
+(W6). A `host` or a `mesh` PEP can make one. A table has no order, so a staged table that is not byte
+for byte the active one is larger. On those kinds a release goes in on its signature alone only when it
+is a renewal.
 
 **W3.** A release that is larger is staged only when a `trust.widening` envelope of the same release is
 staged with it. Otherwise the cause is `dist:widening-unsigned`.
@@ -502,18 +532,24 @@ staged with it. Otherwise the cause is `dist:widening-unsigned`.
 {"encoding":"canon/2","format":"prismpath.dist-widening/1","from":["<policy hash>", "..."]}
 ```
 
-`from` is sorted. It lists the policy hashes the release may replace. An empty list means any, including
+`from` is sorted and holds at most 64 hashes. A longer one is `dist:too-large`. It lists the policy hashes
+the release may replace. An empty list means any, including
 none. The statement covers a PEP when `from` is empty or holds the PEP's active policy hash.
 
 **W5.** A widening statement is signed by the authority. In this version every envelope is, so the rule
 asks for a second, separate signed statement. That is what makes a widening an act the owner takes on
 purpose and what the audit log records.
 
-**W6.** A PEP that can decide and finds `widens` is `false` on a release it computes as larger refuses it
-with `dist:widening-unsigned` even when a statement is present, because the signer's claim is wrong.
+**W6.** A PEP that finds `widens` is `false` on a release it computes as larger refuses it with
+`dist:widening-unsigned` even when a statement is present, because the signer's claim is wrong. A PEP that
+can decide computes this of every release. Every PEP computes that a first install is larger, since it
+goes from no policy to one, and a `host` or a `mesh` PEP computes that another table is.
 
 **W7.** A controller checks W1 itself before it offers a release to a target that cannot decide, and
-refuses to offer one whose `widens` is `false` and which it computes as larger.
+refuses to offer one whose `widens` is `false` and which it computes as larger. It compares the release
+with the one it holds whose policy hash is `replaces`, and a `replaces` it holds no release for is
+treated as larger. The sealing tool applies the same test when it sets `widens`, so for a `mesh` or a
+`host` table `widens` is `false` only on a renewal.
 
 ## 10. Revocation
 
@@ -869,6 +905,7 @@ written. If another change lands first the numbers move up together and the name
 | 157 | `fleet:policy-mismatch` | wire | A PEP reports a policy hash, `seq` or Facet preamble other than the expected one |
 | 158 | `fleet:silent` | wire | No accepted state record from a PEP for three intervals |
 | 159 | `dist:held` | state | A PEP deciding under an expired release because its deployment chose HOLD, or an action refused because of that hold |
+| 160 | `policy:out-of-domain` | envelope | A policy whose rule names a value outside its field's reading domain (9.4) |
 
 Reused as they are. `sig:invalid` (2), `sig:revoked-key` (3), `wire:codebook-mismatch` (51),
 `document:not-canonical` (103), and the causes of the artifact checks of section 3.
@@ -952,8 +989,8 @@ reports exactly the cause given, or none, and its state after is the one given.
 | 57 | An `agent` PEP is offered a policy that allows less | committed on its ordinary signature | W1 | P |
 | 58 | An `agent` PEP is offered a policy that moves a reading from refuse to escalate | `dist:widening-unsigned` | W1 | P |
 | 59 | An `agent` PEP is offered a host list with one more host, and a `gateway` PEP a changed route table | `dist:widening-unsigned` each | W1 | P |
-| 60 | A `mesh` PEP is offered `widens` false with `replaces` equal to its active hash | committed | W2 | P C |
-| 61 | A `mesh` PEP is offered `widens` false with `replaces` another hash, and `widens` true, each without a statement | `dist:widening-unsigned` each | W2, W3 | P C |
+| 60 | A `mesh` PEP is offered the table it has active again at a higher `seq`, with `widens` false and `replaces` its active hash, and a `cfs` PEP a table with another core image, `widens` false and `replaces` its active hash | committed each, the first as a renewal and the second on the signer's word | W2 | P C |
+| 61 | A `mesh` PEP is offered `widens` false with `replaces` another hash, `widens` true, and another table with `widens` false and `replaces` its active hash, each without a statement, and the last again with a covering statement | `dist:widening-unsigned` each time, the last because the signer's word is wrong | W2, W3, W6 | P C |
 | 62 | A widening statement whose `from` holds the active hash, one whose `from` is empty, and one whose `from` holds only another hash | committed, committed, `dist:widening-unsigned` | W4, W5 | P R C |
 | 63 | A first install with no statement, and with one | `dist:widening-unsigned`, committed | W2, W3 | P R C |
 | 64 | A statement is present and a deciding PEP computes larger while `widens` is false | `dist:widening-unsigned` | W6 | P |
@@ -1027,3 +1064,12 @@ reports exactly the cause given, or none, and its state after is the one given.
 | 132 | A `mesh` PEP is sent a revocation list of 64 entries in each list and 16 streams, a `policy.ppt` of 641 bytes, and over frames a trust body offered at 16,385 bytes | applied, `dist:too-large` from the signed `body_size` with no body read, and the transfer dropped with `dist:too-large` | E6, V5, R7, B9 | P C |
 | 133 | A PEP one trust statement behind is offered that statement and a release, refuses the statement, then takes it and the release | only the statement is offered first, the refusal is filed against the statement and the rollout is unmoved, then the release is offered and commits | F6 | P |
 | 134 | A revocation whose `targets` names only `mesh` is sent to a `host` PEP and a `mesh` PEP, then a rotation naming every kind | applied on both, and both then take the rotation at the next trust sequence | V5, R1 | P R C |
+| 135 | A widening statement whose `from` holds 64 hashes, and one with 65 | staged, `dist:too-large` | W4 | P R C |
+| 136 | The sealing tool and a controller are given a `mesh` release whose table differs from the one it replaces by one constant, with `widens` false, then the same table again with a later `expires`, then a `cfs` table whose core image allows less and one whose core image is the same and whose rules differ | the tool writes `widens` true and the controller refuses the false one, the renewal is offered with `widens` false, the narrower `cfs` table is not larger, and the last is larger | W7, W1 | P |
+| 137 | A first install whose signed release id names an artifact that is not staged, on a `host` without its `policy.spiral`, on a `mesh` node whose table's release id also names a `policy.spiral`, and on an `agent` PEP without its `agent.zones` | `dist:incomplete` each, and no release is active | C2, E10 | P R C |
+| 138 | An update whose signed release id names an artifact that is not staged, on a `host` without its `policy.spiral`, on a `mesh` node whose table's release id also names a `policy.spiral`, and on an `agent` PEP that keeps its protected zones and adds a host with the `agent.zones` envelope withheld | `dist:incomplete` each, and the old release stays active | C2, E10 | P R C |
+| 139 | A `host` and a `mesh` PEP are offered a first install with `widens` false and a widening statement whose `from` is empty | `dist:widening-unsigned`, and no release is active | W2, W6 | P R C |
+| 140 | A `host` and a `mesh` PEP roll back from another table to a kept renewal that says it does not widen and holds a widening statement whose `from` is empty | `dist:widening-unsigned`, the active release stays | RB3, W2, W6 | P R C |
+| 141 | An `agent` PEP is sent a `policy.core` whose rule allows a tool the classifier does not produce, and the agent's policy loader is given the same image | `policy:out-of-domain` both times | 9.4, V11 | P |
+| 142 | An `agent` PEP is offered a `policy.core` that allows a combination the classifier never gives, and one that refuses there what the active one asks about, each with `widens` false, and a policy whose rules name only values in the domain decides a reading whose tool is outside it | `dist:widening-unsigned`, committed, and the reading is refused with `policy:out-of-domain` | 9.4, W1, W6 | P |
+| 143 | A renewal staged on a `host` and a `mesh` PEP with `widens` false and no statement, whose active release then expires before the commit | `dist:widening-unsigned` at commit, and nothing is active | C3, V12, W2 | P R C |

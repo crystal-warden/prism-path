@@ -303,6 +303,35 @@ def _first_allows(policy, reading: Dict[str, Any]) -> bool:
         return True
 
 
+def kind_of(policy, reading: Dict[str, Any]) -> str:
+    """The kind `Policy.decide` gives `reading`, `allow`, `refuse` or `escalate`, by the reference's two steps
+    (`core_reference._python_verdict`): the system boundary, then the first deterministic rule that holds, found
+    as `engine.first_deterministic` finds it but with each condition parsed once (`_holds`), and the policy check
+    left out, which does not change a verdict. A reading the session fields are missing from is given them at
+    their most restrictive, as `Policy.reading_bytes` does. The widening comparator walks a whole domain with
+    it, and `prismpath/tests/test_distribution_widening.py` holds it to `Policy.decide`."""
+    from prismpath.agent import session_state
+    from prismpath.agent.policy import target_decision
+    from prismpath.kernel import field_definitions, predicates
+    if policy.stateful and not all(name in reading for name in session_state.FIELDS):
+        reading = {**session_state.RESTRICTIVE, **reading}
+    try:
+        if field_definitions.system_boundary(policy.graph, reading) is not None:
+            return "refuse"
+        for target, condition in policy.graph.nodes[policy.graph.start].edges:
+            if not predicates.is_deterministic(condition):
+                continue
+            try:
+                if _holds(condition, reading):
+                    decision = target_decision(target)
+                    return decision[0] if decision is not None else "refuse"
+            except predicates.PredicateError:
+                pass
+    except Exception:  # noqa: BLE001 - the reference refuses a reading it cannot decide
+        return "refuse"
+    return "refuse"
+
+
 def _unproduced(names: List[str], combo) -> bool:
     """True when a combination of value groups is one the classifier never gives (`CLASSIFIER_ONLY`)."""
     groups = dict(zip(names, combo))
@@ -311,6 +340,167 @@ def _unproduced(names: List[str], combo) -> bool:
                 and not any(value in groups[gate] for value in values):
             return True
     return False
+
+
+def _wide_atoms(when, out) -> bool:
+    """`_atoms`, also reading `not in`, for the boundary walk of a wide integer field."""
+    head = when[0] if isinstance(when, list) and when else None
+    if head in ("and", "or"):
+        return all(_wide_atoms(part, out) for part in when[1:])
+    if head == "not":
+        return _wide_atoms(when[1], out)
+    if head in ("always", "never"):
+        return True
+    if head in ("cmp", "in", "not in", "truthy"):
+        out.append(when)
+        return True
+    return False
+
+
+def _boundary_domain(name: str, text: str, atoms: List[list]) -> List[Any]:
+    """The values of a wide integer field that stand for all of them: its ends and each constant an atom on it
+    compares with, with its neighbours, inside the declared range. Between two of them every atom is true or
+    false alike, so they meet every class `_classes` makes of the whole range. ProfileError when an atom is not
+    a comparison with integer constants."""
+    options = dict(word.split("=", 1) for word in text.split()[1:] if "=" in word)
+    low, high = int(options["min"]), int(options["max"])
+    points = {low, high}
+    for atom in atoms:
+        if atom[0] == "cmp" and isinstance(atom[3], list) and isinstance(atom[3][1], int):
+            constants = [atom[3][1]]
+        elif atom[0] in ("in", "not in") and all(isinstance(const, list) and isinstance(const[1], int) for const in atom[2]):
+            constants = [const[1] for const in atom[2]]
+        elif atom[0] == "truthy":
+            constants = [0]
+        else:
+            raise ProfileError(f"field {name!r} is an int with an atom the boundary walk does not read")
+        for const in constants:
+            points.update(value for value in (const - 1, const, const + 1) if low <= value <= high)
+    values: List[Any] = sorted(points)
+    if options.get("absent") == "allowed":
+        values.append(None)
+    return values
+
+
+def domain_classes(docs, read_also: Tuple[str, ...] = (), boundary_ints: bool = False):
+    """The finite reading domain of one or more policy documents over the same fields, as value classes:
+    `(names, constant, groups)`. `names` are the fields some rule of some document reads (and `read_also`),
+    `constant` gives every other field its first value, and `groups[i]` are the classes of `names[i]`, grouped
+    so that every atom any of the documents has on that field is true of all of a class or of none (see
+    `_classes`). A first rule that holds is then a function of the classes, so each document decides a
+    combination of classes as one, by its first values, and `_unproduced` names the combinations the
+    classifier never gives. Raises ProfileError when a field has no finite domain. `needs_all` walks it for one
+    image, and the widening comparator (`prismpath.distribution.widening`) for two. With `boundary_ints` an
+    integer field whose range is too wide to list stands for itself by its boundary values
+    (`_boundary_domain`), which is exact when every rule is read as atoms; the profile compiler does not use it."""
+    fields = docs[0]["fields"]
+    atoms: Dict[str, List[list]] = {name: [] for name in fields}
+    understood = True
+    read = set(read_also)
+    for doc in docs:
+        for rule in doc["rules"]:
+            found: List[list] = []
+            understood = _atoms(rule["when"], found) and understood
+            for atom in found:
+                if atom[1] in atoms:
+                    atoms[atom[1]].append(atom)
+            read |= _names_read(rule["when"], fields)
+    domains = {}
+    for name, text in sorted(fields.items()):
+        try:
+            domains[name] = _domain(name, text)
+        except ProfileError:
+            if not (boundary_ints and text.split()[0] == "int"):
+                raise
+            wide: List[list] = []
+            if not all(_wide_atoms(rule["when"], wide) for doc in docs for rule in doc["rules"]):
+                raise
+            domains[name] = _boundary_domain(name, text, [atom for atom in wide if atom[1] == name])
+    names = sorted(read)
+    constant = {name: values[0] for name, values in domains.items() if name not in read}
+    groups = [_classes(domains[n], atoms[n]) if understood else [[v] for v in domains[n]] for n in names]
+    return names, constant, groups
+
+
+unproduced = _unproduced          # the classifier's impossible combinations, for a walk of `domain_classes`
+
+
+def _bounds(name: str, text: str):
+    """The values a rule may name for a field: a set for a category the classifier produces and for a bool, the
+    (low, high) range of an int, or None for a field whose definition sets no bounds here."""
+    words = text.split()
+    kind = words[0] if words else ""
+    if kind == "category":
+        return frozenset(KNOWN_CATEGORIES[name]) if name in KNOWN_CATEGORIES else None
+    if kind == "bool":
+        return frozenset({False, True})
+    if kind == "int":
+        options = dict(word.split("=", 1) for word in words[1:] if "=" in word)
+        try:
+            return int(options["min"]), int(options["max"])
+        except (KeyError, ValueError):
+            return None
+    return None
+
+
+def reading_outside_domain(fields, reading) -> Optional[str]:
+    """The first category value of a reading outside its field's reading domain, the values the classifier
+    produces (`KNOWN_CATEGORIES`), as a sentence, or None. A bool or an int out of its declared kind or range is
+    the core's to refuse, as it always has (`route:contract-violation`), and so is a key that is not one of the
+    policy's fields, an absent value and a category with no known values."""
+    if not isinstance(reading, dict):
+        return None
+    for name, text in fields.items():
+        if name not in reading or reading[name] is None:
+            continue
+        if not text.split()[:1] == ["category"] or name not in KNOWN_CATEGORIES:
+            continue
+        value = reading[name]
+        inside = isinstance(value, str) and value in KNOWN_CATEGORIES[name]
+        if not inside:
+            return f"the reading gives {name} {value!r}, which is outside the field's reading domain"
+    return None
+
+
+def outside_domain(doc) -> Optional[str]:
+    """The first value a rule of the policy document names outside its field's reading domain, as a sentence, or
+    None when every value it names is inside. The domain is what the installer defined: the values the classifier
+    produces for a category (`KNOWN_CATEGORIES`), true and false for a bool, and min to max for an int, where an
+    equality or a membership names a value and an ordering only bounds one. A value outside the domain is a
+    resource nobody accounted for. The walk of `domain_classes` never meets it, so the widening comparator could
+    not see a rule that allows it (spec-policy-distribution.md, 9.4)."""
+    fields = doc.get("fields") if isinstance(doc, dict) else None
+    if not isinstance(fields, dict):
+        return None
+    for rule in doc.get("rules") or ():
+        stack = [rule.get("when") if isinstance(rule, dict) else None]
+        while stack:
+            item = stack.pop()
+            if not isinstance(item, list) or not item:
+                continue
+            head = item[0]
+            if head == "cmp" and len(item) == 4 and item[1] in fields:
+                name, op, constants = item[1], item[2], [item[3]]
+            elif head in ("in", "not in") and len(item) == 3 and item[1] in fields and isinstance(item[2], list):
+                name, op, constants = item[1], head, item[2]
+            else:
+                stack.extend(item)
+                continue
+            bounds = _bounds(name, fields[name])
+            if bounds is None:
+                continue
+            for constant in constants:
+                value = constant[1] if isinstance(constant, list) and len(constant) == 2 else constant
+                if value is None:
+                    continue                    # absence is the kernel's to check (policy:none)
+                if isinstance(bounds, tuple):
+                    inside = (op not in ("==", "!=", "in", "not in") or not isinstance(value, int)
+                              or isinstance(value, bool) or bounds[0] <= value <= bounds[1])
+                else:
+                    inside = value in bounds and type(value) is type(next(iter(bounds)))
+                if not inside:
+                    return f"a rule names {name} {value!r}, which is outside the field's reading domain"
+    return None
 
 
 def needs(policy) -> Tuple[bool, bool, bool]:
@@ -327,23 +517,7 @@ def needs_all(policy, read_also: Tuple[str, ...] = ()) -> Tuple[bool, bool, bool
     when it is allowed, every value of the group is allowed alike, and the need of each reading of the group
     (a product of its members) is counted. A group whose readings need nothing not already found is not
     decided at all, since its answer could not change the result."""
-    doc = policy.doc
-    fields = doc["fields"]
-    domains = {name: _domain(name, text) for name, text in sorted(fields.items())}
-    atoms: Dict[str, List[list]] = {name: [] for name in fields}
-    understood = True
-    for rule in doc["rules"]:
-        found: List[list] = []
-        understood = _atoms(rule["when"], found) and understood
-        for atom in found:
-            if atom[1] in atoms:
-                atoms[atom[1]].append(atom)
-    read = set(read_also)
-    for rule in doc["rules"]:
-        read |= _names_read(rule["when"], fields)
-    names = sorted(read)
-    constant = {name: values[0] for name, values in domains.items() if name not in read}
-    groups = [_classes(domains[n], atoms[n]) if understood else [[v] for v in domains[n]] for n in names]
+    names, constant, groups = domain_classes([policy.doc], read_also)
     found = [False] * 5
     for combo in itertools.product(*groups):
         if _unproduced(names, combo):
