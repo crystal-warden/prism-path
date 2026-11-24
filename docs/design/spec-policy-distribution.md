@@ -31,7 +31,7 @@ The owner decided these, and the rules below carry them out.
 | One signed envelope for every distributed artifact | E1 to E9, L1 to L4 |
 | Escape hatches only in dev builds | D1 to D4 |
 | The cFS lost floor response is a mission choice and LOCK is the default | Q5 |
-| Where refusing is not the safe answer, the engineer who installs PrismPath signs what a target always allows, what it falls back to and what no release may allow, on any kind. Refusal stays the default | IS1 to IS12, AF1 to AF10, FB1 to FB9, CL1 to CL4, OP1 to OP3, RC1 to RC4, H11 to H13, P4 |
+| Where refusing is not the safe answer, the engineer who installs PrismPath signs what a target always allows, what it falls back to and what no release may allow, on any kind. Refusal stays the default | IS1 to IS12, AF1 to AF10, FB1 to FB9, CL1 to CL7, OP1 to OP3, RC1 to RC4, H11 to H13, P4 |
 
 Out of scope. A PEP that has been compromised can lie in its state record, because the record says what
 the PEP claims. Hardware attestation would say more and is not designed here. A signature threshold above
@@ -1313,7 +1313,8 @@ reads it, and a PEP takes only what its install signatures carry. The acknowledg
 envelope ids of the statements, never a release id, and goes to the controller's audit log (F5). A statement with no
 envelope id on file cannot be acknowledged. A controller also treats as widening, for each PEP, a ceiling
 that withdraws the held one. A ceiling that would lapse the release it expects of a PEP narrows and is no
-widening (IS12), so it is offered at once, and the fleet view names the PEPs whose release it lapses. A set that does not widen, and a set of another install kind, never waits behind an unacknowledged one.
+widening (IS12), so it is offered at once, and the fleet view names the PEPs whose release it lapses. One the
+engineer sealed with `--staged` goes to its canary group first (CL7). A set that does not widen, and a set of another install kind, never waits behind an unacknowledged one.
 A release carried by a change statement is no widening and waits for nothing (W9, W11), and on `host` and `mesh`
 neither does an install set carried by an install change statement that W8 bears out (IS15). A set whose
 `widens` is `true` waits for its acknowledgement whatever W8 finds, because its signer says it widens, and the
@@ -1552,7 +1553,8 @@ Python holds every part. Rust (`prismpath-hotswap-rs`) holds the sealed envelope
 store with revocation and rotation, the PEP machine for the `host` target and the state record. C holds
 the sealed envelope, the strict scanner, the verifier, the trust store and the PEP machine for the `mesh`
 and `cfs` targets, compiled natively for tests and unchanged for the targets. The controller, the HTTP
-binding and the `agent`, `gateway` and `xdp` targets are Python only. Rust and the C core hold the
+binding and the `agent`, `gateway` and `xdp` targets are Python only, and so are the ceiling's lapse preview,
+retirement warning and staged rollout (CL5 to CL7), which live at the sealing tool and the controller. Rust and the C core hold the
 names `identity.bundle` and `identity.map` on their closed list of artifact kinds (ID8), and case 281 is
 pending in each until they do. The reconciling state (section 9.5)
 is Python's and Rust's, since the C core's switch cannot fail (C6). Every PEP reads the controller
@@ -1869,6 +1871,10 @@ are the change statement on every PEP that takes it.
 | 299 | A `mesh` and a `host` PEP stage an install change statement, restart, and are sent the narrower floor it carries | the statement is still staged after the restart and the floor is applied with event `install-applied` | IS15, IS4 | P R C |
 | 300 | A controller holds a `mesh` floor and is handed an install change statement and a floor table that allows less with `widens` false, then a change statement and a floor table that allows more, then a change statement after the set it carries is whole. A PEP pulls | the first is offered at once with the change statement first, shown as a change, not larger, with W8's answer, and the PEP applies it with event `install-applied` and its install id is the expected one with no finding, then `dist:widening-unsigned` with nothing of it stored, then `dist:incomplete` | IS15, W8, H13, F4 | P |
 | 301 | `prismpath dist install --kind fallback` is given a `mesh` fallback table that allows less than the one it follows, first with no yes and then with `--yes`, then a table that allows more without and with `--widens` | nothing written and `dist:widening-unsigned` with the comparison shown, then the set sealed with `widens` false and an install change statement beside it, then `dist:widening-unsigned`, then the set sealed with `widens` true and no change statement | IS15, W8, W9 | P |
+| 302 | Against a controller whose two `mesh` nodes run one release, `prismpath dist install --kind ceiling` is given a list that drops that release's table, first with no yes and then with `--yes`, then a list that lapses nothing without and with `--yes` | the preview names the release and its two machines, nothing written, then the ceiling sealed, then a preview of zero, nothing written, then sealed | CL5, CL3, IS12 | P |
+| 303 | The tool is given a ceiling with no controller state, with a directory that holds none, and with a controller that serves no PEP of the target on the stream, then with `--yes` | the fleet is shown as unknown each time with nothing written, then the ceiling sealed with the unknown preview | CL5 | P |
+| 304 | The tool is given a ceiling that lapses two `mesh` nodes with no fallback policy, then once they hold one, then with a release inside it stored at the controller, then offered to them | a warning that they refuse everything, then a warning that names their fallback policy by install `seq` and set id, then no warning and the release named as stored, then as offered | CL6, FB1 | P |
+| 305 | `prismpath dist install --kind ceiling --staged` seals a ceiling for a canary node and another node, and its rollout option reaches the controller's inbox with it. Then a staged ceiling lapses the canary node where the controller did not expect it, and `--staged` is given for a fallback policy | the canary node alone is offered it, the other node is offered it once the canary node reports it applied and a record after, then the rollout stops and the other node is never offered it, then a usage error | CL7, CL5, F3 | P |
 
 ## 21. The action floor, the fallback policy and the ceiling
 
@@ -2388,6 +2394,36 @@ names a value outside them is refused at V11 with `policy:out-of-domain`, the ca
 so is a ceiling whose own fields go outside the built domain. On a kind that cannot decide, the domain
 is the layout the PEP was built for, and the list names the tables qualified for it. A PEP with no
 ceiling keeps the domain it was built with.
+
+The owner decided the next three rules on 2026-11-24. Ceilings come from the engineers. A narrower ceiling is
+never a widening, so the controller offers it at once and it stays an emergency brake (IS12, H13). The check
+against a mistake, a ceiling too narrow or wrong that lapses a whole fleet, is made before the ceiling is signed,
+at the sealing tool, and never as a hold at the controller.
+
+**CL5.** The sealing tool shows a lapse preview before it signs a ceiling. The preview names each active release
+the new ceiling is above, as the release the controller expects of each PEP of the target on the stream, and how
+many PEPs run it. The tool reads this from the controller's state and never writes it. When it has no state, or
+the state serves no PEP of the target on the stream, or a PEP runs a release whose bodies the state does not hold,
+the preview says the fleet or that PEP is unknown, and unknown is never counted as nothing lapsing. A ceiling that
+lapses nothing shows zero. The tool signs any ceiling, the empty set and a widening ceiling too, only on the
+engineer's yes, at the terminal or with `--yes`, and without one it writes nothing.
+
+**CL6.** For each PEP the ceiling would lapse, the preview looks for a release inside the new ceiling that an
+open rollout offers that PEP, or that the controller stores on its stream above the `seq` the PEP runs. Where
+there is none, the tool warns that until a compliant release ships those PEPs run on their fallback policy,
+named by its install `seq` and set id from the install sets the controller expects of them, or that they hold no
+fallback policy and refuse everything but what an action floor allows. It also says when that fallback policy is
+above the new ceiling, since CL3 then refuses the ceiling. This is a warning and not a refusal.
+
+**CL7.** A ceiling for a planned change may be staged. With `--staged` the tool writes a rollout option beside the
+set that names a canary group. The controller takes it in its inbox before the set, offers the ceiling to the
+members of that group first, and offers it to the rest of the stream only when every canary member has reported
+the ceiling's install id and then a later record, with no lapse the controller did not name in the ceiling's
+`lapses`. A canary member that refuses the ceiling or lapses where it was not expected stops the rollout, and no
+one else is offered that ceiling. The engineer then seals the next one. Without `--staged` the controller offers a
+ceiling at once, which is the emergency path. The option is unsigned and no PEP reads it. It paces and never
+authorizes, and a controller may withhold any set already (section 21.7), so signing it would add nothing a PEP
+could check. A ceiling some PEP was already offered cannot be staged after.
 
 ### 21.5 The operator's answer
 

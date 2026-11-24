@@ -29,6 +29,15 @@ The state it adds to `controller.json`, under `install`:
     trust      per stream, the `install.trust` statements stored, in install trust order, each `held` or `offered`
     findings   the open `dist:install-widened` of each held set or statement, by its key
     pending    `provisioned` records from PEPs not yet enrolled, at most 8 per PEP id and 64 PEP ids (H13, H6)
+    pacing     per set id, the rollout option of a ceiling staged to a canary group (CL7): the group, the stage,
+               `canary`, `all` or `stopped`, the canary members that applied it and reported after, and why it stopped
+
+A ceiling is offered at once, which keeps it an emergency brake. A ceiling the engineer sealed with `--staged` is
+offered to the members of its canary group first and to the rest of the stream only once every canary member
+reported it applied and then a record after that, with no lapse the controller did not expect (CL7). The option is
+unsigned and kept by the controller alone: it paces and never authorizes, as a controller may always withhold a set.
+`ceiling_preview` gives the sealing tool, which reads this state with `Controller.reader`, the releases a new ceiling
+would lapse and how many PEPs run each, and whether a release inside it is offered or stored for them (CL5, CL6).
 
 Per PEP (`Member.install`) it keeps the install record it expects: the set id and `seq` of each set kind, the install
 trust sequence and the install trust id. The expected install id is computed from them (H10), the enrolled one and
@@ -52,6 +61,10 @@ PARTIAL_SET, HELD_SET, OFFERED_SET = "partial", "held", "offered"
 WIDENING, CHANGE_NOT_LARGER = "widening", "change, not larger"
 MAX_PENDING_PER_PEP = 8                            # the provisioned records kept for one PEP id not yet enrolled
 MAX_PENDING_PEPS = 64                              # and the PEP ids kept, the oldest dropped first
+# CL7: the stages of a ceiling the engineer sealed with `--staged`, offered to a canary group first
+CANARY_STAGE, ALL_STAGE, STOPPED_STAGE = "canary", "all", "stopped"
+ROLLOUT_FORMAT = "prismpath.dist-install-rollout/1"
+ROLLOUT_FILE = "install.ceiling.rollout.json"     # the unsigned rollout option the tool writes beside the set
 
 
 def set_key(stream: str, kind: str, seq: int, release: str) -> str:
@@ -87,10 +100,11 @@ class InstallDesk:
         self.install_findings: Dict[str, str] = dict(doc.get("findings", {}))
         self.pending: Dict[str, List[str]] = {pep: list(records) for pep, records in doc.get("pending", {}).items()}
         self.pending_order: List[str] = list(doc.get("pending_order", []))
+        self.install_pacing: Dict[str, dict] = {one: dict(pacing) for one, pacing in doc.get("pacing", {}).items()}
 
     def _install_doc(self) -> dict:
         return {"sets": self.install_sets, "trust": self.install_trust, "findings": self.install_findings,
-                "pending": self.pending, "pending_order": self.pending_order}
+                "pending": self.pending, "pending_order": self.pending_order, "pacing": self.install_pacing}
 
     # ------------------------------------------------------------------ the install keys of a stream
     def _install_anchor(self, stream: str, kind: Optional[str] = None):
@@ -441,10 +455,14 @@ class InstallDesk:
         _policy, release, seq = member.expected
         if not release:
             return None
+        return self._release_bodies(member.stream, seq, release)
+
+    def _release_bodies(self, stream: str, seq: int, release: str) -> Optional[dict]:
+        """{artifact: body} of the release `release` at `seq` on `stream` that the controller stores, or None."""
         bodies = {info["artifact"]: self.blob(info["body_sha256"]) for info in self.stored.values()
-                  if info["stream"] == member.stream and info["seq"] == seq and info["release"] == release
+                  if info["stream"] == stream and info["seq"] == seq and info["release"] == release
                   and info["artifact"] not in kinds.TRUST_ARTIFACTS | kinds.INSTALL_ARTIFACTS}
-        return bodies or None
+        return bodies if bodies and all(body is not None for body in bodies.values()) else None
 
     def _hold(self, key: str, detail: str) -> None:
         self.install_findings[key] = detail
@@ -575,7 +593,7 @@ class InstallDesk:
                 break
             comps["trust_seq"], comps["trust_id"] = item["seq"], item["envelope_id"]
         for kind in install.SET_KINDS:
-            key = self._latest_key(member.stream, kind)
+            key = self._offered_key(member, kind)
             if key is None:
                 continue
             info = self.install_sets[key]
@@ -601,6 +619,174 @@ class InstallDesk:
                 if info is not None:
                     ids += ([info["change"]] if info.get("change") else []) + sorted(info["statements"].values())
         return ids
+
+    def _offered_key(self, member, kind: str) -> Optional[str]:
+        """The offered set of `kind` at the highest `seq` that `member` may be offered now: a ceiling staged to a canary
+        group is passed over for a PEP outside that group until the canary stage ends (CL7)."""
+        keys = sorted((key for key, info in self.install_sets.items()
+                       if info["stream"] == member.stream and info["kind"] == kind and info["state"] == OFFERED_SET),
+                      key=lambda key: self.install_sets[key]["seq"], reverse=True)
+        return next((key for key in keys if not self._paced_away(member, self.install_sets[key])), None)
+
+    def _paced_away(self, member, info: dict) -> bool:
+        pacing = self.install_pacing.get(info.get("set_id", ""))
+        return (pacing is not None and info["kind"] == install.CEILING and pacing["state"] != ALL_STAGE
+                and member.group != pacing["canary"])
+
+    # ------------------------------------------------------------------ CL7: a ceiling staged to a canary group
+    def pace(self, set_id: str, canary: str) -> dict:
+        """CL7: offer the ceiling whose set id is `set_id` to the members of the group `canary` first. It is the
+        controller's own rollout option, unsigned and read by no PEP, so it may come before the set is stored. A set
+        that is not a ceiling, a group the controller does not know, and a ceiling some PEP was already offered are
+        refused with `ValueError`, since pacing it then would pace nothing."""
+        if not kinds.is_hex64(set_id):
+            raise ValueError(f"{set_id!r} is not a set id")
+        if canary not in self.groups:
+            raise ValueError(f"the controller has no group {canary!r} to offer the ceiling to first")
+        info = next((one for one in self.install_sets.values() if one.get("set_id") == set_id), None)
+        if info is not None:
+            if info["kind"] != install.CEILING:
+                raise ValueError("only a ceiling is staged to a canary group (CL7)")
+            if any(member.install is not None and (member.install["sets"].get(install.CEILING) or [""])[0] == set_id
+                   for member in self.members.values()):
+                raise ValueError("the ceiling was already offered at once, so it cannot be staged now (CL7)")
+        self.install_pacing[set_id] = {"canary": canary, "state": CANARY_STAGE, "applied": {}, "settled": [],
+                                       "detail": "", "at": self.clock()}
+        self._log("install-staged", set_id=set_id, canary=canary, state=CANARY_STAGE, result="staged")
+        return {"staged": set_id, "canary": canary}
+
+    def _pace_progress(self, member, record: state_record.StateRecord) -> None:
+        """CL7: what a record of a canary member says of a ceiling staged to its group. It counts as applied when the
+        record carries the install id the ceiling gives, and the member as reported when a later record follows with
+        no lapse the controller did not name in the ceiling's `lapses`. When every canary member reported, the rest of
+        the stream is offered it. A canary member that refuses it or lapses where the controller did not expect it
+        stops the rollout, and nobody else is offered it."""
+        entry = record.install
+        for set_id, pacing in sorted(self.install_pacing.items()):
+            if pacing["state"] != CANARY_STAGE or member.group != pacing["canary"]:
+                continue
+            info = self._set_by_id(member.stream, set_id)
+            if info is None or info["kind"] != install.CEILING or info["state"] != OFFERED_SET \
+                    or member.kind != info["target"]:
+                continue
+            key = set_key(info["stream"], info["kind"], info["seq"], info["release"])
+            if key in member.install_refused:
+                self._stop_paced(set_id, pacing, f"the canary member {member.pep} refused it")
+                continue
+            holds = (member.install is not None and member.install["sets"].get(install.CEILING) == expected_set(info)
+                     and entry is not None and bytes(entry.install_id) == install_id_of(member.install))
+            if not holds:
+                continue
+            pacing["applied"].setdefault(member.pep, record.counter)
+            expected_lapse = member.pep in info.get("lapses", [])
+            lapsed = (record.event in ("lapsed", "fallback") and record.cause == install.ABOVE_CEILING) or (
+                record.counter > pacing["applied"][member.pep] and not any(record.active_release)
+                and bool(member.expected[1]))
+            if lapsed and not expected_lapse:
+                detail = f"the canary member {member.pep} lapsed under it, which the controller did not expect"
+                self._file(member, install.ABOVE_CEILING, f"lapsed under the staged ceiling {key}, not expected")
+                self._stop_paced(set_id, pacing, detail)
+                continue
+            if record.counter > pacing["applied"][member.pep] and member.pep not in pacing["settled"]:
+                pacing["settled"].append(member.pep)
+            canary = [one.pep for one in self.members.values() if one.stream == info["stream"]
+                      and one.kind == info["target"] and one.group == pacing["canary"]]
+            if canary and all(pep in pacing["settled"] for pep in canary):
+                pacing["state"] = ALL_STAGE
+                self._log("install-staged", set_id=set_id, canary=pacing["canary"], state=ALL_STAGE,
+                          reported=sorted(pacing["settled"]), result="offered to all")
+
+    def _stop_paced(self, set_id: str, pacing: dict, detail: str) -> None:
+        pacing["state"], pacing["detail"] = STOPPED_STAGE, detail
+        self._log("install-staged", set_id=set_id, canary=pacing["canary"], state=STOPPED_STAGE, detail=detail,
+                  result="stopped")
+
+    # ------------------------------------------------------------------ CL5, CL6: the sealing tool's lapse preview
+    def ceiling_preview(self, stream: str, target: str, bodies) -> dict:
+        """CL5, CL6: what a new ceiling of `bodies` would do to the PEPs of `target` on `stream`, from this state, which
+        the sealing tool reads and never writes. Each release the ceiling is above, as the release the controller
+        expects of a PEP, with the PEPs that run it, and for each of them the release inside the ceiling that is
+        offered to it or stored on the stream above its own, or else the fallback policy it will decide under, or that
+        it holds none. A PEP whose release bodies the controller does not hold is unknown, never counted as kept."""
+        if not any(info["stream"] == stream and info["target"] == target for info in self.anchors.values()):
+            return {"fleet": "unknown", "reason": f"the controller serves no {target} stream {stream}, so which "
+                                                  "releases lapse is not known"}
+        ceiling = install.HeldSet(install.CEILING, 0, "", "", "", "", False, {name: ("", "", "") for name in bodies},
+                                  {}, dict(bodies))
+        members = [member for _pep, member in sorted(self.members.items())
+                   if member.stream == stream and member.kind == target]
+        lapses: Dict[Tuple[int, str], dict] = {}
+        unknown, warnings = [], []
+        for member in members:
+            policy, release, seq = member.expected
+            if not release:
+                continue                              # no release to lapse
+            held = self._expected_bodies(member)
+            if held is None:
+                unknown.append(member.pep)
+                continue
+            if install.inside(target, ceiling, held):
+                continue
+            entry = lapses.setdefault((seq, release), {"seq": seq, "release": release, "policy": policy, "peps": [],
+                                                       "replaced": [], "retiring": []})
+            entry["peps"].append(member.pep)
+            successor = self._successor(member, ceiling)
+            if successor is not None:
+                entry["replaced"].append({"pep": member.pep, **successor})
+                continue
+            fallback, floor = self._falls_to(member, ceiling)
+            group = next((one for one in entry["retiring"] if one["fallback"] == fallback and one["floor"] == floor),
+                         None)
+            if group is None:
+                group = {"fallback": fallback, "floor": floor, "peps": []}
+                entry["retiring"].append(group)
+            group["peps"].append(member.pep)
+        out = sorted(lapses.values(), key=lambda one: (one["seq"], one["release"]))
+        for entry in out:
+            entry["machines"] = len(entry["peps"])
+            for group in entry["retiring"]:
+                warnings.append(_retirement_warning(entry, group))
+        if unknown:
+            warnings.append(f"{len(unknown)} machine(s) run a release whose bodies the controller does not hold, so "
+                            "whether this ceiling lapses them is unknown")
+        return {"fleet": "known", "stream": stream, "target": target, "machines": len(members),
+                "lapsing": sum(one["machines"] for one in out), "lapses": out, "unknown": unknown,
+                "warnings": warnings}
+
+    def _successor(self, member, ceiling) -> Optional[dict]:
+        """CL6: a release inside `ceiling` that an open rollout offers `member`, or one stored on its stream above the
+        `seq` it runs, or None."""
+        for rollout in self.rollouts:
+            if (rollout.open and rollout.stream == member.stream and member.pep in rollout.members
+                    and rollout.members[member.pep] not in ("refused", "aborted")):
+                bodies = self._release_bodies(rollout.stream, rollout.seq, rollout.release)
+                if bodies is not None and install.inside(member.kind, ceiling, bodies):
+                    return {"seq": rollout.seq, "release": rollout.release, "state": "offered"}
+        found = sorted({(info["seq"], info["release"]) for info in self.stored.values()
+                        if info["stream"] == member.stream and info["seq"] > member.expected[2]
+                        and info["artifact"] not in kinds.TRUST_ARTIFACTS | kinds.INSTALL_ARTIFACTS
+                        and member.kind in info.get("targets", [member.kind])}, reverse=True)
+        for seq, release in found:
+            bodies = self._release_bodies(member.stream, seq, release)
+            if bodies is not None and install.inside(member.kind, ceiling, bodies):
+                return {"seq": seq, "release": release, "state": "stored, not offered"}
+        return None
+
+    def _falls_to(self, member, ceiling) -> Tuple[Optional[dict], bool]:
+        """CL6: the fallback policy the controller expects `member` to hold, with whether it is inside `ceiling`, or
+        None, and whether it holds an action floor."""
+        held = {}
+        for kind in (install.FALLBACK, install.FLOOR):
+            one = (member.install or {"sets": {}})["sets"].get(kind)
+            info = self._set_by_id(member.stream, one[0]) if one else None
+            if info is not None and set(info["statements"]) != {kinds.NONE}:
+                held[kind] = info
+        fallback = held.get(install.FALLBACK)
+        if fallback is not None:
+            key = set_key(fallback["stream"], fallback["kind"], fallback["seq"], fallback["release"])
+            fallback = {"seq": fallback["seq"], "set_id": fallback["set_id"], "policy": fallback["policy"],
+                        "inside": install.inside(member.kind, ceiling, self.held_set(key).bodies)}
+        return fallback, install.FLOOR in held
 
     # ------------------------------------------------------------------ H11, H12: what a record must carry
     def may_fall_back(self, member) -> bool:
@@ -650,6 +836,7 @@ class InstallDesk:
         if record.event == "install-widened" or (record.event == "provisioned" and record.cause == WIDENED):
             self._file(member, WIDENED, f"applied a set that widens, install id {bytes(entry.install_id).hex()}")
             self._match_widened(member)
+        self._pace_progress(member, record)                         # CL7
         return about and record.event in ("refused", "staged", "install-applied", "install-widened", "answered")
 
     def _install_refused(self, member, subject: str, cause: str) -> None:
@@ -704,7 +891,8 @@ class InstallDesk:
                 {"key": key, "kind": info["kind"], "seq": info["seq"], "set_id": info["set_id"], "state": info["state"],
                  "envelopes": sorted(info["statements"].values()), "acknowledged": info["acknowledged"],
                  "finding": self.install_findings.get(key), "scope": info.get("scope", ""),
-                 "comparison": info.get("comparison"), "change": info.get("change"), "lapses": info.get("lapses", [])})
+                 "comparison": info.get("comparison"), "change": info.get("change"), "lapses": info.get("lapses", []),
+                 "rollout": self.install_pacing.get(info.get("set_id", ""))})
         for stream, items in sorted(self.install_trust.items()):
             out.setdefault(stream, {"sets": [], "trust": []})["trust"] = [
                 {**item, "finding": self.install_findings.get(item["envelope_id"])} for item in self._trust_items(stream)]
@@ -721,3 +909,18 @@ class InstallDesk:
                 "reported": reported.get("install_id"), "trust_seq": reported.get("trust_low"),
                 "floor_answers": reported.get("answers", 0), "floor_overrides": reported.get("overrides", 0),
                 "answered": list(member.answered)}
+
+
+def _retirement_warning(entry: dict, group: dict) -> str:
+    """CL6: the warning for the PEPs of one lapsing release that no release inside the new ceiling reaches."""
+    count, seq = len(group["peps"]), entry["seq"]
+    head = (f"{count} machine(s) on seq {seq} (release {entry['release'][:16]}) lapse, and no release inside the new "
+            "ceiling is staged or offered for them, so until a compliant release ships they ")
+    fallback = group["fallback"]
+    if fallback is None:
+        return head + ("hold no fallback policy and refuse everything but what their action floor allows"
+                       if group["floor"] else "hold no fallback policy and refuse everything")
+    text = head + f"run on their fallback policy, install seq {fallback['seq']} (set {fallback['set_id'][:16]})"
+    if not fallback["inside"]:
+        text += ", which is above the new ceiling, so the controller and the PEPs refuse this ceiling (CL3)"
+    return text

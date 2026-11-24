@@ -23,7 +23,10 @@ fingerprint, and again with `--confirm` takes that fingerprint (P2), `poll` pull
 The engineer's commands run where the install keys are (section 21): `anchor` with `--install-pub` writes the
 install part of a `/2` anchor, `install` seals a fallback policy or a ceiling, compared with the set it follows
 (IS12) and held to the ceiling (CL3), and `install-trust` seals an install trust statement against the engineer's
-list of retired key ids (IS11, K4). `seal --ceiling` refuses a release above the ceiling (CL2).
+list of retired key ids (IS11, K4). `seal --ceiling` refuses a release above the ceiling (CL2). Before it signs a
+ceiling, `install` shows its lapse preview from the controller state `--held` names, or says the fleet is unknown,
+warns where no release inside the ceiling reaches a machine that lapses, and signs only on the engineer's yes (CL5,
+CL6). `--staged` writes the unsigned rollout option that has the controller offer it to a canary group first (CL7).
 
 Exit 0 when the command did what it was asked, 1 when it was refused, with the cause on stderr, and 2 for a
 usage error.
@@ -42,6 +45,7 @@ from prismpath.distribution import kinds, state_record
 from prismpath.distribution.kinds import Refused
 
 DEFAULT_LISTEN = "127.0.0.1:8471"
+ROLLOUT_SUFFIX = ".rollout.json"                     # CL7: an unsigned rollout option in the inbox
 
 
 def add_parser(subparsers) -> None:
@@ -127,7 +131,16 @@ def add_parser(subparsers) -> None:
     inst.add_argument('--widens', action='store_true', help='say the set allows more than the one it follows')
     inst.add_argument('--yes', action='store_true',
                       help='sign the install change statement for a floor or fallback table the comparator finds '
-                           'allows nothing more, without asking at the terminal (IS15)')
+                           'allows nothing more, and a ceiling after its lapse preview, without asking at the '
+                           'terminal (IS15, CL5)')
+    inst.add_argument('--held', default=None, metavar='DIR',
+                      help='a controller directory, read and never written: a ceiling\'s lapse preview names the '
+                           'releases it is above and the machines that run each (CL5, CL6)')
+    inst.add_argument('--staged', action='store_true',
+                      help='a ceiling for a planned change: the controller offers it to the canary group first and to '
+                           'the rest once the canary reports it applied with no unexpected lapse (CL7)')
+    inst.add_argument('--canary', default='canary', metavar='GROUP',
+                      help='with --staged, the controller group offered the ceiling first (default canary)')
     inst.add_argument('--rate', default=None, metavar='ALLOWS/WINDOW', help="a floor's signed rate of overrides (AF8)")
     inst.add_argument('--answer-rate', default=None, metavar='ALLOWS/WINDOW',
                       help="a floor's signed rate of operator allows (OP4)")
@@ -370,7 +383,21 @@ def ingest(controller) -> list:
     inbox = os.path.join(controller.dir, "inbox")
     if not os.path.isdir(inbox):
         return []
+    from prismpath.distribution.controller_install import ROLLOUT_FORMAT
     done = []
+    for name in sorted(os.listdir(inbox)):            # CL7: a rollout option first, so no PEP sees the set before it
+        if not name.endswith(ROLLOUT_SUFFIX):
+            continue
+        path = os.path.join(inbox, name)
+        try:
+            doc = json.loads(_read(path).decode("utf-8"))
+            if not isinstance(doc, dict) or doc.get("format") != ROLLOUT_FORMAT or doc.get("staged") is not True:
+                raise ValueError("not a rollout option of a staged ceiling")
+            done.append(controller.pace(doc.get("set_id"), doc.get("canary")))
+            os.remove(path)
+        except (ValueError, UnicodeDecodeError) as error:
+            done.append({"refused": name, "cause": str(error)})
+            os.replace(path, path + ".refused")
     for name in sorted(os.listdir(inbox)):
         if not name.endswith(".sealed"):
             continue
@@ -461,12 +488,17 @@ def _confirmed(args, comparison, replaces: str, *, keys: str = "the release's ke
     shown = {"comparison": comparison.document(), "replaces": replaces,
              "change": "this table allows nothing more than the one it replaces, by the table comparator (W8)"}
     print(json.dumps(shown, indent=2, sort_keys=True), file=sys.stderr)
+    return _said_yes(args, f"sign a change statement that says so, with {keys}? [y/N] ")
+
+
+def _said_yes(args, question: str) -> bool:
+    """`--yes`, or a yes typed at the terminal. No terminal and no `--yes` is a no."""
     if getattr(args, "yes", False):
         return True
     if not sys.stdin.isatty():
         return False
     try:
-        answer = input(f"sign a change statement that says so, with {keys}? [y/N] ")
+        answer = input(question)
     except EOFError:
         return False
     return answer.strip().lower() in ("y", "yes")
@@ -851,13 +883,49 @@ def _as_sealed(kind: str, rates, metas: dict, layout: Optional[bytes]) -> dict:
     return {"set": SimpleNamespace(meta=meta)}
 
 
+CEILING_NOT_CONFIRMED = ("not signed: a ceiling is signed only when the engineer says yes after its lapse preview; "
+                         "run again at a terminal or with --yes (CL5)")
+
+
+def ceiling_preview(held: Optional[str], stream: str, target: str, bodies: dict) -> dict:
+    """CL5: the lapse preview of a new ceiling, from the controller state in `held`, read and never written. With no
+    state, or one that does not read, the fleet is unknown, which is never taken as nothing lapsing."""
+    if not held:
+        return {"fleet": "unknown", "reason": "no controller state was given (--held), so which releases this ceiling "
+                                              "lapses is not known"}
+    try:
+        controller = _held(held)
+    except (ValueError, OSError, Refused) as error:
+        return {"fleet": "unknown", "reason": f"the controller state in {held} does not read ({error}), so which "
+                                              "releases this ceiling lapses is not known"}
+    return controller.ceiling_preview(stream, target, bodies)
+
+
+def _show_preview(preview: dict, args) -> None:
+    """CL5, CL6: the preview on stderr, its counts in plain words and each retirement warning, before the yes."""
+    print(json.dumps({"ceiling preview": preview}, indent=2, sort_keys=True), file=sys.stderr)
+    if preview["fleet"] != "known":
+        print(f"fleet unknown: {preview['reason']}. This is not the same as nothing lapsing.", file=sys.stderr)
+    else:
+        print(f"this ceiling lapses {preview['lapsing']} of {preview['machines']} machine(s) of {preview['target']} "
+              f"on {preview['stream']}, in {len(preview['lapses'])} release(s)", file=sys.stderr)
+        for entry in preview["lapses"]:
+            print(f"  seq {entry['seq']} release {entry['release'][:16]}: {entry['machines']} machine(s)",
+                  file=sys.stderr)
+        for warning in preview["warnings"]:
+            print(f"warning: {warning}", file=sys.stderr)
+    print(f"the controller offers it to the group {args.canary} first (--staged)" if args.staged
+          else "the controller offers it to every machine at once", file=sys.stderr)
+
+
 def install_cmd(args) -> int:
     """The sealing tool's install set (section 21). It compares the set with the one it follows and refuses one it
     computes as larger whose `widens` is false, on a `cfs` table by the core image inside it (IS12, H13), and holds
     a fallback policy to the held ceiling (CL3). On `host` and `mesh` it compares an action floor's or a fallback
     policy's table by W8, shows the engineer the answer, and for a table that allows nothing more signs an install
     change statement beside a set whose `widens` is false only on the engineer's yes, at the terminal or with `--yes`
-    (IS15). It never signs one for a table W8 finds larger or cannot decide."""
+    (IS15). It never signs one for a table W8 finds larger or cannot decide. A ceiling is signed only after its lapse
+    preview and the engineer's yes, and `--staged` writes its unsigned rollout option beside it (CL5 to CL7)."""
     from prismpath.distribution import floor, install, widening
     kind = {"floor": install.FLOOR, "fallback": install.FALLBACK, "ceiling": install.CEILING}[args.kind]
     try:
@@ -901,6 +969,15 @@ def install_cmd(args) -> int:
             return _fail(install.UNSIGNED, INSTALL_NOT_CONFIRMED)
         if larger and not args.widens and not change:
             return _fail(install.UNSIGNED, "the set allows more than the one it follows; seal it with --widens")
+        if args.staged and kind != install.CEILING:
+            print("--staged paces a ceiling only (CL7)", file=sys.stderr)
+            return 2
+        if kind == install.CEILING:
+            preview = ceiling_preview(args.held, args.stream, args.target, bodies)
+            _show_preview(preview, args)
+            if not _said_yes(args, "sign this ceiling with the install keys? [y/N] "):
+                print(CEILING_NOT_CONFIRMED, file=sys.stderr)
+                return 1
         pairs = install.seal_set(kind, bodies, stream=args.stream, seq=args.seq, target=args.target,
                                  signers=_authority(args.key),
                                  replaces=follows.policy_sha256 if follows and not follows.empty else "",
@@ -920,6 +997,16 @@ def install_cmd(args) -> int:
     if comparison is not None:
         printed["comparison"] = comparison.document()
         printed["scope"] = "widening" if larger and not change else "change, not larger"
+    if kind == install.CEILING:
+        printed["preview"] = preview
+    if args.staged:                                 # CL7: unsigned, for the controller's inbox beside the set
+        from prismpath.distribution.controller_install import ROLLOUT_FILE, ROLLOUT_FORMAT
+        set_id = env.set_id(one["envelope_id"] for one in out)
+        _write(os.path.join(args.out, ROLLOUT_FILE), json.dumps(
+            {"canary": args.canary, "format": ROLLOUT_FORMAT, "set_id": set_id, "staged": True},
+            sort_keys=True).encode("utf-8"))
+        printed["rollout"] = {"staged": True, "canary": args.canary, "set_id": set_id,
+                              "file": os.path.join(args.out, ROLLOUT_FILE)}
     if statement is not None:                       # IS15: handed to the controller before the set it carries
         _write(os.path.join(args.out, f"{install.CHANGE}.sealed"), statement[0])
         _write(os.path.join(args.out, f"{install.CHANGE}.body"), statement[1])

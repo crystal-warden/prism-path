@@ -121,6 +121,31 @@ and writes an install change statement signed by the install keys beside it, as 
 nothing waits for an acknowledgement (IS15). A ceiling that only narrows needs no statement, since the node compares
 two lists itself. Only a set that extends or enlarges what a node allows is a widening.
 
+A ceiling is the engineer's emergency brake, so the controller offers one that narrows at once. The check against a
+wrong ceiling is made before you sign it. `dist install --kind ceiling --held ctl` reads the controller's directory
+and shows a lapse preview, which names each release the new ceiling is above and how many machines run it. Without `--held`, or
+when the directory does not serve the stream, the preview says the fleet is unknown, which is not the same as
+nothing lapsing. A ceiling that lapses nothing shows zero. The tool signs only when you say yes at the terminal, or
+with `--yes` in a script, and without a yes it writes nothing (CL5).
+
+```bash
+prismpath dist install --kind ceiling --list table9.ppt --seq 2 --follows ceiling1 \
+    --held ctl --stream site/mesh --target mesh --key install1.pem --key install2.pem --out ceiling2
+```
+
+For each machine it lapses, the preview looks for a release inside the new ceiling that is offered to it or
+stored at the controller above the one it runs. When there is none it warns you that those machines run on their
+fallback policy, named by its install `seq` and set id, or refuse everything but what their action floor allows,
+until a release that fits ships (CL6). The warning does not stop the yes.
+
+For a planned change add `--staged`, and `--canary GROUP` when the group is not named `canary`. The tool writes
+`install.ceiling.rollout.json` beside the set. Copy it into the controller's `inbox/` with the set. The
+controller offers the ceiling to the canary group first, and to everyone else once each canary machine reports it
+applied and a later record with no lapse the preview did not name. A canary machine that refuses it, or lapses
+where none was expected, stops the rollout, and you seal the next ceiling. The rollout option is not signed. It
+only paces the controller, which may always hold a set back, and no PEP reads it. Leave it out, or seal without
+`--staged`, and the ceiling goes to every machine at once (CL7).
+
 The reading domain an agent policy is compared over is the one the engineer who installs PrismPath defines: the
 values the classifier produces for each category, true and false, and each int's min to max. A policy whose
 rule names a value outside it, such as a tool the classifier does not produce, is refused when it is loaded and
