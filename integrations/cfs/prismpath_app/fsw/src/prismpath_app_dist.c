@@ -635,15 +635,12 @@ void PP_AppDist_Frame(PP_AppDist_t *D, const uint8_t *Frame, size_t Len, uint32_
             Collect(D);
         }
     }
-    else if (event == PP_ASM_CONTROL && Frame[0] == PP_FRAME_EPOCH && Len == 12)
+    else if (event == PP_ASM_CONTROL && Frame[0] == PP_FRAME_EPOCH &&
+             (Len == 4 + PP_STATEMENT_SIZE || Len == 4 + PP_FRESH_STATEMENT_SIZE))
     {
-        uint64_t epoch = 0;
-        int      k;
-        for (k = 7; k >= 0; k--)
-        {
-            epoch = epoch << 8 | Frame[4 + k];
-        }
-        pp_pep_see_epoch(&D->Pep, epoch);
+        /* H9, H16: the epoch and freshness come only from a statement the controller key signed. A bare id,
+           a forged statement or one for another stream changes nothing and sends no record. */
+        (void)pp_pep_take_statement(&D->Pep, Frame + 4, Len - 4, Now);
     }
     End(D);
 }

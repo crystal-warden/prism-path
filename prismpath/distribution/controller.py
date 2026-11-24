@@ -48,7 +48,7 @@ from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 
 from prismpath import canon
 from prismpath.distribution import envelope as env
-from prismpath.distribution import frames, heartbeat, install, kinds, state_record, statement as statements, widening
+from prismpath.distribution import frames, heartbeat, install, kinds, state_record, statement as statements, table_compare, widening
 from prismpath.distribution import controller_install
 from prismpath.distribution.controller_install import FALLBACK_FINDING, WIDENED, InstallDesk
 from prismpath.distribution.kinds import Refused
@@ -224,8 +224,11 @@ class Member:
                    evidence=dict(doc.get("evidence", {})))
 
 
-LARGER_BY_RULE, LARGER_BY_COMPARISON = "larger by rule", "larger by comparison"
-BY_RULE = frozenset({"policy.ppt", "gateway.routes"})             # 9.4: any change of these is larger
+# F4: what a rollout does to the scope a PEP allows, as the controller computes it. A widening is a release that
+# allows or escalates more than the one it replaces, and a change, not larger, is one that differs from it and
+# allows nothing more, as a table carried by a change statement does (W8, W11)
+WIDENING, CHANGE_NOT_LARGER = "widening", "change, not larger"
+_OLD_MARKS = {"larger by comparison": WIDENING, "larger by rule": CHANGE_NOT_LARGER}   # a state kept before W11
 
 
 @dataclass
@@ -245,16 +248,21 @@ class Rollout:
     acks: Dict[str, int] = field(default_factory=dict)             # staged acks per member, one per envelope
     committing_since: float = 0.0
     delay_ms: int = 0
-    widening: str = ""                                             # LARGER_BY_RULE, LARGER_BY_COMPARISON or ""
+    scope: str = ""                                                # WIDENING, CHANGE_NOT_LARGER or ""
+    comparison: Optional[dict] = None                              # W8: the table comparator's answer and witness
 
     def document(self) -> dict:
         return {"group": self.group, "rule": self.rule, "stream": self.stream, "seq": self.seq, "policy": self.policy,
                 "release": self.release, "envelopes": list(self.envelopes), "state": self.state,
                 "started": self.started, "members": dict(self.members), "previous": dict(self.previous), "acks": dict(self.acks),
-                "committing_since": self.committing_since, "delay_ms": self.delay_ms, "widening": self.widening}
+                "committing_since": self.committing_since, "delay_ms": self.delay_ms, "scope": self.scope,
+                "comparison": self.comparison}
 
     @classmethod
     def from_document(cls, doc: dict) -> "Rollout":
+        doc = dict(doc)
+        if "widening" in doc:
+            doc.setdefault("scope", _OLD_MARKS.get(doc.pop("widening"), ""))
         return cls(**{**doc, "envelopes": list(doc["envelopes"]), "members": dict(doc["members"]),
                       "previous": dict(doc["previous"]), "acks": dict(doc["acks"])})
 
@@ -551,7 +559,7 @@ class Controller(InstallDesk):
         ids = sorted((one for one, info in self.stored.items()
                       if info["stream"] == stream and info["seq"] == seq
                       and info["artifact"] not in kinds.ON_TRUST_STREAM | kinds.INSTALL_ARTIFACTS),
-                     key=lambda one: (self.stored[one]["artifact"] != "trust.widening", one))   # W3: the statement first
+                     key=lambda one: (self.stored[one]["artifact"] not in kinds.STATEMENTS, one))   # W3, W11: statements first
         if not ids:
             raise ValueError(f"no release is stored at {stream} seq {seq}")
         releases = {(self.stored[one]["policy"], self.stored[one]["release"]) for one in ids}
@@ -563,6 +571,7 @@ class Controller(InstallDesk):
             self._log("refused", group=group, stream=stream, seq=seq, cause=cause, result="not offered")
             raise Refused(cause, f"seq {seq} allows more than the release it replaces and says it does not (W7)")
         policy, release = next(iter(releases))
+        mark, comparison = self._scope(ids)
         self._inside_ceiling(group, stream, seq, ids, members)
         for rollout in self.rollouts:
             same = (rollout.stream, rollout.seq, rollout.release) == (stream, seq, release)
@@ -572,7 +581,7 @@ class Controller(InstallDesk):
         rollout = Rollout(group=group, rule=self.groups[group], stream=stream, seq=seq, policy=policy, release=release,
                           envelopes=ids, state=OFFERED, started=self.clock(), members={pep: OFFERED for pep in members},
                           previous={pep: list(self.members[pep].expected) for pep in members}, delay_ms=delay_ms,
-                          widening=self._widening(ids))
+                          scope=mark, comparison=comparison)
         self.rollouts.append(rollout)
         for pep in members:
             self._log("offered", pep=pep, group=group, stream=stream, seq=seq, envelopes=ids)
@@ -611,32 +620,75 @@ class Controller(InstallDesk):
 
     def _widens_unsaid(self, ids: List[str]) -> Optional[str]:
         """W7: the release of `ids` says it does not widen, and it is compared with the release the controller
-        holds whose policy hash is its `replaces`. A `replaces` it holds nothing for is larger. The cause when
-        the release is larger with `widens` false, else None."""
+        holds whose policy hash is its `replaces`. A `replaces` it holds nothing for is larger. A table that is not
+        the one it replaces is not larger only when a change statement of the release names that policy and W8
+        finds the table allows nothing more, so a change statement the comparison does not bear out is refused
+        here (W11). The cause when the release is larger with `widens` false, else None."""
         releases, active = self._releases(ids)
         if not releases or releases[0].widens:
             return None
         if active is None:
             return widening.UNSIGNED
         staged = {one.artifact: self.blob(one.body_sha256) for one in releases}
-        return None if widening.compare_release(active, staged) == widening.NOT_LARGER else widening.UNSIGNED
+        if widening.compare_release(active, staged) == widening.NOT_LARGER:
+            return None
+        larger, comparison = self._larger(releases, active, staged)
+        if (not larger and comparison is not None and comparison["answer"] == widening.NOT_LARGER
+                and self._change_of(ids, releases[0].replaces)):
+            return None                                # W11: the PEPs take it on the change statement
+        return widening.UNSIGNED
 
-    def _widening(self, ids: List[str]) -> str:
-        """How a release that says it widens is larger, so the fleet view shows a widening the owner pushed:
-        `larger by comparison` when a comparator with an order (or no release before it) finds it larger, and
-        `larger by rule` when it is larger only because a host or a mesh node counts any change of a table
-        (`BY_RULE`) as larger. Empty for a release that says it does not widen."""
-        releases, active = self._releases(ids)
-        if not releases or not releases[0].widens:
-            return ""
-        if active is None:
-            return LARGER_BY_COMPARISON
-        staged = {one.artifact: self.blob(one.body_sha256) for one in releases}
+    def _change_of(self, ids: List[str], replaces: str) -> bool:
+        """W11: a `trust.change` envelope is stored with the release of `ids`, and its `from` is `replaces`."""
+        for one in ids:
+            if self.stored[one]["artifact"] == "trust.change":
+                body = self.blob(self.stored[one]["body_sha256"])
+                return body is not None and replaces != "" and kinds.read_change(body)["from"] == replaces
+        return False
+
+    def _larger(self, releases, active: Dict[str, bytes], staged: Dict[str, bytes]):
+        """The artifacts of a release that allow more than the release it replaces, each by its own comparator
+        and a `policy.ppt` by W8, with W8's answer when a table was compared. Where a PEP's byte rule counts any
+        change of a table as larger, W8 decides it here."""
         larger = {name for name in sorted(set(active) | set(staged))
                   if widening.compare_artifact(name, active.get(name), staged.get(name)) != widening.NOT_LARGER}
-        if larger - BY_RULE:
-            return LARGER_BY_COMPARISON
-        return LARGER_BY_RULE if larger else ""
+        comparison = None
+        if "policy.ppt" in larger and "policy.ppt" in active and "policy.ppt" in staged:
+            staged_envelope = next(one for one in releases if one.artifact == "policy.ppt")
+            found = table_compare.compare_tables(
+                active["policy.ppt"], staged["policy.ppt"],
+                active_fields=self._held_fields(releases[0], "policy.ppt"),
+                staged_fields=table_compare.table_fields(staged_envelope))
+            comparison = found.document()
+            if found.answer == widening.NOT_LARGER:
+                larger.discard("policy.ppt")
+        return larger, comparison
+
+    def _scope(self, ids: List[str]) -> Tuple[str, Optional[dict]]:
+        """F4: what the release of `ids` does to the scope a PEP allows, as the controller computes it, whatever
+        its `widens` says. A widening when nothing came before it or an artifact allows more, a `policy.ppt` by
+        W8, and a change, not larger, when it differs from the release it replaces and allows nothing more. Empty
+        for a renewal. W8's answer comes with it when a table was compared."""
+        releases, active = self._releases(ids)
+        if not releases:
+            return "", None
+        if active is None:
+            return WIDENING, None
+        staged = {one.artifact: self.blob(one.body_sha256) for one in releases}
+        larger, comparison = self._larger(releases, active, staged)
+        if larger:
+            return WIDENING, comparison
+        return (CHANGE_NOT_LARGER if staged != active else ""), comparison
+
+    def _held_fields(self, first, artifact: str) -> Optional[dict]:
+        """The signed field dictionary of the `artifact` envelope of the release `first` replaces, the one
+        `_releases` holds it to."""
+        held = [one for one, info in self.stored.items() if first.replaces and info["policy"] == first.replaces
+                and info["stream"] == first.stream and info["seq"] < first.seq and info["artifact"] == artifact]
+        if not held:
+            return None
+        latest = max(held, key=lambda one: self.stored[one]["seq"])
+        return table_compare.table_fields(env.read(env.unseal(self.sealed(latest))[0]))
 
     def commit(self, group: str) -> Rollout:
         """The operator's commit: send `commit` to every member of the group's open rollout that staged."""

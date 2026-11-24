@@ -293,6 +293,39 @@ pub fn install_trust(keys: &[&str], threshold: i64, operators: &[&str], seq: i64
     (env::seal(&env::build(doc, &body).unwrap(), &keys).unwrap(), body)
 }
 
+/// IS14: a sealed install change statement for the set of `kind` whose table is `table`, sealed with `args` as that set
+/// is (its `seq`, `replaces`, `widens`, signers, targets and `not_before`), from the policy hash `from`.
+pub fn install_change(kind: ArtifactKind, table: &[u8], args: &SetArgs, from: &Hex64) -> (Vec<u8>, Vec<u8>) {
+    change_body_of(kind.name(), table, args, from)
+}
+
+/// An install change statement whose body names the set kind `set` as text, so a test can name a ceiling.
+pub fn change_body_of(set: &str, table: &[u8], args: &SetArgs, from: &Hex64) -> (Vec<u8>, Vec<u8>) {
+    let body = canon2::write_json(&json!({"basis": "prismpath.table-compare/1", "encoding": "canon/2",
+                                          "format": "prismpath.dist-install-change/1", "from": from.as_str(), "set": set}))
+    .unwrap();
+    let release = args.release.clone().unwrap_or_else(|| install::install_release_id(&[(PPT, h(table))]).unwrap());
+    let doc = EnvelopeDoc {
+        artifact: ArtifactKind::InstallChange,
+        body_sha256: h(&body),
+        body_size: body.len() as i64,
+        encoding: Canon2Tag,
+        expires: 0,
+        format: DistFormat,
+        meta: canon2::from_json(&json!({})).unwrap(),
+        not_before: args.not_before,
+        policy_sha256: args.policy.clone().unwrap_or_else(|| h(table)),
+        release,
+        replaces: MaybeHex64(args.replaces.clone()),
+        seq: args.seq,
+        stream: args.stream.clone(),
+        targets: args.targets.iter().copied().collect(),
+        widens: args.widens,
+    };
+    let keys: Vec<SigningKey> = args.signers.iter().map(|name| test_key(name)).collect();
+    (env::seal(&env::build(doc, &body).unwrap(), &keys).unwrap(), body)
+}
+
 /// The domain the test host is built with (P4, CL4).
 pub fn domain() -> Hex64 {
     install::domain_sha256(Some(&qualification()))

@@ -290,6 +290,34 @@ pub fn verify(sealed: &[u8], body: &[u8], trust: &TrustStore, pep: &PepView, now
     Verdict { cause: None, envelope: Some(envelope), unchanged: false, time_floor }
 }
 
+/// IS14 from V8 on, once V9 checked the body: V11 is its own check, V8 is IS6 against the set kind its body names, and
+/// V10 holds it to the set staged of that kind at its `seq`, which carries at most one change statement.
+fn verify_install_change(envelope: Envelope, body: &[u8], pep: &PepView, record: &Record, view: &InstallView) -> Verdict {
+    let refuse = |cause: &str, envelope: Envelope| Verdict { cause: Some(cause.to_string()), envelope: Some(envelope), ..Verdict::default() };
+    if i64::try_from(body.len()).ok() != Some(envelope.body_size) || Hex64::of(body) != envelope.body_sha256 {
+        return refuse(BODY_MISMATCH, envelope);
+    }
+    if let Some(cause) = install::check_install_change(&envelope, body, pep) {
+        return refuse(&cause, envelope);
+    }
+    let Ok((kind, _from)) = install::read_install_change(body) else { return refuse(BAD_FORMAT, envelope) };
+    let staged = view.staged.get(&kind);
+    if envelope.seq <= record.seq(kind) || staged.is_some_and(|staged| envelope.seq < staged.seq()) {
+        return refuse(SEQ_REPLAY, envelope); // V8, IS6, IS4, G2
+    }
+    if let Some(staged) = staged.filter(|staged| staged.seq() == envelope.seq) {
+        if staged.doc.change.as_ref().is_some_and(|held| held.envelope_id == envelope.envelope_id()) {
+            return Verdict { envelope: Some(envelope), unchanged: true, ..Verdict::default() };
+        }
+        let agrees = (&staged.doc.policy_sha256, &staged.doc.release, &staged.doc.replaces, staged.doc.widens)
+            == (&envelope.policy_sha256, &envelope.release, &envelope.replaces, envelope.widens);
+        if staged.doc.change.is_some() || !agrees {
+            return refuse(INCOMPLETE, envelope); // V10: one change statement for one set
+        }
+    }
+    Verdict { envelope: Some(envelope), ..Verdict::default() }
+}
+
 /// IS5: an install statement through V5 to V11 with the differences section 21 gives them. V3 counted the install
 /// keys against the install threshold. V5 takes an install kind on the PEP's own stream, by provisioning or, where
 /// the install threshold is 2 or more, in a message (IS4), and a set in the form of its kind (IS3). V6 applies T3 and
@@ -330,7 +358,11 @@ fn verify_install(
             return refuse(TARGET_MISMATCH, envelope);
         }
     }
-    let listed = artifact == ArtifactKind::InstallTrust || named == Some(AsName::PolicyList);
+    let change = artifact == ArtifactKind::InstallChange;
+    if change && (!envelope.targets.contains(&pep.kind.kind()) || !matches!(pep.kind.kind(), TargetKind::Host | TargetKind::Mesh)) {
+        return refuse(TARGET_MISMATCH, envelope); // IS14: only host and mesh take it
+    }
+    let listed = artifact == ArtifactKind::InstallTrust || change || named == Some(AsName::PolicyList);
     let bound = if listed { target.trust_bound } else { pep.body_bound.min(target.body_bound) };
     if envelope.body_size > bound || i64::try_from(body.len()).map_or(true, |length| length > bound) {
         return refuse(TOO_LARGE, envelope);
@@ -339,6 +371,9 @@ fn verify_install(
     let time = now.max(if trust.is_readable() { trust.time_floor } else { 0 });
     if pep.has_clock && envelope.not_before - time > SKEW {
         return refuse(NOT_YET_VALID, envelope);
+    }
+    if change {
+        return verify_install_change(envelope, body, pep, record, view);
     }
     // V8: IS6, IS11
     let envelope_id = envelope.envelope_id();
@@ -370,10 +405,10 @@ fn verify_install(
     if let Some(staged) = kind.and_then(|kind| view.staged.get(&kind)).filter(|staged| staged.seq() == envelope.seq) {
         let first = staged.envelopes.values().next();
         let rates = |one: &Envelope| install::install_meta(one).map(|meta| (meta.rate, meta.answer_rate));
-        let agrees = first.is_some_and(|first| {
-            (&first.policy_sha256, &first.release, &first.replaces, first.widens, rates(first))
-                == (&envelope.policy_sha256, &envelope.release, &envelope.replaces, envelope.widens, rates(&envelope))
-        });
+        // the set the staged statements or the change statement staged before them name (IS15)
+        let agrees = (&staged.doc.policy_sha256, &staged.doc.release, &staged.doc.replaces, staged.doc.widens)
+            == (&envelope.policy_sha256, &envelope.release, &envelope.replaces, envelope.widens)
+            && first.is_none_or(|first| rates(first) == rates(&envelope));
         let other = named.and_then(|name| staged.doc.statements.get(&name)).is_some_and(|held| held.envelope_id != envelope_id);
         if !agrees || other {
             return refuse(INCOMPLETE, envelope);

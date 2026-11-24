@@ -10,21 +10,34 @@ to store one that fails. A whole set is then held to the ceiling the controller 
 set it follows (IS12, W7): a set the controller computes as larger whose `widens` is false is refused, on `host` and
 `mesh` by its bytes and on `cfs` by the core image inside its table.
 
-H13 is detection and not prevention. A set whose `widens` is true, a ceiling that withdraws or empties the held one
-or would lapse the release the controller expects of a PEP, and an `install.trust` that adds a key of either role or
-lowers the threshold are held with `dist:install-widened` open, offered to nobody, and their install id is expected
-of no PEP until an acknowledger acknowledges them by the envelope ids of their statements. The acknowledger is a
+H13 is detection and not prevention. A set whose `widens` is true, the empty ceiling that withdraws the held one, and
+an `install.trust` that adds a key of either role or lowers the threshold are held with `dist:install-widened` open,
+offered to nobody, and their install id is expected of no PEP until an acknowledger acknowledges them by the envelope
+ids of their statements. A widening is only a set that extends or enlarges scope: a ceiling that narrows below the
+release the controller expects of a PEP is offered at once, and the fleet view names the PEPs it lapses. On `host`
+and `mesh` an action floor's or a fallback policy's table is compared by W8 (`table_compare`), and a set carried by
+an install change statement W8 bears out is offered at once, the statement before it (IS15). The acknowledger is a
 person the controller lets do this by its own login. It holds no key and signs nothing, and no PEP reads what it
 does: a PEP applies a well signed widening set from any sender, a hostile controller included, so what H13 gives is
 that a widening cannot spread from this controller unseen, nor stay unseen when it reaches a PEP another way.
 
 The state it adds to `controller.json`, under `install`:
 
-    sets       every install set stored, by `<stream>/<kind>/<seq>/<release id>`: its statements by `as`, whether it is
-               whole, and its state, `partial`, `held` (waiting for its acknowledgement) or `offered`
+    sets       every install set stored, by `<stream>/<kind>/<seq>/<release id>`: its statements by `as`, the install
+               change statement before it, whether it is whole, its state, `partial`, `held` (waiting for its
+               acknowledgement) or `offered`, and its scope, `widening` or `change, not larger`, with W8's answer
     trust      per stream, the `install.trust` statements stored, in install trust order, each `held` or `offered`
     findings   the open `dist:install-widened` of each held set or statement, by its key
     pending    `provisioned` records from PEPs not yet enrolled, at most 8 per PEP id and 64 PEP ids (H13, H6)
+    pacing     per set id, the rollout option of a ceiling staged to a canary group (CL7): the group, the stage,
+               `canary`, `all` or `stopped`, the canary members that applied it and reported after, and why it stopped
+
+A ceiling is offered at once, which keeps it an emergency brake. A ceiling the engineer sealed with `--staged` is
+offered to the members of its canary group first and to the rest of the stream only once every canary member
+reported it applied and then a record after that, with no lapse the controller did not expect (CL7). The option is
+unsigned and kept by the controller alone: it paces and never authorizes, as a controller may always withhold a set.
+`ceiling_preview` gives the sealing tool, which reads this state with `Controller.reader`, the releases a new ceiling
+would lapse and how many PEPs run each, and whether a release inside it is offered or stored for them (CL5, CL6).
 
 Per PEP (`Member.install`) it keeps the install record it expects: the set id and `seq` of each set kind, the install
 trust sequence and the install trust id. The expected install id is computed from them (H10), the enrolled one and
@@ -37,15 +50,21 @@ from dataclasses import replace
 from typing import Dict, List, Optional, Sequence, Tuple
 
 from prismpath.distribution import envelope as env
-from prismpath.distribution import install, kinds, state_record, widening
+from prismpath.distribution import install, kinds, state_record, table_compare, widening
 from prismpath.distribution.kinds import Refused
 from prismpath.distribution.trust import read_anchor
 from prismpath.distribution.verify import InstallView, PepView, verify
 
 WIDENED, FALLBACK_FINDING = install.WIDENED, "dist:fallback"
 PARTIAL_SET, HELD_SET, OFFERED_SET = "partial", "held", "offered"
+# F4: what a set does to the scope a PEP allows, as the controller computes it, the words a rollout uses (W9)
+WIDENING, CHANGE_NOT_LARGER = "widening", "change, not larger"
 MAX_PENDING_PER_PEP = 8                            # the provisioned records kept for one PEP id not yet enrolled
 MAX_PENDING_PEPS = 64                              # and the PEP ids kept, the oldest dropped first
+# CL7: the stages of a ceiling the engineer sealed with `--staged`, offered to a canary group first
+CANARY_STAGE, ALL_STAGE, STOPPED_STAGE = "canary", "all", "stopped"
+ROLLOUT_FORMAT = "prismpath.dist-install-rollout/1"
+ROLLOUT_FILE = "install.ceiling.rollout.json"     # the unsigned rollout option the tool writes beside the set
 
 
 def set_key(stream: str, kind: str, seq: int, release: str) -> str:
@@ -81,10 +100,11 @@ class InstallDesk:
         self.install_findings: Dict[str, str] = dict(doc.get("findings", {}))
         self.pending: Dict[str, List[str]] = {pep: list(records) for pep, records in doc.get("pending", {}).items()}
         self.pending_order: List[str] = list(doc.get("pending_order", []))
+        self.install_pacing: Dict[str, dict] = {one: dict(pacing) for one, pacing in doc.get("pacing", {}).items()}
 
     def _install_doc(self) -> dict:
         return {"sets": self.install_sets, "trust": self.install_trust, "findings": self.install_findings,
-                "pending": self.pending, "pending_order": self.pending_order}
+                "pending": self.pending, "pending_order": self.pending_order, "pacing": self.install_pacing}
 
     # ------------------------------------------------------------------ the install keys of a stream
     def _install_anchor(self, stream: str, kind: Optional[str] = None):
@@ -197,6 +217,9 @@ class InstallDesk:
         staged = install.Staged(kind, info["seq"], info["policy"], info["release"], info["replaces"], info["widens"],
                                 {named: (one, one, envelopes[named].body_sha256)
                                  for named, one in info["statements"].items()}, envelopes, bodies)
+        if info.get("change"):
+            staged.change = (info["change"], info["change"], self.stored[info["change"]]["body_sha256"])
+            staged.change_body = self.blob(self.stored[info["change"]]["body_sha256"])
         return {kind: staged}
 
     def _set_by_id(self, stream: str, set_id: str) -> Optional[dict]:
@@ -221,11 +244,15 @@ class InstallDesk:
             if envelope.artifact == install.TRUST:
                 self._check_trust_keys(anchor["stream"], record, body)
             kind = envelope.artifact
+            if kind == install.CHANGE:
+                kind = self._change_set(body)
+                self._check_change_unsettled(envelope, kind)
             # IS4: on a stream whose install threshold is 1 a statement reaches a PEP by provisioning only, so it is
             # verified as a provisioning brings it, stored for the enrollment of install ids, and never offered
             view = PepView(kind=anchor["target"], stream=anchor["stream"], qualification=anchor["qualification"],
                            install=InstallView(record=record,
-                                               staged=self._staged_view(anchor["stream"], kind) if kind != install.TRUST else {},
+                                               staged=self._staged_view(anchor["stream"], kind)
+                                               if kind not in (install.TRUST, None) else {},
                                                ceiling=self.offered_set(anchor["stream"], install.CEILING),
                                                message=record.threshold >= 2, layout=self._layout(fingerprint)))
             verdict = verify(sealed, body, trust=self._anchor_store(fingerprint), pep=view, now=int(self.clock()),
@@ -237,6 +264,25 @@ class InstallDesk:
             checked += 1
         if not checked:
             raise Refused("dist:target-mismatch", "the controller serves no stream with install keys this statement names")
+
+    @staticmethod
+    def _change_set(body: bytes) -> Optional[str]:
+        """IS14: the set kind an install change statement carries, None when its body does not read (V11 says why)."""
+        try:
+            return kinds.read_install_change(body)["set"]
+        except Refused:
+            return None
+
+    def _check_change_unsettled(self, envelope, kind: Optional[str]) -> None:
+        """IS15: an install change statement is handed before the set it carries is whole, as a PEP stages it before
+        the set. One for a set the controller already settled is `dist:incomplete`, so a set it offered or held is
+        never carried after the fact."""
+        if kind is None:
+            return
+        info = self.install_sets.get(set_key(envelope.stream, kind, envelope.seq, envelope.release))
+        if info is not None and info["state"] != PARTIAL_SET:
+            raise Refused("dist:incomplete", "the set this install change statement carries is settled already; hand "
+                                             "the statement before the set (IS15)")
 
     def _layout(self, fingerprint: str) -> Optional[bytes]:
         layout = self.anchors[fingerprint].get("layout")
@@ -263,14 +309,21 @@ class InstallDesk:
             if widened:
                 self._hold(envelope_id, "an install trust statement that adds a key or lowers the threshold")
             return
-        named = envelope.meta["as"]
-        key = set_key(envelope.stream, envelope.artifact, envelope.seq, envelope.release)
+        kind = envelope.artifact
+        if kind == install.CHANGE:
+            kind = kinds.read_install_change(self.blob(envelope.body_sha256))["set"]
+        key = set_key(envelope.stream, kind, envelope.seq, envelope.release)
         info = self.install_sets.setdefault(key, {
-            "stream": envelope.stream, "kind": envelope.artifact, "seq": envelope.seq, "release": envelope.release,
+            "stream": envelope.stream, "kind": kind, "seq": envelope.seq, "release": envelope.release,
             "policy": envelope.policy_sha256, "replaces": envelope.replaces, "widens": envelope.widens,
             "target": envelope.targets[0], "statements": {}, "state": PARTIAL_SET, "set_id": "",
             "acknowledged": None, "reasons": []})
-        info["statements"][named] = envelope_id
+        if envelope.artifact == install.CHANGE:
+            info["change"] = envelope_id                 # IS15: offered before the set it carries
+        else:
+            info["statements"][envelope.meta["as"]] = envelope_id
+        if not info["statements"]:
+            return
         envelopes, bodies = self._set_statements(key)
         staged = install.Staged(info["kind"], info["seq"], info["policy"], info["release"], info["replaces"],
                                 info["widens"], {name: (one, one, "") for name, one in info["statements"].items()},
@@ -281,6 +334,8 @@ class InstallDesk:
     def _drop_set(self, key: str) -> None:
         for envelope_id in self.install_sets[key]["statements"].values():
             self.stored.pop(envelope_id, None)
+        if self.install_sets[key].get("change"):
+            self.stored.pop(self.install_sets[key]["change"], None)
         del self.install_sets[key]
 
     def _settle(self, key: str) -> None:
@@ -307,6 +362,10 @@ class InstallDesk:
             if larger is None:                    # H13: a cfs table, by the core image inside it
                 before = None if follows is None or follows.empty else dict(follows.bodies)
                 larger = before is None or widening.compare_release(before, real) != widening.NOT_LARGER
+            comparison = self._compare_tables(target, kind, follows, new)
+            if info.get("change"):
+                self._bear_out(info, kind, follows, new, comparison)
+                larger = False                    # IS15: W8 bears the change statement out
             if larger and not info["widens"]:
                 raise Refused(install.UNSIGNED, "the set allows more than the one it follows and says it does not (W7)")
             held_policy = follows.policy_sha256 if follows is not None else ""
@@ -317,33 +376,93 @@ class InstallDesk:
             self._log("refused", artifact=kind, stream=stream, seq=info["seq"], cause=refused.cause, detail=str(refused),
                       result="refused")
             raise
+        if comparison is not None:              # W8 in place of the byte rule, and everything else IS12 counts
+            larger = comparison.answer != widening.NOT_LARGER or bool(install.set_larger(
+                target, kind, follows, bodies, dict(new.envelopes), change=True))
+        scope = self._set_scope(kind, follows, new, bool(larger))
         reasons = []
         if info["widens"]:
-            reasons.append("its widens is true")
-        if kind == install.CEILING and (not real or (kinds.POLICY_LIST in real and not kinds.read_ceiling_list(
-                real[kinds.POLICY_LIST])["bodies"])):
-            reasons.append("it withdraws or empties the ceiling")
+            reasons.append("its widens is true" + (
+                ", though the table comparator finds it allows nothing more: an install change statement would carry "
+                "it without an acknowledgement (IS15)" if scope == CHANGE_NOT_LARGER else ""))
+        if kind == install.CEILING and not real and follows is not None and not follows.empty:
+            reasons.append("it withdraws the ceiling")
+        lapsed = []
         if kind == install.CEILING and real:
+            # CL3: a ceiling that narrows below a release is no widening; the release lapses and the PEP says so
             lapsed = [pep for pep, member in sorted(self.members.items())
                       if member.stream == stream and self._expected_bodies(member) is not None
                       and not install.inside(target, new, self._expected_bodies(member))]
-            if lapsed:
-                reasons.append("it would lapse the release expected of " + ", ".join(lapsed))
-        info.update(set_id=new.set_id, reasons=reasons, state=HELD_SET if reasons else OFFERED_SET)
+        info.update(set_id=new.set_id, reasons=reasons, state=HELD_SET if reasons else OFFERED_SET, scope=scope,
+                    comparison=comparison.document() if comparison is not None else None, lapses=lapsed)
         if reasons:
             self._hold(key, "; ".join(reasons))
         self._log("install-set", key=key, set_id=new.set_id, envelopes=sorted(info["statements"].values()),
                   state=info["state"], result="stored")
+
+    def _compare_tables(self, target: str, kind: str, follows: Optional[install.HeldSet], new: install.HeldSet):
+        """W8 over the `policy.ppt` of an action floor or a fallback policy on `host` and `mesh` and the one of the set
+        it follows, with their signed field dictionaries, or None when there is nothing to compare."""
+        if target not in ("host", "mesh") or kind not in kinds.CHANGES_SETS or follows is None or follows.empty:
+            return None
+        if "policy.ppt" not in follows.bodies or "policy.ppt" not in new.bodies:
+            return None
+        return table_compare.compare_tables(
+            follows.bodies["policy.ppt"], new.bodies["policy.ppt"],
+            active_fields=table_compare.table_fields(follows.envelopes.get("policy.ppt")),
+            staged_fields=table_compare.table_fields(new.envelopes.get("policy.ppt")))
+
+    def _bear_out(self, info: dict, kind: str, follows: Optional[install.HeldSet], new: install.HeldSet,
+                  comparison) -> None:
+        """IS15, W9: the controller offers a set carried by an install change statement only when the statement stands
+        for it as a PEP takes it, from the policy hash of the set it follows, and W8 finds the table allows nothing
+        more. Everything else a PEP compares is compared too. `Refused` with `dist:widening-unsigned` otherwise."""
+        held_policy = follows.policy_sha256 if follows is not None and not follows.empty else ""
+        body = self.blob(self.stored[info["change"]]["body_sha256"])
+        if info["widens"] or not install.changes_set(body, kind, held_policy) or info["replaces"] != held_policy:
+            raise Refused(install.UNSIGNED, "the install change statement does not stand for this set (IS15)")
+        if comparison is None or comparison.answer != widening.NOT_LARGER:
+            raise Refused(install.UNSIGNED, "the table comparator does not bear the install change statement out (W8): "
+                          + str(comparison.document() if comparison is not None else "no table to compare"))
+        if install.set_larger(info["target"], kind, follows, dict(new.bodies), dict(new.envelopes), change=True):
+            raise Refused(install.UNSIGNED, "the set allows more than the one it follows beside its table, by its rate, "
+                                            "its layout or its command register (IS12)")
+
+    @staticmethod
+    def _set_scope(kind: str, follows: Optional[install.HeldSet], new: install.HeldSet, larger: bool) -> str:
+        """F4: what the set does to the scope a PEP allows, whatever its `widens` says: a widening when it allows more
+        than the set it follows or is the first of an action floor or a fallback policy, a change, not larger, when it
+        differs and allows nothing more, a table by W8, and empty when it is the same."""
+        empty = set(new.bodies) == {kinds.NONE}
+        before = None if follows is None or follows.empty else dict(follows.bodies)
+        if kind == install.CEILING:
+            if empty:
+                return WIDENING if before is not None else ""
+            if before is None:
+                return CHANGE_NOT_LARGER                 # IS12: a first ceiling does not widen
+        elif empty:
+            return CHANGE_NOT_LARGER if before is not None else ""
+        elif before is None:
+            return WIDENING
+        if larger:
+            return WIDENING
+        same = before is not None and {name: bytes(body) for name, body in before.items()} == {
+            name: bytes(body) for name, body in new.bodies.items()}
+        return "" if same else CHANGE_NOT_LARGER
 
     def _expected_bodies(self, member) -> Optional[dict]:
         """{artifact: body} of the release the controller expects of `member`, or None."""
         _policy, release, seq = member.expected
         if not release:
             return None
+        return self._release_bodies(member.stream, seq, release)
+
+    def _release_bodies(self, stream: str, seq: int, release: str) -> Optional[dict]:
+        """{artifact: body} of the release `release` at `seq` on `stream` that the controller stores, or None."""
         bodies = {info["artifact"]: self.blob(info["body_sha256"]) for info in self.stored.values()
-                  if info["stream"] == member.stream and info["seq"] == seq and info["release"] == release
+                  if info["stream"] == stream and info["seq"] == seq and info["release"] == release
                   and info["artifact"] not in kinds.TRUST_ARTIFACTS | kinds.INSTALL_ARTIFACTS}
-        return bodies or None
+        return bodies if bodies and all(body is not None for body in bodies.values()) else None
 
     def _hold(self, key: str, detail: str) -> None:
         self.install_findings[key] = detail
@@ -474,7 +593,7 @@ class InstallDesk:
                 break
             comps["trust_seq"], comps["trust_id"] = item["seq"], item["envelope_id"]
         for kind in install.SET_KINDS:
-            key = self._latest_key(member.stream, kind)
+            key = self._offered_key(member, kind)
             if key is None:
                 continue
             info = self.install_sets[key]
@@ -498,8 +617,176 @@ class InstallDesk:
             if one is not None and one != before["sets"].get(kind):
                 info = self._set_by_id(member.stream, one[0])
                 if info is not None:
-                    ids += sorted(info["statements"].values())
+                    ids += ([info["change"]] if info.get("change") else []) + sorted(info["statements"].values())
         return ids
+
+    def _offered_key(self, member, kind: str) -> Optional[str]:
+        """The offered set of `kind` at the highest `seq` that `member` may be offered now: a ceiling staged to a canary
+        group is passed over for a PEP outside that group until the canary stage ends (CL7)."""
+        keys = sorted((key for key, info in self.install_sets.items()
+                       if info["stream"] == member.stream and info["kind"] == kind and info["state"] == OFFERED_SET),
+                      key=lambda key: self.install_sets[key]["seq"], reverse=True)
+        return next((key for key in keys if not self._paced_away(member, self.install_sets[key])), None)
+
+    def _paced_away(self, member, info: dict) -> bool:
+        pacing = self.install_pacing.get(info.get("set_id", ""))
+        return (pacing is not None and info["kind"] == install.CEILING and pacing["state"] != ALL_STAGE
+                and member.group != pacing["canary"])
+
+    # ------------------------------------------------------------------ CL7: a ceiling staged to a canary group
+    def pace(self, set_id: str, canary: str) -> dict:
+        """CL7: offer the ceiling whose set id is `set_id` to the members of the group `canary` first. It is the
+        controller's own rollout option, unsigned and read by no PEP, so it may come before the set is stored. A set
+        that is not a ceiling, a group the controller does not know, and a ceiling some PEP was already offered are
+        refused with `ValueError`, since pacing it then would pace nothing."""
+        if not kinds.is_hex64(set_id):
+            raise ValueError(f"{set_id!r} is not a set id")
+        if canary not in self.groups:
+            raise ValueError(f"the controller has no group {canary!r} to offer the ceiling to first")
+        info = next((one for one in self.install_sets.values() if one.get("set_id") == set_id), None)
+        if info is not None:
+            if info["kind"] != install.CEILING:
+                raise ValueError("only a ceiling is staged to a canary group (CL7)")
+            if any(member.install is not None and (member.install["sets"].get(install.CEILING) or [""])[0] == set_id
+                   for member in self.members.values()):
+                raise ValueError("the ceiling was already offered at once, so it cannot be staged now (CL7)")
+        self.install_pacing[set_id] = {"canary": canary, "state": CANARY_STAGE, "applied": {}, "settled": [],
+                                       "detail": "", "at": self.clock()}
+        self._log("install-staged", set_id=set_id, canary=canary, state=CANARY_STAGE, result="staged")
+        return {"staged": set_id, "canary": canary}
+
+    def _pace_progress(self, member, record: state_record.StateRecord) -> None:
+        """CL7: what a record of a canary member says of a ceiling staged to its group. It counts as applied when the
+        record carries the install id the ceiling gives, and the member as reported when a later record follows with
+        no lapse the controller did not name in the ceiling's `lapses`. When every canary member reported, the rest of
+        the stream is offered it. A canary member that refuses it or lapses where the controller did not expect it
+        stops the rollout, and nobody else is offered it."""
+        entry = record.install
+        for set_id, pacing in sorted(self.install_pacing.items()):
+            if pacing["state"] != CANARY_STAGE or member.group != pacing["canary"]:
+                continue
+            info = self._set_by_id(member.stream, set_id)
+            if info is None or info["kind"] != install.CEILING or info["state"] != OFFERED_SET \
+                    or member.kind != info["target"]:
+                continue
+            key = set_key(info["stream"], info["kind"], info["seq"], info["release"])
+            if key in member.install_refused:
+                self._stop_paced(set_id, pacing, f"the canary member {member.pep} refused it")
+                continue
+            holds = (member.install is not None and member.install["sets"].get(install.CEILING) == expected_set(info)
+                     and entry is not None and bytes(entry.install_id) == install_id_of(member.install))
+            if not holds:
+                continue
+            pacing["applied"].setdefault(member.pep, record.counter)
+            expected_lapse = member.pep in info.get("lapses", [])
+            lapsed = (record.event in ("lapsed", "fallback") and record.cause == install.ABOVE_CEILING) or (
+                record.counter > pacing["applied"][member.pep] and not any(record.active_release)
+                and bool(member.expected[1]))
+            if lapsed and not expected_lapse:
+                detail = f"the canary member {member.pep} lapsed under it, which the controller did not expect"
+                self._file(member, install.ABOVE_CEILING, f"lapsed under the staged ceiling {key}, not expected")
+                self._stop_paced(set_id, pacing, detail)
+                continue
+            if record.counter > pacing["applied"][member.pep] and member.pep not in pacing["settled"]:
+                pacing["settled"].append(member.pep)
+            canary = [one.pep for one in self.members.values() if one.stream == info["stream"]
+                      and one.kind == info["target"] and one.group == pacing["canary"]]
+            if canary and all(pep in pacing["settled"] for pep in canary):
+                pacing["state"] = ALL_STAGE
+                self._log("install-staged", set_id=set_id, canary=pacing["canary"], state=ALL_STAGE,
+                          reported=sorted(pacing["settled"]), result="offered to all")
+
+    def _stop_paced(self, set_id: str, pacing: dict, detail: str) -> None:
+        pacing["state"], pacing["detail"] = STOPPED_STAGE, detail
+        self._log("install-staged", set_id=set_id, canary=pacing["canary"], state=STOPPED_STAGE, detail=detail,
+                  result="stopped")
+
+    # ------------------------------------------------------------------ CL5, CL6: the sealing tool's lapse preview
+    def ceiling_preview(self, stream: str, target: str, bodies) -> dict:
+        """CL5, CL6: what a new ceiling of `bodies` would do to the PEPs of `target` on `stream`, from this state, which
+        the sealing tool reads and never writes. Each release the ceiling is above, as the release the controller
+        expects of a PEP, with the PEPs that run it, and for each of them the release inside the ceiling that is
+        offered to it or stored on the stream above its own, or else the fallback policy it will decide under, or that
+        it holds none. A PEP whose release bodies the controller does not hold is unknown, never counted as kept."""
+        if not any(info["stream"] == stream and info["target"] == target for info in self.anchors.values()):
+            return {"fleet": "unknown", "reason": f"the controller serves no {target} stream {stream}, so which "
+                                                  "releases lapse is not known"}
+        ceiling = install.HeldSet(install.CEILING, 0, "", "", "", "", False, {name: ("", "", "") for name in bodies},
+                                  {}, dict(bodies))
+        members = [member for _pep, member in sorted(self.members.items())
+                   if member.stream == stream and member.kind == target]
+        lapses: Dict[Tuple[int, str], dict] = {}
+        unknown, warnings = [], []
+        for member in members:
+            policy, release, seq = member.expected
+            if not release:
+                continue                              # no release to lapse
+            held = self._expected_bodies(member)
+            if held is None:
+                unknown.append(member.pep)
+                continue
+            if install.inside(target, ceiling, held):
+                continue
+            entry = lapses.setdefault((seq, release), {"seq": seq, "release": release, "policy": policy, "peps": [],
+                                                       "replaced": [], "retiring": []})
+            entry["peps"].append(member.pep)
+            successor = self._successor(member, ceiling)
+            if successor is not None:
+                entry["replaced"].append({"pep": member.pep, **successor})
+                continue
+            fallback, floor = self._falls_to(member, ceiling)
+            group = next((one for one in entry["retiring"] if one["fallback"] == fallback and one["floor"] == floor),
+                         None)
+            if group is None:
+                group = {"fallback": fallback, "floor": floor, "peps": []}
+                entry["retiring"].append(group)
+            group["peps"].append(member.pep)
+        out = sorted(lapses.values(), key=lambda one: (one["seq"], one["release"]))
+        for entry in out:
+            entry["machines"] = len(entry["peps"])
+            for group in entry["retiring"]:
+                warnings.append(_retirement_warning(entry, group))
+        if unknown:
+            warnings.append(f"{len(unknown)} machine(s) run a release whose bodies the controller does not hold, so "
+                            "whether this ceiling lapses them is unknown")
+        return {"fleet": "known", "stream": stream, "target": target, "machines": len(members),
+                "lapsing": sum(one["machines"] for one in out), "lapses": out, "unknown": unknown,
+                "warnings": warnings}
+
+    def _successor(self, member, ceiling) -> Optional[dict]:
+        """CL6: a release inside `ceiling` that an open rollout offers `member`, or one stored on its stream above the
+        `seq` it runs, or None."""
+        for rollout in self.rollouts:
+            if (rollout.open and rollout.stream == member.stream and member.pep in rollout.members
+                    and rollout.members[member.pep] not in ("refused", "aborted")):
+                bodies = self._release_bodies(rollout.stream, rollout.seq, rollout.release)
+                if bodies is not None and install.inside(member.kind, ceiling, bodies):
+                    return {"seq": rollout.seq, "release": rollout.release, "state": "offered"}
+        found = sorted({(info["seq"], info["release"]) for info in self.stored.values()
+                        if info["stream"] == member.stream and info["seq"] > member.expected[2]
+                        and info["artifact"] not in kinds.TRUST_ARTIFACTS | kinds.INSTALL_ARTIFACTS
+                        and member.kind in info.get("targets", [member.kind])}, reverse=True)
+        for seq, release in found:
+            bodies = self._release_bodies(member.stream, seq, release)
+            if bodies is not None and install.inside(member.kind, ceiling, bodies):
+                return {"seq": seq, "release": release, "state": "stored, not offered"}
+        return None
+
+    def _falls_to(self, member, ceiling) -> Tuple[Optional[dict], bool]:
+        """CL6: the fallback policy the controller expects `member` to hold, with whether it is inside `ceiling`, or
+        None, and whether it holds an action floor."""
+        held = {}
+        for kind in (install.FALLBACK, install.FLOOR):
+            one = (member.install or {"sets": {}})["sets"].get(kind)
+            info = self._set_by_id(member.stream, one[0]) if one else None
+            if info is not None and set(info["statements"]) != {kinds.NONE}:
+                held[kind] = info
+        fallback = held.get(install.FALLBACK)
+        if fallback is not None:
+            key = set_key(fallback["stream"], fallback["kind"], fallback["seq"], fallback["release"])
+            fallback = {"seq": fallback["seq"], "set_id": fallback["set_id"], "policy": fallback["policy"],
+                        "inside": install.inside(member.kind, ceiling, self.held_set(key).bodies)}
+        return fallback, install.FLOOR in held
 
     # ------------------------------------------------------------------ H11, H12: what a record must carry
     def may_fall_back(self, member) -> bool:
@@ -549,6 +836,7 @@ class InstallDesk:
         if record.event == "install-widened" or (record.event == "provisioned" and record.cause == WIDENED):
             self._file(member, WIDENED, f"applied a set that widens, install id {bytes(entry.install_id).hex()}")
             self._match_widened(member)
+        self._pace_progress(member, record)                         # CL7
         return about and record.event in ("refused", "staged", "install-applied", "install-widened", "answered")
 
     def _install_refused(self, member, subject: str, cause: str) -> None:
@@ -602,7 +890,9 @@ class InstallDesk:
             out.setdefault(info["stream"], {"sets": [], "trust": []})["sets"].append(
                 {"key": key, "kind": info["kind"], "seq": info["seq"], "set_id": info["set_id"], "state": info["state"],
                  "envelopes": sorted(info["statements"].values()), "acknowledged": info["acknowledged"],
-                 "finding": self.install_findings.get(key)})
+                 "finding": self.install_findings.get(key), "scope": info.get("scope", ""),
+                 "comparison": info.get("comparison"), "change": info.get("change"), "lapses": info.get("lapses", []),
+                 "rollout": self.install_pacing.get(info.get("set_id", ""))})
         for stream, items in sorted(self.install_trust.items()):
             out.setdefault(stream, {"sets": [], "trust": []})["trust"] = [
                 {**item, "finding": self.install_findings.get(item["envelope_id"])} for item in self._trust_items(stream)]
@@ -619,3 +909,18 @@ class InstallDesk:
                 "reported": reported.get("install_id"), "trust_seq": reported.get("trust_low"),
                 "floor_answers": reported.get("answers", 0), "floor_overrides": reported.get("overrides", 0),
                 "answered": list(member.answered)}
+
+
+def _retirement_warning(entry: dict, group: dict) -> str:
+    """CL6: the warning for the PEPs of one lapsing release that no release inside the new ceiling reaches."""
+    count, seq = len(group["peps"]), entry["seq"]
+    head = (f"{count} machine(s) on seq {seq} (release {entry['release'][:16]}) lapse, and no release inside the new "
+            "ceiling is staged or offered for them, so until a compliant release ships they ")
+    fallback = group["fallback"]
+    if fallback is None:
+        return head + ("hold no fallback policy and refuse everything but what their action floor allows"
+                       if group["floor"] else "hold no fallback policy and refuse everything")
+    text = head + f"run on their fallback policy, install seq {fallback['seq']} (set {fallback['set_id'][:16]})"
+    if not fallback["inside"]:
+        text += ", which is above the new ceiling, so the controller and the PEPs refuse this ceiling (CL3)"
+    return text

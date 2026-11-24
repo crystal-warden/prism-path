@@ -376,7 +376,7 @@ def test_case_218_a_looser_rate_widens_and_an_install_trust_says_so(tmp_path):
 def test_case_205_everything_a_pep_decides_under_is_inside_its_ceiling(tmp_path):
     """case_205: CL3, IS12, AF1. A PEP with a ceiling refuses a floor above it, a fallback policy above it and a
     ceiling its held floor is above, each `dist:above-ceiling` with nothing changed. A ceiling its active release is
-    above, with `widens` false, is applied with event `install-widened` and the release lapses with
+    above, with `widens` false, narrows, so it is applied with event `install-applied` and the release lapses with
     `dist:above-ceiling`, to the fallback policy and to `no-policy`. An `agent` PEP whose ceiling protects a name is
     asked for a call on that name that a floor rule testing `zone_reach` allows, and the floor is silent."""
     ceiling = core(LIST, '-> allow: when tool == "read_file" and path_scope == "workspace"')
@@ -396,7 +396,7 @@ def test_case_205_everything_a_pep_decides_under_is_inside_its_ceiling(tmp_path)
         assert point.send(_set(point, CEILING, narrower, 2, widens=False))[-1].cause == "dist:above-ceiling"
         point.pep.drain()
         applied = point.send(_set(point, CEILING, NARROW, 2, widens=False))[-1]
-        assert (applied.event, applied.cause) == ("install-widened", "dist:install-widened")
+        assert (applied.event, applied.cause) == ("install-applied", None)               # IS12: it narrows
         lapsed = [_read(point, one) for one in point.pep.drain()][-1]
         assert (lapsed.event, lapsed.cause) == (("fallback" if fallback else "lapsed"), "dist:above-ceiling")
         assert point.pep.state() == "no-policy" and point.pep.fallback_decides() == fallback
@@ -796,3 +796,132 @@ def test_case_235_an_anchor_without_an_install_part_leaves_the_install_record(tm
     for authority in ("N1", "O2"):
         with pytest.raises((Refused, PepRefused)):
             point.pep.provision(trust_module.anchor_bytes([_dist.public(authority)], target="agent", stream=STREAM))
+
+
+# ------------------------------------------------------------------ IS14, IS15: the install change statement
+
+NARROWER = table("cmd == 3 and p >= 3 and p <= 5")      # allows less than GOOD_TABLE, by W8
+
+
+def _change(point, pairs, *, signers=None):
+    """The install change statement the install keys sign for the set whose first statement is in `pairs`."""
+    names = signers if signers is not None else point.install_keys[:point.install_threshold]
+    return install.seal_change(pairs[0][0], [GEN.test_key(name) for name in names])
+
+
+def _change_doc(point, kind, carried, seq, source, *, replaces=None, widens=False, policy=None, signers=None,
+                not_before=NOT_BEFORE, targets=None):
+    """An install change statement sealed by hand, so a test can make one the tool never writes."""
+    body = canon.canon2_bytes({"basis": kinds.CHANGE_BASIS, canon.ENCODING_KEY: canon.CANON2,
+                               "format": kinds.INSTALL_CHANGE_FORMAT, "from": source, "set": kind})
+    envelope = env.build(install.CHANGE, body, stream=point.stream, seq=seq, targets=list(targets or [point.kind]),
+                         not_before=not_before, expires=0, policy_sha256=policy or H(carried),
+                         release=env.install_release_id([("policy.ppt", H(carried))]),
+                         replaces=source if replaces is None else replaces, widens=widens)
+    names = signers if signers is not None else point.install_keys[:point.install_threshold]
+    return env.seal(envelope, [GEN.test_key(name) for name in names]), body
+
+
+@pytest.mark.parametrize("cls", [MeshFloor, HostFloor])
+def test_case_296_an_install_change_statement_out_of_its_form_is_refused(tmp_path, cls):
+    """case_296: IS14, IS2, V5, IS4. A `host` and a `mesh` PEP holding an action floor refuse an install change
+    statement that says it widens, replaces nothing, names another hash than its replaces, carries a ceiling or the
+    empty set with `dist:bad-format`, one signed by authority keys with `dist:unknown-key`, and a second one for a set
+    that has one staged with `dist:incomplete`. An `agent` PEP and a PEP whose install threshold is 1 take none in a
+    message. Nothing is staged."""
+    point = _table_point(cls, tmp_path, "p")
+    point.send(_table_floor(point))
+    held = H(GOOD_TABLE)
+    wrong = [_change_doc(point, FLOOR, NARROWER, 2, held, widens=True),
+             _change_doc(point, FLOOR, NARROWER, 2, held, replaces=""),
+             _change_doc(point, FLOOR, NARROWER, 2, held, replaces=H(image(9))),
+             _change_doc(point, CEILING, NARROWER, 2, held),
+             _change_doc(point, FLOOR, NARROWER, 2, held, policy=env.ZERO_HASH)]
+    assert [point.send([one])[-1].cause for one in wrong] == ["dist:bad-format"] * 5
+    assert point.send([_change_doc(point, FLOOR, NARROWER, 2, held, signers=["A"])])[-1].cause == "dist:unknown-key"
+    assert point.pep.installed.staged == {}
+    staged = point.send([_change_doc(point, FLOOR, NARROWER, 2, held)])[-1]
+    assert (staged.event, staged.install.subject) == ("staged", FLOOR)
+    again = point.send([_change_doc(point, FLOOR, NARROWER, 2, held, not_before=NOT_BEFORE + 1)])[-1]
+    assert (again.cause, again.install.subject) == ("dist:incomplete", FLOOR)
+    agent = _agent(tmp_path, "agent")
+    agent.send(_set(agent, FLOOR, NARROW))
+    assert agent.send([_change_doc(agent, FLOOR, NARROWER, 2, H(NARROW))])[-1].cause == "dist:target-mismatch"
+    one = _table_point(cls, tmp_path, "one", install_threshold=1)
+    one.pep.provision_install(_table_floor(one))
+    assert one.send([_change_doc(one, FLOOR, NARROWER, 2, held)])[-1].cause == "dist:target-mismatch"
+
+
+@pytest.mark.parametrize("cls", [MeshFloor, HostFloor])
+def test_case_297_a_narrower_floor_or_fallback_carried_by_a_change_statement_is_applied(tmp_path, cls):
+    """case_297: IS15, IS12. With a change statement from the held set's policy hash, a floor table and a fallback
+    table that allow less with `widens` false are applied with event `install-applied` and no cause, with the
+    statement named in the audit event, and a narrower floor with no change statement is `dist:widening-unsigned`
+    with the floor before it still held."""
+    point = _table_point(cls, tmp_path, "p")
+    point.send(_table_floor(point))
+    point.send(point.install_set(FALLBACK, {"policy.ppt": image(9)}, 1, widens=True))
+    narrow = _table_floor(point, NARROWER, 2, widens=False, replaces=H(GOOD_TABLE))
+    records = point.send([_change(point, narrow)] + narrow)
+    assert [(one.event, one.cause) for one in records] == [("staged", None), ("install-applied", None)]
+    assert point.pep.installed.held(FLOOR).policy_sha256 == H(NARROWER)
+    fallback = point.install_set(FALLBACK, {"policy.ppt": image(10)}, 2, widens=False, replaces=H(image(9)))
+    records = point.send([_change(point, fallback)] + fallback)
+    assert [(one.event, one.cause) for one in records] == [("staged", None), ("install-applied", None)]
+    applied = [event for event in point.pep.audit.events if event["action"] == "install-applied"][-1]
+    assert applied["data"]["change"] == env.envelope_id(env.unseal(_change(point, fallback)[0])[0])
+    alone = _table_floor(point, table("cmd == 3 and p >= 4 and p <= 5"), 3, widens=False, replaces=H(NARROWER))
+    assert point.send(alone)[-1].cause == "dist:widening-unsigned"
+    assert point.pep.installed.held(FLOOR).policy_sha256 == H(NARROWER)
+
+
+@pytest.mark.parametrize("cls", [MeshFloor, HostFloor])
+def test_case_298_a_change_statement_stands_only_for_a_set_it_can_carry(tmp_path, cls):
+    """case_298: IS15, AF8, V10. A change statement on a PEP with no floor, and one from another hash, are
+    `dist:widening-unsigned` with nothing staged. Beside a change statement a floor with a looser rate is
+    `dist:widening-unsigned`, and a set that says it widens is `dist:incomplete`."""
+    point = _table_point(cls, tmp_path, "p")
+    held = H(GOOD_TABLE)
+    assert point.send([_change_doc(point, FLOOR, NARROWER, 2, held)])[-1].cause == "dist:widening-unsigned"
+    point.send(_table_floor(point, rate={"allows": 3, "window": 60}))
+    other = H(image(9))
+    assert point.send([_change_doc(point, FLOOR, NARROWER, 2, other)])[-1].cause == "dist:widening-unsigned"
+    assert point.pep.installed.staged == {}
+    looser = _table_floor(point, NARROWER, 2, widens=False, replaces=held, rate={"allows": 5, "window": 60})
+    assert [one.cause for one in point.send([_change(point, looser)] + looser)] == [None, "dist:widening-unsigned"]
+    carried = _table_floor(point, NARROWER, 3, widens=False, replaces=held, rate={"allows": 3, "window": 60})
+    widens = _table_floor(point, NARROWER, 3, widens=True, replaces=held, rate={"allows": 3, "window": 60})
+    assert [one.cause for one in point.send([_change(point, carried)] + widens)] == [None, "dist:incomplete"]
+
+
+def test_a_floor_read_with_another_command_register_is_not_carried(tmp_path):
+    """IS15, AF9: beside a change statement, a floor whose `command` is not the held floor's is larger, as the PEP
+    compares it itself, so with `widens` false it is `dist:widening-unsigned`."""
+    point = _table_point(MeshFloor, tmp_path, "p")
+    assert point.send(_table_floor(point))[-1].event == "install-widened"
+    held, narrow = H(GOOD_TABLE), NARROWER
+    new = point.install_set(FLOOR, {"policy.ppt": narrow}, 2, widens=False, replaces=held,
+                            metas={"policy.ppt": {**GEN.image_meta(narrow), "command": 3}}, layout=LAYOUT, check=False)
+    envelopes = {"policy.ppt": env.read(env.unseal(new[0][0])[0])}
+    body = install.change_body(FLOOR, held)
+    assert install.widens_ok("mesh", FLOOR, point.pep.installed.held(FLOOR), {"policy.ppt": narrow}, widens=False,
+                             replaces=held, envelopes=envelopes, change=body) == (install.UNSIGNED, True)
+    same = point.install_set(FLOOR, {"policy.ppt": narrow}, 2, widens=False, replaces=held,
+                             metas={"policy.ppt": {**GEN.image_meta(narrow), "command": 0}}, layout=LAYOUT, check=False)
+    envelopes = {"policy.ppt": env.read(env.unseal(same[0][0])[0])}
+    assert install.widens_ok("mesh", FLOOR, point.pep.installed.held(FLOOR), {"policy.ppt": narrow}, widens=False,
+                             replaces=held, envelopes=envelopes, change=body) == (None, False)
+
+
+@pytest.mark.parametrize("cls", [MeshFloor, HostFloor])
+def test_case_299_a_staged_change_statement_survives_a_restart(tmp_path, cls):
+    """case_299: IS15, IS4. A change statement staged survives a restart, and the narrower floor it carries is then
+    applied with event `install-applied`."""
+    point = _table_point(cls, tmp_path, "p")
+    point.send(_table_floor(point))
+    narrow = _table_floor(point, NARROWER, 2, widens=False, replaces=H(GOOD_TABLE))
+    point.send([_change(point, narrow)])
+    point.pep = point.open()
+    assert point.pep.installed.staged[FLOOR].change is not None
+    applied = point.send(narrow)[-1]
+    assert (applied.event, applied.cause) == ("install-applied", None)

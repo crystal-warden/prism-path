@@ -58,13 +58,17 @@ class Fleet:
                         for name, point in self.points.items()}
         self.first = first
 
-    def put(self, body, seq, *, widen=None, replaces=None, **args):
+    def put(self, body, seq, *, widen=None, replaces=None, change=False, **args):
         """Store a release of `body` at `seq`. It replaces the release put before it, and the first one, or one
-        put with `widen`, goes with a widening statement that covers any PEP (W2, W3)."""
+        put with `widen`, goes with a widening statement that covers any PEP (W2, W3). One put with `change` says
+        it does not widen and goes with a change statement from the release it replaces (W11)."""
         previous = getattr(self, "previous", None)
-        widen = self.first.policy_of(body) != previous if widen is None else widen      # W7: only a renewal does not
+        widen = (self.first.policy_of(body) != previous and not change) if widen is None else widen   # W7
         replaces = (previous or "") if replaces is None else replaces
         pairs = _dist.release_with_statement(self.first, body, seq, widen=widen, replaces=replaces, **args)
+        if change:
+            pairs.insert(0, _dist.change_of(self.first, body, seq, replaces=replaces,
+                                            not_before=args.get("not_before", _dist.NOT_BEFORE)))
         for sealed, data in pairs:
             self.controller.put(sealed, data)
         self.previous = self.first.policy_of(body)
@@ -654,7 +658,8 @@ def test_case_065_a_controller_refuses_to_offer_a_larger_release_that_says_it_do
 
 
 def test_case_136_the_sealing_tool_and_the_controller_hold_widens_to_what_they_hold(tmp_path):
-    """case_136: W7, W1, the mesh part. A table that differs from the one it replaces by one constant is written
+    """case_136: W7, W1, the mesh part. A table that differs from the one it replaces by one constant and allows
+    more is written
     with `widens` true by the tool and refused by the controller when it says false, and the same table again
     with a later `expires` is written with `widens` false and offered. The cFS part, a narrower core image and one
     whose rules alone differ, is in integrations/cfs/tests/test_cfs_dist.py."""
@@ -667,7 +672,7 @@ def test_case_136_the_sealing_tool_and_the_controller_hold_widens_to_what_they_h
     fleet = Fleet(tmp_path, names=("n1",), kind="mesh")
     fleet.put(OLD, 1)
     fleet.controller.save()
-    one_constant = _dist.image(6)
+    one_constant = _dist.image(4)                                     # allows x = 4, which the held table refuses
 
     def seal_with_tool(body, seq, expires):
         (tmp_path / "body").write_bytes(body)
@@ -691,23 +696,127 @@ def test_case_136_the_sealing_tool_and_the_controller_hold_widens_to_what_they_h
     assert fleet.controller.offer("fleet", STREAM, 3).seq == 3
 
 
-def test_a_rollout_that_widens_is_marked_larger_by_rule_or_by_comparison_in_the_fleet_view(tmp_path):
-    """F4: a widening the owner pushed stands out. A mesh table that differs from the one it replaces is larger
-    only because a mesh node counts any change of a table as larger, a policy.core a comparator finds larger is
-    larger by comparison, as is a first install, and a renewal is no widening. The mark is in the state the
-    controller keeps."""
-    from prismpath.agent.policy import starter_path
-    from prismpath.distribution.controller import LARGER_BY_COMPARISON, LARGER_BY_RULE
-    fleet = Fleet(tmp_path / "mesh", names=("n1",), kind="mesh")
+def _pem_of(tmp_path, name):
+    from prismpath.hotswap import policy_pack
+    _priv, _pub, ser, _invalid = policy_pack._ed25519()
+    pem = tmp_path / f"{name}.pem"
+    pem.write_bytes(GEN.test_key(name).private_bytes(ser.Encoding.PEM, ser.PrivateFormat.PKCS8, ser.NoEncryption()))
+    return pem
+
+
+def _seal_with_tool(tmp_path, capsys, pem, held, body, seq, *extra, code=0):
+    from prismpath import cli
+    (tmp_path / "body").write_bytes(body)
+    (tmp_path / "meta.json").write_text(json.dumps(GEN.image_meta(body)))
+    args = cli.build_parser().parse_args([
+        "dist", "seal", "--artifact", "policy.ppt", "--body", str(tmp_path / "body"), "--stream", STREAM,
+        "--seq", str(seq), "--target", "mesh", "--key", str(pem), "--held", str(held),
+        "--not-before", str(_dist.NOT_BEFORE), "--expires", str(_dist.EXPIRES), "--meta", str(tmp_path / "meta.json"),
+        "--out", str(tmp_path / f"r{seq}.sealed"), *extra])
+    assert args.func(args) == code
+    captured = capsys.readouterr()
+    return (json.loads(captured.out) if code == 0 else None), captured.err
+
+
+def test_case_290_the_sealing_tool_signs_a_change_statement_only_for_a_table_that_allows_nothing_more(
+        tmp_path, capsys):
+    """case_290: W8, W9, W10, W11, W2. Against a held mesh table, the tool shows the owner what the comparator found
+    for a narrower table and signs nothing without a yes. With `--yes` it seals the table with `widens` false and
+    writes a change statement from the held table's hash beside it, and no widening statement. A mesh node refuses
+    the table alone, and stages and commits the pair. A wider table is a widening with a witness reading and no
+    statement, and a node refuses it without the owner's widening statement."""
+    pem = _pem_of(tmp_path, "A")
+    fleet = Fleet(tmp_path, names=("n1",), kind="mesh")
     fleet.put(OLD, 1)
-    assert fleet.controller.offer("fleet", STREAM, 1).widening == LARGER_BY_COMPARISON
-    fleet.put(NEW, 2, widen=True)
-    assert fleet.controller.offer("fleet", STREAM, 2).widening == LARGER_BY_RULE
-    fleet.put(NEW, 3, widen=False, replaces=H(NEW), expires=_dist.EXPIRES + 10)
-    assert fleet.controller.offer("fleet", STREAM, 3).widening == ""
+    fleet.controller.save()
+
+    _printed, shown = _seal_with_tool(tmp_path, capsys, pem, fleet.dir, NEW, 2, code=1)
+    assert '"answer": "not-larger"' in shown and "refused: dist:widening-unsigned" in shown
+    assert not (tmp_path / "r2.sealed").exists() and not (tmp_path / "r2.change.sealed").exists()
+    printed, _shown = _seal_with_tool(tmp_path, capsys, pem, fleet.dir, NEW, 2, "--yes")
+    assert not printed["widens"] and printed["scope"] == "change, not larger" and printed["replaces"] == H(OLD)
+    assert printed["comparison"] == {"answer": "not-larger", "reason": "narrower", "witness": None}
+    assert printed["change"]["from"] == H(OLD) and printed["change"]["basis"] == "prismpath.table-compare/1"
+    assert "next" not in printed and not list(tmp_path.glob("*.widening.*"))
+    change = (tmp_path / "r2.change.sealed").read_bytes()
+    assert env.read(env.unseal(change)[0]).artifact == "trust.change"
+
+    node = _dist.MeshPep(tmp_path / "node")
+    node.commit(OLD)
+
+    def read(signed):
+        return state_record.read(signed, node.key.public_raw)
+    assert read(node.pep.stage((tmp_path / "r2.sealed").read_bytes(), NEW)).cause == "dist:widening-unsigned"
+    assert read(node.pep.stage(change, (tmp_path / "r2.change.body").read_bytes())).event == "staged"
+    assert read(node.pep.stage((tmp_path / "r2.sealed").read_bytes(), NEW)).event == "staged"
+    assert read(node.pep.commit(STREAM, 2, H(NEW))).event == "committed"
+
+    wider = _dist.image(3)
+    printed, _shown = _seal_with_tool(tmp_path, capsys, pem, fleet.dir, wider, 3)
+    assert printed["widens"] and printed["scope"] == "widening" and "change" not in printed
+    assert printed["comparison"]["answer"] == "larger" and printed["comparison"]["reason"] == "step"
+    assert printed["comparison"]["witness"]["active"] is None and printed["next"]
+    assert not (tmp_path / "r3.change.sealed").exists()
+    assert read(node.pep.stage((tmp_path / "r3.sealed").read_bytes(), wider)).cause == "dist:widening-unsigned"
+
+
+def test_case_291_the_controller_shows_a_change_apart_from_a_widening_and_keeps_the_witness(tmp_path):
+    """case_291: W8, W11, F4, W7. On a host fleet a table that allows less, carried by a change statement with
+    `widens` false, is offered and shown as a change, not larger. One that allows more with a widening statement is
+    a widening with the comparator's witness, as is one whose signed field dictionary differs, with the frame as
+    the witness. The marks and the answers are in the state the controller keeps. A table carried by a change
+    statement that the comparator does not bear out, and a table with neither statement, are not offered."""
+    from prismpath.distribution.controller import CHANGE_NOT_LARGER, WIDENING
+    fleet = Fleet(tmp_path, names=("p1",))
+    fleet.put(OLD, 1)
+    fleet.controller.offer("fleet", STREAM, 1)
+    fleet.put(NEW, 2, change=True)
+    rollout = fleet.controller.offer("fleet", STREAM, 2)
+    assert rollout.scope == CHANGE_NOT_LARGER and rollout.comparison["answer"] == "not-larger"
+    wider = _dist.image(3)
+    fleet.put(wider, 3, widen=True)
+    rollout = fleet.controller.offer("fleet", STREAM, 3)
+    assert rollout.scope == WIDENING
+    assert rollout.comparison["reason"] == "step" and rollout.comparison["witness"]["staged"] == {"edge": 0, "target": 1}
+    fleet.put(OLD, 4, widen=True, meta=dict(GEN.image_meta(OLD), fields={}))
+    rollout = fleet.controller.offer("fleet", STREAM, 4)
+    assert rollout.scope == WIDENING and rollout.comparison["witness"]["member"] == "meta.fields"
     fleet.controller.save()
     kept = Controller(str(fleet.dir), _dist.instance_key("C"), clock=fleet.clock)
-    assert [one["widening"] for one in kept.fleet()["rollouts"]] == [LARGER_BY_COMPARISON, LARGER_BY_RULE, ""]
+    rollouts = kept.fleet()["rollouts"]
+    assert [one["scope"] for one in rollouts] == [WIDENING, CHANGE_NOT_LARGER, WIDENING, WIDENING]
+    assert [one["comparison"] and one["comparison"]["answer"] for one in rollouts] == [None, "not-larger", "larger",
+                                                                                        "larger"]
+    lower = _dist.image(2)
+    fleet.put(lower, 5, change=True, meta=dict(GEN.image_meta(lower), fields={}))
+    with pytest.raises(Refused) as refused:
+        fleet.controller.offer("fleet", STREAM, 5)                    # a change statement W8 does not bear out
+    assert refused.value.cause == "dist:widening-unsigned"
+    fleet.put(NEWER, 6, widen=False, replaces=H(OLD))
+    with pytest.raises(Refused):
+        fleet.controller.offer("fleet", STREAM, 6)
+
+
+def test_a_rollout_is_shown_as_a_widening_or_a_change_in_the_fleet_view(tmp_path):
+    """F4: a widening the owner pushed stands out, and a change that allows nothing more is shown apart from it. A
+    first install and a policy.core a comparator finds larger are widenings, a mesh table W8 finds narrower is a
+    change, not larger, and a renewal is neither. The mark is in the state the controller keeps, and a state kept
+    with the older marks reads as the new ones."""
+    from prismpath.agent.policy import starter_path
+    from prismpath.distribution.controller import CHANGE_NOT_LARGER, WIDENING, Rollout
+    fleet = Fleet(tmp_path / "mesh", names=("n1",), kind="mesh")
+    fleet.put(OLD, 1)
+    assert fleet.controller.offer("fleet", STREAM, 1).scope == WIDENING
+    fleet.put(NEW, 2, change=True)
+    assert fleet.controller.offer("fleet", STREAM, 2).scope == CHANGE_NOT_LARGER
+    fleet.put(NEW, 3, widen=False, replaces=H(NEW), expires=_dist.EXPIRES + 10)
+    assert fleet.controller.offer("fleet", STREAM, 3).scope == ""
+    fleet.controller.save()
+    kept = Controller(str(fleet.dir), _dist.instance_key("C"), clock=fleet.clock)
+    documents = kept.fleet()["rollouts"]
+    assert [one["scope"] for one in documents] == [WIDENING, CHANGE_NOT_LARGER, ""]
+    older = {key: value for key, value in documents[1].items() if key != "scope"}
+    assert Rollout.from_document(dict(older, widening="larger by rule")).scope == CHANGE_NOT_LARGER
 
     strict, default = (starter_path(name).read_bytes().rstrip(b"\n") for name in ("strict", "default"))
     point = _dist.AgentPep(tmp_path / "agent")
@@ -721,4 +830,4 @@ def test_a_rollout_that_widens_is_marked_larger_by_rule_or_by_comparison_in_the_
                                   targets=("agent",), widens=True, replaces=replaces), statement)
         controller.put(point.seal(image, seq, widens=True, replaces=replaces), image)
         controller.put(point.seal_hosts(image, seq, widens=True, replaces=replaces), point.hosts)
-        assert controller.offer("default", STREAM, seq).widening == LARGER_BY_COMPARISON
+        assert controller.offer("default", STREAM, seq).scope == WIDENING

@@ -269,6 +269,32 @@ pub fn statement_of(sealed: &[u8], from: &[Hex64]) -> (Vec<u8>, Vec<u8>) {
     (seal(ArtifactKind::TrustWidening, &statement, &args), statement)
 }
 
+/// The canon/2 body of a change statement (W10) from the policy hash `from`.
+pub fn change(from: &Hex64) -> Vec<u8> {
+    canon2::write_json(&json!({"basis": "prismpath.table-compare/1", "encoding": "canon/2",
+                               "format": "prismpath.dist-change/1", "from": from.to_string()}))
+    .unwrap()
+}
+
+/// The authority's change statement (W10) from `from` for the `policy.ppt` release `sealed`, sharing its stream,
+/// seq, hashes and `replaces`, with `widens` as given (E7 asks the release's own).
+pub fn change_of(sealed: &[u8], from: &Hex64, widens: bool) -> (Vec<u8>, Vec<u8>) {
+    let envelope = env::read(env::unseal(sealed).unwrap().0).unwrap();
+    let body = change(from);
+    let args = Args {
+        seq: envelope.seq,
+        release: Some(envelope.release.clone()),
+        policy: Some(envelope.policy_sha256.clone()),
+        not_before: envelope.not_before,
+        stream: envelope.stream.clone(),
+        targets: envelope.targets.iter().copied().collect(),
+        widens,
+        replaces: envelope.replaces.0.clone(),
+        ..Args::default()
+    };
+    (seal(ArtifactKind::TrustChange, &body, &args), body)
+}
+
 /// The owner's widening statement covering any PEP for `sealed`, or None when `sealed` is not a `policy.ppt`
 /// release that says it widens.
 pub fn covering_statement(sealed: &[u8]) -> Option<(Vec<u8>, Vec<u8>)> {

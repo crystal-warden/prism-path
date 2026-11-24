@@ -24,7 +24,10 @@ fingerprint, and again with `--confirm` takes that fingerprint (P2), `poll` pull
 The engineer's commands run where the install keys are (section 21): `anchor` with `--install-pub` writes the
 install part of a `/2` anchor, `install` seals a fallback policy or a ceiling, compared with the set it follows
 (IS12) and held to the ceiling (CL3), and `install-trust` seals an install trust statement against the engineer's
-list of retired key ids (IS11, K4). `seal --ceiling` refuses a release above the ceiling (CL2).
+list of retired key ids (IS11, K4). `seal --ceiling` refuses a release above the ceiling (CL2). Before it signs a
+ceiling, `install` shows its lapse preview from the controller state `--held` names, or says the fleet is unknown,
+warns where no release inside the ceiling reaches a machine that lapses, and signs only on the engineer's yes (CL5,
+CL6). `--staged` writes the unsigned rollout option that has the controller offer it to a canary group first (CL7).
 
 Exit 0 when the command did what it was asked, 1 when it was refused, with the cause on stderr, and 2 for a
 usage error.
@@ -43,6 +46,7 @@ from prismpath.distribution import kinds, state_record
 from prismpath.distribution.kinds import Refused
 
 DEFAULT_LISTEN = "127.0.0.1:8471"
+ROLLOUT_SUFFIX = ".rollout.json"                     # CL7: an unsigned rollout option in the inbox
 
 
 def add_parser(subparsers) -> None:
@@ -65,6 +69,9 @@ def add_parser(subparsers) -> None:
     seal.add_argument('--widens', action='store_true',
                       help='say the release allows more than the one it replaces; set as well unless the release is '
                            'compared with the one --held holds for replaces and is not larger (W7)')
+    seal.add_argument('--yes', action='store_true',
+                      help='sign the change statement for a table the comparator finds allows nothing more, without '
+                           'asking (W9, W11)')
     seal.add_argument('--meta', default=None, metavar='FILE', help='the meta object, JSON')
     seal.add_argument('--qualification', default=None, metavar='FILE',
                       help='for policy.ppt, fill meta from the image and this qualification envelope')
@@ -123,6 +130,18 @@ def add_parser(subparsers) -> None:
                       help='the set this one follows, as this command wrote it; sets replaces and is compared (IS12)')
     inst.add_argument('--ceiling', default=None, metavar='DIR', help='the held ceiling, as this command wrote it (CL3)')
     inst.add_argument('--widens', action='store_true', help='say the set allows more than the one it follows')
+    inst.add_argument('--yes', action='store_true',
+                      help='sign the install change statement for a floor or fallback table the comparator finds '
+                           'allows nothing more, and a ceiling after its lapse preview, without asking at the '
+                           'terminal (IS15, CL5)')
+    inst.add_argument('--held', default=None, metavar='DIR',
+                      help='a controller directory, read and never written: a ceiling\'s lapse preview names the '
+                           'releases it is above and the machines that run each (CL5, CL6)')
+    inst.add_argument('--staged', action='store_true',
+                      help='a ceiling for a planned change: the controller offers it to the canary group first and to '
+                           'the rest once the canary reports it applied with no unexpected lapse (CL7)')
+    inst.add_argument('--canary', default='canary', metavar='GROUP',
+                      help='with --staged, the controller group offered the ceiling first (default canary)')
     inst.add_argument('--rate', default=None, metavar='ALLOWS/WINDOW', help="a floor's signed rate of overrides (AF8)")
     inst.add_argument('--answer-rate', default=None, metavar='ALLOWS/WINDOW',
                       help="a floor's signed rate of operator allows (OP4)")
@@ -233,6 +252,11 @@ def add_parser(subparsers) -> None:
     rekey.add_argument('--not-before', type=int, default=None)
     rekey.add_argument('--expires', type=int, required=True)
     rekey.add_argument('--timeout', type=float, default=600.0, help='seconds to wait for the commit')
+    rekey.add_argument('--widens', action='store_true',
+                       help='the release may allow more than the table it replaces; without it a table the comparator '
+                            'finds larger is refused (W9)')
+    rekey.add_argument('--yes', action='store_true',
+                       help='sign the change statement for a table the comparator finds allows nothing more (W11)')
     rekey.set_defaults(func=rekey_cmd)
 
     pep = commands.add_parser('pep', help='run a host enforcement point (provision, poll, status, rollback)')
@@ -363,7 +387,21 @@ def ingest(controller) -> list:
     inbox = os.path.join(controller.dir, "inbox")
     if not os.path.isdir(inbox):
         return []
+    from prismpath.distribution.controller_install import ROLLOUT_FORMAT
     done = []
+    for name in sorted(os.listdir(inbox)):            # CL7: a rollout option first, so no PEP sees the set before it
+        if not name.endswith(ROLLOUT_SUFFIX):
+            continue
+        path = os.path.join(inbox, name)
+        try:
+            doc = json.loads(_read(path).decode("utf-8"))
+            if not isinstance(doc, dict) or doc.get("format") != ROLLOUT_FORMAT or doc.get("staged") is not True:
+                raise ValueError("not a rollout option of a staged ceiling")
+            done.append(controller.pace(doc.get("set_id"), doc.get("canary")))
+            os.remove(path)
+        except (ValueError, UnicodeDecodeError) as error:
+            done.append({"refused": name, "cause": str(error)})
+            os.replace(path, path + ".refused")
     for name in sorted(os.listdir(inbox)):
         if not name.endswith(".sealed"):
             continue
@@ -394,9 +432,7 @@ def replaced(directory: Optional[str], artifact: str, stream: str, seq: int, pol
 
 
 def _replaced_in(controller, artifact: str, stream: str, seq: int, policy: Optional[str] = None):
-    below = [info for info in controller.stored.values()
-             if info["stream"] == stream and info["artifact"] == artifact and info["seq"] < seq
-             and (policy is None or info["policy"] == policy)]
+    below = _below(controller, artifact, stream, seq, policy)
     if not below and policy is not None:
         return policy, None
     if not below:
@@ -405,8 +441,98 @@ def _replaced_in(controller, artifact: str, stream: str, seq: int, policy: Optio
     return latest["policy"], controller.blob(latest["body_sha256"])
 
 
+def _below(controller, artifact: str, stream: str, seq: int, policy: Optional[str]) -> list:
+    return [dict(info, envelope_id=one) for one, info in controller.stored.items()
+            if info["stream"] == stream and info["artifact"] == artifact and info["seq"] < seq
+            and (policy is None or info["policy"] == policy)]
+
+
+def _replaced_fields(controller, stream: str, seq: int, policy: Optional[str]) -> Optional[dict]:
+    """The signed field dictionary of the `policy.ppt` envelope `_replaced_in` holds the new one to (W8)."""
+    from prismpath.distribution import table_compare
+    below = _below(controller, "policy.ppt", stream, seq, policy)
+    if not below:
+        return None
+    latest = max(below, key=lambda info: info["seq"])
+    return table_compare.table_fields(env.read(env.unseal(controller.sealed(latest["envelope_id"]))[0]))
+
+
+def table_comparison(controller, body: bytes, meta: Optional[dict], stream: str, seq: int, policy: Optional[str],
+                     previous: Optional[bytes]):
+    """W8 at the sealing tool: the table comparator's answer for a `policy.ppt` body against the table it
+    replaces, which `controller` holds, or None when it holds none."""
+    from prismpath.distribution import table_compare
+    if previous is None:
+        return None
+    fields = (meta or {}).get("fields")
+    return table_compare.compare_tables(previous, body, active_fields=_replaced_fields(controller, stream, seq, policy),
+                                        staged_fields=dict(fields) if isinstance(fields, dict) else None)
+
+
+def scope_mark(artifact: str, previous: Optional[bytes], body: bytes, comparison) -> str:
+    """F4 at the sealing tool, as the controller marks a rollout: a widening for a release that replaces nothing
+    held, that a comparator with an order finds larger, or a table W8 finds larger or cannot decide, a change, not
+    larger, for one that differs and allows nothing more, and empty for a renewal."""
+    from prismpath.distribution import widening
+    from prismpath.distribution.controller import CHANGE_NOT_LARGER, WIDENING
+    if previous is None:
+        return WIDENING
+    if bytes(previous) == bytes(body):
+        return ""
+    if widening.compare_artifact(artifact, previous, body) == widening.NOT_LARGER:
+        return CHANGE_NOT_LARGER
+    if artifact == "policy.ppt" and comparison is not None and comparison.answer == widening.NOT_LARGER:
+        return CHANGE_NOT_LARGER
+    return WIDENING
+
+
+def _confirmed(args, comparison, replaces: str, *, keys: str = "the release's keys") -> bool:
+    """W9, IS15: the owner or the engineer is shown what W8 found before a change statement is signed, and says yes,
+    at the terminal or with `--yes` for a script."""
+    shown = {"comparison": comparison.document(), "replaces": replaces,
+             "change": "this table allows nothing more than the one it replaces, by the table comparator (W8)"}
+    print(json.dumps(shown, indent=2, sort_keys=True), file=sys.stderr)
+    return _said_yes(args, f"sign a change statement that says so, with {keys}? [y/N] ")
+
+
+def _said_yes(args, question: str) -> bool:
+    """`--yes`, or a yes typed at the terminal. No terminal and no `--yes` is a no."""
+    if getattr(args, "yes", False):
+        return True
+    if not sys.stdin.isatty():
+        return False
+    try:
+        answer = input(question)
+    except EOFError:
+        return False
+    return answer.strip().lower() in ("y", "yes")
+
+
+def change_sealed(release_sealed: bytes, signers: list) -> tuple:
+    """The sealed change statement for the release in `release_sealed` and its body (W10): the same stream, seq,
+    policy hash, release id, targets, `replaces` and `widens` (E7), `from` the policy hash it replaces and `basis`
+    the table comparator its claim rests on."""
+    release = env.read(env.unseal(release_sealed)[0])
+    if release.artifact in kinds.TRUST_ARTIFACTS or release.widens or not release.replaces:
+        raise Refused(kinds.BAD_FORMAT, "a change statement is for a release that replaces one and does not widen")
+    body = canon.canon2_bytes({"basis": kinds.CHANGE_BASIS, canon.ENCODING_KEY: canon.CANON2,
+                               "format": kinds.CHANGE_FORMAT, "from": release.replaces})
+    kinds.read_change(body)
+    envelope_bytes = env.build("trust.change", body, stream=release.stream, seq=release.seq,
+                               targets=list(release.targets), not_before=release.not_before, expires=0,
+                               policy_sha256=release.policy_sha256, release=release.release,
+                               replaces=release.replaces, widens=False)
+    return env.seal(envelope_bytes, signers), body
+
+
+NOT_CONFIRMED = ("the table allows nothing more than the one it replaces, and a change statement is signed only when "
+                 "the owner says yes; run again at a terminal or with --yes, or with --widens to release it as a "
+                 "widening")
+
+
 def seal_cmd(args) -> int:
     from prismpath.distribution import widening
+    from prismpath.distribution.controller import WIDENING
     body = _read(args.body)
     meta = _json(args.meta)
     if meta is None and args.artifact == "policy.ppt" and args.qualification:
@@ -421,23 +547,48 @@ def seal_cmd(args) -> int:
     # a release that replaces nothing, or one the directory holds nothing for, widens
     widens = args.widens or args.artifact not in kinds.TRUST_ARTIFACTS and (
         previous is None or widening.compare_artifact(args.artifact, previous, body) != widening.NOT_LARGER)
+    comparison = None
+    if args.artifact == "policy.ppt" and args.held is not None and previous is not None:
+        comparison = table_comparison(_held(args.held), body, meta, args.stream, args.seq, args.replaces, previous)
+    mark = scope_mark(args.artifact, previous, body, comparison) if args.artifact not in kinds.TRUST_ARTIFACTS else ""
+    change = (widens and not args.widens and comparison is not None and comparison.answer == widening.NOT_LARGER
+              and replaces != "")
+    if change:
+        if not _confirmed(args, comparison, replaces):
+            return _fail(widening.UNSIGNED, NOT_CONFIRMED)
+        widens = False                                   # W11: it allows nothing more, so it does not widen
     try:
         sealed = build_sealed(args.artifact, body, stream=args.stream, seq=args.seq, targets=args.target,
                               signers=_authority(args.key), not_before=args.not_before or int(time.time()),
                               expires=args.expires, meta=meta, release=args.release, policy=args.policy,
                               replaces=replaces, widens=widens, held=args.held)
+        statement = change_sealed(sealed, _authority(args.key)) if change else None
     except Refused as refused:
         return _fail(refused.cause, str(refused))
     _write(args.out, sealed)
-    _print({"sealed": args.out, "envelope_id": env.envelope_id(env.unseal(sealed)[0]),
-            "body_sha256": canon.sha256_hex(body), "sealed_size": len(sealed), "replaces": replaces,
-            "widens": widens})
+    printed = {"sealed": args.out, "envelope_id": env.envelope_id(env.unseal(sealed)[0]),
+               "body_sha256": canon.sha256_hex(body), "sealed_size": len(sealed), "replaces": replaces,
+               "widens": widens, "scope": mark}
+    if comparison is not None:
+        printed["comparison"] = comparison.document()
+    if statement is not None:
+        stem = os.path.splitext(args.out)[0] + ".change"
+        _write(stem + ".sealed", statement[0])
+        _write(stem + ".body", statement[1])
+        printed["change"] = {"sealed": stem + ".sealed", "body": stem + ".body", "from": replaces,
+                             "basis": kinds.CHANGE_BASIS}
+    elif widens and mark == WIDENING:
+        printed["next"] = "this release allows more than the one it replaces; sign its widening statement with widen"
+    elif widens:
+        printed["next"] = "this release says it widens; sign its widening statement with widen"
+    _print(printed)
     return 0
 
 
 def widening_sealed(release_sealed: bytes, froms: List[str], signers: list) -> tuple:
     """The sealed widening statement for the release in `release_sealed` and its body: the same stream, seq,
-    policy hash, release id, targets, `replaces` and `widens` (W4, E7), and `from` sorted."""
+    policy hash, release id, targets, `replaces` and `widens` (W4, E7), and `from` sorted. Only `widen` and a
+    `rekey` the owner passes `--widens` sign one, never the tool on its own (W9)."""
     release = env.read(env.unseal(release_sealed)[0])
     if release.artifact in kinds.TRUST_ARTIFACTS:
         raise Refused(kinds.BAD_FORMAT, "a widening statement is for a release, not a trust statement")
@@ -548,7 +699,9 @@ def rotate_cmd(args) -> int:
 def rekey_cmd(args) -> int:
     """Rotate to the new key retiring the old one, release under the new key, wait for the group to commit, then
     revoke the old key (R5's order of work). A release that is not the one it replaces goes with a widening
-    statement from that one (W3, W7). Each statement is stored in the controller directory, which the running
+    statement from that one when the owner passes `--widens` (W3, W7), and with a change statement when the table
+    comparator finds it allows nothing more and the owner says yes, at the terminal or with `--yes` (W9, W11).
+    Otherwise it is refused before anything is stored. Each statement is stored in the controller directory, which the running
     `serve` offers."""
     from prismpath.distribution import widening
     from prismpath.hotswap import policy_pack
@@ -560,18 +713,32 @@ def rekey_cmd(args) -> int:
     now = int(time.time())
     try:
         with controller.locked():
-            rotation = rotation_body(new, old_id)
-            controller.put(build_sealed("trust.rotation", rotation, stream=env.TRUST_STREAM,
-                                        seq=controller.trust_seq() + 1, targets=targets, signers=[old, new],
-                                        not_before=now, expires=0), rotation)
             body = _read(args.body)
             meta = policy_meta(body, _json(args.qualification)) if args.qualification else {}
             replaces, previous = _replaced_in(controller, "policy.ppt", args.stream, args.seq)
             widens = previous is None or widening.compare_artifact("policy.ppt", previous, body) != widening.NOT_LARGER
+            comparison = table_comparison(controller, body, meta, args.stream, args.seq, None, previous)
+            change = (widens and not args.widens and comparison is not None
+                      and comparison.answer == widening.NOT_LARGER and replaces != "")
+            if widens and not args.widens and not change:
+                # W9: a release that allows more is an act the owner takes on purpose, never signed in passing
+                raise Refused(widening.UNSIGNED, "the table allows more than the one it replaces "
+                              f"({(comparison.document() if comparison else {'reason': 'no table before it'})}); "
+                              "pass --widens to release it with a widening statement")
+            if change and not _confirmed(args, comparison, replaces):
+                raise Refused(widening.UNSIGNED, NOT_CONFIRMED)
+            widens = widens and not change
+            rotation = rotation_body(new, old_id)
+            controller.put(build_sealed("trust.rotation", rotation, stream=env.TRUST_STREAM,
+                                        seq=controller.trust_seq() + 1, targets=targets, signers=[old, new],
+                                        not_before=now, expires=0), rotation)
             release = build_sealed("policy.ppt", body, stream=args.stream, seq=args.seq, targets=args.target,
                                    signers=[new], not_before=args.not_before or now, expires=args.expires,
                                    meta=meta, replaces=replaces, widens=widens)
-            if widens:                                   # W3: it covers the release it replaces and no other
+            if change:                                   # W11: the owner said yes to what W8 found
+                statement, statement_body = change_sealed(release, [new])
+                controller.put(statement, statement_body)
+            elif widens:                                 # W3: the owner's --widens, from the release it replaces alone
                 statement, statement_body = widening_sealed(release, [replaces] if replaces else [], [new])
                 controller.put(statement, statement_body)
             controller.put(release, body)
@@ -650,6 +817,8 @@ def read_set_dir(directory: str):
         sealed = _read(os.path.join(directory, name))
         body = _read(os.path.join(directory, name[:-len(".sealed")] + ".body"))
         envelope = env.read(env.unseal(sealed)[0])
+        if envelope.artifact == install.CHANGE and envelope.body_sha256 == canon.sha256_hex(body):
+            continue                                 # IS14: the change statement written beside the set
         if envelope.body_sha256 != canon.sha256_hex(body) or envelope.artifact not in install.SET_KINDS:
             raise Refused("dist:body-mismatch", f"{name} is not an install statement with its body")
         named = envelope.meta["as"]
@@ -683,10 +852,84 @@ def _rated(kind: str, rates) -> Optional[dict]:
     return {"set": SimpleNamespace(meta={name: value for name, value in rates.items() if value is not None})}
 
 
+INSTALL_NOT_CONFIRMED = ("the table allows nothing more than the one it follows, and an install change statement is "
+                         "signed only when the engineer says yes; run again at a terminal or with --yes, or with "
+                         "--widens to seal it as a widening")
+
+
+def _install_comparison(target: str, kind: str, follows, bodies: dict, metas: dict):
+    """W8 at the sealing tool for an action floor or a fallback policy on `host` and `mesh`: the table comparator's
+    answer for the set's `policy.ppt` against the one of the set it follows, or None when there is nothing to compare."""
+    from prismpath.distribution import table_compare
+    if (target not in ("host", "mesh") or kind not in kinds.CHANGES_SETS or follows is None or follows.empty
+            or "policy.ppt" not in bodies or "policy.ppt" not in follows.bodies):
+        return None
+    fields = (metas.get("policy.ppt") or {}).get("fields")
+    return table_compare.compare_tables(
+        follows.bodies["policy.ppt"], bodies["policy.ppt"],
+        active_fields=table_compare.table_fields(follows.envelopes.get("policy.ppt")),
+        staged_fields=dict(fields) if isinstance(fields, dict) else None)
+
+
+def _as_sealed(kind: str, rates, metas: dict, layout: Optional[bytes]) -> dict:
+    """The statements of a set as IS12 and IS15 compare them beside their tables: one whose `meta` holds the rates, and
+    on a table floor its `layout` hash and `command` register."""
+    from types import SimpleNamespace
+    from prismpath.distribution import install
+    meta = {}
+    if kind == install.FLOOR:
+        meta = {name: value for name, value in rates.items() if value is not None}
+        if layout is not None:
+            meta["layout"] = canon.sha256_hex(layout)
+        command = (metas.get("policy.ppt") or {}).get("command")
+        if command is not None:
+            meta["command"] = command
+    return {"set": SimpleNamespace(meta=meta)}
+
+
+CEILING_NOT_CONFIRMED = ("not signed: a ceiling is signed only when the engineer says yes after its lapse preview; "
+                         "run again at a terminal or with --yes (CL5)")
+
+
+def ceiling_preview(held: Optional[str], stream: str, target: str, bodies: dict) -> dict:
+    """CL5: the lapse preview of a new ceiling, from the controller state in `held`, read and never written. With no
+    state, or one that does not read, the fleet is unknown, which is never taken as nothing lapsing."""
+    if not held:
+        return {"fleet": "unknown", "reason": "no controller state was given (--held), so which releases this ceiling "
+                                              "lapses is not known"}
+    try:
+        controller = _held(held)
+    except (ValueError, OSError, Refused) as error:
+        return {"fleet": "unknown", "reason": f"the controller state in {held} does not read ({error}), so which "
+                                              "releases this ceiling lapses is not known"}
+    return controller.ceiling_preview(stream, target, bodies)
+
+
+def _show_preview(preview: dict, args) -> None:
+    """CL5, CL6: the preview on stderr, its counts in plain words and each retirement warning, before the yes."""
+    print(json.dumps({"ceiling preview": preview}, indent=2, sort_keys=True), file=sys.stderr)
+    if preview["fleet"] != "known":
+        print(f"fleet unknown: {preview['reason']}. This is not the same as nothing lapsing.", file=sys.stderr)
+    else:
+        print(f"this ceiling lapses {preview['lapsing']} of {preview['machines']} machine(s) of {preview['target']} "
+              f"on {preview['stream']}, in {len(preview['lapses'])} release(s)", file=sys.stderr)
+        for entry in preview["lapses"]:
+            print(f"  seq {entry['seq']} release {entry['release'][:16]}: {entry['machines']} machine(s)",
+                  file=sys.stderr)
+        for warning in preview["warnings"]:
+            print(f"warning: {warning}", file=sys.stderr)
+    print(f"the controller offers it to the group {args.canary} first (--staged)" if args.staged
+          else "the controller offers it to every machine at once", file=sys.stderr)
+
+
 def install_cmd(args) -> int:
     """The sealing tool's install set (section 21). It compares the set with the one it follows and refuses one it
     computes as larger whose `widens` is false, on a `cfs` table by the core image inside it (IS12, H13), and holds
-    a fallback policy to the held ceiling (CL3)."""
+    a fallback policy to the held ceiling (CL3). On `host` and `mesh` it compares an action floor's or a fallback
+    policy's table by W8, shows the engineer the answer, and for a table that allows nothing more signs an install
+    change statement beside a set whose `widens` is false only on the engineer's yes, at the terminal or with `--yes`
+    (IS15). It never signs one for a table W8 finds larger or cannot decide. A ceiling is signed only after its lapse
+    preview and the engineer's yes, and `--staged` writes its unsigned rollout option beside it (CL5 to CL7)."""
     from prismpath.distribution import floor, install, widening
     kind = {"floor": install.FLOOR, "fallback": install.FALLBACK, "ceiling": install.CEILING}[args.kind]
     try:
@@ -711,22 +954,40 @@ def install_cmd(args) -> int:
         layout = _read(args.layout) if args.layout else None
         if kind == install.FLOOR and layout is not None:
             floor.read_layout(layout)                 # AF10: a staleness bound of 0 is refused here
-        larger = install.set_larger(args.target, kind, follows, bodies, _rated(kind, rates))
-        if larger is None:                          # H13: a cfs table, by the core image inside it
-            larger = widening.compare_release(dict(follows.bodies), real) != widening.NOT_LARGER
-        if larger and not args.widens:
-            return _fail(install.UNSIGNED, "the set allows more than the one it follows; seal it with --widens")
         metas = {}
         if "policy.ppt" in bodies and args.qualification:
             metas["policy.ppt"] = policy_meta(bodies["policy.ppt"], _json(args.qualification))
         for name in ("policy.ppt", "cfs.table"):
             if kind == install.FLOOR and name in bodies and args.command is not None:
                 metas.setdefault(name, {})["command"] = args.command
+        larger = install.set_larger(args.target, kind, follows, bodies, _rated(kind, rates))
+        if larger is None:                          # H13: a cfs table, by the core image inside it
+            larger = widening.compare_release(dict(follows.bodies), real) != widening.NOT_LARGER
+        comparison = _install_comparison(args.target, kind, follows, bodies, metas)
+        change = (larger and not args.widens and comparison is not None and comparison.answer == widening.NOT_LARGER
+                  and not install.set_larger(args.target, kind, follows, bodies,
+                                             _as_sealed(kind, rates, metas, layout), change=True))
+        if comparison is not None:
+            print(json.dumps({"comparison": comparison.document()}, indent=2, sort_keys=True), file=sys.stderr)
+        if change and not _confirmed(args, comparison, follows.policy_sha256, keys="the install keys"):
+            return _fail(install.UNSIGNED, INSTALL_NOT_CONFIRMED)
+        if larger and not args.widens and not change:
+            return _fail(install.UNSIGNED, "the set allows more than the one it follows; seal it with --widens")
+        if args.staged and kind != install.CEILING:
+            print("--staged paces a ceiling only (CL7)", file=sys.stderr)
+            return 2
+        if kind == install.CEILING:
+            preview = ceiling_preview(args.held, args.stream, args.target, bodies)
+            _show_preview(preview, args)
+            if not _said_yes(args, "sign this ceiling with the install keys? [y/N] "):
+                print(CEILING_NOT_CONFIRMED, file=sys.stderr)
+                return 1
         pairs = install.seal_set(kind, bodies, stream=args.stream, seq=args.seq, target=args.target,
                                  signers=_authority(args.key),
                                  replaces=follows.policy_sha256 if follows and not follows.empty else "",
                                  widens=bool(args.widens), metas=metas,
                                  not_before=args.not_before or int(time.time()), layout=layout, **rates)
+        statement = install.seal_change(pairs[0][0], _authority(args.key)) if change else None
     except Refused as refused:
         return _fail(refused.cause, str(refused))
     os.makedirs(args.out, exist_ok=True)
@@ -736,7 +997,27 @@ def install_cmd(args) -> int:
         _write(os.path.join(args.out, f"{named}.sealed"), sealed)
         _write(os.path.join(args.out, f"{named}.body"), body)
         out.append({"as": named, "envelope_id": env.envelope_id(env.unseal(sealed)[0])})
-    _print({"set": args.out, "kind": kind, "seq": args.seq, "statements": out, "widens": bool(args.widens)})
+    printed = {"set": args.out, "kind": kind, "seq": args.seq, "statements": out, "widens": bool(args.widens)}
+    if comparison is not None:
+        printed["comparison"] = comparison.document()
+        printed["scope"] = "widening" if larger and not change else "change, not larger"
+    if kind == install.CEILING:
+        printed["preview"] = preview
+    if args.staged:                                 # CL7: unsigned, for the controller's inbox beside the set
+        from prismpath.distribution.controller_install import ROLLOUT_FILE, ROLLOUT_FORMAT
+        set_id = env.set_id(one["envelope_id"] for one in out)
+        _write(os.path.join(args.out, ROLLOUT_FILE), json.dumps(
+            {"canary": args.canary, "format": ROLLOUT_FORMAT, "set_id": set_id, "staged": True},
+            sort_keys=True).encode("utf-8"))
+        printed["rollout"] = {"staged": True, "canary": args.canary, "set_id": set_id,
+                              "file": os.path.join(args.out, ROLLOUT_FILE)}
+    if statement is not None:                       # IS15: handed to the controller before the set it carries
+        _write(os.path.join(args.out, f"{install.CHANGE}.sealed"), statement[0])
+        _write(os.path.join(args.out, f"{install.CHANGE}.body"), statement[1])
+        printed["change"] = {"sealed": os.path.join(args.out, f"{install.CHANGE}.sealed"),
+                             "envelope_id": env.envelope_id(env.unseal(statement[0])[0]),
+                             "from": follows.policy_sha256, "basis": kinds.CHANGE_BASIS}
+    _print(printed)
     return 0
 
 
