@@ -42,7 +42,8 @@ static const size_t k_SmallCap[PP_APP_SMALL_PARTS]  = {256, 64, 8576, 192, 128};
 static const int    k_FilePart[3] = {PP_PART_ACTIVE, PP_PART_PREVIOUS, PP_PART_STAGED};
 static const int    k_CopyPart[PP_APP_COPY_PARTS] = {PP_PART_INSTALL, PP_PART_RATES, PP_PART_SET_FLOOR,
                                                      PP_PART_SET_FALLBACK, PP_PART_SET_CEILING};
-static const size_t k_CopyCap[PP_APP_COPY_PARTS] = {1024, 128, PP_APP_SET_BYTES, PP_APP_SET_BYTES, PP_APP_SET_BYTES};
+static const size_t k_CopyCap[PP_APP_COPY_PARTS] = {1024, PP_APP_RATES_BYTES, PP_APP_SET_BYTES, PP_APP_SET_BYTES,
+                                                     PP_APP_SET_BYTES};
 _Static_assert(256 + 64 + 8576 + 192 + 128 == PP_APP_SMALL_BYTES, "the record's parts");
 
 static size_t SmallAt(int K)
@@ -254,9 +255,10 @@ static uint8_t Admit(void *Ctx, const uint8_t *Sealed, size_t Len, long long *Bo
     pp_pep_view(&D->Pep, &view);
     pp_verify(Sealed, Len, (const uint8_t *)"", 0, &D->Pep.d.trust, &view, D->Now, &verdict);
     if (D->Pep.locked && !(verdict.has_envelope && verdict.envelope.artifact >= PP_ART_INSTALL_FLOOR &&
-                           verdict.envelope.artifact <= PP_ART_INSTALL_TRUST))
+                           verdict.envelope.artifact <= PP_ART_OPERATOR_ANSWER))
     {
-        return PP_CAUSE_FLOOR_LOST; /* Q5: a locked PEP admits no release, and still takes install statements */
+        return PP_CAUSE_FLOOR_LOST; /* Q5: a locked PEP admits no release, and still takes install statements and
+                                       answers */
     }
     if (verdict.cause == 0 || (verdict.cause == PP_CAUSE_BODY_MISMATCH && verdict.envelope.body_size > 0))
     {
@@ -615,6 +617,13 @@ void PP_AppDist_Frame(PP_AppDist_t *D, const uint8_t *Frame, size_t Len, uint32_
         pp_pep_stage(&D->Pep, D->Assembler.t.sealed, D->Assembler.t.sealed_len, D->Assembler.t.body,
                      D->Assembler.t.body_len, Now);
         Collect(D);
+        if (D->Pep.answer.applied)
+        {
+            D->Step.Answered    = 1; /* OP3: the escalation is answered durably, and nothing is republished (RC4) */
+            D->Step.AnswerAllow = D->Pep.answer.allow;
+            memcpy(D->Step.AnswerId, D->Pep.answer.envelope_id, 32);
+            memcpy(D->Step.AnswerReceipt, D->Pep.answer.receipt, 32);
+        }
     }
     else if (event == PP_ASM_DROPPED)
     {
@@ -760,6 +769,43 @@ void PP_AppDist_Beat(PP_AppDist_t *D, long long Now)
 }
 
 /* ----------------------------------------------------------------- one proposal */
+/* OP3: open the escalation the action floor just made, under the SHA-256 of its escalation document, with the
+ * proposal's payload kept for an answer. The document names the floor's table, the cause, the reading, the PEP's
+ * count of floor answers and its time, and not the PEP, so two apps may write the same bytes (an answer names its
+ * PEP, OP2). */
+static void Escalate(PP_AppDist_t *D, const pp_decision *Asked, const uint8_t *Payload, size_t PayloadLen,
+                     PP_AppDecision_t *Out)
+{
+    static char    doc[512];
+    char           reading[256];
+    uint8_t        reading_sha[32];
+    const uint8_t *floor = NULL;
+    size_t         n;
+    size_t         len;
+
+    if (D->Pep.d.sets[PP_SET_FLOOR].has_held && D->Pep.d.sets[PP_SET_FLOOR].held.body_len == PP_CFS_TABLE_MAX)
+    {
+        floor = D->Pep.d.sets[PP_SET_FLOOR].held.body;
+    }
+    n = PP_Run_ReadingBytes(Payload, PayloadLen, reading, sizeof(reading));
+    if (floor == NULL || n == 0 || PayloadLen > PP_REQUEST_MAX)
+    {
+        return;
+    }
+    pp_sha256((const uint8_t *)reading, n, reading_sha);
+    len = PP_Run_EscalationBytes((uint32_t)(floor[PP_CFS_OFF_VERSION] | floor[PP_CFS_OFF_VERSION + 1] << 8 |
+                                            floor[PP_CFS_OFF_VERSION + 2] << 16 |
+                                            (uint32_t)floor[PP_CFS_OFF_VERSION + 3] << 24),
+                                 Asked->cause, D->Pep.d.floor_answers, Asked->policy_sha256, reading_sha,
+                                 (uint64_t)D->Now, doc, sizeof(doc));
+    if (len == 0)
+    {
+        return;
+    }
+    pp_sha256((const uint8_t *)doc, len, Out->EscalationReceipt);
+    Out->Escalated = pp_pep_escalated(&D->Pep, Out->EscalationReceipt, Payload, PayloadLen) == 0;
+}
+
 static uint8_t KindOf(uint8_t Outcome)
 {
     return Outcome == PP_OUT_ALLOW ? PP_KIND_ALLOW : Outcome == PP_OUT_ESCALATE ? PP_KIND_ESCALATE : PP_KIND_REFUSE;
@@ -826,6 +872,10 @@ void PP_AppDist_Propose(PP_AppDist_t *D, const PP_RunIo_t *Io, const uint8_t *Pa
             verdict.Field  = -1;
             verdict.Reason = PP_REASON_NONE;
             Out->NotEnacted = asked.basis == PP_BASIS_FLOOR || asked.basis == PP_BASIS_FALLBACK;
+            if (asked.basis == PP_BASIS_FLOOR && asked.outcome == PP_OUT_ESCALATE)
+            {
+                Escalate(D, &asked, Payload, PayloadLen, Out);
+            }
         }
     }
     Out->Kind  = verdict.Kind;

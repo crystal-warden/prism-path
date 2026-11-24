@@ -412,6 +412,27 @@ size_t PP_Run_ReceiptBytes(uint64_t Index, uint32_t CaseVersion, uint32_t CaseNu
     return B.Err ? 0 : B.Len;
 }
 
+size_t PP_Run_EscalationBytes(uint32_t FloorVersion, uint16_t Cause, uint32_t FloorAnswers, const uint8_t Policy[32],
+                              const uint8_t ReadingSha[32], uint64_t Time, char *Out, size_t Cap)
+{
+    Buf_t B = {Out, 0, Cap, 0};
+
+    PutS(&B, "{\"case\":");
+    PutCaseId(&B, FloorVersion, 0);
+    PutS(&B, ",\"cause_code\":");
+    PutU64(&B, Cause);
+    PutS(&B, ",\"decider\":\"" PP_RUN_DECIDER "\",\"format\":\"prismpath.cfs-escalation/1\",\"n\":");
+    PutU64(&B, FloorAnswers);
+    PutS(&B, ",");
+    PutHexMember(&B, "policy_sha256", Policy, 32);
+    PutS(&B, ",");
+    PutHexMember(&B, "reading_sha256", ReadingSha, 32);
+    PutS(&B, ",\"time\":");
+    PutU64(&B, Time);
+    PutS(&B, "}");
+    return B.Err ? 0 : B.Len;
+}
+
 /* ----------------------------------------------------------------- files */
 static int Append(const PP_RunIo_t *Io, int File, const void *Data, size_t Len)
 {

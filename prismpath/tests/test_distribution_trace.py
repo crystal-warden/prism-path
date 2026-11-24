@@ -43,11 +43,14 @@ C_KINDS = frozenset({"mesh", "cfs"})
 # has its test. 16: the Rust PEP allows nothing; 66, 70, 72, 73, 79, 123, 130, 134: the Rust verifier decides them,
 # and applying the trust statement, a commit or a release staying active is the Rust PEP's (PR 14).
 # 100: Python's grant writer emits an envelope, and the other older forms' writers wait for PRs 11 and 12.
-PARTIAL = {"P": frozenset({100}), "R": frozenset({16, 66, 70, 72, 73, 79, 123, 130, 134}), "C": frozenset()}
+# 220: the C core and the cFS app take an operator's answer once and bound to its escalation, and the receipt with basis
+# `operator` waits for a core run that can hold an operator case (RC4), so the app records the answer in its state record
+# and housekeeping only and does not republish the request.
+PARTIAL = {"P": frozenset({100}), "R": frozenset({16, 66, 70, 72, 73, 79, 123, 130, 134}), "C": frozenset({220})}
 PENDING = {
     "P": "45 100 102 104-105 161-280",
     "R": "16-17 23-24 26 31 43 46-48 50-53 62-63 66 69-70 72-73 77 79 82 84-85 101 104 111 123 126 130 134 137-140 143 161-163 165-166 169-172 174-178 182-183 186 188-190 193 195 197 199 201-202 204-205 207 213 215 218 221 223-227 230 233-236 240-251 256-262 265-266 269-272 274 276-280",
-    "C": "97 104-105 122 193 202 220 225 230-232 235 256-261 269-271 276-280",
+    "C": "97 104-105 122 193 202 220 230 235 256-261 269-271 276-280",
 }
 
 

@@ -828,19 +828,21 @@ def app_table(rules=None, version: int = 1) -> bytes:
     return bytes(data)
 
 
-def app_anchor(*, install=(), threshold=2, stale=0) -> bytes:
+def app_anchor(*, install=(), threshold=2, stale=0, operators=()) -> bytes:
     """The /2 trust anchor the ground writes for the app: A the authority, C the controller, and install keys whose
     domain is the app's layout document as it was built with `stale` (CL4)."""
     from integrations.cfs.ground import provision
     return provision.anchor_document([_public("A")], controller_public=_public("C"), stream=S, target="cfs",
                                      install_publics=[_public(name) for name in install], threshold=threshold,
+                                     operator_publics=[_public(name) for name in operators],
                                      domain=provision.domain(stale))
 
 
-def app_head(*, install=(), stale=0, bring=()) -> list:
+def app_head(*, install=(), stale=0, bring=(), operators=(), threshold=2, seed=None) -> list:
     from integrations.cfs.ground import table
-    lines = [f"authority {_public('A').hex()}", f"instance {base.INSTANCE_SEED}",
-             f"anchor {app_anchor(install=install, stale=stale).hex()}", f"stale {stale}"]
+    lines = [f"authority {_public('A').hex()}", f"instance {seed or base.INSTANCE_SEED}",
+             f"anchor {app_anchor(install=install, stale=stale, operators=operators, threshold=threshold).hex()}",
+             f"stale {stale}"]
 
     return lines + [f"bring {table.statement_file(sealed, body).hex()}" for sealed, body in bring]
 
@@ -888,7 +890,7 @@ def steps(out: list) -> list:
 
 
 def decisions(out: list) -> list:
-    keys = ("kind", "cause", "rule", "basis", "held", "receipted", "receipt", "not_enacted", "record_error")
+    keys = ("kind", "cause", "rule", "basis", "held", "receipted", "receipt", "not_enacted", "record_error", "escalated")
     return [dict(zip(keys, map(int, line.split()[1:]))) for line in out if line.startswith("decision")]
 
 
@@ -1129,3 +1131,97 @@ def test_case_226_a_cfs_app_that_loses_the_file_of_its_install_record_uses_the_c
     assert ("refused", "dist:install-lost") in [(one["event"], one["cause"]) for records in restarts[-1:]
                                                  for one in records]
     assert all(one["cause"] != "dist:install-lost" for records in restarts[:-1] for one in records)
+
+
+# ------------------------------------------------------------------ OP1 to OP4 in the cFS app
+def _app_escalating(*, seed=None, threshold=2, keys=("J", "K")) -> list:
+    """A cFS app with install keys J and K, operator O1, a floor that allows command 3 once in 60 seconds past its
+    release, which refuses it, so the second proposal of command 3 escalates with dist:floor-rate."""
+    meta = floor_meta(rate={"allows": 1, "window": 60}, answer_rate={"allows": 2, "window": 600})
+    floor = install("install.floor", floors()["one"], meta=meta, signers=keys[:threshold])
+    brought = [(bytes.fromhex(floor[0]), bytes.fromhex(floor[1]))]
+    rules = [{"target": "refuse_104", "when": ["in", "cmd_class", [["num", 3]]]},
+             {"target": "allow", "when": ["in", "cmd_class", [["num", 1], ["num", 2]]]}]
+    return [*app_head(install=keys, threshold=threshold, operators=("O1",), bring=brought, stale=5, seed=seed),
+            f"start 0 0 1 {N}", *release_lines(app_table(rules), 1, 10),
+            f"propose {payload(3, slew=15, thrust=20)} 1 - {N}", f"propose {payload(3, slew=15, thrust=20)} 1 - {N}"]
+
+
+def _app_answer(receipt: str, verdict="allow", *, pep=None, transfer=40, now=N) -> list:
+    from integrations.cfs.ground import answer
+    sealed, body = answer.seal_answer(_private("O1"), pep=pep or pep_id(), receipt=receipt,
+                                      policy=policy(floors()["one"]), answer=verdict, now=now - 10, stream=S)
+    return offer(sealed, body, transfer, now)
+
+
+def _escalation_doc(n: int, time: int) -> bytes:
+    """The escalation document the app hashes (PP_Run_EscalationBytes), from the ground's reference reading."""
+    from integrations.cfs.ground import reference
+    from integrations.cfs.tests import run_scenario
+    raw = run_scenario.reading_payload(dict(cmd_class=3, ground_contact=0, slew_deg=15, thrust_pct=20))
+    reading = hashlib.sha256(reference.reading_bytes(raw)).hexdigest()
+    return canon.canon2_bytes({"case": "v1", "cause_code": 166, "decider": "cfs:prismpath_app",
+                               "format": "prismpath.cfs-escalation/1", "n": n,
+                               "policy_sha256": policy(floors()["one"]), "reading_sha256": reading, "time": time})
+
+
+def _answered(out: list) -> list:
+    return [line.split()[1:] for line in out if line.startswith("answered")]
+
+
+def test_case_220_a_cfs_app_opens_a_floor_escalation_and_applies_an_operator_answer_once(app, tmp_path):
+    """case_220: OP2, OP3, AF8, in the cFS app. The app's floor escalates a proposal past its rate with
+    dist:floor-rate, not enacted, and opens the escalation under the SHA-256 of its escalation document, which it
+    downlinks. The ground's answer `allow`, sealed by the operator key for that receipt hash and the app's PEP id and
+    offered in frames on the command topic, is applied with an `answered` record of subject 5, and the same answer
+    again, also after a processor reset, is dist:answer-unbound. The request is not republished: an operator receipt
+    has no case in a core run yet (RC4), so the answer is in housekeeping and the state record only."""
+    out = app_run(app, tmp_path / "a", [*_app_escalating()])
+    made = decisions(out)
+    assert [(one["basis"], one["not_enacted"], one["escalated"]) for one in made] == [(2, 1, 0), (2, 1, 1)]
+    receipt = [line.split()[1] for line in out if line.startswith("escalation")][0]
+    assert receipt == hashlib.sha256(_escalation_doc(2, N)).hexdigest()
+    out = app_run(app, tmp_path / "b", [*_app_escalating(), *_app_answer(receipt), *_app_answer(receipt, transfer=41),
+                                        "reset", f"start 0 0 1 {N + 1}", *_app_answer(receipt, transfer=42, now=N + 1)])
+    done = steps(out)
+    events = [(one["event"], one["cause"], one.get("subject")) for records, _flags in done for one in records]
+    assert events.count(("answered", None, 5)) == 1
+    assert events.count(("refused", "dist:answer-unbound", 5)) == 2
+    answered = _answered(out)
+    assert len(answered) == 1 and answered[0][1] == receipt
+    assert [flags[8:10] for _records, flags in done if flags[8]] == [[1, 1]]
+
+
+def test_case_231_a_cfs_app_takes_no_answer_at_a_threshold_of_one_nor_one_for_another_pep(app, tmp_path):
+    """case_231: OP1, OP2, in the cFS app. An app whose install threshold is 1 refuses a well signed answer with
+    dist:target-mismatch, and one whose threshold is 2 refuses an answer that names another PEP's id with
+    dist:answer-unbound and applies the one that names its own."""
+    lone = app_run(app, tmp_path / "lone", [*_app_escalating(threshold=1, keys=("J",)), *_app_answer("ab" * 32)])
+    assert ("refused", "dist:target-mismatch") in [(one["event"], one["cause"]) for records, _f in steps(lone)
+                                                   for one in records]
+    out = app_run(app, tmp_path / "two", [*_app_escalating()])
+    receipt = [line.split()[1] for line in out if line.startswith("escalation")][0]
+    out = app_run(app, tmp_path / "three", [*_app_escalating(), *_app_answer(receipt, pep=pep_id("I2")),
+                                            *_app_answer(receipt, transfer=41)])
+    events = [(one["event"], one["cause"]) for records, _flags in steps(out) for one in records]
+    assert events[-2:] == [("refused", "dist:answer-unbound"), ("answered", None)]
+
+
+def test_case_232_a_cfs_app_holds_operator_answers_to_the_signed_answer_rate(app, tmp_path):
+    """case_232: OP4, H1, AF8, in the cFS app. With an answer_rate of 2 in 600 seconds, three escalations get two
+    `allow` answers applied, a processor reset between them changing nothing, and the third is dist:floor-rate with
+    its escalation still open, so a `refuse` for it is applied."""
+    lines = [*_app_escalating(), f"propose {payload(3, slew=15, thrust=20)} 1 - {N}",
+             f"propose {payload(3, slew=15, thrust=20)} 1 - {N}"]
+    out = app_run(app, tmp_path / "first", lines)
+    receipts = [line.split()[1] for line in out if line.startswith("escalation")]
+    assert len(receipts) == 3 and len(set(receipts)) == 3
+    out = app_run(app, tmp_path / "second", [*lines, *_app_answer(receipts[0]), "reset", f"start 0 0 1 {N + 1}",
+                                             *_app_answer(receipts[1], transfer=41, now=N + 1),
+                                             *_app_answer(receipts[2], transfer=42, now=N + 1),
+                                             *_app_answer(receipts[2], "refuse", transfer=43, now=N + 1)])
+    events = [(one["event"], one["cause"], one.get("subject")) for records, _flags in steps(out) for one in records
+              if one["event"] in ("answered", "refused")]
+    assert events == [("answered", None, 5), ("answered", None, 5), ("refused", "dist:floor-rate", 5),
+                      ("answered", None, 5)]
+    assert [one[0] for one in _answered(out)] and len(_answered(out)) == 3

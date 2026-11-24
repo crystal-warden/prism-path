@@ -221,4 +221,11 @@ size_t PP_Run_ReceiptBytes(uint64_t Index, uint32_t CaseVersion, uint32_t CaseNu
                            const uint8_t ReadingSha[32], const PP_Verdict_t *Verdict, const PP_PolicyTable_t *Active,
                            char *Out, size_t Cap);
 
+/** OP3: the escalation document of a request the action floor escalated, whose SHA-256 an operator's answer names,
+ *  since a decision of the action floor has no receipt in a core run yet (RC4): {"case":"v<floor version>",
+ *  "cause_code":..,"decider":..,"format":"prismpath.cfs-escalation/1","n":<floor answers>,"policy_sha256":..,
+ *  "reading_sha256":..,"time":<PEP time>}. Returns the length, or 0 when Cap is too small. */
+size_t PP_Run_EscalationBytes(uint32_t FloorVersion, uint16_t Cause, uint32_t FloorAnswers, const uint8_t Policy[32],
+                              const uint8_t ReadingSha[32], uint64_t Time, char *Out, size_t Cap);
+
 #endif

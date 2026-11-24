@@ -9,7 +9,8 @@
  *   dist_check RUN_DIR DIST_DIR < script
  *
  * The script's lines, each printing "records <hex of each state record the step made>" and then
- * "step <hold began> <hold ended> <provisioned> <locked> <floor at minimum> <table cause> <table busy> <dropped>":
+ * "step <hold began> <hold ended> <provisioned> <locked> <floor at minimum> <table cause> <table busy> <dropped>
+ * <answered> <answer allow>", and after a step that applied an operator's answer "answered <envelope id> <receipt>":
  *
  *   authority <public hex> | instance <seed hex> | anchor <document hex> | stale <seconds>
  *   bring <statement file hex> | boot_release <statement file hex>     what the next start is provisioned with
@@ -18,7 +19,9 @@
  *   tick <now ms> <now> | rollback <now> | beat <now>
  *   propose <payload hex> <monitor ok 0|1> <monitor age or -> <now>   also prints "decision <kind> <cause> <rule>
  *                                                                      <basis> <held> <receipted> <receipt>
- *                                                                      <not enacted> <record error>"
+ *                                                                      <not enacted> <record error> <escalated>",
+ *                                                                      and "escalation <receipt hash hex>" for an
+ *                                                                      escalation of the action floor (OP3)
  *   reset                    a processor reset: memory is lost, the store images and the files are kept
  *   power                    a power on reset: the store images are lost, the files are kept
  *   lose record | lose copy  that store image no longer reads
@@ -234,8 +237,22 @@ static void PrintStep(void)
             printf("%02x", s->Record[k][j]);
         }
     }
-    printf("\nstep %d %d %d %d %d %u %d %u\n", s->HoldBegan, s->HoldEnded, s->Provisioned, s->Locked, s->FloorAt,
-           (unsigned)s->TableCause, s->TableBusy, (unsigned)s->Dropped);
+    printf("\nstep %d %d %d %d %d %u %d %u %d %d\n", s->HoldBegan, s->HoldEnded, s->Provisioned, s->Locked, s->FloorAt,
+           (unsigned)s->TableCause, s->TableBusy, (unsigned)s->Dropped, s->Answered, s->AnswerAllow);
+    if (s->Answered)
+    {
+        printf("answered ");
+        for (j = 0; j < 32; j++)
+        {
+            printf("%02x", s->AnswerId[j]);
+        }
+        printf(" ");
+        for (j = 0; j < 32; j++)
+        {
+            printf("%02x", s->AnswerReceipt[j]);
+        }
+        printf("\n");
+    }
 }
 
 static PP_AppDistConfig_t Config;
@@ -413,8 +430,18 @@ int main(int argc, char **argv)
             PP_AppDist_Propose(&Dist, &Io, bytes, n, strcmp(b, "-") == 0 ? PP_AGE_NONE : (uint32_t)strtoul(b, NULL, 10),
                                now, &d);
             PrintStep();
-            printf("decision %u %u %d %u %d %d %llu %d %d\n", d.Kind, d.Cause, d.Rule, d.Basis, d.Held, d.Receipted,
-                   (unsigned long long)d.Receipt, d.NotEnacted, d.RecordError);
+            printf("decision %u %u %d %u %d %d %llu %d %d %d\n", d.Kind, d.Cause, d.Rule, d.Basis, d.Held, d.Receipted,
+                   (unsigned long long)d.Receipt, d.NotEnacted, d.RecordError, d.Escalated);
+            if (d.Escalated)
+            {
+                int i;
+                printf("escalation ");
+                for (i = 0; i < 32; i++)
+                {
+                    printf("%02x", d.EscalationReceipt[i]);
+                }
+                printf("\n");
+            }
         }
         else if (strcmp(word, "reset") == 0 || strcmp(word, "power") == 0)
         {
@@ -429,7 +456,7 @@ int main(int argc, char **argv)
             {
                 RecordState = CopyState = PP_APP_STORE_ABSENT; /* a power on reset clears the Critical Data Store */
             }
-            printf("records\nstep 0 0 0 0 0 0 0 0\n");
+            printf("records\nstep 0 0 0 0 0 0 0 0 0 0\n");
         }
         else if (strcmp(word, "lose") == 0)
         {
@@ -441,19 +468,19 @@ int main(int argc, char **argv)
             {
                 SavedCopy.Magic ^= 1u;
             }
-            printf("records\nstep 0 0 0 0 0 0 0 0\n");
+            printf("records\nstep 0 0 0 0 0 0 0 0 0 0\n");
         }
         else if (strcmp(word, "unlink") == 0)
         {
             char path[1024];
             snprintf(path, sizeof(path), "%s/%s", DistDir, rest);
             (void)unlink(path);
-            printf("records\nstep 0 0 0 0 0 0 0 0\n");
+            printf("records\nstep 0 0 0 0 0 0 0 0 0 0\n");
         }
         else if (strcmp(word, "tblfail") == 0)
         {
             TableFails = atoi(rest);
-            printf("records\nstep 0 0 0 0 0 0 0 0\n");
+            printf("records\nstep 0 0 0 0 0 0 0 0 0 0\n");
         }
         else if (strcmp(word, "groundload") == 0)
         {
