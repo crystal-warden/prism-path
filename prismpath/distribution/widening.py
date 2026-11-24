@@ -10,14 +10,18 @@ answer that per artifact, `LARGER`, `NOT_LARGER` or `CANNOT_DECIDE`:
                      escalate, allow is larger. Two policies whose fields differ are larger
     egress.hosts     larger when the staged list is not a subset of the active one
     gateway.routes   any change is larger
+    identity.bundle  larger unless every staged CA is one the active bundle holds for the same trust domain (ID7)
+    identity.map     larger unless the staged map is the active one with entries taken out, in the same order, and
+                     no entry taken out matches an ID a later entry kept also matches (ID7)
     agent.zones      larger when a protected name is gone, and a release that drops the artifact drops them all
     policy.ppt       any change is larger, since the table format gives its nodes no meaning and nothing in
                      the image says which outcome is the more permissive one
     cfs.table        ordered by the core image inside it, registered from `integrations/cfs/dist_kind.py`
+    net.dests        larger when the edge it compiles to would allow an address the active one's does not,
+                     registered from `prismpath-ebpf/net_dist.py`, which the `net.dests` check loads
 
-Going from no policy to any policy is larger, and an answer that cannot be reached is treated as larger. A
-kind registered from outside this package, such as the XDP edge's `net.dests`, adds its comparator with
-`register_comparator`.
+Going from no policy to any policy is larger, and an answer that cannot be reached is treated as larger. An
+artifact whose reader lives outside this package adds its comparator with `register_comparator`.
 
 `check` is V12 for one envelope at staging and `check_release` for a whole release at commit. A PEP that can
 decide computes the answer itself (W1) and refuses a release it finds larger whose `widens` is false, even
@@ -115,10 +119,45 @@ def compare_zones(active: Optional[bytes], staged: Optional[bytes]) -> str:
     return NOT_LARGER if old <= new else LARGER
 
 
+def compare_bundles(active: bytes, staged: bytes) -> str:
+    """W1 for `identity.bundle` (ID7): not larger when the staged bundle only removes CAs or trust domains, so a
+    certificate it validates the active one validates too. Anything else, a CA added or moved to another trust
+    domain, is larger."""
+    try:
+        old, new = kinds.read_identity_bundle(active), kinds.read_identity_bundle(staged)
+    except Refused:
+        return CANNOT_DECIDE
+    return NOT_LARGER if all(domain in old and set(cas) <= set(old[domain]) for domain, cas in new.items()) else LARGER
+
+
+def compare_maps(active: bytes, staged: bytes) -> str:
+    """W1 for `identity.map` (ID7): not larger only when the staged entries are the active ones with some taken out,
+    in the same order, and no entry taken out overlaps an entry kept after it. Each SPIFFE ID then keeps its class
+    or reads `other`. A class changed, an entry added or moved, or one taken out whose IDs a later entry would take
+    is larger, since an ID would read another class."""
+    try:
+        old, new = kinds.read_identity_map(active), kinds.read_identity_map(staged)
+    except Refused:
+        return CANNOT_DECIDE
+    kept, at = [], 0
+    for index, entry in enumerate(old):
+        if at < len(new) and new[at] == entry:
+            kept.append(index)
+            at += 1
+    if at != len(new):
+        return LARGER                                  # an entry that is not one of the active ones, in its order
+    removed = [index for index in range(len(old)) if index not in set(kept)]
+    if any(old[gone].overlaps(old[later]) for gone in removed for later in kept if later > gone):
+        return LARGER                                  # an ID the removed entry classed would take a later class
+    return NOT_LARGER
+
+
 COMPARATORS: Dict[str, Comparator] = {
     "policy.core": compare_policies,
     "egress.hosts": compare_hosts,
     "gateway.routes": compare_routes,
+    "identity.bundle": compare_bundles,
+    "identity.map": compare_maps,
     "agent.zones": compare_zones,
     "policy.ppt": compare_ppt,
 }

@@ -10,9 +10,13 @@ readings use (canon2 bytes, `Policy.reading_bytes`).
     content_class none (no Content-Type) | json | form | text | other | unknown
     query          none | present | unknown
     grant          none | valid | invalid | expired
+    workload       none | invalid | other | a class the owner's identity map names, read only under a policy that
+                   has the field (identity.py, spec-policy-distribution.md section 13.1)
 
-Nothing about the sender is read. The reading is what the request says it wants of the resource, so two clients
-that send the same request get the same reading and the same decision.
+Nothing else about the sender is read. The reading is what the request says it wants of the resource, so two clients
+that send the same request get the same reading and the same decision. A policy that reads `workload` adds one
+thing: the SPIFFE ID of the client certificate the front proxy saw, read into a class through the owner's signed
+map, as a path is read through the route table. The policy decides what each class is worth.
 
 Unreadable is `unknown`. A field is `unknown` when the request is malformed in it or ambiguous in a way two
 servers could read differently: a method that is not a token, a target that is not an origin form path of plain
@@ -50,6 +54,21 @@ CONTENT_CLASSES = ("none", "json", "form", "text", "other", "unknown")
 QUERY_CLASSES = ("none", "present", "unknown")
 GRANT_STATES = ("none", "valid", "invalid", "expired")
 FIELDS = ("http_reading_version", "method_class", "path_class", "body_class", "content_class", "query", "grant")
+WORKLOAD = "workload"
+WORKLOAD_FIELDS = FIELDS + (WORKLOAD,)               # the fields of a policy that reads the workload (ID6)
+
+
+def fields_ok(fields) -> bool:
+    """Whether a policy with these fields decides the gateway's reading: the seven, or the seven and `workload`."""
+    return sorted(fields) in (sorted(FIELDS), sorted(WORKLOAD_FIELDS))
+
+
+def unreadable(fields=FIELDS) -> Dict[str, object]:
+    """The reading of a request that cannot be read, for a policy with these fields."""
+    out = dict(UNREADABLE)
+    if WORKLOAD in fields:
+        out[WORKLOAD] = "invalid"
+    return out
 
 _TOKEN = re.compile(r"^[!#$%&'*+.^_`|~0-9A-Za-z-]{1,16}$")
 _PATH = re.compile(r"^/[A-Za-z0-9._~+=@:,/-]*$")
@@ -197,8 +216,10 @@ def read_request(method: Optional[str], target: Optional[str], headers: Mapping[
 
 
 def read(method: Optional[str], target: Optional[str], headers: Mapping[str, Sequence[str]],
-         routes: Routes, body_length: Optional[int], grants=None) -> Tuple[Dict[str, object], Optional[Dict[str, str]]]:
-    """(reading, grant record) of a request; the record is what the receipt's journal line keeps of the grant."""
+         routes: Routes, body_length: Optional[int], grants=None,
+         workload: Optional[str] = None) -> Tuple[Dict[str, object], Optional[Dict[str, str]]]:
+    """(reading, grant record) of a request; the record is what the receipt's journal line keeps of the grant.
+    `workload`, when given, is the request's workload class (identity.Identity.read) and becomes the field."""
     path, query = split_target(target)
     methods = method_class(method)
     paths = "unknown" if path is None else routes.classify(path)
@@ -207,6 +228,10 @@ def read(method: Optional[str], target: Optional[str], headers: Mapping[str, Seq
         grant, record = grant_state(values), None
     else:
         grant, record = grants.read(values, paths, methods)
-    return ({"http_reading_version": READING_VERSION, "method_class": methods, "path_class": paths,
-             "body_class": body_class(body_length), "content_class": content_class(headers.get("content-type", ())),
-             "query": query, "grant": grant}, record)
+    out: Dict[str, object] = {"http_reading_version": READING_VERSION, "method_class": methods, "path_class": paths,
+                              "body_class": body_class(body_length),
+                              "content_class": content_class(headers.get("content-type", ())), "query": query,
+                              "grant": grant}
+    if workload is not None:
+        out[WORKLOAD] = workload
+    return out, record

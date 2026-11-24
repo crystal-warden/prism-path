@@ -5,11 +5,16 @@ new kind is one row.
 
 The names are closed lists of the format: an envelope naming any other artifact or target kind is
 `dist:bad-format` (E8), and each artifact's `meta` members are its row's. A target kind has a row in
-`TARGETS` once an enforcement point of that kind is built: `host`, `agent`, `gateway` and `mesh` here, and `cfs`, whose table
-layout lives with the cFS app, registered by `integrations/cfs/dist_kind.py` through `register_target`. A
+`TARGETS` once an enforcement point of that kind is built: `host`, `agent`, `gateway`, `mesh` and `xdp` here, and `cfs`, whose table
+layout lives with the cFS app, registered by `integrations/cfs/dist_kind.py` through `register_target`. The `xdp`
+row's destination table is read by the edge's own reader (`prismpath-ebpf/net_dist.py`), which lives beside the
+loader it feeds and is found from here, so a tree without it refuses the artifact rather than guessing at it. A
 PEP of a kind with no row cannot be described to the verifier. Each artifact's own check (V11) is
 `check(envelope, body, pep)`, which answers None or the cause. A target row may hold its own check of an
 artifact in `checks`, as a mesh node reads a `policy.ppt` with its own table parser and ignores `meta`.
+
+A `gateway` release carries `identity.bundle` and `identity.map` when its policy reads `workload` and only then
+(ID3), which the gateway adapter holds at commit.
 
 A target row also says which trust kinds its machine applies (`applies`). V5 refuses any other trust kind
 with `dist:target-mismatch`, so a statement is never verified and then left unapplied.
@@ -17,8 +22,11 @@ with `dist:target-mismatch`, so a statement is never verified and then left unap
 from __future__ import annotations
 
 import hashlib
+import importlib
 import re
+import sys
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Callable, Dict, FrozenSet, Optional
 
 from prismpath import canon
@@ -96,7 +104,7 @@ class Target:
     decides: bool
     when_declared: FrozenSet[str] = frozenset()
     expiry_hold: bool = False
-    applies: FrozenSet[str] = frozenset({"trust.widening", "trust.revocation", "trust.rotation"})
+    applies: FrozenSet[str] = frozenset({"trust.widening", "trust.revocation", "trust.rotation", "trust.controller"})
     body_bound: int = 16777215
     trust_bound: int = 16384
     checks: Any = None
@@ -112,8 +120,8 @@ class Target:
         return (self.checks or {}).get(artifact) or ARTIFACTS[artifact].check
 
 
-ROLES = frozenset({"authority"})                    # K4: the key roles this version knows
-AUTHORITY = "authority"
+ROLES = frozenset({"authority", "controller"})      # K4: the key roles this version builds
+AUTHORITY, CONTROLLER = "authority", "controller"   # K6: the controller key signs controller statements only
 
 
 # ------------------------------------------------------------------ the forms of the meta members (E11)
@@ -255,6 +263,7 @@ REVOCATION_FORMAT = "prismpath.dist-revocation/1"
 REVOCATION_ENTRIES, REVOCATION_FLOORS = 64, 16       # section 10, R7
 ROTATION_FORMAT = "prismpath.dist-rotation/1"
 WIDENING_FORMAT = "prismpath.dist-widening/1"
+CONTROLLER_FORMAT = "prismpath.dist-controller/1"
 
 
 def read_revocation(body: bytes) -> dict:
@@ -280,6 +289,14 @@ def read_rotation(body: bytes) -> dict:
     doc = _trust_body(body, ROTATION_FORMAT, frozenset({"add", "encoding", "format", "retire"}))
     if not is_hex64(doc["add"]) or not (doc["retire"] == "" or is_hex64(doc["retire"])):
         raise Refused(BAD_FORMAT, "rotation members")
+    return doc
+
+
+def read_controller(body: bytes) -> dict:
+    """K7: a controller key statement, the controller's public key in `key`, 64 lower case hex digits."""
+    doc = _trust_body(body, CONTROLLER_FORMAT, frozenset({"encoding", "format", "key"}))
+    if not is_hex64(doc["key"]):
+        raise Refused(BAD_FORMAT, "a controller key statement whose key is not 64 hex digits")
     return doc
 
 
@@ -358,6 +375,61 @@ def read_grant(body: bytes) -> dict:
     return doc
 
 
+def read_identity_bundle(body: bytes) -> dict:
+    """`identity.bundle` (section 13.1, ID1): a canon/2 object with `domains`, `encoding` and `format`
+    `prismpath.dist-identity-bundle/1`, each trust domain to the standard base64 DER of its X.509 CA certificates,
+    sorted, without repeats, each a CA with keyCertSign. `Refused` with `dist:bad-format` otherwise."""
+    from prismpath.gateway import identity
+    doc = load_canonical(body, "identity.bundle")
+    try:
+        return identity.bundle_doc(doc)
+    except identity.IdentityError as error:
+        raise Refused(BAD_FORMAT, f"identity.bundle is not a trust bundle ({error})") from None
+
+
+def read_identity_map(body: bytes) -> tuple:
+    """`identity.map` (section 13.1, ID2): a canon/2 object with `encoding`, `entries` and `format`
+    `prismpath.dist-identity-map/1`, its entries SPIFFE ID patterns to classes, in order. `Refused` with
+    `dist:bad-format` otherwise."""
+    from prismpath.gateway import identity
+    doc = load_canonical(body, "identity.map")
+    try:
+        return identity.map_doc(doc)
+    except identity.IdentityError as error:
+        raise Refused(BAD_FORMAT, f"identity.map is not an identity map ({error})") from None
+
+
+EDGE_DIR = Path(__file__).resolve().parents[2] / "prismpath-ebpf"
+
+
+def edge_reader():
+    """`net_dist`, the XDP edge's reader of `net.dests` and its loader adapter, from `prismpath-ebpf/` beside the
+    package. `Refused` with `dist:bad-format` in a tree that does not carry it, so a destination table is never
+    taken unread."""
+    if "net_dist" in sys.modules:
+        return sys.modules["net_dist"]
+    if not (EDGE_DIR / "net_dist.py").is_file():
+        raise Refused(BAD_FORMAT, "this tree has no reader of the XDP edge's destination table")
+    if str(EDGE_DIR) not in sys.path:
+        sys.path.insert(0, str(EDGE_DIR))
+    return importlib.import_module("net_dist")
+
+
+def read_dests(body: bytes):
+    """`net.dests`: a `prismpath.net_dests/1` destination table in its canonical spelling, one the edge can use
+    (`net_from_policy.Destinations`). `Refused` with `dist:bad-format` otherwise."""
+    return edge_reader().read_dests(body)
+
+
+def check_net_edge(_envelope, body: bytes, _pep) -> Optional[str]:
+    """`net.edge` when it is staged (V11): the image check, with its existing causes. That it is byte for byte the
+    table compiled from the staged `policy.core` and `net.dests` is the edge adapter's check at commit (C2), with
+    `dist:derived-mismatch`, as the agent home holds a `sandbox.profile`."""
+    from prismpath.hotswap import policy_pack
+    ok, reasons = policy_pack.validate_image(body)
+    return None if ok else _first_cause(reasons)
+
+
 def _reads(reader: Callable[[bytes], dict]) -> Callable[[Any, bytes, Any], Optional[str]]:
     def check(_envelope, body: bytes, _pep) -> Optional[str]:
         try:
@@ -379,16 +451,20 @@ ARTIFACTS: Dict[str, Artifact] = {
     "egress.hosts": Artifact(check=_reads(read_hosts)),
     "agent.zones": Artifact(check=_reads(read_zones)),
     "gateway.routes": Artifact(check=_reads(read_routes)),
-    "net.dests": Artifact(),
-    "net.edge": Artifact(frozenset({"flow_sha256", "names_sha256", "qualification"})),
+    "identity.bundle": Artifact(check=_reads(read_identity_bundle)),
+    "identity.map": Artifact(check=_reads(read_identity_map)),
+    "net.dests": Artifact(check=_reads(read_dests)),
+    "net.edge": Artifact(frozenset({"flow_sha256", "names_sha256", "qualification"}), check=check_net_edge),
     "cfs.table": Artifact(),
     "grant": Artifact(check=_reads(read_grant)),
     "trust.widening": Artifact(check=_reads(read_widening)),
     "trust.revocation": Artifact(check=_reads(read_revocation)),
     "trust.rotation": Artifact(check=_reads(read_rotation)),
+    "trust.controller": Artifact(check=_reads(read_controller)),
 }
-TRUST_ARTIFACTS = frozenset({"trust.widening", "trust.revocation", "trust.rotation"})
-ON_TRUST_STREAM = frozenset({"trust.revocation", "trust.rotation"})     # R1, O1: they travel on `@trust`
+TRUST_ARTIFACTS = frozenset({"trust.widening", "trust.revocation", "trust.rotation", "trust.controller"})
+# R1, O1, K7: they travel on `@trust` and share the one trust sequence
+ON_TRUST_STREAM = frozenset({"trust.revocation", "trust.rotation", "trust.controller"})
 
 TRUST_BOUND = 16384                                # E6: every kind takes the largest revocation list R7 allows
 MESH_TABLE_MAX = 640                               # E6: TBL_MAX in prismpath-hw/mesh/main/ppt_mesh.c
@@ -398,7 +474,9 @@ TARGETS: Dict[str, Target] = {
                    compares=frozenset({"policy.ppt"})),
     "agent": Target(needs=frozenset({"policy.core", "egress.hosts"}), decides=True,
                     when_declared=frozenset({"agent.zones", "sandbox.profile"})),
-    "gateway": Target(needs=frozenset({"policy.core", "gateway.routes"}), decides=True),
+    "gateway": Target(needs=frozenset({"policy.core", "gateway.routes"}), decides=True,
+                      when_declared=frozenset({"identity.bundle", "identity.map"})),
+    "xdp": Target(needs=frozenset({"policy.core", "net.dests", "net.edge"}), decides=True),
     "mesh": Target(needs=frozenset({"policy.ppt"}), decides=False, expiry_hold=True, body_bound=MESH_TABLE_MAX,
                    checks={"policy.ppt": check_mesh_table}, reads_meta=False, compares=frozenset({"policy.ppt"})),
 }

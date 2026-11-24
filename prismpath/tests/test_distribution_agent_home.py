@@ -226,8 +226,8 @@ def test_case_049_an_agent_release_without_its_host_list_is_incomplete(home):
 
 
 def test_case_045_a_staged_sandbox_profile_that_is_not_the_compiled_one_is_derived_mismatch(home):
-    """Case 45's profile half (its net.edge half is the XDP edge's): V11 at commit. A `sandbox.profile` must be the profile the staged `policy.core`
-    compiles to, and the compiled one commits."""
+    """case_045: V11 at commit, the profile half (the net.edge half is test_distribution_xdp.py's). A
+    `sandbox.profile` must be the profile the staged `policy.core` compiles to, and the compiled one commits."""
     compiled = compile_profile(STRICT, "bash").canonical()
     other = canon.canon2_bytes({**json.loads(compiled), "max_processes": 512})
     records = home.release(STRICT, 1, extra=[("sandbox.profile", other)])
@@ -472,3 +472,67 @@ def test_a_commit_of_another_policy_drops_what_the_home_s_deciders_spooled_under
         b"".join(canon2.dumps(reading) + b"\n" for reading in _readings(STRICT, 3)))
     record = _read(home, home.pep.commit(STREAM, 2, H(DEFAULT)))
     assert record.event == "committed" and heartbeat.decode(DEFAULT, record.body) == []
+
+
+# ------------------------------------------------------------------ a withdrawal signals only the session it registered
+
+def _sleeper():
+    import subprocess
+    import sys
+    return subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"], start_new_session=True)
+
+
+def _entry(home_dir, pid, **fields):
+    from prismpath.kernel import canon2
+    directory = home_dir / "dist" / agent_home.SESSIONS
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / f"{pid}.json").write_bytes(canon2.dumps({"pid": pid, "policy_sha256": H(STRICT), **fields}))
+
+
+needs_proc = pytest.mark.skipif(not agent_home.can_identify(), reason="the platform has no /proc")
+
+
+@needs_proc
+@pytest.mark.parametrize("which", ["reused", "rebooted"])
+def test_a_withdrawal_never_signals_a_pid_that_names_another_process_or_another_boot(home, which):
+    """C6: an entry whose pid now names an unrelated process (its start time differs) or whose boot id is not this
+    boot's is a session that ended. The process is never signalled and the entry is removed."""
+    other = _sleeper()
+    try:
+        boot, start = agent_home.process_identity(other.pid)
+        identity = {"reused": (boot, start + 1), "rebooted": ("0" * 8 + boot[8:], start)}[which]
+        _entry(home.state_dir, other.pid, boot_id=identity[0], start_time=identity[1])
+        agent_home.AgentHomeAdapter(home.state_dir).deactivate("dist:expired")
+        assert agent_home.sessions(home.state_dir) == []
+        assert other.poll() is None
+    finally:
+        other.kill()
+        other.wait()
+
+
+@needs_proc
+def test_a_withdrawal_ends_the_live_session_it_registered(home):
+    """C6: the launcher's entry holds the session's boot id and start time, and a withdrawal ends that session."""
+    session = _sleeper()
+    try:
+        agent_home.register_session(home.state_dir, session.pid, H(STRICT))
+        assert agent_home.session_identity(home.state_dir, session.pid) == agent_home.process_identity(session.pid)
+        agent_home.AgentHomeAdapter(home.state_dir).deactivate("dist:expired")
+        assert session.wait(5) is not None and agent_home.sessions(home.state_dir) == []
+    finally:
+        if session.poll() is None:
+            session.kill()
+        session.wait()
+
+
+def test_without_proc_a_withdrawal_signals_nothing_and_reports_the_session(home, monkeypatch, tmp_path):
+    """A platform without `/proc` cannot tell a session from a reused pid, so the withdrawal signals nothing and
+    fails, keeping the entry."""
+    monkeypatch.setattr(agent_home, "PROC", str(tmp_path / "no-proc"))
+    sent = []
+    monkeypatch.setattr(agent_home.os, "killpg", lambda *args: sent.append(args))
+    monkeypatch.setattr(agent_home.os, "kill", lambda *args: sent.append(args))
+    _entry(home.state_dir, 4242)
+    with pytest.raises(agent_home.SessionsRunning):
+        agent_home.AgentHomeAdapter(home.state_dir).deactivate("dist:expired")
+    assert sent == [] and agent_home.sessions(home.state_dir) == [4242]

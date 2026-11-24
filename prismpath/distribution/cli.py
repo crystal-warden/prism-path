@@ -77,6 +77,11 @@ def add_parser(subparsers) -> None:
                         help='an authority public key, 32 raw bytes (`swap keygen`), repeatable')
     anchor.add_argument('--target', required=True, help='the target kind of the stream\'s PEPs')
     anchor.add_argument('--stream', required=True)
+    anchor.add_argument('--controller', default=None, metavar='FILE',
+                        help='the controller\'s instance public key, 32 raw bytes; writes a prismpath.dist-trust/2 '
+                             'anchor that names it as the first controller key (K6, P4)')
+    anchor.add_argument('--fresh', type=int, default=0, metavar='SECONDS',
+                        help='with --controller, the longest lifetime of a fresh statement; 0 leaves freshness off (H16)')
     anchor.add_argument('--out', required=True, metavar='FILE')
     anchor.set_defaults(func=anchor_cmd)
 
@@ -504,7 +509,10 @@ def rekey_cmd(args) -> int:
 def anchor_cmd(args) -> int:
     from prismpath.distribution.trust import anchor_bytes, read_anchor
     try:
-        raw = anchor_bytes([_read(path) for path in args.pub], target=args.target, stream=args.stream)
+        if args.fresh and not args.controller:
+            return _fail("dist:bad-format", "freshness needs a controller key to sign it (--controller)")
+        raw = anchor_bytes([_read(path) for path in args.pub], target=args.target, stream=args.stream,
+                           controller=_read(args.controller) if args.controller else None, fresh=args.fresh)
     except Refused as refused:
         return _fail(refused.cause, str(refused))
     _write(args.out, raw)

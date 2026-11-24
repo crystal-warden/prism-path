@@ -128,7 +128,7 @@ def _verify(sealed: bytes, body: bytes, trust: TrustStore, pep: PepView, now: in
     except Refused as refused:
         return Verdict(refused.cause)
     # V5: for this PEP's kind, an artifact its kind uses or a trust kind its machine applies, on its stream or
-    # `@trust`. A revocation or a rotation is for every PEP whatever `targets` says, since one trust sequence
+    # `@trust`. A revocation, a rotation or a controller key statement is for every PEP whatever `targets` says, since one trust sequence
     # counts the same for all of them (R1)
     on_trust = envelope.artifact in kinds.ON_TRUST_STREAM
     stream = env.TRUST_STREAM if on_trust else pep.stream
@@ -184,6 +184,8 @@ def _verify(sealed: bytes, body: bytes, trust: TrustStore, pep: PepView, now: in
         cause = trust.check_revocation(body)                                     # R6
     if cause is None and envelope.artifact == "trust.rotation":
         cause = trust.check_rotation(body, entries, env.signed_message(envelope_bytes), pep.instance_key_id)  # O2-O4
+    if cause is None and envelope.artifact == "trust.controller":
+        cause = trust.check_controller(body, pep.instance_key_id)                # K7, K4, K5
     if cause is not None:
         return refused(cause)
     return Verdict(None, envelope, time_floor=time_floor)
