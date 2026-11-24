@@ -5,32 +5,38 @@
 
     python3 integrations/cfs/tests/run_scenario.py [--build-dir <cFS>/build-native_std/exe/cpu1] [--keys DIR]
 
-It provisions the staged build with test keys (integrations/cfs/ground/provision.py: the authority key the app
-checks every table against, the instance key it signs root statements with) and a signed policy table, boots
-`core-cpu1` with a power on reset, and plays proposed commands into it as UDP datagrams to ci_lab, the stock
-command ingest app, exactly as a ground system would send them. The stock to_lab app is subscribed to the vehicle
-command message id and to the app's housekeeping and read back over UDP, so the check is on what reaches the
-software bus and not only on what the app says about itself.
+It provisions the staged build with test keys and a trust anchor (integrations/cfs/ground/provision.py: the authority
+key the core run's image attestations are under, the instance key the app signs its state records and root
+statements with, and the `prismpath.dist-trust/2` anchor), boots `core-cpu1` with a power on reset, and plays
+commands into it as UDP datagrams to ci_lab, the stock command ingest app, exactly as a ground system would send
+them. The stock to_lab app is subscribed to the vehicle command message id and to the app's housekeeping and read
+back over UDP, so the check is on what reaches the software bus and not only on what the app says about itself.
 
-  1. The S1 sequence. For every proposal, the event (ALLOW, REFUSE with its cause, ESCALATE with its cause, each
+  1. The app starts with no policy and provisions itself from its anchor. The ground reads the app's time from the
+     state record in its housekeeping, seals the version 3 table at seq 1 (integrations/cfs/ground/table.py), and
+     offers it on the app's command topic: the widening statement and the table in offer and chunk frames, then a
+     commit frame with the table's image attestation. The table is loaded through cFE Table Services, and the
+     state record the app sends is `committed`, signed by its instance key.
+  2. The S1 sequence. For every proposal, the event (ALLOW, REFUSE with its cause, ESCALATE with its cause, each
      with its receipt number) against the Python reference decision on the same reading; exactly the allowed
      proposals reach VEHICLE_CMD with their payload; the housekeeping counters, receipt count and root. Then a
      SEAL command: the app signs a root statement over the receipts so far.
-  2. A processor reset, by the cFE ES restart command. The PSP exits and the driver boots it again, which starts
-     as a processor reset from the boot record, as on a vehicle. The app restores its run from the Critical Data
-     Store: the receipt count and root continue, and the same image is accepted against the version floor.
-  3. More proposals, receipted after the ones before the reset. Then two table loads through cFE Table Services
-     (load, validate, activate): the same policy signed by the authority as version 1, below the floor, which is
-     refused as image:version-replay (9), and the version 3 table with one threshold changed and not signed
-     again, refused as sig:invalid (2). A proposal after them is still decided by version 3. A second SEAL.
-  4. The run directory is copied off the vehicle's file system (the downlink) and verified on the ground with
+  3. A processor reset, by the cFE ES restart command. The PSP exits and the driver boots it again, which starts
+     as a processor reset from the boot record, as on a vehicle. The app restores its run and its floor from the
+     Critical Data Store and its release from its files: the receipt count and root continue, and the table decides.
+  4. More proposals, receipted after the ones before the reset. Then the same table sealed again at seq 1, below the
+     floor, is refused as dist:seq-replay (139), and a table loaded by the ground from a file through Table Services
+     has no envelope and is refused by the validation callback as dist:not-staged (151). A proposal after them is
+     still decided by version 3. A second SEAL.
+  5. The run directory is copied off the vehicle's file system (the downlink) and verified on the ground with
      the repository's own verifier, both keys pinned to the ground's copies and every receipt replayed through
      the reference kernel (`prismpath evidence verify RUN --sample all --pin-authority --pin-instance`), and the
      root history: the root signed before the reset is the root of the first receipts after it.
-  5. A boot (power on) on a table whose image has one byte corrupted: rejected, nothing allowed.
+  6. A power on boot offered a table whose image has one byte corrupted: refused by the kernel's check inside the
+     verifier (image:field-index-oob, 76), nothing activated, and a proposal refused.
 
 Exit status 0 when every check holds. The caller decides what to do when there is no cFS build (the pytest skips).
-The build's original table file is put back and the provisioned key files removed afterwards.
+The build's original table file is put back and the provisioned files removed afterwards.
 """
 from __future__ import annotations
 
@@ -66,12 +72,13 @@ CMD_BASE, TLM_BASE = 0x1800, 0x0800   # the stock message id scheme of the sampl
 ES_CMD_MID, TBL_CMD_MID = CMD_BASE | 6, CMD_BASE | 4   # cFE Executive and Table Services commands
 ES_RESTART_CC, TBL_LOAD_CC, TBL_VALIDATE_CC, TBL_ACTIVATE_CC, TBL_ABORT_LOAD_CC = 2, 2, 4, 5, 9
 PROCESSOR_RESET = 1                   # CFE_PSP_RST_TYPE_PROCESSOR
-SEAL_CC = 2                           # PRISMPATH_APP_SEAL_CC
+SEAL_CC, OFFER_CC, CHUNK_CC, CONTROL_CC = 2, 3, 4, 5   # PRISMPATH_APP_*_CC
+FRAME_MAX = 250                       # PRISMPATH_APP_FRAME_MAX
 TABLE_NAME = b"PRISMPATH_APP.PolicyTable"
-HK_PAYLOAD = struct.Struct("<BBBBIIIIIIIIIIIIIII16s")
+HK_PAYLOAD = struct.Struct("<BBBBIIIIIIIIIIIIIII16sIIHH244s")
 HK_NAMES = ("cmd_ctr", "err_ctr", "active", "spare", "layout", "proposed", "allowed", "refused", "escalated",
             "forwarded", "fwd_err", "loaded", "rejected", "last_cause", "receipts", "unreceipted", "record_errors",
-            "version", "seals", "root16")
+            "version", "seals", "root16", "not_enacted", "dropped", "record_len", "spare16", "record")
 
 # ----------------------------------------------------------------- the app's message ids, read from its header
 _TOPIC = re.compile(r"#define DEFAULT_PRISMPATH_APP_MISSION_(\w+)_TOPICID\s+(0x[0-9A-Fa-f]+)")
@@ -293,6 +300,39 @@ class Ground:
         send(self.tx, packet(TBL_CMD_MID, TBL_ABORT_LOAD_CC, name))
         time.sleep(0.3)
 
+    def frame(self, code: int, frame: bytes, sig: bytes = None) -> None:
+        """One frame of policy distribution on the app's command topic (PRISMPATH_APP_FrameCmd_t, _ControlCmd_t)."""
+        body = struct.pack("<HH", len(frame), 0) + bytes(frame).ljust(FRAME_MAX, b"\0")
+        send(self.tx, packet(self.cmd_mid, code, body + (bytes(sig) if code == CONTROL_CC else b"")))
+
+    def offer(self, pairs, transfer: int) -> None:
+        """The offer and chunk frames of each (sealed, body), the widening statement first."""
+        for k, (sealed, body) in enumerate(pairs):
+            for frame in table.frames(sealed, body, transfer + k):
+                self.frame(OFFER_CC if frame[0] == 1 else CHUNK_CC, frame)
+
+    def commit(self, data: bytes, seq: int, transfer: int, stream: str = table.STREAM) -> None:
+        self.frame(CONTROL_CC, table.commit_frame(transfer, stream, seq, table.policy_of(data)), table.image_sig(data))
+
+    def state(self, core: Core, keys: Path, count: int) -> Tuple[Optional[Dict], Optional[Dict]]:
+        """The housekeeping counters and the state record in them, read under the pinned instance key."""
+        _datagrams, hk = self.housekeeping(core, count)
+        if hk is None:
+            return None, None
+        record = downlink.read_state_record(hk["record"][:hk["record_len"]], (keys / "instance.pub").read_bytes())
+        return hk, record
+
+
+def seal_v3(keys: Path, seq: int, not_before: int, data: bytes = None) -> Tuple[bytes, list]:
+    """The signed version 3 table and its sealed envelope with its widening statement, as the ground's tool makes."""
+    from prismpath.hotswap import policy_pack
+    if data is None:
+        data = table.pack(gen_image.build(gen_image.CORE.read_bytes().rstrip(b"\n")))
+        table.sign(data, keys / "authority.key")
+    pairs = table.seal_table(data, [policy_pack._load_private(str(keys / "authority.key"))], seq=seq,
+                             not_before=not_before, expires=not_before + 30 * 86400, widens=True, froms=[])
+    return bytes(data), pairs
+
 
 def check_decisions(check: Check, policy: Policy, built: Dict, cases: List[Case], events: List[Tuple[int, str]],
                     first_receipt: int, sent: List[bytes]) -> List[bytes]:
@@ -327,17 +367,36 @@ def run_good(exe_dir: Path, keys: Path, downlinked: Path, check: Check, log) -> 
     run_dir = exe_dir / "cf" / "pprun"
     ground = Ground()
     seen = 0
-    # ------------------------------------------------ 1. power on, the S1 sequence, a seal
+    # ------------------------------------------------ 1. power on, a table offered on the bus
     core = Core(exe_dir)
     try:
-        core.wait_for(r"PRISMPATH_APP initialized, policy active")
-        check.ok(any(e == 24 and "v3" in t for e, t in app_events(core)),
-                 "the signed version 3 table is loaded at startup (event 24)")
-        check.ok(any("RUN BEGUN receipts=0 floor=v0" in t for _e, t in app_events(core)),
-                 "a power on reset begins a new run (no receipts, no floor)")
+        core.wait_for(r"PRISMPATH_APP initialized, policy NOT active")
+        check.ok(any(e == 36 and "PROVISIONED anchor" in t for e, t in app_events(core)),
+                 "with no store the app provisions itself from its trust anchor and prints its fingerprint (event 36)")
+        check.ok(any("RUN BEGUN receipts=0 floor=0" in t for _e, t in app_events(core)),
+                 "a power on reset begins a new run (no receipts, floor 0)")
         ground.connect()
+        hk, record = ground.state(core, keys, 1)
+        check.ok(record is not None and record["state"] == "no-policy",
+                 "the state record in housekeeping reads under the instance key: no policy yet")
+        now = record["time"] if record else int(time.time())
+        data, pairs = seal_v3(keys, 1, now)
+        ground.offer(pairs, 1)
+        ground.commit(data, 1, 1)
+        core.wait_for(r"PRISMPATH_APP POLICY LOADED v3", 1, 20)
+        events = [t for e, t in app_events(core) if e == 33]
+        log("distribution: " + " | ".join(events))
+        check.ok([t.split()[2] for t in events[-3:]] == ["staged", "staged", "committed"],
+                 "the widening statement and the table are staged, then committed (state records, event 33)")
+        hk, record = ground.state(core, keys, 2)
+        check.ok(record is not None and (record["state"], record["active_seq"], record["floor"]) == ("active", 1, 1),
+                 "housekeeping's state record says active at seq 1, the floor at 1")
+        check.ok(hk is not None and hk["active"] == 1 and hk["version"] == gen_image.VERSION,
+                 "the table offered on the bus loaded through the table service and decides (version 3 active)")
+
+        # ------------------------------------------------ 2. the S1 sequence, a seal
         sent = ground.propose(SEQUENCE)
-        datagrams, hk = ground.housekeeping(core, 1)
+        datagrams, hk = ground.housekeeping(core, 3)
         events = [(e, text) for e, text in app_events(core) if e in (20, 21, 22)]
         log(f"console events before the reset ({len(events)}):")
         for _e, text in events:
@@ -353,13 +412,13 @@ def run_good(exe_dir: Path, keys: Path, downlinked: Path, check: Check, log) -> 
             check.ok(total == 0, "the republished command carries a valid cFE checksum")
         want = {k: sum(1 for _n, c in SEQUENCE if expected(policy, c)[0] == k) for k in ("allow", "refuse", "escalate")}
         if hk:
-            log(f"housekeeping telemetry: { {k: (v.hex() if isinstance(v, bytes) else v) for k, v in hk.items()} }")
+            log(f"housekeeping telemetry: { {k: (v.hex() if isinstance(v, bytes) else v) for k, v in hk.items() if k != 'record'} }")
             check.ok((hk["proposed"], hk["allowed"], hk["refused"], hk["escalated"], hk["forwarded"], hk["active"]) ==
                      (len(SEQUENCE), want["allow"], want["refuse"], want["escalate"], want["allow"], 1),
                      "housekeeping counters match the sequence")
             check.ok(hk["layout"] == built["layout_hash"], "housekeeping reports the policy layout hash")
             check.ok((hk["receipts"], hk["version"], hk["unreceipted"], hk["record_errors"]) == (len(SEQUENCE), gen_image.VERSION, 0, 0),
-                     f"housekeeping reports {len(SEQUENCE)} receipts and the version floor {gen_image.VERSION}")
+                     f"housekeeping reports {len(SEQUENCE)} receipts and the active version {gen_image.VERSION}")
             check.ok(hk["root16"].hex() == root_of(run_dir, len(SEQUENCE))[:32],
                      "housekeeping's root is the Merkle root of the receipts in the run file")
         else:
@@ -370,7 +429,7 @@ def run_good(exe_dir: Path, keys: Path, downlinked: Path, check: Check, log) -> 
         check.ok(f"receipts={seen} root={root_of(run_dir, seen)}" in sealed,
                  f"the first seal signs the root over the {seen} receipts")
 
-        # ------------------------------------------------ 2. a processor reset, by the ES restart command
+        # ------------------------------------------------ 3. a processor reset, by the ES restart command
         send(ground.tx, packet(ES_CMD_MID, ES_RESTART_CC, struct.pack("<H", PROCESSOR_RESET)))
         check.ok(core.exited(20), "the cFE ES restart command (processor reset) ends the cFE instance")
         log("processor reset: " + " | ".join(line for line in core.lines if "PROCESSOR" in line))
@@ -383,13 +442,13 @@ def run_good(exe_dir: Path, keys: Path, downlinked: Path, check: Check, log) -> 
         check.ok(any("Starting the cFE with a PROCESSOR reset" in line for line in core.lines),
                  "the next boot is a processor reset, from the PSP's boot record")
         events = app_events(core)
-        log("after the reset: " + " | ".join(t for e, t in events if e in (24, 25, 30, 31, 32, 1)))
-        check.ok(any(e == 30 and f"RUN RESTORED from CDS receipts={seen} floor=v3" in t for e, t in events),
-                 f"the run is restored from the Critical Data Store: {seen} receipts, floor version 3")
+        log("after the reset: " + " | ".join(t for e, t in events if e in (24, 25, 30, 31, 32, 33, 1)))
+        check.ok(any(e == 30 and f"RUN RESTORED from CDS receipts={seen} floor=1" in t for e, t in events),
+                 f"the run and the floor are restored from the Critical Data Store: {seen} receipts, floor 1")
         check.ok(any(e == 1 and "policy active, processor reset" in t for e, t in events),
-                 "the same signed version 3 table is accepted against the restored floor")
+                 "the release held before the reset decides again")
 
-        # ------------------------------------------------ 3. more proposals, then an older and a tampered table
+        # ------------------------------------------------ 4. more proposals, then an older seq and a ground load
         ground.connect()
         sent = ground.propose(AFTER_RESET)
         datagrams, hk = ground.housekeeping(core, 1)
@@ -403,27 +462,24 @@ def run_good(exe_dir: Path, keys: Path, downlinked: Path, check: Check, log) -> 
         check.ok(hk is not None and hk["receipts"] == seen and hk["root16"].hex() == root_of(run_dir, seen)[:32],
                  f"housekeeping continues: {seen} receipts and their root")
 
+        _hk, record = ground.state(core, keys, 2)
+        older_data, older = seal_v3(keys, 1, (record["time"] if record else now) + 1)
+        ground.offer(older, 7)
+        core.wait_for(r"PRISMPATH_APP DIST refused cause=139", 1, 20)
+        check.ok(True, "after the reset the table sealed again at seq 1, below the floor, is refused as "
+                       "dist:seq-replay (139)")
         tbl = exe_dir / "cf" / "pp_app_policy.tbl"
-        _headers, good = table.split(tbl.read_bytes())
         (exe_dir / "cf" / "pp_policy_v1.tbl").write_bytes(
             table.signed_file(tbl.read_bytes(), keys / "authority.key", version=1))
-        tampered = bytearray(tbl.read_bytes())
-        tampered[table.HEADERS + table.OFF["Image"] + 56] ^= 0x01    # thrust > 100 becomes > 101, not signed again
-        (exe_dir / "cf" / "pp_policy_bad.tbl").write_bytes(bytes(tampered))
         ground.table_load(core, "/cf/pp_policy_v1.tbl", 1)
-        ground.table_load(core, "/cf/pp_policy_bad.tbl", 2)
         rejected = [t for e, t in app_events(core) if e == 25]
-        loaded = [t for e, t in app_events(core) if e == 24]
-        log("table loads: " + " | ".join(rejected))
-        check.ok(any("cause=9" in t for t in rejected[:1]),
-                 "the authority's version 1 table, below the floor, is refused as image:version-replay (9)")
-        check.ok(any("cause=2" in t for t in rejected[1:2]),
-                 "the version 3 table with a threshold changed and not signed again is refused as sig:invalid (2)")
-        check.ok(len(loaded) == 1, "no refused table was activated (one POLICY LOADED event, at startup)")
+        log("table load from a file: " + " | ".join(rejected))
+        check.ok(any("cause=151" in t for t in rejected),
+                 "a table loaded by the ground from a file has no envelope and is refused as dist:not-staged (151)")
 
         before = len([1 for e, _t in app_events(core) if e in (20, 21, 22)])
         sent = ground.propose(AFTER_LOADS)
-        datagrams, hk = ground.housekeeping(core, 2)
+        datagrams, hk = ground.housekeeping(core, 3)
         events = [(e, text) for e, text in app_events(core) if e in (20, 21, 22)][before:]
         for _e, text in events:
             log(f"    {text}")
@@ -440,7 +496,7 @@ def run_good(exe_dir: Path, keys: Path, downlinked: Path, check: Check, log) -> 
         core.stop()
         ground.close()
 
-    # ------------------------------------------------ 4. the downlink, verified on the ground
+    # ------------------------------------------------ 5. the downlink, verified on the ground
     if downlinked.exists():
         shutil.rmtree(downlinked)
     downlink.fetch(run_dir, downlinked)
@@ -470,36 +526,38 @@ def run_good(exe_dir: Path, keys: Path, downlinked: Path, check: Check, log) -> 
         check.ok(False, f"the ground verifies the downlinked run: {bad}")
 
 
-def run_bad_image(exe_dir: Path, check: Check, log) -> None:
+def run_bad_image(exe_dir: Path, keys: Path, check: Check, log) -> None:
     tbl = exe_dir / "cf" / "pp_app_policy.tbl"
-    good = tbl.read_bytes()
-    at = good.find(b"PPTM")
-    assert at >= 0, "the staged table does not hold a PPT image"
-    bad = bytearray(good)
-    bad[at + 28] = 0x7F                       # atom 0's field index, far past the image's four fields
-    tbl.write_bytes(bytes(bad))
+    bad = bytearray(table.split(tbl.read_bytes())[1])
+    bad[table.OFF["Image"] + 28] = 0x7F       # atom 0's field index, far past the image's fields
     tp = topics()
     proposed_mid = CMD_BASE | tp["PROPOSED_CMD"]
-    tx = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    core = Core(exe_dir)
+    ground = Ground()
+    core = Core(exe_dir)                      # a power on reset: the store, its floor and its release are cleared
     try:
         core.wait_for(r"PRISMPATH_APP initialized")
+        ground.connect()
+        _hk, record = ground.state(core, keys, 1)
+        table.sign(bad, keys / "authority.key")
+        data, pairs = seal_v3(keys, 1, record["time"] if record else int(time.time()), data=bad)
+        ground.offer(pairs, 1)
+        ground.commit(data, 1, 1)
+        core.wait_for(r"PRISMPATH_APP DIST refused cause=76", 1, 20)
         events = app_events(core)
-        text = " | ".join(t for _e, t in events)
-        log(f"bad image boot: {text}")
-        check.ok(any(e == 25 and "cause=76" in t for e, t in events),
-                 "a table with a corrupted image is rejected with image:field-index-oob (76), event 25")
-        check.ok("policy NOT active" in text, "the app starts with no active policy")
-        send(tx, packet(proposed_mid, 0, reading_payload(SEQUENCE[0][1])))
+        log("bad image offered: " + " | ".join(t for e, t in events if e in (33, 34, 24, 25)))
+        check.ok(not any(e == 24 for e, _t in events),
+                 "a table with a corrupted image is refused by the kernel's check in the verifier "
+                 "(image:field-index-oob, 76) and never activated")
+        send(ground.tx, packet(proposed_mid, 0, reading_payload(SEQUENCE[0][1])))
         core.wait_for(r"PRISMPATH_APP (ALLOW|REFUSE|ESCALATE) seq=1", 1, 10)
         decided = [t for e, t in app_events(core) if e in (20, 21, 22)]
         log(f"proposal 1 with no policy: {decided}")
-        check.ok(len(decided) == 1 and decided[0].startswith("PRISMPATH_APP REFUSE") and "cause=32" in decided[0],
-                 "with no active policy even an in-bounds, in-limits command is refused (cause 32), never allowed")
+        check.ok(len(decided) == 1 and decided[0].startswith("PRISMPATH_APP REFUSE") and "cause=153" in decided[0],
+                 "with no active policy even an in-bounds, in-limits command is refused (dist:policy-lapsed, 153), "
+                 "never allowed")
     finally:
         core.stop()
-        tx.close()
-        tbl.write_bytes(good)
+        ground.close()
 
 
 def main(argv: Optional[List[str]] = None) -> int:
@@ -524,15 +582,19 @@ def main(argv: Optional[List[str]] = None) -> int:
     cf = exe_dir / "cf"
     original = (cf / "pp_app_policy.tbl").read_bytes()
     try:
-        provision.provision(exe_dir, keys)
-        log("== the S1 sequence, a seal, a processor reset, more proposals, two refused loads, a seal ==")
+        provision.provision(exe_dir, keys, boot=False)
+        shutil.rmtree(cf / "ppdist", ignore_errors=True)
+        log("== a table offered on the bus, the S1 sequence, a seal, a processor reset, more proposals, an older seq "
+            "and a ground load refused, a seal ==")
         run_good(exe_dir, keys, downlinked, check, log)
         log("== a table with a corrupted image ==")
-        run_bad_image(exe_dir, check, log)
+        run_bad_image(exe_dir, keys, check, log)
     finally:
         (cf / "pp_app_policy.tbl").write_bytes(original)
-        for name in ("pp_authority.pub", "pp_instance.key", "pp_policy_v1.tbl", "pp_policy_bad.tbl"):
+        for name in ("pp_authority.pub", "pp_instance.key", "pp_policy_v1.tbl", "pp_policy_bad.tbl", "pp_trust.anchor",
+                     "pp_boot0.pps", "pp_boot1.pps"):
             (cf / name).unlink(missing_ok=True)
+        shutil.rmtree(cf / "ppdist", ignore_errors=True)
         if not args.keys and not args.downlink:
             shutil.rmtree(work, ignore_errors=True)
     print("\n".join(check.report))

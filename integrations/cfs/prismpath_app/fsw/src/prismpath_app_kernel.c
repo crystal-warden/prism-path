@@ -36,12 +36,14 @@ typedef struct
     uint8_t     Width;
     int32_t     Min;
     int32_t     Max;
+    uint8_t     Role;
 } FieldDef_t;
 
-#define FIELD_ROW(reg, name, kind, off, width, lo, hi) {name, LK_##kind, off, width, lo, hi},
+#define FIELD_ROW(reg, name, kind, off, width, lo, hi, role) {name, LK_##kind, off, width, lo, hi, PP_FIELD_##role},
 static const FieldDef_t k_Fields[PRISMPATH_APP_FIELD_COUNT] = {PRISMPATH_APP_FIELDS(FIELD_ROW)};
+static const char *const k_RoleNames[4] = {"command", "parameter", "independent", "proposer"};
 
-/* the text policy/gen_image.py hashes: `name:int:min:max;` or `name:bool;` per field */
+/* the text policy/gen_image.py hashes: `name:int:min:max:role;` or `name:bool:role;` per field */
 static uint32_t Hash_Char(uint32_t h, char c)
 {
     return (h ^ (uint8_t)c) * 0x01000193u;
@@ -88,7 +90,7 @@ uint32_t PP_Kernel_LayoutHash(void)
         h = Hash_Str(h, k_Fields[i].Name);
         if (k_Fields[i].Kind != LK_INT)
         {
-            h = Hash_Str(h, ":bool;");
+            h = Hash_Str(h, ":bool:");
         }
         else
         {
@@ -96,10 +98,95 @@ uint32_t PP_Kernel_LayoutHash(void)
             h = Hash_Int(h, k_Fields[i].Min);
             h = Hash_Char(h, ':');
             h = Hash_Int(h, k_Fields[i].Max);
-            h = Hash_Char(h, ';');
+            h = Hash_Char(h, ':');
         }
+        h = Hash_Str(h, k_RoleNames[k_Fields[i].Role]);
+        h = Hash_Char(h, ';');
     }
     return h;
+}
+
+int PP_Kernel_FieldRole(int Field, uint32_t MonitorStale, int32_t *Min, int32_t *Max, uint32_t *Stale)
+{
+    const FieldDef_t *def = &k_Fields[Field];
+
+    *Min   = def->Min;
+    *Max   = def->Max;
+    *Stale = 0;
+    if (def->Role != PP_FIELD_INDEPENDENT)
+    {
+        return def->Role;
+    }
+    if (MonitorStale == 0u)
+    {
+        return PP_FIELD_PROPOSER; /* AF10: no monitor, so no source but the proposer's byte, which is never read */
+    }
+    *Stale = MonitorStale;
+    return PP_FIELD_INDEPENDENT;
+}
+
+/* "key": and a decimal integer */
+static size_t Put_Text(char *Out, size_t Cap, size_t At, const char *Text)
+{
+    size_t n = strlen(Text);
+
+    if (At + n > Cap)
+    {
+        return Cap + 1u;
+    }
+    memcpy(Out + At, Text, n);
+    return At + n;
+}
+
+static size_t Put_Int(char *Out, size_t Cap, size_t At, int32_t V)
+{
+    char     digits[12];
+    uint32_t mag = (V < 0) ? (uint32_t)0 - (uint32_t)V : (uint32_t)V;
+    int      n   = 0;
+    char     one[2] = {0, 0};
+
+    if (V < 0)
+    {
+        At = Put_Text(Out, Cap, At, "-");
+    }
+    do
+    {
+        digits[n++] = (char)('0' + (mag % 10u));
+        mag /= 10u;
+    } while (mag != 0u);
+    while (n > 0 && At <= Cap)
+    {
+        one[0] = digits[--n];
+        At     = Put_Text(Out, Cap, At, one);
+    }
+    return At;
+}
+
+size_t PP_Kernel_LayoutDocument(uint32_t MonitorStale, char *Out, size_t Cap)
+{
+    size_t at = Put_Text(Out, Cap, 0, "[");
+    int    i;
+
+    for (i = 0; i < PRISMPATH_APP_FIELD_COUNT; i++)
+    {
+        int32_t  lo, hi;
+        uint32_t stale;
+        int      role = PP_Kernel_FieldRole(i, MonitorStale, &lo, &hi, &stale);
+
+        at = Put_Text(Out, Cap, at, i ? ",{\"max\":" : "{\"max\":");
+        at = Put_Int(Out, Cap, at, hi);
+        at = Put_Text(Out, Cap, at, ",\"min\":");
+        at = Put_Int(Out, Cap, at, lo);
+        at = Put_Text(Out, Cap, at, ",\"reg\":");
+        at = Put_Int(Out, Cap, at, i);
+        at = Put_Text(Out, Cap, at, ",\"role\":\"");
+        at = Put_Text(Out, Cap, at, k_RoleNames[role]);
+        at = Put_Text(Out, Cap, at, "\",\"stale\":");
+        at = Put_Int(Out, Cap, at, (int32_t)stale);
+        at = Put_Text(Out, Cap, at, "}");
+    }
+    at = Put_Text(Out, Cap, at, "]");
+    return at > Cap ? 0u : at;
 }
 
 /* ----------------------------------------------------------------- the active image */
@@ -328,6 +415,11 @@ int PP_Kernel_Active(void)
     return Active_Valid;
 }
 
+void PP_Kernel_Deactivate(void)
+{
+    Active_Valid = 0;
+}
+
 const char *PP_Kernel_FieldName(int16_t Field)
 {
     return (Field >= 0 && Field < PRISMPATH_APP_FIELD_COUNT) ? k_Fields[Field].Name : "-";
@@ -377,6 +469,41 @@ int PP_Kernel_FieldValue(const uint8_t *Payload, size_t PayloadLen, int Field, i
     }
     *IsBool = (def->Kind == LK_BOOL);
     return 1;
+}
+
+size_t PP_Kernel_Registers(const uint8_t *Payload, size_t PayloadLen, uint8_t *Regs, size_t Cap,
+                           PP_Verdict_t *Boundary)
+{
+    size_t need = 4u + 8u * PRISMPATH_APP_FIELD_COUNT;
+    int    i;
+
+    if (Cap < need)
+    {
+        return 0;
+    }
+    memset(Regs, 0, need);
+    for (i = 0; i < PRISMPATH_APP_FIELD_COUNT; i++)
+    {
+        const FieldDef_t *def = &k_Fields[i];
+        int32_t           value;
+        int               is_bool;
+        int32_t           ty;
+
+        if (!PP_Kernel_FieldValue(Payload, PayloadLen, i, &value, &is_bool))
+        {
+            Refuse(Boundary, PP_CONTRACT_CAUSE, (int16_t)i, PP_REASON_MISSING);
+            return 0;
+        }
+        if (value < def->Min || value > def->Max)
+        {
+            Refuse(Boundary, PP_CONTRACT_CAUSE, (int16_t)i, is_bool ? PP_REASON_WRONG_TYPE : PP_REASON_OUT_OF_RANGE);
+            return 0;
+        }
+        ty = is_bool ? TY_BOOL : TY_INT;
+        wr32(Regs + 4u + 8u * (uint32_t)i, ty);
+        wr32(Regs + 8u + 8u * (uint32_t)i, value);
+    }
+    return need;
 }
 
 void PP_Kernel_Decide(const uint8_t *Payload, size_t PayloadLen, PP_Verdict_t *Verdict)

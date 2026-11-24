@@ -323,7 +323,13 @@ class Assembler:
         except Refused as refused:
             return self._drop(refused.cause, chunk.transfer)
         _require(body_size == current.offer.body_length, "an offered body length that is not the signed one")
-        if body_size > (self.trust_bound if artifact in TRUST_ARTIFACTS else self.artifact_bound):          # E6
+        if artifact in TRUST_ARTIFACTS or artifact == "install.trust":
+            bound = self.trust_bound                              # E6, IS5: an install trust statement too
+        elif artifact == "install.ceiling":
+            bound = max(self.trust_bound, self.artifact_bound)    # CL1: a ceiling may be a list; V5 holds it exactly
+        else:
+            bound = self.artifact_bound
+        if body_size > bound:                                                                          # E6
             return self._drop(TOO_LARGE, chunk.transfer)
         current.sealed_bytes, current.body_sha256 = sealed, body_sha256
         current.body = _Part(body_size)

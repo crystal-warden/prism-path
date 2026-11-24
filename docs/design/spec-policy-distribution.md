@@ -104,7 +104,7 @@ version. An implementation holds them in one table so that a new kind is one row
 |---|---|---|---|
 | `host` | The software tier of `prismpath/hotswap/policy_host.py` | `policy.ppt`, and `policy.spiral` when the `policy.ppt` envelope's `meta` has `packing` | No |
 | `agent` | One agent home. The hook, the decider, the sandbox profile, the egress proxy and the MCP proxy all read it (`prismpath/agent/commands.py`, `load_checked`) | `policy.core`, `egress.hosts`, and `agent.zones` when the owner declares zones | Yes |
-| `gateway` | One gateway home (`prismpath/gateway/proxy.py`) | `policy.core`, `gateway.routes` | Yes for the policy. A changed route table is always a widening |
+| `gateway` | One gateway home (`prismpath/gateway/proxy.py`) | `policy.core`, `gateway.routes`, and `identity.bundle` and `identity.map` when the policy reads `workload` (ID3) | Yes for the policy. A changed route table is always a widening, and the identity kinds compare by ID7 |
 | `xdp` | The host preloader in front of the XDP loader (`prismpath-ebpf/net_swap.py`) | `policy.core`, `net.dests`, `net.edge` | Yes |
 | `mesh` | One ESP32 node (`prismpath-hw/mesh/main/ppt_mesh.c`) | `policy.ppt` | No |
 | `cfs` | The cFS app (`integrations/cfs/prismpath_app`) | `cfs.table` | No |
@@ -121,6 +121,8 @@ home holds one release, so they cannot hold different versions of one policy.
 | `egress.hosts` | A canon/2 array of lower case host names, sorted, without repeats. It may be empty | none | Each name is one the egress proxy can read |
 | `agent.zones` | A canon/2 object with `encoding`, `format` `prismpath.dist-zones/1` and `protected`, the owner's protected names, sorted, without repeats, at most 10,000 names of at most 512 characters | none | Each name is one the zone point can read. The body names no path. Where the project and its index are is the home's own setting, and the index is one of the home's control paths. A release with no `agent.zones` declares no zone, and the release id (E10) signs that absence |
 | `gateway.routes` | A route table document in canon/2 bytes | none | `Routes.from_doc` accepts it |
+| `identity.bundle` | A trust bundle, each trust domain's X.509 CA certificates (section 13.1) | none | ID1 |
+| `identity.map` | An identity map, SPIFFE ID patterns to classes (section 13.1) | none | ID2 |
 | `net.dests` | A `prismpath.net_dests/1` destination table in canonical form | none | The table is one the edge can use |
 | `net.edge` | The edge `.ppt` image | `flow_sha256`, `names_sha256`, `qualification` | The table recompiled from the staged `policy.core` and `net.dests` is byte for byte the body |
 | `cfs.table` | The `PP_PolicyTable_t` bytes before `ImageSig` | none | The kernel check, and the SHA-256 of the core image inside the table is `policy_sha256` |
@@ -583,7 +585,8 @@ A release is **larger** than another when some request is treated more permissiv
 order is refuse, then escalate, then allow, and a release is larger when any reading of the finite reading
 domain moves up that order, or when the two policies do not have the same fields. For `egress.hosts` and
 for the address set of `net.dests`, larger means not a subset. For `gateway.routes` any change is larger,
-because a path that loses its route reads as another class. For `agent.zones`, larger means a protected
+because a path that loses its route reads as another class. For `identity.bundle` and `identity.map` a
+change that only removes entries is not larger, and any other change is (ID7). For `agent.zones`, larger means a protected
 name is gone, and a release that drops the artifact drops every name. A `policy.ppt` image has no order.
 The table format gives its nodes no meaning (the substrate does), so nothing in the image says which
 outcome is the more permissive one, and any change of the image is larger. That is the rule a PEP holds a
@@ -975,6 +978,91 @@ release) or the widening rule (a grant is the owner's signed widening for one sc
 
 **GR3.** A grant is revoked by its envelope id in a `trust.revocation`. A gateway under distribution reads
 no other revocation list.
+
+### 13.1 Workload identity
+
+A gateway may read one thing about the sender of a request, the SPIFFE ID of its client certificate. It
+reads the ID into a class through a map the owner signs, as it reads a path into a class through the
+route table. The class is one more field of the reading, and the policy decides what each class is worth.
+The rules follow the X509-SVID standard, section 2 for the one URI SAN, section 4 for the key usage and
+section 5 for the path validation. The SPIFFE Workload API document was not read for them, and nothing
+here depends on it.
+
+**ID1.** `identity.bundle` is an artifact kind whose body is a trust bundle, a canon/2 object with
+`domains`, `encoding` and `format` `prismpath.dist-identity-bundle/1`.
+
+```json
+{"domains":{"example.org":["MIIB..."]},"encoding":"canon/2","format":"prismpath.dist-identity-bundle/1"}
+```
+
+`domains` maps each trust domain name to the X.509 CA certificates of that domain, each the standard
+base64 of its DER with padding, sorted and without repeats. A bundle names 1 to 16 trust domains and each
+domain 1 to 16 certificates of at most 8,192 bytes. Each certificate is X.509 v3 and its DER is its own
+canonical encoding. It has basic constraints with `cA` true and a key usage with keyCertSign, and a URI
+SAN it carries is the ID of its own trust domain. Anything else is `dist:bad-format`. Whether a
+certificate is in its validity is not read here. It is read for each request (ID5).
+
+**ID2.** `identity.map` is an artifact kind whose body is an identity map, a canon/2 object with
+`encoding`, `entries` and `format` `prismpath.dist-identity-map/1`.
+
+```json
+{"encoding":"canon/2","entries":[{"class":"ops","match":"spiffe://example.org/ops/*"}],"format":"prismpath.dist-identity-map/1"}
+```
+
+`entries` holds 1 to 1,000 entries in the owner's order. A `match` is a SPIFFE ID with a path, such an
+ID followed by `/*`, or the ID of a trust domain followed by `/*`. A SPIFFE ID is as SPIFFE-ID section 2
+gives it. The scheme and the trust domain are lower case, the trust domain is letters, digits, `.`, `-`
+and `_`, each path segment is letters, digits, `.`, `-` and `_` and is never `.` or `..`, and there is no
+port, user, query, fragment, percent escape or trailing `/`. The whole ID is at most 2,048 bytes. A
+`class` is lower case letters, digits and `_`, starts with a letter, and is not `none`, `invalid`, `other`
+or `unknown`. No match is listed twice. Anything else is `dist:bad-format`. The first entry that matches
+an ID gives its class. A match that ends in `/*` matches its path and every path below it, and one that
+does not matches that ID alone. An ID no entry matches is `other`.
+
+**ID3.** A `gateway` release carries `identity.bundle` and `identity.map` when its policy has the field
+`workload`, and carries neither when it does not. Every trust domain the map names is one the bundle
+holds. A release that breaks either is `dist:incomplete` at commit (C2), since its envelopes disagree. A
+gateway's policy has the seven fields of the HTTP reading, or those and `workload`.
+
+**ID4.** The gateway does not terminate TLS. The front proxy that does passes the certificate chain the
+client presented in one request header the owner names, as the percent encoded PEM of the leaf followed
+by its intermediates. That is the form nginx and Envoy write. The gateway reads that header only from a
+peer address the owner lists as the front proxy, and never passes it to the service. The header is never
+one the gateway reads or passes on for another purpose. The front proxy replaces any copy of the header
+the client sent. The gateway cannot check that, so the owner's list of front proxy addresses is what
+makes the header the front proxy's word. A policy that reads `workload` with no header or no front proxy
+set refuses every request (131), as a gateway does whose policy cannot be loaded.
+
+**ID5.** A chain is valid when all of this holds at the gateway's time. The header value decodes to 1 to
+4 PEM certificates and nothing else, in at most 16,384 bytes. The leaf is X.509 v3 with exactly one URI
+SAN, and that URI is a SPIFFE ID with a path (X509-SVID section 2). The leaf has basic constraints with
+`cA` false and a key usage with digitalSignature and without keyCertSign and cRLSign (section 4.3). Every
+other certificate of the chain is a CA as ID1 reads one. The chain passes RFC 5280 path validation
+(section 5) against the CA certificates the bundle holds for the leaf's own trust domain alone, so a CA
+of another trust domain never vouches for it. Each certificate is within its validity, each signature
+verifies, and the path ends at one of those CA certificates. The Python gateway validates the path with
+the verifier of the `cryptography` package and its web PKI profile for the extensions, and a chain that
+profile refuses is not valid.
+
+**ID6.** The reading has the field `workload` when the policy has it. It is `none` when the request has
+no certificate header. It is `invalid` when the header comes from a peer that is not the front proxy, is
+sent more than once, does not decode or fails ID5. It is `other` when the SPIFFE ID is valid and no entry
+matches it, and otherwise the class of the first entry that matches. No certificate reads `none` and a bad
+one `invalid`, as a grant does, and the policy decides what each is worth. A request the gateway cannot
+read at all reads `invalid` here as well. A policy without the field is read as before and no certificate
+is looked at.
+
+**ID7.** A changed `identity.bundle` is larger unless every certificate it holds is one the active bundle
+holds for the same trust domain. A changed `identity.map` is larger unless its entries are the active
+entries with some taken out and the rest in the same order, and no entry taken out matches an ID that an
+entry kept after it also matches. So a release that only removes entries is not larger. Each ID then
+keeps its class or reads `other`, and a certificate that chained to a removed CA reads `invalid`. A
+policy that treats `other` or `invalid` more permissively than a class it names would gain from such a
+release, so the owner writes the policy so that it does not. Going from no bundle or map to one is larger.
+
+**ID8.** The two kinds are on the closed list of E8 in every implementation, so a PEP of another kind
+refuses their envelopes with `dist:target-mismatch` and not `dist:bad-format`. Only the gateway, which is
+Python, reads their bodies.
 
 ## 14. First key provisioning
 
@@ -1463,7 +1551,9 @@ Python holds every part. Rust (`prismpath-hotswap-rs`) holds the sealed envelope
 store with revocation and rotation, the PEP machine for the `host` target and the state record. C holds
 the sealed envelope, the strict scanner, the verifier, the trust store and the PEP machine for the `mesh`
 and `cfs` targets, compiled natively for tests and unchanged for the targets. The controller, the HTTP
-binding and the `agent`, `gateway` and `xdp` targets are Python only. The reconciling state (section 9.5)
+binding and the `agent`, `gateway` and `xdp` targets are Python only. Rust and the C core hold the
+names `identity.bundle` and `identity.map` on their closed list of artifact kinds (ID8), and case 281 is
+pending in each until they do. The reconciling state (section 9.5)
 is Python's and Rust's, since the C core's switch cannot fail (C6). Every PEP reads the controller
 statement, its freshness and the `trust.controller` kind (H9, H16, K7).
 
@@ -1757,6 +1847,14 @@ are the change statement on every PEP that takes it.
 | 278 | A `mesh` PEP with `fresh` 3600 is off for 30 days and starts, is sent a good fresh statement and then one whose `expires` is a year ahead in the same start, and a `host` PEP with a clock is sent one a year ahead | the first raises the time floor to its `expires` less 3600 and gives freshness, the second gives none and moves nothing, and the host takes no time and no freshness from it | H16, T1, T2 | P R C |
 | 279 | A PEP provisioned from a `/1` anchor is sent a `trust.controller` naming a key, then a statement under it. A PEP whose trust store holds 8 authority keys and no controller key is sent one, and a PEP is sent a `trust.controller` that names the key it already holds | it gains the key and takes the epoch id, `dist:too-large`, then the key stays at the new key sequence and a statement under the old key sequence is not taken | K7, K5, H6 | P R C |
 | 280 | A PEP is given an anchor whose controller key is an install key, one whose controller key is an operator key, and one whose controller key is its instance key | refused at provisioning three times and the PEP is unchanged | P2, K4, K6 | P R C |
+| 281 | An envelope of `identity.bundle` and one of `identity.map`, each for target `gateway`, verified by a `host` PEP and a `mesh` PEP and then by a `gateway` PEP, and an envelope of artifact `identity.other` | `dist:target-mismatch` on `host` and on `mesh`, accepted on `gateway`, and `dist:bad-format` for the last | E8, V5, ID8 | P R C |
+| 282 | An `identity.bundle` of CA certificates, then bundles holding a leaf, a CA without keyCertSign, a CA whose URI SAN names another trust domain, a list unsorted, with a repeat or empty, a trust domain in capitals, no trust domain, base64 that is not canonical, bytes that are not a certificate and an extra member, then the first bundle spelled out of order | accepted, `dist:bad-format` each time, then `document:not-canonical` | ID1, V11 | P |
+| 283 | An `identity.map`, then maps whose match is not a SPIFFE ID, is a trust domain alone, has a `*` that is not a closing `/*`, a `..` segment, a trailing `/`, a percent escape, a capital in the trust domain, a port or a user, whose class is reserved or not a class, that list a match twice, or that have no entries | accepted with the first match winning and an ID no entry matches reading `other`, then `dist:bad-format` each time | ID2, V11 | P |
+| 284 | A running gateway whose policy reads `workload`, behind a front proxy on loopback, gets a request with no certificate header, one with a leaf the map does not name, a `billing` leaf, an `ops` leaf through an intermediate, and a leaf of a second trust domain the map does not name | `none`, `other`, `billing`, `ops` and `other`, each in its receipt's reading and decided by the policy, and the header never reaches the service | ID4, ID6 | P |
+| 285 | The same gateway gets leaves with two URI SANs, none, a DNS name alone, a URI that is not a SPIFFE ID, a SPIFFE ID without a path, `cA` true, no basic constraints, no key usage, keyCertSign, no digitalSignature, past their validity, before it, signed by another trust domain's CA or by a CA the bundle does not hold, of a trust domain the bundle does not hold, self signed or with a changed signature, a chain through a leaf or longer than four, a header that is not percent encoded PEM or has more after it, two headers, and a valid header from a peer that is not the front proxy | `invalid` each time, refused by the policy, and a request without the header from that peer is `none` | ID4, ID5, ID6 | P |
+| 286 | A `gateway` PEP is sent a bundle that only drops a CA and a trust domain with a map that only drops entries no later entry overlaps, without a widening statement, then the bundle and map before them without one. The comparators are given a CA added, a CA moved to another trust domain, a map entry added, moved, given another class, or dropped where a later entry takes its IDs | the first commits, the second is `dist:widening-unsigned`, and each change given to the comparators is larger | ID7, W1 | P |
+| 287 | A `gateway` PEP is sent releases whose policy reads `workload` without a bundle, without a map, without both, and with a map naming a trust domain the bundle does not hold, then the demo policy with both identity kinds, then a complete release that drops a trust domain while a gateway runs | `dist:incomplete` five times, then committed, and the gateway's next request with a leaf of the dropped trust domain reads `invalid` | ID3, C2, ID6 | P |
+| 288 | `prismpath gateway identity-bundle` and `identity-map` write the bodies, `prismpath dist seal` seals each for target `gateway`, a home that holds its own policy serves with them, and a home that follows a stream is given them at `serve` | the canonical bodies, each envelope with `widens` true and accepted by the gateway's verifier, decisions by `workload` in the first home, and a refusal to start in the second | ID1, ID2, W7, ID4 | P |
 | 289 | A mesh table that raises its threshold, one whose second edge takes no reading now, one that lowers its threshold, one that sends an edge to another node, one with a higher `max_steps`, one whose field dictionary in `meta` differs, a stateful table that drops an edge, and a pair whose walk passes the bound are each compared with the table before by the table comparator | not larger twice, larger with a witness register file the old table refuses and the new one routes, larger, larger by its frame twice, larger, and cannot decide, which is larger | W8 | P |
 | 290 | Against a mesh table a controller holds, the sealing tool is given a table that allows less, first with no yes and then with `--yes`, and then a table that allows more. A mesh node is sent the first table alone, then with the tool's change statement, and the second without a statement | nothing written and `dist:widening-unsigned` with the comparison shown, then the first sealed with `widens` false, shown as a change, not larger, with a change statement from the held table's hash beside it and no widening statement, the second shown as a widening with its witness and no statement, then `dist:widening-unsigned`, staged and committed, and `dist:widening-unsigned` | W8, W9, W10, W11, W2 | P |
 | 291 | A controller is handed a host table that allows less with a change statement, one that allows more with a widening statement, one whose signed field dictionary differs, a table that allows more with a change statement, and a table with neither statement that says it does not widen | rollouts shown as a change, not larger, as a widening with the witness register file, and as a widening with the frame as the witness, kept across a restart, then two not offered with `dist:widening-unsigned` | W8, W9, W11, F4, W7 | P |

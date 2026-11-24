@@ -1568,6 +1568,46 @@ def test_case_178_the_empty_set_withdraws_its_kind(host_check):
     assert out[7] == f"installid {_install_id()}"
 
 
+def test_a_withdrawn_kind_holds_nothing_in_python_as_in_the_c_core(host_check, tmp_path):
+    """IS6, H10, IS12: the empty set withdraws its kind and the PEP holds nothing of it. The Python machine and the C
+    core, given one anchor, a ceiling and the empty ceiling after it, send the same install id, which is the install
+    id of a PEP that holds no set. The same empty set again changes nothing, and the next ceiling that says it does
+    not widen names the empty string as `replaces`, not the empty set's zero policy hash, in both."""
+    from prismpath.distribution import install
+    from prismpath.distribution.adapters.mesh import MeshAdapter
+    ceiling = "install.ceiling"
+    point = _dist.MeshPep(tmp_path / "mesh", install_keys=["J", "K"], install_threshold=2)
+    record = point.pep.installed.record
+    domain, fingerprint = install.domain_sha256(MeshAdapter()), record.trust_id
+    before = record.install_id().hex()
+    listed = _ceiling(RELEASE)
+
+    def py(seq, bodies, **args):
+        return point.send(point.install_set(ceiling, bodies, seq, **args))[-1]
+
+    assert py(1, {"policy.list": listed}).event == "install-applied"
+    withdrawn = point.install_set(ceiling, {"none": b""}, 2, widens=True)
+    assert point.send(withdrawn)[-1].event == "install-widened"
+    after = point.pep.installed.record.install_id().hex()
+    assert point.send(withdrawn)[-1].event == "beat" and point.pep.installed.record.install_id().hex() == after
+    assert point.pep.installed.ceiling is None
+    assert py(3, {"policy.list": listed}, replaces=ZERO).cause == "dist:widening-unsigned"
+    assert py(3, {"policy.list": listed}, replaces="").event == "install-applied"
+
+    def c(seq, **args):
+        return _stage(_install(ceiling, listed, seq=seq, **args))
+
+    empty = _install(ceiling, seq=2, widens=True, replaces=hashlib.sha256(listed).hexdigest())
+    out = _run21(host_check, [f"machine 0 1 {INSTANCE_SEED}", f"domain {domain}",
+                              *_anchor(domain=domain, fingerprint=fingerprint), f"provision {S} {N}", "installid",
+                              c(1), _stage(empty), "installid", _stage(empty), "installid",
+                              c(3, widens=False, replaces=ZERO), c(3, widens=False, replaces="")])
+    assert out[1] == f"installid {before}" == f"installid {_install_id(trust_id=fingerprint)}"
+    assert _last(out[2])["event"] == "install-applied" and _last(out[3])["event"] == "install-widened"
+    assert out[4] == f"installid {after}" == out[1] and out[6] == out[4]
+    assert _refused(out[7])[0] == "dist:widening-unsigned" and _last(out[8])["event"] == "install-applied"
+
+
 def test_case_182_234_the_older_forms_stay_refused(host_check):
     """case_182: IS9, L2. A PEP that holds an install statement and committed nothing refuses the older forms, again
     after a second provisioning and after its install record is made unreadable. case_234: L2, P3. A PEP that never
@@ -1889,7 +1929,7 @@ def test_case_219_a_set_spreads_by_itself_and_the_install_ids_show_the_mix(host_
 
 
 def test_the_action_floor_is_narrow_and_tests_only_what_the_proposer_cannot_write(host_check):
-    """AF9, AF10 on a mesh node (case 213 and case 216 wait for their cfs halves). A floor whose edge tests no command,
+    """case_213: AF9, AF10, the mesh half (the cfs half is in test_distribution_c_cfs.py). A floor whose edge tests no command,
     tests the command only inside an or, leaves a parameter unbounded or bounded by its whole domain, has a second
     decision node or nine rules, names a register the layout does not label as its command, or tests the proposer's
     reading is dist:floor-broad; one whose layout is another layout's hash, or reaches a PEP built with no layout, is
@@ -1933,7 +1973,7 @@ def test_the_action_floor_is_narrow_and_tests_only_what_the_proposer_cannot_writ
 
 
 def test_the_signed_rate_counts_overrides_durably_on_a_mesh_node(host_check):
-    """AF8, H10 on a mesh node (case 194 waits for its cfs half). With a rate of 3 in 60 seconds, five overrides in one
+    """case_194: AF8, H10, the mesh half (the cfs half is in test_distribution_c_cfs.py). With a rate of 3 in 60 seconds, five overrides in one
     window are allowed three times and then left to the release, a restart after the second changing nothing; a
     request the release allows is never counted; the next window allows again; the counts of H10 rise only with
     floor answers."""

@@ -7,13 +7,14 @@ runtime a target kind protects.
 the whole staged release, since one artifact may name another (C2). Whether a staged release allows more
 (W1) is not an adapter's: a kind that can decide compares with the comparators of
 `prismpath.distribution.widening`, one per artifact, which answer `LARGER`, `NOT_LARGER` or `CANNOT_DECIDE`.
-`activate(release)` makes the runtime use a committed release and `deactivate()` makes
-it refuse. An adapter never verifies a signature, reads a clock or touches a floor. Those are the
-machine's.
+`activate(release)` makes the runtime use a committed release, `deactivate()` makes
+it refuse, and `withdraw_to(fallback, cause)` makes it run the fallback set in place of a release (FB1). An
+adapter never verifies a signature, reads a clock or touches a floor. Those are the machine's.
 
 Beside the calls an adapter tells the machine what it needs to build its view: `home`, the directory the
 runtime keeps its files in (K2), `qualification`, the qualification envelope a `policy.ppt` is admitted
-under, and `body_bound`, its bound on a body (E6).
+under, `body_bound`, its bound on a body (E6), and `floor_layout`, the layout document (AF10) a table kind was built
+with, without which it takes no action floor.
 """
 from __future__ import annotations
 
@@ -28,6 +29,7 @@ class Adapter:
     home: Optional[str] = None
     qualification: Optional[dict] = None
     body_bound: int = 16777215
+    floor_layout: Optional[bytes] = None
 
     def check(self, artifact: str, body: bytes, staged: Mapping[str, Tuple[Any, bytes]]) -> Optional[str]:
         """The target's own check of one staged artifact against the rest of the staged release, which maps
@@ -39,3 +41,8 @@ class Adapter:
 
     def deactivate(self, cause: str) -> None:
         raise NotImplementedError
+
+    def withdraw_to(self, fallback: Any, cause: str) -> None:
+        """C10, FB1: withdraw the release and run the PEP's fallback set, given in the shape of a release, in its
+        place. A runtime that runs what `activate` gives it runs the fallback set the same way."""
+        self.activate(fallback)

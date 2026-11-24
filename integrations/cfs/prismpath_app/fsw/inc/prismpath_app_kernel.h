@@ -95,8 +95,30 @@ typedef struct
 /** The refusal cause when no image is active. The registry's route:no-matching-edge: no rule allows. */
 #define PP_NO_IMAGE_CAUSE 32
 
-/** The layout hash this build computes from prismpath_app_layout.h (FNV-1a 32 over the layout text). */
+/** The layout hash this build computes from prismpath_app_layout.h (FNV-1a 32 over the layout text, the field labels
+ *  included). */
 uint32_t PP_Kernel_LayoutHash(void);
+
+/** The labels of prismpath_app_layout.h (AF9, AF10), in the order of the C core's PP_ROLE_* (pp_dist.h). */
+enum
+{
+    PP_FIELD_COMMAND     = 0,
+    PP_FIELD_PARAMETER   = 1,
+    PP_FIELD_INDEPENDENT = 2,
+    PP_FIELD_PROPOSER    = 3
+};
+
+/** The label of field `Field` as an action floor reads it, and its bounds and staleness bound in seconds. The
+ *  independent field is the monitor's verdict: with MonitorStale 0 the mission has no monitor, and the field is the
+ *  proposer's, which no floor rule may test (AF10). */
+int PP_Kernel_FieldRole(int Field, uint32_t MonitorStale, int32_t *Min, int32_t *Max, uint32_t *Stale);
+
+/** The layout document of AF10, written into Out: a canon/2 list of each field's register, role, bounds and staleness
+ *  bound, which integrations/cfs/ground/table.py writes alike. Returns its length, or 0 when Cap is too small. */
+size_t PP_Kernel_LayoutDocument(uint32_t MonitorStale, char *Out, size_t Cap);
+
+/** The registered cause of a reading outside its field definitions (route:contract-violation). */
+#define PP_CONTRACT_CAUSE 37
 
 /**
  * Check a table without activating it. Returns 0 when the table is safe to run, or the registered cause code
@@ -114,6 +136,18 @@ int PP_Kernel_Activate(const PP_PolicyTable_t *Table);
 
 /** True once an image has been activated. */
 int PP_Kernel_Active(void);
+
+/** No image decides any more: every proposal is refused with PP_NO_IMAGE_CAUSE until another is activated. */
+void PP_Kernel_Deactivate(void);
+
+/**
+ * The register file of a payload in the form the C core of policy distribution reads (a 4 byte prefix, then the type
+ * and the value of each field, little endian), with the app's monitor verdict, written into Regs. Returns its length,
+ * or 0 with the boundary refusal in Boundary when a field is missing, of the wrong type or out of range, which no
+ * set decides.
+ */
+size_t PP_Kernel_Registers(const uint8_t *Payload, size_t PayloadLen, uint8_t *Regs, size_t Cap,
+                           PP_Verdict_t *Boundary);
 
 /**
  * Set the runtime monitor's verdict, the value of the layout's MONITOR field (monitor_ok) for the decisions and

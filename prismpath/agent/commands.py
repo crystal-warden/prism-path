@@ -227,7 +227,9 @@ class Committed:
     AgentError, and loads again only when a file of the PEP's store changed (a commit, a rollback, a lapse, a
     revocation, a lock) or the release's earliest expiry has come, so a decision costs a few `stat` calls and a
     release that no longer stands stops deciding at the next one (section 9, X3, R5)."""
-    WATCHED = ("anchor.json", "setting.json", "counter.json", "floor.json", "trust.json", "active.json")
+    # the install record too, so a fallback set applied while no release decides reaches it (FB1, FB8)
+    WATCHED = ("anchor.json", "setting.json", "counter.json", "floor.json", "trust.json", "active.json",
+               "install/record.json")
 
     def __init__(self, home: Path, kind: str = "agent"):
         self.home, self.kind = Path(home), kind

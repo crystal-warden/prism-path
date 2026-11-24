@@ -465,7 +465,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         original = tbl.read_bytes()
         shutil.rmtree(mission.exe / "cf" / "pprun", ignore_errors=True)    # a new run on a power on reset
         provision.provision(mission.exe, keys)
-        log("provisioned the flight file system: test authority and instance keys, the signed version 3 table")
+        log("provisioned the flight file system: test authority and instance keys, the trust anchor and the version 3 table as the boot release")
         t = time.time()
         mission.launch()
         log(f"launched {len(mission.names)} containers on {NETWORK}: {', '.join(mission.names)}")
@@ -481,8 +481,9 @@ def main(argv: Optional[List[str]] = None) -> int:
             mission.close()
         if original is not None:
             tbl.write_bytes(original)
-        for name in ("pp_authority.pub", "pp_instance.key"):
+        for name in ("pp_authority.pub", "pp_instance.key", "pp_trust.anchor", "pp_boot0.pps", "pp_boot1.pps"):
             (mission.exe / "cf" / name).unlink(missing_ok=True)
+        shutil.rmtree(mission.exe / "cf" / "ppdist", ignore_errors=True)
         if not args.keep_run:
             shutil.rmtree(work, ignore_errors=True)
     if not args.leave_running:

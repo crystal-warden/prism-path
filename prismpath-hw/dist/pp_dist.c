@@ -89,6 +89,7 @@ const char *pp_target_name(pp_target target) {
  * (O2). */
 struct pp_check_args {
     pp_artifact artifact;
+    const pp_envelope *envelope;
     const uint8_t *body;
     size_t len;
     const pp_trust *trust;
@@ -151,13 +152,52 @@ static uint8_t pp_mesh_check(const struct pp_check_args *a) {
     }
 }
 
+static uint16_t pp_u16(const uint8_t *p);
+
+/* V11 for `cfs.table` (integrations/cfs/dist_kind.check_cfs_table): the body is the table before ImageSig, its header
+ * holds what the app's kernel check holds it to, refused with the cause the app answers it with
+ * (image:truncated-header), and the SHA-256 of the core image inside it is the envelope's policy hash
+ * (image:sha256-mismatch). The app runs its kernel's own check of the PPT image before it hands a body here. */
+static uint8_t pp_check_cfs_table(const pp_envelope *e, const uint8_t *body, size_t len) {
+    if (len != PP_CFS_TABLE_MAX) return PP_CAUSE_IMAGE_TRUNCATED_HEADER;
+    uint16_t image_len = pp_u16(body + PP_CFS_OFF_IMAGE_LEN), rules = pp_u16(body + PP_CFS_OFF_RULE_COUNT);
+    uint16_t core_len = pp_u16(body + PP_CFS_OFF_CORE_LEN), flow_len = pp_u16(body + PP_CFS_OFF_FLOW_LEN);
+    uint32_t version = (uint32_t)pp_u16(body + PP_CFS_OFF_VERSION) | (uint32_t)pp_u16(body + PP_CFS_OFF_VERSION + 2) << 16;
+    if (image_len > PP_CFS_IMAGE_MAX || rules > PP_CFS_RULES_MAX || core_len < 1 || core_len > PP_CFS_CORE_MAX ||
+        flow_len < 2 || flow_len > PP_CFS_FLOW_MAX || version == 0 || pp_u16(body + PP_CFS_OFF_CONTRACT) != 37 ||
+        pp_u16(body + PP_CFS_OFF_NOMATCH) != 32)
+        return PP_CAUSE_IMAGE_TRUNCATED_HEADER;
+    uint8_t hash[32];
+    pp_sha256(body + PP_CFS_OFF_CORE, core_len, hash);
+    return memcmp(hash, e->policy_sha256, 32) == 0 ? PP_CAUSE_NONE : PP_CAUSE_IMAGE_SHA256_MISMATCH;
+}
+
+/* The cFS app takes the table of its own kind and the same trust kinds a mesh node does. */
+static uint8_t pp_cfs_check(const struct pp_check_args *a) {
+    switch (a->artifact) {
+    case PP_ART_CFS_TABLE: return pp_check_cfs_table(a->envelope, a->body, a->len);
+    case PP_ART_TRUST_WIDENING: return pp_read_widening(a->body, a->len);
+    case PP_ART_TRUST_REVOCATION: return pp_check_revocation(a->body, a->len, a->trust);
+    case PP_ART_TRUST_ROTATION: return pp_check_rotation(a);
+    default: return PP_CAUSE_TARGET_MISMATCH; /* unreachable: V5 admits nothing else */
+    }
+}
+
 static const pp_row *pp_row_of(pp_target kind) {
     static const pp_row mesh = {PP_BIT(PP_ART_POLICY_PPT),
                                 PP_BIT(PP_ART_TRUST_WIDENING) | PP_BIT(PP_ART_TRUST_REVOCATION) | PP_BIT(PP_ART_TRUST_ROTATION) |
                                     PP_BIT(PP_ART_TRUST_CHANGE),
                                 PP_MESH_TABLE_MAX, PP_TRUST_BOUND, pp_mesh_check};
-    return kind == PP_TGT_MESH ? &mesh : NULL;
+    static const pp_row cfs = {PP_BIT(PP_ART_CFS_TABLE),
+                               PP_BIT(PP_ART_TRUST_WIDENING) | PP_BIT(PP_ART_TRUST_REVOCATION) | PP_BIT(PP_ART_TRUST_ROTATION),
+                               PP_CFS_TABLE_MAX, PP_TRUST_BOUND, pp_cfs_check};
+    if (kind == PP_TGT_MESH) return &mesh;
+    return kind == PP_TGT_CFS && PP_TABLE_MAX >= PP_CFS_TABLE_MAX ? &cfs : NULL; /* a build that cannot hold its table */
 }
+
+/* The table artifact a release of `kind` decides with, and what `as` names it in an install set (IS3). */
+static pp_artifact pp_table_artifact(pp_target kind) { return kind == PP_TGT_CFS ? PP_ART_CFS_TABLE : PP_ART_POLICY_PPT; }
+static uint8_t pp_table_as(pp_target kind) { return kind == PP_TGT_CFS ? PP_AS_CFS_TABLE : PP_AS_POLICY_PPT; }
 
 /* ------------------------------------------------------------------ the sealed container (S2) */
 
@@ -247,6 +287,7 @@ static uint8_t pp_as_of(const uint8_t *s, size_t len) {
                                          "agent.zones", "gateway.routes", "net.dests", "net.edge", "cfs.table"};
     if (len == 10 && memcmp(s, "policy.ppt", 10) == 0) return PP_AS_POLICY_PPT;
     if (len == 11 && memcmp(s, "policy.list", 11) == 0) return PP_AS_POLICY_LIST;
+    if (len == 9 && memcmp(s, "cfs.table", 9) == 0) return PP_AS_CFS_TABLE;
     if (len == 4 && memcmp(s, "none", 4) == 0) return PP_AS_NONE;
     return pp_name_index(s, len, others, 9) >= 0 ? PP_AS_OTHER : PP_AS_ABSENT;
 }
@@ -685,6 +726,88 @@ typedef struct {
     long long threshold;
 } pp_install_trust_body;
 
+/* P2, P4 (trust.read_anchor): a trust anchor, /1 or /2, in canonical canon/2. The `keys` object maps each key id to
+ * {public, role}, every role `authority` and every id its key's; the threshold is 1 (S6). A /2 anchor carries its
+ * controller key, which is apart from every other key it names, and `fresh`, which this core holds to 0. */
+uint8_t pp_read_anchor(const uint8_t *bytes, size_t len, pp_trust *trust, pp_install_anchor *install,
+                       char stream[PP_STREAM_MAX + 1], pp_target *target, uint8_t fingerprint[32]) {
+    int form = pp_c2_check(bytes, len);
+    if (form == PP_C2_NOT_CANONICAL) return PP_CAUSE_NOT_CANONICAL;
+    if (form != PP_C2_OK) return PP_CAUSE_BAD_FORMAT;
+    pp_c2 c = {bytes, len, 0, 1};
+    memset(trust, 0, sizeof *trust);
+    memset(install, 0, sizeof *install);
+    const uint8_t *s;
+    size_t n;
+    long long v;
+    int v2 = 0;
+    uint8_t controller[32];
+    if (!pp_c2_lit(&c, "{")) return PP_CAUSE_BAD_FORMAT;
+    if (pp_c2_lit(&c, "\"controller\":")) { /* /2 */
+        if (!pp_scan_hash(&c, controller) || !pp_c2_lit(&c, ",")) return PP_CAUSE_BAD_FORMAT;
+        v2 = 1;
+    }
+    if (!pp_c2_lit(&c, "\"encoding\":\"canon/2\",\"format\":\"prismpath.dist-trust/")) return PP_CAUSE_BAD_FORMAT;
+    if (!pp_c2_lit(&c, v2 ? "2\"," : "1\",")) return PP_CAUSE_BAD_FORMAT;
+    if (v2) {
+        if (!pp_c2_lit(&c, "\"fresh\":") || !pp_c2_int(&c, &v) || v < 0 || !pp_c2_lit(&c, ",")) return PP_CAUSE_BAD_FORMAT;
+        if (v != 0) return PP_CAUSE_BAD_FORMAT; /* H16 is not built in this core, so freshness cannot be honoured */
+        if (pp_c2_lit(&c, "\"install\":")) {
+            if (!pp_c2_lit(&c, "{\"domain\":") || !pp_scan_hash(&c, install->domain) || !pp_c2_lit(&c, ",\"keys\":") ||
+                !pp_key_list(&c, install->keys, PP_INSTALL_KEYS, &install->n_keys) ||
+                !pp_c2_lit(&c, ",\"operators\":") ||
+                !pp_key_list(&c, install->operators, PP_OPERATOR_KEYS, &install->n_operators) ||
+                !pp_c2_lit(&c, ",\"seq\":") || !pp_c2_int(&c, &install->seq) || install->seq < 0 ||
+                !pp_c2_lit(&c, ",\"threshold\":") || !pp_c2_int(&c, &install->threshold) || !pp_c2_lit(&c, "},"))
+                return PP_CAUSE_BAD_FORMAT;
+            if (install->n_keys < 1 || install->n_keys > PP_INSTALL_KEYS || install->n_operators > PP_OPERATOR_KEYS ||
+                install->threshold < 1 || install->threshold > (long long)install->n_keys)
+                return PP_CAUSE_BAD_FORMAT;
+            install->present = 1;
+        }
+    }
+    if (!pp_c2_lit(&c, "\"keys\":{")) return PP_CAUSE_BAD_FORMAT;
+    if (!pp_c2_lit(&c, "}")) {
+        for (;;) {
+            uint8_t id[32], public_key[32], own[32];
+            if (trust->n_keys >= PP_MAX_KEYS) return PP_CAUSE_BAD_FORMAT; /* K5 */
+            if (!pp_scan_hash(&c, id) || !pp_c2_lit(&c, ":{\"public\":") || !pp_scan_hash(&c, public_key) ||
+                !pp_c2_lit(&c, ",\"role\":\"authority\"}"))
+                return PP_CAUSE_BAD_FORMAT; /* P4: every entry an authority key */
+            pp_sha256(public_key, 32, own);
+            if (memcmp(own, id, 32) != 0) return PP_CAUSE_BAD_FORMAT;
+            pp_key *key = &trust->keys[trust->n_keys++];
+            memcpy(key->id, id, 32);
+            memcpy(key->public_key, public_key, 32);
+            key->role = PP_ROLE_AUTHORITY;
+            if (pp_c2_lit(&c, "}")) break;
+            if (!pp_c2_lit(&c, ",")) return PP_CAUSE_BAD_FORMAT;
+        }
+    }
+    if (trust->n_keys == 0) return PP_CAUSE_BAD_FORMAT;
+    if (!pp_c2_lit(&c, ",\"stream\":") || !pp_c2_plain_string(&c, &s, &n) || !pp_is_stream(s, n)) return PP_CAUSE_BAD_FORMAT;
+    memcpy(stream, s, n);
+    stream[n] = 0;
+    if (!pp_c2_lit(&c, ",\"target\":") || !pp_c2_plain_string(&c, &s, &n)) return PP_CAUSE_BAD_FORMAT;
+    int kind = pp_name_index(s, n, pp_target_names, PP_TGT_COUNT);
+    if (kind < 0 || !pp_c2_lit(&c, ",\"threshold\":1}") || c.i != c.n) return PP_CAUSE_BAD_FORMAT;
+    *target = (pp_target)kind;
+    if (v2) { /* K4, K6: the controller key is in no other role */
+        uint8_t id[32];
+        pp_sha256(controller, 32, id);
+        for (size_t k = 0; k < trust->n_keys; k++)
+            if (memcmp(trust->keys[k].id, id, 32) == 0) return PP_CAUSE_BAD_FORMAT;
+        for (size_t k = 0; k < install->n_keys; k++)
+            if (memcmp(install->keys[k], controller, 32) == 0) return PP_CAUSE_BAD_FORMAT;
+        for (size_t k = 0; k < install->n_operators; k++)
+            if (memcmp(install->operators[k], controller, 32) == 0) return PP_CAUSE_BAD_FORMAT;
+    }
+    pp_sha256(bytes, len, fingerprint);
+    memcpy(install->fingerprint, fingerprint, 32);
+    trust->readable = 1;
+    return PP_CAUSE_NONE;
+}
+
 /* IS11: an install trust statement, the sorted install `keys` (1 to 4, dist:too-large past 4), the sorted
  * `operators` (0 to 4) and the install `threshold`, from 1 to the number of keys (kinds.read_install_trust). */
 static uint8_t pp_read_install_trust(const uint8_t *body, size_t len, pp_install_trust_body *out) {
@@ -958,7 +1081,24 @@ static int pp_floor_conjuncts(const pp_table *t, uint16_t offset, uint16_t count
     return 1;
 }
 
-uint8_t pp_floor_narrow(const uint8_t *image, size_t len, const pp_layout *layout, int command) {
+/* A cfs.table's PPT image inside its body, or NULL for a body that is not a table of the kind's size. */
+static const uint8_t *pp_cfs_image(const uint8_t *body, size_t len, size_t *image_len) {
+    if (len != PP_CFS_TABLE_MAX || pp_u16(body + PP_CFS_OFF_IMAGE_LEN) > PP_CFS_IMAGE_MAX) return NULL;
+    *image_len = pp_u16(body + PP_CFS_OFF_IMAGE_LEN);
+    return body + PP_CFS_OFF_IMAGE;
+}
+
+/* The action of rule `k` of a cfs.table, 0 allow, 1 refuse, 2 escalate (PP_KIND_* of the app), and its cause. */
+static uint8_t pp_cfs_rule(const uint8_t *body, int k, uint16_t *cause) {
+    *cause = pp_u16(body + PP_CFS_OFF_RULES + 4u * (unsigned)k + 2);
+    return body[PP_CFS_OFF_RULES + 4u * (unsigned)k];
+}
+
+/* AF9 over the edges of the start node of `image`. `cfs_body`, when given, is the cfs.table the image is inside: an
+ * edge whose rule refuses is silent and so is never a floor rule, the rules are the edges one for one, and the
+ * table's own no-match outcome is the refusal its check holds it to. */
+static uint8_t pp_floor_narrow_in(const uint8_t *image, size_t len, const pp_layout *layout, int command,
+                                  const uint8_t *cfs_body) {
     pp_table t;
     const pp_layout_field *labelled = NULL;
     for (size_t k = 0; k < layout->n; k++)
@@ -967,8 +1107,12 @@ uint8_t pp_floor_narrow(const uint8_t *image, size_t len, const pp_layout *layou
     for (uint16_t node = 0; node < t.nodes; node++)  /* AF9: one decision node, the start node */
         if (node != t.start && pp_u16(image + t.nodes_at + 4u * node + 2)) return PP_CAUSE_FLOOR_BROAD;
     uint16_t first = pp_u16(image + t.nodes_at + 4u * t.start), edges = pp_u16(image + t.nodes_at + 4u * t.start + 2);
-    if (edges == 0 || edges > PP_FLOOR_RULES) return PP_CAUSE_FLOOR_BROAD;
+    if (cfs_body && edges != pp_u16(cfs_body + PP_CFS_OFF_RULE_COUNT)) return PP_CAUSE_FLOOR_BROAD;
+    size_t rules = 0;
     for (uint16_t k = 0; k < edges; k++) {
+        uint16_t rule_cause;
+        if (cfs_body && pp_cfs_rule(cfs_body, k, &rule_cause) == 1) continue; /* a refusing rule: the floor is silent */
+        rules++;
         const uint8_t *edge = image + t.edges_at + 6u * ((size_t)first + k);
         uint16_t conj[PP_FLOOR_WALK];
         size_t n = 0;
@@ -1003,7 +1147,12 @@ uint8_t pp_floor_narrow(const uint8_t *image, size_t len, const pp_layout *layou
             if (!has_low || !has_high || (low <= field->min && high >= field->max)) return PP_CAUSE_FLOOR_BROAD;
         }
     }
+    if (rules == 0 || rules > PP_FLOOR_RULES) return PP_CAUSE_FLOOR_BROAD;
     return PP_CAUSE_NONE;
+}
+
+uint8_t pp_floor_narrow(const uint8_t *image, size_t len, const pp_layout *layout, int command) {
+    return pp_floor_narrow_in(image, len, layout, command, NULL);
 }
 
 /* AF10: every independent field the edge `k` of the start node tests has a value no older than its bound. */
@@ -1081,7 +1230,7 @@ static void pp_verify_install(const pp_envelope *e, const pp_entry *entries, siz
         return;
     }
     if (set >= 0 && (!(e->targets & PP_BIT(pep->kind)) ||
-                     !(e->as == PP_AS_NONE || e->as == (set == PP_SET_CEILING ? PP_AS_POLICY_LIST : PP_AS_POLICY_PPT)))) {
+                     !(e->as == PP_AS_NONE || e->as == (set == PP_SET_CEILING ? PP_AS_POLICY_LIST : pp_table_as(pep->kind))))) {
         out->cause = PP_CAUSE_TARGET_MISMATCH;
         return;
     }
@@ -1142,13 +1291,28 @@ static void pp_verify_install(const pp_envelope *e, const pp_entry *entries, siz
         out->cause = pp_read_ceiling(body, body_len, hashes, &n);
         return;
     }
-    if ((out->cause = pp_validate_image(body, body_len))) return;
+    int cfs = pep->kind == PP_TGT_CFS;
+    if ((out->cause = cfs ? pp_check_cfs_table(e, body, body_len) : pp_validate_image(body, body_len))) return;
+    if (pep->table_check && (out->cause = pep->table_check(pep->table_context, body, body_len))) return;
     if (set == PP_SET_FLOOR) {
         if (view->layout == NULL || !e->has_layout || memcmp(e->layout, view->layout->sha256, 32) != 0) {
             out->cause = PP_CAUSE_TARGET_MISMATCH; /* AF10: the layout the PEP was built with, or no table floor */
             return;
         }
-        if ((out->cause = pp_floor_narrow(body, body_len, view->layout, e->has_command ? e->command : -1))) return;
+        int command = e->has_command ? e->command : -1;
+        if (cfs) {
+            size_t image_len = 0;
+            const uint8_t *image = pp_cfs_image(body, body_len, &image_len);
+            int escalates = 0;
+            for (uint16_t k = 0; k < pp_u16(body + PP_CFS_OFF_RULE_COUNT); k++) {
+                uint16_t rule_cause;
+                escalates |= pp_cfs_rule(body, k, &rule_cause) == 2;
+            }
+            if (escalates && !e->has_answer_rate) { out->cause = PP_CAUSE_BAD_FORMAT; return; } /* OP4 */
+            if ((out->cause = pp_floor_narrow_in(image, image_len, view->layout, command, body))) return;
+        } else if ((out->cause = pp_floor_narrow(body, body_len, view->layout, command))) {
+            return;
+        }
     }
     if (!pp_inside(view, e->body_sha256)) out->cause = PP_CAUSE_ABOVE_CEILING;
     (void)now;
@@ -1247,10 +1411,12 @@ void pp_verify(const uint8_t *sealed, size_t sealed_len, const uint8_t *body, si
         return;
     }
     /* V11: the artifact's own check on this kind */
-    struct pp_check_args args = {e->artifact, body, body_len, trust, pep, entries, n_entries, message, message_len};
+    struct pp_check_args args = {e->artifact, e, body, body_len, trust, pep, entries, n_entries, message, message_len};
     out->cause = e->artifact == PP_ART_TRUST_CHANGE ? pp_check_change(e, body, body_len) : row->check(&args);
+    if (!out->cause && e->artifact == pp_table_artifact(pep->kind) && pep->table_check)
+        out->cause = pep->table_check(pep->table_context, body, body_len); /* V11: the PEP's own check of its table */
     /* CL2: the table of a release is on the held ceiling's list */
-    if (!out->cause && e->artifact == PP_ART_POLICY_PPT && !pp_inside(pep->install, e->body_sha256))
+    if (!out->cause && e->artifact == pp_table_artifact(pep->kind) && !pp_inside(pep->install, e->body_sha256))
         out->cause = PP_CAUSE_ABOVE_CEILING;
 }
 
@@ -1317,6 +1483,19 @@ static int pp_body_whole(pp_assembler *a, uint16_t transfer, uint8_t *cause) {
     if (memcmp(hash, t->body_sha256, 32) != 0) return pp_drop(a, transfer, PP_CAUSE_FRAME_INVALID, cause); /* B6 */
     t->active = 0; /* the parts stay in the buffers for the caller to verify and stage */
     return PP_ASM_WHOLE;
+}
+
+int pp_frame_names(const uint8_t *f, size_t len, const char *stream, long long seq, const uint8_t policy_sha256[32]) {
+    if ((len != 46 && len != 44) || (f[0] != PP_FRAME_COMMIT && f[0] != PP_FRAME_ABORT)) return 0;
+    uint8_t hash[32];
+    uint64_t at = 0;
+    pp_sha256((const uint8_t *)stream, strlen(stream), hash);
+    for (int k = 7; k >= 0; k--) at = at << 8 | f[20 + k];
+    return memcmp(f + 4, hash, 16) == 0 && at == (uint64_t)seq && memcmp(f + 28, policy_sha256, 16) == 0;
+}
+
+uint16_t pp_frame_delay(const uint8_t *f, size_t len) {
+    return len == 46 && f[0] == PP_FRAME_COMMIT ? pp_u16(f + 44) : 0;
 }
 
 int pp_assembler_receive(pp_assembler *a, const uint8_t *f, size_t len, uint32_t now_ms, uint8_t *cause) {
@@ -1904,7 +2083,7 @@ static uint8_t pp_next_record(const pp_pep_machine *pep, const pp_install_anchor
     for (size_t k = 0; k < held->n_keys + held->n_operators; k++) { /* sorted within the provisioning, as _retire */
         const uint8_t *id = k < held->n_keys ? held->keys[k].id : held->operators[k - held->n_keys].id;
         if (pp_ikey_listed(part.keys, part.n_keys, id) || pp_ikey_listed(part.operators, part.n_operators, id) ||
-            pp_listed(part.retired, part.n_retired, id))
+            pp_listed((const uint8_t (*)[32])part.retired, part.n_retired, id))
             continue;
         if (part.n_retired == PP_INSTALL_RETIRED) {
             memmove(part.retired[0], part.retired[1], (PP_INSTALL_RETIRED - 1) * 32);
@@ -1943,6 +2122,8 @@ uint8_t pp_pep_provision_install(pp_pep_machine *pep, const pp_trust *anchor, co
         view.has_clock = pep->config.has_clock;
         view.has_instance_key_id = 1;
         pp_sha256(pep->instance_public, 32, view.instance_key_id);
+        view.table_check = pep->config.table_check;
+        view.table_context = pep->config.context;
         iview.record = &next;
         iview.layout = pep->config.layout;
         iview.trust = anchor;
@@ -2067,7 +2248,7 @@ static void pp_apply_rotation(pp_pep_machine *pep, const pp_envelope *e, const u
     uint8_t add[32], retire[32], id[32];
     int has_retire = 0;
     pp_read_rotation(body, len, add, &has_retire, retire); /* V11 read it and held it to O2 to O4 and K5 */
-    if (has_retire && !pp_listed(t->retired, t->n_retired, retire)) {
+    if (has_retire && !pp_listed((const uint8_t (*)[32])t->retired, t->n_retired, retire)) {
         if (t->n_retired == PP_MAX_RETIRED) { /* K5: forget the oldest retired id and its key */
             for (size_t k = 0; k < t->n_keys; k++)
                 if (memcmp(t->keys[k].id, t->retired[0], 32) == 0) {
@@ -2135,7 +2316,7 @@ static const uint8_t *pp_active_table(const pp_pep_machine *pep, size_t *len) {
     const pp_durable *d = &pep->d;
     if (!d->has_active) return NULL;
     for (size_t k = 0; k < d->active.n; k++)
-        if (d->active.held[k].envelope.artifact == PP_ART_POLICY_PPT) {
+        if (!pp_is_trust(d->active.held[k].envelope.artifact)) {
             *len = d->active.held[k].body_len;
             return pp_held_body((pp_release *)&d->active, k);
         }
@@ -2155,7 +2336,8 @@ static uint8_t pp_widening(const pp_pep_machine *pep, int widens, const uint8_t 
     /* Going from no policy to any is a comparison every PEP makes, so a first install is larger and one that says
      * it does not widen is refused even with a statement (W6), as another table is. */
     int changed = !d->has_active ||
-                  (table != NULL && active != NULL && (table_len != active_len || memcmp(table, active, table_len) != 0));
+                  (pep->config.kind == PP_TGT_MESH && table != NULL && active != NULL &&
+                   (table_len != active_len || memcmp(table, active, table_len) != 0)); /* W2: cfs compares nothing */
     int larger = changed || widens || !has_replaces || memcmp(replaces, d->active.policy_sha256, 32) != 0;
     if (!larger) return PP_CAUSE_NONE;
     /* W11: a change statement the authority signed stands in place of a widening statement for a release that says
@@ -2179,6 +2361,8 @@ void pp_pep_view(const pp_pep_machine *pep, pp_pep *out) {
     out->has_clock = pep->config.has_clock;
     out->has_instance_key_id = 1;
     pp_sha256(pep->instance_public, 32, out->instance_key_id);
+    out->table_check = pep->config.table_check;
+    out->table_context = pep->config.context;
     if (pp_has_record(pep)) { /* section 21: the install part, a view the machine keeps */
         pp_install_view *v = (pp_install_view *)&pep->install_view;
         memset(v, 0, sizeof *v);
@@ -2210,7 +2394,8 @@ void pp_pep_view(const pp_pep_machine *pep, pp_pep *out) {
 static int pp_on_trust_stream(pp_artifact artifact);
 
 static const char *pp_as_name(uint8_t as) {
-    return as == PP_AS_POLICY_PPT ? "policy.ppt" : as == PP_AS_POLICY_LIST ? "policy.list" : "none";
+    return as == PP_AS_POLICY_PPT ? "policy.ppt" : as == PP_AS_POLICY_LIST ? "policy.list"
+           : as == PP_AS_CFS_TABLE ? "cfs.table" : "none";
 }
 
 /* A held statement's body as its bytes: a table as kept, a policy list written again from its hashes (CL1). */
@@ -2235,7 +2420,7 @@ static int pp_active_hash(const pp_pep_machine *pep, uint8_t hash[32]) {
     const pp_durable *d = &pep->d;
     if (!d->has_active) return 0;
     for (size_t k = 0; k < d->active.n; k++)
-        if (d->active.held[k].envelope.artifact == PP_ART_POLICY_PPT) {
+        if (!pp_is_trust(d->active.held[k].envelope.artifact)) {
             memcpy(hash, d->active.held[k].envelope.body_sha256, 32);
             return 1;
         }
@@ -2275,7 +2460,9 @@ static uint8_t pp_apply_set(pp_pep_machine *pep, int kind) {
                 for (size_t k = 0; k < st->body_len / 32; k++)
                     larger |= !pp_on_list(held, st->body + 32 * k); /* a hash the list before did not hold */
         } else if (!empty) {
-            larger = held == NULL || held->body_len != st->body_len || memcmp(held->body, st->body, st->body_len) != 0;
+            /* IS12: a mesh PEP compares bytes, and a cfs PEP takes the signers' word beyond the replaces test */
+            larger = held == NULL || (pep->config.kind == PP_TGT_MESH &&
+                                      (held->body_len != st->body_len || memcmp(held->body, st->body, st->body_len) != 0));
             const pp_envelope *before = held ? &held->envelope : NULL;
             if (kind == PP_SET_FLOOR && before && before->has_rate &&
                 (!e->has_rate || e->rate_allows > before->rate_allows || e->rate_window < before->rate_window))
@@ -2341,7 +2528,7 @@ static void pp_apply_install_trust(pp_pep_machine *pep, const pp_envelope *e, co
             pp_sha256(j < b.n_keys ? b.keys[j] : b.operators[j - b.n_keys], 32, other);
             kept |= memcmp(other, id, 32) == 0;
         }
-        if (!kept && !pp_listed(r->retired, r->n_retired, id)) memcpy(dropped[n_dropped++], id, 32);
+        if (!kept && !pp_listed((const uint8_t (*)[32])r->retired, r->n_retired, id)) memcpy(dropped[n_dropped++], id, 32);
     }
     for (size_t k = 1; k < n_dropped; k++) /* sorted, as install._retire appends them */
         for (size_t j = k; j > 0 && memcmp(dropped[j - 1], dropped[j], 32) > 0; j--) {
@@ -2485,7 +2672,7 @@ static uint8_t pp_stage_one(pp_pep_machine *pep, const uint8_t *sealed, size_t s
     }
     if (e->artifact != PP_ART_TRUST_WIDENING && e->artifact != PP_ART_TRUST_CHANGE) {
         int same = d->has_staged && strcmp(d->staged.stream, e->stream) == 0 && d->staged.seq == e->seq;
-        int table = e->artifact == PP_ART_POLICY_PPT;
+        int table = !pp_is_trust(e->artifact); /* the kind's table (V5 admits nothing else here) */
         uint8_t cause = pp_widening(pep, e->widens, e->replaces, e->has_replaces, same ? &d->staged : NULL,
                                     table ? body : NULL, table ? body_len : 0);
         if (cause) { pp_refuse(pep, cause); return cause; } /* V12 */
@@ -2525,7 +2712,7 @@ void pp_pep_stage(pp_pep_machine *pep, const uint8_t *sealed, size_t sealed_len,
 /* The table `release` holds, or NULL when it holds none. */
 static const uint8_t *pp_release_table(const pp_release *release, size_t *len) {
     for (size_t k = 0; k < release->n; k++)
-        if (release->held[k].envelope.artifact == PP_ART_POLICY_PPT) {
+        if (!pp_is_trust(release->held[k].envelope.artifact)) {
             *len = release->held[k].body_len;
             return pp_held_body((pp_release *)release, k);
         }
@@ -2574,39 +2761,54 @@ static int pp_whole(const pp_release *staged) {
     return memcmp(id, staged->release, 32) == 0;
 }
 
-static void pp_commit_now(pp_pep_machine *pep, const char *stream, long long seq, const uint8_t policy[32]) {
-    pp_durable *d = &pep->d;
-    if (pep->record_lost || pp_ceiling_lost(pep)) { pp_refuse(pep, PP_CAUSE_INSTALL_LOST); return; } /* IS10 */
-    if (pep->locked) { pp_refuse(pep, PP_CAUSE_FLOOR_LOST); return; }
-    if (!d->trust_reads) { pp_refuse(pep, PP_CAUSE_UNKNOWN_KEY); return; }
-    if (!d->has_staged || !pp_names(&d->staged, stream, seq, policy)) { pp_emit(pep, PP_EV_REFUSED, PP_CAUSE_NOT_STAGED); return; }
-    int has_ppt = 0;
-    for (size_t k = 0; k < d->staged.n; k++) has_ppt |= d->staged.held[k].envelope.artifact == PP_ART_POLICY_PPT;
-    if (!has_ppt || !pp_whole(&d->staged)) { pp_refuse(pep, PP_CAUSE_INCOMPLETE); return; } /* C2: the mesh row needs policy.ppt */
+/* What a commit of the named staged release answers now, with nothing changed: 0 to flip, else the cause, with
+ * `drops` set for a C3 or CL2 failure, which drops the staged release. One function for the commit and for
+ * pp_pep_commit_check, so the two cannot answer apart. */
+static uint8_t pp_commit_cause(const pp_pep_machine *pep, const char *stream, long long seq, const uint8_t policy[32],
+                               int *drops) {
+    const pp_durable *d = &pep->d;
+    *drops = 0;
+    if (pep->record_lost || pp_ceiling_lost(pep)) return PP_CAUSE_INSTALL_LOST; /* IS10 */
+    if (pep->locked) return PP_CAUSE_FLOOR_LOST;
+    if (!d->trust_reads) return PP_CAUSE_UNKNOWN_KEY;
+    if (!d->has_staged || !pp_names(&d->staged, stream, seq, policy)) return PP_CAUSE_NOT_STAGED;
+    int has_table = 0;
+    for (size_t k = 0; k < d->staged.n; k++) has_table |= !pp_is_trust(d->staged.held[k].envelope.artifact);
+    if (!has_table || !pp_whole(&d->staged)) return PP_CAUSE_INCOMPLETE; /* C2: the row needs its table */
     uint8_t cause = pp_still_valid(pep, &d->staged, 1); /* C3 */
-    size_t staged_len = 0;
-    const uint8_t *staged_table = pp_release_table(&d->staged, &staged_len);
-    uint8_t staged_hash[32];
-    if (staged_table) pp_sha256(staged_table, staged_len, staged_hash);
-    if (!cause && staged_table && !pp_on_list(pp_held_set(pep, PP_SET_CEILING), staged_hash))
+    size_t table_len = 0;
+    const uint8_t *table = pp_release_table(&d->staged, &table_len);
+    uint8_t hash[32];
+    if (table) pp_sha256(table, table_len, hash);
+    if (!cause && table && !pp_on_list(pp_held_set(pep, PP_SET_CEILING), hash))
         cause = PP_CAUSE_ABOVE_CEILING; /* CL2: the ceiling may have changed since it was staged */
     if (cause) {
-        d->has_staged = 0;
-        pp_persist(pep, PP_PART_STAGED);
+        *drops = 1;
+        return cause;
+    }
+    /* V12 again, against what is active now */
+    return pp_widening(pep, d->staged.widens, d->staged.replaces, d->staged.has_replaces, &d->staged, table, table_len);
+}
+
+static void pp_commit_now(pp_pep_machine *pep, const char *stream, long long seq, const uint8_t policy[32]) {
+    int drops = 0;
+    uint8_t cause = pp_commit_cause(pep, stream, seq, policy, &drops);
+    if (cause) {
+        if (drops) {
+            pep->d.has_staged = 0;
+            pp_persist(pep, PP_PART_STAGED);
+        }
         pp_refuse(pep, cause);
         return;
     }
-    const uint8_t *table = NULL;
-    size_t table_len = 0;
-    for (size_t k = 0; k < d->staged.n; k++)
-        if (d->staged.held[k].envelope.artifact == PP_ART_POLICY_PPT) {
-            table = pp_held_body(&d->staged, k);
-            table_len = d->staged.held[k].body_len;
-        }
-    cause = pp_widening(pep, d->staged.widens, d->staged.replaces, d->staged.has_replaces, &d->staged, table,
-                        table_len);
-    if (cause) { pp_refuse(pep, cause); return; } /* V12 again, against what is active now */
     pp_flip(pep, 0);
+}
+
+uint8_t pp_pep_commit_check(pp_pep_machine *pep, const char *stream, long long seq, const uint8_t policy_sha256[32],
+                            long long now) {
+    int drops = 0;
+    pep->now = now;
+    return pp_commit_cause(pep, stream, seq, policy_sha256, &drops);
 }
 
 void pp_pep_commit(pp_pep_machine *pep, const char *stream, long long seq, const uint8_t policy_sha256[32],
@@ -2642,13 +2844,15 @@ void pp_pep_abort(pp_pep_machine *pep, const char *stream, long long seq, const 
     pp_emit(pep, PP_EV_ABORTED, 0);
 }
 
-uint8_t pp_pep_rollback(pp_pep_machine *pep, long long now) {
-    pp_begin(pep, now);
-    pp_durable *d = &pep->d;
-    if (pep->held) { pp_refuse(pep, PP_CAUSE_HELD); return 0; } /* X9 */
-    if (pep->record_lost || pp_ceiling_lost(pep)) { pp_refuse(pep, PP_CAUSE_INSTALL_LOST); return 0; } /* IS10 */
-    if (pep->locked) { pp_refuse(pep, PP_CAUSE_FLOOR_LOST); return 0; }
-    if (!d->trust_reads) { pp_refuse(pep, PP_CAUSE_UNKNOWN_KEY); return 0; }
+/* What a rollback answers now, with nothing changed: 0 to flip, else the cause, with `drops` for a kept release above
+ * the ceiling, which is dropped (CL2, RB2). PP_CAUSE_NOT_STAGED when nothing is kept, which writes no record. */
+static uint8_t pp_rollback_cause(const pp_pep_machine *pep, int *drops) {
+    const pp_durable *d = &pep->d;
+    *drops = 0;
+    if (pep->held) return PP_CAUSE_HELD; /* X9 */
+    if (pep->record_lost || pp_ceiling_lost(pep)) return PP_CAUSE_INSTALL_LOST; /* IS10 */
+    if (pep->locked) return PP_CAUSE_FLOOR_LOST;
+    if (!d->trust_reads) return PP_CAUSE_UNKNOWN_KEY;
     if (!d->has_previous) return PP_CAUSE_NOT_STAGED;
     uint8_t cause = pp_still_valid(pep, &d->previous, 1); /* RB2: what a commit checks, as it is active anew */
     if (!cause && d->previous.seq < pp_raised(&d->trust, d->previous.stream)) cause = PP_CAUSE_SEQ_REPLAY; /* R4 */
@@ -2657,22 +2861,40 @@ uint8_t pp_pep_rollback(pp_pep_machine *pep, long long now) {
     uint8_t kept_hash[32];
     if (kept) pp_sha256(kept, kept_len, kept_hash);
     if (!cause && kept && !pp_on_list(pp_held_set(pep, PP_SET_CEILING), kept_hash)) {
-        d->has_previous = 0; /* CL2, RB2: a kept release above the ceiling is dropped */
+        *drops = 1;
+        return PP_CAUSE_ABOVE_CEILING;
+    }
+    if (cause) return cause;
+    int same = d->has_active && memcmp(d->previous.release, d->active.release, 32) == 0; /* RB3: never larger */
+    if (same) return PP_CAUSE_NONE;
+    /* RB3: W1 to W7 as at a commit, so a kept table that says it does not widen is refused (W6) */
+    return pp_widening(pep, d->previous.widens, d->previous.replaces, d->previous.has_replaces, &d->previous, kept,
+                       kept_len);
+}
+
+uint8_t pp_pep_rollback(pp_pep_machine *pep, long long now) {
+    pp_begin(pep, now);
+    int drops = 0;
+    uint8_t cause = pp_rollback_cause(pep, &drops);
+    if (cause == PP_CAUSE_NOT_STAGED) return PP_CAUSE_NOT_STAGED;
+    if (drops) {
+        pep->d.has_previous = 0; /* CL2, RB2: a kept release above the ceiling is dropped */
         pp_persist(pep, PP_PART_PREVIOUS);
-        pp_refuse(pep, PP_CAUSE_ABOVE_CEILING);
-        return 0;
     }
     if (cause) { pp_refuse(pep, cause); return 0; }
-    int same = d->has_active && memcmp(d->previous.release, d->active.release, 32) == 0; /* RB3: never larger */
-    if (!same) { /* RB3: W1 to W7 as at a commit, so a kept table that says it does not widen is refused (W6) */
-        size_t table_len = 0;
-        const uint8_t *table = pp_release_table(&d->previous, &table_len);
-        cause = pp_widening(pep, d->previous.widens, d->previous.replaces, d->previous.has_replaces, &d->previous,
-                            table, table_len);
-        if (cause) { pp_refuse(pep, cause); return 0; }
-    }
     pp_flip(pep, 1);
     return 0;
+}
+
+uint8_t pp_pep_rollback_check(pp_pep_machine *pep, long long now) {
+    int drops = 0;
+    pep->now = now;
+    return pp_rollback_cause(pep, &drops);
+}
+
+void pp_pep_refuse(pp_pep_machine *pep, uint8_t cause, long long now) {
+    pp_begin(pep, now);
+    pp_refuse(pep, cause);
 }
 
 void pp_pep_record(pp_pep_machine *pep, uint8_t event, long long now) {
@@ -2700,13 +2922,31 @@ uint8_t pp_pep_decide(pp_pep_machine *pep, int *held_mark, long long now) {
     return PP_CAUSE_NONE;
 }
 
-/* One table's answer to a request: allow by a matching edge of the start node, else the refusal of
- * route:no-matching-edge, which is also the answer of a table that cannot be asked. */
-static void pp_answer(const uint8_t *image, size_t len, const uint8_t *regs, size_t regs_len, uint8_t *outcome,
-                      uint8_t *cause) {
-    int k = pp_eval_table(image, len, regs, regs_len);
-    *outcome = k >= 0 ? PP_OUT_ALLOW : PP_OUT_REFUSE;
-    *cause = k >= 0 ? PP_CAUSE_NONE : PP_CAUSE_NO_MATCHING_EDGE;
+/* One table's answer to a request on `kind`, and the edge of its start node that decided (-1 for none). A mesh table
+ * allows by a matching edge and refuses with route:no-matching-edge otherwise, also when it cannot be asked. A cfs
+ * table answers with the rule of its matching edge, allow, refuse or escalate with the rule's cause, and refuses
+ * with its own no-match cause when no edge matches. */
+static int pp_table_answer(pp_target kind, const uint8_t *table, size_t len, const uint8_t *regs, size_t regs_len,
+                           uint8_t *outcome, uint8_t *cause) {
+    *outcome = PP_OUT_REFUSE;
+    *cause = PP_CAUSE_NO_MATCHING_EDGE;
+    if (kind != PP_TGT_CFS) {
+        int k = pp_eval_table(table, len, regs, regs_len);
+        if (k < 0) return -1;
+        *outcome = PP_OUT_ALLOW;
+        *cause = PP_CAUSE_NONE;
+        return k;
+    }
+    size_t image_len = 0;
+    const uint8_t *image = pp_cfs_image(table, len, &image_len);
+    int k = image ? pp_eval_table(image, image_len, regs, regs_len) : -2;
+    if (k == -1) *cause = (uint8_t)pp_u16(table + PP_CFS_OFF_NOMATCH);
+    if (k < 0 || k >= (int)pp_u16(table + PP_CFS_OFF_RULE_COUNT)) return -1;
+    uint16_t rule_cause;
+    uint8_t action = pp_cfs_rule(table, k, &rule_cause);
+    *outcome = action == 0 ? PP_OUT_ALLOW : action == 2 ? PP_OUT_ESCALATE : PP_OUT_REFUSE;
+    *cause = action == 0 ? PP_CAUSE_NONE : (uint8_t)rule_cause;
+    return k;
 }
 
 void pp_pep_ask(pp_pep_machine *pep, const uint8_t *regs, size_t regs_len, const uint32_t *ages, long long now,
@@ -2714,6 +2954,7 @@ void pp_pep_ask(pp_pep_machine *pep, const uint8_t *regs, size_t regs_len, const
     pp_begin(pep, now);
     memset(out, 0, sizeof *out);
     pp_durable *d = &pep->d;
+    pp_target kind = pep->config.kind;
     size_t n_ages = ages && regs_len >= 4 ? (regs_len - 4) / 8 : 0;
     /* what decides with no floor: the active release, the fallback policy, or the refusal of X3 */
     const uint8_t *table = NULL, *policy = NULL;
@@ -2731,23 +2972,37 @@ void pp_pep_ask(pp_pep_machine *pep, const uint8_t *regs, size_t regs_len, const
         basis = PP_BASIS_FALLBACK;
     }
     uint8_t outcome = PP_OUT_REFUSE, cause = pep->locked ? PP_CAUSE_FLOOR_LOST : PP_CAUSE_POLICY_LAPSED;
-    if (table) pp_answer(table, table_len, regs, regs_len, &outcome, &cause);
+    if (table) (void)pp_table_answer(kind, table, table_len, regs, regs_len, &outcome, &cause);
     out->held_mark = basis == PP_BASIS_RELEASE && pep->held;
-    /* AF1, AF2: the action floor first, which only allows on this kind */
+    /* AF1, AF2: the action floor first. It allows, on cfs it also escalates with its rule's cause, and it is silent
+     * on a refusal, on a request it cannot read and when an independent field it tests is stale (AF10) */
     const pp_statement *floor = pp_held_set(pep, PP_SET_FLOOR);
-    int k = floor ? pp_eval_table(floor->body, floor->body_len, regs, regs_len) : -1;
-    if (k >= 0 && pp_floor_fresh(floor->body, floor->body_len, k, pep->config.layout, ages, n_ages)) {
+    uint8_t floor_outcome = PP_OUT_REFUSE, floor_cause = 0;
+    int k = floor ? pp_table_answer(kind, floor->body, floor->body_len, regs, regs_len, &floor_outcome, &floor_cause) : -1;
+    size_t image_len = floor ? floor->body_len : 0;
+    const uint8_t *image = !floor ? NULL : kind == PP_TGT_CFS ? pp_cfs_image(floor->body, floor->body_len, &image_len)
+                                                             : floor->body;
+    if (k >= 0 && floor_outcome != PP_OUT_REFUSE && image &&
+        pp_floor_fresh(image, image_len, k, pep->config.layout, ages, n_ages)) {
         int override = !(table && outcome == PP_OUT_ALLOW); /* AF7 */
-        int allowed = 1;
+        int answers = 1;
         const pp_envelope *fe = &floor->envelope;
-        if (override && fe->has_rate && k < PP_FLOOR_RULES) { /* AF8: counted per rule in fixed windows of its time */
+        if (floor_outcome == PP_OUT_ALLOW && override && fe->has_rate && k < PP_FLOOR_RULES) {
+            /* AF8: overrides counted per rule in fixed windows of the PEP's time */
             long long time = pp_time(pep);
             if (d->rate_count[k] == 0 || time >= d->rate_start[k] + fe->rate_window || time < d->rate_start[k]) {
                 d->rate_start[k] = time;
                 d->rate_count[k] = 0;
             }
-            if (d->rate_count[k] >= (uint32_t)fe->rate_allows) allowed = 0; /* past the rate the release decides */
-            else {
+            if (d->rate_count[k] >= (uint32_t)fe->rate_allows) {
+                /* past the rate: escalated with dist:floor-rate where the kind escalates, else the release decides */
+                if (kind == PP_TGT_CFS) {
+                    floor_outcome = PP_OUT_ESCALATE;
+                    floor_cause = PP_CAUSE_FLOOR_RATE;
+                } else {
+                    answers = 0;
+                }
+            } else {
                 d->rate_count[k]++;
                 pp_persist(pep, PP_PART_RATES); /* saved before the PEP acts on it */
                 out->counted = 1;
@@ -2756,12 +3011,12 @@ void pp_pep_ask(pp_pep_machine *pep, const uint8_t *regs, size_t regs_len, const
                 out->count = d->rate_count[k];
             }
         }
-        if (allowed) {
+        if (answers) {
             if (d->floor_answers < 0xFFFFFFFFu) d->floor_answers++;
             if (override && d->floor_overrides < 0xFFFFFFFFu) d->floor_overrides++;
             pp_persist(pep, PP_PART_COUNTER); /* H10: with the counter, so no count goes down */
-            out->outcome = PP_OUT_ALLOW;
-            out->cause = PP_CAUSE_FLOOR_ALLOWED; /* RC3 */
+            out->outcome = floor_outcome;
+            out->cause = floor_outcome == PP_OUT_ALLOW ? PP_CAUSE_FLOOR_ALLOWED : floor_cause; /* RC3 */
             out->basis = PP_BASIS_FLOOR;
             out->has_policy = 1;
             memcpy(out->policy_sha256, fe->policy_sha256, 32);

@@ -3,7 +3,8 @@
 
 /* Host check of the app's receipts (prismpath_app_run.c) and its decision core, with no cFS in it.
  *
- *   run_check OUT TABLE AUTHORITY_PUB INSTANCE_SEED PAYLOADS TIME_US [--reset-at N] [--refuse TABLE CAUSE]...
+ *   run_check OUT TABLE AUTHORITY_PUB INSTANCE_SEED PAYLOADS TIME_US [--reset-at N] [--hold FROM UNTIL]
+ *             [--refuse TABLE CAUSE]...
  *
  * TABLE is the signed struct bytes of a policy table, AUTHORITY_PUB the raw public key, INSTANCE_SEED the raw 32
  * byte seed, PAYLOADS one payload per line in hex (an empty line is an empty payload). The table is checked and
@@ -12,8 +13,12 @@
  * copied out as the Critical Data Store holds it, the app's copy is scribbled over, a torn write is left on two
  * run files (bytes after the recorded lengths), and the state is restored from the copy, held valid, and the
  * files recovered; the table is then checked again against the restored floor, as the app's initial load is.
- * Each --refuse TABLE CAUSE must be refused by the table checks with that cause (an older version, a tampered
- * table). Prints the receipt count and the root, then "run_check: all checks passed". */
+ * With --hold FROM UNTIL the payloads from FROM up to UNTIL are decided while held (X7), which opens a case of their
+ * own marked "hold":true and another when the hold ends. Each --refuse TABLE CAUSE must be refused by the signed
+ * table checks of PP_Run_CheckSignedTable with that cause (an older version, a tampered table). The table is also
+ * held to PP_Run_CheckTable, the checks of a table a distribution envelope admits: its own body hash passes, another
+ * is dist:body-mismatch and a changed image attestation sig:invalid. Prints the receipt count and the root, then
+ * "run_check: all checks passed". */
 #define _XOPEN_SOURCE 700 /* truncate */
 #include <stdio.h>
 #include <stdlib.h>
@@ -149,6 +154,7 @@ int main(int argc, char **argv)
     char     line[256];
     FILE    *payloads;
     long     reset_at = -1;
+    long     hold_from = -1, hold_until = -1;
     long     n        = 0;
     int      i;
     uint64_t index;
@@ -170,13 +176,32 @@ int main(int argc, char **argv)
         {
             reset_at = atol(argv[++i]);
         }
+        if (strcmp(argv[i], "--hold") == 0 && i + 2 < argc)
+        {
+            hold_from  = atol(argv[++i]);
+            hold_until = atol(argv[++i]);
+        }
     }
 
     PP_Run_Init(&State);
     CHECK(PP_Run_StateValid(&State), "a fresh state is not valid");
     CHECK(PP_Run_Begin(&Io) == 0, "cannot begin the run files in %s", Dir);
     CHECK(PP_Kernel_Check(&Table) == 0, "the kernel refuses the table");
-    CHECK(PP_Run_CheckTable(&State, &Keys, &Table, digest) == 0, "the run checks refuse the signed table");
+    CHECK(PP_Run_CheckSignedTable(&State, &Keys, &Table, digest) == 0, "the run checks refuse the signed table");
+    {
+        /* the checks of a table its envelope admits: the body hash it signed, and the image attestation */
+        uint8_t body[32], other[32];
+        memcpy(body, digest, 32);
+        CHECK(PP_Run_CheckTable(&Keys, &Table, body, other) == 0 && memcmp(other, digest, 32) == 0,
+              "the envelope checks refuse the table its body hash names");
+        body[0] ^= 1;
+        CHECK(PP_Run_CheckTable(&Keys, &Table, body, other) == R_BODY_MISMATCH, "another body hash admits the table");
+        body[0] ^= 1;
+        Other = Table;
+        Other.ImageSig[0] ^= 1;
+        CHECK(PP_Run_CheckTable(&Keys, &Other, body, other) == R_SIG_INVALID, "a changed image attestation passes");
+        printf("envelope checks: the body hash and the image attestation\n");
+    }
     CHECK(PP_Kernel_Activate(&Table) == 0, "the table does not activate");
     PP_Run_Accept(&State, Table.Version, digest);
 
@@ -210,13 +235,14 @@ int main(int argc, char **argv)
             CHECK(PP_Run_StateValid(&State), "the state restored from the CDS copy is not valid");
             CHECK(PP_Run_Recover(&State, &Io) == 0, "the torn writes were not cut back");
             CHECK(IoSize(NULL, PP_FILE_RECEIPTS) == (int64_t)State.ReceiptsLen, "receipts.jsonl not recovered");
-            CHECK(PP_Run_CheckTable(&State, &Keys, &Table, digest) == 0,
+            CHECK(PP_Run_CheckSignedTable(&State, &Keys, &Table, digest) == 0,
                   "the same table is refused against the restored floor");
             printf("reset simulated before payload %ld: %llu receipts restored\n", n,
                    (unsigned long long)State.Acc.count);
         }
         PP_Kernel_Decide(p, len, &v);
-        CHECK(PP_Run_Record(&State, &Io, &Keys, &Table, digest, p, len, &v, &index) == 0, "payload %ld not recorded", n);
+        CHECK(PP_Run_Record(&State, &Io, &Keys, &Table, digest, p, len, &v, n >= hold_from && n < hold_until, &index) == 0,
+              "payload %ld not recorded", n);
         CHECK(index == (uint64_t)n, "payload %ld got receipt %llu", n, (unsigned long long)index);
         n++;
     }
@@ -232,7 +258,7 @@ int main(int argc, char **argv)
             got = PP_Kernel_Check(&Other);
             if (got == 0)
             {
-                got = PP_Run_CheckTable(&State, &Keys, &Other, digest);
+                got = PP_Run_CheckSignedTable(&State, &Keys, &Other, digest);
             }
             CHECK(got == want, "%s: refused with cause %d, not %d", argv[i + 1], got, want);
             printf("table %s refused with cause %d\n", argv[i + 1], got);
@@ -254,9 +280,9 @@ int main(int argc, char **argv)
     PP_Run_Init(&Cds);
     PP_Run_LoseFloor(&Cds, PP_LOST_FLOOR_LOCK, 1u);
     CHECK(PP_Run_StateValid(&Cds), "a locked state is not valid");
-    CHECK(PP_Run_CheckTable(&Cds, &Keys, &Table, digest) == R_VERSION_REPLAY, "a locked floor admits the table");
+    CHECK(PP_Run_CheckSignedTable(&Cds, &Keys, &Table, digest) == R_VERSION_REPLAY, "a locked floor admits the table");
     PP_Run_Accept(&Cds, Table.Version, digest);
-    CHECK(PP_Run_CheckTable(&Cds, &Keys, &Table, digest) == R_VERSION_REPLAY, "accepting an image clears the lock");
+    CHECK(PP_Run_CheckSignedTable(&Cds, &Keys, &Table, digest) == R_VERSION_REPLAY, "accepting an image clears the lock");
     for (i = 0; i < 3; i++)
     {
         uint32_t Min  = i == 0 ? 0u : (i == 1 ? Table.Version : Table.Version + 1u);
@@ -264,7 +290,7 @@ int main(int argc, char **argv)
         PP_Run_Init(&Cds);
         PP_Run_LoseFloor(&Cds, PP_LOST_FLOOR_MINIMUM, Min);
         CHECK(PP_Run_StateValid(&Cds) && Cds.FloorLost == 0u, "a minimum floor state is not valid");
-        CHECK(PP_Run_CheckTable(&Cds, &Keys, &Table, digest) == Want, "minimum v%u: the v%u table got the wrong answer",
+        CHECK(PP_Run_CheckSignedTable(&Cds, &Keys, &Table, digest) == Want, "minimum v%u: the v%u table got the wrong answer",
               (unsigned)Min, (unsigned)Table.Version);
     }
     printf("lost floor: lock refuses, minimum admits from its version\n");
