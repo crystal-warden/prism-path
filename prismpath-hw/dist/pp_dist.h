@@ -90,6 +90,13 @@
 #ifndef PP_TABLE_MAX
 #define PP_TABLE_MAX PP_MESH_TABLE_MAX
 #endif
+/* OP3: the open escalations a PEP holds, the oldest dropped first. Only a cfs PEP escalates, so a build without the cfs
+ * row keeps one slot that is never used, and a mesh node keeps its RAM. */
+#if PP_TABLE_MAX >= PP_CFS_TABLE_MAX
+#define PP_OPEN_ESCALATIONS 8
+#else
+#define PP_OPEN_ESCALATIONS 1
+#endif
 /* The members of a cfs.table body (PP_PolicyTable_t in integrations/cfs/prismpath_app/fsw/inc/prismpath_app_kernel.h,
  * which holds itself to these offsets at compile time). Little endian, no padding. */
 #define PP_CFS_OFF_LAYOUT 0
@@ -116,7 +123,6 @@
 #define PP_FLOOR_RULES 8      /* AF9: the rules of an action floor */
 #define PP_LAYOUT_FIELDS 32   /* AF10: the fields a layout labels */
 #define PP_LEGACY_STREAMS 4   /* L2: the streams the older forms are refused on, past which every stream is */
-#define PP_OPEN_ESCALATIONS 8 /* OP3: the open escalations a PEP holds, the oldest dropped first */
 #define PP_ANSWER_LIFE 600    /* OP2, OP3: an answer's lifetime and an escalation's, in seconds */
 #define PP_REQUEST_MAX 32     /* OP3: the bytes of the one request an escalation keeps for its answer */
 
