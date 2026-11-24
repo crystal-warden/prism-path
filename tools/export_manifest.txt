@@ -265,6 +265,7 @@ prismpath/distribution/frames.py
 prismpath/distribution/heartbeat.py
 prismpath/distribution/http.py
 prismpath/distribution/kinds.py
+prismpath/distribution/legacy.py
 prismpath/distribution/pep.py
 prismpath/distribution/state_record.py
 prismpath/distribution/trust.py
@@ -785,6 +786,7 @@ prismpath/tests/test_distribution_gateway.py
 prismpath/tests/test_distribution_hatches.py
 prismpath/tests/test_distribution_heartbeat.py
 prismpath/tests/test_distribution_http.py
+prismpath/tests/test_distribution_legacy.py
 prismpath/tests/test_distribution_pep.py
 prismpath/tests/test_distribution_revocation.py
 prismpath/tests/test_distribution_rotation.py

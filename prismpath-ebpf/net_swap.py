@@ -154,6 +154,10 @@ def preload_swap(ppt_path: str, iface: str, pubkey_paths: List[str], envelope_ba
         ok, reasons, manifest = pp.verify_pack(ppt_path, pubkey_paths, pp.load_revoked(revoked_path))
         if not ok:
             return _reject(audit, to_hash, reasons)
+        if pp.is_older(manifest):                   # L3: an older pack is read, and says so in the log
+            from prismpath.distribution import legacy
+            legacy.record(audit, legacy.PACK, reader="net_swap.preload_swap", sha256=to_hash,
+                          key_id=manifest.get("key_id"))
         if env is None:
             return _reject(audit, to_hash, ["envelope:missing"])
         ok, reasons = pp.check_envelope(manifest, image, env)

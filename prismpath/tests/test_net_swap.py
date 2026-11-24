@@ -123,7 +123,8 @@ def test_a_dry_run_runs_every_gate_and_never_reaches_the_loader_or_moves_the_flo
     assert not (Path(env["state"]) / "active_version").exists()
     assert _swap(env, loader, dry_run=True)["ok"]                        # the floor did not move, so it repeats
     audit = ns.AuditLog(str(Path(env["state"]) / "net_swaps.log"))
-    assert [event["action"] for event in audit.events] == ["swap_dry_run", "swap_dry_run"]
+    # the edge's pack is the older form, read with a legacy_form event each time (L3)
+    assert [event["action"] for event in audit.events] == ["legacy_form", "swap_dry_run"] * 2
     raw = bytearray(Path(env["ppt"]).read_bytes()); raw[-1] ^= 1
     Path(env["ppt"]).write_bytes(bytes(raw))
     refused = _swap(env, loader, dry_run=True)                           # a gate that refuses still refuses a dry run
@@ -149,7 +150,9 @@ def test_the_floor_is_written_before_the_one_loader_call_and_the_log_takes_the_i
                              instance_key=key)
     assert result["reasons"] == ["loader:failed"] and seen == ["1"]
     log = str(Path(state) / "net_swaps.log")
-    assert [event["action"] for event in ns.AuditLog(log).events] == ["loader_failed"]
+    actions = [event["action"] for event in ns.AuditLog(log).events]
+    # One event per load; the older form this gate reads is also logged once as a read (L3), not a load.
+    assert [a for a in actions if a != "legacy_form"] == ["loader_failed"] and actions.count("legacy_form") == 1
     assert Path(root_statement.statements_path_for(log)).is_file()
     with pytest.raises(ValueError):
         ns.run_loader(b"x", "netdelete", "lo", path=str(tmp_path / "t.ppt"), audit=ns.AuditLog(log), action="swap")

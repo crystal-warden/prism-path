@@ -11,10 +11,8 @@ components:
     files:
       - source: ../policy.tampered.ppt
         target: deployed-tampered/policy.ppt
-      - source: ../policy.ppt.manifest.json
-        target: deployed-tampered/policy.ppt.manifest.json
-      - source: ../policy.ppt.manifest.sig
-        target: deployed-tampered/policy.ppt.manifest.sig
+      - source: ../policy.ppt.sealed
+        target: deployed-tampered/policy.ppt.sealed
       - source: ../authority.pub
         target: deployed-tampered/authority.pub
       - source: ../env1.envelope.json
