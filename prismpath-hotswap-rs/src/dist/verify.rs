@@ -211,8 +211,8 @@ pub fn verify(sealed: &[u8], body: &[u8], trust: &TrustStore, pep: &PepView, now
         time_floor,
     };
     // V5: for this PEP's kind, an artifact its kind uses or a trust kind its machine applies, on its stream
-    // or `@trust`. A revocation or a rotation is for every PEP whatever `targets` says, since one trust
-    // sequence counts the same for all of them (R1)
+    // or `@trust`. A revocation, a rotation or a controller key statement is for every PEP whatever `targets`
+    // says, since one trust sequence counts the same for all of them (R1, K7)
     let on_trust = envelope.artifact.on_trust_stream();
     let stream = if on_trust { env::TRUST_STREAM } else { pep.stream.as_str() };
     let named = on_trust || envelope.targets.contains(&pep.kind.kind());
@@ -264,6 +264,13 @@ pub fn verify(sealed: &[u8], body: &[u8], trust: &TrustStore, pep: &PepView, now
     if envelope.artifact == ArtifactKind::TrustRotation {
         let others = record.map(Record::ids).unwrap_or_default();
         if let Some(cause) = trust.check_rotation(body, &entries, &message, pep.instance_key_id.as_ref(), &others) {
+            return refuse(cause, envelope, time_floor);
+        }
+    }
+    // K7, K4, K5: a controller key statement names no key held or retired in another role and makes no ninth key
+    if envelope.artifact == ArtifactKind::TrustController {
+        let others = record.map(Record::ids).unwrap_or_default();
+        if let Some(cause) = trust.check_controller(body, pep.instance_key_id.as_ref(), &others) {
             return refuse(cause, envelope, time_floor);
         }
     }

@@ -21,6 +21,7 @@
 //! staged.json    the staged release
 //! pending.json   the intent record of a commit, a rollback or a lapse (C4, C7)
 //! active.json    the active release and the one it replaced (RB1)
+//! fresh.json     the latest fresh controller statement, where freshness is on (H16)
 //! blobs/         sealed envelopes and bodies under their SHA-256
 //! audit.log      the audit log
 //! ```
@@ -54,19 +55,25 @@
 //! request in every state (AF1 to AF10, `floor`). The floor of a `host` lives in the machine and not in its runtime,
 //! so applying one has no runtime step, and DIVERGENCES.md says so.
 //!
-//! This crate reads `prismpath.dist-trust/1` and `/2` anchors and holds the `/2` anchor's controller key in its own
-//! role, apart from every other (K4, K6), but does not build the controller statement or the `trust.controller`
-//! kind. It takes no epoch id from anything (H9) and every record carries epoch 0, which is the id H15 starts at.
+//! The controller key is held in its own role, apart from every other (K4, K6), named by a `/2` anchor or by a
+//! `trust.controller` (K7). The epoch id (H9) is taken only from a controller statement that verifies under that
+//! key at the key sequence the trust store holds for it, is never lowered and is kept in memory only, starting again
+//! at 0 at every start, at provisioning and at a `trust.controller` (H15). Where the anchor sets `fresh`, a fresh
+//! statement is kept durably, a newer one written only once the kept one has used half its life, and the PEP lapses
+//! as at expiry once its time passes the kept one's `expires` plus SKEW; a PEP with no clock takes one raise of its
+//! time floor per start from a fresh statement (H16).
+//!
 //! A home holding the private half of a trusted authority key is refused at start (K2).
 
 use super::envelope::{self as env, Envelope};
 use super::floor::{self as floors, Answer, Request};
 use super::install::{self, AsName, InstallSet, Installed, Record, SetKind};
 use super::state_record::{self, StateRecord};
+use super::statement::{self as statements, Statement};
 use super::trust::{read_anchor, Anchor, TrustStore};
 use super::verify::{self, Floor, InstallView, PepKind, PepView, Staged, SKEW};
 use super::{
-    load, ActiveFormat, ArtifactKind, PendingInstallFormat, Canon2Tag, CounterFormat, FloorFormat, Hex64, MaybeHex64, Meta, PendingFormat,
+    load, ActiveFormat, ArtifactKind, PendingInstallFormat, Canon2Tag, CounterFormat, FloorFormat, FreshFormat, Hex64, MaybeHex64, Meta, PendingFormat,
     Refused, SettingFormat, SortedSet, StagedFormat, Stream, Target, TargetKind, AUTHORITY, EXPIRED, FLOOR_LOST, HELD,
     INCOMPLETE, MAX_SEQ, NOT_STAGED, NOT_YET_VALID, POLICY_LAPSED, REVOKED, SEQ_REPLAY, SIDECAR_MISMATCH,
     SIDECAR_MISSING, UNKNOWN_KEY, WIDENING_UNSIGNED, RECONCILING, ABOVE_CEILING, FALLBACK, FLOOR_ALLOWED, INSTALL_LOST,
@@ -317,6 +324,25 @@ struct FloorDoc {
     ids: SortedSet<Hex64>,
     seq: i64,
     stream: Stream,
+}
+
+/// H16: the latest fresh controller statement, its `expires` and the PEP's time when it was kept.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct FreshDoc {
+    at: i64,
+    encoding: Canon2Tag,
+    expires: i64,
+    format: FreshFormat,
+    statement: String,
+}
+
+/// H16: the fresh statement the PEP keeps.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Kept {
+    pub statement: Vec<u8>,
+    pub expires: i64,
+    pub at: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -726,6 +752,13 @@ pub struct Pep<A: Adapter> {
     lost: Vec<SetKind>,
     /// IS8, P2 step 4: the envelope ids of the install statements brought with the waiting anchor.
     printed: Vec<Hex64>,
+    /// H9, H15: the epoch id, in memory only and 0 at every start.
+    epoch: u64,
+    /// H16: the anchor's `fresh`, 0 for freshness off, and the fresh statement kept.
+    fresh: i64,
+    kept: Option<Kept>,
+    /// H16: a PEP with no clock has taken its one raise of the time floor of this start.
+    time_taken: bool,
 }
 
 /// The record a transition owes once its runtime step works (C9, H14). `Installed` is a fallback policy applied
@@ -845,6 +878,10 @@ impl<A: Adapter> Pep<A> {
             installed,
             lost: Vec::new(),
             printed: Vec::new(),
+            epoch: 0,
+            fresh: 0,
+            kept: None,
+            time_taken: false,
         };
         pep.load()?;
         pep.check_setting()?;
@@ -906,6 +943,7 @@ impl<A: Adapter> Pep<A> {
                     _ => self.locked = true, // Q5
                 }
                 self.stream = Some(anchor.stream);
+                self.fresh = anchor.fresh;
             }
             Err(_) => self.locked = true,
         }
@@ -946,6 +984,7 @@ impl<A: Adapter> Pep<A> {
                 withdrawn: false,
             }));
         }
+        self.kept = self.read_fresh();
         Ok(())
     }
 
@@ -1336,7 +1375,7 @@ impl<A: Adapter> Pep<A> {
             pep_id: state_record::pep_id(&self.instance_public()),
             counter: unsigned(self.counter),
             time: unsigned(self.time()),
-            epoch: 0, // H9, H15: this crate's PEP holds no controller key, so it never takes an epoch id
+            epoch: self.epoch, // H9, H15
             stream: state_record::stream_prefix(self.stream.as_ref().map_or("", Stream::as_str)),
             active_policy: prefix(active.map(|release| &release.policy_sha256)),
             active_release: prefix(active.map(|release| &release.release)),
@@ -1403,6 +1442,108 @@ impl<A: Adapter> Pep<A> {
             _ => 0,
         };
         self.floor.seq.max(raised)
+    }
+
+    // ------------------------------------------------------------------ H9, H15, H16: the controller statement
+    /// H9: take the epoch id of a controller statement that reads, names this PEP's stream, verifies under the
+    /// controller key the trust store holds (not revoked, K6) and carries the key sequence the store holds for it,
+    /// when that id is above the one held. Any other statement changes nothing and makes no record. Where freshness
+    /// is on (H16), a statement that passes those checks may also give freshness. Answers whether the epoch id was
+    /// taken. A statement changes nothing but the epoch id, the kept fresh statement and, once per start on a PEP
+    /// with no clock, the time floor. A reconciling PEP takes one too and tries no runtime (C8).
+    pub fn take_statement(&mut self, data: &[u8]) -> Result<bool, PepError> {
+        let Some(stream) = self.stream.clone().filter(|_| self.provisioned && !self.locked && self.trust.is_readable()) else {
+            return Ok(false);
+        };
+        let Some(read) = statements::verify(data, self.trust.controller_public().as_ref()) else { return Ok(false) };
+        if read.stream != state_record::stream_prefix(stream.as_str()) || i64::try_from(read.key_seq).ok() != Some(self.trust.key_sequence()) {
+            return Ok(false);
+        }
+        let taken = read.epoch > self.epoch;
+        if taken {
+            self.epoch = read.epoch; // H9: never lowered
+        }
+        if self.fresh > 0 {
+            self.freshen(&read, data)?;
+        }
+        Ok(taken)
+    }
+
+    /// H9: `take_statement` for the `epoch` member of an `offers` answer, base64url without padding. A member that is
+    /// not one, an epoch id with no statement among them, changes nothing.
+    pub fn take_offered(&mut self, epoch: &str) -> Result<bool, PepError> {
+        match statements::decode_offered(epoch) {
+            Some(data) => self.take_statement(&data),
+            None => Ok(false),
+        }
+    }
+
+    /// H9, H15: the epoch id the PEP holds and puts in every record.
+    pub fn epoch(&self) -> u64 {
+        self.epoch
+    }
+
+    /// H16: the fresh statement the PEP keeps, None when freshness is off or none is kept.
+    pub fn kept(&self) -> Option<&Kept> {
+        self.kept.as_ref()
+    }
+
+    /// H16: a fresh statement has `fresh` 1, a trust sequence not below the PEP's, a stream seq not below its floor,
+    /// an `expires` later than the kept one's and at most `fresh` plus SKEW ahead of the PEP's time. A PEP with no
+    /// clock takes, from the first statement after each start that passes every other check, its `expires` less
+    /// `fresh` as a raise of its time floor (T1). The latest fresh statement is kept durably, written before it
+    /// counts, and a newer one is written only when the kept one has used half its life. An `expires` past what a
+    /// canon/2 document holds exactly gives no freshness and no time.
+    fn freshen(&mut self, read: &Statement, data: &[u8]) -> Result<(), PepError> {
+        let unsigned = |value: i64| u64::try_from(value).unwrap_or(0);
+        if !read.fresh || read.trust_seq < unsigned(self.trust.trust_seq) || read.stream_seq < unsigned(self.reported_floor()) {
+            return Ok(());
+        }
+        let Some(expires) = i64::try_from(read.expires).ok().filter(|expires| *expires <= MAX_SEQ) else { return Ok(()) };
+        if self.kept.as_ref().is_some_and(|kept| expires <= kept.expires) {
+            return Ok(());
+        }
+        if !self.has_clock && !self.time_taken {
+            self.time_taken = true; // once per start, from no other statement
+            let floor = expires - self.fresh;
+            if floor > self.trust.time_floor {
+                self.trust.time_floor = floor; // T1
+                self.trust.save(&self.trust_path())?;
+            }
+        }
+        let time = self.time();
+        if i128::from(expires) - i128::from(time) > i128::from(self.fresh) + i128::from(SKEW) {
+            return Ok(());
+        }
+        if let Some(kept) = &self.kept {
+            if 2 * (i128::from(time) - i128::from(kept.at)) < i128::from(kept.expires) - i128::from(kept.at) {
+                return Ok(()); // the kept one has not used half its life
+            }
+        }
+        let kept = Kept { statement: data.to_vec(), expires, at: time };
+        self.store.write(
+            "fresh.json",
+            &FreshDoc { at: kept.at, encoding: Canon2Tag, expires, format: FreshFormat, statement: hex::encode(&kept.statement) },
+        )?;
+        self.kept = Some(kept);
+        Ok(())
+    }
+
+    /// The kept fresh statement (H16), or None. One that does not read is none, so the PEP lapses at its next
+    /// statement's lapse rather than on a file it cannot trust; it is checked again under the controller key.
+    fn read_fresh(&self) -> Option<Kept> {
+        if self.fresh == 0 || !self.store.exists("fresh.json") {
+            return None;
+        }
+        let doc = self.store.read::<FreshDoc>("fresh.json").ok()?;
+        let statement = hex::decode(&doc.statement).ok()?;
+        let read = statements::verify(&statement, self.trust.controller_public().as_ref())?;
+        (i64::try_from(read.expires).ok() == Some(doc.expires) && doc.at >= 0).then_some(Kept { statement, expires: doc.expires, at: doc.at })
+    }
+
+    /// H16: freshness is on and the PEP's time passed the kept statement's `expires` plus SKEW.
+    fn stale(&self) -> bool {
+        self.fresh > 0 && self.kept.as_ref().is_some_and(|kept| i128::from(self.time()) > i128::from(kept.expires) + i128::from(SKEW))
     }
 
     /// X5, B5: which of the offered blobs this PEP does not hold. An offer is a hint and changes nothing.
@@ -1493,6 +1634,7 @@ impl<A: Adapter> Pep<A> {
         match envelope.artifact {
             ArtifactKind::TrustRevocation => return self.apply_revocation(&envelope, body),
             ArtifactKind::TrustRotation => return self.apply_rotation(&envelope, body),
+            ArtifactKind::TrustController => return self.apply_controller(&envelope, body),
             _ => {}
         }
         if let Some(staged) = &self.staged {
@@ -1746,6 +1888,16 @@ impl<A: Adapter> Pep<A> {
         let store = self.trust.apply_rotation(envelope, body).map_err(|refusal| refused(refusal.to_string()))?;
         self.adopt(envelope, store)?;
         self.drop_fallen_staged()?;
+        self.check_active()?;
+        self.make_record("trust-applied", None)
+    }
+
+    /// Apply a verified `trust.controller` at once (K7). The epoch id starts again at 0 (H15), so the next statement
+    /// under the new key sequence is taken whatever id it carries.
+    fn apply_controller(&mut self, envelope: &Envelope, body: &[u8]) -> Result<Vec<u8>, PepError> {
+        let store = self.trust.apply_controller(envelope, body).map_err(|refusal| refused(refusal.to_string()))?;
+        self.adopt(envelope, store)?;
+        self.epoch = 0;
         self.check_active()?;
         self.make_record("trust-applied", None)
     }
@@ -2079,8 +2231,8 @@ impl<A: Adapter> Pep<A> {
         }
         if !self.stands(release, true) {
             Some(REVOKED)
-        } else if self.still_valid(release, false).as_deref() == Some(EXPIRED) {
-            Some(EXPIRED)
+        } else if self.still_valid(release, false).as_deref() == Some(EXPIRED) || self.stale() {
+            Some(EXPIRED) // X1, and H16's freshness
         } else if !self.inside_ceiling(release) {
             Some(ABOVE_CEILING)
         } else {
@@ -2242,8 +2394,8 @@ impl<A: Adapter> Pep<A> {
     }
 
     /// What every entry point and the periodic tick run first: an active release that no longer stands lapses
-    /// with `dist:revoked` (R5), and an expired one lapses or is held (X1, X7). A reconciling PEP runs the tests
-    /// of C10 instead, which try no runtime.
+    /// with `dist:revoked` (R5), and an expired one, or one whose freshness ran out (H16), lapses or is held (X1,
+    /// X7). A reconciling PEP runs the tests of C10 instead, which try no runtime.
     fn check_active(&mut self) -> Result<Option<Vec<u8>>, PepError> {
         if self.reconciling.is_some() {
             self.run_tests(true)?;
@@ -2256,7 +2408,7 @@ impl<A: Adapter> Pep<A> {
         if !self.stands(&active, true) {
             return self.lapse_now(REVOKED).map(Some);
         }
-        if self.still_valid(&active, false).as_deref() != Some(EXPIRED) {
+        if self.still_valid(&active, false).as_deref() != Some(EXPIRED) && !self.stale() {
             return Ok(None);
         }
         if self.expiry_response == HOLD {
@@ -2636,8 +2788,8 @@ impl<A: Adapter> Pep<A> {
     }
 
     /// P2 step 4, P3, P5: the operator confirmed `fingerprint`. The runtime is withdrawn first, and when it does
-    /// not withdraw provisioning is refused and nothing changes. Then the trust store, the floor and the time
-    /// floor start again from the anchor, whatever was held before, a locked PEP is unlocked, and a reconciling
+    /// not withdraw provisioning is refused and nothing changes. Then the trust store, the floor, the time floor,
+    /// the epoch id and the kept fresh statement start again from the anchor, whatever was held before, a locked PEP is unlocked, and a reconciling
     /// one leaves the state with its intent record gone and the record it owed not sent.
     pub fn confirm(&mut self, fingerprint: &Hex64) -> Result<Vec<u8>, PepError> {
         let raw = std::fs::read(self.store.path("anchor.pending")).map_err(|_| refused("no anchor is waiting to be confirmed"))?;
@@ -2671,9 +2823,14 @@ impl<A: Adapter> Pep<A> {
         self.active = None;
         self.previous = None;
         self.staged = None;
-        for name in ["active.json", "staged.json", "pending.json"] {
+        for name in ["active.json", "staged.json", "pending.json", "fresh.json"] {
             self.store.remove(name)?;
         }
+        // P3, H15, H16
+        self.fresh = read.fresh;
+        self.kept = None;
+        self.epoch = 0;
+        self.time_taken = false;
         store.save(&self.trust_path())?;
         self.trust = store;
         self.store.write(
