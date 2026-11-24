@@ -42,6 +42,15 @@
 //! next swap or rollback. [`PolicyHost::set_commit_hook`] is the fault injection point the crash tests
 //! use: it runs before each step and an error stands for a process that died there.
 //!
+//! # Distribution
+//!
+//! [`PolicyHost::install_verified`] is the commit half of a swap alone, for an image every check already
+//! passed: the distribution enforcement point (`dist::pep`) installs a committed release with it, so the
+//! host's record, audit log and restore on start are what they always were. [`PolicyHost::withdraw`] makes
+//! the host hold nothing when that enforcement point lapses or is locked (X3). Once the enforcement point in
+//! `<state_dir>/dist/` has committed an envelope, `swap` and `rollback` refuse with `dist:legacy-refused`
+//! (L2), and so does a provisioned directory whose floor is missing or cannot be read.
+//!
 //! The event line is the event's canon/2 bytes, so the file is byte for byte what Python writes for the
 //! same event. The intent record and the active policy record are canon/2 documents too.
 
@@ -211,7 +220,7 @@ pub(crate) fn atomic_write_bytes(path: &str, data: &[u8]) -> Result<(), HostErro
 }
 
 /// Make a rename or removal in `dir` durable. Windows cannot open a directory, so there it is a no-op.
-fn fsync_dir(dir: &str) -> Result<(), HostError> {
+pub(crate) fn fsync_dir(dir: &str) -> Result<(), HostError> {
     #[cfg(unix)]
     {
         let dir = if dir.is_empty() { "." } else { dir };
@@ -248,7 +257,7 @@ fn is_image_leaving(name: &str) -> bool {
 }
 
 /// `os.path.abspath`: joined to the working directory and normalised lexically, no symlink resolved.
-fn abspath(path: &str) -> String {
+pub(crate) fn abspath(path: &str) -> String {
     use std::path::Component;
     let given = std::path::Path::new(path);
     let joined = if given.is_absolute() {
@@ -424,6 +433,11 @@ impl AuditLog {
 
     pub fn events(&self) -> Vec<Value> {
         locked(&self.state).events.clone()
+    }
+
+    /// The last event, without a copy of the rest.
+    pub fn last_event(&self) -> Option<Value> {
+        locked(&self.state).events.last().cloned()
     }
 
     pub fn leaves(&self) -> Vec<String> {
@@ -860,6 +874,23 @@ impl PolicyHost {
         Ok(())
     }
 
+    /// L2: true when this state directory's enforcement point has committed a distribution envelope, or when it
+    /// was provisioned and its floor file is missing or cannot be read, which is answered the same way (fail
+    /// closed). Only a directory no enforcement point was provisioned in, or one whose readable floor is
+    /// still 0, keeps the older path open.
+    fn distribution_floor(&self) -> bool {
+        let dist = format!("{}/dist", self.state_dir);
+        match std::fs::read(format!("{dist}/floor.json")) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => std::path::Path::new(&format!("{dist}/anchor.json")).exists(),
+            Err(_) => true,
+            Ok(bytes) => !matches!(
+                prismpath_rs::canon2::read(&bytes),
+                Ok(prismpath_rs::canon2::Doc::Obj(members))
+                    if members.iter().any(|(name, value)| name == "seq" && *value == prismpath_rs::canon2::Doc::Int(0))
+            ),
+        }
+    }
+
     /// The gate every escape hatch passes (D1 to D3): one `hatch` audit event, then true only in a dev build.
     fn hatch(&self, name: &str) -> Result<bool, HostError> {
         let dev_build = crate::dist::DEV_BUILD;
@@ -910,6 +941,9 @@ impl PolicyHost {
     /// `HostError::SwapRejected`.
     pub fn swap_with(&self, ppt_path: &str, allow_unsigned: bool, strict: bool) -> Result<Value, HostError> {
         let mut state = locked(&self.state);
+        if self.distribution_floor() {
+            return self.reject(&state, None, Value::Null, vec![crate::dist::LEGACY_REFUSED.to_string()], strict);
+        }
         let pending = self.recover(&mut state)?;
         // an escape hatch: a dev build lets it through, a production build refuses it and the signed check runs
         // instead (docs/design/spec-policy-distribution.md, D1, D2)
@@ -992,29 +1026,66 @@ impl PolicyHost {
         record.insert("since".into(), json!((self.clock.iso)()));
         record.insert("ppt_path".into(), json!(abspath(ppt_path)));
         let new_active = ActivePolicy { record, image };
+        self.commit_locked(&mut state, new_active, floor_version, Vec::new(), false)
+    }
 
-        // commit: intent, floor, evidence, image, record and flip, clean up; see the module note
+    /// The commit half of a swap, for an image every check has already passed: by `swap` after its own checks,
+    /// and by the distribution enforcement point after the verifier (spec-policy-distribution.md, C4). `record`
+    /// is the active record without the image. Intent, floor when the record has an integer version, evidence,
+    /// image, record and flip, clean up; see the module note. `evidence` adds members to the audit event.
+    pub(crate) fn install_verified(&self, image: Vec<u8>, record: Map<String, Value>, evidence: Fields) -> Result<Value, HostError> {
+        let mut state = locked(&self.state);
+        let floor_version = record.get("version").and_then(Value::as_i64);
+        self.commit_locked(&mut state, ActivePolicy { record, image }, floor_version, evidence, true)
+    }
+
+    /// Commit `new_active`: intent, floor, evidence, image, record and flip, clean up; see the module note.
+    /// With `once`, an install tried again after it died past its evidence does not write that evidence a
+    /// second time: the intent record and the last event of the log are already this install's.
+    fn commit_locked(
+        &self,
+        state: &mut HostState,
+        new_active: ActivePolicy,
+        floor_version: Option<i64>,
+        evidence: Fields,
+        once: bool,
+    ) -> Result<Value, HostError> {
+        let to_hash = new_active.sha256().unwrap_or_default();
+        let field = |name: &str| new_active.field(name);
+        let unsigned = new_active.record.get("unsigned").and_then(Value::as_bool).unwrap_or(false);
+        // An install tried again after it died past its evidence is the same install when the intent record names
+        // its image and version and the log's last event is its evidence, member for member, the distribution
+        // envelope it installs included. A restart of the host writes `swap_incomplete` first, so after one the
+        // evidence is written again.
+        let pending = if once { self.read_pending().ok().flatten() } else { None };
+        let intended = pending.as_ref().is_some_and(|pending| {
+            pending.get("to_hash") == Some(&json!(to_hash)) && pending.get("version") == Some(&field("version")) && pending.get("op").is_none()
+        });
         self.fault(CommitStep::Intent)?;
-        self.write_pending(&to_hash, &manifest_field("version"), None)?;
+        self.write_pending(&to_hash, &field("version"), None)?;
         if let Some(version) = floor_version {
             self.fault(CommitStep::Floor)?;
             self.persist_version(version)?;
         }
         self.fault(CommitStep::Evidence)?;
-        self.audit.append(
-            "policy_host",
-            "swap",
-            vec![
-                ("from_hash", state.active.as_ref().and_then(ActivePolicy::sha256).map_or(Value::Null, Value::String)),
-                ("to_hash", json!(to_hash)),
-                ("version", manifest_field("version")),
-                ("key_id", manifest_field("key_id")),
-                ("envelope_id", manifest_field("envelope_id")),
-                ("unsigned", json!(unsigned)),
-                ("overlay_of", manifest_field("overlay_of")),
-                ("result", json!("accepted")),
-            ],
-        )?;
+        let mut fields: Fields = vec![
+            ("from_hash", state.active.as_ref().and_then(ActivePolicy::sha256).map_or(Value::Null, Value::String)),
+            ("to_hash", json!(to_hash)),
+            ("version", field("version")),
+            ("key_id", field("key_id")),
+            ("envelope_id", field("envelope_id")),
+            ("unsigned", json!(unsigned)),
+            ("overlay_of", field("overlay_of")),
+            ("result", json!("accepted")),
+        ];
+        fields.extend(evidence);
+        let again = intended
+            && self.audit.last_event().is_some_and(|event| {
+                event["action"] == "swap" && fields.iter().all(|(name, value)| event["data"].get(*name) == Some(value))
+            });
+        if !again {
+            self.audit.append("policy_host", "swap", fields)?;
+        }
         let file = self.persist_active(&new_active)?;
         state.prev = state.active.replace(new_active);
         state.active_file = file;
@@ -1022,6 +1093,48 @@ impl PolicyHost {
         let mut out = active_value(state.active.as_ref());
         out["ok"] = Value::Bool(true);
         Ok(out)
+    }
+
+    /// Hold no policy from now on: the distribution enforcement point lapsed, is locked or cannot read its trust
+    /// store (spec-policy-distribution.md, X3). The evidence first, then the record, then the images, so a death
+    /// at any step leaves either the old policy or none, never a half.
+    pub fn withdraw(&self, cause: &str) -> Result<Value, HostError> {
+        let mut state = locked(&self.state);
+        let Some(active) = state.active.as_ref() else {
+            // nothing is active, so no install that died part way is still to finish: its intent goes
+            self.clear_pending()?;
+            return Ok(json!({"ok": true, "active": null}));
+        };
+        let from_hash = active.sha256().map_or(Value::Null, Value::String);
+        // a withdraw tried again after it died past its evidence does not write that evidence a second time, in the
+        // same process (a restart writes its own event first, so the tail is then another event)
+        let again = self.audit.last_event().is_some_and(|event| {
+            event["action"] == "withdraw" && event["data"]["from_hash"] == from_hash && event["data"]["cause"] == json!(cause)
+        });
+        if !again {
+            self.audit.append(
+                "policy_host",
+                "withdraw",
+                vec![("from_hash", from_hash), ("cause", json!(cause)), ("result", json!("withdrawn"))],
+            )?;
+        }
+        let path = self.active_record_path();
+        match std::fs::remove_file(&path) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(HostError::Io(io_text(&path, &error))),
+        }
+        fsync_dir(&self.state_dir)?;
+        state.active = None;
+        state.prev = None;
+        state.active_file = String::new();
+        self.finish_commit("")?;
+        Ok(json!({"ok": true, "active": null}))
+    }
+
+    /// The host clock's ISO-8601 second, what a policy's `since` records.
+    pub fn now_iso(&self) -> String {
+        (self.clock.iso)()
     }
 
     pub fn active_info(&self) -> Value {
@@ -1034,6 +1147,9 @@ impl PolicyHost {
     /// version floor (anti-rollback still holds against replayed old packs).
     pub fn rollback(&self) -> Result<Value, HostError> {
         let mut state = locked(&self.state);
+        if self.distribution_floor() {
+            return Ok(json!({"ok": false, "reasons": [crate::dist::LEGACY_REFUSED]}));
+        }
         self.recover(&mut state)?;
         let Some(target) = state.prev.clone() else {
             return Ok(json!({"ok": false, "reasons": ["rollback:no-previous"]}));
@@ -1091,5 +1207,41 @@ fn active_value(active: Option<&ActivePolicy>) -> Value {
             "unsigned": policy.field("unsigned"), "envelope_id": policy.field("envelope_id"),
             "overlay_of": policy.field("overlay_of"),
         }),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn record(version: i64, image: &[u8]) -> Map<String, Value> {
+        let mut record = Map::new();
+        record.insert("sha256".into(), json!(sha256_hex(image)));
+        record.insert("version".into(), json!(version));
+        record.insert("unsigned".into(), json!(false));
+        record
+    }
+
+    /// An install that died past its evidence and is tried again writes that evidence once, and an install of
+    /// another distribution envelope of the same image and version, after it, writes its own.
+    #[test]
+    fn an_install_tried_again_writes_its_evidence_once_and_another_envelope_its_own() {
+        let dir = std::env::temp_dir().join(format!("pp_host_install_once_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let host = PolicyHost::new(dir.to_str().unwrap(), Vec::new(), json!({}), Vec::new()).unwrap();
+        let image = b"an image".to_vec();
+        let evidence = |envelope: &str| vec![("distribution", json!({"envelope_id": envelope}))];
+        host.set_commit_hook(Some(Box::new(|step| if step == CommitStep::ActiveRecord { Err("died".into()) } else { Ok(()) })));
+        for _ in 0..3 {
+            assert!(host.install_verified(image.clone(), record(1, &image), evidence("e1")).is_err());
+        }
+        host.set_commit_hook(Some(Box::new(|step| if step == CommitStep::ActiveRecord { Err("died".into()) } else { Ok(()) })));
+        assert!(host.install_verified(image.clone(), record(1, &image), evidence("e2")).is_err());
+        host.set_commit_hook(None);
+        host.install_verified(image.clone(), record(1, &image), evidence("e2")).unwrap();
+        let swaps: Vec<Value> =
+            host.audit.events().into_iter().filter(|event| event["action"] == "swap").map(|event| event["data"]["distribution"]["envelope_id"].clone()).collect();
+        assert_eq!(swaps, vec![json!("e1"), json!("e2")]);
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 }

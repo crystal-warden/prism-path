@@ -128,3 +128,28 @@ def test_a_dry_run_runs_every_gate_and_never_reaches_the_loader_or_moves_the_flo
     Path(env["ppt"]).write_bytes(bytes(raw))
     refused = _swap(env, loader, dry_run=True)                           # a gate that refuses still refuses a dry run
     assert not refused["ok"] and refused["reasons"] == ["image:sha256-mismatch"] and loader.calls == []
+
+
+def test_the_floor_is_written_before_the_one_loader_call_and_the_log_takes_the_instance_key(env, tmp_path):
+    """C4 of spec-policy-distribution.md: the version floor is on disk when the loader runs, so a load that fails
+    part way leaves no floor below a table the kernel may hold, and the gate ends in `run_loader`, one audit event
+    per load in a log the instance key signs."""
+    from prismpath.ledgers import root_statement
+    seen = []
+
+    class Watching(FakeLoader):
+        def __call__(self, argv, capture_output=True, text=True, env=None):
+            seen.append((Path(state) / "active_version").read_text())
+            return super().__call__(argv, capture_output, text, env)
+
+    state = env["state"]
+    key = root_statement.InstanceKey.load(root_statement.keygen(str(tmp_path / "instance"))["private"])
+    failing = Watching(rc=2)
+    result = ns.preload_swap(env["ppt"], "lo", [env["keys"]["public"]], env["envbase"], state, run=failing,
+                             instance_key=key)
+    assert result["reasons"] == ["loader:failed"] and seen == ["1"]
+    log = str(Path(state) / "net_swaps.log")
+    assert [event["action"] for event in ns.AuditLog(log).events] == ["loader_failed"]
+    assert Path(root_statement.statements_path_for(log)).is_file()
+    with pytest.raises(ValueError):
+        ns.run_loader(b"x", "netdelete", "lo", path=str(tmp_path / "t.ppt"), audit=ns.AuditLog(log), action="swap")
