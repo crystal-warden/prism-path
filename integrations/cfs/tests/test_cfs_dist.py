@@ -554,3 +554,110 @@ def test_case_232_operator_answers_are_counted_against_a_signed_rate(tmp_path):
                       'and not path_control')
     answers = agent.send(_set(agent, "install.floor", escalating, check=False))
     assert "dist:bad-format" in [one.cause for one in answers]
+
+
+# ------------------------------------------------------------------ H13 and IS12 on `cfs`: the controller compares
+
+def _ids(pairs):
+    return [env.envelope_id(env.unseal(sealed)[0]) for sealed, _body in pairs]
+
+
+def _controller(tmp_path, point):
+    from prismpath.distribution.controller import Controller
+    controller = Controller(str(tmp_path / "controller"), _dist.instance_key("C"), clock=point.clock)
+    controller.add_anchor(point.anchor(), layout=CFS_LAYOUT)
+    return controller
+
+
+NARROWER = ["and", ["cmp", "cmd_class", "==", ["num", 3]], ["cmp", "slew_deg", ">=", ["num", 0]],
+            ["cmp", "slew_deg", "<=", ["num", 5]], ["cmp", "thrust_pct", ">=", ["num", 0]],
+            ["cmp", "thrust_pct", "<=", ["num", 20]]]
+
+
+def test_case_185_a_controller_offers_a_cfs_floor_whose_core_image_allows_less_at_once(tmp_path):
+    """case_185: H13, IS12, the `cfs` floor. The cFS app takes a table on its signers' word, so the controller compares
+    it by the core image inside it (section 9.4): a floor whose core image allows less than the offered one, with
+    `widens` false, is offered at once, and one whose core image is the same with other rules is larger and
+    refused."""
+    point = _floor_point(tmp_path)
+    controller = _controller(tmp_path, point)
+    first = _cfs_floor(point, ALLOW_3)
+    for sealed, body in first:
+        controller.put(sealed, body)
+    assert len(controller.install_findings) == 1
+    controller.acknowledge(_ids(first), by="engineer")
+    policy = env.read(env.unseal(first[0][0])[0]).policy_sha256
+    narrower = _cfs_floor(point, _table_of(("allow", NARROWER)), 2, widens=False, replaces=policy)
+    for sealed, body in narrower:
+        controller.put(sealed, body)
+    assert [one["state"] for one in controller.install_view()[_dist.STREAM]["sets"]] == ["offered", "offered"]
+    assert not controller.install_findings
+    renumbered = bytearray(_table_of(("allow", NARROWER)))
+    table.set_version(renumbered, 2)
+    other = _cfs_floor(point, bytes(renumbered), 3, widens=False,
+                       replaces=env.read(env.unseal(narrower[0][0])[0]).policy_sha256)
+    with pytest.raises(kinds.Refused) as refused:
+        controller.put(*other[0])
+    assert refused.value.cause == "dist:widening-unsigned"
+
+
+def test_case_184_a_held_cfs_app_takes_a_widening_floor_and_its_finding_waits_for_the_acknowledgement(tmp_path):
+    """case_184: IS12, X9, H13, the held `cfs` part. A held cFS app takes a floor with `widens` true with event
+    `install-widened` and bit 5 still set, and the controller's finding against it waits for its acknowledgement. A
+    local rollback is `dist:held`, and a wider table with `widens` false and `replaces` the held policy hash is applied
+    with `install-applied` on the signers' word."""
+    point = _floor_point(tmp_path, expiry_response="hold")
+    controller = _controller(tmp_path, point)
+    pep_id = controller.enroll(point.key.public_raw, "cfs", _dist.STREAM)
+    point.commit(_body(1))
+    controller.members[pep_id].expected = (point.policy_of(_body(1)), point.pep.active.release, 1)
+    point.clock.now = _dist.EXPIRES
+    point.pep.tick()
+    assert point.pep.held
+    point.pep.drain()
+    floor_pairs = _cfs_floor(point, ALLOW_3)
+    applied = point.send(floor_pairs)[-1]
+    assert (applied.event, applied.cause, applied.held) == ("install-widened", "dist:install-widened", True)
+    point.pep.take_statement(controller.statement(_dist.STREAM))
+    for record in point.pep.drain():
+        controller.receive(record)
+    controller.receive(_beat(point, controller))
+    assert "dist:install-widened" in controller.members[pep_id].findings
+    assert state_record.read(point.pep.rollback(), point.key.public_raw).cause == "dist:held"
+    for sealed, body in floor_pairs:
+        controller.put(sealed, body)
+    controller.acknowledge(_ids(floor_pairs), by="engineer")
+    assert "dist:install-widened" not in controller.members[pep_id].findings
+    wider = _cfs_floor(point, _table_of(("allow", _cmd(3)), ("allow", _cmd(4))), 2, widens=False,
+                       replaces=point.pep.floor_set().policy_sha256)
+    assert point.send(wider)[-1].event == "install-applied"
+
+
+def _beat(point, controller):
+    point.pep.take_statement(controller.statement(_dist.STREAM))
+    signed = point.pep.record("beat")
+    point.pep.drain()
+    return signed
+
+
+def test_case_203_a_cfs_app_with_a_list_takes_only_the_tables_on_it(tmp_path):
+    """case_203: CL1, CL2, IS12, the `cfs` part. A cFS app with a list stages a table whose body hash is on it and
+    refuses one off it, including one with the listed core image and other rules, refuses a floor table off it,
+    refuses a list that adds that floor's hash with `widens` false, applies it with `widens` true, and then the
+    floor."""
+    from prismpath.distribution import install
+    point = _floor_point(tmp_path)
+    first = _body(1)
+    renumbered = _body(2)                                       # the same core image, another table
+
+    def listed(seq, *tables, widens=False):
+        held = point.pep.installed.record.sets["install.ceiling"]
+        return point.install_set("install.ceiling", {kinds.POLICY_LIST: install.ceiling_body(tables)}, seq,
+                                 widens=widens, replaces=held.policy_sha256 if held else "")
+    assert point.send(listed(1, first))[-1].event == "install-applied"
+    assert state_record.read(point.stage(first, 1), point.key.public_raw).event == "staged"
+    assert state_record.read(point.stage(renumbered, 2), point.key.public_raw).cause == "dist:above-ceiling"
+    assert point.send(_cfs_floor(point, ALLOW_3))[-1].cause == "dist:above-ceiling"
+    assert point.send(listed(2, first, ALLOW_3))[-1].cause == "dist:widening-unsigned"
+    assert point.send(listed(2, first, ALLOW_3, widens=True))[-1].event == "install-widened"
+    assert point.send(_cfs_floor(point, ALLOW_3))[-1].event == "install-widened"

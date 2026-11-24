@@ -48,7 +48,7 @@ def add_parser(subparsers) -> None:
     dist = subparsers.add_parser(
         'dist', help='Policy distribution: seal and verify signed releases, run the reference controller, and run a '
                      'host enforcement point that pulls from it (seal, verify, serve, enroll, offer, commit, abort, '
-                     'pep, fleet, revoke, rotate, rekey, anchor)')
+                     'pep, fleet, revoke, rotate, rekey, anchor, install, install-trust, acknowledge)')
     commands = dist.add_subparsers(dest='dist_command', metavar='<action>')
     commands.required = True
 
@@ -170,7 +170,20 @@ def add_parser(subparsers) -> None:
     enroll.add_argument('--qualification', default=None, metavar='FILE', help='a host stream\'s qualification envelope')
     enroll.add_argument('--group', default='default')
     enroll.add_argument('--rule', choices=('each', 'all'), default='each')
+    enroll.add_argument('--install', action='append', default=None, metavar='ENVELOPE_ID',
+                        help='the envelope id of an install statement the PEP printed beside the anchor, repeatable; '
+                             'enrolls its install id, which acknowledges a first set it came with (P2 step 5, H13)')
+    enroll.add_argument('--layout', default=None, metavar='FILE',
+                        help='for a table kind, the layout document its action floors are checked against (AF10)')
     enroll.set_defaults(func=enroll_cmd)
+
+    ack = commands.add_parser('acknowledge', help='acknowledge a held install set or install trust statement by the '
+                                                  'envelope ids of its statements, so the controller offers it (H13)')
+    _controller_args(ack)
+    ack.add_argument('--envelope', action='append', required=True, metavar='ENVELOPE_ID',
+                     help='an envelope id of the set, repeatable; name every statement of it, never a release id')
+    ack.add_argument('--by', default=None, help='the acknowledger, by default the login running this command')
+    ack.set_defaults(func=acknowledge_cmd)
 
     for name, text in (('offer', 'offer a stored release to a group'),
                        ('commit', 'send commit to the members of a group\'s rollout that staged'),
@@ -449,6 +462,13 @@ def widen_cmd(args) -> int:
 
 def _trust_statement(args, artifact: str, body: bytes, signers: list) -> int:
     controller = _held(args.held)
+    if artifact == "trust.revocation" and set(kinds.read_revocation(body)["keys"]) & controller.install_key_ids():
+        return _fail("dist:rotation-invalid", "a revocation list never names an install or an operator key id (IS7)")
+    if artifact == "trust.rotation":
+        added = env.key_id(bytes.fromhex(kinds.read_rotation(body)["add"]))
+        if added in controller.retired_authority() | controller.install_key_ids():
+            return _fail("dist:rotation-invalid", "the rotation adds a key that was retired or is held in another "
+                                                  "role (K4)")
     targets = args.target or sorted({anchor["target"] for anchor in controller.anchors.values()})
     if not targets:
         return _fail("dist:target-mismatch", "the controller serves no stream, so name --target")
@@ -802,12 +822,32 @@ def enroll_cmd(args) -> int:
     try:
         with controller.locked():
             if anchor.fingerprint not in controller.anchors:
-                controller.add_anchor(raw, _json(args.qualification))
-            pep = controller.enroll(_read(args.pub), anchor.target, anchor.stream, args.group, args.rule)
+                controller.add_anchor(raw, _json(args.qualification),
+                                      layout=_read(args.layout) if getattr(args, "layout", None) else None)
+            ingest(controller)
+            pep = controller.enroll(_read(args.pub), anchor.target, anchor.stream, args.group, args.rule,
+                                    install_envelopes=getattr(args, "install", None))
     except ValueError as error:
         print(str(error), file=sys.stderr)
         return 2
     _print({"enrolled": pep, "kind": anchor.target, "stream": anchor.stream, "group": args.group})
+    return 0
+
+
+def acknowledge_cmd(args) -> int:
+    """H13: the acknowledger's command. It signs nothing and holds no key of the spec; the controller lets the login
+    that runs it acknowledge, and the acknowledgement goes to its audit log. A PEP never reads it: this is detection,
+    and a PEP applies a well signed set from any sender."""
+    import getpass
+    controller = _controller(args)
+    try:
+        with controller.locked():
+            ingest(controller)
+            done = controller.acknowledge(args.envelope, by=args.by or getpass.getuser())
+    except ValueError as error:
+        print(str(error), file=sys.stderr)
+        return 2
+    _print(done)
     return 0
 
 

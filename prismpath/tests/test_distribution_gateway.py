@@ -327,3 +327,17 @@ def test_a_gateway_floor_allows_one_exact_route_and_method_and_is_silent_beside_
     assert ask("/ledger/today")["basis"] == "floor"
     assert ask("/ledger/today", "write")["basis"] == "release"
     assert ask("/ledger/tomorrow")["basis"] == "release"
+
+
+def test_case_203_a_gateway_route_table_is_held_inside_the_ceiling(tmp_path, monkeypatch):
+    """case_203: CL1, CL2, the `gateway` part. A gateway PEP with a ceiling refuses a route table that gives one path
+    another class than the ceiling's with `dist:above-ceiling`, and stages one that names fewer routes."""
+    monkeypatch.setattr(agent_home, "clock", lambda: NOW)
+    point = GatewayHome(tmp_path / "gateway", install_keys=["N1", "N2"], install_threshold=2)
+    assert point.release(DEMO, 1)[-1].event == "committed"
+    ceiling = point.install_set("install.ceiling", {"policy.core": DEMO, "gateway.routes": ROUTES}, 1, widens=False)
+    assert point.send(ceiling)[-1].event == "install-applied"
+    assert point.stage_routes(DEMO, 2, OPEN, widens=True).cause == "dist:above-ceiling"
+    fewer = rd.Routes.from_doc({"routes": [{"match": "/api/orders/*", "class": "orders"}]}).canonical()
+    acks = point.release(DEMO, 3, routes=fewer, froms=[H(DEMO)])
+    assert [one.event for one in acks] == ["staged", "staged", "staged", "committed"]
