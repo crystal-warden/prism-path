@@ -25,6 +25,7 @@ The owner decided these, and the rules below carry them out.
 | Fail closed everywhere | V1, X1 to X3, R5, Q5, D1 |
 | At expiry a `mesh` or `cfs` deployment may choose HOLD. REFUSE is the default and hosts always refuse | X6 to X10, H8 |
 | Authority keys and instance keys stay separate | K2, H2, O4 |
+| The controller key signs only controller statements and never an envelope | K4, K6, K7, H9, H16 |
 | Never widen silently | W1 to W7, IS12, H13 |
 | Hosts pull over HTTP. Push only where the medium is a broadcast | B1 to B8 |
 | One signed envelope for every distributed artifact | E1 to E9, L1 to L4 |
@@ -42,8 +43,9 @@ advance. TUF calls this a fast forward attack (TUF section 1.5.2) and recovers b
 key and the client forget the versions. This spec keeps the rule that no message lowers a floor, so the
 recovery is the provisioning step (P3) after the key is rotated and revoked. A controller in the wrong
 hands can withhold releases and revocations and can choose among unrevoked releases at or above a PEP's
-floor. It can do nothing else, and the longest it can freeze a PEP is the time left on that PEP's
-envelope (X2). An install statement (section 21) never expires and no authority key can take it back. So nothing
+floor. With no key it can do nothing else, and the longest it can freeze a PEP is the time left on that
+PEP's envelope (X2). Where freshness is on (H16) it can also lapse a PEP by withholding its controller
+statements, and section 21.7 says what the controller key adds. An install statement (section 21) never expires and no authority key can take it back. So nothing
 bounds how long a controller can withhold one, where X2 bounds a withheld release. A controller can keep
 a PEP on a wide action floor by never passing the narrower one, and can offer a superseded install set
 the engineer signed, as long as its `seq` is above the PEP's own. It cannot make one, cannot offer one
@@ -63,7 +65,7 @@ envelope**, and its format tag is `prismpath.dist/1`.
 | Authority key | An Ed25519 key that says which policy may run. Its key id is the SHA-256 of its 32 raw public bytes, in lower case hex. |
 | Instance key | An Ed25519 key one PEP makes for itself. It signs what that PEP reports and never authorizes anything. |
 | Trust store | What a PEP holds about authority keys. The trusted keys, the retired keys, the revocation list, the trust sequence and the threshold. Install and operator keys are never in it (K3). |
-| Stream | A named line of policy that one group of PEPs follows, for example `agent/default` or `mesh/demo`. A name is 1 to 64 characters of `a-z 0-9 . _ / -`. The reserved stream `@trust` carries revocations and rotations. |
+| Stream | A named line of policy that one group of PEPs follows, for example `agent/default` or `mesh/demo`. A name is 1 to 64 characters of `a-z 0-9 . _ / -`. The reserved stream `@trust` carries revocations, rotations and controller key statements. |
 | Policy hash | The SHA-256 of the policy document every artifact of a release derives from. It is the `prismpath.core/1` image bytes when the policy has one, and the `.ppt` image bytes otherwise. |
 | Distribution envelope | The canon/2 document of section 4 that names one artifact body by hash. |
 | Envelope id | The SHA-256 of the envelope's canon/2 bytes, in lower case hex. Signatures are not part of it. |
@@ -72,6 +74,7 @@ envelope**, and its format tag is `prismpath.dist/1`.
 | Floor | The highest `seq` a PEP has committed on a stream, with the envelope ids committed at it. |
 | Install key | An Ed25519 key of the engineer who installs PrismPath on a resource. It signs the bounds the resource runs within and nothing else. |
 | Operator key | An Ed25519 key the engineer enrolls to answer the action floor's escalations, one at a time (OP1). It signs nothing else. |
+| Controller key | The controller's instance key, named in the trust store. It signs controller statements and nothing else (K6). |
 | Install statement | A sealed envelope, signed by install keys, that carries one artifact of an action floor, of a fallback policy or of a ceiling, or an install trust statement (section 21). |
 | Install set | Every install statement that shares one install kind, one stream, one `seq` and one release id. A PEP applies it whole. |
 | Action floor | The install set whose allows hold in every state of a PEP. It is never called the floor. |
@@ -84,7 +87,7 @@ envelope**, and its format tag is `prismpath.dist/1`.
 |---|---|---|---|
 | The authority, who signs what may run | The source of the data access policies. It is not the policy engine | Reference value provider | The root and targets roles (TUF 2.1.1, 2.1.2), the Image repository (Uptane 5.3.1) |
 | The decision under the signed policy, made inside each PEP | Policy engine | | |
-| The controller | Policy administrator, the part that reaches PEPs over the control plane. It makes no decision and holds no authority key | Verifier and relying party for state records | A mirror (TUF 2.1.5). It is weaker than the Uptane Director (5.3.2), which signs |
+| The controller | Policy administrator, the part that reaches PEPs over the control plane. It makes no decision and holds no authority key | Verifier and relying party for state records | A mirror (TUF 2.1.5) that signs only a statement of the present, as TUF's timestamp role does (2.1.4). It is weaker than the Uptane Director (5.3.2), which signs what runs |
 | The PEP | Policy enforcement point | Attester | A client, an ECU (Uptane 5.4) |
 | A relay (B10) | Part of the control plane | | A Primary that only forwards (Uptane 5.4.2.6) |
 | State records and receipts | Network and system activity logs, and the asset state a CDM system gathers | Evidence | The ECU version report (Uptane 5.4.2.1.2) |
@@ -130,6 +133,7 @@ home holds one release, so they cannot hold different versions of one policy.
 | `install.ceiling` | One artifact of a ceiling, or a policy list (CL1) | `as`, and the members this table gives the artifact that `as` names | CL1 |
 | `install.trust` | An install trust statement (IS11) | none | IS11 |
 | `operator.answer` | An operator's answer to one escalation (OP2) | none | OP2 |
+| `trust.controller` | A controller key statement (K7) | none | K7 |
 
 ## 4. The distribution envelope
 
@@ -283,21 +287,23 @@ document with format `prismpath.dist-trust-store/1`.
 at start, as `root_statement.check_separation` refuses it today. A PEP under distribution holds no
 authority private key.
 
-**K3.** The trust store changes only by first key provisioning (section 14), by a `trust.rotation` and by
-a `trust.revocation`. No other message changes it. The install keys and the operator keys are never in
-it. They are held in the install record (IS10) and change only by provisioning and by an `install.trust`
-(IS11, IS13).
+**K3.** The trust store changes only by first key provisioning (section 14), by a `trust.rotation`, by a
+`trust.revocation` and by a `trust.controller`. No other message changes it. The install keys and the
+operator keys are never in it. They are held in the install record (IS10) and change only by
+provisioning and by an `install.trust` (IS11, IS13).
 
-**K4.** Every key a PEP holds has a role. This version has three roles. The install kinds need
-`install` (IS2), `operator.answer` needs `operator` (OP1), and every other artifact kind needs
-`authority`. The trust store holds the authority keys. The install keys and the operator keys are held
-apart from it in the install record, with their own bounds (IS10, IS11, OP1). The roles are strictly
-apart. No key is held in two roles, and none is the PEP's instance key. The PEP checks every two roles
-against each other and each against the instance key at the anchor (P2, P4) and at every statement that
-adds a key, which is a `trust.rotation` (O4) and an `install.trust` (IS11). A key retired in one role is
-never added again in any role while the PEP remembers its id (K5, IS10). A PEP forgets the oldest ids
-past those bounds and then cannot tell, so the sealing tool and the controller, which keep every retired
-id, refuse to seal or store a statement that adds one. A key in a role this version does not know is kept and never counts.
+**K4.** Every key a PEP holds has a role. This version has four roles. The install kinds need `install`
+(IS2), `operator.answer` needs `operator` (OP1), and every other artifact kind needs `authority`. The
+role `controller` signs controller statements and no envelope (K6). The trust store holds the authority
+keys and the controller key. The install keys and the operator keys are held apart from it in the
+install record, with their own bounds (IS10, IS11, OP1). The roles are strictly apart. No key is held in
+two roles, and none is the PEP's instance key. The PEP checks every two roles against each other and
+each against the instance key at the anchor (P2, P4) and at every statement that adds a key, which is a
+`trust.rotation` (O4), a `trust.controller` (K7) and an `install.trust` (IS11). A key retired in one
+role is never added again in any role while the PEP remembers its id (K5, IS10). A PEP forgets the
+oldest ids past those bounds and then cannot tell, so the sealing tool and the controller, which keep
+every retired id, refuse to seal or store a statement that adds one. A key in a role this version does not know is kept and never
+counts.
 The role an artifact needs is a column of the kind table. Because the artifact kind is inside the
 envelope and V3 runs before the envelope is read, a version with more than one role works in two steps.
 V3 finds every role under which the envelope is signed (S4) and fails only when there is none. V5 then
@@ -309,6 +315,36 @@ make a ninth key is refused with `dist:too-large`. When a seventeenth key is ret
 is forgotten, and a signature by it then reads as one by an unknown key, which is refused all the same.
 The bounds are the same in every implementation, so the smallest PEP and the reference agree. The
 install and operator keys are not in the trust store and have their own bounds (IS10, IS11, OP1).
+
+**K6.** A trust store holds at most one key in the role `controller`. It is the controller's instance key
+(F5). Its only power is to sign controller statements (H9). A signature by it never counts on an
+envelope, so it admits nothing, commits nothing and revokes nothing. It is held apart from every other
+role as K4 says, and it counts among the 8 keys of K5. The anchor names the first controller key, and
+its key sequence is 0. A PEP with no controller key, or whose controller key is on the revocation list,
+takes no controller statement. Whoever steals the controller key can raise the epoch id of every PEP on
+a stream, so that its records read as replays until a start or a `trust.controller` begins the id again
+(H15, K7). It can keep a PEP fresh while a controller withholds what the PEP lacks, and it can move the
+time floor of a PEP that has no clock and has freshness on, once per start, and so expire that PEP's
+release (H16). It cannot keep a good statement from giving freshness, and it admits, commits, revokes
+and installs nothing. That is what the key can do, and section 21.7 lists it.
+
+**K7.** The authority names the controller key with a `trust.controller` envelope, whose body is this.
+
+```json
+{"encoding":"canon/2","format":"prismpath.dist-controller/1","key":"<64 hex digits, the public key>"}
+```
+
+It is a trust kind. It travels on `@trust`, shares the one trust sequence (R1, O1), carries `expires` 0
+(X4), reaches every PEP whatever `targets` says (V5) and is applied as soon as it verifies (B2). On
+acceptance the key replaces the controller key the store held, the envelope's `seq` becomes the key
+sequence, and the PEP's epoch id starts again at 0 (H15). Naming the key the store already holds is not a
+replacement. The key stays and takes the new key sequence, which makes every statement signed before
+worthless. A key that another key replaces is retired, and it is never named again in any role while its
+id is remembered (K4). A store that holds no controller key, as one provisioned from a `/1` anchor, gains
+one by this statement, and one that would then hold a ninth key is `dist:too-large` (K5). `key` is never a key the store holds as an authority key, never
+the PEP's own instance key, never an install or an operator key the PEP holds or has retired, never a key
+id on the revocation list and never a retired key. Each is `dist:rotation-invalid`. This statement is the way back when a controller key is lost
+or stolen, or when an epoch id ran ahead of the controller.
 
 ## 6. Sequence numbers and the floor
 
@@ -331,7 +367,8 @@ section 21 installs (AF1, FB1) and reports
 ## 7. Clocks
 
 The trust assumption is stated once. A PEP trusts its own clock to be within 300 seconds of true time
-(`SKEW`). The transport and the controller are not time sources.
+(`SKEW`). The transport is not a time source. The controller is one only in the bounded way H16 gives a
+PEP that has no clock and has freshness on, once per start.
 
 **T1.** A PEP keeps a durable time floor. It is the highest `not_before` of any envelope whose signature it
 has verified, other than an install kind (IS5) and an `operator.answer` (OP2). The PEP's time is the larger of its clock and the time floor, so a clock set back cannot
@@ -363,9 +400,10 @@ grace after expiry.
 | `commit` | controller | stream, `seq`, policy hash, delay in milliseconds | Make the staged release active |
 | `abort` | controller | stream, `seq`, policy hash | Drop the staged release |
 | `state` | PEP | a state record | The heartbeat, and the report of every transition |
-| `epoch` | controller | an epoch id | The controller's name for the present, echoed in state records (H9) |
+| `epoch` | controller | a controller statement | The controller's name for the present, and freshness where it is on, signed by the controller key and echoed in state records (H9, H16) |
 | `revoke` | controller | a sealed `trust.revocation` and its body | Applied when verified, with no commit |
 | `rotate` | controller | a sealed `trust.rotation` and its body | Applied when verified, with no commit |
+| `rekey` | controller | a sealed `trust.controller` and its body | Applied when verified, with no commit (K7) |
 | `install` | controller | a sealed install statement and its body | Applied when its install set is whole and verified, with no commit (IS4) |
 
 **B1.** No message is trusted for who sent it. `offer`, `fetch`, `commit` and `abort` are not signed. A
@@ -373,7 +411,7 @@ forged `commit` can only make active a release the authority signed for that PEP
 can only delay one. Staging a release is therefore consent to run it, and a release the owner no longer
 wants is revoked (section 10), not aborted.
 
-**B2.** `revoke` and `rotate` are `stage` of a trust kind. A PEP applies a trust envelope as soon as it
+**B2.** `revoke`, `rotate` and `rekey` are `stage` of a trust kind. A PEP applies a trust envelope as soon as it
 verifies and sends a state record with event `trust-applied` or `refused`.
 
 ### 8.2 The HTTP binding, for hosts
@@ -415,7 +453,7 @@ commit       4  16 first 16 bytes of SHA-256 of the stream name
              44 2  delay in milliseconds
 abort        as commit, without the delay
 state        4  n  one state record
-epoch        4  8  the epoch id
+epoch        4  n  one controller statement of 102 or 126 bytes (H9)
 ```
 
 **B6.** A PEP assembles the chunks of a transfer into the lengths the offer gave. A chunk outside those
@@ -457,6 +495,7 @@ A PEP runs one machine per stream it follows. The states are these.
 | `staged` | A release is verified and held beside whatever is active. It is a sub state of the two above |
 | `locked` | The floor is lost (Q5) |
 | `fallback` | No release is active and the installed fallback policy decides (FB1). It is a sub state of `no-policy` and of `locked` |
+| `reconciling` | The active record is durable and the runtime may run something else (C6). The action floor still answers, the fallback policy decides once the runtime is withdrawn, and every other decision is a refusal with `dist:reconciling` (C8) |
 
 ### 9.1 Verify
 
@@ -468,7 +507,7 @@ cause reported and nothing is staged.
 | V2 | The sealed container reads (S2), and the body is no longer than the larger of the PEP's two bounds (E6) | `dist:bad-format`, `dist:too-large` |
 | V3 | The signatures (S3 to S5) | `dist:unknown-key`, `sig:invalid`, `sig:revoked-key` |
 | V4 | The envelope reads (E1, E2, E5, E8, E11) | `document:not-canonical`, `dist:bad-format` |
-| V5 | `targets` holds this PEP's kind, `artifact` is one this kind uses or a trust kind, and `stream` is this PEP's stream or `@trust` for a trust kind. A `trust.revocation` or a `trust.rotation` is for every PEP whatever `targets` says, because one trust sequence must count the same for all of them (R1). An install kind on this PEP's stream is one it uses (IS5). An `operator.answer` on this PEP's stream is one it uses when its kind has escalation, which is `agent`, `gateway` and `cfs` (AF2, OP1), and on `host`, `mesh` and `xdp` it is `dist:target-mismatch`. Then the signed `body_size` is within the bound for that artifact (E6), which is checked before any body is read (B9) | `dist:target-mismatch`, then `dist:too-large` |
+| V5 | `targets` holds this PEP's kind, `artifact` is one this kind uses or a trust kind, and `stream` is this PEP's stream or `@trust` for a trust kind. A `trust.revocation`, a `trust.rotation` or a `trust.controller` is for every PEP whatever `targets` says, because one trust sequence must count the same for all of them (R1). An install kind on this PEP's stream is one it uses (IS5). An `operator.answer` on this PEP's stream is one it uses when its kind has escalation, which is `agent`, `gateway` and `cfs` (AF2, OP1), and on `host`, `mesh` and `xdp` it is `dist:target-mismatch`. Then the signed `body_size` is within the bound for that artifact (E6), which is checked before any body is read (B9) | `dist:target-mismatch`, then `dist:too-large` |
 | V6 | Time (T3, T4, and X4 for a trust kind) | `dist:not-yet-valid`, `dist:expired` |
 | V7 | The envelope id and the policy hash are not on the revocation list | `dist:revoked` |
 | V8 | The sequence (Q2, Q3, or R1 and O1 for a trust kind) | `dist:seq-replay`, `dist:trust-replay` |
@@ -511,7 +550,8 @@ a covering statement it is refused with `dist:widening-unsigned` and stays stage
 floor, the audit event, the artifacts under content addressed names, the active record that names them,
 then the cleanup. This is the order `policy_host.py` uses today. A death before the active record flips
 leaves the previous release active, and a death after it leaves the new one. A restart finishes or
-reports an interrupted commit and never reads an artifact the active record does not name.
+reports an interrupted commit and never reads an artifact the active record does not name. A runtime
+step that fails after the active record or the install record is durable is the subject of section 9.5.
 
 **C5.** After a commit the PEP sends a state record with event `committed`.
 
@@ -597,6 +637,113 @@ with the one it holds whose policy hash is `replaces`, and a `replaces` it holds
 treated as larger. The sealing tool applies the same test when it sets `widens`, so for a `mesh` or a
 `host` table `widens` is `false` only on a renewal.
 
+### 9.5 Reconciling
+
+The last step of a commit, a rollback, a lapse and an install set switches what the runtime runs. That
+step can fail after the PEP's own record is durable. The PEP then holds one release and its runtime may
+run another. This section says what the PEP does until the two agree. A PEP whose
+switch fails withdraws the runtime at once, and it keeps track of two releases only when that
+withdrawal fails too.
+
+It uses two terms. The **held release** is the one the active record names, or none after a lapse. The
+**running release** is the one the runtime may still run, or none.
+
+**C6.** A PEP is `reconciling` when a runtime step fails after the record it switches to is durable. A
+runtime step makes the runtime run what the PEP now holds. It is the last step of a commit, of a
+rollback, of a lapse at expiry, by a revocation (R5) or by a ceiling (CL3), of applying an action floor
+or a fallback policy that changes what the runtime runs (IS4, FB8), and of a start, which makes the
+runtime run what the active record names. A start never refuses to run because that step failed. The
+state lasts until a try succeeds (C9) or the PEP is provisioned (P5). A PEP whose switch cannot fail
+never enters it, and a renewal never does (C10). The C core switches by an assignment in memory, so its
+`mesh` and `cfs` targets never have the state. A `gateway` home reads its active record at each request,
+so it has no runtime step and never has the state. The `host` runtime and the `xdp` loader do have one.
+An `agent` home's commit and rollback have no runtime step. Its hook, decider, egress proxy and MCP proxy
+read the active record at their next decision, so the durable record is the switch, and a session that
+is already running keeps its sandbox profile while the hook decides each of its calls under the new
+release. Its lapse and its revocation do have a runtime step. The launcher ends every sandboxed session
+still running under the release that fell, and the PEP sends the `lapsed` or `fallback` record only once
+they have ended. A session that will not end keeps the PEP `reconciling`, with that release as the
+running release (H14).
+
+**C7.** A lapse is durable in the order of C4. The intent record, the audit event, the active record that
+names no release, the runtime step, the state record, then the cleanup. The intent record of a commit, a
+rollback, a lapse or an install set names the transition, the release it makes active or none, the cause of a lapse, and
+in full the release the runtime runs when the transition starts. A restart reads the running release from
+it, so a rollback that died is reported with the release it was leaving and not with none. A start that
+finds no intent record takes the held release as the running release, because a runtime that outlives the
+PEP may still run it. A restart that finds the intent record of a lapse beside an active record that still
+names the release reports the lapse as incomplete, as C4 does a commit, and the checks of the start lapse
+the release again if its cause still holds.
+
+**C8.** A reconciling PEP asks its action floor first, as in every state (AF1). When the floor is silent
+and the runtime is withdrawn (C10), a PEP that holds a fallback policy decides under it (FB1). Every
+other decision is refused with `dist:reconciling`, since the PEP cannot say which release the runtime
+runs. A runtime that decides without asking the PEP, as an XDP program does, may go on deciding under the
+running release until the withdrawal works, and nothing on the PEP bounds that. On `xdp` a failed
+withdrawal keeps passing packets under the running release and its edge table. That is detection only.
+H14 names the running release in every record, and the controller files `dist:reconciling` at once. A `commit`, a commit with a delay that
+falls due and a rollback are each answered with a state record with event `refused` and cause
+`dist:reconciling`. Nothing changes, and a staged release stays staged for a later commit. Everything else
+runs as in any other state. The PEP verifies and stages, replaces a staged release (G2), aborts, applies
+trust statements and install sets, receives an anchor, takes a controller statement and sends its beats. The widening rule compares a
+release against the held release.
+
+**C9.** Only a tick and a start try the runtime again. A tick runs at least once a minute, as in X1, and
+each makes one try. A try first runs the tests of C10, then the withdrawal again when it has not yet
+worked. Then it makes the runtime run the held release, with the action floor the PEP holds. When no
+release is held the withdrawal is the whole switch, and a withdrawal that works ends the state. When the
+switch works the PEP leaves the state for `active` or `no-policy` and sends the record the transition
+owed (H14). When nothing was owed, as after a start, it sends a `beat`. The cleanup of C4 follows. When
+the try fails nothing changes and the next tick tries again.
+
+**C10.** A PEP that enters the state withdraws the runtime at once, so a failed switch fails closed. To
+withdraw is to make the runtime run the action floor the PEP holds, with the fallback set where it holds
+one (FB1), and no release. The runtime is never left with nothing while the PEP holds a floor, so the
+floor answers in every state, also on `host` and `xdp`, where it lives in the runtime (AF1, AF3). Only a
+PEP with neither has the runtime run nothing. When the withdrawal works the runtime runs no release, the
+PEP notes it in the intent record, and the PEP holds one release, the held one. When it fails the PEP
+also holds the running release, names it in every record (H14) and tries the withdrawal again at every
+tick. Only then does it track two releases. When the step that failed was the one that installs a new
+action floor and the withdrawal fails too, the runtime may still hold the floor before it, and every
+record names the floor the runtime holds (H14).
+
+A switch between two releases whose bodies are byte for byte the same, as a renewal's are (X5), changes
+nothing the runtime decides with. When its runtime step fails the PEP does not withdraw and does not
+enter the state. It stays `active` under the held release with the runtime running, sends its
+`committed` record, writes the failure to its audit log and tries the step again at every tick. It
+withdraws only when the policy differs.
+
+The PEP holds each release it holds to the test of R5, to expiry (X1) and to the ceiling (CL3). It runs
+the tests before every try and whenever it applies a trust statement or an install set. HOLD is for
+`mesh` and `cfs` alone (X6), which never have this state, so expiry always fells a release here.
+
+A held release that falls was never run and is never installed. Its transition becomes a lapse with the
+cause it fell for. The PEP rewrites the intent record, writes the `lapsed` audit event, which says the
+release never ran, and writes an active record that names no release. It then owes `lapsed` with that
+cause, or `fallback` where it holds a fallback policy (FB3), and no longer owes `committed` or
+`rolled-back`. The floor stays where the commit put it (Q4). A running release that falls is named with
+the cause it fell for in every record until the withdrawal works.
+
+A PEP whose trust store does not read (K1) cannot run these tests. It treats the held release as none, so
+its tries only withdraw.
+
+**C11.** Until the withdrawal works, the PEP keeps every envelope and body of the running release. No
+stage, replacement, abort, drop or cleanup removes them. The tests of C10 read those envelopes, and the
+runtime may still read those bodies.
+
+**C12.** The audit event of the transition is written once, before the active record, as C4 orders. No try
+and no restart writes it again. Entering the state writes an audit event `reconciling` with the runtime's
+own error and sends a record with event `reconciling`. Leaving it writes an audit event `reconciled`. A
+start that finds the state again writes `reconciling` again, which is true each time. The state record a
+transition owes is another matter. The intent record goes only after that record is made. A PEP that dies
+between the two makes the record again at its next start with a higher counter, so the transition may be
+reported twice and the same bytes are never sent twice (H3). A PEP that dies after it made the record and
+before it sent it reports the transition in no record of its own. The controller is built for both (H14).
+
+**C13.** A locked PEP stays `locked` (Q5), and its runtime must run its fallback set or nothing (X3,
+FB1). When the runtime does not withdraw, the locked PEP tries again at every tick and start. Its records carry the entry of H14 with
+the cause `dist:floor-lost` and no running release named, since a locked PEP reads no active record.
+
 ## 10. Revocation
 
 A revocation list is cumulative. Each one replaces the one before.
@@ -629,7 +776,7 @@ A release below it is `dist:seq-replay`.
 **R5.** When a revocation removes the ground the active release stands on, the PEP goes to `no-policy` and
 reports event `lapsed` with `dist:revoked`, or goes to its fallback policy where it has one (FB1). That is the case when an active envelope's id or policy hash
 is listed, when its `seq` is below a raised floor, or when it no longer has a counting signature. A staged
-release is dropped on the same test. The owner avoids an outage by order of work. Rotate, release under
+release is dropped on the same test, and a reconciling PEP holds both its releases to it (C10). The owner avoids an outage by order of work. Rotate, release under
 the new key, commit, then revoke the old key.
 
 **R6.** A revocation list never restores trust, and a PEP holds the latest list and no more, so its
@@ -667,7 +814,7 @@ until it expires or is replaced. `retire` that names an unknown key is `dist:rot
 
 **O4.** `add` is never the PEP's own instance key, never a key id on the revocation list, never a key
 the store has retired, since a retired key does not come back, and never a key the PEP holds or has
-retired in the role `install` or `operator` (K4). Each is `dist:rotation-invalid`.
+retired in the role `install`, `operator` or `controller` (K4). Each is `dist:rotation-invalid`.
 
 ## 12. Expiry
 
@@ -684,7 +831,8 @@ keeps only what X8 and X9 state.
 **X3.** A PEP in `no-policy` or `locked` allows nothing. The cause on its receipts is
 `dist:policy-lapsed`, or `dist:floor-lost` when locked. The two exceptions are signed by the engineer
 and never by the authority. An action floor allows what it allows in every state (AF1), and a PEP with a
-fallback policy decides under it (FB1).
+fallback policy decides under it (FB1). A reconciling PEP allows nothing beyond these either, its
+fallback policy decides only once its runtime is withdrawn, and its cause is `dist:reconciling` (C8).
 
 **X4.** A trust kind carries `expires` 0 and never expires, and so does an install kind (AF3). A revocation that could expire would restore
 trust on its own.
@@ -749,26 +897,31 @@ a first key.
 3. The owner installs the trust anchor on the PEP by a channel the owner already trusts. On a host that is
    a file copied by the operator, on a `mesh` node it is compiled into the firmware that is flashed, and
    on `cfs` it is the key file the ground provisioning writes. The anchor is a canon/2 document
-   (`prismpath.dist-trust/1`, or `/2` by P4) with the trusted public keys, the threshold, the PEP's
-   target kind and its stream. Every entry of `keys` is an authority key. At this step the PEP checks
-   the anchor's keys pairwise. No key is in two of `keys`, the install keys and the operator keys, none
-   is the PEP's instance key, and none is a key the PEP holds in another role or has retired in any role
-   (K4). Any of these refuses the anchor and leaves the PEP as it was.
+   (`prismpath.dist-trust/2`, P4) with the trusted public keys, the threshold, the controller key (K6),
+   `fresh` (H16), the PEP's target kind and its stream. Every entry of `keys` is an authority key. At
+   this step the PEP checks the anchor's keys pairwise. No key is in two of `keys`, `controller`, the
+   install keys and the operator keys, none is the PEP's instance key, and none is a key the PEP holds in
+   another role or has retired in any role (K4). Any of these refuses the anchor and leaves the PEP as it
+   was.
 4. The PEP prints the fingerprint of the anchor and the operator compares it with the one the owner's
    tool printed. A host PEP does not start following a stream until the operator confirms.
 5. The owner enrolls the PEP's instance public key, target kind and stream at the controller.
 
-**P3.** Provisioning sets the trust sequence, the floor and the time floor to their starting values and is
-the only step that clears `locked`. It is written to the audit log as its own event. It never reopens the
-older forms of section 17. A stream on which the PEP refused them stays refused after any provisioning,
-whether or not the PEP ever held an install statement (L2, IS9).
+**P3.** Provisioning sets the trust sequence, the floor, the time floor and the epoch id (H15) to their
+starting values and is the only step that clears `locked`. It is written to the audit log as its own event.
+It never reopens the older forms of section 17. A stream on which the PEP refused them stays refused after
+any provisioning, whether or not the PEP ever held an install statement (L2, IS9).
 
-**P4.** An anchor that holds install keys has format `prismpath.dist-trust/2`. It holds what a
-`prismpath.dist-trust/1` anchor holds and the member `install`, which holds `keys`, `threshold` and
+**P4.** An anchor of this version has format `prismpath.dist-trust/2`. It holds what a
+`prismpath.dist-trust/1` anchor holds, `controller`, the first controller key (K6), and `fresh`, 0 or
+the longest lifetime in seconds of a fresh statement (H16). Where the engineer installs bounds it also
+holds the member `install`, which holds `keys`, `threshold` and
 `operators` as the body of an `install.trust` does (IS11), `seq`, the install trust sequence they stand
 at, and `domain`, the SHA-256 of the reading domain the PEP was built with (CL4). Those keys go to the
-install record and never to the trust store (K3, K4). A PEP of this version reads both formats, and a
-`/1` anchor holds no install part. A reader of `/1` alone refuses a `/2` anchor, so a PEP is never
+install record and never to the trust store (K3, K4). A PEP of this version reads both formats. A `/1`
+anchor holds no controller key, no install part and `fresh` 0. Such a PEP takes no epoch id until a
+`trust.controller` names a controller key (K7), and until its records show that statement applied the
+controller enrolls it as one with no controller key (H6). A reader of `/1` alone refuses a `/2` anchor, so a PEP is never
 given install keys it would not keep. In both formats `keys` holds authority keys only, and an entry
 that names another role is `dist:bad-format` and refuses the anchor. An older PEP whose trust store holds
 a key in a role it does not know keeps it and never counts it (K4), which is why the sealing tool never
@@ -782,6 +935,11 @@ an install `seq` or the install trust sequence, starts them again only with a di
 (IS6), and never reopens the older forms (IS9). A provisioning that brings install statements and no
 anchor is the install provisioning of IS13.
 
+**P5.** Provisioning first withdraws what the runtime runs. When the runtime does not withdraw,
+provisioning is refused and nothing changes, so a PEP is never provisioned over a runtime that still runs
+a release the new trust store cannot judge. When it withdraws, provisioning ends `reconciling`. The intent
+record goes with the rest, the record the transition owed is not sent, and the PEP sends `provisioned`.
+
 ## 15. The heartbeat and the fleet view
 
 ### 15.1 The state record
@@ -794,8 +952,10 @@ offset  size  field
 4       1     version, 1
 5       1     event     0 beat, 1 staged, 2 refused, 3 committed, 4 aborted,
                         5 trust-applied, 6 lapsed, 7 rolled-back, 8 provisioned, 9 held,
-                        10 fallback, 11 install-applied, 12 install-widened, 13 answered
-6       1     status    0 no-policy, 1 active, 2 locked. Bit 7 set when a release is staged.
+                        10 fallback, 11 install-applied, 12 install-widened, 13 answered,
+                        14 reconciling
+6       1     status    0 no-policy, 1 active, 2 locked, 3 reconciling (C6). Bit 7 set when a
+                        release is staged.
                         Bit 6 set when this is a dev build (D3). Bit 5 set while the PEP is
                         on hold past expiry (X7). Bit 4 set while the installed fallback
                         policy decides (FB2)
@@ -803,7 +963,7 @@ offset  size  field
 8       16    PEP id, the first 16 bytes of SHA-256 of the instance public key
 24      8     counter
 32      8     the PEP's time, Unix seconds
-40      8     epoch, the latest epoch id the PEP has seen from the controller, 0 for none (H9)
+40      8     epoch, the epoch id the PEP holds, 0 for none (H9)
 48      16    first 16 bytes of SHA-256 of the stream name
 64      16    first 16 bytes of the active policy hash, zeros for none
 80      16    first 16 bytes of the active release id, zeros for none
@@ -863,11 +1023,55 @@ PEP's next record carries its install id. So a first install set that arrives at
 it accepted for a PEP id across a new enrollment of that id, so a record from before it is still a
 replay at step 2.
 
-**H9.** A controller names the present with an epoch id, a number that rises at least once per heartbeat
-interval. It rides in the `offers` answer as `epoch` and in a frame of type 6 (bytes 4 to 11). A PEP puts
-the highest epoch id it has seen in every record. This is the epoch id of RFC 9334 section 10.3. It tells
-the controller that a record was made after that epoch began, which the PEP's own clock cannot prove. An
-epoch id is not signed, changes nothing but that field, and a PEP never lowers the one it holds.
+Epoch 0 is not a replay at step 2 on a `provisioned` record, on the `trust-applied` record whose trust
+sequence is that of a `trust.controller` the controller holds, or on any record of a PEP that holds no
+controller key. The first two start the epoch id again (H15). The controller knows a PEP holds none from
+its `/1` anchor (P4) until the PEP's records show a `trust.controller` applied (K7). On every other record
+epoch 0 is a replay as before.
+
+A record filed `fleet:state-replay` for its epoch alone, whose counter is above the last one accepted, is
+still used. The controller files the finding and then reads the record's event and state as it reads any
+record, marked in the fleet view as unverified for freshness. So a record sent once, such as `refused`
+with `dist:install-lost`, is not lost. The records a host sends after a start and before it takes a
+statement carry epoch 0 and are read this way. A record whose counter is not above the last one
+accepted is dropped as before.
+
+**H9.** A controller names the present on each stream with an epoch id, a number that rises at least once
+per heartbeat interval. This is the epoch id of RFC 9334 section 10.3. It tells the controller that a
+record was made after that epoch began, which the PEP's own clock cannot prove. A PEP puts the epoch id
+it holds in every record. The controller counts the epoch id of each stream apart. It keeps each counter
+durably, writes the next value before it signs it and never lowers one, so a controller that restarts
+never signs a lower id. It sends each epoch id in a controller statement, which is 102 bytes, or 126
+when it carries the freshness fields of H16. It is the one statement the controller key signs.
+
+```
+offset  size  field
+0       4     magic "PPEP"
+4       1     version, 1
+5       8     key sequence (K6, K7)
+13      16    first 16 bytes of SHA-256 of the stream name
+29      8     epoch id, counted for that stream
+37      1     fresh     0, or 1 when the next three fields follow (H16)
+38      8     trust sequence, the end of the controller's trust chain
+46      8     stream seq, the highest seq the controller holds on that stream
+54      8     expires, Unix seconds
+n       64    Ed25519 signature by the controller key over the DSSE pre-authentication
+              encoding (S1) of the bytes before it with the payload type
+              application/vnd.prismpath.dist-epoch
+```
+
+The statement rides in the `offers` answer as `epoch`, in base64url without padding, and in a frame of
+type 6. The controller signs it with its instance key and with the key sequence of the latest
+`trust.controller` in its chain, or 0 when the anchor named its key. A PEP reads only the statements of
+its own stream, so a broadcast that carries statements for two streams starves neither. It takes an
+epoch id only from a statement that reads, names its stream, whose signature verifies under the
+controller key the PEP holds, whose key sequence is the one the PEP holds for that key, and whose epoch
+id is above the one the PEP holds. Any other
+statement changes nothing, and so does an epoch id that comes with no statement. The PEP sends no record
+for either, so a forged frame on a broadcast medium cannot make every PEP answer. A PEP never lowers the
+epoch id it holds. The id starts again at 0 at a start (H15), when a `trust.controller` gives a new key
+sequence (K7) and at provisioning (P3), so an id that a stolen key raised to the top is undone by either. A controller statement changes nothing but that field and the freshness of
+H16.
 
 **H10.** The extensions are a run of entries, each a type byte, a two byte length and that many bytes.
 The instance key's signature covers them. Type 1 is an Entity Attestation Token (RFC 9711) whose
@@ -893,7 +1097,7 @@ its counter (H3), so no count goes down and a lost record loses nothing. Such a 
 record, which makes its record 242 bytes on `mesh` and `cfs` and its frame 246 of the 250 bytes ESP-NOW
 carries. So a `mesh` PEP with an install record sends no Facet body, and this version gives it none (H5).
 Its record has no room for a type 1 or a type 2 entry either, so it sends neither.
-A PEP in this version sends no other type.
+Type 4 is the reconciling entry of H14. A PEP in this version sends no other type.
 A controller skips a type it does not know and never treats an extension as a signature on the record.
 A type 1 entry that does not read, or whose `eat_nonce` is not that hash, makes the record
 `fleet:state-invalid` at step 1 of H6.
@@ -904,7 +1108,8 @@ A type 1 entry that does not read, or whose `eat_nonce` is not that hash, makes 
 A record with bit 5 from a target that has no HOLD setting is filed as `fleet:state-invalid`.
 
 **H11.** A PEP whose record has bit 4 set is filed as `dist:fallback` for as long as its records carry
-the bit. Such a record has zeros for the active policy hash, release id and `seq`, and step 3 of H6
+the bit. Such a record has zeros for the active policy hash, release id and `seq`, but under status 3
+(FB2), and step 3 of H6
 expects those zeros of it and files no `fleet:policy-mismatch` for them. A record with bit 4 from a PEP
 enrolled with no fallback policy, or with bits 4 and 5 together, is filed as `fleet:state-invalid`.
 
@@ -939,6 +1144,77 @@ them. For a first set that arrives at provisioning, the `provisioned` record car
 `dist:install-widened`, and the enrollment of the install id at P2 step 5 is the acknowledgement. This
 rule detects and does not prevent. A PEP applies a well signed widening set from any sender, a hostile
 controller, a relay or a broadcast included, and what H13 gives is that it cannot spread or stay unseen.
+
+**H14.** Every record of a reconciling PEP has status 3 and one extension of type 4, which is these 58
+bytes.
+
+```
+offset  size  field
+0       1     owed      the event of H1 the transition owes. 3 committed, 6 lapsed,
+                        7 rolled-back, 10 fallback, 11 install-applied, 12 install-widened,
+                        0 for none
+1       1     cause     the registered cause of the lapse owed, or the one the running
+                        release fell for (C10), 0 for none
+2       16    first 16 bytes of the running policy hash, zeros for none
+18      16    first 16 bytes of the running release id, zeros for none
+34      8     running seq
+42      16    first 16 bytes of the set id of the action floor the runtime holds, zeros
+              for none. It differs from the held one only when the failed step installed a
+              new floor and the withdrawal failed too (C10)
+```
+
+The active fields name the held release and are zeros when none is held. The staged fields and bit 7 mean
+what they mean in every state, so a stage ack for a new release reads as ever. The Facet body has length
+0, since no active release decided anything (H5). A locked PEP whose runtime has not withdrawn sends status
+2 with the same entry (C13). Status 3 without exactly one type 4 entry, a type 4 entry under status 0 or
+1, and an entry that does not read each make the record `fleet:state-invalid` at step 1 of H6.
+
+The controller runs steps 2 and 3 of H6 on such a record as on any other, with the active fields. Then it
+does four things.
+
+1. It never counts the record as `committed` in F3, whatever the active fields say. The rollout waits for
+   a record with status 1, and its window still ends in `partial`. A stage ack and an abort count as in
+   any state.
+2. It files `dist:reconciling` at once when the entry names a running release, since that means the
+   withdrawal failed, when the floor the runtime holds is not the held one, or when the status is 2. A
+   running release of none is never a reason to file. It files it in any case once the PEP's records
+   have carried the entry for three intervals. The finding stays open until a record without the entry.
+3. It shows the running policy hash, release id and `seq` in the fleet view beside the reported ones for
+   as long as the entry is sent.
+4. It takes a commit, a rollback, a lapse, a fallback and an install set from the fields of any record
+   and not from its event. So a
+   record that reports one the controller already took from this PEP changes nothing, and one whose
+   record never came is taken from the next beat. That is how it tolerates C12.
+
+**H15.** Every PEP keeps its epoch id in memory and in no store, so there is one rule for every kind and
+no write for every heartbeat to wear a small PEP's store. The id is 0 at every start, at provisioning
+(P3) and when a `trust.controller` gives a new key sequence (K7), and the `provisioned` record carries 0.
+The epoch id guards nothing on the PEP, so a start costs only records the controller files as
+`fleet:state-replay` until the PEP takes a current statement, which comes with the next `offers` answer
+or epoch frame.
+
+**H16.** Freshness bounds how long the transport can keep a PEP from its controller unseen. It is a
+setting of the deployment, off by default. It is `fresh` in the anchor (P4), the longest lifetime in
+seconds of a fresh statement, and no message changes it. A fresh statement is a controller statement
+that reads, names this PEP's stream, verifies under its controller key at the key sequence it holds and
+has `fresh` 1, whose trust sequence is not below the PEP's, whose stream seq is not below its floor,
+whose `expires` is later than the kept one's, and whose `expires` is ahead of the PEP's time by at most
+`fresh` plus `SKEW` seconds. It need not raise the epoch id, so an epoch id raised to the top keeps no
+good statement from giving freshness. A statement that fails one of these gives no freshness. A PEP with freshness on keeps the
+latest fresh statement durably, written before it counts, and writes a newer one only when the kept one
+has used half its lifetime, so the writes are few. When the PEP's time passes the kept one's `expires`
+plus `SKEW` the PEP lapses as at expiry (X1) with `dist:expired`, and HOLD applies to that lapse as to
+expiry (X6 to X9).
+
+A PEP with no clock that was off is behind true time by as long as it was off (T2), so every statement
+would look too far ahead. Such a PEP, with freshness on, takes from the first statement after each start
+that passes every other check its `expires` less `fresh` as a raise of its time floor (T1), and the
+ahead test then holds. It does this once per start and from no other statement, and it is the one way
+the controller is a time source (section 7). A PEP with a clock never takes time from a statement. Apart
+from that, a fresh statement never raises the time floor, never lowers anything and authorizes nothing. Its trust sequence and stream
+seq only tell the PEP what exists, and the controller offers what the PEP lacks as F6 says. It does not
+bound a controller in the wrong hands, which holds the key that signs it (K6). A PEP with freshness off
+reads the fields and does nothing with them.
 
 ### 15.3 The controller
 
@@ -1075,6 +1351,7 @@ written. If another change lands first the numbers move up together and the name
 | 166 | `dist:floor-rate` | routing | A request the action floor would have allowed, escalated because the signed rate of floor allows is spent, or an operator's answer past its signed rate (OP3) |
 | 167 | `dist:floor-broad` | envelope | An action floor with a default or catch all, a rule that names no one action or lacks a required test, a test of a field that is not independent, or more rules or entries than its bound |
 | 168 | `dist:answer-unbound` | authority | An operator's answer that names no open escalation of this PEP, or one already answered |
+| 169 | `dist:reconciling` | state | A decision the action floor and the fallback policy leave, a commit or a rollback asked of a PEP whose runtime may not run what it holds (C6), and the controller's finding for it |
 
 Reused as they are. `sig:invalid` (2), `sig:revoked-key` (3), `wire:codebook-mismatch` (51),
 `document:not-canonical` (103), and the causes of the artifact checks of section 3.
@@ -1085,7 +1362,9 @@ Python holds every part. Rust (`prismpath-hotswap-rs`) holds the sealed envelope
 store with revocation and rotation, the PEP machine for the `host` target and the state record. C holds
 the sealed envelope, the strict scanner, the verifier, the trust store and the PEP machine for the `mesh`
 and `cfs` targets, compiled natively for tests and unchanged for the targets. The controller, the HTTP
-binding and the `agent`, `gateway` and `xdp` targets are Python only.
+binding and the `agent`, `gateway` and `xdp` targets are Python only. The reconciling state (section 9.5)
+is Python's and Rust's, since the C core's switch cannot fail (C6). Every PEP reads the controller
+statement, its freshness and the `trust.controller` kind (H9, H16, K7).
 
 Section 21 is built in no implementation yet, and its cases are pending in each. This is what exists
 today and what the section needs of each part.
@@ -1107,7 +1386,8 @@ it runs on. A case marked `C` runs on `mesh` or `cfs`, the only kinds the C core
 ## 20. Conformance cases
 
 Each case names the rules it tests. `P` is Python, `R` Rust, `C` the C core. A case passes when the PEP
-reports exactly the cause given, or none, and its state after is the one given.
+reports exactly the cause given, or none, and its state after is the one given. Numbers 144 to 160 are
+not used.
 
 | # | Case | Expect | Rules | Runs on |
 |---|---|---|---|---|
@@ -1234,7 +1514,7 @@ reports exactly the cause given, or none, and its state after is the one given.
 | 121 | A release sent through a relay that drops, repeats and corrupts frames, then passes them | nothing is staged until the frames are whole, then staged, and the relay holds no key | B10 | P C |
 | 122 | On an ordered link, chunks in order, and a chunk out of order | staged with the envelope never held whole, `dist:frame-invalid` | B11 | C |
 | 123 | A rotation with `seq` two above the trust sequence, then the one it skipped, then the first again | `dist:trust-replay`, applied, applied | O1, R1 | P R C |
-| 124 | A record with the controller's current epoch id, the one before, and one three epochs old, and a PEP sent a lower epoch id than it holds | accepted, accepted, `fleet:state-replay`, and the PEP keeps the higher | H9, H6 | P |
+| 124 | A record with the controller's current epoch id, the one before, and one three epochs old, and a PEP sent a signed statement with a lower epoch id than it holds | accepted, accepted, `fleet:state-replay`, and the PEP keeps the higher | H9, H6 | P |
 | 125 | A record with a type 1 extension whose `eat_nonce` matches, one with an unknown type, and one whose extension was changed after signing | read, skipped, `fleet:state-invalid` | H10 | P |
 | 126 | A `host` release whose `policy.ppt` declares `packing`, with no `policy.spiral`, with a wrong one and with the right one | `spiral:sidecar-missing`, `spiral:sidecar-hash-mismatch`, committed | V11, C2 | P R |
 | 127 | A `policy.ppt` envelope whose `fields` is a string, whose `counts` is an integer, whose `counts` lacks a member, whose `packing` has no `sidecar_sha256`, and a `ppt-pack/1` manifest whose `fields` is a string | `dist:bad-format` four times, then `manifest:bad-format`, and no check raises | E11, V4 | P R |
@@ -1333,6 +1613,47 @@ reports exactly the cause given, or none, and its state after is the one given.
 | 237 | An `agent` PEP stages a fallback set whose release id covers an `agent.zones` that has not arrived, is then given a ceiling the staged set is above, and the zones statement arrives | the ceiling is applied, then the set is dropped with `dist:above-ceiling` at apply and the held fallback policy still decides | IS4, CL3 | P |
 | 238 | A controller holds a PEP's last counter at 40 and the PEP is enrolled again. It is then given that PEP's record at counter 39, and, before another PEP is enrolled, four forged `provisioned` records for its id and the real one, and later 64 forged ids that push the real record out | `fleet:state-replay`, then the real record is the one used at enrollment, and after the flood the enrollment still acknowledges the install id and the next record shows it | H6, H3, H13 | P |
 | 239 | Seventeen authority keys and nine install keys are retired, then the sealing tool and a controller are given a rotation and an `install.trust` that add back the first of each | the PEP no longer holds those ids, and the tool and the controller refuse both | K4, K5, IS11 | P |
+| 240 | A `host` PEP's commit has a runtime step that fails after the active record, and the withdrawal works. Then come a decision, a tick whose try fails, and a tick whose try works | `reconciling` with event `reconciling` and the runtime withdrawn, the decision refused with `dist:reconciling`, still `reconciling`, then `active` with one `committed` record | C6, C8, C9, C10, X3 | P R |
+| 241 | The same for a rollback and for a lapse at expiry, and a start whose runtime step fails with no intent record | `reconciling` each time, then `rolled-back`, `lapsed` with `dist:expired`, and a `beat` with status active | C6, C7, C9 | P R |
+| 242 | A reconciling PEP is sent a commit for a staged release, a commit with a delay that falls due, and a rollback command | event `refused` with `dist:reconciling` each time, nothing changes and the staged release is still staged | C8 | P R |
+| 243 | A reconciling PEP is sent a new release, a higher one that replaces it, an abort, a revocation, an anchor and a controller statement | staged with a stage ack that names the new release, replaced, `aborted`, `trust-applied`, a pending anchor and the epoch taken, and no call tries the runtime | C8, C9, G2, A1, R3 | P R |
+| 244 | A rollback is killed after its active record and restarted with a runtime that still fails | `reconciling`, the entry names the release the rollback was leaving, and the active fields name the kept release | C7, H14 | P R |
+| 245 | A lapse is killed after its intent record and before its active record, then restarted | the release is still active, the audit log reports the lapse as incomplete, and the start's checks lapse it again | C7 | P R |
+| 246 | While a commit is reconciling with its runtime withdrawn, the held release expires, in another run it is revoked, in a third a ceiling it is above is applied, and in a fourth it expires on a PEP with a fallback policy | never installed and `no-policy` at once, one `lapsed` record with `dist:expired`, `dist:revoked` and `dist:above-ceiling`, then one `fallback` record with `dist:expired`, no `committed` record, and the floor is the commit's | C10, R5, X1, CL3, Q4, H14 | P R |
+| 247 | A commit's runtime step fails and the runtime refuses to withdraw, then the running release expires | every record names the running release, with `dist:expired` once it falls, each tick tries the withdrawal again, and the held release is still held to the tests | C10, H14, X1 | P R |
+| 248 | A rollback is reconciling with a runtime that refuses to withdraw, the release it was leaving is staged again and then aborted, and a higher release is staged | every envelope and body of the running release is still in the store | C11 | P R |
+| 249 | A commit is killed after its state record is made and before its intent record goes, and in another run before the record is made, then restarted | one `committed` audit event in each run, a second `committed` record with a higher counter in the first, one in the second | C12, C4, H3 | P R |
+| 250 | A PEP with a floor that cannot be read starts with a runtime that refuses to withdraw, then the runtime obeys | `locked` with the entry and `dist:floor-lost`, a try at every tick, then `locked` with no entry | C13, Q5, X3 | P R |
+| 251 | A reconciling PEP is provisioned with a runtime that refuses to withdraw, then with one that obeys | refused with nothing changed, then `provisioned`, `no-policy`, no intent record, no owed record sent, and the epoch id is 0 | P5, P3, H15 | P R |
+| 252 | A record with status 3 and no type 4 entry, one with two, one with a type 4 entry under status 1, and one whose entry is 57 bytes | `fleet:state-invalid` each | H14, H10 | P |
+| 253 | A controller in `committing` receives a reconciling record whose active fields name the new release and whose entry names the replaced one, a stage ack for a newer release in a reconciling record, then a `committed` record with status 1 | the member is not `committed` and nothing is filed, the ack counts for the newer rollout, then `committed` | H14, F3 | P |
+| 254 | A controller receives reconciling records for three intervals that name no running release, one whose entry names a running release, one whose floor field is not the held floor, and a locked record with the entry, then a record without the entry | `dist:reconciling` filed after the third interval and at once in the other three, the running release and the floor in the fleet view, then cleared | H14, F4 | P |
+| 255 | A controller receives two `committed` records for one commit with rising counters, and in another run no `committed` record and then a `beat` with status 1 and the new release | the second changes nothing, and the beat moves the member to `committed` | H14, C12 | P |
+| 256 | A `host` PEP and a `mesh` PEP each restart after they took an epoch id, and each is then sent a current controller statement | each reports epoch 0 after the restart, and its records are filed `fleet:state-replay` and still used, marked unverified for freshness, then it takes the id and its records are accepted | H15, H6, H9 | P R C |
+| 257 | A PEP is sent an epoch id with no statement, a controller statement signed by an authority key, one signed by an unknown key, one with a byte changed and one with another key sequence, and a PEP with no controller key is sent a good statement | nothing changes each time and no record is sent | H9, K6 | P R C |
+| 258 | A signed statement with an epoch id above the one held, the same statement again, and one with a lower id | taken, unchanged, unchanged | H9 | P R C |
+| 259 | A `trust.controller` names a new key. Then come a statement by the old key, one by the new key with the old key sequence, and one by the new key with the new key sequence and an epoch id below the one held before | applied with event `trust-applied` and epoch 0, nothing, nothing, taken | K7, H9, H15 | P R C |
+| 260 | A `trust.controller` whose `key` is an authority key, the PEP's instance key, an install key, an operator key, a revoked key, the controller key it replaced before, and a retired key, and an anchor whose controller key is also an authority key | `dist:rotation-invalid` seven times, then refused at provisioning | K6, K7, K4 | P R C |
+| 261 | A release, a revocation and a rotation are each signed only by the controller key, and a `trust.rotation` and an `install.trust` each try to add the controller key | `dist:unknown-key` three times, then `dist:rotation-invalid` twice | K6, K4, S3, O4, IS11 | P R C |
+| 262 | The controller key is revoked and a good statement follows. Then a `trust.controller` names a new key and a statement under it follows | the first is not taken, the second is | K6, K7, R2 | P R |
+| 263 | A PEP whose epoch id was raised far above the controller's under a stolen controller key is sent a `trust.controller` that names a new key, then the controller's statement, and another such PEP restarts | its records are `fleet:state-replay` before and accepted after, and the second starts again at 0 and takes the controller's next statement | K7, H9, H6, H15 | P |
+| 264 | A controller sends each epoch id in a statement signed by its instance key, stores a `trust.controller` that names a new key, and is handed one with a bad signature | a PEP takes the first, the next is signed under the new key sequence, and the last is refused and not stored | H9, K7, F1 | P |
+| 265 | A `host` PEP with an action floor and a fallback policy is reconciling with its runtime withdrawn and is asked for a request the floor allows and for one the floor is silent on. Then a second such PEP whose withdrawal failed is asked the same | allowed with basis `floor`, decided by the fallback policy with bit 4 set and status 3, then allowed with basis `floor` and refused with `dist:reconciling` | C8, AF1, FB1, FB2 | P R |
+| 266 | A `host` PEP under its fallback policy applies a new fallback policy whose runtime step fails, and another has its release lapsed by a ceiling whose runtime step fails | `reconciling` each time, the entry owes 11 and then 10 with `dist:above-ceiling`, and each sends that record when a try works | C6, H14, FB8, CL3 | P R |
+| 267 | An `agent` PEP commits a release while its egress proxy and MCP proxy run and a session holds an older sandbox profile. A `mesh` and a `gateway` PEP each commit a release. The `agent` release then lapses with two sandboxed sessions running, one of which will not end | none is `reconciling` at the commits, and the hook and both proxies decide their next calls under the new release. At the lapse the launcher ends one session, the PEP is `reconciling` with the lapsed release as the running release until the second ends, then sends `lapsed` | C6, H14 | P |
+| 268 | A controller is given a `provisioned` record with epoch 0, the `trust-applied` record of a `trust.controller` it holds with epoch 0, a `beat` with epoch 0 from a PEP enrolled with a controller key, and a record with epoch 0 from a PEP with a `/1` anchor | accepted, accepted, `fleet:state-replay`, accepted | H6, H15, P4 | P |
+| 269 | A `host` and a `mesh` PEP with `fresh` 3600 take a fresh statement and are then cut off for 3901 seconds, and a `cfs` PEP with HOLD and the same setting is cut off as long | `lapsed` with `dist:expired` on both, and the `cfs` PEP is held with bit 5 set | H16, X1, X7 | P R C |
+| 270 | A PEP with `fresh` 3600 is sent a controller statement for another stream, one whose trust sequence is below its own, one whose stream seq is below its floor, one whose `expires` is 3901 seconds ahead, one whose `expires` is 3900 seconds ahead, and one with `fresh` 0 | the first changes nothing, the next three give no freshness, the fifth gives freshness, the last gives none, the epoch ids of all but the first are taken, and the time floor does not move | H16, H9, T1 | P R C |
+| 271 | A PEP with `fresh` 0 is cut off for a year with a release that expires in two, and a PEP with `fresh` 3600 is restarted after it took a fresh statement | the first decides under its release the whole year, and the second still holds its fresh statement after the restart | H16, P4 | P R C |
+| 272 | A `host` PEP applies a new action floor whose runtime step fails and whose withdrawal fails too, then the withdrawal works | every record names the set id of the floor before as the floor the runtime holds and the controller files `dist:reconciling` at once, then the entry names the new floor and no running release | C10, H14, AF3 | P R |
+| 273 | An `xdp` PEP with an action floor and a fallback policy has a loader swap that fails and a withdrawal that works, and another `xdp` PEP's withdrawal fails too | the first loads the floor's and the fallback's edge tables and a packet the floor allows passes, the second keeps passing packets under the running release while every record names it and the controller files `dist:reconciling` at once | C8, C10, C6 | P |
+| 274 | A `host` PEP commits a renewal whose bodies are byte for byte the active release's, and its runtime step fails | the PEP stays `active` with the runtime running, sends `committed`, writes the failure to its audit log, tries again at the next tick, and never withdraws | C10, X5 | P R |
+| 275 | A controller holds a PEP's last counter at 40 and receives a `refused` record with `dist:install-lost`, counter 41 and an epoch three epochs old, then a record with counter 40 | `fleet:state-replay` is filed and the install lost event is taken, marked unverified for freshness, then the second record is dropped | H6 | P |
+| 276 | A broadcast carries controller statements for streams `mesh/a` and `mesh/b` in turn, to a `mesh` PEP on each stream | each PEP takes every statement of its own stream and none of the other's | H9 | P R C |
+| 277 | A stolen controller key signs a statement with epoch id 2^64 - 1, then the controller sends a good fresh statement, and the PEP restarts | the epoch id is taken, the good statement still gives freshness, and after the restart the PEP takes the controller's next epoch id | H9, H16, H15 | P R C |
+| 278 | A `mesh` PEP with `fresh` 3600 is off for 30 days and starts, is sent a good fresh statement and then one whose `expires` is a year ahead in the same start, and a `host` PEP with a clock is sent one a year ahead | the first raises the time floor to its `expires` less 3600 and gives freshness, the second gives none and moves nothing, and the host takes no time and no freshness from it | H16, T1, T2 | P R C |
+| 279 | A PEP provisioned from a `/1` anchor is sent a `trust.controller` naming a key, then a statement under it. A PEP whose trust store holds 8 authority keys and no controller key is sent one, and a PEP is sent a `trust.controller` that names the key it already holds | it gains the key and takes the epoch id, `dist:too-large`, then the key stays at the new key sequence and a statement under the old key sequence is not taken | K7, K5, H6 | P R C |
+| 280 | A PEP is given an anchor whose controller key is an install key, one whose controller key is an operator key, and one whose controller key is its instance key | refused at provisioning three times and the PEP is unchanged | P2, K4, K6 | P R C |
 
 ## 21. The action floor, the fallback policy and the ceiling
 
@@ -1583,7 +1904,7 @@ which includes a call whose reach of the ceiling's names cannot be told. A name 
 `agent.zones` protects is never overridden. The hook asks the ceiling's names first and the floor is
 silent for a call that reaches one (CL3). When the action floor answers,
 nothing else decides. That holds while a release is active, while the PEP is held (X7), in `no-policy`,
-in `locked` and under the fallback policy.
+in `locked`, under the fallback policy and while reconciling (C8).
 
 **AF2.** The action floor answers in two ways. An allow is allowed. An escalation is escalated with the
 floor's own cause, so the engineer can sign that a request is always put to a person or a remote
@@ -1594,8 +1915,9 @@ of an `agent`, has only the allow.
 
 **AF3.** The action floor never lapses. It has no expiry. Nothing the authority signs reaches it (IS7), a
 lost floor of section 6 does not take it (IS10), an install key retired later does not remove it (IS11),
-and no unsigned message changes it (IS4). Only the engineer changes it, with an install set or the
-empty set at a higher `seq`, or with a provisioning (IS6, IS13).
+and no unsigned message changes it (IS4). A failed runtime step does not take it, since a withdrawal
+installs it (C10). Only the engineer changes it, with an install set or the empty set at a higher
+`seq`, or with a provisioning (IS6, IS13).
 
 **AF4.** A release cannot narrow the action floor and is never checked against it. A release that refuses
 what the action floor allows is staged and committed under the rules it would meet with no action floor,
@@ -1691,16 +2013,17 @@ bound of 0 as never stale, and PR 18 closes that before a cFS floor may test the
 **FB1.** A PEP that holds a fallback policy decides under it whenever no release is active. That is at
 start with nothing committed, after a lapse at expiry (X1) where the deployment did not choose HOLD,
 after a revocation or a ceiling that removes the active release (R5, CL3), and while the PEP is `locked`
-(Q5). The fallback policy is a set like a release. Its policy allows, refuses and escalates with its own
+(Q5), and while a PEP is `reconciling` once its runtime is withdrawn (C8, C10). The fallback policy is a set like a release. Its policy allows, refuses and escalates with its own
 causes, and the action floor still comes first (AF1). On a host kind the PEP hands the fallback set to
 its runtime where it would otherwise withdraw the policy, so a `host` runtime decides under the fallback
 `policy.ppt`, every part of an `agent` home reads the fallback set, a `gateway` routes by it and the XDP
 program loads its edge table. A PEP with no fallback policy refuses as X3 says, and that stays the
 default on every kind.
 
-**FB2.** The fallback policy is a sub state of `no-policy` and of `locked`. The PEP's status stays 0 or
-2, the active policy hash, release id and `seq` of its state record stay zero, and bit 4 of `status` is
-set in every record while the fallback policy decides. A PEP under its fallback policy stages and refuses
+**FB2.** The fallback policy is a sub state of `no-policy`, of `locked` and of `reconciling`. The PEP's
+status stays 0, 2 or 3, the active policy hash, release id and `seq` of its state record stay zero but
+under status 3, where they name the held release (H14), and bit 4 of `status` is set in every record
+while the fallback policy decides. A PEP under its fallback policy stages and refuses
 envelopes as it would in `no-policy`, and a `locked` one still admits no release.
 
 **FB3.** A PEP that goes to its fallback policy reports event `fallback` in place of `lapsed`. The cause
@@ -1891,6 +2214,7 @@ install keys as the threshold can do there, what a controller can do with none, 
 | | On `cfs`, sign a wider table with `widens` `false`. The PEP takes their word, and only a controller or a sealing tool that compares catches it (H13) | Sign a wrong `widens` past any PEP but a `cfs` one (IS12), or a broad floor past any PEP (AF9) |
 | An operator key in the wrong hands | Answer `allow` to escalations the action floor made, on PEPs of a stream whose install threshold is 2 or more, up to the signed answer rate, each shown by an `answered` record (OP4) | Answer what the floor did not escalate, answer for another PEP or twice (OP2, OP3), sign any other kind (OP1), or act where the install threshold is 1 |
 | A controller, with no key | Withhold an install set for as long as it likes. No expiry bounds this | Make or change an install statement (IS8) |
+| The controller key in the wrong hands | Raise the epoch ids of a stream until a start or a `trust.controller` begins them again, keep a PEP fresh while it withholds, and move the time floor of a PEP with no clock and freshness on once per start, which can expire its release (K6, H16) | Admit, commit, revoke or install anything, count on any envelope, or keep a good statement from giving freshness (K6, H16) |
 | | Offer a superseded set the engineer signed, at a `seq` above the PEP's | Offer one at or below the `seq` the PEP holds (IS6), or one the PEP's ceiling does not hold (CL3) |
 | | Fork a stream by giving two PEPs different `install.trust` statements that were both signed | Hide it. The install trust id is in every install id (IS10, H12) |
 

@@ -79,10 +79,11 @@ policy and the ceiling an install engineer signs for a target of any kind, appen
 fallback policy deciding, an allow by the action floor, a lost install set and a widened install set are `state` at
 161 to 164. A release or a set above the ceiling is `envelope` at 165, a floor action escalated past its signed rate
 is `routing` at 166, an action floor that is too broad is `envelope` at 167, and an operator's answer bound to no
-open escalation is `authority` at 168. So the occupied ranges today are `authority` 1 to 10, 87 to 88, 135 to 147
+open escalation is `authority` at 168. The reconciling rule of that spec (section 9.5) appended one more in `state`
+at 169, for an enforcement point whose runtime did not take a switch of policy. So the occupied ranges today are `authority` 1 to 10, 87 to 88, 135 to 147
 and 168, `envelope` 16 to 19, 69 to 86, 89 to 98, 101, 103, 148 to 149, 160, 165 and 167, `routing` 32 to 37, 99
-to 100, 102, 104 to 134 and 166, `wire` 48 to 56, 150 and 155 to 158, and `state` 64 to 68, 151 to 154, 159 and
-161 to 164.
+to 100, 102, 104 to 134 and 166, `wire` 48 to 56, 150 and 155 to 158, and `state` 64 to 68, 151 to 154, 159,
+161 to 164 and 169.
 The first `state` band stops at 68. It never reached 79, and 69 to 86 is envelope, not state. Read a code's class
 off the `class` column in `prismpath/kernel/causes.py` and never infer it from the number: the next
 append lands after the highest code present, in whatever band that falls, and nothing already
