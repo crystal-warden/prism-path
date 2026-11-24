@@ -701,6 +701,12 @@ class Pep:
         record = self.installed.record
         if record is None and not self.installed.record_lost:
             return b""
+        if record is not None and hasattr(self.adapter, "floor_counts"):
+            answers, overrides = self.adapter.floor_counts()         # AF7: answered in another process of the home
+            if answers:
+                record = replace(record, answers=min(record.answers + answers, 2 ** 32 - 1),
+                                 overrides=min(record.overrides + overrides, 2 ** 32 - 1))
+                self.installed.save(record)
         about = subject if event in ("staged", "refused", "answered", "install-applied", "install-widened") else None
         return state_record.InstallEntry(
             install_id=record.install_id() if record is not None else b"\x00" * 16,

@@ -340,7 +340,10 @@ def _policy_profile(home: Path, max_processes: int):
     """(the agent profile, the policy, the store of runs) of the recorded policy, or a LaunchError saying what to fix."""
     try:
         policy, store = commands.load_checked(home)
-        profile = compile_profile(policy, "agent")
+        from prismpath.distribution.adapters import agent_home
+        # AF1: a home that follows a stream runs under the profile of the policy in force and its action floor together
+        profile = agent_home.running_profile(home, "agent") if agent_home.is_distributed(home) \
+            else compile_profile(policy, "agent")
     except commands.AgentError as exc:
         raise LaunchError(f"{exc}, so nothing was run") from exc
     except ProfileError as exc:

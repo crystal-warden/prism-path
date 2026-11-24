@@ -279,7 +279,7 @@ def test_case_246_a_held_release_that_falls_while_withdrawn_is_never_installed(t
     """case_246: C10, R5, X1, Q4, H14, the expiry and revocation runs. While a commit is reconciling with its
     runtime withdrawn, the held release expires, and in another run is revoked: it is never installed, the PEP is
     `no-policy` at once with one `lapsed` record of that cause and no `committed` record, and the floor stays the
-    commit's. The ceiling and fallback runs wait for section 21."""
+    commit's. The ceiling and fallback runs are in test_distribution_install_controller.py."""
     for cause in ("dist:expired", "dist:revoked"):
         rig = FlakyHost(tmp_path / cause[5:])
         rig.commit(OLD)
