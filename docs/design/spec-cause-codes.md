@@ -74,9 +74,15 @@ findings the controller files from state records are `wire` at 155 to 158, under
 controller files them and no enforcement point emits them. The hold at expiry that a `mesh` or `cfs` deployment may
 choose is `state` at 159. The refusal of a policy whose rule names a value outside its field's reading domain,
 which the engineer who installs PrismPath defines (`spec-policy-distribution.md`, section 9.4), took 160 in
-`envelope` beside the other policy refusals. So the occupied ranges today are `authority` 1 to 10, 87 to 88 and 135
-to 147, `envelope` 16 to 19, 69 to 86, 89 to 98, 101, 103, 148 to 149 and 160, `routing` 32 to 37, 99 to 100, 102
-and 104 to 134, `wire` 48 to 56, 150 and 155 to 158, and `state` 64 to 68, 151 to 154 and 159.
+`envelope` beside the other policy refusals. Section 21 of that spec, the action floor, the fallback
+policy and the ceiling an install engineer signs for a target of any kind, appended eight more at 161 to 168. The
+fallback policy deciding, an allow by the action floor, a lost install set and a widened install set are `state` at
+161 to 164. A release or a set above the ceiling is `envelope` at 165, a floor action escalated past its signed rate
+is `routing` at 166, an action floor that is too broad is `envelope` at 167, and an operator's answer bound to no
+open escalation is `authority` at 168. So the occupied ranges today are `authority` 1 to 10, 87 to 88, 135 to 147
+and 168, `envelope` 16 to 19, 69 to 86, 89 to 98, 101, 103, 148 to 149, 160, 165 and 167, `routing` 32 to 37, 99
+to 100, 102, 104 to 134 and 166, `wire` 48 to 56, 150 and 155 to 158, and `state` 64 to 68, 151 to 154, 159 and
+161 to 164.
 The first `state` band stops at 68. It never reached 79, and 69 to 86 is envelope, not state. Read a code's class
 off the `class` column in `prismpath/kernel/causes.py` and never infer it from the number: the next
 append lands after the highest code present, in whatever band that falls, and nothing already

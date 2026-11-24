@@ -11,7 +11,7 @@
 pub const CAUSE_NONE: u8 = 0;
 
 /// `registry_sha256()` of the Python registry when this file was generated.
-pub const REGISTRY_SHA256: &str = "ec2ea6dafaa3f2230a34314887d653d42055dd218ae7cab91031b1ba6e54a37b";
+pub const REGISTRY_SHA256: &str = "db8bffeb055c77435cecbad64858ab2b5c720c3429dd24d17d06a09b111f15bb";
 
 /// The cause class, the semantic axis of the registry.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -297,6 +297,22 @@ pub const FLEET_SILENT: u8 = 158;
 pub const DIST_HELD: u8 = 159;
 /// `policy:out-of-domain`
 pub const POLICY_OUT_OF_DOMAIN: u8 = 160;
+/// `dist:fallback`
+pub const DIST_FALLBACK: u8 = 161;
+/// `dist:floor-allowed`
+pub const DIST_FLOOR_ALLOWED: u8 = 162;
+/// `dist:install-lost`
+pub const DIST_INSTALL_LOST: u8 = 163;
+/// `dist:install-widened`
+pub const DIST_INSTALL_WIDENED: u8 = 164;
+/// `dist:above-ceiling`
+pub const DIST_ABOVE_CEILING: u8 = 165;
+/// `dist:floor-rate`
+pub const DIST_FLOOR_RATE: u8 = 166;
+/// `dist:floor-broad`
+pub const DIST_FLOOR_BROAD: u8 = 167;
+/// `dist:answer-unbound`
+pub const DIST_ANSWER_UNBOUND: u8 = 168;
 
 /// Every registered cause, in registry order.
 pub const REGISTRY: &[Cause] = &[
@@ -426,6 +442,14 @@ pub const REGISTRY: &[Cause] = &[
     Cause { code: 158, name: "fleet:silent", class: CauseClass::Wire, description: "no accepted state record from an enforcement point for three heartbeat intervals; filed by the controller" },
     Cause { code: 159, name: "dist:held", class: CauseClass::State, description: "an enforcement point deciding under an expired release because its deployment chose to hold at expiry, or an action refused because of that hold; marked in every state record and receipt while it lasts" },
     Cause { code: 160, name: "policy:out-of-domain", class: CauseClass::Envelope, description: "a policy whose rule names a value outside its field's reading domain, the values the installer defined for it (a tool or a category value the classifier does not produce, a bool constant that is not true or false, an int named outside its min and max); refused when the policy is loaded and when it is checked, since such a value is a resource nobody accounted for" },
+    Cause { code: 161, name: "dist:fallback", class: CauseClass::State, description: "an enforcement point deciding under its installed fallback policy because no release is active; marked in every state record while it lasts and filed by the controller" },
+    Cause { code: 162, name: "dist:floor-allowed", class: CauseClass::State, description: "a request the installed action floor allowed, whatever the policy says; an allow that was not the policy's" },
+    Cause { code: 163, name: "dist:install-lost", class: CauseClass::State, description: "an install set or an install record that no longer reads at start, so the enforcement point runs without that action floor, fallback policy or ceiling" },
+    Cause { code: 164, name: "dist:install-widened", class: CauseClass::State, description: "an install set applied or handed over that allows more than the one before it, or is the first of its kind; filed until an operator acknowledges it" },
+    Cause { code: 165, name: "dist:above-ceiling", class: CauseClass::Envelope, description: "a release or an install set that allows what the installed ceiling does not, or a ceiling the held sets are above" },
+    Cause { code: 166, name: "dist:floor-rate", class: CauseClass::Routing, description: "a request the action floor would have allowed, escalated because the signed rate of floor allows is spent" },
+    Cause { code: 167, name: "dist:floor-broad", class: CauseClass::Envelope, description: "an action floor with a default or catch all, a rule that names no one action or lacks a required test, a test of a field that is not independent, or more rules or entries than its bound" },
+    Cause { code: 168, name: "dist:answer-unbound", class: CauseClass::Authority, description: "an operator's signed answer that names no open escalation of this enforcement point, or one already answered" },
 ];
 
 /// The engine's stop vocabulary mapped onto the registry; `terminal` and `waiting` are clean and have no cause.
