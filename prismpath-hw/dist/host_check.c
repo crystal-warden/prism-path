@@ -7,7 +7,7 @@
  *   host_check < cases      each case is lines of "<word> <values>" ending with "end"
  *
  *   case <name>
- *   key <key id hex> <public hex> <role 0 authority | 1 another>
+ *   key <key id hex> <public hex> <role 0 authority | 1 another | 2 controller>
  *   retired | revoked_key | revoked_envelope | revoked_policy <hex>
  *   raised <stream> <seq>
  *   trust <readable 0|1> <trust_seq> <trust_id hex or -> <time_floor>
@@ -33,10 +33,11 @@
  *   tick <now ms> <now>
  *   rollback <now>
  *   record <event code> <now>
- *   epoch <epoch id>
+ *   statement <hex> <now>   one controller statement (H9, H16), which prints "statement <taken 0|1> <epoch id>"
  *   decide <now>
  *   restart <now>
- *   lose anchor | setting | counter | trust | floor | active | previous | staged | pending   (that part's bytes do not read)
+ *   lose anchor | setting | counter | trust | floor | active | previous | staged | pending | fresh   (that part's bytes
+ *                 do not read)
  *   stop <n>  after n more part writes nothing reaches the store, as a power loss; a restart restores the power
  *   state     the durable state as read back: active, previous and staged, each its seq or "-"
  *   written   the bytes the durable writes took since the last "written": total, writes, the largest
@@ -136,7 +137,7 @@ static const pp_durable *reread(void) {
 static int part_index(const char *name) {
     static const char *const names[N_PARTS] = {"anchor", "counter", "trust", "floor", "active", "previous", "staged",
                                                "pending", "install", "rates", "set_floor", "set_fallback",
-                                               "set_ceiling"};
+                                               "set_ceiling", "fresh"};
     for (int k = 0; k < N_PARTS; k++)
         if (strcmp(names[k], name) == 0) return k;
     return -1;
@@ -171,6 +172,8 @@ static void print_decision(const pp_decision *d) {
  *
  *   akey <key id hex> <public hex>      a key of the next anchor (anchor_clear empties it, the install part and the
  *   anchor_clear                        statements brought)
+ *   ckey <key id hex> <public hex>      the controller key of the next anchor (K6), and
+ *   fresh <seconds>                     its `fresh` (H16)
  *   ikey | iop <public hex>             an install or operator key of the next anchor's install member
  *   install <threshold> <seq> <domain hex> <fingerprint hex>   the next anchor has an install member
  *   bring <sealed hex> <body hex>       a statement the next provisioning or install provisioning brings
@@ -232,6 +235,16 @@ static int machine(const char *args, pp_trust *anchor) {
             hash32(b, anchor->keys[anchor->n_keys].public_key);
             anchor->keys[anchor->n_keys++].role = PP_ROLE_AUTHORITY;
             anchor->readable = 1;
+            continue;
+        } else if (strcmp(word, "ckey") == 0 && anchor->n_keys < PP_MAX_HELD_KEYS) {
+            if (sscanf(rest, "%s %s", a, b) != 2) return 2;
+            hash32(a, anchor->keys[anchor->n_keys].id);
+            hash32(b, anchor->keys[anchor->n_keys].public_key);
+            anchor->keys[anchor->n_keys++].role = PP_ROLE_CONTROLLER;
+            anchor->readable = 1;
+            continue;
+        } else if (strcmp(word, "fresh") == 0) {
+            anchor->fresh = strtoll(rest, NULL, 10);
             continue;
         } else if (strcmp(word, "anchor_clear") == 0) {
             memset(anchor, 0, sizeof *anchor);
@@ -345,9 +358,11 @@ static int machine(const char *args, pp_trust *anchor) {
             if (sscanf(rest, "%u %lld", &event, &now) != 2) return 2;
             pp_pep_record(&pep, (uint8_t)event, now);
             print_records(&pep);
-        } else if (strcmp(word, "epoch") == 0) {
-            pp_pep_see_epoch(&pep, strtoull(rest, NULL, 10));
-            printf("records\n");
+        } else if (strcmp(word, "statement") == 0) {
+            if (sscanf(rest, "%s %lld", a, &now) != 2) return 2;
+            size_t n = unhex(a, sealed_bytes, sizeof sealed_bytes);
+            int taken = pp_pep_take_statement(&pep, sealed_bytes, n, now);
+            printf("statement %d %llu\n", taken, (unsigned long long)pep.epoch);
         } else if (strcmp(word, "decide") == 0) {
             int mark = 0;
             uint8_t cause = pp_pep_decide(&pep, &mark, strtoll(rest, NULL, 10));

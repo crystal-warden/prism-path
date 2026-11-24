@@ -32,6 +32,15 @@ policy or the refusal of X3, with the basis and the policy hash of the set that 
 of body hashes. The layout and the reading domain the PEP was built with are in its `pp_config`. The `cfs` kind, and
 with it the operator's answer, is not built yet.
 
+The controller key is built for `mesh` (K6, K7, H9, H16). The anchor may name one key in the controller role and
+`fresh`. A controller key's signature never counts on an envelope. A `trust.controller` is a trust kind on `@trust`
+that replaces the controller key, retires the one before and starts the epoch id again. `pp_pep_take_statement`
+reads one controller statement of 102 or 126 bytes (`pp_statement_verify`, the twin of
+`prismpath/distribution/statement.py`), takes its epoch id under the rules of H9 and sends no record. Where `fresh`
+is set it keeps the latest fresh statement in its own part (`PP_PART_FRESH`), lapses a release or holds it at X1
+once that statement runs out, and on a node with no clock takes its time floor from the first one of each start.
+The epoch id lives in memory only. A frame of type 6 carries one statement.
+
 `prismpath/tests/test_distribution_c.py` builds `host_check.c` with the host `cc` and
 `-Wall -Wextra -Werror -fsanitize=address,undefined`. It replays every corpus case on the `mesh` kind,
 runs the machine step for step beside the Python one (`prismpath/distribution/pep.py` on a modelled mesh
