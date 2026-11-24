@@ -214,6 +214,7 @@ _REGISTRY: Tuple[Tuple[int, str, str, str], ...] = (
     (166, "dist:floor-rate",             "routing",   "a request the action floor would have allowed, escalated because the signed rate of floor allows is spent, or an operator's answer refused past its signed answer rate"),
     (167, "dist:floor-broad",            "envelope",  "an action floor with a default or catch all, a rule that names no one action or lacks a required test, a test of a field that is not independent, or more rules or entries than its bound"),
     (168, "dist:answer-unbound",         "authority", "an operator's signed answer that names no open escalation of this enforcement point, or one already answered"),
+    (169, "dist:reconciling",            "state",     "a decision the action floor and the fallback policy leave, a commit or a rollback asked of an enforcement point whose runtime may not run what it holds, after the runtime step of a commit, a rollback, a lapse, an install set or a start failed; marked in every state record while it lasts and filed by the controller"),
 )
 
 CODES: Dict[int, Tuple[str, str, str]] = {cause_code: (canonical_name, class_name, description)
