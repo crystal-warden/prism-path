@@ -109,5 +109,7 @@ def test_a_build_whose_sdkconfig_lacks_the_family_settings_fails(family):
 def test_the_esp32_classic_entry_builds_for_every_crystal():
     entry = families.FAMILIES["esp32"]
     assert entry.settings == {"CONFIG_XTAL_FREQ_AUTO": "y"} and entry.capability == families.FULL
+    if not (entry.project / "sdkconfig.defaults").is_file():
+        pytest.skip("the firmware project is in the research tree, which the installed wheel does not carry")
     defaults = (entry.project / "sdkconfig.defaults").read_text()
     assert "CONFIG_XTAL_FREQ_AUTO=y" in defaults.splitlines()
