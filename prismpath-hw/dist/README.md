@@ -24,6 +24,14 @@ and a pending intent named by release id and seq), and the caller's `persist` is
 writes each whole, so a state record writes its 12 byte counter and no more, and it reports every
 transition in a state record signed by the instance key.
 
+Section 21 is built for `mesh`. The install record, the rate counts and the held and staged statement of each install
+kind are five more parts, each written to two media by `persist` and read back from the first copy that reads, the
+record before the set it names (IS10). `pp_pep_ask` decides one request: the action floor first, which on this kind
+only allows and is held narrow by one bounded postfix pass at staging (AF9), then the active release, the fallback
+policy or the refusal of X3, with the basis and the policy hash of the set that decided (RC1). The ceiling is a list
+of body hashes. The layout and the reading domain the PEP was built with are in its `pp_config`. The `cfs` kind, and
+with it the operator's answer, is not built yet.
+
 `prismpath/tests/test_distribution_c.py` builds `host_check.c` with the host `cc` and
 `-Wall -Wextra -Werror -fsanitize=address,undefined`. It replays every corpus case on the `mesh` kind,
 runs the machine step for step beside the Python one (`prismpath/distribution/pep.py` on a modelled mesh
