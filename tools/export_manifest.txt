@@ -798,8 +798,8 @@ prismpath/tests/test_distribution_frames.py
 prismpath/tests/test_distribution_gateway.py
 prismpath/tests/test_distribution_hatches.py
 prismpath/tests/test_distribution_heartbeat.py
-prismpath/tests/test_distribution_identity.py
 prismpath/tests/test_distribution_http.py
+prismpath/tests/test_distribution_identity.py
 prismpath/tests/test_distribution_install.py
 prismpath/tests/test_distribution_install_controller.py
 prismpath/tests/test_distribution_legacy.py
@@ -825,6 +825,7 @@ prismpath/tests/test_facet.py
 prismpath/tests/test_fanout_engine.py
 prismpath/tests/test_fanout_tree.py
 prismpath/tests/test_field_definitions.py
+prismpath/tests/test_fleet_harness.py
 prismpath/tests/test_flow_authority.py
 prismpath/tests/test_flow_authority_callers.py
 prismpath/tests/test_flow_authority_console.py
@@ -862,6 +863,7 @@ prismpath/tests/test_lsp.py
 prismpath/tests/test_merkle_consistency.py
 prismpath/tests/test_merkle_rfc6962.py
 prismpath/tests/test_merkle_stream.py
+prismpath/tests/test_mesh_firmware.py
 prismpath/tests/test_mission_control.py
 prismpath/tests/test_mission_control_audit.py
 prismpath/tests/test_mission_control_auditing.py

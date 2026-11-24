@@ -1,0 +1,12 @@
+menu "PrismPath mesh node"
+
+config PPT_MESH_EXPIRY_HOLD
+    bool "Keep deciding under an expired release (HOLD) instead of refusing (REFUSE)"
+    default n
+    help
+        The expiry response of policy distribution (spec-policy-distribution.md, X6). Off is REFUSE: an
+        expired release lapses and the node decides nothing. On is HOLD: the node keeps deciding under the
+        expired release, marks every state record with bit 5 and ends the hold only on a release that passes
+        every rule, a revocation, or a lost floor. The setting is fixed for the node's life (X10).
+
+endmenu

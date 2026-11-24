@@ -31,6 +31,16 @@ only allows and is held narrow by one bounded postfix pass at staging (AF9), the
 policy or the refusal of X3, with the basis and the policy hash of the set that decided (RC1). The ceiling is a list
 of body hashes. The layout and the reading domain the PEP was built with are in its `pp_config`.
 
+The controller key is built for `mesh` (K6, K7, H9, H16). The anchor may name one key in the controller role and
+`fresh`. A controller key's signature never counts on an envelope. A `trust.controller` is a trust kind on `@trust`
+that replaces the controller key, retires the one before and starts the epoch id again. `pp_pep_take_statement`
+reads one controller statement of 102 or 126 bytes (`pp_statement_verify`, the twin of
+`prismpath/distribution/statement.py`), takes its epoch id under the rules of H9 and sends no record. Where `fresh`
+is set it keeps the latest fresh statement in its own part (`PP_PART_FRESH`), lapses a release or holds it at X1
+once that statement runs out, and on a node with no clock takes its time floor from the first one of each start.
+The epoch id lives in memory only. A frame of type 6 carries one statement.
+
+`prismpath/tests/test_distribution_c.py` builds `host_check.c` with the host `cc` and
 The `cfs` kind takes a `cfs.table`, the `PP_PolicyTable_t` bytes before `ImageSig` (4,692 bytes). Every release and
 install slot is sized by `PP_TABLE_MAX`, which is the mesh node's 640 bytes unless a build sets it, so the firmware
 keeps its RAM. The cFS app and the host check of the cfs kind build with `-DPP_TABLE_MAX=4692`, and a build whose

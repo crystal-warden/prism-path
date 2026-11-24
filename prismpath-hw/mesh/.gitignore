@@ -1,4 +1,7 @@
 build/
+build-*/
 sdkconfig
-sdkconfig.old
+sdkconfig.*
+!sdkconfig.defaults
 authority_ed25519.key
+controller_ed25519.key

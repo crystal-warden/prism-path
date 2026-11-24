@@ -71,7 +71,7 @@ void pp_sha256(const uint8_t *data, size_t len, uint8_t out[32]) {
 static const char *const pp_artifact_names[PP_ART_COUNT] = {
     "policy.core", "policy.ppt", "policy.spiral", "sandbox.profile", "egress.hosts", "agent.zones", "gateway.routes",
     "net.dests", "net.edge", "cfs.table", "grant", "trust.widening", "trust.revocation", "trust.rotation",
-    "install.floor", "install.fallback", "install.ceiling", "install.trust", "operator.answer"};
+    "install.floor", "install.fallback", "install.ceiling", "install.trust", "operator.answer", "trust.controller"};
 static const char *const pp_target_names[PP_TGT_COUNT] = {"agent", "cfs", "gateway", "host", "mesh", "xdp"};
 
 const char *pp_artifact_name(pp_artifact artifact) {
@@ -111,7 +111,8 @@ typedef struct {
 } pp_row;
 
 static int pp_is_trust(pp_artifact artifact) {
-    return artifact == PP_ART_TRUST_WIDENING || artifact == PP_ART_TRUST_REVOCATION || artifact == PP_ART_TRUST_ROTATION;
+    return artifact == PP_ART_TRUST_WIDENING || artifact == PP_ART_TRUST_REVOCATION || artifact == PP_ART_TRUST_ROTATION ||
+           artifact == PP_ART_TRUST_CONTROLLER;
 }
 
 /* Section 21: the install kinds, and the set kind of each of the three that make a set. */
@@ -129,12 +130,13 @@ uint8_t *pp_held_body(pp_release *release, size_t k) {
 }
 
 static int pp_on_trust_stream(pp_artifact artifact) {
-    return artifact == PP_ART_TRUST_REVOCATION || artifact == PP_ART_TRUST_ROTATION;
+    return artifact == PP_ART_TRUST_REVOCATION || artifact == PP_ART_TRUST_ROTATION || artifact == PP_ART_TRUST_CONTROLLER;
 }
 
 static uint8_t pp_read_widening(const uint8_t *body, size_t len);
 static uint8_t pp_check_revocation(const uint8_t *body, size_t len, const pp_trust *trust);
 static uint8_t pp_check_rotation(const struct pp_check_args *a);
+static uint8_t pp_check_controller(const struct pp_check_args *a);
 static int pp_install_names(const pp_install *r, const uint8_t id[32]);
 static const pp_key *pp_held_key(const pp_trust *trust, const uint8_t id[32]);
 
@@ -147,6 +149,7 @@ static uint8_t pp_mesh_check(const struct pp_check_args *a) {
     case PP_ART_TRUST_WIDENING: return pp_read_widening(a->body, a->len);
     case PP_ART_TRUST_REVOCATION: return pp_check_revocation(a->body, a->len, a->trust);
     case PP_ART_TRUST_ROTATION: return pp_check_rotation(a);
+    case PP_ART_TRUST_CONTROLLER: return pp_check_controller(a);
     default: return PP_CAUSE_TARGET_MISMATCH; /* unreachable: V5 admits nothing else */
     }
 }
@@ -184,7 +187,8 @@ static uint8_t pp_cfs_check(const struct pp_check_args *a) {
 
 static const pp_row *pp_row_of(pp_target kind) {
     static const pp_row mesh = {PP_BIT(PP_ART_POLICY_PPT),
-                                PP_BIT(PP_ART_TRUST_WIDENING) | PP_BIT(PP_ART_TRUST_REVOCATION) | PP_BIT(PP_ART_TRUST_ROTATION),
+                                PP_BIT(PP_ART_TRUST_WIDENING) | PP_BIT(PP_ART_TRUST_REVOCATION) | PP_BIT(PP_ART_TRUST_ROTATION) |
+                                    PP_BIT(PP_ART_TRUST_CONTROLLER),
                                 PP_MESH_TABLE_MAX, PP_TRUST_BOUND, pp_mesh_check};
     static const pp_row cfs = {PP_BIT(PP_ART_CFS_TABLE),
                                PP_BIT(PP_ART_TRUST_WIDENING) | PP_BIT(PP_ART_TRUST_REVOCATION) | PP_BIT(PP_ART_TRUST_ROTATION),
@@ -591,10 +595,11 @@ static uint8_t pp_check_rotation(const struct pp_check_args *a) {
     if (cause) return cause;
     const pp_trust *t = a->trust;
     pp_sha256(add, 32, added_id);
+    const pp_key *same = pp_held_key(t, added_id);
     if ((a->pep->has_instance_key_id && memcmp(added_id, a->pep->instance_key_id, 32) == 0) ||
         pp_listed(t->revoked_keys, t->n_revoked_keys, added_id) || pp_listed(t->retired, t->n_retired, added_id) ||
-        (a->pep->install && pp_install_names(a->pep->install->record, added_id)))
-        return PP_CAUSE_ROTATION_INVALID; /* O4, K4: never an install or an operator key, held or retired */
+        (same && same->role != PP_ROLE_AUTHORITY) || (a->pep->install && pp_install_names(a->pep->install->record, added_id)))
+        return PP_CAUSE_ROTATION_INVALID; /* O4, K4: never the controller key, an install or an operator key, held or retired */
     if (has_retire && pp_held_key(t, retire) == NULL) return PP_CAUSE_ROTATION_INVALID; /* O3 */
     size_t live = 0;
     int added_live = 0, retire_live = 0;
@@ -612,6 +617,47 @@ static uint8_t pp_check_rotation(const struct pp_check_args *a) {
             return crypto_ed25519_check(a->entries[k].signature, add, a->message, a->message_len) == 0
                        ? PP_CAUSE_NONE : PP_CAUSE_ROTATION_INVALID; /* O2 */
     return PP_CAUSE_ROTATION_INVALID;
+}
+
+/* K7 (kinds.read_controller): the controller's public key in `key`. */
+static uint8_t pp_read_controller(const uint8_t *body, size_t len, uint8_t key[32]) {
+    int form = pp_c2_check(body, len);
+    if (form == PP_C2_NOT_CANONICAL) return PP_CAUSE_NOT_CANONICAL;
+    if (form != PP_C2_OK) return PP_CAUSE_BAD_FORMAT;
+    pp_c2 c = {body, len, 0, 1};
+    if (!pp_c2_lit(&c, "{\"encoding\":\"canon/2\",\"format\":\"prismpath.dist-controller/1\",\"key\":") ||
+        !pp_scan_hash(&c, key) || !pp_c2_lit(&c, "}") || c.i != c.n)
+        return PP_CAUSE_BAD_FORMAT;
+    return PP_CAUSE_NONE;
+}
+
+/* K6: the controller key the store holds and has not retired, or NULL. */
+static const pp_key *pp_controller_of(const pp_trust *t) {
+    for (size_t k = 0; k < t->n_keys; k++)
+        if (t->keys[k].role == PP_ROLE_CONTROLLER && !pp_listed(t->retired, t->n_retired, t->keys[k].id)) return &t->keys[k];
+    return NULL;
+}
+
+/* K7, K4, K5 (trust.check_controller): naming the held controller key passes. Otherwise `key` is never the PEP's own
+ * instance key, a revoked key, a key held in another role or retired, the controller key replaced before included,
+ * or an install or an operator key the PEP holds or retired (dist:rotation-invalid), and a store that would then
+ * hold a ninth key that is not retired is dist:too-large. */
+static uint8_t pp_check_controller(const struct pp_check_args *a) {
+    uint8_t key[32], id[32];
+    uint8_t cause = pp_read_controller(a->body, a->len, key);
+    if (cause) return cause;
+    const pp_trust *t = a->trust;
+    pp_sha256(key, 32, id);
+    const pp_key *held = pp_controller_of(t), *same = pp_held_key(t, id);
+    if (held && memcmp(held->id, id, 32) == 0) return PP_CAUSE_NONE;
+    if ((a->pep->has_instance_key_id && memcmp(id, a->pep->instance_key_id, 32) == 0) ||
+        pp_listed(t->revoked_keys, t->n_revoked_keys, id) || pp_listed(t->retired, t->n_retired, id) ||
+        (same && same->role != PP_ROLE_CONTROLLER) || (a->pep->install && pp_install_names(a->pep->install->record, id)))
+        return PP_CAUSE_ROTATION_INVALID;
+    size_t live = 1; /* the key named */
+    for (size_t k = 0; k < t->n_keys; k++)
+        if (!pp_listed(t->retired, t->n_retired, t->keys[k].id) && &t->keys[k] != held) live++;
+    return live > PP_MAX_KEYS ? PP_CAUSE_TOO_LARGE : PP_CAUSE_NONE;
 }
 
 uint8_t pp_counting(const pp_trust *trust, const pp_entry *entries, size_t n_entries, const uint8_t *message,
@@ -1489,7 +1535,8 @@ static uint8_t pp_frame_reads(const uint8_t *f, size_t len, size_t limit) {
         for (int k = 7; k >= 0; k--) seq = seq << 8 | f[20 + k];
         return seq <= (uint64_t)PP_MAX_SEQ ? 0 : PP_CAUSE_FRAME_INVALID;
     }
-    case PP_FRAME_EPOCH: return len == 12 ? 0 : PP_CAUSE_FRAME_INVALID;
+    case PP_FRAME_EPOCH: /* H9: one controller statement */
+        return len == 4 + PP_STATEMENT_SIZE || len == 4 + PP_FRESH_STATEMENT_SIZE ? 0 : PP_CAUSE_FRAME_INVALID;
     default: return PP_CAUSE_FRAME_INVALID;
     }
 }
@@ -1837,6 +1884,11 @@ static void pp_drop_fallen_staged(pp_pep_machine *pep) {
     }
 }
 
+/* H16: freshness is on and the PEP's time passed the kept fresh statement's `expires` plus SKEW. */
+static int pp_stale(const pp_pep_machine *pep) {
+    return pep->d.trust.fresh > 0 && pep->d.has_kept && pp_time(pep) > (long long)pep->d.kept_expires + PP_SKEW;
+}
+
 /* What every entry point and the tick run first (pep._check_active): an active release that no longer stands lapses
  * with dist:revoked (R5, X8), and an expired one lapses or under HOLD is held (X1, X6, X7). */
 static void pp_check_expiry(pp_pep_machine *pep) {
@@ -1845,7 +1897,7 @@ static void pp_check_expiry(pp_pep_machine *pep) {
         pp_lapse(pep, PP_CAUSE_REVOKED);
         return;
     }
-    if (pp_still_valid(pep, &pep->d.active, 0) != PP_CAUSE_EXPIRED) return;
+    if (pp_still_valid(pep, &pep->d.active, 0) != PP_CAUSE_EXPIRED && !pp_stale(pep)) return;
     if (pep->config.expiry_hold) {
         if (pep->held) return;
         pep->held = 1;
@@ -2009,6 +2061,13 @@ int pp_pep_open(pp_pep_machine *pep, const pp_config *config, const pp_durable *
         pep->d.has_staged = 0; /* a commit cut off after its active part left the release staged as well */
         pp_persist(pep, PP_PART_STAGED);
     }
+    if (pep->d.has_kept) { /* H16: the kept statement is checked again under the controller key, or is none */
+        pp_controller_statement st;
+        size_t kept_len = pep->d.kept[37] ? PP_FRESH_STATEMENT_SIZE : PP_STATEMENT_SIZE;
+        if (pep->d.trust.fresh <= 0 || pp_statement_verify(pep->d.kept, kept_len, pp_pep_controller_key(pep), &st) ||
+            !st.fresh || st.expires != pep->d.kept_expires)
+            pep->d.has_kept = 0;
+    }
     pep->n_out = 0;
     pep->message = 1;
     pp_open_install(pep);
@@ -2041,9 +2100,15 @@ static uint8_t pp_check_anchor(const pp_pep_machine *pep, const pp_trust *anchor
     const pp_install *held = pp_has_record(pep) ? &d->install : NULL;
     uint8_t instance[32];
     pp_sha256(pep->instance_public, 32, instance);
-    for (size_t k = 0; k < anchor->n_keys; k++)
+    size_t controllers = 0;
+    for (size_t k = 0; k < anchor->n_keys; k++) {
         if (memcmp(anchor->keys[k].id, instance, 32) == 0 || pp_install_names(held, anchor->keys[k].id))
             return PP_CAUSE_ROTATION_INVALID; /* K2, K4 */
+        for (size_t j = 0; j < k; j++)
+            if (memcmp(anchor->keys[j].id, anchor->keys[k].id, 32) == 0) return PP_CAUSE_ROTATION_INVALID; /* K4 */
+        controllers += anchor->keys[k].role == PP_ROLE_CONTROLLER;
+    }
+    if (controllers > 1 || anchor->fresh < 0) return PP_CAUSE_BAD_FORMAT; /* K6, P4 */
     if (in == NULL || !in->present) return PP_CAUSE_NONE;
     if (in->n_keys < 1 || in->n_keys > PP_INSTALL_KEYS || in->n_operators > PP_OPERATOR_KEYS || in->threshold < 1 ||
         in->threshold > (long long)in->n_keys || in->seq < 0)
@@ -2201,6 +2266,7 @@ uint8_t pp_pep_provision_install(pp_pep_machine *pep, const pp_trust *anchor, co
     d->trust.readable = 1;
     d->trust.trust_seq = 0;
     d->trust.time_floor = 0;
+    d->trust.key_seq = 0; /* K6: the anchor names the first controller key at key sequence 0 */
     pp_copy_stream(d->stream, stream);
     d->counter = counter;
     d->install_mark = install_mark;
@@ -2221,6 +2287,8 @@ uint8_t pp_pep_provision_install(pp_pep_machine *pep, const pp_trust *anchor, co
     d->ceiling_mark = has && d->install.sets[PP_SET_CEILING].held;
     pep->locked = pep->held = 0;
     pep->commit_due = 0;
+    pep->epoch = 0;      /* H15, P3 */
+    pep->time_taken = 0; /* H16: the kept statement went with the parts cleared above */
     pp_runtime(pep);
     pp_persist(pep, PP_PARTS);
     pep->message = 0;
@@ -2311,6 +2379,46 @@ static void pp_apply_rotation(pp_pep_machine *pep, const pp_envelope *e, const u
     memcpy(t->trust_id, e->envelope_id, 32);
     t->has_trust_id = 1;
     pp_persist(pep, PP_PART_TRUST);
+}
+
+/* trust.apply_controller: the store after a verified `trust.controller` at the next trust sequence (K7). The key
+ * named becomes the controller key and the one it replaces is retired, a seventeenth retired id forgetting the
+ * oldest and its key (K5). A key that is already the controller key stays. Either way the envelope's `seq` is the
+ * key sequence, and the epoch id starts again at 0 (H15). */
+static void pp_apply_controller(pp_pep_machine *pep, const pp_envelope *e, const uint8_t *body, size_t len) {
+    pp_trust *t = &pep->d.trust;
+    uint8_t key[32], id[32];
+    (void)pp_read_controller(body, len, key); /* V11 read it and held it to K7 */
+    pp_sha256(key, 32, id);
+    const pp_key *held = pp_controller_of(t);
+    if (held == NULL || memcmp(held->id, id, 32) != 0) {
+        if (held != NULL) {
+            if (t->n_retired == PP_MAX_RETIRED) { /* K5: forget the oldest retired id and its key */
+                for (size_t k = 0; k < t->n_keys; k++)
+                    if (memcmp(t->keys[k].id, t->retired[0], 32) == 0) {
+                        if (&t->keys[k] < held) held--;
+                        memmove(&t->keys[k], &t->keys[k + 1], (t->n_keys - k - 1) * sizeof t->keys[0]);
+                        t->n_keys--;
+                        break;
+                    }
+                memmove(t->retired[0], t->retired[1], (PP_MAX_RETIRED - 1) * 32);
+                t->n_retired--;
+            }
+            memcpy(t->retired[t->n_retired++], held->id, 32);
+        }
+        if (t->n_keys < PP_MAX_HELD_KEYS) {
+            pp_key *added = &t->keys[t->n_keys++];
+            memcpy(added->id, id, 32);
+            memcpy(added->public_key, key, 32);
+            added->role = PP_ROLE_CONTROLLER;
+        }
+    }
+    t->key_seq = e->seq;
+    t->trust_seq = e->seq;
+    memcpy(t->trust_id, e->envelope_id, 32);
+    t->has_trust_id = 1;
+    pp_persist(pep, PP_PART_TRUST);
+    pep->epoch = 0;
 }
 
 static void pp_refuse(pp_pep_machine *pep, uint8_t cause) {
@@ -2762,6 +2870,12 @@ static uint8_t pp_stage_one(pp_pep_machine *pep, const uint8_t *sealed, size_t s
         pp_emit(pep, PP_EV_TRUST_APPLIED, 0);
         return PP_CAUSE_NONE;
     }
+    if (e->artifact == PP_ART_TRUST_CONTROLLER) {
+        pp_apply_controller(pep, e, body, body_len); /* B2, K7: applied when it verifies, durable before reported */
+        pp_check_expiry(pep);
+        pp_emit(pep, PP_EV_TRUST_APPLIED, 0);
+        return PP_CAUSE_NONE;
+    }
     if (d->has_staged && strcmp(d->staged.stream, e->stream) == 0 && e->seq < d->staged.seq) {
         pp_refuse(pep, PP_CAUSE_SEQ_REPLAY); /* G2 */
         return PP_CAUSE_SEQ_REPLAY;
@@ -3004,8 +3118,94 @@ void pp_pep_save_time(pp_pep_machine *pep, long long now) {
     pp_persist(pep, PP_PART_TRUST);
 }
 
-void pp_pep_see_epoch(pp_pep_machine *pep, uint64_t epoch) {
-    if (epoch > pep->epoch) pep->epoch = epoch;
+/* ------------------------------------------------------------------ the controller statement (H9, H16) */
+
+static uint64_t pp_rd64(const uint8_t *p) {
+    uint64_t v = 0;
+    for (int k = 7; k >= 0; k--) v = v << 8 | p[k];
+    return v;
+}
+
+uint8_t pp_statement_verify(const uint8_t *data, size_t len, const uint8_t *public_key, pp_controller_statement *out) {
+    static const char head[] = "DSSEv1 36 application/vnd.prismpath.dist-epoch ";
+    uint8_t message[sizeof head + 4 + PP_FRESH_STATEMENT_SIZE];
+    memset(out, 0, sizeof *out);
+    if ((len != PP_STATEMENT_SIZE && len != PP_FRESH_STATEMENT_SIZE) || memcmp(data, "PPEP", 4) != 0 || data[4] != 1 ||
+        data[37] > 1 || len != (data[37] ? PP_FRESH_STATEMENT_SIZE : PP_STATEMENT_SIZE))
+        return PP_CAUSE_BAD_FORMAT;
+    out->key_seq = pp_rd64(data + 5);
+    memcpy(out->stream, data + 13, 16);
+    out->epoch = pp_rd64(data + 29);
+    out->fresh = data[37];
+    if (out->fresh) {
+        out->trust_seq = pp_rd64(data + 38);
+        out->stream_seq = pp_rd64(data + 46);
+        out->expires = pp_rd64(data + 54);
+    }
+    if (public_key == NULL) return PP_CAUSE_SIG_INVALID; /* K6: no key to check it against */
+    size_t unsigned_len = len - 64, at = sizeof head - 1;
+    memcpy(message, head, at);
+    message[at++] = (uint8_t)('0' + unsigned_len / 10);
+    message[at++] = (uint8_t)('0' + unsigned_len % 10);
+    message[at++] = ' ';
+    memcpy(message + at, data, unsigned_len);
+    return crypto_ed25519_check(data + unsigned_len, public_key, message, at + unsigned_len) == 0 ? PP_CAUSE_NONE
+                                                                                                 : PP_CAUSE_SIG_INVALID;
+}
+
+const uint8_t *pp_pep_controller_key(const pp_pep_machine *pep) {
+    const pp_trust *t = &pep->d.trust;
+    if (!pep->d.trust_reads) return NULL;
+    const pp_key *held = pp_controller_of(t);
+    return held && !pp_listed(t->revoked_keys, t->n_revoked_keys, held->id) ? held->public_key : NULL;
+}
+
+/* H16 (pep._freshen): a fresh statement has `fresh` 1, a trust sequence not below the PEP's, a stream seq not below
+ * its floor, an `expires` later than the kept one's and at most `fresh` plus SKEW ahead of the PEP's time. A PEP with
+ * no clock takes, from the first statement of a start that passes every check before the ahead test, its `expires`
+ * less `fresh` as a raise of its time floor (T1). The kept statement is written before it counts, and a newer one
+ * only once the kept one has used half its life. An `expires` past PP_MAX_SEQ gives nothing, since no time floor
+ * holds it. */
+static void pp_freshen(pp_pep_machine *pep, const pp_controller_statement *st, const uint8_t *data, size_t len) {
+    pp_durable *d = &pep->d;
+    pp_trust *t = &d->trust;
+    long long raised = pp_raised(t, d->stream), floor = d->floor_seq > raised ? d->floor_seq : raised;
+    if (!st->fresh || st->expires > (uint64_t)PP_MAX_SEQ || st->trust_seq < (uint64_t)t->trust_seq ||
+        st->stream_seq < (uint64_t)floor)
+        return;
+    if (d->has_kept && st->expires <= d->kept_expires) return;
+    long long expires = (long long)st->expires;
+    if (!pep->config.has_clock && !pep->time_taken) {
+        pep->time_taken = 1; /* once per start, from no other statement */
+        if (expires - t->fresh > t->time_floor) {
+            t->time_floor = expires - t->fresh;
+            pp_persist(pep, PP_PART_TRUST);
+        }
+    }
+    long long time = pp_time(pep);
+    if (expires - time > t->fresh + PP_SKEW) return;
+    if (d->has_kept && 2 * (time - d->kept_at) < (long long)d->kept_expires - d->kept_at) return;
+    memset(d->kept, 0, sizeof d->kept);
+    memcpy(d->kept, data, len);
+    d->kept_expires = st->expires;
+    d->kept_at = time;
+    d->has_kept = 1;
+    pp_persist(pep, PP_PART_FRESH);
+}
+
+int pp_pep_take_statement(pp_pep_machine *pep, const uint8_t *data, size_t len, long long now) {
+    pp_controller_statement st;
+    uint8_t stream_hash[32];
+    pep->now = now;
+    pep->n_out = 0; /* H9: a statement sends no record, whatever it says */
+    if (!pep->d.provisioned || pep->locked || !pep->d.trust_reads || !pep->d.stream[0]) return 0;
+    if (pp_statement_verify(data, len, pp_pep_controller_key(pep), &st)) return 0;
+    pp_sha256((const uint8_t *)pep->d.stream, strlen(pep->d.stream), stream_hash);
+    if (memcmp(st.stream, stream_hash, 16) != 0 || st.key_seq != (uint64_t)pep->d.trust.key_seq) return 0;
+    int taken = st.epoch > pep->epoch;
+    if (taken) pep->epoch = st.epoch; /* H9: never lowered */
+    if (pep->d.trust.fresh > 0) pp_freshen(pep, &st, data, len);
+    return taken;
 }
 
 uint8_t pp_pep_decide(pp_pep_machine *pep, int *held_mark, long long now) {
@@ -3279,6 +3479,8 @@ static void pp_io_part(pp_io *io, pp_durable *d, int part) {
         pp_io_bytes(io, t->trust_id, 32);
         pp_io_bytes(io, &t->has_trust_id, sizeof t->has_trust_id);
         pp_io_bytes(io, &t->time_floor, sizeof t->time_floor);
+        pp_io_bytes(io, &t->key_seq, sizeof t->key_seq);
+        pp_io_bytes(io, &t->fresh, sizeof t->fresh);
         break;
     case PP_PART_FLOOR:
         pp_io_bytes(io, &d->floor_seq, sizeof d->floor_seq);
@@ -3335,6 +3537,14 @@ static void pp_io_part(pp_io *io, pp_durable *d, int part) {
         if (io->ok && set->has_staged) pp_io_statement(io, &set->staged);
         break;
     }
+    case PP_PART_FRESH:
+        pp_io_bytes(io, &d->has_kept, sizeof(int));
+        if (io->ok && d->has_kept) {
+            pp_io_bytes(io, d->kept, sizeof d->kept);
+            pp_io_bytes(io, &d->kept_expires, sizeof d->kept_expires);
+            pp_io_bytes(io, &d->kept_at, sizeof d->kept_at);
+        }
+        break;
     default: io->ok = 0;
     }
 }
@@ -3368,6 +3578,7 @@ static void pp_part_lost(pp_durable *d, int part, int absent) {
         set->has_held = set->has_staged = 0;
         break;
     }
+    case PP_PART_FRESH: d->has_kept = 0; break; /* H16: none kept, so none counts */
     }
 }
 
