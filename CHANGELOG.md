@@ -8,6 +8,18 @@ spec stable.
 
 ## [Unreleased]
 
+### Added: the Rust host follows a policy stream and reports signed state records (2026-11-23)
+
+- **`prismpath_hotswap_rs::dist::pep` is the enforcement point machine in Rust.** It is provisioned by a trust anchor's fingerprint, stages, commits, aborts and rolls back, applies a revocation or a rotation as soon as it verifies, lapses at expiry, locks on a floor, anchor or setting it cannot read, and keeps its state under the file names the Python machine uses. A counter it cannot read locks it for that start only, and its records count on from its time so none repeats.
+- **A commit is durable step by step as C4 orders it.** Killed at any step, the machine's own or the host's inside its install, a restart holds the old release before the active record flips and the new one after, never a mix.
+- **Every transition is reported as a state record signed by the instance key.** `dist::state_record` writes and reads the record of H1 byte for byte as Python does, and the Python controller accepts the Rust PEP's records.
+- **`PolicyHost::install_verified` is the commit half of a swap for an image already verified, and `PolicyHost::withdraw` makes the host hold nothing.** Once the enforcement point in the state directory has committed an envelope, `swap` and `rollback` refuse with `dist:legacy-refused`.
+- **The trust store applies revocations and rotations and reads trust anchors in Rust.** An anchor with more than 8 keys is refused, and a confirm checks the new trust store before it lets go of anything held.
+- **A runtime that fails after the PEP's record flipped is made to match before the PEP decides or reports anything again.** Meanwhile it decides nothing but keeps sending state records, applies trust statements and may be provisioned. Only a tick tries again, after checking expiry and revocation, and the `committed`, `rolled-back` or `lapsed` record the transition owed goes then, also after a restart, or `refused` and `lapsed` for a release that fell before it ran. A restart reports the highest epoch the PEP had seen. A lapse whose record cannot be written stays active until the next check lapses it, and a stage whose write fails keeps the release staged before it.
+- **A Rust PEP whose home holds the private half of a trusted authority key refuses to start (K2).** It scans as the Python machine does, two levels deep, past the PEP's store and `runs`, files up to 16,384 bytes and at most 4,096 of them, and reads every PEM private key block. It also finds a raw 32 byte seed.
+- **`Pep::commit` refuses a delay (B8)**, which belongs to the frame binding this crate does not build. DIVERGENCES.md lists what else of the Python machine is not ported.
+- **The cross language CI step runs a release sealed by Python through the Rust host and a release sealed by Rust through the Python host.** The widening rule's cases 62 and 63 wait for the rule in the Python reference.
+
 ### Changed: grants and route tables travel in distribution envelopes, and a grant is revoked through the signed list (2026-11-23)
 
 - **The `gateway` row joins the kind table.** A gateway release needs `policy.core` and `gateway.routes`, a route table must read as `Routes.from_doc` reads it and be its canonical spelling, and any change of the table is a widening. `prismpath dist pep --kind gateway` runs the PEP of a gateway home that holds its instance key and no authority key.

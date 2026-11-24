@@ -137,5 +137,26 @@ must report the cause, the unchanged flag, the time floor and the envelope id Py
 Rust writers must give back the corpus's bytes, the containers the Python writer sealed with the fixed
 test keys included.
 
+`dist::pep::Pep` is the enforcement point machine, `prismpath/distribution/pep.py` in Rust, and
+`dist::pep::HostAdapter` puts the release it commits into a `PolicyHost` with `install_verified`. It
+stages, commits, aborts, rolls back, applies revocations and rotations at once, lapses at expiry, keeps its
+state in `<state_dir>/dist/` under the file names the Python machine uses, and signs a state record
+(`dist::state_record`) with its instance key after every transition. A host whose enforcement point has
+committed an envelope refuses `swap` and `rollback` with `dist:legacy-refused`.
+
+```rust
+use prismpath_hotswap_rs::dist::pep::{HostAdapter, Pep, REFUSE};
+
+let mut pep = Pep::new("state", HostAdapter::new(host), instance_key, Box::new(now), REFUSE, true)?;
+let fingerprint = pep.provision(&anchor)?;    // the operator compares it, then
+pep.confirm(&fingerprint)?;
+let ack = pep.stage(&sealed, &body)?;         // a signed state record, event staged or refused
+let done = pep.commit("host/demo", 1, &policy_sha256)?;
+```
+
+`tests/test_distribution_pep.rs` runs the machine case by case, a commit killed at each of its steps and
+at each step of the host's install among them, and `tests/test_distribution_cross_language.rs` has a
+release Python sealed committed by the Rust host and accepted by the Python controller, and the reverse.
+
 **Related.** The `prismpath swap` command drives the Python side of the same contract;
 `prismpath-hw/` and `prismpath-ebpf/` consume the images this host activates.

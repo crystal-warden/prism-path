@@ -165,7 +165,7 @@ rust_cases! {
     case_013_revoked_key_only => "013_revoked_key_only",
     /// case_013: S5.
     case_013_retired_key_only => "013_retired_key_only",
-    // case 16's X3 half, that the PEP allows nothing, is the Rust PEP's (PR 14), so it is not claimed here
+    /// case_016: K1, the verifier's half; the PEP's half, that it allows nothing, is in test_distribution_pep.rs.
     case_016_trust_store_unreadable => "016_trust_store_unreadable",
     /// case_020: Q1, Q2, V8.
     case_020_seq_below_floor => "020_seq_below_floor",
@@ -221,11 +221,11 @@ rust_cases! {
     case_117_unsigned_with_a_failing_entry_added => "117_unsigned_with_a_failing_entry_added",
     /// case_118: K4, S3.
     case_118_unknown_role_signs => "118_unknown_role_signs",
-    // case 72's verdict; applying the rotation and the commit are the Rust PEP's (PR 14), so it is not claimed here
+    /// case_072: O1, O2, O3, the verdict; applying the rotation and the commit are in test_distribution_pep.rs.
     case_072_signed_by_the_old_and_the_new_key => "072_signed_by_the_old_and_the_new_key",
-    // case 72's verdict; applying the rotation and the commit are the Rust PEP's (PR 14), so it is not claimed here
+    /// case_072: O1, O2, O3, the verdict; applying the rotation and the commit are in test_distribution_pep.rs.
     case_072_a_pack_under_the_new_key => "072_a_pack_under_the_new_key",
-    // case 73's verdict; the release staying active is the Rust PEP's (PR 14), so it is not claimed here
+    /// case_073: O3, S5, the verdict; the release staying active is in test_distribution_pep.rs.
     case_073_a_pack_signed_by_the_retired_key => "073_a_pack_signed_by_the_retired_key",
     /// case_074: O2.
     case_074_signed_only_by_an_unknown_key => "074_signed_only_by_an_unknown_key",
@@ -241,7 +241,7 @@ rust_cases! {
     case_135_a_statement_from_64_hashes => "135_a_statement_from_64_hashes",
     /// case_135: W4.
     case_135_a_statement_from_65_hashes => "135_a_statement_from_65_hashes",
-    // case 134's verdicts; applying the two statements is the Rust PEP's (PR 14), so it is not claimed here
+    /// case_134: V5, R1, the verdict; applying the two statements is in test_distribution_pep.rs.
     case_134_a_revocation_naming_only_mesh => "134_a_revocation_naming_only_mesh",
     case_134_then_a_rotation_naming_every_kind => "134_then_a_rotation_naming_every_kind",
     /// case_076: O1.
@@ -250,37 +250,37 @@ rust_cases! {
     case_131_a_ninth_key => "131_a_ninth_key",
     /// case_131: K5.
     case_131_a_pack_by_the_first_of_seventeen_retired => "131_a_pack_by_the_first_of_seventeen_retired",
-    // case 123's verdict; applying the rotations is the Rust PEP's (PR 14), so it is not claimed here
+    /// case_123: O1, R1, the verdict; applying the rotations is in test_distribution_pep.rs.
     case_123_two_above_the_trust_sequence => "123_two_above_the_trust_sequence",
-    // case 123's verdict; applying the rotations is the Rust PEP's (PR 14), so it is not claimed here
+    /// case_123: O1, R1, the verdict; applying the rotations is in test_distribution_pep.rs.
     case_123_the_same_once_the_skipped_one_is_in => "123_the_same_once_the_skipped_one_is_in",
-    // case 66's verdict; applying the list is the Rust PEP's (PR 14), so it is not claimed here
+    /// case_066: R1, the verdict; applying the list is in test_distribution_pep.rs.
     case_066_one_above_the_trust_sequence => "066_one_above_the_trust_sequence",
-    // case 66's verdict; applying the list is the Rust PEP's (PR 14), so it is not claimed here
+    /// case_066: R1, the verdict; applying the list is in test_distribution_pep.rs.
     case_066_the_same_one_again => "066_the_same_one_again",
-    // case 66's verdict; applying the list is the Rust PEP's (PR 14), so it is not claimed here
+    /// case_066: R1, the verdict; applying the list is in test_distribution_pep.rs.
     case_066_an_older_one => "066_an_older_one",
-    // case 66's verdict; applying the list is the Rust PEP's (PR 14), so it is not claimed here
+    /// case_066: R1, the verdict; applying the list is in test_distribution_pep.rs.
     case_066_one_that_skips_a_number => "066_one_that_skips_a_number",
     /// case_067: R2.
     case_067_a_pack_signed_by_a_revoked_key => "067_a_pack_signed_by_a_revoked_key",
     /// case_068: R4, Q4.
     case_068_a_release_below_a_raised_floor => "068_a_release_below_a_raised_floor",
-    // case 70's verdict; applying the list is the Rust PEP's (PR 14), so it is not claimed here
+    /// case_070: R6, the verdict; applying the list is in test_distribution_pep.rs.
     case_070_a_later_list_dropping_the_key => "070_a_later_list_dropping_the_key",
-    // case 70's verdict; applying the list is the Rust PEP's (PR 14), so it is not claimed here
+    /// case_070: R6, the verdict; applying the list is in test_distribution_pep.rs.
     case_070_the_key_still_refused => "070_the_key_still_refused",
-    // case 130's verdict; applying the list is the Rust PEP's (PR 14), so it is not claimed here
+    /// case_130: R6, R8, the verdict; applying the list is in test_distribution_pep.rs.
     case_130_a_floor_past_a_revoked_envelope => "130_a_floor_past_a_revoked_envelope",
-    // case 130's verdict; applying the list is the Rust PEP's (PR 14), so it is not claimed here
+    /// case_130: R6, R8, the verdict; applying the list is in test_distribution_pep.rs.
     case_130_the_next_list_dropping_it => "130_the_next_list_dropping_it",
-    // case 130's verdict; applying the list is the Rust PEP's (PR 14), so it is not claimed here
+    /// case_130: R6, R8, the verdict; applying the list is in test_distribution_pep.rs.
     case_130_the_envelope_again => "130_the_envelope_again",
     /// case_071: R7.
     case_071_sixty_five_entries => "071_sixty_five_entries",
-    // case 79's verdict; applying the list is the Rust PEP's (PR 14), so it is not claimed here
+    /// case_079: X4, E5, the verdict; applying the list is in test_distribution_pep.rs.
     case_079_trust_kind_with_expires => "079_trust_kind_with_expires",
-    // case 79's verdict; applying the list is the Rust PEP's (PR 14), so it is not claimed here
+    /// case_079: X4, E5, the verdict; applying the list is in test_distribution_pep.rs.
     case_079_revocation_read_years_later => "079_revocation_read_years_later",
 }
 
@@ -293,6 +293,7 @@ fn every_case_the_corpus_runs_on_rust_has_its_test() {
     assert_eq!(named, rust);
 }
 
+/// case_104: I1, Rust's part. Every corpus case on the host kind replays to the verdict Python recorded.
 #[test]
 fn every_case_on_a_kind_rust_has_built_decides_as_python_did() {
     // the host cases that run on Python alone included: one verifier answers alike everywhere it runs. The

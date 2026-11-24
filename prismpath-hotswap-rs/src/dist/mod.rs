@@ -9,12 +9,15 @@
 //! forms every distribution document shares. Every document here derives the one canon/2 reader and
 //! writer (`prismpath_rs::canon2::codec`), so its field list is its member list and a member missing or
 //! extra is refused by the type. `envelope` is the envelope and the sealed container, `trust` the trust
-//! store and `verify` the one verifier.
+//! store and the trust anchor, `verify` the one verifier, `pep` the enforcement point machine with the
+//! host adapter, and `state_record` the signed record it reports every transition with.
 //!
-//! What a trust statement does to the trust store (R1 to R7, O1 to O4) and the widening rule (W1 to
-//! W7) are applied by the code that owns them, not by this table.
+//! What a trust statement does to the trust store (R1 to R7, O1 to O4) is the trust store's, applied by
+//! the machine, not by this table.
 
 pub mod envelope;
+pub mod pep;
+pub mod state_record;
 pub mod trust;
 pub mod verify;
 
@@ -42,13 +45,23 @@ pub const SIG_INVALID: &str = "sig:invalid";
 pub const SIG_REVOKED_KEY: &str = "sig:revoked-key";
 pub const ROTATION_INVALID: &str = "dist:rotation-invalid";
 pub const HATCH_REFUSED: &str = "dist:hatch-refused";
+pub const NOT_STAGED: &str = "dist:not-staged";
+pub const POLICY_LAPSED: &str = "dist:policy-lapsed";
+pub const FLOOR_LOST: &str = "dist:floor-lost";
+pub const HELD: &str = "dist:held";
+pub const WIDENING_UNSIGNED: &str = "dist:widening-unsigned";
+pub const LEGACY_REFUSED: &str = "dist:legacy-refused";
+pub const STATE_INVALID: &str = "fleet:state-invalid";
+pub const SIDECAR_MISSING: &str = "spiral:sidecar-missing";
+pub const SIDECAR_MISMATCH: &str = "spiral:sidecar-hash-mismatch";
 /// D2: a dev build is the cargo feature `dev-hatches`, off by default, and no environment or setting makes one.
 pub const DEV_BUILD: bool = cfg!(feature = "dev-hatches");
 /// Every cause this module reports itself, each a registered name (`tests` checks the registry).
-pub const CAUSES: [&str; 16] = [
+pub const CAUSES: [&str; 25] = [
     BAD_FORMAT, NOT_CANONICAL, UNKNOWN_KEY, TARGET_MISMATCH, BODY_MISMATCH, SEQ_REPLAY, NOT_YET_VALID,
     EXPIRED, REVOKED, TRUST_REPLAY, TOO_LARGE, INCOMPLETE, SIG_INVALID, SIG_REVOKED_KEY, ROTATION_INVALID,
-    HATCH_REFUSED,
+    HATCH_REFUSED, NOT_STAGED, POLICY_LAPSED, FLOOR_LOST, HELD, WIDENING_UNSIGNED, LEGACY_REFUSED, STATE_INVALID,
+    SIDECAR_MISSING, SIDECAR_MISMATCH,
 ];
 
 /// E1 `seq`, and every integer the format carries: canon/2's exact range.
@@ -355,6 +368,27 @@ fixed_string!(
 fixed_string!(RevocationFormat = "prismpath.dist-revocation/1");
 fixed_string!(RotationFormat = "prismpath.dist-rotation/1");
 fixed_string!(WideningFormat = "prismpath.dist-widening/1");
+fixed_string!(
+    /// P2: a trust anchor.
+    AnchorFormat = "prismpath.dist-trust/1"
+);
+fixed_string!(
+    /// The enforcement point's durable documents (`pep`), each written whole.
+    FloorFormat = "prismpath.dist-floor/1"
+);
+fixed_string!(ActiveFormat = "prismpath.dist-active/1");
+fixed_string!(StagedFormat = "prismpath.dist-staged/1");
+fixed_string!(PendingFormat = "prismpath.dist-pending/1");
+fixed_string!(CounterFormat = "prismpath.dist-counter/1");
+fixed_string!(SettingFormat = "prismpath.dist-setting/1");
+fixed_string!(
+    /// A lapse made durable whose report is owed (`pep`), a file of the Rust machine only.
+    OwedFormat = "prismpath.dist-owed/1"
+);
+fixed_string!(
+    /// The highest epoch id a PEP saw (`pep`), a file of the Rust machine only.
+    EpochFormat = "prismpath.dist-epoch/1"
+);
 
 /// A closed list of names (E8), each variant written as its name and ordered by it.
 macro_rules! kind_names {
@@ -500,7 +534,8 @@ fn cause_of(refused: Refused) -> String {
 /// A target kind's row: the artifacts it needs before it commits (C2), those it needs only when another
 /// artifact of the release asks for them (`policy.spiral`, when the `policy.ppt` declares packing),
 /// whether it can decide larger (W1), the trust kinds its machine applies, its bound on the body of an
-/// artifact it uses and its bound on a trust body, 16,384 bytes for every kind (E6).
+/// artifact it uses and its bound on a trust body, 16,384 bytes for every kind (E6), and whether a
+/// deployment may choose HOLD at expiry (X6).
 #[derive(Debug, Clone, Copy)]
 pub struct Target {
     pub needs: &'static [ArtifactKind],
@@ -509,6 +544,7 @@ pub struct Target {
     pub applies: &'static [ArtifactKind],
     pub body_bound: i64,
     pub trust_bound: i64,
+    pub expiry_hold: bool,
 }
 
 /// E6: every kind takes the largest revocation list R7 allows.
@@ -540,6 +576,7 @@ impl TargetKind {
                 applies: &[ArtifactKind::TrustWidening, ArtifactKind::TrustRevocation, ArtifactKind::TrustRotation],
                 body_bound: envelope::MAX_BODY,
                 trust_bound: TRUST_BOUND,
+                expiry_hold: false,
             }),
             TargetKind::Agent | TargetKind::Cfs | TargetKind::Gateway | TargetKind::Mesh | TargetKind::Xdp => None,
         }
