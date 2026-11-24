@@ -665,7 +665,7 @@ def install_cmd(args) -> int:
         if "policy.ppt" in bodies and args.qualification:
             metas["policy.ppt"] = policy_meta(bodies["policy.ppt"], _json(args.qualification))
         pairs = install.seal_set(kind, bodies, stream=args.stream, seq=args.seq, target=args.target,
-                                 signers=_authority(args.key), replaces=follows.policy_sha256 if follows else "",
+                                 signers=_authority(args.key), replaces=follows.policy_sha256 if follows and not follows.empty else "",
                                  widens=bool(args.widens), metas=metas,
                                  not_before=args.not_before or int(time.time()))
     except Refused as refused:

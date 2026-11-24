@@ -766,7 +766,8 @@ def test_the_engineer_s_tool_writes_the_anchor_s_install_part_sets_and_install_t
     """P4, IS11, IS12, CL1, CL2, K4: `prismpath dist anchor --install-pub` writes the install part a PEP takes,
     `dist install` seals a ceiling list and a fallback set the PEP applies, refuses a larger set sealed without
     `--widens` and a fallback above the ceiling, `dist seal --ceiling` refuses a release above it, and
-    `dist install-trust` keeps the retired ids and refuses to add one back."""
+    `dist install-trust` keeps the retired ids and refuses to add one back. A set sealed to follow the empty set names
+    the empty string as `replaces`, since the empty set withdrew its kind (IS6)."""
     from prismpath import cli
     from prismpath.hotswap import policy_pack
     _priv, _pub, ser, _invalid = policy_pack._ed25519()
@@ -825,3 +826,9 @@ def test_the_engineer_s_tool_writes_the_anchor_s_install_part_sets_and_install_t
 def install_pairs(directory: Path):
     return [((directory / name).read_bytes(), (directory / (name[:-len(".sealed")] + ".body")).read_bytes())
             for name in sorted(path.name for path in directory.iterdir() if path.name.endswith(".sealed"))]
+    assert run("install", "--kind", "ceiling", "--empty", "--seq", "2", "--follows", str(tmp_path / "ceiling"),
+               "--widens", *common, "--out", str(tmp_path / "withdrawn")) == 0
+    assert point.send(install_pairs(tmp_path / "withdrawn"))[-1].event == "install-widened"
+    assert run("install", "--kind", "ceiling", "--list", str(tmp_path / "t9.ppt"), "--seq", "3", "--follows",
+               str(tmp_path / "withdrawn"), *common, "--out", str(tmp_path / "again")) == 0
+    assert point.send(install_pairs(tmp_path / "again"))[-1].event == "install-applied"   # IS6: it replaces nothing

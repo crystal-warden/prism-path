@@ -207,13 +207,15 @@ class Record:
 
     def install_id(self) -> bytes:
         """H10: the first 16 bytes of the SHA-256 of the set id and `seq` of the action floor, the fallback policy and
-        the ceiling held, zeros for a set not held, then the install trust sequence and the install trust id."""
+        the ceiling held, zeros for a set not held, then the install trust sequence and the install trust id. A kind the
+        empty set withdrew holds nothing (IS6), so it is zeros too."""
         import hashlib
         import struct
         out = b""
         for kind in SET_KINDS:
             held = self.sets[kind]
-            out += (bytes.fromhex(held.set_id) + struct.pack("<Q", held.seq)) if held is not None else b"\x00" * 40
+            out += (bytes.fromhex(held.set_id) + struct.pack("<Q", held.seq)) if held is not None and not held.empty \
+                else b"\x00" * 40
         out += struct.pack("<Q", self.trust_seq) + (bytes.fromhex(self.trust_id) if self.trust_id else b"\x00" * 32)
         assert len(out) == 160
         return hashlib.sha256(out).digest()[:16]
@@ -441,14 +443,15 @@ def widens_ok(kind: str, install_kind: str, held: Optional[HeldSet], bodies: Map
     """IS12: (cause, stands out) of a set whose signer said `widens` and `replaces`. A set the PEP computes as larger
     whose `widens` is false is `dist:widening-unsigned`. A PEP that cannot decide also takes `widens` false only when
     `replaces` is the policy hash of the set it holds, the empty string when it holds none. A set stands out, with
-    event `install-widened`, when its `widens` is true or the PEP computes it as larger."""
+    event `install-widened`, when its `widens` is true or the PEP computes it as larger. A kind the empty set withdrew
+    holds none, so the set after it names the empty string (IS6)."""
     larger = set_larger(kind, install_kind, held, bodies)
     if widens:
         return None, True
     if larger:
         return UNSIGNED, True
     if not kinds.TARGETS[kind].decides:
-        held_policy = held.policy_sha256 if held is not None else ""
+        held_policy = held.policy_sha256 if held is not None and not held.empty else ""
         if replaces != held_policy:
             return UNSIGNED, True
     return None, False
@@ -569,8 +572,8 @@ class Installed:
         sets = dict(self.record.sets)
         for kind in SET_KINDS:
             held = sets[kind]
-            if held is None:
-                continue
+            if held is None or held.empty:
+                continue                            # IS6: a kind the empty set withdrew holds nothing to read
             read = self._read_set(held)
             if read is None:
                 sets[kind] = None
