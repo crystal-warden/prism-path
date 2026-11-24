@@ -13,6 +13,9 @@ PEP of a kind with no row cannot be described to the verifier. Each artifact's o
 `check(envelope, body, pep)`, which answers None or the cause. A target row may hold its own check of an
 artifact in `checks`, as a mesh node reads a `policy.ppt` with its own table parser and ignores `meta`.
 
+A `gateway` release carries `identity.bundle` and `identity.map` when its policy reads `workload` and only then
+(ID3), which the gateway adapter holds at commit.
+
 A target row also says which trust kinds its machine applies (`applies`). V5 refuses any other trust kind
 with `dist:target-mismatch`, so a statement is never verified and then left unapplied.
 """
@@ -24,7 +27,7 @@ import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict, FrozenSet, Optional
+from typing import Any, Callable, Dict, FrozenSet, Optional, Tuple
 
 from prismpath import canon
 from prismpath.kernel import canon2, causes
@@ -101,7 +104,7 @@ class Target:
     decides: bool
     when_declared: FrozenSet[str] = frozenset()
     expiry_hold: bool = False
-    applies: FrozenSet[str] = frozenset({"trust.widening", "trust.revocation", "trust.rotation"})
+    applies: FrozenSet[str] = frozenset({"trust.widening", "trust.revocation", "trust.rotation", "trust.controller"})
     body_bound: int = 16777215
     trust_bound: int = 16384
     checks: Any = None
@@ -117,8 +120,10 @@ class Target:
         return (self.checks or {}).get(artifact) or ARTIFACTS[artifact].check
 
 
-ROLES = frozenset({"authority"})                    # K4: the key roles this version knows
-AUTHORITY = "authority"
+ROLES = frozenset({"authority", "controller", "install", "operator"})   # K4: the key roles this version builds
+AUTHORITY, CONTROLLER = "authority", "controller"   # K6: the controller key signs controller statements only
+INSTALL = "install"                                 # IS2: install keys sign the install kinds and nothing else
+OPERATOR = "operator"                               # OP1: operator keys sign answers and nothing else
 
 
 # ------------------------------------------------------------------ the forms of the meta members (E11)
@@ -144,6 +149,12 @@ def _packing(value: Any) -> bool:
             and _string(1, 32)(value["profile"]) and is_hex64(value["sidecar_sha256"]))
 
 
+def _rate(value: Any) -> bool:
+    """AF8, OP4: `allows` in each `window` of seconds."""
+    return (isinstance(value, dict) and set(value) == {"allows", "window"} and is_int(value["allows"], 1, 65535)
+            and is_int(value["window"], 1, 86400))
+
+
 FORMS: Dict[str, Callable[[Any], bool]] = {
     "fields": _fields,
     "counts": _counts,
@@ -154,6 +165,11 @@ FORMS: Dict[str, Callable[[Any], bool]] = {
     "overlay_of": _string(1, 128),
     "names_sha256": lambda value: is_hex64(value),
     "compiler": lambda value: is_int(value, 1, MAX_SEQ),
+    "as": lambda value: isinstance(value, str) and (value in INSTALL_AS or value in (POLICY_LIST, NONE)),
+    "rate": _rate,
+    "answer_rate": _rate,
+    "command": lambda value: is_int(value, 0, 255),
+    "layout": lambda value: is_hex64(value),
 }
 
 
@@ -260,6 +276,7 @@ REVOCATION_FORMAT = "prismpath.dist-revocation/1"
 REVOCATION_ENTRIES, REVOCATION_FLOORS = 64, 16       # section 10, R7
 ROTATION_FORMAT = "prismpath.dist-rotation/1"
 WIDENING_FORMAT = "prismpath.dist-widening/1"
+CONTROLLER_FORMAT = "prismpath.dist-controller/1"
 
 
 def read_revocation(body: bytes) -> dict:
@@ -285,6 +302,14 @@ def read_rotation(body: bytes) -> dict:
     doc = _trust_body(body, ROTATION_FORMAT, frozenset({"add", "encoding", "format", "retire"}))
     if not is_hex64(doc["add"]) or not (doc["retire"] == "" or is_hex64(doc["retire"])):
         raise Refused(BAD_FORMAT, "rotation members")
+    return doc
+
+
+def read_controller(body: bytes) -> dict:
+    """K7: a controller key statement, the controller's public key in `key`, 64 lower case hex digits."""
+    doc = _trust_body(body, CONTROLLER_FORMAT, frozenset({"encoding", "format", "key"}))
+    if not is_hex64(doc["key"]):
+        raise Refused(BAD_FORMAT, "a controller key statement whose key is not 64 hex digits")
     return doc
 
 
@@ -363,6 +388,30 @@ def read_grant(body: bytes) -> dict:
     return doc
 
 
+def read_identity_bundle(body: bytes) -> dict:
+    """`identity.bundle` (section 13.1, ID1): a canon/2 object with `domains`, `encoding` and `format`
+    `prismpath.dist-identity-bundle/1`, each trust domain to the standard base64 DER of its X.509 CA certificates,
+    sorted, without repeats, each a CA with keyCertSign. `Refused` with `dist:bad-format` otherwise."""
+    from prismpath.gateway import identity
+    doc = load_canonical(body, "identity.bundle")
+    try:
+        return identity.bundle_doc(doc)
+    except identity.IdentityError as error:
+        raise Refused(BAD_FORMAT, f"identity.bundle is not a trust bundle ({error})") from None
+
+
+def read_identity_map(body: bytes) -> tuple:
+    """`identity.map` (section 13.1, ID2): a canon/2 object with `encoding`, `entries` and `format`
+    `prismpath.dist-identity-map/1`, its entries SPIFFE ID patterns to classes, in order. `Refused` with
+    `dist:bad-format` otherwise."""
+    from prismpath.gateway import identity
+    doc = load_canonical(body, "identity.map")
+    try:
+        return identity.map_doc(doc)
+    except identity.IdentityError as error:
+        raise Refused(BAD_FORMAT, f"identity.map is not an identity map ({error})") from None
+
+
 EDGE_DIR = Path(__file__).resolve().parents[2] / "prismpath-ebpf"
 
 
@@ -415,6 +464,8 @@ ARTIFACTS: Dict[str, Artifact] = {
     "egress.hosts": Artifact(check=_reads(read_hosts)),
     "agent.zones": Artifact(check=_reads(read_zones)),
     "gateway.routes": Artifact(check=_reads(read_routes)),
+    "identity.bundle": Artifact(check=_reads(read_identity_bundle)),
+    "identity.map": Artifact(check=_reads(read_identity_map)),
     "net.dests": Artifact(check=_reads(read_dests)),
     "net.edge": Artifact(frozenset({"flow_sha256", "names_sha256", "qualification"}), check=check_net_edge),
     "cfs.table": Artifact(),
@@ -422,9 +473,86 @@ ARTIFACTS: Dict[str, Artifact] = {
     "trust.widening": Artifact(check=_reads(read_widening)),
     "trust.revocation": Artifact(check=_reads(read_revocation)),
     "trust.rotation": Artifact(check=_reads(read_rotation)),
+    "trust.controller": Artifact(check=_reads(read_controller)),
 }
-TRUST_ARTIFACTS = frozenset({"trust.widening", "trust.revocation", "trust.rotation"})
-ON_TRUST_STREAM = frozenset({"trust.revocation", "trust.rotation"})     # R1, O1: they travel on `@trust`
+TRUST_ARTIFACTS = frozenset({"trust.widening", "trust.revocation", "trust.rotation", "trust.controller"})
+# R1, O1, K7: they travel on `@trust` and share the one trust sequence
+ON_TRUST_STREAM = frozenset({"trust.revocation", "trust.rotation", "trust.controller"})
+
+# ------------------------------------------------------------------ the install kinds (section 21)
+
+INSTALL_SETS = frozenset({"install.floor", "install.fallback", "install.ceiling"})      # IS1: a set of one kind
+INSTALL_ARTIFACTS = INSTALL_SETS | {"install.trust"}
+POLICY_LIST, NONE = "policy.list", "none"           # CL1: the list of a ceiling; IS1: the empty set
+FLOOR_META = frozenset({"rate", "answer_rate", "command", "layout"})   # AF8, OP4, AF9, AF10: on an action floor only
+READ_ALWAYS = frozenset({"as"}) | FLOOR_META        # IS1: every reader reads these, the E9 scanners too
+CEILING_FORMAT = "prismpath.dist-ceiling/1"
+CEILING_BODIES = 64                                # CL1: the hashes a policy list holds
+INSTALL_TRUST_FORMAT = "prismpath.dist-install-trust/1"
+INSTALL_KEYS, OPERATOR_KEYS = 4, 4                 # IS11, OP1
+
+
+def read_ceiling_list(body: bytes) -> dict:
+    """CL1: a policy list, the sorted `body_sha256` of every table qualified for the kind, at most 64
+    (`dist:too-large` past that)."""
+    doc = _trust_body(body, CEILING_FORMAT, frozenset({"bodies", "encoding", "format"}))
+    if not _sorted_hashes(doc["bodies"]):
+        raise Refused(BAD_FORMAT, "a policy list whose bodies are not sorted hashes without repeats")
+    if len(doc["bodies"]) > CEILING_BODIES:
+        raise Refused("dist:too-large", f"a policy list of {len(doc['bodies'])} hashes, past {CEILING_BODIES}")
+    return doc
+
+
+def read_install_trust(body: bytes) -> dict:
+    """IS11: an install trust statement, the sorted install `keys` (1 to 4 public keys, `dist:too-large` past 4),
+    the sorted `operators` (0 to 4) and the install `threshold`, from 1 to the number of keys."""
+    doc = _trust_body(body, INSTALL_TRUST_FORMAT, frozenset({"encoding", "format", "keys", "operators", "threshold"}))
+    keys, operators = doc["keys"], doc["operators"]
+    if not _sorted_hashes(keys) or not _sorted_hashes(operators) or not keys:
+        raise Refused(BAD_FORMAT, "install trust keys or operators that are not sorted keys without repeats")
+    if len(keys) > INSTALL_KEYS or len(operators) > OPERATOR_KEYS:
+        raise Refused("dist:too-large", "an install trust statement past 4 install or 4 operator keys")
+    if not is_int(doc["threshold"], 1, len(keys)):
+        raise Refused(BAD_FORMAT, "an install threshold outside 1 to the number of install keys")
+    return doc
+
+
+ANSWER, ANSWER_FORMAT, ANSWER_LIFE = "operator.answer", "prismpath.dist-answer/1", 600     # OP2
+
+
+def read_answer(body: bytes) -> dict:
+    """OP2: an operator's answer, `answer` `allow` or `refuse`, `pep` the PEP id of H1 in lower case hex and
+    `receipt` the SHA-256 of the receipt of the escalation it answers. `Refused` with `dist:bad-format` otherwise."""
+    doc = _trust_body(body, ANSWER_FORMAT, frozenset({"answer", "encoding", "format", "pep", "receipt"}))
+    pep = doc["pep"]
+    if not (doc["answer"] in ("allow", "refuse") and isinstance(pep, str) and len(pep) == 32
+            and all(char in "0123456789abcdef" for char in pep) and is_hex64(doc["receipt"])):
+        raise Refused(BAD_FORMAT, "an operator answer whose answer, pep or receipt does not read")
+    return doc
+
+
+ARTIFACTS[ANSWER] = Artifact(check=_reads(read_answer), role=OPERATOR)
+ARTIFACTS["install.floor"] = Artifact(role=INSTALL)
+ARTIFACTS["install.fallback"] = Artifact(role=INSTALL)
+ARTIFACTS["install.ceiling"] = Artifact(role=INSTALL)
+ARTIFACTS["install.trust"] = Artifact(check=_reads(read_install_trust), role=INSTALL)
+# E11: what `as` may name, an artifact a release holds, never a trust kind, a grant or an install kind
+INSTALL_AS = frozenset(name for name in ARTIFACTS
+                       if name not in TRUST_ARTIFACTS | INSTALL_ARTIFACTS and name not in ("grant", ANSWER))
+
+
+def install_meta(artifact: str, meta: Any) -> Tuple[FrozenSet[str], FrozenSet[str]]:
+    """E11, IS1: the (required, optional) `meta` members of an install statement whose `meta` names `as`: `as`,
+    then the members section 3 gives the artifact it names, and on an action floor `rate`, `answer_rate`,
+    `command` and `layout`. An `install.trust` has none."""
+    if artifact == "install.trust":
+        return frozenset(), frozenset()
+    named = meta.get("as") if isinstance(meta, dict) else None
+    inner = ARTIFACTS.get(named) if named in INSTALL_AS else None
+    required = frozenset({"as"}) | (inner.meta_required if inner else frozenset())
+    optional = (inner.meta_optional if inner else frozenset()) | (FLOOR_META if artifact == "install.floor" else frozenset())
+    return required, optional
+
 
 TRUST_BOUND = 16384                                # E6: every kind takes the largest revocation list R7 allows
 MESH_TABLE_MAX = 640                               # E6: TBL_MAX in prismpath-hw/mesh/main/ppt_mesh.c
@@ -434,11 +562,25 @@ TARGETS: Dict[str, Target] = {
                    compares=frozenset({"policy.ppt"})),
     "agent": Target(needs=frozenset({"policy.core", "egress.hosts"}), decides=True,
                     when_declared=frozenset({"agent.zones", "sandbox.profile"})),
-    "gateway": Target(needs=frozenset({"policy.core", "gateway.routes"}), decides=True),
+    "gateway": Target(needs=frozenset({"policy.core", "gateway.routes"}), decides=True,
+                      when_declared=frozenset({"identity.bundle", "identity.map"})),
     "xdp": Target(needs=frozenset({"policy.core", "net.dests", "net.edge"}), decides=True),
     "mesh": Target(needs=frozenset({"policy.ppt"}), decides=False, expiry_hold=True, body_bound=MESH_TABLE_MAX,
                    checks={"policy.ppt": check_mesh_table}, reads_meta=False, compares=frozenset({"policy.ppt"})),
 }
+
+
+def install_form(kind: str, install_kind: str) -> Tuple[FrozenSet[str], FrozenSet[str]]:
+    """IS3: the (needed, allowed) `as` of a set of `install_kind` on a PEP of `kind`. A set takes the form of a release
+    of its kind, without a sandbox profile, and an action floor never holds an `agent.zones`. A ceiling for a kind
+    that cannot decide is one policy list (CL1)."""
+    target = TARGETS[kind]
+    if install_kind == "install.ceiling" and not target.decides:
+        return frozenset({POLICY_LIST}), frozenset({POLICY_LIST})
+    allowed = target.needs | (target.when_declared - {"sandbox.profile"})
+    if install_kind == "install.floor":
+        allowed = allowed - {"agent.zones"}
+    return target.needs, allowed
 
 
 def _check_row(name: str, target: Target) -> None:

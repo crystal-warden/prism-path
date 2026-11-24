@@ -25,10 +25,15 @@ checks:
 
 Each earlier statement's `policy` member binds the manifest as it stood when it was sealed, which a later seal
 replaced, so for those only the signature, the root and the count are checked; the last is checked in full by 1.
+
+The app also sends a state record of policy distribution (docs/design/spec-policy-distribution.md H1) in every
+housekeeping packet, signed by the same instance key. `read_state_record` checks one and reads it, with the type 3
+entry of H10 an app that holds an install record carries.
 """
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -103,6 +108,47 @@ def verify(run: Path, keys: Path) -> Dict:
         raise Bad(f"prismpath evidence verify refuses the run: {bad}") from None
     summary["roots"] = root_history(run, (keys / "instance.pub").read_bytes())
     return summary
+
+
+STATES = ("no-policy", "active", "locked")
+EVENTS = ("beat", "staged", "refused", "committed", "aborted", "trust-applied", "lapsed", "rolled-back", "provisioned",
+          "held", "fallback", "install-applied", "install-widened", "answered")
+_STATE_HEAD = b"DSSEv1 36 application/vnd.prismpath.dist-state "
+
+
+def read_state_record(raw: bytes, instance_pub: bytes) -> Dict:
+    """One state record (H1) from the app, its signature checked under the pinned instance key, or Bad: its event, state,
+    the held bit (5) and the fallback bit (4), its cause, time, the active seq and the floor, and the install entry."""
+    from prismpath.kernel import causes
+    _Priv, _Pub, _ser, InvalidSignature = root_statement._ed25519()
+    raw = bytes(raw)
+    if len(raw) < 148 + 64 or raw[:5] != b"PPSR\x01":
+        raise Bad("not a state record")
+    extension = int.from_bytes(raw[146:148], "little")
+    body, signature = raw[:148 + extension], raw[148 + extension:]
+    if len(signature) != 64:
+        raise Bad("a state record whose length is not its body's and a signature's")
+    message = _STATE_HEAD + str(len(body)).encode() + b" " + body
+    try:
+        core_evidence._public_key(instance_pub, "instance").verify(signature, message)
+    except (InvalidSignature, ValueError):
+        raise Bad("the state record is not signed by the pinned instance key") from None
+    if raw[8:24] != hashlib.sha256(instance_pub).digest()[:16]:
+        raise Bad("the state record names another PEP")
+    status = raw[6]
+    out = {"event": EVENTS[raw[5]] if raw[5] < len(EVENTS) else raw[5], "state": STATES[status & 3] if status & 3 < 3
+           else status & 3, "staged": bool(status & 0x80), "held": bool(status & 0x20), "fallback": bool(status & 0x10),
+           "cause": causes.name(raw[7]) if raw[7] else None, "counter": int.from_bytes(raw[24:32], "little"),
+           "time": int.from_bytes(raw[32:40], "little"), "active_policy": raw[64:80].hex(),
+           "active_seq": int.from_bytes(raw[96:104], "little"), "floor": int.from_bytes(raw[104:112], "little"),
+           "trust_seq": int.from_bytes(raw[136:144], "little")}
+    if extension:
+        entry = raw[148:148 + extension]
+        if entry[0] != 3 or int.from_bytes(entry[1:3], "little") != 27:
+            raise Bad("a state record extension other than the install entry of H10")
+        out.update(install_id=entry[3:19].hex(), subject=entry[21], answers=int.from_bytes(entry[22:26], "little"),
+                   overrides=int.from_bytes(entry[26:30], "little"))
+    return out
 
 
 def main(argv=None) -> int:

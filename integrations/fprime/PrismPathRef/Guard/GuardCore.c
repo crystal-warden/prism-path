@@ -197,7 +197,7 @@ int GC_Load(GC *Core, const char *PolicyFile, const char *KeysDir, const char *R
     rc = PP_Kernel_Check(&Table);
     if (rc == 0)
     {
-        rc = PP_Run_CheckTable(&Core->Run, &Core->Keys, &Table, Digest);
+        rc = PP_Run_CheckSignedTable(&Core->Run, &Core->Keys, &Table, Digest);
     }
     if (rc == 0)
     {
@@ -218,7 +218,7 @@ int GC_Load(GC *Core, const char *PolicyFile, const char *KeysDir, const char *R
 /* ----------------------------------------------------------------- a proposal */
 /* a MONITOR row is the runtime monitor's verdict, which an app supplies and no command carries ("MONITOR" is the
  * only kind name 8 bytes long once stringized) */
-#define ROW(Reg, Name, Kind, Off, Width, Lo, Hi) {Off, Width, sizeof(#Kind) == sizeof("MONITOR")},
+#define ROW(Reg, Name, Kind, Off, Width, Lo, Hi, Role) {Off, Width, sizeof(#Kind) == sizeof("MONITOR")},
 static const struct
 {
     uint8_t Off;
@@ -280,7 +280,7 @@ int GC_Propose(GC *Core, const uint8_t *Args, size_t Len, GC_Outcome *Out)
     if (PP_Kernel_Active())
     {
         if (PP_Run_Record(&Core->Run, &Core->Io, &Core->Keys, &Core->Active, Core->ActiveDigest, Payload, PayloadLen,
-                          &Verdict, &Index) == 0)
+                          &Verdict, 0, &Index) == 0)
         {
             Out->Receipt = (int64_t)Index;
         }

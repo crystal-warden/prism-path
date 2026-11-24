@@ -10,12 +10,21 @@ per PEP, the enrolled instance key, the kind, the stream, the group, the expecte
 accepted record and the open findings (F2). Per group and release it runs the machine of F3 under the rule
 `each` or `all`. It checks each state record in the order of H6 and files the first finding, files a PEP
 silent after three intervals (H7) and held while its records carry the hold bit (H8), and names the present
-with a rising epoch id (H9). Every offer, ack, commit, abort, finding and trust statement goes to its own
+on each stream with an epoch id it counts apart per stream, keeps durably and never lowers, sent in a controller
+statement signed by its instance key (H9), with the freshness fields where the stream's anchor sets `fresh`
+(H16). A record of a PEP that holds a controller key and carries another epoch id is filed `fleet:state-replay`
+and still used, marked unverified for freshness (H6). A reconciling record (H14) never counts as committed, and
+`dist:reconciling` is filed against it as H14 says. Every offer, ack, commit, abort, finding and trust statement goes to its own
 audit log, signed with the controller's instance key (F5).
+
+Section 21 is `controller_install.InstallDesk`'s: the install statements stored and offered (IS8), the install id
+expected of each PEP and the fallback bit (H11, H12), and the acknowledgement of a widening (H13), which is detection
+and not prevention. A controller that holds a ceiling offers no release above it (CL2).
 
 Its directory:
 
-    controller.json  members, groups, rollouts, the trust chain, the epoch, as JSON written whole
+    controller.json  members, groups, rollouts, the trust chain, the epoch id of each stream, as JSON written
+                     whole, and written before a new epoch id is signed
     anchors/         each trust anchor it serves, under its fingerprint, with a host stream's qualification
     blobs/           sealed envelopes under `<envelope id>.sealed`, bodies under their SHA-256
     audit.log        the controller's audit log
@@ -27,11 +36,11 @@ hashes matched, so a PEP on another policy is filed from the hashes and never fr
 """
 from __future__ import annotations
 
+import base64
 import fcntl
 import hashlib
 import json
 import os
-import struct
 import time as _time
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -39,7 +48,9 @@ from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 
 from prismpath import canon
 from prismpath.distribution import envelope as env
-from prismpath.distribution import frames, heartbeat, kinds, state_record, widening
+from prismpath.distribution import frames, heartbeat, install, kinds, state_record, statement as statements, widening
+from prismpath.distribution import controller_install
+from prismpath.distribution.controller_install import FALLBACK_FINDING, WIDENED, InstallDesk
 from prismpath.distribution.kinds import Refused
 from prismpath.distribution.trust import TrustStore, check_drops, read_anchor
 from prismpath.distribution.verify import PepView, verify
@@ -55,8 +66,9 @@ MESH_STAGE_WINDOW = 0.5
 COMMIT_WINDOW = 120.0
 MESH_COMMIT_SLACK = 2.0                            # F3: on the mesh the commit window is the delay plus 2 seconds
 SILENT_AFTER = 3                                   # H7: intervals with no accepted record
-STATE_INVALID, STATE_REPLAY, POLICY_MISMATCH, SILENT, HELD = (
-    "fleet:state-invalid", "fleet:state-replay", "fleet:policy-mismatch", "fleet:silent", "dist:held")
+STATE_INVALID, STATE_REPLAY, POLICY_MISMATCH, SILENT, HELD, RECONCILING = (
+    "fleet:state-invalid", "fleet:state-replay", "fleet:policy-mismatch", "fleet:silent", "dist:held",
+    "dist:reconciling")
 MAX_UNKNOWN = 64                                   # the senders of records from no enrolled PEP that are kept
 EAT = 1                                            # H10: the extension type of an Entity Attestation Token
 _ZERO = "0" * 32
@@ -153,16 +165,8 @@ def check_extensions(record: state_record.StateRecord, unsigned: bytes) -> None:
     """H10: the extensions are a run of type, two byte length and bytes. A type 1 token is read and its
     `eat_nonce` must be the SHA-256 of bytes 0 to 146+m of the record; another type is skipped. No extension
     is ever taken for a signature on the record. `Refused` with `fleet:state-invalid` otherwise."""
-    run, at = record.extensions, 0
     bound = hashlib.sha256(unsigned[:state_record._HEAD.size + 2 + len(record.body)]).digest()
-    while at < len(run):
-        if at + 3 > len(run):
-            raise Refused(STATE_INVALID, "an extension entry cut short")
-        kind, size = run[at], struct.unpack_from("<H", run, at + 1)[0]
-        value = run[at + 3:at + 3 + size]
-        if len(value) != size:
-            raise Refused(STATE_INVALID, "an extension longer than the area")
-        at += 3 + size
+    for kind, value in state_record.extension_entries(record.extensions):
         if kind != EAT:
             continue
         try:
@@ -188,17 +192,29 @@ class Member:
     last: Optional[dict] = None
     seen: float = 0.0
     findings: Dict[str, str] = field(default_factory=dict)
+    reconciling_since: Optional[float] = None                     # H14: since when its records carry the entry
+    install: Optional[dict] = None                                # H12: the install record expected of it
+    install_previous: Optional[dict] = None                       # the one before, while an offer is in flight
+    install_refused: List[str] = field(default_factory=list)      # the sets and statements it refused
+    install_enrolled: Optional[int] = None                        # the install trust sequence it was enrolled at
+    answered: List[dict] = field(default_factory=list)            # OP4: the operator answers it applied
 
     def document(self) -> dict:
         return {"pep": self.pep, "public": self.public, "kind": self.kind, "stream": self.stream, "group": self.group,
                 "expected": list(self.expected), "counter": self.counter, "last": self.last, "seen": self.seen,
-                "findings": dict(self.findings)}
+                "findings": dict(self.findings), "reconciling_since": self.reconciling_since,
+                "install": self.install, "install_previous": self.install_previous,
+                "install_refused": list(self.install_refused), "install_enrolled": self.install_enrolled,
+                "answered": list(self.answered)}
 
     @classmethod
     def from_document(cls, doc: dict) -> "Member":
         return cls(pep=doc["pep"], public=doc["public"], kind=doc["kind"], stream=doc["stream"], group=doc["group"],
                    expected=tuple(doc["expected"]), counter=doc["counter"], last=doc["last"], seen=doc["seen"],
-                   findings=dict(doc["findings"]))
+                   findings=dict(doc["findings"]), reconciling_since=doc.get("reconciling_since"),
+                   install=doc.get("install"), install_previous=doc.get("install_previous"),
+                   install_refused=list(doc.get("install_refused", [])), install_enrolled=doc.get("install_enrolled"),
+                   answered=list(doc.get("answered", [])))
 
 
 LARGER_BY_RULE, LARGER_BY_COMPARISON = "larger by rule", "larger by comparison"
@@ -240,7 +256,7 @@ class Rollout:
         return self.state in (OFFERED, STAGING, COMMITTING, PARTIAL)
 
 
-class Controller:
+class Controller(InstallDesk):
     """The controller over `directory`. `instance_key` signs its audit log and is never an authority key
     (F1, K2). `clock` answers Unix seconds and drives the windows and the epoch, so every process that opens the
     directory agrees on them."""
@@ -282,8 +298,10 @@ class Controller:
         self.chain: List[str] = []                   # the trust statements stored, by envelope id, in trust order
         self.stored: Dict[str, dict] = {}            # envelope id -> {artifact, stream, seq, policy, release, ...}
         self.unknown: List[dict] = []                # findings for records that name no enrolled PEP
-        self.epoch, self.epoch_at = 1, self.clock()
+        self.epochs: Dict[str, int] = {}            # H9: the epoch id of each stream, counted apart
+        self.epoch_at = self.clock()
         self.anchors: Dict[str, dict] = {}           # fingerprint -> {target, stream, qualification}
+        self._load_install(None)                     # section 21: the install sets, statements and acknowledgements
         if not os.path.exists(self._state_path):
             return
         with open(self._state_path, "rb") as handle:
@@ -294,14 +312,15 @@ class Controller:
         self.groups = dict(doc["groups"])
         self.rollouts = [Rollout.from_document(one) for one in doc["rollouts"]]
         self.chain, self.stored, self.unknown = list(doc["chain"]), dict(doc["stored"]), list(doc["unknown"])
-        self.epoch, self.epoch_at, self.anchors = doc["epoch"], doc["epoch_at"], dict(doc["anchors"])
+        self.epochs, self.epoch_at, self.anchors = dict(doc.get("epochs", {})), doc["epoch_at"], dict(doc["anchors"])
+        self._load_install(doc.get("install"))
 
     def save(self) -> None:
         doc = {"format": FORMAT,
                "members": {pep: member.document() for pep, member in self.members.items()},
                "groups": self.groups, "rollouts": [one.document() for one in self.rollouts], "chain": self.chain,
-               "stored": self.stored, "unknown": self.unknown[-MAX_UNKNOWN:], "epoch": self.epoch, "epoch_at": self.epoch_at,
-               "anchors": self.anchors}
+               "stored": self.stored, "unknown": self.unknown[-MAX_UNKNOWN:], "epochs": self.epochs, "epoch_at": self.epoch_at,
+               "anchors": self.anchors, "install": self._install_doc()}
         canon.atomic_write_bytes(self._state_path, json.dumps(_plain(doc), sort_keys=True).encode("utf-8"))
         canon.fsync_dir(self.dir)
 
@@ -332,18 +351,23 @@ class Controller:
         self.audit.append("controller", action, _plain(data))
 
     # ------------------------------------------------------------------ anchors and trust
-    def add_anchor(self, raw: bytes, qualification: Optional[dict] = None) -> str:
+    def add_anchor(self, raw: bytes, qualification: Optional[dict] = None, layout: Optional[bytes] = None) -> str:
         """Serve the stream of a trust anchor (P2): the controller verifies what it stores for that kind and
         stream under the anchor's keys and the trust statements stored since. A `host` stream needs the
-        qualification envelope its PEPs admit images under (V11)."""
+        qualification envelope its PEPs admit images under (V11), and a table kind whose anchor has install keys
+        may name the layout document its action floors are checked against (AF10)."""
         anchor = read_anchor(raw)
         if anchor.target == "host" and qualification is None:
             raise ValueError("a host stream needs the qualification envelope its PEPs hold")
         with open(os.path.join(self.dir, "anchors", anchor.fingerprint), "wb") as handle:
             handle.write(bytes(raw))
         self.anchors[anchor.fingerprint] = {"target": anchor.target, "stream": anchor.stream,
-                                            "qualification": qualification}
-        self._log("anchor", fingerprint=anchor.fingerprint, target=anchor.target, stream=anchor.stream)
+                                            "qualification": qualification, "fresh": anchor.fresh,
+                                            "controller": anchor.controller.hex() if anchor.controller else None,
+                                            "layout": bytes(layout).hex() if layout is not None else None}
+        self.epochs.setdefault(anchor.stream, 1)
+        self._log("anchor", fingerprint=anchor.fingerprint, target=anchor.target, stream=anchor.stream,
+                  controller=anchor.controller_id, fresh=anchor.fresh)
         return anchor.fingerprint
 
     def _anchor_store(self, fingerprint: str) -> TrustStore:
@@ -353,8 +377,12 @@ class Controller:
         for envelope_id in self.chain:                               # V5, R1: every statement, whatever its targets
             sealed, body = self.sealed(envelope_id), self.blob(self.stored[envelope_id]["body_sha256"])
             envelope = env.read(env.unseal(sealed)[0])
-            store = (store.apply_revocation(envelope, body) if envelope.artifact == "trust.revocation"
-                     else store.apply_rotation(envelope, body))
+            if envelope.artifact == "trust.revocation":
+                store = store.apply_revocation(envelope, body)
+            elif envelope.artifact == "trust.controller":
+                store = store.apply_controller(envelope, body)
+            else:
+                store = store.apply_rotation(envelope, body)
         return store
 
     def _view(self, fingerprint: str) -> PepView:
@@ -374,8 +402,12 @@ class Controller:
         try:
             envelope = env.read(env.unseal(sealed)[0], reads_meta=True)          # F1: E1 and E11 whatever the kind
             chained = envelope.artifact in kinds.ON_TRUST_STREAM                # R1: one of the trust chain
+            if envelope.artifact in kinds.INSTALL_ARTIFACTS:                    # IS8: under the install keys
+                self.put_install(sealed, body, envelope)
+            self._check_roles_kept(envelope, body)
             checked = 0
-            for fingerprint, anchor in sorted(self.anchors.items()):
+            for fingerprint, anchor in ([] if envelope.artifact in kinds.INSTALL_ARTIFACTS
+                                        else sorted(self.anchors.items())):
                 if not chained and (anchor["target"] not in envelope.targets
                                               or anchor["stream"] != envelope.stream):
                     continue
@@ -386,7 +418,7 @@ class Controller:
                 if verdict.unchanged:
                     raise Refused("dist:trust-replay" if chained else "dist:seq-replay", "already stored")
                 checked += 1
-            if not checked:
+            if not checked and envelope.artifact not in kinds.INSTALL_ARTIFACTS:
                 raise Refused("dist:target-mismatch", "the controller serves no kind and stream this envelope names")
             if envelope.artifact == "trust.revocation":
                 earlier = [self.blob(self.stored[one]["body_sha256"]) for one in self.chain
@@ -408,7 +440,22 @@ class Controller:
         else:
             self._log("stored", envelope_id=envelope_id, artifact=envelope.artifact, stream=envelope.stream,
                       seq=envelope.seq, result="stored")
+        if envelope.artifact in kinds.INSTALL_ARTIFACTS:
+            self.stored_install(envelope)                   # IS8, H13: joins its set or its install trust chain
         return envelope
+
+    def _check_roles_kept(self, envelope, body: bytes) -> None:
+        """IS7, K4: the controller refuses to store a revocation list that names an install or an operator key id,
+        and a rotation that adds a key it knows was retired in any role, which it keeps whole where a PEP remembers
+        sixteen authority and eight install ids."""
+        if envelope.artifact == "trust.revocation":
+            named = set(kinds.read_revocation(body)["keys"]) & self.install_key_ids()
+            if named:
+                raise Refused(install.ROTATION_INVALID, "a revocation list that names an install key id (IS7)")
+        elif envelope.artifact == "trust.rotation":
+            added = env.key_id(bytes.fromhex(kinds.read_rotation(body)["add"]))
+            if added in self.retired_authority() or added in self.install_key_ids():
+                raise Refused(install.ROTATION_INVALID, "a rotation that adds a key retired or held in another role (K4)")
 
     def _write_blob(self, name: str, data: bytes) -> None:
         canon.atomic_write_bytes(os.path.join(self.dir, "blobs", name), data)
@@ -439,10 +486,14 @@ class Controller:
         return [env.read(env.unseal(self.sealed(one))[0]) for one in self.stored]
 
     # ------------------------------------------------------------------ F2: enrolment and groups
-    def enroll(self, instance_public: bytes, kind: str, stream: str, group: str = "default", rule: str = EACH) -> str:
+    def enroll(self, instance_public: bytes, kind: str, stream: str, group: str = "default", rule: str = EACH,
+               install_envelopes: Optional[List[str]] = None) -> str:
         """F2: enrol a PEP by its instance public key into `group`. Its kind and stream must be ones an anchor
         serves, and the key is never one of the anchor's (K2). Enrolling a PEP again moves it to `group` and
-        keeps what the controller knows of it."""
+        keeps what the controller knows of it. On a stream whose anchor has install keys the PEP's install id is
+        enrolled (P2 step 5, IS8) from `install_envelopes`, the envelope ids it printed beside the anchor, and this
+        is the acknowledgement of a first set that came with the provisioning (H13). A `provisioned` record the
+        controller kept for the PEP before it was enrolled is then checked under its key and used."""
         if not any(anchor["target"] == kind and anchor["stream"] == stream for anchor in self.anchors.values()):
             raise ValueError(f"no anchor is served for the {kind} stream {stream}")
         key_id = canon.sha256_hex(bytes(instance_public))
@@ -451,6 +502,7 @@ class Controller:
                 raise ValueError("an instance key is never a trusted authority key (K2)")
         if rule not in (EACH, ALL):
             raise ValueError("a group's rule is each or all")
+        comps = self.enrolled_install(kind, stream, install_envelopes or [])
         pep = _hex(state_record.pep_id(bytes(instance_public)))
         if self.groups.get(group, rule) != rule:
             raise ValueError(f"the group {group} runs under {self.groups[group]}")
@@ -461,8 +513,24 @@ class Controller:
         else:
             self.members[pep] = Member(pep=pep, public=_hex(instance_public), kind=kind, stream=stream, group=group,
                                        seen=self.clock())
-        self._log("enrolled", pep=pep, kind=kind, stream=stream, group=group)
+        member = self.members[pep]
+        if comps is not None and (install_envelopes is not None or member.install is None):
+            member.install, member.install_previous = comps, None
+            member.install_enrolled, member.install_refused = comps["trust_seq"], []
+        self._log("enrolled", pep=pep, kind=kind, stream=stream, group=group,
+                  **({"install_id": controller_install.install_id_of(member.install).hex(),
+                      "install": sorted(install_envelopes or [])} if member.install else {}))
+        kept = self.take_pending(pep, bytes(instance_public))
+        if kept is not None:
+            self.receive(kept)
+        if WIDENED in member.findings and self._enrolled_widening(member):
+            self._clear(member, WIDENED)                  # H13: the enrollment of the install id acknowledges it
         return pep
+
+    def _enrolled_widening(self, member: Member) -> bool:
+        reported = (member.last or {}).get("install")
+        return bool(reported) and member.install is not None and reported["install_id"] == \
+            controller_install.install_id_of(member.install).hex()
 
     # ------------------------------------------------------------------ F3: rollouts
     def offer(self, group: str, stream: str, seq: int, delay_ms: int = 0) -> Rollout:
@@ -472,7 +540,8 @@ class Controller:
         if not members:
             raise ValueError(f"the group {group} has no member on {stream}")
         ids = sorted((one for one, info in self.stored.items()
-                      if info["stream"] == stream and info["seq"] == seq and info["artifact"] not in kinds.ON_TRUST_STREAM),
+                      if info["stream"] == stream and info["seq"] == seq
+                      and info["artifact"] not in kinds.ON_TRUST_STREAM | kinds.INSTALL_ARTIFACTS),
                      key=lambda one: (self.stored[one]["artifact"] != "trust.widening", one))   # W3: the statement first
         if not ids:
             raise ValueError(f"no release is stored at {stream} seq {seq}")
@@ -485,6 +554,7 @@ class Controller:
             self._log("refused", group=group, stream=stream, seq=seq, cause=cause, result="not offered")
             raise Refused(cause, f"seq {seq} allows more than the release it replaces and says it does not (W7)")
         policy, release = next(iter(releases))
+        self._inside_ceiling(group, stream, seq, ids, members)
         for rollout in self.rollouts:
             same = (rollout.stream, rollout.seq, rollout.release) == (stream, seq, release)
             if rollout.group == group and (rollout.open or same and "aborting" in rollout.members.values()):
@@ -499,6 +569,21 @@ class Controller:
             self._log("offered", pep=pep, group=group, stream=stream, seq=seq, envelopes=ids)
         return rollout
 
+    def _inside_ceiling(self, group: str, stream: str, seq: int, ids: List[str], members: List[str]) -> None:
+        """CL2: a controller that holds a ceiling for the stream offers no release that is not inside it, on every
+        kind, the check a PEP makes at staging. `Refused` with `dist:above-ceiling`."""
+        ceiling = self.offered_set(stream, install.CEILING)
+        if ceiling is None:
+            return
+        for kind in sorted({self.members[pep].kind for pep in members}):
+            bodies = {self.stored[one]["artifact"]: self.blob(self.stored[one]["body_sha256"]) for one in ids
+                      if self.stored[one]["artifact"] not in kinds.TRUST_ARTIFACTS
+                      and kind in self.stored[one]["targets"]}
+            if bodies and not install.inside(kind, ceiling, bodies):
+                self._log("refused", group=group, stream=stream, seq=seq, cause=install.ABOVE_CEILING,
+                          result="not offered")
+                raise Refused(install.ABOVE_CEILING, f"seq {seq} is not inside the {kind} ceiling of {stream} (CL2)")
+
     def _releases(self, ids: List[str]):
         """The artifact envelopes of `ids` and the release the controller holds whose policy hash is their
         `replaces`, as {artifact: body}, or None when it holds none."""
@@ -509,7 +594,7 @@ class Controller:
         first = releases[0]
         held = [info for info in self.stored.values() if first.replaces and info["policy"] == first.replaces
                 and info["stream"] == first.stream and info["seq"] < first.seq
-                and info["artifact"] not in kinds.TRUST_ARTIFACTS]
+                and info["artifact"] not in kinds.TRUST_ARTIFACTS | kinds.INSTALL_ARTIFACTS]
         if not held:
             return releases, None
         latest = max(info["seq"] for info in held)
@@ -642,8 +727,17 @@ class Controller:
     def tick(self) -> None:
         """The windows of F3, the silence of H7 and the epoch of H9, at the controller's clock."""
         now = self.clock()
-        while now - self.epoch_at >= self.interval:
-            self.epoch, self.epoch_at = self.epoch + 1, self.epoch_at + self.interval
+        streams = {anchor["stream"] for anchor in self.anchors.values()}
+        advanced = any(stream not in self.epochs for stream in streams)
+        for stream in streams:
+            self.epochs.setdefault(stream, 1)
+        if now - self.epoch_at >= self.interval:
+            steps = int((now - self.epoch_at) // self.interval)
+            self.epochs = {stream: epoch + steps for stream, epoch in self.epochs.items()}
+            self.epoch_at += steps * self.interval
+            advanced = True
+        if advanced and self.instance_key is not None:
+            self.save()                           # H9: the next epoch id is durable before it is signed
         for rollout in self.rollouts:
             self._advance(rollout)
         for member in self.members.values():
@@ -657,14 +751,17 @@ class Controller:
         of its group's open rollout for its kind, and its `commit` and `abort` entries. An unknown PEP is given
         the epoch and nothing else."""
         self.tick()
-        out: dict = {"epoch": self.epoch, "offers": [], "commit": [], "abort": []}
+        out: dict = {"epoch": "", "offers": [], "commit": [], "abort": []}
         member = self.members.get(pep)
         if member is None:
-            return out
+            return out                            # an unknown PEP names no stream, so no statement is its
+        out["epoch"] = base64.urlsafe_b64encode(self.statement(member.stream)).rstrip(b"=").decode("ascii")
         lacking = self.chain[self._trust_seq_of(member):]
+        installing = [self._offer(envelope_id) for envelope_id in self.install_offers(member)]   # IS7, IS8
         if lacking:
-            out["offers"] = [self._offer(envelope_id) for envelope_id in lacking]
+            out["offers"] = [self._offer(envelope_id) for envelope_id in lacking] + installing
             return out
+        out["offers"] = list(installing)
         for rollout in self.rollouts:
             state = rollout.members.get(pep)
             if rollout.stream != member.stream or state is None:
@@ -678,6 +775,55 @@ class Controller:
             elif state == "aborting":
                 out["abort"].append(entry)
         return out
+
+    # ------------------------------------------------------------------ H9, H16: the controller statement
+    def epoch_of(self, stream: str) -> int:
+        """H9: the epoch id the controller names the present with on `stream`, 0 for a stream it does not serve."""
+        return self.epochs.get(stream, 0)
+
+    def key_seq(self) -> int:
+        """H9, K7: the key sequence the controller signs with, the `seq` of the latest `trust.controller` of its
+        chain, or 0 when the anchor named its key."""
+        return max((self.stored[one]["seq"] for one in self.chain if self.stored[one]["artifact"] == "trust.controller"),
+                   default=0)
+
+    def statement(self, stream: str) -> bytes:
+        """H9, H16: the controller statement of `stream` now, signed by the controller's instance key. Where an
+        anchor of the stream sets `fresh`, it carries the end of the trust chain, the highest `seq` the controller
+        holds on the stream and an `expires` that many seconds ahead."""
+        self.tick()
+        fresh = max((anchor.get("fresh", 0) for anchor in self.anchors.values() if anchor["stream"] == stream),
+                    default=0)
+        held = [info["seq"] for info in self.stored.values() if info["stream"] == stream
+                and info["artifact"] not in kinds.INSTALL_ARTIFACTS]          # an install `seq` is its own count
+        read = statements.Statement(
+            key_seq=self.key_seq(), stream=state_record.stream_prefix(stream), epoch=self.epoch_of(stream),
+            fresh=bool(fresh), trust_seq=len(self.chain) if fresh else 0, stream_seq=max(held, default=0) if fresh else 0,
+            expires=int(self.clock()) + fresh if fresh else 0)
+        return statements.build(read, self.instance_key)
+
+    def _no_controller_key(self, member: Member, record: state_record.StateRecord) -> bool:
+        """H6, P4: the PEP holds no controller key. Its anchor named none, and its record does not show a
+        `trust.controller` of the chain applied."""
+        anchor = next((one for one in self.anchors.values()
+                       if (one["target"], one["stream"]) == (member.kind, member.stream)), None)
+        if anchor is None or anchor.get("controller"):
+            return False
+        return not any(self.stored[one]["artifact"] == "trust.controller" and self.stored[one]["seq"] <= record.trust_seq
+                       for one in self.chain)
+
+    def _fresh_epoch(self, member: Member, record: state_record.StateRecord) -> bool:
+        """H6 step 2: the record's epoch id is the stream's current one or the one before, or it is epoch 0 on a
+        `provisioned` record, on the `trust-applied` record of a `trust.controller` the controller holds, or on any
+        record of a PEP that holds no controller key (P4)."""
+        current = self.epoch_of(member.stream)
+        if record.epoch:
+            return record.epoch in (current, current - 1)
+        if record.event == "provisioned" or self._no_controller_key(member, record):
+            return True
+        return record.event == "trust-applied" and any(
+            self.stored[one]["artifact"] == "trust.controller" and self.stored[one]["seq"] == record.trust_seq
+            for one in self.chain)
 
     @staticmethod
     def _trust_seq_of(member: Member) -> int:
@@ -699,48 +845,107 @@ class Controller:
             return self._file_unknown("", str(refused))
         member = self.members.get(pep)
         if member is None:                                                # F2: not enrolled
+            if _event_of(data) == "provisioned":
+                self.keep_pending(pep, data)                              # H13: kept, not filed, and used once the
+                return None                                               # PEP is enrolled
             return self._file_unknown(pep, "a record from a PEP that is not enrolled")
         try:                                                             # step 1, H2, H8, H10
             record = state_record.read(data, bytes.fromhex(member.public))
             if record.held and not kinds.TARGETS[member.kind].expiry_hold:
                 raise Refused(STATE_INVALID, f"the hold bit from a {member.kind} PEP, which has no HOLD setting")
+            if record.fallback and record.held:                           # H11, FB6
+                raise Refused(STATE_INVALID, "bits 4 and 5 together")
+            if record.fallback and not self.may_fall_back(member):
+                raise Refused(STATE_INVALID, "the fallback bit from a PEP enrolled with no fallback policy (H11)")
             check_extensions(record, data[:-state_record.SIGNATURE_SIZE])
         except Refused as refused:
             return self._file(member, STATE_INVALID, str(refused))
         self.tick()
         if record.counter <= member.counter:                              # step 2, H3
             return self._file(member, STATE_REPLAY, f"counter {record.counter} is not above {member.counter}")
-        if record.epoch not in (self.epoch, self.epoch - 1):              # H9
-            return self._file(member, STATE_REPLAY, f"epoch {record.epoch} is not {self.epoch} or the one before")
+        first: Optional[str] = None
+        unverified = not self._fresh_epoch(member, record)
+        if unverified:                                                    # H6: filed, and still used
+            first = self._file(member, STATE_REPLAY, f"epoch {record.epoch} is not "
+                                                     f"{self.epoch_of(member.stream)} or the one before")
         member.counter, member.seen = record.counter, self.clock()
         member.last = {"event": record.event, "state": record.state, "cause": record.cause, "counter": record.counter,
                        "time": record.time, "epoch": record.epoch, "policy": _hex(record.active_policy),
                        "release": _hex(record.active_release), "seq": record.active_seq, "floor": record.floor,
                        "staged_release": _hex(record.staged_release), "staged_seq": record.staged_seq,
-                       "trust_seq": record.trust_seq, "held": record.held, "dev_build": record.dev_build}
-        self._log("ack", pep=pep, event=record.event, cause=record.cause, counter=record.counter, seq=record.active_seq)
-        for cleared in (STATE_INVALID, STATE_REPLAY, SILENT):
+                       "trust_seq": record.trust_seq, "held": record.held, "dev_build": record.dev_build,
+                       "unverified": unverified, "no_controller_key": self._no_controller_key(member, record)}
+        self._log("ack", pep=pep, event=record.event, cause=record.cause, counter=record.counter, seq=record.active_seq,
+                  **({"unverified": True} if unverified else {}))
+        for cleared in (STATE_INVALID, SILENT) if unverified else (STATE_INVALID, STATE_REPLAY, SILENT):
             self._clear(member, cleared)
+        self._reconciling(member, record)
         if record.held:                                                   # H8
             self._file(member, HELD, "deciding under an expired release on hold")
         else:
             self._clear(member, HELD)
-        self._progress(member, record)
+        if record.fallback:                                               # H11
+            self._file(member, FALLBACK_FINDING, "deciding under its fallback policy")
+        else:
+            self._clear(member, FALLBACK_FINDING)
+        about_install = self.install_progress(member, record)             # IS8, H12, H13
+        if not about_install:
+            self._progress(member, record)
         reported = (_hex(record.active_policy), _hex(record.active_release), record.active_seq)
-        if reported not in self._allowed(member):                         # step 3
-            return self._file(member, POLICY_MISMATCH, f"reports seq {record.active_seq} policy {reported[0]}, "
-                                                       f"expected seq {member.expected[2]} policy {_prefix(member.expected[0])}")
+        allowed = self._allowed(member) + ([(_ZERO, _ZERO, 0)] if record.fallback else [])     # H11: zeros expected
+        if reported not in allowed:                                       # step 3
+            found = self._file(member, POLICY_MISMATCH, f"reports seq {record.active_seq} policy {reported[0]}, "
+                                                        f"expected seq {member.expected[2]} policy {_prefix(member.expected[0])}")
+            return first or found
+        mismatch = self.install_mismatch(member, record)                  # H12, step 3
+        if mismatch is not None:
+            return first or self._file(member, POLICY_MISMATCH, mismatch)
         member.last["decisions"] = 0                                      # an empty body carries no decision
+        if record.body and record.fallback:                               # step 4: the fallback policy sends none (H5)
+            return first or self._file(member, POLICY_MISMATCH, "a Facet body on a record under the fallback policy")
         if record.body:                                                   # steps 4 and 5 (H5)
             cause = heartbeat.check(self._image(reported[0]), record.body)
             if cause == POLICY_MISMATCH:
-                return self._file(member, cause, "the Facet body's preamble names another policy or layout")
+                return first or self._file(member, cause, "the Facet body's preamble names another policy or layout")
             if cause is not None:
-                return self._file(member, cause, "the Facet body does not decode under the policy it names")
+                return first or self._file(member, cause, "the Facet body does not decode under the policy it names")
             member.last["decisions"] = len(heartbeat.decode(self._image(reported[0]), record.body))
         self._clear(member, POLICY_MISMATCH)
         self._clear(member, heartbeat.CODEBOOK_MISMATCH)
-        return None
+        return first
+
+    def _reconciling(self, member: Member, record: state_record.StateRecord) -> None:
+        """H14: a record with the reconciling entry is filed `dist:reconciling` at once when the entry names a
+        running release, when the floor the runtime holds is not the held one (the action floor of the install record
+        the controller expects of the PEP, or of the one before while a set is offered, none when it expects none),
+        or when the PEP is locked, and in any case once its records have carried the entry for three intervals. The finding stays open until a record without the entry, and the running
+        release is shown beside the reported one while the entry is sent."""
+        entry = record.reconciling
+        if entry is None:
+            member.reconciling_since = None
+            member.last["running"] = None
+            self._clear(member, RECONCILING)
+            return
+        now = self.clock()
+        if member.reconciling_since is None:
+            member.reconciling_since = now
+        running = entry.running_release != bytes(16)
+        member.last["running"] = {"policy": _hex(entry.running_policy), "release": _hex(entry.running_release),
+                                  "seq": entry.running_seq, "floor": _hex(entry.floor), "owed": entry.owed,
+                                  "cause": entry.cause}
+        held = {bytes(16)} if member.install is None else set()
+        for comps in (member.install, member.install_previous):
+            floor = comps["sets"].get(install.FLOOR) if comps else None
+            if comps:
+                held.add(bytes.fromhex(floor[0])[:16] if floor else bytes(16))
+        other_floor = bytes(entry.floor) not in held
+        if running or other_floor or record.state == "locked":
+            reason = ("the runtime may still run another release" if running else
+                      "the runtime holds another action floor" if other_floor else
+                      "a locked PEP whose runtime has not withdrawn")
+            self._file(member, RECONCILING, reason)
+        elif now - member.reconciling_since >= SILENT_AFTER * self.interval:
+            self._file(member, RECONCILING, f"reconciling for {SILENT_AFTER} intervals")
 
     def _image(self, policy_prefix: str) -> Optional[bytes]:
         """The stored `policy.core` image whose policy hash starts with `policy_prefix`, or None."""
@@ -787,7 +992,8 @@ class Controller:
                     if record.cause not in kinds.RETRYABLE:          # else the PEP tries it again, still offered
                         rollout.members[member.pep] = "refused"
                     self._file(member, record.cause, f"refused seq {rollout.seq} of {rollout.stream}")
-            elif state == "committing" and record.active_release == release and record.active_seq == rollout.seq:
+            elif (state == "committing" and record.state == "active" and record.active_release == release
+                  and record.active_seq == rollout.seq):                 # H14: never from a reconciling record
                 rollout.members[member.pep] = "committed"
                 for cause in [code for code in member.findings if not code.startswith("fleet:") and code != HELD]:
                     self._clear(member, cause)
@@ -845,9 +1051,14 @@ class Controller:
                                       "seq": member.expected[2]},
                          "reported": {key: last.get(key) for key in ("policy", "release", "seq", "floor", "trust_seq",
                                                                      "state", "event", "counter", "epoch")},
+                         "unverified": bool(last.get("unverified")),                   # H6: not shown fresh
+                         "no_controller_key": bool(last.get("no_controller_key")),
+                         "running": last.get("running"),                             # H14
+                         "install": self.member_install(member),                     # H12, OP4
                          "findings": dict(sorted(member.findings.items()))})
-        return {"epoch": self.epoch, "trust_seq": self.trust_seq(), "peps": peps,
-                "rollouts": [one.document() for one in self.rollouts], "unknown": list(self.unknown)}
+        return {"epochs": dict(self.epochs), "trust_seq": self.trust_seq(), "peps": peps,
+                "rollouts": [one.document() for one in self.rollouts], "unknown": list(self.unknown),
+                "install": self.install_view(), "install_findings": dict(sorted(self.install_findings.items()))}
 
 
 class FrameDriver:
@@ -878,7 +1089,8 @@ class FrameDriver:
                                         for entry in answer["commit"]) if one not in commits]
             aborts += [one for one in ((entry["stream"], entry["seq"], entry["policy"])
                                        for entry in answer["abort"]) if one not in aborts]
-        out = [frames.encode(frames.Epoch(self._next(), controller.epoch), self.limit)]
+        streams = sorted({member.stream for member in controller.members.values() if member.group == self.group})
+        out = [frames.encode(frames.Epoch(self._next(), controller.statement(stream)), self.limit) for stream in streams]
         for envelope_id in owed:
             body = controller.blob(controller.stored[envelope_id]["body_sha256"])
             out += list(frames.frames_for(self._next(), controller.sealed(envelope_id), body, self.limit))
@@ -895,6 +1107,14 @@ class FrameDriver:
             return None
         if isinstance(frame, frames.State):
             return self.controller.receive(frame.record)
+        return None
+
+
+def _event_of(data: bytes) -> Optional[str]:
+    """The event a record names, read without its key, or None when it does not read."""
+    try:
+        return state_record._parse(bytes(data))[0].event
+    except (Refused, ValueError, IndexError):
         return None
 
 

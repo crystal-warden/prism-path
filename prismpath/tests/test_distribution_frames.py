@@ -80,7 +80,7 @@ def test_every_frame_type_encodes_and_decodes_to_itself():
     policy = "ab" * 32
     for frame in (frames.Offer(1, b"\x01" * 16, 600, 52), frames.Chunk(2, frames.BODY, 40, b"xyz"),
                   frames.State(3, b"PPSR" + bytes(200)), frames.commit_for(4, "mesh/demo", 9, policy, 120),
-                  frames.abort_for(5, "mesh/demo", 9, policy), frames.Epoch(6, 2 ** 64 - 1)):
+                  frames.abort_for(5, "mesh/demo", 9, policy), frames.Epoch(6, b"PPEP" + bytes(122))):
         data = frames.encode(frame)
         assert frames.decode(data) == frame
         assert data[:2] == bytes([{frames.Offer: 1, frames.Chunk: 2, frames.State: 3, frames.Commit: 4,
@@ -88,6 +88,10 @@ def test_every_frame_type_encodes_and_decodes_to_itself():
     assert len(frames.encode(frames.Offer(1, b"\x01" * 16, 600, 52))) == 26
     assert len(frames.encode(frames.commit_for(4, "s", 1, policy))) == 46
     assert len(frames.encode(frames.abort_for(4, "s", 1, policy))) == 44
+    assert [len(frames.encode(frames.Epoch(6, b"PPEP" + bytes(size - 4)))) for size in (102, 126)] == [106, 130]
+    for size in (101, 103, 125, 127):                                 # H9: a statement is 102 or 126 bytes
+        with pytest.raises(Refused):
+            frames.decode(bytes([6, 1, 0, 0]) + bytes(size))
 
 
 def test_a_state_frame_carries_a_signed_state_record_whole():
@@ -249,9 +253,9 @@ def test_no_body_is_read_for_an_envelope_that_fails_and_no_part_beyond_its_bound
 
 def test_control_frames_pass_through_to_the_enforcement_point():
     commit = frames.commit_for(1, GEN.STREAM, 1, "ab" * 32, 120)
-    epoch = frames.Epoch(2, 41)
-    assembler = _assembler()
-    assert _feed(assembler, [frames.encode(commit, LIMIT), frames.encode(epoch, LIMIT)]) == [commit, epoch]
+    epoch = frames.Epoch(2, b"PPEP" + bytes(98))                     # a statement needs a link of 106 bytes
+    assembler = frames.Assembler(frames.admit_through_v8(_through_v8), clock=Clock(), limit=frames.ESPNOW_LIMIT)
+    assert _feed(assembler, [frames.encode(commit), frames.encode(epoch)]) == [commit, epoch]
 
 
 def test_case_132_a_trust_body_offered_past_the_trust_bound_drops_the_transfer():

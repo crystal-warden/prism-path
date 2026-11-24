@@ -115,6 +115,7 @@ class Governor:
     def __init__(self, home: Path, runs: Optional[Path], session: str, workspace: Path, server_cwd: str,
                  policy_path: Optional[Path] = None):
         self.session, self.server_cwd, self.home = session, server_cwd, home
+        self.workspace, self.runs = Path(workspace), runs
         self.failure: Optional[str] = None
         self.policy = self.run = self.config = self.follow = None
         store = None
@@ -136,7 +137,29 @@ class Governor:
         except Exception as exc:   # noqa: BLE001
             self.failure = f"the run could not be opened ({type(exc).__name__}: {exc})"
 
+    def _floor(self, params: Any) -> Optional[Outcome]:
+        """AF1: the action floor of a home that follows a stream is asked first, in every state, also when no release
+        loads. When it answers, nothing else decides and the decision is a receipt of the floor's own run."""
+        from prismpath.agent import commands
+        try:
+            call = mcp_map.classifier_call(params, self.server_cwd)
+            floored = commands.floor_decide(self.home, call, self.workspace,
+                                            policy_image=self.policy.image if self.policy is not None else None)
+        except Exception:   # noqa: BLE001 - a floor that cannot be asked is silent
+            return None
+        if floored is None:
+            return None
+        decision, raw, _answered = floored
+        try:
+            index = commands.floor_run(self.home, self.session, self.runs).append(raw, decision.verdict)
+        except Exception as exc:   # noqa: BLE001 - never forward a call whose receipt is not durable
+            return Outcome("refuse", failure=f"its receipt could not be written ({type(exc).__name__}: {exc})")
+        return Outcome(decision.kind, decision.cause, decision.cause_code, index)
+
     def decide(self, params: Any) -> Outcome:
+        floored = self._floor(params)
+        if floored is not None:
+            return floored
         if self.failure:
             return Outcome("refuse", failure=self.failure)
         if self.follow is not None:

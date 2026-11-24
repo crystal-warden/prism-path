@@ -217,6 +217,7 @@ def launch(command: Sequence[str], workspace: str, credential: Optional[str] = N
         if not os.path.exists(path):
             raise LaunchError(f"the read only path {path} does not exist, so nothing was run")
     gate = None
+    follow = None
     zone_paths: Tuple[str, ...] = ()
     home_dir = Path(home) if home else commands.config_dir()
     if decider is None:
@@ -284,7 +285,13 @@ def launch(command: Sequence[str], workspace: str, credential: Optional[str] = N
             os.close(write_fd)
         if on_start:
             on_start(proc.pid)
-        status = _wait(proc)
+        if follow is not None:                   # C6: a lapse or a revocation of the home's release ends it
+            agent_home.register_session(home_dir, proc.pid, commands._sha256_hex(policy.image))
+        try:
+            status = _wait(proc)
+        finally:
+            if follow is not None:
+                agent_home.forget_session(home_dir, proc.pid)
         info = b""
         try:
             info = os.read(read_fd, 65536)
@@ -333,7 +340,10 @@ def _policy_profile(home: Path, max_processes: int):
     """(the agent profile, the policy, the store of runs) of the recorded policy, or a LaunchError saying what to fix."""
     try:
         policy, store = commands.load_checked(home)
-        profile = compile_profile(policy, "agent")
+        from prismpath.distribution.adapters import agent_home
+        # AF1: a home that follows a stream runs under the profile of the policy in force and its action floor together
+        profile = agent_home.running_profile(home, "agent") if agent_home.is_distributed(home) \
+            else compile_profile(policy, "agent")
     except commands.AgentError as exc:
         raise LaunchError(f"{exc}, so nothing was run") from exc
     except ProfileError as exc:

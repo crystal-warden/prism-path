@@ -32,7 +32,7 @@ import threading
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from prismpath.distribution import devbuild
+from prismpath.distribution import devbuild, legacy
 from prismpath.hotswap import policy_pack as pp
 from prismpath.ledgers.audit_log import AuditLog
 from prismpath.ledgers import root_statement
@@ -277,9 +277,21 @@ class PolicyHost:
     def _distribution_floor(self) -> bool:
         """True when this state directory's enforcement point has committed a distribution envelope, or when
         it was provisioned and its floor file is missing or cannot be read, which is answered the same way
-        (fail closed). Only a directory no enforcement point was provisioned in, or one whose readable floor
-        is still 0, keeps the older path open."""
+        (fail closed). The marks of its anchor part close the path too: an install statement it ever held (IS9),
+        and a release it committed on the stream it follows, whatever provisioning came after (L2, P3). Only a
+        directory no enforcement point was provisioned in, or one whose readable floor is still 0 and whose marks
+        say neither, keeps the older path open."""
+        from prismpath.distribution import install, kinds, trust
         dist = os.path.join(self.state_dir, "dist")
+        stream = None
+        if os.path.exists(os.path.join(dist, "anchor.json")):
+            try:
+                with open(os.path.join(dist, "anchor.json"), "rb") as anchor_file:
+                    stream = trust.read_anchor(anchor_file.read()).stream
+            except (OSError, ValueError, kinds.Refused):
+                return True
+        if install.older_forms_refused(dist, stream):
+            return True
         path = os.path.join(dist, "floor.json")
         if not os.path.exists(path):
             return os.path.exists(os.path.join(dist, "anchor.json"))
@@ -294,7 +306,8 @@ class PolicyHost:
         """Verify -> envelope -> version -> stage -> atomic flip. Returns {ok, reasons} (or the
         active dict on success). Every outcome is one audit event; the active policy only changes
         on full success. A state directory whose enforcement point committed a distribution envelope
-        refuses every pack with `dist:legacy-refused` (L2). `allow_unsigned` is an escape hatch that works
+        refuses every pack with `dist:legacy-refused` (L2). A pack is the sealed `policy.ppt` envelope beside the
+        image, or the older `ppt-pack/1` manifest, read with a `legacy_form` audit event (L3). `allow_unsigned` is an escape hatch that works
         only in a dev build. In a production build the hatch is refused and the pack is checked as signed."""
         with self._lock:
             if self._distribution_floor():
@@ -326,6 +339,9 @@ class PolicyHost:
                 ok, reasons, manifest = pp.verify_pack(ppt_path, self.pubkey_paths, self.revoked)
                 if not ok:
                     return self._reject(to_hash, None, reasons, strict)
+                if pp.is_older(manifest):           # L3: an older pack is read, and says so in the log
+                    legacy.record(self.audit, legacy.PACK, reader="policy_host.swap", sha256=to_hash,
+                                  key_id=manifest.get("key_id"))
                 ok, reasons = pp.check_envelope(manifest, image, self.envelope)
                 if not ok:
                     return self._reject(to_hash, manifest.get("version"), reasons, strict)

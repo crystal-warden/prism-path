@@ -223,8 +223,8 @@ def _swapped_state(tmp_path):
     ppt = tmp_path / "v1.ppt"
     ppt.write_bytes(ppt_compile.compile_flow(parse(
         "# f\n## start\n-> hot: when temp >= 100\n-> cold: else\n## hot\n-> end\n## cold\n-> end\n## end\n")).serialize())
-    policy_pack.build_pack(str(ppt), {"temp": "int"}, version=1, envelope_id="env1",
-                           priv_path=keys["private"], pub_path=keys["public"])
+    policy_pack.seal_pack(str(ppt), {"temp": "int"}, version=1, envelope_id="env1",
+                          priv_path=keys["private"], pub_path=keys["public"])
     host = policy_host.PolicyHost(str(tmp_path / "state"), [keys["public"]], envelope)
     return host.swap(str(ppt))
 

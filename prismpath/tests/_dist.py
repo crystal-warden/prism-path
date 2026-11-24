@@ -8,7 +8,7 @@ from __future__ import annotations
 import importlib.util
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, List, Optional
+from typing import Callable, List, Optional, Sequence
 
 from prismpath import canon
 from prismpath.distribution import envelope as env
@@ -56,7 +56,7 @@ def seal(artifact: str, body: bytes, *, seq: int = 1, signer: str = "A", release
     """A sealed envelope for `body`, by default a `policy.ppt` release of one artifact."""
     if meta is None:
         meta = GEN.image_meta(body) if artifact == "policy.ppt" else {}
-    trust_kind = artifact in ("trust.revocation", "trust.rotation")
+    trust_kind = artifact in ("trust.revocation", "trust.rotation", "trust.controller")
     envelope_bytes = env.build(
         artifact, body, stream=stream, seq=seq, targets=targets, not_before=not_before,
         expires=0 if artifact.startswith("trust.") else expires, meta=meta,
@@ -85,6 +85,12 @@ def rotation(add: str, retire: str = "") -> bytes:
                                "add": GEN.public_raw(GEN.test_key(add)).hex(), "retire": key_id(retire) if retire else ""})
 
 
+def controller_key(key: str) -> bytes:
+    """The canon/2 body of a controller key statement (K7) naming the test key `key`."""
+    return canon.canon2_bytes({canon.ENCODING_KEY: canon.CANON2, "format": "prismpath.dist-controller/1",
+                               "key": GEN.public_raw(GEN.test_key(key)).hex()})
+
+
 def trust_statement(artifact: str, body: bytes, *, seq: int, signers=("A",), targets=("host",)) -> bytes:
     """A sealed trust statement on `@trust`, signed by every test key in `signers` (O2 asks for two)."""
     envelope_bytes = env.build(artifact, body, stream=env.TRUST_STREAM, seq=seq, targets=targets, not_before=NOT_BEFORE,
@@ -94,6 +100,10 @@ def trust_statement(artifact: str, body: bytes, *, seq: int, signers=("A",), tar
 
 def key_id(name: str) -> str:
     return env.key_id(GEN.public_raw(GEN.test_key(name)))
+
+
+def public(name: str) -> bytes:
+    return GEN.public_raw(GEN.test_key(name))
 
 
 def image(threshold: int = 5) -> bytes:
@@ -112,20 +122,78 @@ class Point:
     expiry_response: str = "refuse"
     kind: str = "host"
     artifact: str = "policy.ppt"
+    controller: Optional[str] = None               # the test key named as the controller key, for a /2 anchor
+    fresh: int = 0                                 # H16
+    has_clock: bool = True
+    stream: str = STREAM
+    install_keys: Sequence[str] = ()               # section 21: the test keys of the anchor's install part
+    install_threshold: int = 1
+    operators: Sequence[str] = ()
+    install_seq: int = 0
+    install_copy: Optional[Path] = None            # IS10: the second medium of the install record
 
     def __post_init__(self):
         self.pep = self.open()
 
-    def anchor(self) -> bytes:
-        return trust_module.anchor_bytes([GEN.public_raw(GEN.test_key(name)) for name in self.authorities],
-                                         target=self.kind, stream=STREAM)
+    def anchor(self, **changes) -> bytes:
+        """The anchor of the point, `/2` with an install part when it names install keys. `changes` overrides the
+        install part's members (`keys`, `threshold`, `operators`, `seq`, `domain`) by test key name."""
+        from prismpath.distribution import install
+        controller_name = self.controller or ("C" if self.install_keys else None)
+        controller = GEN.public_raw(GEN.test_key(controller_name)) if controller_name else None
+        part = None
+        keys = changes.pop("keys", self.install_keys)
+        if keys:
+            part = install.anchor_part([public(name) for name in keys],
+                                       threshold=changes.pop("threshold", self.install_threshold),
+                                       operators=[public(name) for name in changes.pop("operators", self.operators)],
+                                       seq=changes.pop("seq", self.install_seq),
+                                       domain=changes.pop("domain", None) or install.domain_sha256(self.adapter()))
+        return trust_module.anchor_bytes([public(name) for name in changes.pop("authorities", self.authorities)],
+                                         target=self.kind, stream=self.stream, controller=controller,
+                                         fresh=self.fresh, install=part)
+
+    def install_set(self, install_kind: str, bodies: dict, seq: int = 1, *, signers=None, metas=None,
+                    **seal_args) -> list:
+        """The (sealed, body) pairs of an install set of `install_kind` for this point, signed by `signers` (test key
+        names, by default the first `install_threshold` install keys). A `policy.ppt` gets the image's `meta`."""
+        from prismpath.distribution import install
+        names = signers if signers is not None else self.install_keys[:self.install_threshold]
+        metas = dict(metas or {})
+        if "policy.ppt" in bodies and "policy.ppt" not in metas:
+            metas["policy.ppt"] = GEN.image_meta(bodies["policy.ppt"])
+        seal_args.setdefault("not_before", NOT_BEFORE)
+        return install.seal_set(install_kind, bodies, stream=self.stream, seq=seq, target=self.kind,
+                                signers=[GEN.test_key(name) for name in names], metas=metas, **seal_args)
+
+    def send(self, pairs, pep: Optional[Pep] = None) -> list:
+        """Stage each (sealed, body) on the PEP and answer the state records, read."""
+        pep = pep or self.pep
+        return [state_record.read(pep.stage(sealed, body), self.key.public_raw) for sealed, body in pairs]
+
+    def install_trust(self, seq: int, keys, *, threshold: int, operators=(), signers=None, widens=None):
+        """A sealed `install.trust` with `keys` and `operators` (test key names), signed by `signers`, by default every
+        current install key and every key it adds. Returns (sealed, body)."""
+        from prismpath.distribution import install
+        body = install.trust_body([public(name) for name in keys], threshold=threshold,
+                                  operators=[public(name) for name in operators])
+        if signers is None:
+            signers = list(dict.fromkeys(list(self.install_keys) + list(keys) + list(operators)))
+        record = self.pep.installed.record
+        if widens is None:
+            widens = install.trust_widens(record, body)
+        envelope_bytes = env.build("install.trust", body, stream=self.stream, seq=seq, targets=(self.kind,),
+                                   not_before=NOT_BEFORE, expires=0, policy_sha256=env.ZERO_HASH,
+                                   release=env.ZERO_HASH, widens=widens)
+        return env.seal(envelope_bytes, [GEN.test_key(name) for name in signers]), body
 
     def adapter(self):
         raise NotImplementedError("a Point names its adapter")
 
     def open(self, provision: bool = True) -> Pep:
         """A fresh PEP over the state directory, as after a restart, provisioned on first open."""
-        pep = Pep(str(self.state_dir), self.adapter(), self.key, self.clock, expiry_response=self.expiry_response)
+        pep = Pep(str(self.state_dir), self.adapter(), self.key, self.clock, expiry_response=self.expiry_response,
+                  has_clock=self.has_clock, install_copy=str(self.install_copy) if self.install_copy else None)
         if provision and not pep.provisioned:
             pep.confirm(pep.provision(self.anchor()))
         return pep
@@ -294,6 +362,24 @@ class AgentPep(Point):
         return refused[0] if refused else acks[-1]
 
 
+def answer(point, receipt, answer="allow", *, signer="O1", pep=None, not_before=None, lifetime=300, policy=None,
+           kind=None):
+    """A sealed `operator.answer` to the escalation whose receipt hash is `receipt`, and its body."""
+    from prismpath.distribution import floor, kinds
+    pep = pep or state_record.pep_id(point.key.public_raw).hex()
+    kind = kind or point.kind
+    body = floor.answer_body(answer, pep, receipt)
+    start = point.clock.now - 10 if not_before is None else not_before
+    held = point.pep.floor_set()
+    doc = {"artifact": kinds.ANSWER, "body_sha256": canon.sha256_hex(body), "body_size": len(body),
+           "encoding": "canon/2", "expires": start + lifetime, "format": env.FORMAT, "meta": {}, "not_before": start,
+           "policy_sha256": policy or (held.policy_sha256 if held else "00" * 32), "release": env.ZERO_HASH,
+           "replaces": "", "seq": 1, "stream": STREAM, "targets": [kind], "widens": False}
+    raw = canon.canon2_bytes(doc)                     # raw, so a lifetime the writer refuses can be sent
+    key = GEN.test_key(signer)
+    return env.seal_entries(raw, [(key_id(signer), key.sign(env.signed_message(raw)))]), body
+
+
 # ------------------------------------------------------------------ the hold cases, on every kind with HOLD
 
 def _read(point: Point, signed: bytes):
@@ -379,7 +465,7 @@ def case_112_no_message_changes_the_setting(make: Callable[..., Point], bodies, 
         pep.stage(point.seal(bodies[1], seq=3), bodies[1])
         pep.commit(STREAM, 3, point.policy_of(bodies[1]))
         pep.record("beat")
-        pep.see_epoch(7)
+        pep.take_statement(b"PPEP" + bytes(98))
         pep.needs(["00" * 32])
         try:
             pep.rollback()

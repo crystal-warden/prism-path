@@ -15,14 +15,35 @@ Its durable store is `<state>/dist/`, each file canon/2 and written whole (the o
     counter.json   the state record counter (H3)
     setting.json   the expiry response the PEP was provisioned with (X10)
     staged.json    the staged release
-    pending.json   the intent record of a commit or a rollback
+    pending.json   the intent record of a commit, a rollback or a lapse (C7): the transition, the release it
+                   makes active or none, the cause of a lapse, the release the runtime ran when it started and
+                   whether the runtime was withdrawn since (C10)
     active.json    the active release and the one it replaced (RB1)
+    fresh.json     the latest fresh controller statement, where freshness is on (H16)
     blobs/         sealed envelopes and bodies under their SHA-256
     audit.log      the audit log, signed by the instance key
 
 A commit is durable in the order of C4: the intent, the floor, the audit event, the artifacts under content
 addressed names (staging already wrote them, each synced), the active record, the runtime switch, the clean
 up. A restart reads only what the active record names, and finishes or reports an interrupted commit.
+
+When the last step of a transition, making the runtime run what the PEP now holds, fails after the record is
+durable, the PEP is `reconciling` (section 9.5): it withdraws the runtime at once, refuses every decision, commit
+and rollback with `dist:reconciling`, and only a tick or a start tries the runtime again. Its records carry status
+3 and the reconciling entry of H14, and the record the transition owed goes once a try works. A withdrawal makes the
+runtime run the fallback set where the PEP holds one, and nothing otherwise (C10, FB1).
+
+The install part (section 21, `prismpath.distribution.install`) is kept apart from this store, with two copies of the
+install record and of every held statement. The PEP stages install statements, applies a set when it is whole (IS4),
+holds every release, action floor and fallback policy inside the held ceiling (CL2, CL3), and decides under its
+fallback policy while no release decides (FB1). Its records carry bit 4 while the fallback policy decides and the
+install entry of H10 once it holds install keys. It asks its action floor first on every request in every state, and
+applies an operator's signed answer to an escalation the floor made (`prismpath.distribution.floor`, AF1, OP2). Every
+receipt of a PEP that holds an install record names the basis and the policy hash of the set that decided (RC1).
+
+The epoch id (H9) is taken only from a controller statement that verifies under the controller key the trust store
+holds at its key sequence, and is kept in memory only (H15). Where the anchor sets `fresh`, a fresh statement is
+kept durably and the PEP lapses at expiry when it is not renewed in time (H16).
 
 A store that cannot be read is answered by failing closed: an unreadable trust store refuses every envelope
 and decides nothing (K1, X3), and an unreadable floor, counter or anchor locks the PEP (Q5) until it is
@@ -37,15 +58,19 @@ from dataclasses import dataclass, field, replace
 from typing import Any, Callable, Dict, FrozenSet, Iterable, Optional, Tuple
 
 from prismpath import canon
-from prismpath.distribution import devbuild, heartbeat, kinds, state_record, widening
+from prismpath.distribution import devbuild, heartbeat, install, kinds, state_record, statement as statements, widening
 from prismpath.distribution.adapters import LARGER, NOT_LARGER
 from prismpath.distribution import envelope as env
+from prismpath.distribution import floor as floors
 from prismpath.distribution.kinds import Refused
 from prismpath.distribution.trust import TrustStore, read_anchor
-from prismpath.distribution.verify import SKEW, Floor, PepView, Staged, verify
+from prismpath.distribution.verify import SKEW, Floor, InstallView, PepView, Staged, verify
 from prismpath.ledgers.audit_log import AuditLog
 
 REFUSE, HOLD = "refuse", "hold"
+RECONCILING, POLICY_LAPSED, FLOOR_LOST, EXPIRED, REVOKED = (
+    "dist:reconciling", "dist:policy-lapsed", "dist:floor-lost", "dist:expired", "dist:revoked")
+_FRESH = "prismpath.dist-fresh/1"
 K2_SCAN, K2_SKIP = 4096, frozenset({"runs"})          # K2: the bound of the scan of a home for an authority key
 _FLOOR, _ACTIVE, _STAGED, _PENDING, _COUNTER, _SETTING = (
     "prismpath.dist-floor/1", "prismpath.dist-active/1", "prismpath.dist-staged/1", "prismpath.dist-pending/1",
@@ -131,6 +156,39 @@ def read_committed(state_dir: str, kind: str, now: int) -> Dict[str, bytes]:
 
 
 def read_committed_release(state_dir: str, kind: str, now: int) -> "Release":
+    """`read_release_in_force` for a reader in another process: the active release, or the fallback set when no
+    release decides and the PEP holds a fallback policy (FB1). The fallback set read this way has `basis` set to
+    `fallback`, and on `agent` its `agent.zones` holds the names FB9 keeps protected."""
+    try:
+        return read_release_in_force(state_dir, kind, now)
+    except Refused:
+        if not os.path.exists(os.path.join(state_dir, "dist", "anchor.json")):
+            raise
+        fallback = read_fallback(state_dir, kind)
+        if fallback is None:
+            raise
+        return fallback
+
+
+def read_fallback(state_dir: str, kind: str) -> Optional["Release"]:
+    """FB1, FB9, IS10: the fallback set the PEP over `state_dir` holds, each statement read from the first copy that
+    is the one the install record names, or None. On `agent` its `agent.zones` is the fallback's names and the
+    ceiling's, and the last committed release's where the ceiling has none. The reader of a home reads the copies at
+    their default place, where a home keeps them."""
+    installed = install.Installed(os.path.join(state_dir, "dist"), reads_meta=kinds.TARGETS[kind].reads_meta)
+    installed.load()
+    held = installed.fallback if not installed.record_lost else None
+    if held is None:
+        return None
+    release = installed.release_of(held)
+    zones = install.protected_names(kind, held, installed.ceiling, installed.zones)
+    if zones is not None:
+        release.bodies["agent.zones"] = zones
+    release.basis = "fallback"
+    return release
+
+
+def read_release_in_force(state_dir: str, kind: str, now: int) -> "Release":
     """The release the PEP over `state_dir` has active, read as a restart reads them and held to the
     tests the machine holds it to on every entry point, for a reader in another process (the agent home's hook and
     proxies). `Refused`: `dist:floor-lost` when the anchor, the setting, the counter or the floor does not read,
@@ -167,6 +225,17 @@ def read_committed_release(state_dir: str, kind: str, now: int) -> "Release":
     return release
 
 
+def _plain(value: Any) -> Any:
+    """A request as canon/2 can spell it: bytes as hex."""
+    if isinstance(value, (bytes, bytearray)):
+        return bytes(value).hex()
+    if isinstance(value, dict):
+        return {str(key): _plain(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_plain(item) for item in value]
+    return value
+
+
 class PepRefused(Exception):
     """The PEP refuses to start or to be provisioned (K2, X10, an anchor for another kind)."""
 
@@ -193,6 +262,7 @@ class Release:
     envelopes: Dict[str, Any] = field(default_factory=dict)
     bodies: Dict[str, bytes] = field(default_factory=dict)
     paths: Dict[str, str] = field(default_factory=dict)
+    basis: str = "release"                         # RC1: `fallback` for a fallback set read in its place (FB1)
 
     def document(self) -> dict:
         return {"stream": self.stream, "seq": self.seq, "policy_sha256": self.policy_sha256, "release": self.release,
@@ -292,7 +362,7 @@ class Pep:
 
     def __init__(self, state_dir: str, adapter, instance_key, clock: Callable[[], int], *,
                  expiry_response: str = REFUSE, has_clock: bool = True,
-                 monotonic: Callable[[], float] = _time.monotonic):
+                 monotonic: Callable[[], float] = _time.monotonic, install_copy: Optional[str] = None):
         target = kinds.TARGETS.get(adapter.kind)
         if target is None:
             raise PepRefused(f"no enforcement point of kind {adapter.kind!r} is built")
@@ -306,17 +376,29 @@ class Pep:
         self.expiry_response, self.has_clock = expiry_response, has_clock
         self.store = _Store(os.path.join(state_dir, "dist"))
         self.audit = AuditLog(self.store.path("audit.log"), instance_key=instance_key, sign_appends=True)
-        self.epoch = 0
+        # IS10: the install part, its second copy on `install_copy`, a second medium where the deployment gives one
+        self.installed = install.Installed(self.store.dir, install_copy, reads_meta=target.reads_meta)
+        self.printed: Optional[dict] = None                          # P2 step 4: what the PEP printed
+        self.epoch = 0                                               # H15: in memory only, 0 at every start
+        self.time_taken = False                                      # H16: a clockless PEP takes time once a start
+        self.reconciling: Optional[dict] = None                      # section 9.5, while the runtime may differ
+        self.retry_runtime = False                                   # C10: a renewal's failed runtime step
         self.held = False
         self.monotonic = monotonic
         self.due: Optional[Tuple[str, int, str, float]] = None      # B8: a commit with a delay, and when it falls
         self.outbox: list = []
         self.recent: deque = deque(maxlen=heartbeat.MAX_FRAMES)    # H5: the readings decided since the last record
         self.bad_readings = 0                                        # readings the Facet codec refused, not carried
+        self.receipts = 0                                            # RC1: the receipts written since start
+        self.operator_receipts: list = []                            # OP3: the receipts of the answers applied
         self._load()
         self._check_setting()
         self._check_separation(self.trust)
         self._recover()
+        for kind in self.lost:                                       # IS10: a set no copy of which reads
+            self._refuse(install.INSTALL_LOST, subject=kind)
+        if self.installed.record_lost:
+            self._refuse(install.INSTALL_LOST)
 
     # ------------------------------------------------------------------ the durable state
     def _load(self) -> None:
@@ -329,9 +411,12 @@ class Pep:
         self.previous: Optional[Release] = None
         self.staged: Optional[Release] = None
         self.pending: Optional[dict] = None
+        self.fresh, self.kept = 0, None
         self.provisioned = self.store.exists("anchor.json")
+        self.lost = []
         if not self.provisioned:
             return                                                  # P1: nothing to believe yet
+        self.lost = self.installed.load()                           # apart from the store Q5 can lose (IS10)
         self.trust = TrustStore.load(self.store.path("trust.json"))
         try:                                                         # H3: the counter is kept apart from the floor
             counter = self.store.read("counter.json", _COUNTER)["counter"]
@@ -344,7 +429,8 @@ class Pep:
             self.counter, self.locked = self.time() * 1_000_000, True
         try:
             with open(self.store.path("anchor.json"), "rb") as handle:
-                self.stream = read_anchor(handle.read()).stream
+                anchor = read_anchor(handle.read())
+            self.stream, self.fresh = anchor.stream, anchor.fresh
             floor = self.store.read("floor.json", _FLOOR)
             if floor["stream"] != self.stream or not kinds.is_int(floor["seq"], 0, kinds.MAX_SEQ):
                 raise Refused(kinds.BAD_FORMAT, "floor.json")
@@ -371,6 +457,7 @@ class Pep:
                 self.pending = self.store.read("pending.json", _PENDING)
             except Refused:
                 self.pending = {"op": "unknown", "release": None}
+        self.kept = self._read_fresh()
 
     def _check_setting(self) -> None:
         """X10: the expiry response is fixed at provisioning. A start with another one is refused, and one that
@@ -390,9 +477,10 @@ class Pep:
         return read_release(self.store, self.trust, self.target.reads_meta, doc)
 
     def _check_separation(self, trust: TrustStore) -> None:
-        """K2: the instance key is never a trusted key, and the home holds no private half of one."""
+        """K2, K4: the instance key is never a key the store holds in any role, and the home holds no private half
+        of a trusted authority key."""
         if self.instance_key.key_id in trust.keys:
-            raise PepRefused("the instance key is also a trusted authority key (K2)")
+            raise PepRefused("the instance key is also a key the trust store holds (K2, K4)")
         home = getattr(self.adapter, "home", None)
         if not home or not trust.keys or not os.path.isdir(home):
             return
@@ -426,50 +514,140 @@ class Pep:
                     raise PepRefused(f"{path} holds the private half of a trusted authority key (K2)")
 
     def _recover(self) -> None:
-        """Finish or report an interrupted commit or rollback (C4), hold the staged and the active release to the
-        revocation test again (R5) and check expiry (X1), all before the runtime is made to match what the PEP
-        holds, so a release that fell while the PEP was down never runs again."""
-        if self.pending is not None:
-            target = self.pending.get("release")
-            if self.active is not None and target is not None and self.active.document() == target:
-                self._cleanup()
+        """A start: finish or report an interrupted transition (C4, C7), hold the staged and the active release to
+        the revocation test again (R5) and check expiry (X1), then make the runtime run what the active record
+        names. A transition the intent record shows durable is owed its record, which goes once the runtime step
+        works, and the intent record with it (C12). A held release that fell while the PEP was down is never
+        installed (C10). A start whose runtime step fails still starts, `reconciling` (C6)."""
+        owed: Tuple[str, Optional[str]] = ("beat", None)
+        running = self.active                     # C7: with no intent record the held release may still run
+        withdrawn = False
+        if self.pending is not None:              # a locked PEP read no intent record: provisioning removes it
+            intent, self.pending = self.pending, None
+            op, target = intent.get("op"), intent.get("release")
+            if op in ("commit", "rollback"):
+                flipped = self.active is not None and target is not None and self.active.document() == target
             else:
-                self.audit.append("distribution", "commit_incomplete", {"op": self.pending.get("op"),
-                                                                         "result": "incomplete"})
+                flipped = op == "lapse" and self.active is None and target is None
+            if flipped:
+                owed = ({"commit": "committed", "rollback": "rolled-back"}.get(op, self._lapse_event()),
+                        (intent.get("cause") or POLICY_LAPSED) if op == "lapse" else None)
+                withdrawn = intent.get("withdrawn") is True
+                running = None if withdrawn else self._running_of(intent.get("running"))
+            else:
+                self.audit.append("distribution", "commit_incomplete", {"op": op, "result": "incomplete"})
                 self.store.remove("pending.json")
-            self.pending = None
+        if (self.staged is not None and self.active is not None and self.staged.stream == self.active.stream
+                and self.staged.seq <= self.active.seq):
+            self._drop_staged()                   # a flip that died before its clean up: the staged release is done
         self._drop_fallen_staged()
-        self._check_active()
-        cause = self.refusal()
-        if cause is None:
+        if owed[0] == "beat":
+            before = self.active
+            self._check_ground()
+            if before is not None and self.active is None or self.reconciling is not None:
+                return                            # a lapse made its own runtime step
+        else:
+            self.reconciling = self._state(owed, running, withdrawn)
+            self._run_tests(never_ran=False)      # C10: the tests come before the step, as in every try
+            state, self.reconciling = self.reconciling, None
+            owed, running, withdrawn = (state["owed"], state["cause"]), state["running"], state["withdrawn"]
+        try:
+            self._step(owed[1])
+        except Exception as error:  # noqa: BLE001 - any failure of the runtime is a failed runtime step (C6)
+            self._enter(owed, running, error)       # withdrawn again: a runtime may restore what it ran
+            return
+        if owed[0] != "beat":
+            self._settle(owed)
+        elif self.fallback_decides():               # FB3: a start with nothing committed goes to its fallback policy
+            self._record("fallback", FLOOR_LOST if self.locked else "dist:fallback")
+
+    def _running_of(self, doc: Optional[dict]) -> Optional[Release]:
+        """C7: the release the intent record says the runtime ran. Its blobs are read when they still are, and it is
+        still named when they are not (C11)."""
+        if doc is None:
+            return None
+        try:
+            return self._release(doc)
+        except (Refused, KeyError, TypeError):
+            return Release(doc["stream"], doc["seq"], doc["policy_sha256"], doc["release"], doc["replaces"],
+                           doc["widens"], held={artifact: Held(one["envelope_id"], one["sealed"], one["body"])
+                                                for artifact, one in doc["held"].items()})
+
+    @staticmethod
+    def _state(owed: Tuple[str, Optional[str]], running: Optional[Release], withdrawn: bool) -> dict:
+        return {"owed": owed[0], "cause": owed[1], "running": None if withdrawn else running,
+                "withdrawn": withdrawn, "running_fell": None}
+
+    def _step(self, cause: Optional[str] = None) -> None:
+        """The runtime step: run the held release, or the fallback set or nothing when none is held or the PEP is
+        locked (X3, C13, FB1). Raises whatever the runtime raised."""
+        refusal = self.own_refusal()
+        if refusal is None:
             self.adapter.activate(self.active)
         else:
+            self._withdraw(cause or refusal)
+
+    def _withdraw(self, cause: str) -> None:
+        """C10, FB1: make the runtime run no release: the fallback set where the PEP holds one, else nothing."""
+        fallback = self.installed.fallback if not self.installed.record_lost else None
+        if fallback is None:
             self.adapter.deactivate(cause)
+        else:
+            self.adapter.withdraw_to(self.installed.release_of(fallback), cause)
+
+    def _lapse_event(self) -> str:
+        """FB3: a PEP that goes to its fallback policy reports `fallback` in place of `lapsed`."""
+        return "fallback" if self.installed.fallback is not None and not self.installed.record_lost else "lapsed"
+
+    def fallback_decides(self) -> bool:
+        """FB1, FB2, C8: the fallback policy decides while no release does, in `no-policy`, in `locked` and while
+        reconciling once the runtime is withdrawn, and never under a hold (FB6)."""
+        if self.installed.fallback is None or self.installed.record_lost or self.held:
+            return False
+        if self.reconciling is not None:
+            return bool(self.reconciling["withdrawn"])
+        return self.own_refusal() is not None
 
     # ------------------------------------------------------------------ what the PEP is
     def state(self) -> str:
         if self.locked:
             return "locked"
+        if self.reconciling is not None:
+            return "reconciling"
         return "active" if self.active is not None and self.trust.readable else "no-policy"
 
     def refusal(self) -> Optional[str]:
-        """X3: None while a release is active, else the cause every decision is refused with."""
+        """X3, C8: None while a release decides, else the cause every decision is refused with."""
+        if not self.locked and self.reconciling is not None:
+            return RECONCILING
+        return self.own_refusal()
+
+    def own_refusal(self) -> Optional[str]:
+        """The refusal of what the PEP holds, whatever its runtime runs: what the runtime step makes it do."""
         if self.locked:
-            return "dist:floor-lost"
-        return None if self.state() == "active" else "dist:policy-lapsed"
+            return FLOOR_LOST
+        return None if self.active is not None and self.trust.readable else POLICY_LAPSED
+
+    def running(self) -> Optional[Release]:
+        """C10: the release the runtime may still run while the withdrawal has not worked, else None."""
+        state = self.reconciling
+        return None if state is None or state["withdrawn"] else state["running"]
 
     def time(self) -> int:
         """T1: the larger of the clock and the time floor."""
         return max(int(self.clock()), self.trust.time_floor if self.trust.readable else 0)
 
-    def view(self) -> PepView:
+    def view(self, message: bool = True) -> PepView:
         staged = self.staged
         return PepView(kind=self.adapter.kind, stream=self.stream, floor=self.floor,
                        active=self.active.policy_sha256 if self.active else None,
                        staged=None if staged is None else Staged(staged.stream, staged.seq, staged.policy_sha256,
                                                                  staged.release, staged.replaces, staged.widens),
                        qualification=self.adapter.qualification, body_bound=self.adapter.body_bound,
-                       has_clock=self.has_clock, instance_key_id=self.instance_key.key_id)
+                       has_clock=self.has_clock, instance_key_id=self.instance_key.key_id,
+                       install=InstallView(record=self.installed.record, staged=dict(self.installed.staged),
+                                           ceiling=self.installed.ceiling, message=message,
+                                           layout=getattr(self.adapter, "floor_layout", None)))
 
     def record(self, event: str, cause: Optional[str] = None) -> bytes:
         """A signed state record of the PEP as it is now (H1), after the expiry check every report comes
@@ -483,8 +661,9 @@ class Pep:
         sent, self.outbox = self.outbox, []
         return sent
 
-    def _record(self, event: str, cause: Optional[str] = None) -> bytes:
-        """Make one record, its counter durable first (H3), and put it in the outbox."""
+    def _record(self, event: str, cause: Optional[str] = None, subject: Optional[str] = None) -> bytes:
+        """Make one record, its counter durable first (H3), and put it in the outbox. The active fields name the
+        held release in every state, and a reconciling PEP's record carries the entry of H14."""
         self.counter += 1
         if self.provisioned:
             self.store.write("counter.json", _COUNTER, {"counter": self.counter})
@@ -499,6 +678,7 @@ class Pep:
             self.bad_readings += len(self.recent)                     # never a ring that stops every record
             body = b""
         self.recent.clear()
+        entry = self.reconciling_entry()
         record = state_record.StateRecord(
             event=event, state=self.state(), cause=cause, pep_id=state_record.pep_id(self.instance_key.public_raw),
             counter=self.counter, time=self.time(), epoch=self.epoch,
@@ -508,10 +688,47 @@ class Pep:
             active_seq=active.seq if active else 0, floor=self.reported_floor(),
             staged_release=state_record.prefix(staged.release if staged else None),
             staged_seq=staged.seq if staged else 0, trust_seq=self.trust.trust_seq if self.trust.readable else 0,
-            staged=staged is not None, dev_build=devbuild.is_dev_build(), held=self.held, body=body)
+            staged=staged is not None, dev_build=devbuild.is_dev_build(), held=self.held,
+            fallback=self.fallback_decides(), body=body,
+            extensions=self.install_entry(event, subject) + (entry.extension() if entry is not None else b""))
         signed = state_record.build(record, self.instance_key)
         self.outbox.append(signed)
         return signed
+
+    def install_entry(self, event: str, subject: Optional[str]) -> bytes:
+        """H10: the install entry of a PEP that holds an install record, empty otherwise. The subject names what an
+        event of `staged`, `refused`, `answered`, `install-applied` or `install-widened` is about."""
+        record = self.installed.record
+        if record is None and not self.installed.record_lost:
+            return b""
+        if record is not None and hasattr(self.adapter, "floor_counts"):
+            answers, overrides = self.adapter.floor_counts()         # AF7: answered in another process of the home
+            if answers:
+                record = replace(record, answers=min(record.answers + answers, 2 ** 32 - 1),
+                                 overrides=min(record.overrides + overrides, 2 ** 32 - 1))
+                self.installed.save(record)
+        about = subject if event in ("staged", "refused", "answered", "install-applied", "install-widened") else None
+        return state_record.InstallEntry(
+            install_id=record.install_id() if record is not None else b"\x00" * 16,
+            trust_seq=record.trust_seq if record is not None else 0, subject=about or "none",
+            answers=record.answers if record is not None else 0,
+            overrides=record.overrides if record is not None else 0).extension()
+
+    def reconciling_entry(self) -> Optional[state_record.ReconcilingEntry]:
+        """H14: the reconciling entry, or None outside the state. A locked PEP names `dist:floor-lost` and no
+        running release (C13). The floor field is the set id of the action floor the PEP holds, which in the Python
+        machine is the one it asks, zeros for none."""
+        state = self.reconciling
+        if state is None:
+            return None
+        running = self.running()
+        cause = FLOOR_LOST if self.locked else (state["cause"] or state["running_fell"])
+        return state_record.ReconcilingEntry(
+            owed=state["owed"], cause=cause,
+            running_policy=state_record.prefix(running.policy_sha256 if running else None),
+            running_release=state_record.prefix(running.release if running else None),
+            running_seq=running.seq if running else 0,
+            floor=bytes.fromhex(held.set_id)[:16] if (held := self.floor_set()) is not None else b"\x00" * 16)
 
     def _keep(self, image: bytes, reading: Any) -> bool:
         """H5: put `reading` in the ring when the Facet codec of `image` encodes it, as `decide` and the readings
@@ -533,19 +750,77 @@ class Pep:
         raised = self.trust.floors.get(self.stream, 0) if self.trust.readable and self.stream else 0
         return max(self.floor.seq, raised)
 
-    def see_epoch(self, epoch: int) -> None:
-        """H9: keep the highest epoch id the controller sent. It changes nothing else."""
-        if kinds.is_int(epoch, 0, 2 ** 64 - 1):
-            self.epoch = max(self.epoch, epoch)
+    # ------------------------------------------------------------------ H9, H15, H16: the controller statement
+    def take_statement(self, data: bytes) -> bool:
+        """H9: take the epoch id of a controller statement that reads, names this PEP's stream, verifies under the
+        controller key the trust store holds (not revoked, K6) and carries the key sequence the store holds for it,
+        when that id is above the one held. Any other statement changes nothing and sends no record. Where
+        freshness is on (H16), a statement that passes those checks may also give freshness. Returns whether the
+        epoch id was taken. A statement changes nothing but the epoch id, the kept fresh statement and, once per
+        start on a PEP with no clock, the time floor."""
+        if not self.provisioned or self.locked or not self.trust.readable or not self.stream:
+            return False
+        read = statements.verify(data, self.trust.controller_public())
+        if read is None or read.stream != state_record.stream_prefix(self.stream) or read.key_seq != self.trust.key_seq:
+            return False
+        taken = read.epoch > self.epoch
+        if taken:
+            self.epoch = read.epoch                                   # H9: never lowered
+        if self.fresh:
+            self._freshen(read, bytes(data))
+        return taken
+
+    def _freshen(self, read: "statements.Statement", data: bytes) -> None:
+        """H16: a fresh statement has `fresh` 1, a trust sequence not below the PEP's, a stream seq not below its
+        floor, an `expires` later than the kept one's and at most `fresh` plus SKEW ahead of the PEP's time. A PEP
+        with no clock takes, from the first statement after each start that passes every other check, its
+        `expires` less `fresh` as a raise of its time floor (T1). The latest fresh statement is kept durably,
+        written before it counts, and a newer one is written only when the kept one has used half its life."""
+        if not read.fresh or read.trust_seq < self.trust.trust_seq or read.stream_seq < self.reported_floor():
+            return
+        kept = self.kept
+        if kept is not None and read.expires <= kept["expires"]:
+            return
+        if not self.has_clock and not self.time_taken:
+            self.time_taken = True                                    # once per start, from no other statement
+            floor = read.expires - self.fresh
+            if floor > self.trust.time_floor:
+                self.trust = replace(self.trust, time_floor=floor).save()
+        time = self.time()
+        if read.expires - time > self.fresh + SKEW:
+            return
+        if kept is not None and time - kept["at"] < (kept["expires"] - kept["at"]) / 2:
+            return                                                    # the kept one has not used half its life
+        self.kept = {"statement": data.hex(), "expires": read.expires, "at": time}
+        self.store.write("fresh.json", _FRESH, dict(self.kept))
+
+    def _read_fresh(self) -> Optional[dict]:
+        """The kept fresh statement (H16), or None. One that does not read is none, so the PEP lapses at its next
+        statement's lapse rather than on a file it cannot trust; it is checked again under the controller key."""
+        if not self.fresh or not self.store.exists("fresh.json"):
+            return None
+        try:
+            doc = self.store.read("fresh.json", _FRESH)
+            read = statements.verify(bytes.fromhex(doc["statement"]), self.trust.controller_public())
+            if read is None or read.expires != doc["expires"] or not kinds.is_int(doc["at"], 0, 2 ** 64 - 1):
+                return None
+            return {"statement": doc["statement"], "expires": doc["expires"], "at": doc["at"]}
+        except (Refused, KeyError, TypeError, ValueError):
+            return None
+
+    def _stale(self) -> bool:
+        """H16: freshness is on and the PEP's time passed the kept statement's `expires` plus SKEW."""
+        return bool(self.fresh) and self.kept is not None and self.time() > self.kept["expires"] + SKEW
 
     def needs(self, blob_sha256s: Iterable[str]) -> Tuple[str, ...]:
         """X5, B5: which of the offered blobs this PEP does not hold. An offer is a hint and changes nothing."""
         return tuple(name for name in blob_sha256s if self.store.get(name) is None)
 
     # ------------------------------------------------------------------ G1, G2: stage
-    def _refuse(self, cause: str, **details) -> bytes:
-        self.audit.append("distribution", "refused", {**details, "cause": cause, "result": "refused"})
-        return self._record("refused", cause)
+    def _refuse(self, cause: str, subject: Optional[str] = None, **details) -> bytes:
+        self.audit.append("distribution", "refused", {**details, "cause": cause, "result": "refused",
+                                                      **({"subject": subject} if subject else {})})
+        return self._record("refused", cause, subject)
 
     def refuse_fetched(self, cause: str, name: str) -> bytes:
         """B4, B9: the binding refused the blob `name` before anything was staged, for a hash that is not the
@@ -559,25 +834,46 @@ class Pep:
         return self.store.get(name)
 
     def stage(self, sealed: bytes, body: bytes) -> bytes:
-        """Verify one sealed envelope and its body and hold it (G1). Returns the stage-ack state record."""
+        """Verify one sealed envelope and its body and hold it (G1). Returns the stage-ack state record. A
+        reconciling PEP stages as in any other state, and the widening rule compares with the held release (C8)."""
         self._check_active()
-        if self.locked:
-            return self._refuse("dist:floor-lost")
         if not self.provisioned:
             return self._refuse("dist:unknown-key")                 # P1, P2 step 4
-        verdict = verify(sealed, body, trust=self.trust, pep=self.view(), now=int(self.clock()))
-        if verdict.time_floor is not None and self.trust.readable and verdict.time_floor > self.trust.time_floor:
-            self.trust = replace(self.trust, time_floor=verdict.time_floor).save()      # V13, T1
+        if self.locked and self.stream is None:
+            return self._refuse("dist:floor-lost")
+        return self._stage(sealed, body, message=True)
+
+    def _stage(self, sealed: bytes, body: bytes, *, message: bool) -> bytes:
+        """`stage` once the PEP is provisioned. `message` false is a statement brought by provisioning (IS4, IS13)."""
+        verdict = verify(sealed, body, trust=self.trust, pep=self.view(message), now=int(self.clock()))
         envelope = verdict.envelope
         envelope_id = envelope.envelope_id if envelope is not None else None
+        answer = envelope is not None and envelope.artifact == kinds.ANSWER
+        installing = envelope is not None and envelope.artifact in kinds.INSTALL_ARTIFACTS
+        subject = envelope.artifact if installing or answer else None
+        if self.installed.record_lost and (envelope is None or envelope.artifact not in kinds.ON_TRUST_STREAM):
+            return self._refuse(install.INSTALL_LOST, envelope_id=envelope_id, subject=subject)   # IS10
+        if self.locked and not (installing or answer):
+            return self._refuse("dist:floor-lost")                   # Q5: a locked PEP still takes install statements
+        if (self.installed.ceiling_lost and envelope is not None and envelope.artifact not in kinds.ON_TRUST_STREAM
+                and envelope.artifact not in (install.CEILING, install.TRUST, kinds.ANSWER)):
+            return self._refuse(install.INSTALL_LOST, envelope_id=envelope_id, subject=subject)   # IS10: frozen
+        if verdict.time_floor is not None and self.trust.readable and verdict.time_floor > self.trust.time_floor:
+            self.trust = replace(self.trust, time_floor=verdict.time_floor).save()      # V13, T1
         if not verdict.ok:
-            return self._refuse(verdict.cause, envelope_id=envelope_id)
+            return self._refuse(verdict.cause, envelope_id=envelope_id, subject=subject)
         if verdict.unchanged:
-            return self._record("beat")                               # Q3, R1: changes nothing, reports its state
+            return self._record("beat")                               # Q3, R1, IS6: changes nothing, reports its state
+        if installing:
+            return self._stage_install(envelope, bytes(sealed), bytes(body))
+        if answer:
+            return self._apply_answer(envelope, bytes(body))
         if envelope.artifact == "trust.revocation":
             return self._apply_revocation(envelope, body)
         if envelope.artifact == "trust.rotation":
             return self._apply_rotation(envelope, body)
+        if envelope.artifact == "trust.controller":
+            return self._apply_controller(envelope, body)
         staged = self.staged
         if staged is not None and staged.stream == envelope.stream and envelope.seq < staged.seq:
             return self._refuse("dist:seq-replay", envelope_id=envelope_id)   # G2
@@ -596,7 +892,7 @@ class Pep:
         staged.paths[envelope.artifact] = self.store.blob_path(names.body)
         self.store.write("staged.json", _STAGED, {"release": staged.document()})
         self.staged = staged
-        self._keep_blobs()                                           # a replaced release's blobs go (G2)
+        self._keep_blobs()                                           # a replaced release's blobs go (G2), not C11's
         self.audit.append("distribution", "staged", {"envelope_id": envelope_id, "artifact": envelope.artifact,
                                                      "seq": envelope.seq, "release": envelope.release,
                                                      "result": "staged"})
@@ -626,6 +922,147 @@ class Pep:
                               active_policy=active.policy_sha256 if active else None, answer=answer,
                               statement=staged.get("trust.widening"))
 
+    # ------------------------------------------------------------------ IS4 to IS12: the install statements
+    def _stage_install(self, envelope, sealed: bytes, body: bytes) -> bytes:
+        """IS4: an `install.trust` is applied as soon as it verifies (IS11). A statement of a set is staged durably, as
+        G1 stages an envelope, with event `staged`, a set at a higher `seq` replacing the staged one of its kind, and
+        the set is applied when it is whole."""
+        kind = envelope.artifact
+        if kind == install.TRUST:
+            return self._apply_install_trust(envelope, body)
+        named = envelope.meta["as"]
+        staged = self.installed.staged.get(kind)
+        if staged is None or staged.seq != envelope.seq:
+            staged = install.Staged(kind, envelope.seq, envelope.policy_sha256, envelope.release, envelope.replaces,
+                                    envelope.widens)
+        names = self.installed.put(sealed, body, both=False)
+        staged.statements[named] = (envelope.envelope_id, *names)
+        staged.envelopes[named], staged.bodies[named] = envelope, bytes(body)
+        self.installed.staged[kind] = staged
+        self.installed.save_staged()
+        self.audit.append("distribution", "staged", {"envelope_id": envelope.envelope_id, "artifact": kind,
+                                                     "as": named, "seq": envelope.seq, "release": envelope.release,
+                                                     "result": "staged"})
+        ack = self._record("staged", subject=kind)
+        if not staged.whole(self.adapter.kind):
+            return ack
+        return self._apply_set(staged)
+
+    def _drop_install_staged(self, kind: str) -> None:
+        self.installed.staged.pop(kind, None)
+        self.installed.save_staged()
+
+    def _apply_set(self, staged: "install.Staged") -> bytes:
+        """IS4, IS6, IS12, CL3: apply a whole set. It is held to its `seq` again, to the kind's own checks over the whole
+        set, to the ceiling the PEP holds now (an action floor and a fallback policy inside it, and a ceiling the held
+        ones are inside), and to the widening rule of IS12. The record and both copies of every statement are durable
+        before the event, `install-widened` for a set that stands out and `install-applied` otherwise. A ceiling the
+        active release is above lapses it (CL3), and a fallback policy that now decides is run (FB8)."""
+        kind, target = staged.kind, self.adapter.kind
+        record = self.installed.record
+        held_raw = record.sets[kind]
+        refuse = lambda cause: (self._drop_install_staged(kind), self._refuse(cause, subject=kind, seq=staged.seq))[1]  # noqa: E731
+        if staged.seq <= record.seqs[kind]:
+            return refuse("dist:seq-replay")
+        bodies = {name: body for name, body in staged.bodies.items() if name != kinds.NONE}
+        whole = {name: (staged.envelopes[name], body) for name, body in bodies.items()}
+        for name in sorted(bodies):
+            if name in kinds.INSTALL_AS:
+                cause = self.adapter.check(name, bodies[name], whole)
+                if cause is not None:
+                    return refuse(cause)
+        new = staged.held()
+        if kind != install.CEILING and bodies and not install.inside(target, self.installed.ceiling, bodies,
+                                                                     whole=kind != install.FLOOR):
+            return refuse(install.ABOVE_CEILING)                     # CL3, IS4: the ceiling held at apply
+        if kind == install.CEILING and bodies:
+            for other in (install.FLOOR, install.FALLBACK):
+                held = self.installed.held(other)
+                if held is not None and not install.inside(target, new, held.bodies, whole=other != install.FLOOR):
+                    return refuse(install.ABOVE_CEILING)             # CL3: the engineer narrows those first
+        cause, stands_out = install.widens_ok(target, kind, held_raw, staged.bodies, widens=staged.widens,
+                                              replaces=staged.replaces, envelopes=staged.envelopes)
+        if cause is not None:
+            return refuse(cause)
+        lapses = (kind == install.CEILING and self.active is not None and bodies
+                  and not install.inside(target, new, self.active.bodies))
+        stands_out = stands_out or bool(lapses)                      # IS12: it hands the PEP to its fallback policy
+        before = self.fallback_decides()
+        self.installed.mark(install=True, **({"ceiling": True} if kind == install.CEILING and bodies else {}))
+        for name, (envelope_id, sealed_name, body_name) in new.statements.items():
+            sealed = install._get(os.path.join(self.installed.dir, "blobs"), sealed_name)
+            self.installed.put(sealed, staged.bodies[name], both=True)
+        sets, seqs = dict(record.sets), dict(record.seqs)
+        sets[kind], seqs[kind] = new, staged.seq
+        self.installed.staged.pop(kind, None)
+        self.installed.save(replace(record, sets=sets, seqs=seqs))
+        self.installed.save_staged()
+        if kind == install.CEILING:
+            self.installed.ceiling_lost = False
+        event = "install-widened" if stands_out else "install-applied"
+        self.audit.append("distribution", event, {"artifact": kind, "seq": staged.seq, "set_id": new.set_id,
+                                                  "envelopes": self.installed.statement_ids(), "result": event})
+        owed = (event, install.WIDENED if stands_out else None, kind)
+        if lapses:
+            applied = self._record(*owed)
+            self.lapse(install.ABOVE_CEILING)                        # CL3, as under R5
+            return applied
+        if kind == install.FALLBACK and self.reconciling is not None:
+            if self.reconciling["withdrawn"]:                        # C8: the withdrawn runtime runs the new set
+                try:
+                    self._withdraw(self._withdraw_cause())
+                except Exception:  # noqa: BLE001 - not withdrawn after all; the next tick tries again (C9)
+                    self.reconciling["withdrawn"] = False
+            return self._record(*owed)
+        if kind == install.FALLBACK and (before or self.fallback_decides()):
+            return self._runtime_step(owed, None)                    # FB8: the new fallback set decides at once
+        return self._record(*owed)
+
+    def _apply_install_trust(self, envelope, body: bytes) -> bytes:
+        """IS11: apply a verified `install.trust` at once, durably before its event. It widens when it adds a key of
+        either role or lowers the threshold."""
+        record = self.installed.record
+        widened = envelope.widens or install.trust_widens(record, body)
+        self.installed.mark(install=True)
+        self.installed.save(record.apply_trust(envelope, body))
+        event = "install-widened" if widened else "install-applied"
+        self.audit.append("distribution", event, {"artifact": install.TRUST, "seq": envelope.seq,
+                                                  "envelope_id": envelope.envelope_id, "result": event})
+        return self._record(event, install.WIDENED if widened else None, install.TRUST)
+
+    # ------------------------------------------------------------------ OP1 to OP4: the operator's answer
+    def _apply_answer(self, envelope, body: bytes) -> bytes:
+        """OP2 to OP4: an answer that verified names this PEP's id and an open escalation the action floor made under
+        the floor it still holds, `dist:answer-unbound` otherwise. An `allow` past the signed `answer_rate` is
+        `dist:floor-rate` and the escalation stays open. Otherwise the count and then the escalation, written as
+        answered, are durable before the PEP acts, the answer leaves a receipt with basis `operator`, the answer's
+        envelope id and the receipt hash it answered, and the PEP sends `answered` with subject 5. An `allow` lets
+        the one request of that escalation through once, uncounted by AF8, and a `refuse` keeps it refused."""
+        doc = kinds.read_answer(body)
+        held = self.floor_set()
+        book = self.book()
+        now = self.time()
+        own = state_record.pep_id(self.instance_key.public_raw).hex()
+        bound = (doc["pep"] == own and held is not None and held.policy_sha256 == envelope.policy_sha256)
+        open_one = book.find(doc["receipt"], held.policy_sha256, now) if bound else None
+        if open_one is None:
+            return self._refuse(floors.UNBOUND, subject=kinds.ANSWER, envelope_id=envelope.envelope_id)
+        if doc["answer"] == floors.ALLOW:
+            meta = next(iter(held.envelopes.values())).meta if held.envelopes else {}
+            rate = meta.get("answer_rate")
+            if rate is None or book.spend_answer(rate, now) is None:
+                return self._refuse(floors.RATE, subject=kinds.ANSWER, envelope_id=envelope.envelope_id)   # OP4
+        book.answered(open_one)                                      # OP3: before the PEP acts on it
+        data, digest = floors.receipt({"basis": "operator", "outcome": doc["answer"], "answer": envelope.envelope_id,
+                                       "answers": doc["receipt"], "policy_sha256": held.policy_sha256,
+                                       "mark": self.receipt_mark(), **self._receipt_place(None)})
+        self.operator_receipts.append({"decision": doc["answer"], "basis": "operator",
+                                       "answer": envelope.envelope_id, "answers": doc["receipt"],
+                                       "policy_sha256": held.policy_sha256, "receipt": data, "receipt_sha256": digest})
+        self.audit.append("distribution", "answered", {"envelope_id": envelope.envelope_id, "answer": doc["answer"],
+                                                      "receipt": doc["receipt"], "result": "answered"})
+        return self._record("answered", None, kinds.ANSWER)
+
     # ------------------------------------------------------------------ B2: the trust statements
     def _adopt(self, envelope, store: TrustStore) -> None:
         """Make the store a verified trust statement leaves durable before anything reports it (B2, R3)."""
@@ -636,7 +1073,7 @@ class Pep:
     def _apply_revocation(self, envelope, body: bytes) -> bytes:
         """Apply a verified revocation at once, then drop the staged release and lapse the active one when the
         revocation removed the ground they stand on (R5). A held PEP lapses the same way, which ends the hold
-        (X8)."""
+        (X8). A reconciling PEP holds both its releases to the test (C10) and tries no runtime."""
         self._adopt(envelope, self.trust.apply_revocation(envelope, body, self.stream))
         self._drop_fallen_staged()
         self._check_active()
@@ -647,6 +1084,15 @@ class Pep:
         expires or is replaced, and a staged one that no longer has a counting signature is dropped (S5)."""
         self._adopt(envelope, self.trust.apply_rotation(envelope, body))
         self._drop_fallen_staged()
+        self._check_active()
+        return self._record("trust-applied")
+
+    def _apply_controller(self, envelope, body: bytes) -> bytes:
+        """Apply a verified `trust.controller` at once (K7). The epoch id starts again at 0 (H15), so the next
+        statement under the new key sequence is taken whatever id it carries."""
+        self._adopt(envelope, self.trust.apply_controller(envelope, body))
+        self.epoch = 0
+        self._check_active()
         return self._record("trust-applied")
 
     def _drop_fallen_staged(self) -> None:
@@ -665,7 +1111,9 @@ class Pep:
         self._keep_blobs()
 
     def _keep_blobs(self) -> None:
-        held = [release for release in (self.active, self.previous, self.staged) if release is not None]
+        """The blobs of the active, the kept and the staged release stay, and those of the running release until
+        the withdrawal works (C11). Every other blob goes."""
+        held = [release for release in (self.active, self.previous, self.staged, self.running()) if release is not None]
         self.store.keep_only(name for release in held for one in release.held.values() for name in (one.sealed, one.body))
 
     def _still_valid(self, release: Release, *, early: bool) -> Optional[str]:
@@ -691,7 +1139,8 @@ class Pep:
     def commit(self, stream: str, seq: int, policy_sha256: str, delay_ms: int = 0) -> bytes:
         """Make the staged release named by `stream`, `seq` and `policy_sha256` active (C1 to C5). With a delay
         it becomes active at the PEP's own monotonic time plus the delay and not before (B8), so a group flips
-        together with no shared clock: the checks run now, and again when it falls due."""
+        together with no shared clock: the checks run now, and again when it falls due. A reconciling PEP answers
+        `refused` with `dist:reconciling`, now and when a delay falls due, and keeps the staged release (C8)."""
         self._check_active()
         if not kinds.is_int(delay_ms, 0, 65535):
             raise ValueError("a commit delay is 0 to 65535 milliseconds")
@@ -707,6 +1156,10 @@ class Pep:
         """C1 to C3 without the flip: None when the named release may commit, else the refusal's record."""
         if self.locked:
             return self._refuse("dist:floor-lost")
+        if self.reconciling is not None:
+            return self._refuse(RECONCILING, seq=seq)                 # C8: nothing changes
+        if self.installed.record_lost or self.installed.ceiling_lost:
+            return self._refuse(install.INSTALL_LOST, seq=seq)        # IS10: a lost ceiling never fails open
         if not self.trust.readable:
             return self._refuse("dist:unknown-key")                 # K1: decides nothing, commits nothing
         staged = self.staged
@@ -740,6 +1193,8 @@ class Pep:
         if not self._whole(staged):
             return self._refuse("dist:incomplete", seq=seq)          # C2, E10: an artifact of the release is not staged
         cause = self._still_valid(staged, early=True)                 # C3
+        if cause is None and not install.inside(self.adapter.kind, self.installed.ceiling, staged.bodies):
+            cause = install.ABOVE_CEILING                             # CL2: the ceiling may have changed since staging
         if cause is not None:
             self._drop_staged()
             return self._refuse(cause, seq=seq)
@@ -757,11 +1212,20 @@ class Pep:
                  if artifact not in kinds.TRUST_ARTIFACTS]
         return bool(pairs) and env.release_id(pairs) == staged.release
 
+    def _intent(self, op: str, release: Optional[Release], cause: Optional[str], running: Optional[Release],
+                withdrawn: bool) -> None:
+        """C7: the intent record of a transition, with the release the runtime runs when it starts, in full."""
+        self.store.write("pending.json", _PENDING, {
+            "op": op, "release": release.document() if release else None, "cause": cause,
+            "running": running.document() if running else None, "withdrawn": withdrawn})
+
     def _flip(self, op: str, release: Release, *, previous: Optional[Release], floor: Floor) -> bytes:
         """C4, one step after another, each synced: intent, floor (a commit only), evidence, the artifacts
-        (already blobs), the active record, the runtime, the clean up."""
-        self.store.write("pending.json", _PENDING, {"op": op, "release": release.document()})
+        (already blobs), the active record, the runtime step, the state record, the clean up."""
+        running = self.active                     # the runtime runs the held release, since the PEP is not reconciling
+        self._intent(op, release, None, running, False)
         if op == "commit":
+            self.installed.mark_stream(self.stream)                 # L2: before the floor, so no provisioning reopens
             self.store.write("floor.json", _FLOOR, {"stream": self.stream, "seq": floor.seq, "ids": sorted(floor.ids)})
             self.floor = floor
         event = "committed" if op == "commit" else "rolled-back"
@@ -771,16 +1235,43 @@ class Pep:
         self.store.write("active.json", _ACTIVE, {"release": release.document(),
                                                  "previous": previous.document() if previous else None})
         self._end_ring(release)
-        self.active, self.previous, self.held = release, previous, False
+        self.active, self.previous, self.held, self.retry_runtime = release, previous, False, False
+        if self.adapter.kind == "agent":                             # FB9: kept with the install record
+            zones = release.bodies.get("agent.zones")
+            self.installed.keep_zones(kinds.read_zones(zones)["protected"] if zones is not None else [])
         if self.staged is not None and self.staged.seq <= release.seq:
             self.staged = None
-        cause = self.refusal()
-        if cause is None:
-            self.adapter.activate(release)
-        else:
-            self.adapter.deactivate(cause)                           # X3: the runtime never runs what the PEP refuses
+        return self._runtime_step((event, None), running)
+
+    def _runtime_step(self, owed: Tuple[str, Optional[str]], running: Optional[Release]) -> bytes:
+        """The runtime step of a transition whose record is durable. When it works the state record goes, then the
+        clean up. When it fails between two releases whose bodies are the same the PEP stays as it is and each tick
+        tries again, and otherwise it is reconciling (C6, C10)."""
+        try:
+            self._step(owed[1])
+        except Exception as error:  # noqa: BLE001 - any failure of the runtime is a failed runtime step (C6)
+            if not self._same_bodies(running):
+                return self._enter(owed, running, error)
+            self.audit.append("distribution", "runtime_failed", {"error": str(error),
+                                                                 "result": "tried again at the next tick"})
+            self.retry_runtime = True
+        return self._settle(owed)
+
+    def _same_bodies(self, running: Optional[Release]) -> bool:
+        """C10: the held release and `running` have the same bodies, as a renewal's are (X5), so a switch between
+        them changes nothing the runtime decides with. The trust kinds are not run, so they are left out."""
+        held = self.active
+        if held is None or running is None:
+            return False
+        run = lambda release: {name: body for name, body in release.bodies.items()  # noqa: E731
+                               if name not in kinds.TRUST_ARTIFACTS}
+        return bool(run(held)) and run(held) == run(running)
+
+    def _settle(self, owed: Tuple[str, Optional[str]]) -> bytes:
+        """The state record a transition owes, then the clean up, which takes the intent record (C12)."""
+        record = self._record(*owed)
         self._cleanup()
-        return self._record(event)
+        return record
 
     def _end_ring(self, release: Optional[Release]) -> None:
         """H5: the decisions in the ring were made under the active policy, and the next record's stream is built
@@ -799,6 +1290,124 @@ class Pep:
         self._keep_blobs()
         self.store.remove("pending.json")
 
+    # ------------------------------------------------------------------ section 9.5: reconciling
+    def _withdraw_cause(self) -> str:
+        """What the runtime is told when it is withdrawn."""
+        if self.locked:
+            return FLOOR_LOST
+        state = self.reconciling
+        return (state["cause"] if state is not None and state["owed"] in ("lapsed", "fallback") and state["cause"]
+                else RECONCILING)
+
+    def _enter(self, owed: Tuple[str, Optional[str]], running: Optional[Release], error: Exception, *,
+               withdrawn: bool = False) -> bytes:
+        """C6, C10, C12: the runtime step failed. The PEP withdraws the runtime at once, unless the step that failed
+        was the withdrawal itself, writes `reconciling` with the runtime's error and sends a record with that
+        event. When the withdrawal works the intent record notes it and only the held release is tracked."""
+        stepped_withdrawal = self.own_refusal() is not None
+        self.reconciling = self._state(owed, running, withdrawn)
+        if not withdrawn and not stepped_withdrawal:
+            try:
+                self._withdraw(self._withdraw_cause())
+                self._note_withdrawn()
+            except Exception:  # noqa: BLE001 - a withdrawal that fails is tried again at every tick (C10)
+                pass
+        self.audit.append("distribution", "reconciling", {"error": str(error), "withdrawn": self.reconciling["withdrawn"],
+                                                         "result": "reconciling"})
+        self._run_tests(never_ran=True)
+        return self._record("reconciling")
+
+    def _note_withdrawn(self) -> None:
+        """C10: the withdrawal worked. The runtime runs no release, and the intent record says so."""
+        state = self.reconciling
+        state["withdrawn"], state["running"], state["running_fell"] = True, None, None
+        if self.store.exists("pending.json"):
+            try:
+                intent = self.store.read("pending.json", _PENDING)
+            except Refused:
+                return
+            self.store.write("pending.json", _PENDING, {**intent, "running": None, "withdrawn": True})
+
+    def _fell(self, release: Release) -> Optional[str]:
+        """Why `release` falls, the test of R5 and then expiry (X1, and H16's freshness), else None. HOLD is for
+        `mesh` and `cfs`, which never reconcile, so expiry always fells a release here (C10)."""
+        if release.envelopes.keys() != release.held.keys():
+            return None                           # a running release whose blobs do not read: still named (C11)
+        cause = standing(self.trust, release, self.store.get, self.time())
+        return cause or (EXPIRED if self._stale() else None)
+
+    def _run_tests(self, *, never_ran: bool) -> None:
+        """C10: hold the held release, and the running one while the withdrawal has not worked, to the tests. A
+        held release that falls becomes a lapse with the cause it fell for, never installed. A PEP whose trust
+        store does not read treats the held release as none and runs no test. No runtime is tried here."""
+        state = self.reconciling
+        if state is None or self.locked or not self.trust.readable:
+            return
+        running = self.running()
+        if running is not None and state["running_fell"] is None:
+            state["running_fell"] = self._fell(running)
+        cause = self._fell(self.active) if self.active is not None else None
+        if cause is not None:
+            self._held_falls(cause, never_ran)
+
+    def _held_falls(self, cause: str, never_ran: bool) -> None:
+        """C10: a held release that falls was never run. Its transition becomes a lapse: the intent record is
+        written again, the `lapsed` audit event, then an active record that names no release. The PEP owes `lapsed`
+        with that cause and no longer the record of the commit or the rollback, and the floor stays (Q4)."""
+        fell, state = self.active, self.reconciling
+        self._intent("lapse", None, cause, state["running"], state["withdrawn"])
+        details = {"seq": fell.seq, "cause": cause, **({"ran": False} if never_ran else {}), "result": "lapsed"}
+        self.audit.append("distribution", "lapsed", details)
+        self.store.write("active.json", _ACTIVE, {"release": None,
+                                                 "previous": self.previous.document() if self.previous else None})
+        self._end_ring(None)
+        self.active, self.held = None, False
+        state["owed"], state["cause"] = self._lapse_event(), cause
+        self._keep_blobs()
+
+    def _try(self) -> Optional[bytes]:
+        """C9: one try. The tests of C10, the withdrawal again when it has not worked, then the held release run.
+        When the switch works the state ends and the record the transition owed goes, a `beat` when nothing was.
+        When it fails nothing more changes and the next tick tries again."""
+        self._run_tests(never_ran=True)
+        state = self.reconciling
+        if state is None:
+            return None
+        if not state["withdrawn"]:
+            try:
+                self._withdraw(self._withdraw_cause())
+            except Exception:  # noqa: BLE001 - the next tick tries again
+                return None
+            self._note_withdrawn()
+        if self.own_refusal() is None:
+            try:
+                self.adapter.activate(self.active)
+            except Exception:  # noqa: BLE001 - the next tick tries again
+                return None
+        return self._leave()
+
+    def _end_if_switched(self) -> Optional[bytes]:
+        """C9, C10: with the runtime withdrawn and no release held the switch is done, so the state ends at once,
+        with no runtime call."""
+        state = self.reconciling
+        if state is not None and state["withdrawn"] and not self.locked and self.active is None:
+            return self._leave()
+        return None
+
+    def _leave(self) -> bytes:
+        """C9, C12: the state ends. The owed record, then `reconciled`, then the clean up, which takes the intent
+        record. A locked PEP read no active record, so its clean up waits for provisioning."""
+        state, self.reconciling = self.reconciling, None
+        try:
+            record = self._record(state["owed"], state["cause"])
+        except Exception:
+            self.reconciling = state
+            raise
+        self.audit.append("distribution", "reconciled", {"result": "reconciled"})
+        if not self.locked:
+            self._cleanup()
+        return record
+
     # ------------------------------------------------------------------ A1: abort
     def abort(self, stream: str, seq: int, policy_sha256: str) -> bytes:
         """Drop the staged release when the abort names it, and change nothing otherwise (A1)."""
@@ -812,8 +1421,21 @@ class Pep:
     # ------------------------------------------------------------------ X1 to X9: expiry and hold
     def tick(self) -> Optional[bytes]:
         """X1: check the active release's expiry, at least once a minute. It lapses to `no-policy`, or under
-        HOLD is held (X7). Returns the state record of a transition, None when nothing changed."""
-        return self._check_active()
+        HOLD is held (X7). Returns the state record of a transition, None when nothing changed. A tick is one of
+        the two calls that try the runtime again (C9), and the one that tries again the failed runtime step of a
+        renewal (C10)."""
+        self._fall_due()
+        if self.reconciling is not None:
+            return self._try()
+        record = self._check_active()
+        if self.retry_runtime and self.reconciling is None:
+            try:
+                if self.active is not None:
+                    self.adapter.activate(self.active)
+                self.retry_runtime = False
+            except Exception:  # noqa: BLE001 - still the same bodies; the next tick tries again
+                pass
+        return record
 
     def _check_active(self) -> Optional[bytes]:
         self._fall_due()
@@ -821,16 +1443,20 @@ class Pep:
 
     def _check_ground(self) -> Optional[bytes]:
         """What every entry point and the periodic tick run first: an active release that no longer stands lapses
-        with `dist:revoked` (R5), and an expired one lapses or is held (X1, X7). A staged release is held to the
+        with `dist:revoked` (R5), and an expired one, or one whose freshness ran out (H16), lapses or is held (X1,
+        X7). A reconciling PEP runs the tests of C10 instead, which try no runtime. A staged release is held to the
         same test when a revocation is applied and at a restart, and again at its commit (C3)."""
+        if self.reconciling is not None:
+            self._run_tests(never_ran=True)
+            return self._end_if_switched()
         if self.locked or not self.trust.readable:
             return None
         if self.active is None:
             return None
         cause = standing(self.trust, self.active, self.store.get, self.time())
-        if cause == "dist:revoked":
+        if cause == REVOKED:
             return self.lapse(cause)
-        if cause != "dist:expired":
+        if cause != EXPIRED and not self._stale():
             return None
         if self.expiry_response == HOLD:
             if self.held:
@@ -838,53 +1464,169 @@ class Pep:
             self.held = True
             self.audit.append("distribution", "held", {"seq": self.active.seq, "cause": "dist:held", "result": "held"})
             return self._record("held", "dist:held")
-        return self.lapse("dist:expired")
+        return self.lapse(EXPIRED)
 
     def lapse(self, cause: str) -> bytes:
-        """X1, R5: go to `no-policy` with `cause`, durably, and make the runtime refuse."""
-        lapsed = self.active
+        """X1, R5: go to `no-policy` with `cause`, durably in the order of C7, and make the runtime run nothing. A
+        reconciling PEP lapses its held release as C10 does one that fell."""
+        if self.reconciling is not None:
+            if not self.locked and self.active is not None:
+                self._held_falls(cause, True)
+            switched = self._end_if_switched()
+            return switched if switched is not None else self._record("beat")
+        running = self.active
+        self._intent("lapse", None, cause, running, False)
+        self.audit.append("distribution", "lapsed", {"seq": running.seq if running else None, "cause": cause,
+                                                     "result": "lapsed"})
         self.store.write("active.json", _ACTIVE, {"release": None,
                                                  "previous": self.previous.document() if self.previous else None})
         self._end_ring(None)
-        self.active, self.held = None, False
-        self.adapter.deactivate(cause)
-        self._keep_blobs()
-        self.audit.append("distribution", "lapsed", {"seq": lapsed.seq if lapsed else None, "cause": cause,
-                                                     "result": "lapsed"})
-        return self._record("lapsed", cause)
+        self.active, self.held, self.retry_runtime = None, False, False
+        return self._runtime_step((self._lapse_event(), cause), running)
 
     def receipt_mark(self) -> Optional[str]:
         """X7: `held` on every receipt written while the PEP holds an expired release, else None."""
         return "held" if self.held else None
 
-    def decide(self, under_release: Callable[[], Any], reading: Optional[Dict[str, Any]] = None) -> dict:
-        """One decision through the PEP, after the expiry check (X1). With no active release, or locked, it is
-        refused with the cause of X3 and `under_release` is not called. Otherwise its answer is the decision,
-        and the receipt carries the hold mark while the PEP is held (X7). The adapter hands the `reading` it
-        decided, which the next state record carries in its Facet body when the active release has a
-        `policy.core` (H5). A reading the Facet codec refuses is decided and not carried."""
+    def decide(self, under_release: Callable[[], Any], reading: Optional[Dict[str, Any]] = None, *,
+               request: Optional[Dict[str, Any]] = None) -> dict:
+        """One decision through the PEP, after the expiry check (X1). A PEP that holds an action floor asks it first
+        on `request`, the reading of the request in the form of its kind (`floors.ask`), in every state (AF1): when
+        the floor allows or escalates, nothing else decides (`_floor_answer`). Otherwise, with no active release,
+        locked or reconciling, it is refused with the cause of X3 or C8 and `under_release` is not called, unless the
+        fallback policy decides (FB1), and no decision tries the runtime. Otherwise its answer is the decision, and
+        the receipt carries the hold mark while the PEP is held (X7). The adapter hands the `reading` it decided,
+        which the next state record carries in its Facet body when the active release has a `policy.core` (H5). A
+        reading the Facet codec refuses is decided and not carried. A PEP that holds an install record names the
+        basis and the policy hash of the set that decided on every receipt (RC1), and `receipt` is its bytes."""
         self._check_active()
+        held = self.floor_set()
+        if held is not None and request is not None:
+            answered = self._floor_answer(held, request)
+            if answered is not None:
+                return answered
         cause = self.refusal()
         if cause is not None:
-            return {"decision": None, "cause": cause, "mark": None}
+            if self.fallback_decides():                               # FB1: the runtime runs the fallback set
+                return self._receipted({"decision": under_release(), "cause": None, "mark": None, "basis": "fallback",
+                                        "policy_sha256": self.installed.fallback.policy_sha256}, request)
+            return self._receipted({"decision": None, "cause": cause, "mark": None}, request)
         decision = under_release()
         image = self.active.bodies.get("policy.core") if reading is not None else None
         if image is not None:
             self._keep(image, reading)
-        return {"decision": decision, "cause": None, "mark": self.receipt_mark()}
+        out = {"decision": decision, "cause": None, "mark": self.receipt_mark()}
+        if self.installed.record is not None or self.installed.record_lost:
+            out.update(basis="release", policy_sha256=self.active.policy_sha256)
+        return self._receipted(out, request)
+
+    def floor_set(self) -> Optional["install.HeldSet"]:
+        """The action floor the PEP asks, None when it holds none or its install record is lost (IS10)."""
+        return None if self.installed.record_lost else self.installed.held(install.FLOOR)
+
+    def _receipted(self, out: dict, request: Optional[Dict[str, Any]]) -> dict:
+        """RC1: a PEP that holds an install record writes the receipt of every decision, with its basis, and a
+        refusal made with no set carries no basis. The release's own outcome is named when the request reads."""
+        if self.installed.record is None and not self.installed.record_lost:
+            return out
+        outcome = None
+        if request is not None and out.get("basis") in ("release", "fallback"):
+            decided = self.active if out["basis"] == "release" else self.installed.fallback
+            outcome = floors.ask(self.adapter.kind, decided.bodies, request).document(None)
+        data, digest = floors.receipt({"basis": out.get("basis"), "cause": out["cause"], "mark": out["mark"],
+                                       "decided": outcome, "policy_sha256": out.get("policy_sha256"),
+                                       **self._receipt_place(request)})
+        return {**out, "receipt": data, "receipt_sha256": digest}
+
+    def _receipt_place(self, request: Optional[Dict[str, Any]]) -> dict:
+        """What sets one receipt apart from the next: the PEP's time, its count of receipts since start and the hash
+        of the request. The PEP id is not in it, so two PEPs may write the same bytes, which is why an answer names its
+        PEP (OP2)."""
+        self.receipts += 1
+        try:
+            asked = canon.sha256_hex(canon.canon2_bytes(_plain(request))) if request is not None else None
+        except (TypeError, ValueError):
+            asked = None
+        return {"time": self.time(), "n": self.receipts, "request": asked}
+
+    def _would(self, request: Dict[str, Any]) -> Tuple["floors.Answer", Optional[str]]:
+        """AF7: what the active release, or the fallback policy when that decides, answers the request, and the policy
+        hash of the set it asked. None when no set would have decided."""
+        if self.refusal() is None:
+            return floors.ask(self.adapter.kind, self.active.bodies, request), self.active.policy_sha256
+        if self.fallback_decides():
+            fallback = self.installed.fallback
+            return floors.ask(self.adapter.kind, fallback.bodies, request), fallback.policy_sha256
+        return floors.SILENT, None
+
+    def _ceiling_names(self) -> Tuple[str, ...]:
+        ceiling = self.installed.ceiling
+        if ceiling is None or "agent.zones" not in ceiling.bodies:
+            return ()
+        return tuple(kinds.read_zones(ceiling.bodies["agent.zones"])["protected"])
+
+    def _floor_answer(self, held: "install.HeldSet", request: Dict[str, Any]) -> Optional[dict]:
+        """AF1, AF2, AF7, AF8: the action floor's answer, or None when it is silent. An allow is allowed with
+        `dist:floor-allowed` (RC3), an escalation is escalated with the floor's own cause and opens an escalation an
+        operator may answer (OP3). The release or the fallback policy is asked too and its answer is `would`. An
+        override, a floor answer whose `would` is not an allow, of a rule past the signed `rate` is escalated with
+        `dist:floor-rate`, or leaves the floor silent on a rule that may only allow. Its count is durable before the
+        PEP acts, and so are the counts of floor answers and overrides of the state record (H10)."""
+        kind = self.adapter.kind
+        answer = floors.ask(kind, held.bodies, request, floor=True, layout=getattr(self.adapter, "floor_layout", None),
+                           ceiling_names=self._ceiling_names())
+        if answer.outcome not in (floors.ALLOW, floors.ESCALATE):
+            return None                                               # AF2: silent
+        would, would_policy = self._would(request)
+        override = would.outcome != floors.ALLOW
+        meta = next(iter(held.envelopes.values())).meta if held.envelopes else {}
+        outcome, cause, counted = answer.outcome, answer.cause, None
+        book = self.book()
+        if outcome == floors.ALLOW and override and meta.get("rate") is not None:
+            counted = book.spend(answer.rule, meta["rate"], self.time())
+            if counted is None:
+                if answer.allow_only or kind not in floors.ESCALATING:
+                    return None                                       # AF8: past the rate the release decides
+                outcome, cause = floors.ESCALATE, floors.RATE
+        if outcome == floors.ALLOW:
+            cause = floors.ALLOWED                                     # RC3
+        record = self.installed.record
+        self.installed.save(replace(record, answers=min(record.answers + 1, 2 ** 32 - 1),
+                                    overrides=min(record.overrides + (1 if override else 0), 2 ** 32 - 1)))
+        mark = self.receipt_mark()
+        doc = {"basis": "floor", "cause": cause, "mark": mark, "outcome": outcome, "policy_sha256": held.policy_sha256,
+               "would": would.document(would_policy), "zone": answer.zone, **self._receipt_place(request)}
+        if counted is not None:
+            doc.update(rule=answer.rule, window=counted[0], count=counted[1])          # RC3
+        data, digest = floors.receipt(doc)
+        if outcome == floors.ESCALATE:
+            book.escalated(digest, held.policy_sha256, self.time())    # OP3
+        return {"decision": outcome, "cause": cause, "mark": mark, "basis": "floor",
+                "policy_sha256": held.policy_sha256, "would": would.document(would_policy), "zone": answer.zone,
+                "override": override, "receipt": data, "receipt_sha256": digest,
+                **({"rule": answer.rule, "window": counted[0], "count": counted[1]} if counted is not None else {})}
+
+    def book(self) -> "floors.Book":
+        """AF8, OP3, OP4: the rate counts and the open escalations, beside the install record in both copies."""
+        return floors.Book.load((os.path.join(self.installed.dir, "rates.json"),
+                                os.path.join(self.installed.copy, "rates.json")))
 
     # ------------------------------------------------------------------ RB1, RB2, X9: rollback
     def rollback(self) -> bytes:
         """Return to the release the active one replaced (RB1), never lowering the floor. Refused while held
-        (X9), when an envelope of the kept release has expired, is revoked, has no counting signature or is
-        below a floor a revocation raised, each with that check's own cause (RB2), and when the kept release
-        may allow more than the active one without a widening statement that covers it (RB3). With no
-        release kept there is nothing to return to, and `PepRefused` says so."""
+        (X9), while reconciling (C8), when an envelope of the kept release has expired, is revoked, has no counting
+        signature or is below a floor a revocation raised, each with that check's own cause (RB2), and when the
+        kept release may allow more than the active one without a widening statement that covers it (RB3). With
+        no release kept there is nothing to return to, and `PepRefused` says so."""
         self._check_active()
         if self.held:
             return self._refuse("dist:held")
         if self.locked:
             return self._refuse("dist:floor-lost")
+        if self.reconciling is not None:
+            return self._refuse(RECONCILING)
+        if self.installed.record_lost or self.installed.ceiling_lost:
+            return self._refuse(install.INSTALL_LOST)                 # IS10
         if not self.trust.readable:
             return self._refuse("dist:unknown-key")
         kept = self.previous
@@ -893,6 +1635,12 @@ class Pep:
         cause = self._still_valid(kept, early=True)                  # RB2: what a commit checks, as it is active anew
         if cause is None and kept.seq < self.trust.floors.get(kept.stream, 0):
             cause = "dist:seq-replay"                                 # R4: below a floor a revocation raised
+        if cause is None and not install.inside(self.adapter.kind, self.installed.ceiling, kept.bodies):
+            self.previous = None                                      # CL2: the kept release is dropped
+            self.store.write("active.json", _ACTIVE, {"release": self.active.document() if self.active else None,
+                                                     "previous": None})
+            self._keep_blobs()
+            return self._refuse(install.ABOVE_CEILING, seq=kept.seq)
         if cause is not None:
             return self._refuse(cause, seq=kept.seq)
         if not self._covers(kept):
@@ -911,20 +1659,87 @@ class Pep:
             return True
         return self._widening(kept.widens, kept.replaces, kept.bodies, kept.bodies, whole=True) is None
 
-    # ------------------------------------------------------------------ P2, P3: provisioning
-    def provision(self, anchor: bytes) -> str:
-        """P2 step 3: receive a trust anchor and return its fingerprint for the operator to compare. The PEP
-        follows no stream until `confirm` is given that fingerprint (P2 step 4)."""
+    # ------------------------------------------------------------------ P2, P3, P5: provisioning
+    def provision(self, anchor: bytes, statements: Iterable[Tuple[bytes, bytes]] = ()) -> str:
+        """P2 step 3: receive a trust anchor, and any install statements the engineer brings with it, and return its
+        fingerprint for the operator to compare. The PEP follows no stream until `confirm` is given that fingerprint
+        (P2 step 4). An anchor whose keys are not apart from each other, from the instance key and from what the PEP
+        holds in another role, or whose `domain` is not the hash of the domain the PEP was built with, is refused and
+        leaves the PEP as it was (K4, P4). `printed` is what the PEP prints: the fingerprint, and the envelope id of
+        each install statement beside it (IS8)."""
         read = read_anchor(anchor)
         if read.target != self.adapter.kind:
             raise PepRefused(f"the anchor is for a {read.target} PEP, not a {self.adapter.kind} one")
+        self._check_separation(read.store())
+        self._check_roles(read)
+        self._provisioned_record(read)                               # IS6: refused here, the PEP left as it was
+        pairs = [(bytes(sealed), bytes(body)) for sealed, body in statements]
+        ids = [env.envelope_id(env.unseal(sealed)[0]) for sealed, _body in pairs]
+        self.store.write("install.pending", "prismpath.dist-install-pending/1",
+                         {"statements": [[sealed.hex(), body.hex()] for sealed, body in pairs]})
         self.store.write_bytes("anchor.pending", bytes(anchor))
-        self.audit.append("distribution", "anchor_received", {"fingerprint": read.fingerprint, "result": "pending"})
+        self.printed = {"fingerprint": read.fingerprint, "install": ids}
+        self.audit.append("distribution", "anchor_received", {"fingerprint": read.fingerprint, "install": ids,
+                                                              "result": "pending"})
         return read.fingerprint
 
+    def _check_roles(self, read) -> None:
+        """P2 step 3, P4, K4: no key of the anchor is the instance key or a key the PEP holds in another role or has
+        retired in any role, its install part's domain is the one the PEP was built with, and an anchor that reaches a
+        PEP holding an install record is checked against its install and operator keys too."""
+        part, held = read.install, self.installed.record
+        authority = set(read.keys) | ({read.controller_id} if read.controller is not None else set())
+        if held is not None and authority & held.ids:
+            raise PepRefused("an anchor key is an install or an operator key the PEP holds or retired (K4)")
+        if part is None:
+            return
+        named = set(part.keys) | set(part.operators)
+        if self.instance_key.key_id in named:
+            raise PepRefused("an install or operator key of the anchor is the PEP's instance key (K4)")
+        if self.trust.readable and named & (set(self.trust.keys) | set(self.trust.retired)):
+            raise PepRefused("an install or operator key of the anchor is a key the trust store holds or retired (K4)")
+        if held is not None and (set(part.keys) & (set(held.operators) | set(held.retired))
+                                 or set(part.operators) & (set(held.keys) | set(held.retired))):
+            raise PepRefused("an install or operator key of the anchor is held in another role or retired (K4)")
+        if part.domain != install.domain_sha256(self.adapter):
+            raise PepRefused("the anchor's domain is not the hash of the domain this PEP was built with (P4, CL4)")
+
+    def _provisioned_record(self, read) -> Optional["install.Record"]:
+        """IS6, P4: the install record a provisioning leaves. An anchor with no install part leaves the held one as it
+        is. One whose install trust sequence is below the held one is refused, one at the same number brings the same
+        key set, and one above it may bring another: every key it leaves out is retired, and only a key set that
+        shares no key with the held one starts the install sequences again and drops the held sets. The install trust
+        id becomes the anchor's fingerprint."""
+        part, held = read.install, self.installed.record
+        if part is None:
+            return held
+        part = replace(part, trust_id=read.fingerprint)
+        if held is None:
+            return part
+        if part.trust_seq < held.trust_seq:
+            raise PepRefused("dist:trust-replay: the anchor's install trust sequence is below the PEP's (IS6)")
+        same = (dict(part.keys), dict(part.operators), part.threshold) == (dict(held.keys), dict(held.operators),
+                                                                           held.threshold)
+        if part.trust_seq == held.trust_seq:
+            if not same:
+                raise PepRefused("dist:trust-replay: an anchor at the held install trust sequence brings another key "
+                                 "set (IS6)")
+            return replace(held, trust_id=read.fingerprint, domain=part.domain)
+        dropped = (set(held.keys) | set(held.operators)) - set(part.keys) - set(part.operators)
+        retired = install._retire(held.retired, dropped)
+        if set(part.keys) & set(held.keys):
+            return replace(part, retired=retired, seqs=dict(held.seqs), sets=dict(held.sets), answers=held.answers,
+                           overrides=held.overrides)
+        return replace(part, retired=retired, answers=held.answers, overrides=held.overrides)   # disjoint: anew
+
     def confirm(self, fingerprint: str) -> bytes:
-        """P2 step 4, P3: the operator confirmed `fingerprint`. The trust store, the floor and the time floor
-        start again from the anchor, whatever was held before, and a locked PEP is unlocked."""
+        """P2 step 4, P3, P5: the operator confirmed `fingerprint`. The runtime is withdrawn first, and when it does
+        not withdraw provisioning is refused and nothing changes. Then the trust store, the floor, the time floor
+        and the epoch id start again from the anchor, whatever was held before, a locked PEP is unlocked, and a
+        reconciling one leaves the state with its intent record gone and the record it owed not sent. The install
+        part follows IS6 and P4, the install statements brought with the anchor are applied (any that does not verify
+        refuses the provisioning), and the `provisioned` record carries `dist:install-widened` when a set it brought
+        stands out (H13)."""
         try:
             with open(self.store.path("anchor.pending"), "rb") as handle:
                 raw = handle.read()
@@ -935,8 +1750,22 @@ class Pep:
             raise PepRefused("the fingerprint is not the waiting anchor's")
         store = read.store()
         self._check_separation(store)
-        self.adapter.deactivate("dist:policy-lapsed")
-        for name in ("active.json", "staged.json", "pending.json"):
+        self._check_roles(read)
+        new_record = self._provisioned_record(read)
+        try:
+            brought = [(bytes.fromhex(sealed), bytes.fromhex(body)) for sealed, body in
+                       self.store.read("install.pending", "prismpath.dist-install-pending/1")["statements"]]
+        except (Refused, KeyError, TypeError, ValueError):
+            brought = []
+        self._precheck(read, store, new_record, brought)
+        try:
+            self.adapter.deactivate(POLICY_LAPSED)
+        except Exception as error:  # noqa: BLE001 - P5: never provisioned over a runtime that still runs a release
+            raise PepRefused(f"the runtime does not withdraw, so the PEP is not provisioned over it (P5): {error}") from None
+        self.reconciling, self.retry_runtime, self.due = None, False, None
+        if self.stream and self.floor.seq > 0:
+            self.installed.mark_stream(self.stream)                 # L2: a stream committed on before the mark was kept
+        for name in ("active.json", "staged.json", "pending.json", "fresh.json"):
             self.store.remove(name)
         self.trust = store.save(self.store.path("trust.json"))
         self.store.write("floor.json", _FLOOR, {"stream": read.stream, "seq": 0, "ids": []})
@@ -944,10 +1773,67 @@ class Pep:
         self.store.write("setting.json", _SETTING, {"expiry": self.expiry_response})
         self.store.write_bytes("anchor.json", raw)
         self.store.remove("anchor.pending")
+        self.store.remove("install.pending")
         self.stream, self.floor, self.locked, self.provisioned, self.held = read.stream, Floor(), False, True, False
+        self.fresh, self.kept, self.epoch, self.time_taken = read.fresh, None, 0, False      # P3, H15, H16
         self.active = self.previous = self.staged = None
         self.recent.clear()                                          # H5: no policy made what the ring holds
         self._keep_blobs()
+        if new_record is None:
+            self.installed.clear()
+        else:
+            self.installed.mark(install=True)                        # IS9: before the first statement is applied
+            self.installed.staged = {}
+            self.installed.save(new_record)
+            self.installed.save_staged()
+            self.installed.ceiling_lost = False
+        sent = len(self.outbox)
+        for sealed, body in brought:
+            self._stage(sealed, body, message=False)
+        applied = [state_record.read(one, self.instance_key.public_raw) for one in self.outbox[sent:]]
+        del self.outbox[sent:]                                       # P3: provisioning reports as its own event
+        widened = any(one.event == "install-widened" for one in applied)
         self.audit.append("distribution", "provisioned", {"fingerprint": read.fingerprint, "stream": read.stream,
+                                                          "install": self.installed.statement_ids(),
                                                           "result": "provisioned"})
-        return self._record("provisioned")
+        record = self._record("provisioned", install.WIDENED if widened else None)
+        if self.fallback_decides():
+            try:
+                self._step()
+            except Exception as error:  # noqa: BLE001 - a failed runtime step after the record is durable (C6)
+                self._enter(("beat", None), None, error)
+        return record
+
+    def _precheck(self, read, store: TrustStore, record, brought) -> None:
+        """P2 step 3: every install statement the engineer brings verifies under the install record the provisioning
+        leaves, before anything changes."""
+        if not brought:
+            return
+        if record is None:
+            raise PepRefused("install statements came with an anchor that holds no install keys")
+        trust = replace(store, path=None)
+        for sealed, body in brought:
+            view = PepView(kind=self.adapter.kind, stream=read.stream, qualification=self.adapter.qualification,
+                           body_bound=self.adapter.body_bound, has_clock=self.has_clock,
+                           instance_key_id=self.instance_key.key_id,
+                           install=InstallView(record=record, staged={}, ceiling=None, message=False,
+                                               layout=getattr(self.adapter, "floor_layout", None)))
+            verdict = verify(sealed, body, trust=trust, pep=view, now=int(self.clock()))
+            if verdict.envelope is None or verdict.envelope.artifact not in kinds.INSTALL_ARTIFACTS:
+                raise PepRefused("only install statements come with an anchor (P2 step 3)")
+            if not verdict.ok and verdict.cause not in ("dist:above-ceiling", "dist:seq-replay", "dist:incomplete"):
+                raise PepRefused(f"{verdict.cause}: an install statement brought with the anchor does not verify")
+
+    def provision_install(self, statements: Iterable[Tuple[bytes, bytes]]) -> list:
+        """IS13: an install provisioning brings install statements and no anchor, by the channel of P2 step 3. Each is
+        held to IS5 and IS6 as any install statement is, with no message rule, and reported with the event IS12 gives
+        its set. The trust store, the floors, the time floor, the epoch id and the PEP's state stay as they were, and a
+        locked PEP stays locked. Returns the records it made."""
+        if not self.provisioned or self.installed.record is None:
+            raise PepRefused("an install provisioning reaches a PEP that holds an install record (IS13)")
+        sent = len(self.outbox)
+        for sealed, body in statements:
+            self._stage(bytes(sealed), bytes(body), message=False)
+        self.audit.append("distribution", "install-provisioned", {"install": self.installed.statement_ids(),
+                                                                  "result": "provisioned"})
+        return list(self.outbox[sent:])
