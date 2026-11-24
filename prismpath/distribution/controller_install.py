@@ -52,12 +52,19 @@ def set_key(stream: str, kind: str, seq: int, release: str) -> str:
     return f"{stream}/{kind}/{seq}/{release}"
 
 
+def expected_set(info: dict) -> list:
+    """The entry of an expected install record for the stored set `info`: [set id, seq], and "none" after them for the
+    empty set, which withdraws its kind so the PEP holds nothing of it (IS6)."""
+    return [info["set_id"], info["seq"]] + (["none"] if set(info["statements"]) == {kinds.NONE} else [])
+
+
 def install_id_of(comps: dict) -> bytes:
-    """H10: the install id of the expected install record `comps`."""
+    """H10: the install id of the expected install record `comps`, zeros for a kind held of nothing or withdrawn."""
     sets = {}
     for kind in install.SET_KINDS:
         one = comps["sets"].get(kind)
-        sets[kind] = None if one is None else install.HeldSet(kind, one[1], one[0], "", "", "", False, {})
+        withdrawn = one is not None and len(one) > 2 and one[2] == kinds.NONE
+        sets[kind] = None if one is None or withdrawn else install.HeldSet(kind, one[1], one[0], "", "", "", False, {})
     record = install.Record(keys={}, threshold=1, trust_seq=comps["trust_seq"], trust_id=comps["trust_id"], sets=sets)
     return record.install_id()
 
@@ -402,7 +409,7 @@ class InstallDesk:
             info = self.install_sets[key]
             if info["state"] == PARTIAL_SET or not set(info["statements"].values()) <= named:
                 raise ValueError(f"name every statement of the whole set {key}")
-            comps["sets"][info["kind"]] = [info["set_id"], info["seq"]]
+            comps["sets"][info["kind"]] = expected_set(info)
         return comps
 
     def keep_pending(self, pep: str, data: bytes) -> None:
@@ -475,7 +482,7 @@ class InstallDesk:
             if member.kind != info["target"] or key in member.install_refused or (
                     expected is not None and info["seq"] <= expected[1]):
                 continue
-            comps["sets"][kind] = [info["set_id"], info["seq"]]
+            comps["sets"][kind] = expected_set(info)
         if comps != member.install:
             if member.install_previous is None:
                 member.install_previous = member.install
@@ -576,7 +583,7 @@ class InstallDesk:
             for info in self.install_sets.values():
                 if info["stream"] == member.stream and info["kind"] == kind and info["state"] == OFFERED_SET:
                     candidates.append({**member.install, "sets": {**member.install["sets"],
-                                                                  kind: [info["set_id"], info["seq"]]}})
+                                                                  kind: expected_set(info)}})
         for item in self._trust_items(member.stream):
             if item["state"] == OFFERED_SET:
                 candidates.append({**member.install, "trust_seq": item["seq"], "trust_id": item["envelope_id"]})

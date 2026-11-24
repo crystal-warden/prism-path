@@ -131,6 +131,23 @@ def _floor_in_place(fleet, policy=NARROW, seq=1):
 
 # ------------------------------------------------------------------ IS8, H12: store, offer, attribute
 
+def test_the_controller_expects_zeros_for_a_kind_the_empty_set_withdrew(tmp_path):
+    """IS6, H10, H12: a PEP offered the empty floor withdraws its floor and holds nothing of it, so the install id the
+    controller expects counts zeros for the floor, as the PEP's does, and the offer ends without a finding."""
+    fleet = Fleet(tmp_path)
+    point = fleet.first
+    _floor_in_place(fleet)
+    empty = point.install_set(FLOOR, {kinds.NONE: b""}, 2)
+    fleet.put(empty)
+    fleet.round()
+    member = fleet.member("p1")
+    assert point.pep.installed.record.seqs[FLOOR] == 2 and fleet.held("p1", FLOOR) is None
+    bare = replace(point.pep.installed.record, sets={kind: None for kind in install.SET_KINDS})
+    assert install_id_of(member.install) == point.pep.installed.record.install_id() == bare.install_id()
+    assert member.last["install"]["install_id"] == bare.install_id().hex() and member.install_previous is None
+    assert not fleet.findings("p1")
+
+
 def test_case_181_the_controller_verifies_offers_trust_first_and_attributes_by_subject(tmp_path):
     """case_181: IS8, H12. A controller handed an install statement with a bad signature refuses it and stores and
     offers the good one. A PEP two install trust statements behind is offered both, in order, before any install set,
