@@ -46,9 +46,125 @@ from prismpath.distribution.verify import SKEW, Floor, PepView, Staged, verify
 from prismpath.ledgers.audit_log import AuditLog
 
 REFUSE, HOLD = "refuse", "hold"
+K2_SCAN, K2_SKIP = 4096, frozenset({"runs"})          # K2: the bound of the scan of a home for an authority key
 _FLOOR, _ACTIVE, _STAGED, _PENDING, _COUNTER, _SETTING = (
     "prismpath.dist-floor/1", "prismpath.dist-active/1", "prismpath.dist-staged/1", "prismpath.dist-pending/1",
     "prismpath.dist-counter/1", "prismpath.dist-setting/1")
+
+
+def _signed_by_a_held_key(trust: TrustStore, entries, message: bytes) -> bool:
+    """A stored sealed envelope still carries a signature that verifies under a key the store holds, whatever that
+    key's standing: a blob changed on disk is caught when it is read back, and revocation and retirement are
+    R5's to judge, after the load."""
+    from prismpath.hotswap import policy_pack
+    _priv, Public, _ser, InvalidSignature = policy_pack._ed25519()
+    for kid, signature in entries:
+        key = trust.keys.get(kid)
+        if key is None:
+            continue
+        try:
+            Public.from_public_bytes(key.public).verify(signature, message)
+            return True
+        except (InvalidSignature, ValueError):
+            continue
+    return False
+
+
+def read_release(store: "_Store", trust: TrustStore, reads_meta: bool, doc: Optional[dict]) -> Optional["Release"]:
+    """A release document read back with every blob it names, or `Refused` when one is missing, not its name's, or
+    no longer carries a signature by a key the store holds. Nothing the record does not name is ever read (C4)."""
+    if doc is None:
+        return None
+    release = Release(stream=doc["stream"], seq=doc["seq"], policy_sha256=doc["policy_sha256"],
+                      release=doc["release"], replaces=doc["replaces"], widens=doc["widens"])
+    for artifact, held in doc["held"].items():
+        sealed, body = store.get(held["sealed"]), store.get(held["body"])
+        if sealed is None or body is None:
+            raise Refused(kinds.BAD_FORMAT, f"a blob of {artifact} is missing or not its name's")
+        envelope_bytes, entries = env.unseal(sealed)
+        envelope = env.read(envelope_bytes, reads_meta=reads_meta)
+        if envelope.envelope_id != held["envelope_id"] or envelope.artifact != artifact:
+            raise Refused(kinds.BAD_FORMAT, f"the blob of {artifact} is another envelope")
+        if trust.readable and not _signed_by_a_held_key(trust, entries, env.signed_message(envelope_bytes)):
+            raise Refused(kinds.BAD_FORMAT, f"the stored blob of {artifact} is not signed by a key the store holds")
+        release.held[artifact] = Held(held["envelope_id"], held["sealed"], held["body"])
+        release.envelopes[artifact], release.bodies[artifact] = envelope, body
+        release.paths[artifact] = store.blob_path(held["body"])
+    return release
+
+
+def stands(trust: TrustStore, release: "Release", sealed_of: Callable[[str], Optional[bytes]], *, active: bool) -> bool:
+    """R5: a release still stands when no envelope of it is listed by id or policy hash, its `seq` is not below a
+    floor a revocation raised, and every envelope of it is still signed. A key that was only retired still holds up
+    a release already active under it (O3), and a staged release needs a counting signature (S5), as at commit.
+    `sealed_of(name)` reads a sealed blob. The machine and every reader of a committed release ask this."""
+    if release.seq < trust.floors.get(release.stream, 0):
+        return False
+    for held in release.held.values():
+        if held.envelope_id in trust.revoked_envelopes or release.policy_sha256 in trust.revoked_policies:
+            return False
+        sealed = sealed_of(held.sealed)
+        if sealed is None:
+            return False
+        envelope_bytes, entries = env.unseal(sealed)
+        message = env.signed_message(envelope_bytes)
+        if not (trust.holds_up(entries, message, kinds.AUTHORITY) if active
+                else trust.counting(entries, message, kinds.AUTHORITY).ok):
+            return False
+    return True
+
+
+def standing(trust: TrustStore, release: "Release", sealed_of: Callable[[str], Optional[bytes]],
+             time: int) -> Optional[str]:
+    """Why an active release no longer decides at the PEP's `time`: `dist:revoked` when it no longer stands (R5),
+    `dist:expired` when an envelope of it has expired (X1), else None."""
+    if not stands(trust, release, sealed_of, active=True):
+        return "dist:revoked"
+    if any(envelope.expires and time >= envelope.expires for envelope in release.envelopes.values()):
+        return "dist:expired"
+    return None
+
+
+def read_committed(state_dir: str, kind: str, now: int) -> Dict[str, bytes]:
+    """The bodies of `read_committed_release`."""
+    return dict(read_committed_release(state_dir, kind, now).bodies)
+
+
+def read_committed_release(state_dir: str, kind: str, now: int) -> "Release":
+    """The release the PEP over `state_dir` has active, read as a restart reads them and held to the
+    tests the machine holds it to on every entry point, for a reader in another process (the agent home's hook and
+    proxies). `Refused`: `dist:floor-lost` when the anchor, the setting, the counter or the floor does not read,
+    since the PEP is then locked (Q5); `dist:unknown-key` when the trust store does not read (K1);
+    `dist:policy-lapsed` with nothing active; and the cause of `standing` when the release no longer decides. A
+    HOLD past expiry is the machine's to mark, so a reader refuses an expired release."""
+    store = _Store(os.path.join(state_dir, "dist"))
+    if not store.exists("anchor.json"):
+        raise Refused("dist:policy-lapsed", "the PEP is not provisioned")
+    trust = TrustStore.load(store.path("trust.json"))
+    if not trust.readable:
+        raise Refused("dist:unknown-key", "the trust store cannot be read")
+    try:
+        with open(store.path("anchor.json"), "rb") as handle:
+            stream = read_anchor(handle.read()).stream
+        counter = store.read("counter.json", _COUNTER)["counter"]
+        floor = store.read("floor.json", _FLOOR)
+        store.read("setting.json", _SETTING)["expiry"]
+        if (not kinds.is_int(counter, 0, 2 ** 64 - 1) or floor["stream"] != stream
+                or not kinds.is_int(floor["seq"], 0, kinds.MAX_SEQ)):
+            raise Refused(kinds.BAD_FORMAT, "counter.json or floor.json")
+    except (OSError, Refused, KeyError, TypeError):
+        raise Refused("dist:floor-lost", "the PEP's anchor, setting, counter or floor cannot be read") from None
+    try:
+        release = read_release(store, trust, kinds.TARGETS[kind].reads_meta,
+                               store.read("active.json", _ACTIVE)["release"])
+    except (Refused, KeyError, TypeError):
+        release = None
+    if release is None:
+        raise Refused("dist:policy-lapsed", "no release is active")
+    cause = standing(trust, release, store.get, max(int(now), trust.time_floor))
+    if cause is not None:
+        raise Refused(cause, "the active release no longer decides")
+    return release
 
 
 class PepRefused(Exception):
@@ -196,6 +312,7 @@ class Pep:
         self.due: Optional[Tuple[str, int, str, float]] = None      # B8: a commit with a delay, and when it falls
         self.outbox: list = []
         self.recent: deque = deque(maxlen=heartbeat.MAX_FRAMES)    # H5: the readings decided since the last record
+        self.bad_readings = 0                                        # readings the Facet codec refused, not carried
         self._load()
         self._check_setting()
         self._check_separation(self.trust)
@@ -269,23 +386,8 @@ class Pep:
             raise PepRefused(f"this PEP was provisioned to {provisioned} at expiry, not to {self.expiry_response} (X10)")
 
     def _release(self, doc: Optional[dict]) -> Optional[Release]:
-        """A release document read back with every blob it names, or `Refused` when one is missing or not
-        its name's. Nothing the record does not name is ever read (C4)."""
-        if doc is None:
-            return None
-        release = Release(stream=doc["stream"], seq=doc["seq"], policy_sha256=doc["policy_sha256"],
-                          release=doc["release"], replaces=doc["replaces"], widens=doc["widens"])
-        for artifact, held in doc["held"].items():
-            sealed, body = self.store.get(held["sealed"]), self.store.get(held["body"])
-            if sealed is None or body is None:
-                raise Refused(kinds.BAD_FORMAT, f"a blob of {artifact} is missing or not its name's")
-            envelope = env.read(env.unseal(sealed)[0], reads_meta=self.target.reads_meta)
-            if envelope.envelope_id != held["envelope_id"] or envelope.artifact != artifact:
-                raise Refused(kinds.BAD_FORMAT, f"the blob of {artifact} is another envelope")
-            release.held[artifact] = Held(held["envelope_id"], held["sealed"], held["body"])
-            release.envelopes[artifact], release.bodies[artifact] = envelope, body
-            release.paths[artifact] = self.store.blob_path(held["body"])
-        return release
+        """A release document read back with every blob it names (`read_release`)."""
+        return read_release(self.store, self.trust, self.target.reads_meta, doc)
 
     def _check_separation(self, trust: TrustStore) -> None:
         """K2: the instance key is never a trusted key, and the home holds no private half of one."""
@@ -296,11 +398,22 @@ class Pep:
             return
         from prismpath.hotswap import policy_pack
         _priv, _pub, ser, _invalid = policy_pack._ed25519()
+        looked = 0
         for directory, subdirectories, files in os.walk(home):
-            subdirectories[:] = [name for name in subdirectories if os.path.join(directory, name) != self.store.dir]
+            # the scan is bounded: not the PEP's own store, not the runs a home keeps, no deeper than two levels,
+            # and at most K2_SCAN files, since a private key is a small file among the home's own
+            depth = os.path.relpath(directory, home).count(os.sep) + (directory != home)
+            subdirectories[:] = [] if depth >= 2 else [
+                name for name in subdirectories
+                if os.path.join(directory, name) != self.store.dir and name not in K2_SKIP]
             for name in files:
+                looked += 1
+                if looked > K2_SCAN:
+                    return
                 path = os.path.join(directory, name)
                 try:
+                    if os.path.getsize(path) > 16384:
+                        continue
                     with open(path, "rb") as handle:
                         head = handle.read(64)
                     if not (head.startswith(b"-----BEGIN") and b"PRIVATE KEY" in head):
@@ -377,7 +490,14 @@ class Pep:
             self.store.write("counter.json", _COUNTER, {"counter": self.counter})
         active, staged = self.active, self.staged
         image = active.bodies.get("policy.core") if active is not None and self.state() == "active" else None
-        body = heartbeat.body(image, self.recent) if image is not None else b""
+        if image is not None and hasattr(self.adapter, "readings"):
+            for reading in self.adapter.readings():                   # decided in another process of the home
+                self._keep(image, reading)
+        try:
+            body = heartbeat.body(image, self.recent) if image is not None else b""
+        except (ValueError, KeyError, TypeError, AttributeError):
+            self.bad_readings += len(self.recent)                     # never a ring that stops every record
+            body = b""
         self.recent.clear()
         record = state_record.StateRecord(
             event=event, state=self.state(), cause=cause, pep_id=state_record.pep_id(self.instance_key.public_raw),
@@ -392,6 +512,21 @@ class Pep:
         signed = state_record.build(record, self.instance_key)
         self.outbox.append(signed)
         return signed
+
+    def _keep(self, image: bytes, reading: Any) -> bool:
+        """H5: put `reading` in the ring when the Facet codec of `image` encodes it, as `decide` and the readings
+        another process of the home noted are both held. A reading it refuses is counted in `bad_readings` and
+        not carried."""
+        from prismpath.telemetry.spiral_groups import TIER_BAND
+        try:
+            if not isinstance(reading, dict):
+                raise TypeError("a reading is an object")
+            heartbeat.facet(image).encode_reading(reading, TIER_BAND)
+        except (ValueError, KeyError, TypeError, AttributeError):
+            self.bad_readings += 1
+            return False
+        self.recent.append(dict(reading))
+        return True
 
     def reported_floor(self) -> int:
         """H1, R4: the floor V8 holds, the larger of the committed floor and the one a revocation raised."""
@@ -520,24 +655,8 @@ class Pep:
             self._drop_staged()
 
     def _stands(self, release: Release, *, active: bool = True) -> bool:
-        """R5: a release still stands when no envelope of it is listed by id or policy hash, its `seq` is not
-        below a floor a revocation raised, and every envelope of it is still signed. A key that was only retired
-        still holds up a release already active under it (O3), and a staged release needs a counting signature
-        (S5), as it would at commit."""
-        if release.seq < self.trust.floors.get(release.stream, 0):
-            return False
-        for held in release.held.values():
-            if held.envelope_id in self.trust.revoked_envelopes or release.policy_sha256 in self.trust.revoked_policies:
-                return False
-            sealed = self.store.get(held.sealed)
-            if sealed is None:
-                return False
-            envelope_bytes, entries = env.unseal(sealed)
-            message = env.signed_message(envelope_bytes)
-            if not (self.trust.holds_up(entries, message, kinds.AUTHORITY) if active
-                    else self.trust.counting(entries, message, kinds.AUTHORITY).ok):
-                return False
-        return True
+        """R5 for `release` under the store as it is now (`stands`)."""
+        return stands(self.trust, release, self.store.get, active=active)
 
     # ------------------------------------------------------------------ C1 to C5: commit
     def _drop_staged(self) -> None:
@@ -671,6 +790,8 @@ class Pep:
         after = release.bodies.get("policy.core") if release is not None else None
         if before is None or before != after:
             self.recent.clear()
+            if hasattr(self.adapter, "readings"):
+                self.adapter.readings()                               # and what the home's other deciders noted
 
     def _cleanup(self) -> None:
         if self.staged is None:
@@ -706,9 +827,10 @@ class Pep:
             return None
         if self.active is None:
             return None
-        if not self._stands(self.active):
-            return self.lapse("dist:revoked")
-        if self._still_valid(self.active, early=False) != "dist:expired":
+        cause = standing(self.trust, self.active, self.store.get, self.time())
+        if cause == "dist:revoked":
+            return self.lapse(cause)
+        if cause != "dist:expired":
             return None
         if self.expiry_response == HOLD:
             if self.held:
@@ -748,12 +870,7 @@ class Pep:
         decision = under_release()
         image = self.active.bodies.get("policy.core") if reading is not None else None
         if image is not None:
-            from prismpath.telemetry.spiral_groups import TIER_BAND
-            try:
-                heartbeat.facet(image).encode_reading(reading, TIER_BAND)
-                self.recent.append(dict(reading))
-            except (ValueError, KeyError, TypeError):
-                pass
+            self._keep(image, reading)
         return {"decision": decision, "cause": None, "mark": self.receipt_mark()}
 
     # ------------------------------------------------------------------ RB1, RB2, X9: rollback

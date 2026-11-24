@@ -8,6 +8,17 @@ spec stable.
 
 ## [Unreleased]
 
+### Added: an agent home can follow a policy stream, with a floor, an expiry and no authority key on the machine (2026-11-23)
+
+- **`prismpath agent init --follow STREAM --anchor FILE` makes the agent home follow a stream.** It shows the anchor's fingerprint, takes it back with `--confirm`, writes the hook entries, and the home holds an instance key and no authority key. `prismpath dist pep --kind agent` pulls its releases.
+- **The hook, the egress proxy and the MCP proxy decide under the committed release, checked again on every load by the same test the PEP machine runs.** Its signature, its expiry, the revocation list and a raised floor are read each time, a PEP locked for a floor, counter or setting that does not read decides nothing, and an authority key in the home is refused.
+- **The egress proxy reaches only the committed `egress.hosts`, and `--allow-host` is refused in such a home.** A commit changes the hook's policy and the proxy's hosts together.
+- **The egress proxy and the MCP proxy follow the committed state at every decision, not the release they started with.** They load again when a file of the PEP's store changes or the release expires, so a revocation, an expiry or a commit that removes a host stops them at the next call, and a commit of another policy refuses the run that began under the old one.
+- **A staged `sandbox.profile` must be the profile the staged policy compiles to, or the commit is `dist:derived-mismatch`.**
+- **The zone file is a distributed `agent.zones` artifact.** A release that protects fewer names, or drops the file, is a widening. `prismpath agent zones set` records the project, its index and the Context Cloud program as the home's own setting, and the index stays a control path.
+- **The hook and the proxies hand their readings to the next state record, so an agent home's heartbeat carries its decisions.** A spooled line the Facet codec cannot encode is skipped and counted and never stops a record, and a commit of another policy drops what was spooled under the old one.
+- **The search of a home for an authority key skips the runs and stops at two levels and 4,096 files, and a stored sealed envelope must still be signed by a key the store holds when it is read back.**
+
 ### Added: signed state records with a Facet body, and a fleet view that finds a wrong policy by its hash (2026-11-22)
 
 - **A PEP whose active release has a `policy.core` puts the decisions it made since its last record, at most 64, in the record's body as a grouped Facet stream of that policy at the band tier.** The stream's preamble names the policy and its layout. A record with no decision in it still carries the preamble. A commit, a rollback or a lapse to another policy drops the decisions the old one made, so no decision is reported under a policy that did not make it.

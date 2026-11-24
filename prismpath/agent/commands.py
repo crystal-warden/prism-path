@@ -148,15 +148,91 @@ def _attestation(home: Path, image: bytes, case: str = POLICY_CASE) -> bytes:
                          "sig": signer.sign(core_evidence.IMAGE_DOMAIN + image).hex()}) + b"\n"
 
 
+def load_distributed(home: Path, *, until: Optional[list] = None):
+    """The policy of a home that follows a stream (spec-policy-distribution.md, section 3): the committed
+    `policy.core`, every envelope of the release checked again on this load (`agent_home.committed`). Such a home
+    holds its instance key and no authority key. Returns the policy and the committed bodies, and appends to
+    `until`, when given, the earliest `expires` of the release (0 when none expires)."""
+    from prismpath.agent.policy import Policy
+    from prismpath.distribution.adapters import agent_home
+    from prismpath.distribution.kinds import Refused
+    from prismpath.ledgers import root_statement
+    if any(path.exists() for path in _key_paths(home, "authority")):
+        raise AgentError(f"{home} follows a stream and must hold no authority key; remove authority.key")
+    for path in _key_paths(home, "instance"):
+        if not path.is_file():
+            raise AgentError(f"no instance key at {path}; run `prismpath agent init --follow`")
+    instance = root_statement.InstanceKey.load(str(_key_paths(home, "instance")[0]))
+    if instance.key_id != _key_id(home, "instance"):
+        raise AgentError("instance.key and instance.pub are not one key pair")
+    try:
+        bodies, expires = agent_home.committed_until(home)
+    except Refused as refused:
+        raise AgentError(f"the home's release does not stand: {refused}") from None
+    if until is not None:
+        until.append(expires)
+    return Policy(bodies["policy.core"]), bodies
+
+
+class Committed:
+    """The committed release of a home that follows a stream, for a decider that runs long (the egress proxy's
+    gate, the MCP proxy). `current()` answers (policy, bodies) as `load_distributed` does, or raises its
+    AgentError, and loads again only when a file of the PEP's store changed (a commit, a rollback, a lapse, a
+    revocation, a lock) or the release's earliest expiry has come, so a decision costs a few `stat` calls and a
+    release that no longer stands stops deciding at the next one (section 9, X3, R5)."""
+    WATCHED = ("anchor.json", "setting.json", "counter.json", "floor.json", "trust.json", "active.json")
+
+    def __init__(self, home: Path):
+        self.home = Path(home)
+        self._stamp: Any = None
+        self._until = 0
+        self._loaded: Any = None
+        self._error: Optional[AgentError] = None
+
+    def _files(self) -> tuple:
+        out = []
+        for name in self.WATCHED:
+            try:
+                stat = os.stat(self.home / "dist" / name)
+                out.append((stat.st_ino, stat.st_mtime_ns, stat.st_size))
+            except OSError:
+                out.append(None)
+        return tuple(out)
+
+    def current(self):
+        from prismpath.distribution.adapters import agent_home
+        stamp = self._files()
+        if stamp != self._stamp or (self._until and agent_home.clock() >= self._until):
+            self._stamp, until = stamp, []
+            try:
+                self._loaded, self._error = load_distributed(self.home, until=until), None
+                self._until = until[0]
+            except AgentError as exc:
+                self._loaded, self._error, self._until = None, exc, 0
+        if self._error is not None:
+            raise self._error
+        return self._loaded
+
+
+def hosts_of(home: Path):
+    """The hosts a distributed home's egress proxy may reach: the committed `egress.hosts` (section 3)."""
+    from prismpath.distribution.adapters import agent_home
+    return agent_home.hosts(load_distributed(home)[1])
+
+
 def load_checked(home: Path):
     """The policy the hook decides under and the store of runs, after checking that both key pairs are
     present and read, the instance key is not the authority key, and the policy's attestation verifies under
-    the authority key. Raises with the reason otherwise; the hook answers that reason with a deny."""
+    the authority key. Raises with the reason otherwise; the hook answers that reason with a deny. A home that
+    follows a stream reads its committed release instead (`load_distributed`)."""
     from prismpath.agent.policy import Policy
     from prismpath.agent.run import RunStore
     from prismpath.hotswap import policy_pack
     from prismpath.kernel import canon2
     from prismpath.ledgers import core_evidence, root_statement
+    from prismpath.distribution.adapters import agent_home
+    if agent_home.is_distributed(home):
+        return load_distributed(home)[0], RunStore(home / RUNS_DIR)
     for role in KEY_ROLES:
         for path in _key_paths(home, role):
             if not path.is_file():
@@ -222,11 +298,91 @@ def _settings_text(settings: Dict[str, Any]) -> str:
 
 
 # ------------------------------------------------------------------------------------------------- init
+def _write_hook_entries(project, yes: bool, as_json: bool, confirm, out):
+    """Show and, with consent, write the hook entries into the project's `.claude/settings.json`. Returns the path,
+    what became of it (unchanged, written or not written) and the diff shown."""
+    import difflib
+    path = Path(project) / ".claude" / "settings.json"
+    before_text = path.read_text(encoding="utf-8") if path.exists() else ""
+    try:
+        before = json.loads(before_text) if before_text.strip() else {}
+    except json.JSONDecodeError as exc:
+        raise AgentError(f"{path} is not valid JSON ({exc}); it is left as it is") from exc
+    if not isinstance(before, dict):
+        raise AgentError(f"{path} does not hold a JSON object; it is left as it is")
+    after = merged_settings(before, hook_command())
+    after_text = _settings_text(after)
+    diff = "" if after == before else "".join(difflib.unified_diff(
+        before_text.splitlines(True) if before_text else [], after_text.splitlines(True),
+        fromfile=str(path) if before_text else "/dev/null", tofile=str(path)))
+    if not diff:
+        settings_state = "unchanged"
+    else:
+        if not as_json:
+            print(f"The hook entries for {path}:\n{diff}", file=out)
+        if yes:
+            agreed = True
+        elif confirm is not None:
+            agreed = confirm(f"Write this change to {path}? [y/N] ")
+        elif not as_json and sys.stdin.isatty():
+            agreed = input(f"Write this change to {path}? [y/N] ").strip().lower() in ("y", "yes")
+        else:
+            agreed = False
+        if agreed:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = path.with_name(path.name + ".tmp")
+            tmp.write_text(after_text, encoding="utf-8")
+            os.replace(tmp, path)
+            settings_state = "written"
+        else:
+            settings_state = "not written"
+    return path, settings_state, diff
+
+
+def follow(project: Path, stream: str, anchor: Optional[Path], fingerprint: Optional[str], yes: bool,
+           as_json: bool, confirm=None, out=None) -> int:
+    """Make the user config directory a home that follows `stream` (spec-policy-distribution.md, P2): the instance
+    key and no authority key, the trust anchor received and its fingerprint shown, then, run again with the
+    fingerprint the owner gave out of band, the anchor confirmed and the hook entries written. Its policy is the
+    release the PEP commits, read on every load (`load_distributed`)."""
+    import time as _time
+    from prismpath.distribution.adapters.agent_home import AgentHomeAdapter
+    from prismpath.distribution.pep import Pep, PepRefused
+    from prismpath.distribution.trust import read_anchor
+    from prismpath.ledgers import root_statement
+    out = out or sys.stdout
+    home = config_dir()
+    _make_dir(home)
+    if any(path.exists() for path in _key_paths(home, "authority")):
+        raise AgentError(f"{home} holds an authority key; a home that follows a stream holds none, so move it aside")
+    _ensure_key(home, "instance")
+    instance = root_statement.InstanceKey.load(str(_key_paths(home, "instance")[0]))
+    try:
+        pep = Pep(str(home), AgentHomeAdapter(home), instance, lambda: int(_time.time()))
+        if fingerprint is None:
+            if anchor is None:
+                raise AgentError("`--follow` needs `--anchor FILE`, then `--confirm FINGERPRINT`")
+            raw = Path(anchor).read_bytes()
+            if read_anchor(raw).stream != stream:
+                raise AgentError(f"the anchor is for the stream {read_anchor(raw).stream}, not {stream}")
+            report = {"config_dir": str(home), "stream": stream, "fingerprint": pep.provision(raw),
+                      "next": "compare it with the owner's, then run again with --confirm FINGERPRINT"}
+        else:
+            pep.confirm(fingerprint)
+            path, settings_state, _diff = _write_hook_entries(project, yes, as_json, confirm, out)
+            report = {"config_dir": str(home), "stream": pep.stream, "state": pep.state(),
+                      "settings": {"path": str(path), "state": settings_state}}
+    except PepRefused as exc:
+        raise AgentError(str(exc)) from None
+    print(json.dumps(report, indent=2) if as_json else "\n".join(f"{key}: {value}" for key, value in report.items()),
+          file=out)
+    return 0
+
+
 def init(project: Path, yes: bool, as_json: bool, confirm=None, out=None, policy: Optional[str] = None) -> int:
     """Keys, policy and the project's hook entries. `confirm(prompt) -> bool` asks the person; None means
     ask on a terminal and otherwise take no for an answer. `policy` names the starter to record (`strict`,
     `default`, `review`, `session`); None keeps the starter already recorded, and records `default` where there is none."""
-    import difflib
     out = out or sys.stdout
     home = config_dir()
     _make_dir(home)
@@ -264,40 +420,7 @@ def init(project: Path, yes: bool, as_json: bool, confirm=None, out=None, policy
         except sandbox_hook.SandboxRefused as exc:      # the hook denies Bash with cause 129 until this is fixed
             sandbox_problem = str(exc) or type(exc).__name__
 
-    path = Path(project) / ".claude" / "settings.json"
-    before_text = path.read_text(encoding="utf-8") if path.exists() else ""
-    try:
-        before = json.loads(before_text) if before_text.strip() else {}
-    except json.JSONDecodeError as exc:
-        raise AgentError(f"{path} is not valid JSON ({exc}); it is left as it is") from exc
-    if not isinstance(before, dict):
-        raise AgentError(f"{path} does not hold a JSON object; it is left as it is")
-    after = merged_settings(before, hook_command())
-    after_text = _settings_text(after)
-    diff = "" if after == before else "".join(difflib.unified_diff(
-        before_text.splitlines(True) if before_text else [], after_text.splitlines(True),
-        fromfile=str(path) if before_text else "/dev/null", tofile=str(path)))
-    if not diff:
-        settings_state = "unchanged"
-    else:
-        if not as_json:
-            print(f"The hook entries for {path}:\n{diff}", file=out)
-        if yes:
-            agreed = True
-        elif confirm is not None:
-            agreed = confirm(f"Write this change to {path}? [y/N] ")
-        elif not as_json and sys.stdin.isatty():
-            agreed = input(f"Write this change to {path}? [y/N] ").strip().lower() in ("y", "yes")
-        else:
-            agreed = False
-        if agreed:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            tmp = path.with_name(path.name + ".tmp")
-            tmp.write_text(after_text, encoding="utf-8")
-            os.replace(tmp, path)
-            settings_state = "written"
-        else:
-            settings_state = "not written"
+    path, settings_state, diff = _write_hook_entries(project, yes, as_json, confirm, out)
     report = {"config_dir": str(home),
               "keys": {role: {"id": _key_id(home, role), "state": keys[role]} for role in KEY_ROLES},
               "policy": {"name": starter, "image": STARTERS[starter], "sha256": _sha256_hex(image),
@@ -476,6 +599,8 @@ def hook(raw: bytes, env: Optional[Mapping[str, str]] = None, nested=None,
                 continue
         else:
             raise AgentError(f"the session's journal changed under {STATE_ATTEMPTS} decisions in a row, so none was made")
+        from prismpath.distribution.adapters import agent_home
+        agent_home.note(home, result.reading)           # the decision made, for a following home's heartbeat (H5)
         if profile is not None:
             # the receipt is written first so the runner can bind what the command shows to it (observe.py)
             from prismpath.ledgers import core_evidence
@@ -650,6 +775,12 @@ def run(program: List[str], workspace: Optional[str] = None, credential: Optiona
         egress_kwargs["local_model"] = local_model
     if extra_ro:
         confinement_kwargs["extra_ro"] = extra_ro
+    from prismpath.distribution.adapters import agent_home
+    if agent_home.is_distributed(config_dir()):
+        if allowed_hosts:
+            raise AgentError("this home follows a stream, so its hosts are the committed egress.hosts and "
+                             "--allow-host is refused; nothing was run")
+        allowed_hosts = list(hosts_of(config_dir()))
     if allowed_hosts:
         egress_kwargs["allowed_hosts"] = [host.lower() for host in allowed_hosts]
     return launcher.launch(program, workspace or os.getcwd(), credential=credential, egress_log=egress_log,
@@ -675,11 +806,28 @@ def zones_cmd(action: str, project: Path, protected: Optional[List[str]], protec
     from prismpath.agent import zones
     out = out or sys.stdout
     home = config_dir()
-    load_checked(home)                                     # keys and a recorded policy that verifies, or AgentError
-    image = (home / POLICY_FILE).read_bytes()
+    from prismpath.distribution.adapters import agent_home
+    distributed = agent_home.is_distributed(home)
+    policy, _store = load_checked(home)                    # keys and a policy that verifies, or AgentError
+    image = policy.image if distributed else (home / POLICY_FILE).read_bytes()
     project = Path(os.path.realpath(project))
     try:
-        if action == "set":
+        if action == "set" and distributed:
+            if protected or protected_file:
+                raise zones.ZoneError("this home follows a stream, so its protected names are the committed "
+                                      "agent.zones; `zones set` records only where the project and Context Cloud are")
+            exe = zones.contextcloud_executable()
+            if exe is None:
+                raise zones.ZoneError("Context Cloud is not installed (no `contextcloud` on the PATH and no $CONTEXTCLOUD), "
+                                      "and `zones set` records where it is")
+            program = zones.find_program(exe, home)
+            from prismpath.agent import sandbox_hook
+            confined = sandbox_hook.supported() and not zones._host_write(home, image)
+            problem = zones.package_tree_problem(program["package"], project, confined)
+            if problem:
+                raise zones.ZoneError(problem)
+            result = {"recorded": True, **zones.set_local(home, project, Path(index) if index else None, program)}
+        elif action == "set":
             names = [n for item in (protected or []) for n in item.split(",") if n]
             if protected_file:
                 names += [line.strip() for line in Path(protected_file).read_text(encoding="utf-8").split("\n")

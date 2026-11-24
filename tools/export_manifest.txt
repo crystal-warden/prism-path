@@ -247,6 +247,7 @@ prismpath/crypto_registry.py
 prismpath/deferral.py
 prismpath/distribution/__init__.py
 prismpath/distribution/adapters/__init__.py
+prismpath/distribution/adapters/agent_home.py
 prismpath/distribution/adapters/host.py
 prismpath/distribution/adapters/mesh.py
 prismpath/distribution/cli.py
@@ -766,6 +767,7 @@ prismpath/tests/test_crypto_host.py
 prismpath/tests/test_crypto_migration.py
 prismpath/tests/test_crypto_registry.py
 prismpath/tests/test_deferral.py
+prismpath/tests/test_distribution_agent_home.py
 prismpath/tests/test_distribution_c.py
 prismpath/tests/test_distribution_controller.py
 prismpath/tests/test_distribution_corpus.py

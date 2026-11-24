@@ -360,6 +360,13 @@ def _add_operator_commands(subparsers) -> None:
     agent_init.add_argument('--project', default=None,
                             help='the project directory (default $CLAUDE_PROJECT_DIR, else the current directory)')
     agent_init.add_argument('--yes', action='store_true', help='write the settings change without asking')
+    agent_init.add_argument('--follow', default=None, metavar='STREAM',
+                            help='follow a policy stream instead: the home holds no authority key, takes the trust '
+                                 'anchor given with --anchor, shows its fingerprint, and after --confirm commits the '
+                                 'releases the controller offers (`prismpath dist`)')
+    agent_init.add_argument('--anchor', default=None, metavar='FILE', help='with --follow: the stream\'s trust anchor')
+    agent_init.add_argument('--confirm', default=None, metavar='FINGERPRINT',
+                            help='with --follow: the anchor\'s fingerprint, as the owner gave it')
     agent_init.add_argument('--policy', choices=('strict', 'default', 'review', 'session'), default=None,
                             help='the starter policy to record: strict refuses what it cannot read and shell '
                                  'commands that change files, default asks about those, review also asks about '
@@ -583,6 +590,8 @@ def agent_cmd(args) -> int:
         if args.agent_action == 'run':
             return commands.run(args.program, args.workspace, args.credential, args.egress_log, args.max_processes,
                                 args.local_model, args.ro, args.allow_host)
+        if args.agent_action == 'init' and args.follow:
+            return commands.follow(project, args.follow, args.anchor, args.confirm, args.yes, args.json)
         if args.agent_action == 'init':
             return commands.init(project, args.yes, args.json, policy=args.policy)
         if args.agent_action == 'verify':
