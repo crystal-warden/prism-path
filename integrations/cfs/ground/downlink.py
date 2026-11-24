@@ -26,6 +26,14 @@ checks:
 Each earlier statement's `policy` member binds the manifest as it stood when it was sealed, which a later seal
 replaced, so for those only the signature, the root and the count are checked; the last is checked in full by 1.
 
+An app that holds install statements (docs/design/spec-policy-distribution.md, RC4) also downlinks `install.jsonl`,
+every install statement it decided under or applied in the run, in order, and `rates.jsonl`, a line per override its
+action floor counted, and its run has a case per basis: `release`, `floor` and `fallback`, and the release's `would`
+lines marked not enacted. `run.json` names both files by hash. Such a run is verified with the install key set the app
+held when the run began pinned beside the two keys, `KEYS/install.json`, the `install` member of the anchor the
+ground provisioned it with (`install_pin`). A run with no install statements has both files empty, run.json names
+neither, and it is verified as before with no install key pinned.
+
 The app also sends a state record of policy distribution (docs/design/spec-policy-distribution.md H1) in every
 housekeeping packet, signed by the same instance key. `read_state_record` checks one and reads it, with the type 3
 entry of H10 an app that holds an install record carries.
@@ -98,12 +106,24 @@ def root_history(run: Path, instance_pub: bytes) -> List[Dict]:
     return out
 
 
+def install_pin(anchor: bytes) -> Dict:
+    """RC4: the install key set a run of an app provisioned with `anchor` starts from, the anchor's `install` member,
+    which the ground keeps as `KEYS/install.json`."""
+    doc = canon2.loads(bytes(anchor))
+    if not isinstance(doc, dict) or not isinstance(doc.get("install"), dict):
+        raise Bad("the anchor holds no install member")
+    return doc["install"]
+
+
 def verify(run: Path, keys: Path) -> Dict:
-    """Both checks, or Bad (the verifier's own refusal is passed on as Bad with its message)."""
+    """Both checks, or Bad (the verifier's own refusal is passed on as Bad with its message). The install key set is
+    pinned from `KEYS/install.json` when the ground holds one (RC4)."""
     run, keys = Path(run), Path(keys)
+    pin_install = keys / "install.json"
     try:
         summary = core_evidence.verify(run, sample=None, pin_authority=keys / "authority.pub",
-                                       pin_instance=keys / "instance.pub")
+                                       pin_instance=keys / "instance.pub",
+                                       pin_install=pin_install if pin_install.exists() else None)
     except core_evidence.Bad as bad:
         raise Bad(f"prismpath evidence verify refuses the run: {bad}") from None
     summary["roots"] = root_history(run, (keys / "instance.pub").read_bytes())
@@ -155,7 +175,9 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("source", type=Path, help="the run directory as downlinked")
     parser.add_argument("run", type=Path, help="where the ground keeps the run (must not exist)")
-    parser.add_argument("--keys", type=Path, required=True, help="the ground's keys (authority.pub, instance.pub)")
+    parser.add_argument("--keys", type=Path, required=True,
+                        help="the ground's keys (authority.pub, instance.pub, and install.json for an app that holds "
+                             "install statements)")
     args = parser.parse_args(argv)
     try:
         summary = verify(fetch(args.source, args.run), args.keys)

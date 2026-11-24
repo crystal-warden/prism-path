@@ -2430,6 +2430,7 @@ static const uint8_t *pp_statement_body(const pp_statement *st, size_t *len) {
     return list;
 }
 
+const uint8_t *pp_statement_bytes(const pp_statement *st, size_t *len) { return pp_statement_body(st, len); }
 
 /* A table on the list of a ceiling statement, or any table for none. */
 static int pp_on_list(const pp_statement *ceiling, const uint8_t body_sha256[32]) {

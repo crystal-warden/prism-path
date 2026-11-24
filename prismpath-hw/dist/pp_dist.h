@@ -500,6 +500,10 @@ typedef struct {
     pp_statement held, staged;
 } pp_install_set;
 
+/* RC4: a held statement's body as its bytes, a policy list written again from its hashes (CL1), so a run can hold the
+ * statement it decided under. The pointer is to the statement, or to a buffer the next call writes again. */
+const uint8_t *pp_statement_bytes(const pp_statement *st, size_t *len);
+
 /* OP3: an escalation the action floor made, by the hash of its receipt, under the floor of `policy_sha256`, at the
  * PEP's time `at`, with the request it holds for an answer `allow` (the caller's bytes, at most PP_REQUEST_MAX). */
 typedef struct {

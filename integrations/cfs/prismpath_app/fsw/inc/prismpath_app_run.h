@@ -28,6 +28,9 @@
  *                         limit, so the ground's copy renames it (integrations/cfs/ground/downlink.py)
  *   roots.log.jsonl       every root statement sealed so far, one per line: the history that shows a root
  *                         taken before a processor reset is the root of a prefix of the leaves after it
+ *   install.jsonl         every install statement the enforcement point decided under or applied, in order, each
+ *                         its body and sealed envelope in hex (RC4), empty for an app with none
+ *   rates.jsonl           a line per override the action floor counted, naming its receipt's leaf (AF8, RC3)
  *
  * The state that must survive a processor reset is PP_RunState_t, which the app keeps in the Critical Data
  * Store: the highest accepted image version and its table digest, the accumulator's peaks and count, the open
@@ -71,10 +74,26 @@ typedef struct
     uint64_t              Seals;        /**< root statements signed */
     uint32_t              CaseHold;     /**< 1 when the open case holds decisions made while held (X7) */
     uint32_t              CaseNumber;   /**< 0, or the open case's number when its id is v<version>.<number> */
-    uint32_t              CaseMaxVersion; /**< the highest version a case of this run had */
-    uint32_t              Spare;
+    uint32_t              CaseMaxVersion; /**< the highest version a release case of this run had */
+    uint32_t              CaseKind;     /**< PP_CASE_* of the open case (RC4) */
+    uint8_t               CaseInstall[32]; /**< the open floor or fallback case's install statement */
+    uint64_t              InstallLen;   /**< bytes of install.jsonl and rates.jsonl written */
+    uint64_t              RatesLen;
+    int64_t               TrustSeq;     /**< the seq of the last install.trust in install.jsonl, when HasTrust */
+    uint32_t              HasTrust;
+    uint32_t              Installed;    /**< 1 once a floor or fallback case was opened */
     struct ppt_merkle_acc Acc;          /**< the receipts' peaks and count */
 } PP_RunState_t;
+
+/** What a case holds (RC4): the decisions of the active release, of the action floor, of the fallback policy, and the
+ *  release's answer for a reading the action floor decided (AF7), a case of the release marked not enacted. */
+enum
+{
+    PP_CASE_RELEASE  = 0,
+    PP_CASE_FLOOR    = 1,
+    PP_CASE_FALLBACK = 2,
+    PP_CASE_WOULD    = 3
+};
 
 #define PP_RUN_MAGIC 0x50505253u /* "PPRS" */
 
@@ -95,6 +114,8 @@ enum
     PP_FILE_ROOTLOG,
     PP_FILE_AUTHORITY,
     PP_FILE_INSTANCE,
+    PP_FILE_INSTALL,
+    PP_FILE_RATES,
     PP_FILE_COUNT
 };
 
@@ -187,8 +208,35 @@ int PP_Run_Record(PP_RunState_t *State, const PP_RunIo_t *Io, const PP_RunKeys_t
                   int Hold, uint64_t *Index);
 
 /**
+ * Record one decision in a case of `Kind` (RC4): PP_CASE_RELEASE as PP_Run_Record does, PP_CASE_FLOOR or
+ * PP_CASE_FALLBACK under the install set's table `Table`, whose body hash is `Digest`, named by the envelope id of its
+ * install statement `Install`, and PP_CASE_WOULD for the active release's answer to a reading the action floor decided
+ * (AF7), a case of the release marked not enacted. A case opens when the kind, the table, the install statement or the
+ * hold changes. A floor or fallback case's image line names its install statement and carries no signature; its id is
+ * floor.v<version>.<n> or fallback.v<version>.<n>, a would case's would.v<version>.<n>. Leaf is the receipt's leaf
+ * hash, for rates.jsonl. Returns 0, or -1 with the state and the files unchanged.
+ */
+int PP_Run_RecordCase(PP_RunState_t *State, const PP_RunIo_t *Io, const PP_RunKeys_t *Keys, int Kind,
+                      const uint8_t Install[32], const PP_PolicyTable_t *Table, const uint8_t Digest[32],
+                      const uint8_t *Payload, size_t PayloadLen, const PP_Verdict_t *Verdict, int Hold, uint64_t *Index,
+                      uint8_t Leaf[32]);
+
+/** AF8, RC3: a counted override's line of rates.jsonl, {"count","receipt_sha256","rule","window"}. 0, or -1 with the
+ *  state and the file unchanged. */
+int PP_Run_Rate(PP_RunState_t *State, const PP_RunIo_t *Io, uint32_t Rule, uint64_t Window, uint32_t Count,
+                const uint8_t Leaf[32]);
+
+/** RC4: an install statement the enforcement point decided under or applied, a line of install.jsonl,
+ *  {"body":<hex>,"sealed":<hex>}, written in chunks. IsTrust for an install.trust, whose seq the manifest's
+ *  install_trust_seq names. 0, or -1 with the state and the file unchanged. */
+int PP_Run_Install(PP_RunState_t *State, const PP_RunIo_t *Io, const uint8_t *Sealed, size_t SealedLen,
+                   const uint8_t *Body, size_t BodyLen, int IsTrust, int64_t TrustSeq);
+
+/**
  * Seal the run: write cases.jsonl (the stream, its open case closed), run.json, receipts.roots.jsonl with one
  * statement signed with the instance key, the two public keys, and append the statement to roots.log.jsonl.
+ * A run that holds an install statement or a floor or fallback case names install.jsonl and rates.jsonl by hash in
+ * run.json, with the seq of its last install.trust (null for none); one that holds neither is written as before.
  * TimeUs is the statement's time. Returns 0, -2 when no instance or authority key is loaded, -1 when a document
  * does not fit its buffer, or PP_SEAL_FILE_ERR(file) for the file that could not be read or written.
  */
@@ -221,10 +269,10 @@ size_t PP_Run_ReceiptBytes(uint64_t Index, uint32_t CaseVersion, uint32_t CaseNu
                            const uint8_t ReadingSha[32], const PP_Verdict_t *Verdict, const PP_PolicyTable_t *Active,
                            char *Out, size_t Cap);
 
-/** OP3: the escalation document of a request the action floor escalated, whose SHA-256 an operator's answer names,
- *  since a decision of the action floor has no receipt in a core run yet (RC4): {"case":"v<floor version>",
- *  "cause_code":..,"decider":..,"format":"prismpath.cfs-escalation/1","n":<floor answers>,"policy_sha256":..,
- *  "reading_sha256":..,"time":<PEP time>}. Returns the length, or 0 when Cap is too small. */
+/** OP3: the escalation document of a request the action floor escalated, whose SHA-256 an operator's answer
+ *  names: {"case":"v<floor version>","cause_code":..,"decider":..,"format":"prismpath.cfs-escalation/1",
+ *  "n":<floor answers>,"policy_sha256":..,"reading_sha256":..,"time":<PEP time>}. Returns the length, or 0 when
+ *  Cap is too small. */
 size_t PP_Run_EscalationBytes(uint32_t FloorVersion, uint16_t Cause, uint32_t FloorAnswers, const uint8_t Policy[32],
                               const uint8_t ReadingSha[32], uint64_t Time, char *Out, size_t Cap);
 

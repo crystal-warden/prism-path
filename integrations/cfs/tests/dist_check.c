@@ -336,6 +336,7 @@ int main(int argc, char **argv)
                 return 2;
             }
             Dist.Store = (PP_AppStore_t){NULL, SaveRecord, SaveCopy, WriteFile, ReadFile, LoadTable};
+            Dist.Io    = &Io; /* a new run's files are begun by the start, which writes install.jsonl */
             if (record != PP_APP_STORE_ABSENT)
             {
                 memcpy(&Dist.Record, &SavedRecord, sizeof(SavedRecord));
@@ -365,7 +366,6 @@ int main(int argc, char **argv)
             }
             else
             {
-                (void)PP_Run_Begin(&Io);
                 (void)PP_AppDist_SaveRun(&Dist);
             }
             (void)PP_AppDist_LoadActive(&Dist);

@@ -23,7 +23,7 @@
  * (integrations/cfs/ground/downlink.py, fetch). Every other file has the core run's name. */
 const char *const PP_RunFileNames[PP_FILE_COUNT] = {
     "receipts.jsonl", "cases.stream",    "images.jsonl",  "cases.jsonl",  "run.json",
-    "roots.jsonl",    "roots.log.jsonl", "authority.pub", "instance.pub",
+    "roots.jsonl",    "roots.log.jsonl", "authority.pub", "instance.pub", "install.jsonl", "rates.jsonl",
 };
 
 /* the domain prefixes the signatures are taken over, NUL included (core_evidence.IMAGE_DOMAIN, ROOT_DOMAIN) */
@@ -109,12 +109,16 @@ static void PutHexMember(Buf_t *B, const char *Key, const uint8_t *Data, size_t 
     PutS(B, "\"");
 }
 
-/* v<version>, or v<version>.<case number> for a case whose version is not above every version a case of this run had
- * before: a hold that begins or ends, another table of one version or an older one again, so every case id of a run
- * is its own, which the verifier needs (core_evidence keys a case's readings by its id) */
-static void PutCaseId(Buf_t *B, uint32_t Version, uint32_t Number)
+/* v<version>, or v<version>.<case number> for a release case whose version is not above every version a release case
+ * of this run had before: a hold that begins or ends, another table of one version or an older one again, so every
+ * case id of a run is its own, which the verifier needs (core_evidence keys a case's readings by its id). A floor, a
+ * fallback or a would case is always numbered, after its kind: floor.v<version>.<n> (RC4). */
+static const char *const k_CasePrefix[4] = {"\"v", "\"floor.v", "\"fallback.v", "\"would.v"};
+static const char *const k_BasisName[4]  = {"release", "floor", "fallback", "release"};
+
+static void PutCaseIdOf(Buf_t *B, uint32_t Kind, uint32_t Version, uint32_t Number)
 {
-    PutS(B, "\"v");
+    PutS(B, k_CasePrefix[Kind & 3u]);
     PutU64(B, Version);
     if (Number != 0u)
     {
@@ -122,6 +126,11 @@ static void PutCaseId(Buf_t *B, uint32_t Version, uint32_t Number)
         PutU64(B, Number);
     }
     PutS(B, "\"");
+}
+
+static void PutCaseId(Buf_t *B, uint32_t Version, uint32_t Number)
+{
+    PutCaseIdOf(B, PP_CASE_RELEASE, Version, Number);
 }
 
 static void Sha256(const void *Data, size_t Len, uint8_t Out[32])
@@ -146,7 +155,8 @@ int PP_Run_StateValid(const PP_RunState_t *State)
 {
     return State->Magic == PP_RUN_MAGIC && State->Size == (uint32_t)sizeof(*State) && State->CaseOpen <= 1u &&
            (State->CaseOpen == 0u || State->CaseCount > 0u) && (uint64_t)State->CaseReadings <= State->Acc.count &&
-           (State->Acc.count == 0u || State->CaseCount > 0u) && State->FloorLost <= 1u && State->CaseHold <= 1u;
+           (State->Acc.count == 0u || State->CaseCount > 0u) && State->FloorLost <= 1u && State->CaseHold <= 1u &&
+           State->CaseKind <= PP_CASE_WOULD && State->HasTrust <= 1u && State->Installed <= 1u;
 }
 
 void PP_Run_SetInstanceSeed(PP_RunKeys_t *Keys, uint8_t Seed[32])
@@ -332,10 +342,9 @@ static const char *ReasonName(uint8_t Reason)
     }
 }
 
-size_t PP_Run_ReceiptBytes(uint64_t Index, uint32_t CaseVersion, uint32_t CaseNumber, uint32_t Reading,
-                           const uint8_t ImageSha[32],
-                           const uint8_t ReadingSha[32], const PP_Verdict_t *Verdict, const PP_PolicyTable_t *Active,
-                           char *Out, size_t Cap)
+static size_t ReceiptBytesOf(uint64_t Index, uint32_t CaseKind, uint32_t CaseVersion, uint32_t CaseNumber,
+                             uint32_t Reading, const uint8_t ImageSha[32], const uint8_t ReadingSha[32],
+                             const PP_Verdict_t *Verdict, const PP_PolicyTable_t *Active, char *Out, size_t Cap)
 {
     Buf_t       B     = {Out, 0, Cap, 0};
     const char *cause = NULL;
@@ -362,7 +371,7 @@ size_t PP_Run_ReceiptBytes(uint64_t Index, uint32_t CaseVersion, uint32_t CaseNu
     /* the members in key order: case, cause, cause_code, decider, decision, field, format, idx, image_sha256,
      * reading, reading_sha256, reason, target */
     PutS(&B, "{\"case\":");
-    PutCaseId(&B, CaseVersion, CaseNumber);
+    PutCaseIdOf(&B, CaseKind, CaseVersion, CaseNumber);
     if (!route)
     {
         PutS(&B, ",\"cause\":\"");
@@ -410,6 +419,15 @@ size_t PP_Run_ReceiptBytes(uint64_t Index, uint32_t CaseVersion, uint32_t CaseNu
     }
     PutS(&B, "}");
     return B.Err ? 0 : B.Len;
+}
+
+size_t PP_Run_ReceiptBytes(uint64_t Index, uint32_t CaseVersion, uint32_t CaseNumber, uint32_t Reading,
+                           const uint8_t ImageSha[32],
+                           const uint8_t ReadingSha[32], const PP_Verdict_t *Verdict, const PP_PolicyTable_t *Active,
+                           char *Out, size_t Cap)
+{
+    return ReceiptBytesOf(Index, PP_CASE_RELEASE, CaseVersion, CaseNumber, Reading, ImageSha, ReadingSha, Verdict,
+                          Active, Out, Cap);
 }
 
 size_t PP_Run_EscalationBytes(uint32_t FloorVersion, uint16_t Cause, uint32_t FloorAnswers, const uint8_t Policy[32],
@@ -464,15 +482,17 @@ static int Replace(const PP_RunIo_t *Io, int File, const void *Data, size_t Len)
 
 int PP_Run_Recover(const PP_RunState_t *State, const PP_RunIo_t *Io)
 {
-    static const int k_Files[3] = {PP_FILE_RECEIPTS, PP_FILE_STREAM, PP_FILE_IMAGES};
-    uint64_t         want[3];
+    static const int k_Files[5] = {PP_FILE_RECEIPTS, PP_FILE_STREAM, PP_FILE_IMAGES, PP_FILE_INSTALL, PP_FILE_RATES};
+    uint64_t         want[5];
     int              i;
     int              rc = 0;
 
     want[0] = State->ReceiptsLen;
     want[1] = State->StreamLen;
     want[2] = State->ImagesLen;
-    for (i = 0; i < 3; i++)
+    want[3] = State->InstallLen;
+    want[4] = State->RatesLen;
+    for (i = 0; i < 5; i++)
     {
         int64_t size = Io->Size(Io->Ctx, k_Files[i]);
         if (size < 0)
@@ -509,8 +529,11 @@ int PP_Run_Begin(const PP_RunIo_t *Io)
 static char s_Line[1024];
 static char s_Reading[256];
 
-/* the case line's opening, up to the readings array: {"case":..,"flow":..,"image":"<hex>","readings":[ */
-static int OpenCase(const PP_RunIo_t *Io, const PP_PolicyTable_t *Active, uint32_t Number, int Hold, uint64_t *Written)
+/* the case line's opening, up to the readings array, its members in key order:
+ * {"basis":..,"case":..,"enacted":false,"flow":..,"hold":true,"image":"<hex>","install":"<hex>","readings":[
+ * with basis and install only for a floor or fallback case, enacted only for a would case and hold only when held */
+static int OpenCase(const PP_RunIo_t *Io, uint32_t Kind, const uint8_t Install[32], const PP_PolicyTable_t *Active,
+                    uint32_t Number, int Hold, uint64_t *Written)
 {
     Buf_t    B = {s_Line, 0, sizeof(s_Line), 0};
     uint16_t at;
@@ -522,8 +545,19 @@ static int OpenCase(const PP_RunIo_t *Io, const PP_PolicyTable_t *Active, uint32
     {
         return -1;
     }
-    PutS(&B, "{\"case\":");
-    PutCaseId(&B, Active->Version, Number);
+    PutS(&B, "{");
+    if (Kind == PP_CASE_FLOOR || Kind == PP_CASE_FALLBACK)
+    {
+        PutS(&B, "\"basis\":\"");
+        PutS(&B, k_BasisName[Kind]);
+        PutS(&B, "\",");
+    }
+    PutS(&B, "\"case\":");
+    PutCaseIdOf(&B, Kind, Active->Version, Number);
+    if (Kind == PP_CASE_WOULD)
+    {
+        PutS(&B, ",\"enacted\":false"); /* AF7: what the release would have answered, not what was done */
+    }
     PutS(&B, ",\"flow\":");
     rc |= (B.Err ? -1 : Io->Write(Io->Ctx, h, B.P, B.Len));
     *Written += B.Len;
@@ -547,25 +581,40 @@ static int OpenCase(const PP_RunIo_t *Io, const PP_PolicyTable_t *Active, uint32
         *Written += B.Len;
     }
     B.Len = 0;
-    PutS(&B, "\",\"readings\":[");
+    PutS(&B, "\"");
+    if (Kind == PP_CASE_FLOOR || Kind == PP_CASE_FALLBACK)
+    {
+        PutS(&B, ",");
+        PutHexMember(&B, "install", Install, 32);
+    }
+    PutS(&B, ",\"readings\":[");
     rc |= (B.Err ? -1 : Io->Write(Io->Ctx, h, B.P, B.Len));
     *Written += B.Len;
     Io->Close(Io->Ctx, h);
     return rc == 0 ? 0 : -1;
 }
 
-/* the case's image attestation: {"case":..,"format":"prismpath.core-image/1","image_sha256":..,"key_id":..,"sig":..} */
-static size_t ImageLine(const PP_RunKeys_t *Keys, const PP_PolicyTable_t *Active, uint32_t Number,
-                        const uint8_t CoreSha[32])
+/* the case's image attestation: {"case":..,"format":"prismpath.core-image/1","image_sha256":..,"key_id":..,"sig":..},
+ * or for a floor or fallback case, which its install statement's signature block attests (RC4),
+ * {"case":..,"format":"prismpath.core-image/1","image_sha256":..,"install":..} */
+static size_t ImageLine(const PP_RunKeys_t *Keys, uint32_t Kind, const uint8_t Install[32],
+                        const PP_PolicyTable_t *Active, uint32_t Number, const uint8_t CoreSha[32])
 {
     Buf_t   B = {s_Line, 0, sizeof(s_Line), 0};
     uint8_t key_id[32];
 
     Sha256(Keys->AuthorityPub, 32, key_id);
     PutS(&B, "{\"case\":");
-    PutCaseId(&B, Active->Version, Number);
+    PutCaseIdOf(&B, Kind, Active->Version, Number);
     PutS(&B, ",\"format\":\"prismpath.core-image/1\",");
     PutHexMember(&B, "image_sha256", CoreSha, 32);
+    if (Kind == PP_CASE_FLOOR || Kind == PP_CASE_FALLBACK)
+    {
+        PutS(&B, ",");
+        PutHexMember(&B, "install", Install, 32);
+        PutS(&B, "}\n");
+        return B.Err ? 0 : B.Len;
+    }
     PutS(&B, ",");
     PutHexMember(&B, "key_id", key_id, 32);
     PutS(&B, ",");
@@ -574,28 +623,39 @@ static size_t ImageLine(const PP_RunKeys_t *Keys, const PP_PolicyTable_t *Active
     return B.Err ? 0 : B.Len;
 }
 
-int PP_Run_Record(PP_RunState_t *State, const PP_RunIo_t *Io, const PP_RunKeys_t *Keys, const PP_PolicyTable_t *Active,
-                  const uint8_t ActiveDigest[32], const uint8_t *Payload, size_t PayloadLen, const PP_Verdict_t *Verdict,
-                  int Hold, uint64_t *Index)
+int PP_Run_RecordCase(PP_RunState_t *State, const PP_RunIo_t *Io, const PP_RunKeys_t *Keys, int Kind,
+                      const uint8_t Install[32], const PP_PolicyTable_t *Active, const uint8_t ActiveDigest[32],
+                      const uint8_t *Payload, size_t PayloadLen, const PP_Verdict_t *Verdict, int Hold, uint64_t *Index,
+                      uint8_t Leaf[32])
 {
+    static const uint8_t k_NoInstall[32];
     PP_RunState_t next = *State;
     uint32_t      number;
+    uint32_t      kind = (uint32_t)Kind;
+    int           installed = (Kind == PP_CASE_FLOOR || Kind == PP_CASE_FALLBACK);
     uint8_t       core_sha[32];
     uint8_t       reading_sha[32];
-    uint8_t       leaf[32];
     size_t        reading_len;
     size_t        len;
     Buf_t         B;
 
-    if (!Keys->HaveAuthority || next.Acc.count == UINT64_MAX)
+    if (Kind < PP_CASE_RELEASE || Kind > PP_CASE_WOULD || (installed && Install == NULL) || !Keys->HaveAuthority ||
+        next.Acc.count == UINT64_MAX || Active->CoreLen == 0u || Active->CoreLen > PRISMPATH_APP_CORE_MAX ||
+        Active->FlowJsonLen < 2u || Active->FlowJsonLen > PRISMPATH_APP_FLOW_MAX)
     {
         return -1;
     }
+    if (!installed)
+    {
+        Install = k_NoInstall;
+    }
     Sha256(Active->Core, Active->CoreLen, core_sha);
 
-    /* a new case when the image deciding is not the open case's, and when a hold begins or ends (X7) */
+    /* a new case when the image deciding is not the open case's, when the basis or the install statement changes, and
+     * when a hold begins or ends (X7, RC4) */
     Hold = Hold ? 1 : 0;
-    if (!next.CaseOpen || next.CaseVersion != Active->Version || memcmp(next.CaseDigest, ActiveDigest, 32) != 0 ||
+    if (!next.CaseOpen || next.CaseKind != kind || next.CaseVersion != Active->Version ||
+        memcmp(next.CaseDigest, ActiveDigest, 32) != 0 || memcmp(next.CaseInstall, Install, 32) != 0 ||
         next.CaseHold != (uint32_t)Hold)
     {
         if (next.CaseOpen)
@@ -606,26 +666,39 @@ int PP_Run_Record(PP_RunState_t *State, const PP_RunIo_t *Io, const PP_RunKeys_t
             }
             next.StreamLen += 3;
         }
-        number = (next.CaseCount == 0u || Active->Version > next.CaseMaxVersion) ? 0u : next.CaseCount + 1u;
-        if (OpenCase(Io, Active, number, Hold, &next.StreamLen) != 0)
+        if (kind != PP_CASE_RELEASE)
+        {
+            number = next.CaseCount + 1u;
+        }
+        else
+        {
+            number = (next.CaseCount == 0u || Active->Version > next.CaseMaxVersion) ? 0u : next.CaseCount + 1u;
+        }
+        if (OpenCase(Io, kind, Install, Active, number, Hold, &next.StreamLen) != 0)
         {
             goto fail;
         }
-        len = ImageLine(Keys, Active, number, core_sha);
+        len = ImageLine(Keys, kind, Install, Active, number, core_sha);
         if (len == 0 || Append(Io, PP_FILE_IMAGES, s_Line, len) != 0)
         {
             goto fail;
         }
         next.ImagesLen += len;
         next.CaseOpen     = 1;
+        next.CaseKind     = kind;
         next.CaseVersion  = Active->Version;
         memcpy(next.CaseDigest, ActiveDigest, 32);
+        memcpy(next.CaseInstall, Install, 32);
         next.CaseReadings = 0;
         next.CaseHold     = (uint32_t)Hold;
         next.CaseNumber   = number;
-        if (Active->Version > next.CaseMaxVersion)
+        if (kind == PP_CASE_RELEASE && Active->Version > next.CaseMaxVersion)
         {
             next.CaseMaxVersion = Active->Version;
+        }
+        if (installed)
+        {
+            next.Installed = 1;
         }
         next.CaseCount++;
     }
@@ -652,14 +725,13 @@ int PP_Run_Record(PP_RunState_t *State, const PP_RunIo_t *Io, const PP_RunKeys_t
     next.StreamLen += B.Len;
 
     /* the receipt, and its leaf */
-    len = PP_Run_ReceiptBytes(next.Acc.count, next.CaseVersion, next.CaseNumber, next.CaseReadings, core_sha, reading_sha,
-                              Verdict,
-                              Active, s_Line, sizeof(s_Line) - 1u);
+    len = ReceiptBytesOf(next.Acc.count, next.CaseKind, next.CaseVersion, next.CaseNumber, next.CaseReadings, core_sha,
+                         reading_sha, Verdict, Active, s_Line, sizeof(s_Line) - 1u);
     if (len == 0)
     {
         goto fail;
     }
-    Sha256(s_Line, len, leaf);
+    Sha256(s_Line, len, Leaf);
     s_Line[len] = '\n';
     if (Append(Io, PP_FILE_RECEIPTS, s_Line, len + 1u) != 0)
     {
@@ -667,7 +739,7 @@ int PP_Run_Record(PP_RunState_t *State, const PP_RunIo_t *Io, const PP_RunKeys_t
     }
     next.ReceiptsLen += len + 1u;
     *Index = next.Acc.count;
-    (void)ppt_merkle_acc_add(&next.Acc, leaf, 32);
+    (void)ppt_merkle_acc_add(&next.Acc, Leaf, 32);
     next.CaseReadings++;
     *State = next;
     return 0;
@@ -675,6 +747,95 @@ int PP_Run_Record(PP_RunState_t *State, const PP_RunIo_t *Io, const PP_RunKeys_t
 fail:
     (void)PP_Run_Recover(State, Io); /* cut back whatever part of this decision reached the files */
     return -1;
+}
+
+int PP_Run_Record(PP_RunState_t *State, const PP_RunIo_t *Io, const PP_RunKeys_t *Keys, const PP_PolicyTable_t *Active,
+                  const uint8_t ActiveDigest[32], const uint8_t *Payload, size_t PayloadLen, const PP_Verdict_t *Verdict,
+                  int Hold, uint64_t *Index)
+{
+    uint8_t leaf[32];
+
+    return PP_Run_RecordCase(State, Io, Keys, PP_CASE_RELEASE, NULL, Active, ActiveDigest, Payload, PayloadLen, Verdict,
+                             Hold, Index, leaf);
+}
+
+int PP_Run_Rate(PP_RunState_t *State, const PP_RunIo_t *Io, uint32_t Rule, uint64_t Window, uint32_t Count,
+                const uint8_t Leaf[32])
+{
+    Buf_t B = {s_Line, 0, sizeof(s_Line), 0};
+
+    /* {"count":..,"receipt_sha256":..,"rule":..,"window":..}, the members in key order */
+    PutS(&B, "{\"count\":");
+    PutU64(&B, Count);
+    PutS(&B, ",");
+    PutHexMember(&B, "receipt_sha256", Leaf, 32);
+    PutS(&B, ",\"rule\":");
+    PutU64(&B, Rule);
+    PutS(&B, ",\"window\":");
+    PutU64(&B, Window);
+    PutS(&B, "}\n");
+    if (B.Err || Append(Io, PP_FILE_RATES, B.P, B.Len) != 0)
+    {
+        (void)PP_Run_Recover(State, Io);
+        return -1;
+    }
+    State->RatesLen += B.Len;
+    return 0;
+}
+
+/* the hex of Data, written in chunks the line buffer holds */
+static int WriteHex(const PP_RunIo_t *Io, int32_t H, const uint8_t *Data, size_t Len, uint64_t *Written)
+{
+    Buf_t  B = {s_Line, 0, sizeof(s_Line), 0};
+    size_t at;
+
+    for (at = 0; at < Len; at += 256u)
+    {
+        size_t n = Len - at < 256u ? Len - at : 256u;
+        B.Len    = 0;
+        PutHex(&B, Data + at, n);
+        if (B.Err || Io->Write(Io->Ctx, H, B.P, B.Len) != 0)
+        {
+            return -1;
+        }
+        *Written += B.Len;
+    }
+    return 0;
+}
+
+int PP_Run_Install(PP_RunState_t *State, const PP_RunIo_t *Io, const uint8_t *Sealed, size_t SealedLen,
+                   const uint8_t *Body, size_t BodyLen, int IsTrust, int64_t TrustSeq)
+{
+    uint64_t written = 0;
+    int32_t  h       = Io->Open(Io->Ctx, PP_FILE_INSTALL, PP_IO_APPEND);
+    int      rc;
+
+    if (h < 0)
+    {
+        return -1;
+    }
+    /* {"body":"<hex>","sealed":"<hex>"} */
+    rc = Io->Write(Io->Ctx, h, "{\"body\":\"", 9);
+    written += 9u;
+    rc |= rc == 0 ? WriteHex(Io, h, Body, BodyLen, &written) : -1;
+    rc |= rc == 0 ? Io->Write(Io->Ctx, h, "\",\"sealed\":\"", 12) : -1;
+    written += 12u;
+    rc |= rc == 0 ? WriteHex(Io, h, Sealed, SealedLen, &written) : -1;
+    rc |= rc == 0 ? Io->Write(Io->Ctx, h, "\"}\n", 3) : -1;
+    written += 3u;
+    Io->Close(Io->Ctx, h);
+    if (rc != 0)
+    {
+        (void)PP_Run_Recover(State, Io);
+        return -1;
+    }
+    State->InstallLen += written;
+    if (IsTrust)
+    {
+        State->HasTrust = 1;
+        State->TrustSeq = TrustSeq;
+    }
+    return 0;
 }
 
 /* ----------------------------------------------------------------- sealing */
@@ -714,6 +875,8 @@ int PP_Run_Seal(PP_RunState_t *State, const PP_RunIo_t *Io, const PP_RunKeys_t *
 {
     ppt_sha256_ctx ctx;
     uint8_t        cases_sha[32], images_sha[32], run_sha[32], authority_id[32], instance_id[32], root[32], sig[64];
+    uint8_t        install_sha[32], rates_sha[32];
+    int            installed = State->InstallLen > 0u || State->RatesLen > 0u || State->Installed;
     int32_t        h;
     int            rc;
     Buf_t          B;
@@ -749,6 +912,22 @@ int PP_Run_Seal(PP_RunState_t *State, const PP_RunIo_t *Io, const PP_RunKeys_t *
         return PP_SEAL_FILE_ERR(PP_FILE_IMAGES);
     }
     ppt_sha256_final(&ctx, images_sha);
+    if (installed)
+    {
+        /* RC4: the install statements and the counted overrides, named by hash */
+        ppt_sha256_init(&ctx);
+        if (CopyHash(Io, PP_FILE_INSTALL, -1, &ctx) != 0)
+        {
+            return PP_SEAL_FILE_ERR(PP_FILE_INSTALL);
+        }
+        ppt_sha256_final(&ctx, install_sha);
+        ppt_sha256_init(&ctx);
+        if (CopyHash(Io, PP_FILE_RATES, -1, &ctx) != 0)
+        {
+            return PP_SEAL_FILE_ERR(PP_FILE_RATES);
+        }
+        ppt_sha256_final(&ctx, rates_sha);
+    }
     Sha256(Keys->AuthorityPub, 32, authority_id);
     Sha256(Keys->InstancePub, 32, instance_id);
     leaves = PP_Run_Root(State, root);
@@ -763,8 +942,27 @@ int PP_Run_Seal(PP_RunState_t *State, const PP_RunIo_t *Io, const PP_RunKeys_t *
     PutHexMember(&B, "cases_sha256", cases_sha, 32);
     PutS(&B, ",\"decider\":\"" PP_RUN_DECIDER "\",\"excluded\":[],\"format\":\"prismpath.core-run/1\",");
     PutHexMember(&B, "images_sha256", images_sha, 32);
+    if (installed)
+    {
+        PutS(&B, ",");
+        PutHexMember(&B, "install_sha256", install_sha, 32);
+        PutS(&B, ",\"install_trust_seq\":");
+        if (State->HasTrust)
+        {
+            PutU64(&B, (uint64_t)State->TrustSeq);
+        }
+        else
+        {
+            PutS(&B, "null");
+        }
+    }
     PutS(&B, ",");
     PutHexMember(&B, "instance_key_id", instance_id, 32);
+    if (installed)
+    {
+        PutS(&B, ",");
+        PutHexMember(&B, "rates_sha256", rates_sha, 32);
+    }
     PutS(&B, ",\"receipts\":");
     PutU64(&B, leaves);
     PutS(&B, "}");

@@ -105,8 +105,8 @@ typedef struct
     uint32 PolicyVersion;      /**< the image version of the active table, 0 for none */
     uint32 Seals;              /**< root statements signed onboard */
     uint8  Root[16];           /**< the first 16 bytes of the current Merkle root (the full root is in the run's files) */
-    uint32 NotEnacted;         /**< decisions of the action floor or the fallback policy, and operator answers allow,
-                                    refused and not receipted (RC4) */
+    uint32 NotEnacted;         /**< escalations of the action floor past its rate (dist:floor-rate) and operator
+                                    answers allow, refused and not receipted, since a core run has no line for them */
     uint32 FramesDropped;      /**< distribution frames dropped (dist:frame-invalid, dist:too-large, a refused envelope) */
     uint16 StateRecordLen;     /**< bytes of StateRecord in use */
     uint16 Spare16;

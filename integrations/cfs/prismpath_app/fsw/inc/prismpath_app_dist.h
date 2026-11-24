@@ -161,6 +161,8 @@ typedef struct
     int     AnswerAllow;           /**< the answer was `allow` */
     uint8_t AnswerId[32];          /**< its envelope id */
     uint8_t AnswerReceipt[32];     /**< the receipt hash of the escalation it answered */
+    int     RunError;              /**< the run's files could not be begun, or an install statement the core applied
+                                        could not be written to install.jsonl, so the run will not verify (RC4) */
 } PP_AppStep_t;
 
 /** One decision of a proposal. */
@@ -174,16 +176,21 @@ typedef struct
     int      Held;      /**< decided while held (X7) */
     int      Receipted; /**< a receipt was written, at Receipt */
     uint64_t Receipt;
-    int      NotEnacted;   /**< the action floor or the fallback policy decided, which a core run cannot carry yet */
+    int      NotEnacted;   /**< the action floor escalated past its signed rate (dist:floor-rate, AF8), which no
+                                line of a core run carries: refused, unreceipted, its escalation opened */
     int      RecordError;  /**< the decision could not be receipted, so an allow is not carried out */
     int      Escalated;    /**< OP3: an escalation of the action floor is open, under EscalationReceipt */
     uint8_t  EscalationReceipt[32]; /**< the SHA-256 of the escalation's document (PP_Run_EscalationBytes) */
 } PP_AppDecision_t;
 
 /** The app's enforcement point. One per app, in static storage. */
+#define PP_APP_SEEN_MAX 8 /**< install statements a start applies, which it does not write to a new run twice */
+
 typedef struct
 {
     PP_AppStore_t       Store;
+    const PP_RunIo_t   *Io;     /**< the run's files, set before the start: install.jsonl is written as the core
+                                     applies each install statement (RC4) */
     PP_AppRecord_t      Record; /**< the Critical Data Store record, kept as the store holds it */
     PP_AppInstallCopy_t Copy;
     PP_RunKeys_t        Keys;
@@ -210,25 +217,32 @@ typedef struct
     uint8_t             DueFrame[46];
     uint8_t             DueSig[64];
     int                 WasHeld;
+    int                 Starting;   /**< within PP_AppDist_Start */
+    size_t              NSeen;
+    uint8_t             Seen[PP_APP_SEEN_MAX][32]; /**< the envelope ids applied by this start */
     PP_AppStep_t        Step;
 } PP_AppDist_t;
 
 /**
  * Start the enforcement point. Record and Copy are what the two Critical Data Store areas held, with what each was
  * (PP_APP_STORE_*), already copied into D->Record and D->Copy by the caller. A record that is absent is a first start
- * or a power on reset: a new run begins and the app provisions itself from its anchor and the statements brought
- * with it (P2, P4). A record that is lost loses the floor: under PP_LOST_FLOOR_LOCK the core is locked until ground
- * deletes the store and restarts the app, and under PP_LOST_FLOOR_MINIMUM the app provisions itself again from its
- * anchor with the floor one below MinSeq. A record that reads restores the run and the core. When no release is
- * active the boot release is staged and committed as if offered. Returns 0, or -1 when the core refused to start.
+ * or a power on reset: a new run begins (its files begun through D->Io) and the app provisions itself from its anchor
+ * and the statements brought with it (P2, P4). A new run's install.jsonl starts with every install set the core holds,
+ * and each install statement the core applies after is appended to it (RC4), so a run is verified with the install key
+ * set the app held when it began pinned. A record that is lost loses the floor: under PP_LOST_FLOOR_LOCK the core is
+ * locked until ground deletes the store and restarts the app, and under PP_LOST_FLOOR_MINIMUM the app provisions
+ * itself again from its anchor with the floor one below MinSeq. A record that reads restores the run and the core.
+ * When no release is active the boot release is staged and committed as if offered. Returns 0, or -1 when the core
+ * refused to start.
  */
 int PP_AppDist_Start(PP_AppDist_t *D, const PP_AppDistConfig_t *Cfg, int Record, int Copy, uint32_t NowMs,
                      long long Now);
 
 /** One frame of an offer or a chunk from the command topic, at the app's monotonic time and its time. An operator's
  *  answer travels in these frames as any sealed envelope does (OP2): the core applies it, and Step says so. The answer
- *  is not enacted: an operator receipt has no case in a core run yet (RC4), so the request it answers is not
- *  republished, and the answer shows in the state record of housekeeping and in an event. */
+ *  is not enacted: an operator receipt needs the basis `operator`, which a core run does not have yet (RC4), so the
+ *  request it answers is not republished, and the answer shows in the state record of housekeeping and in an
+ *  event. */
 void PP_AppDist_Frame(PP_AppDist_t *D, const uint8_t *Frame, size_t Len, uint32_t NowMs, long long Now);
 
 /** A commit or an abort frame, the commit with the table's image attestation. */
@@ -253,10 +267,13 @@ int PP_AppDist_ValidateTable(PP_AppDist_t *D, const PP_PolicyTable_t *Table);
  * Decide one proposal: the boundary first, then the core asks the action floor and the active release or the
  * fallback policy (AF1, FB1), and the kernel decides a release decision, which is receipted (with the hold mark of
  * X7 in its case) before it is acted on. MonitorAge is the age in seconds of the monitor's last verdict, or
- * PP_AGE_NONE. A decision of the action floor or of the fallback policy is refused and not enacted, since its case
- * would be attested by an install statement, which the core run's verifier does not read yet (RC4). An escalation by
- * the action floor is still opened in the core (OP3), under the SHA-256 of its escalation document, which the app
- * downlinks so the ground can seal an operator's answer to it; the request is kept with it.
+ * PP_AGE_NONE. A decision of the action floor or of the fallback policy is enacted as the set's table decides, and
+ * receipted first in a case of its basis keyed by that table and naming its install statement (RC4). When the action
+ * floor answers and the release decides, the release's answer for the same reading is a second line, in a case of the
+ * release marked not enacted (AF7), and a counted override writes its line of rates.jsonl (AF8). An escalation by
+ * the action floor is opened in the core (OP3), under the SHA-256 of its escalation document, which the app downlinks
+ * so the ground can seal an operator's answer to it; the request is kept with it. An escalation past the floor's rate
+ * (dist:floor-rate) has no line in a core run: it is refused unreceipted and counted NotEnacted.
  */
 void PP_AppDist_Propose(PP_AppDist_t *D, const PP_RunIo_t *Io, const uint8_t *Payload, size_t PayloadLen,
                         uint32_t MonitorAge, long long Now, PP_AppDecision_t *Out);

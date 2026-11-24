@@ -242,6 +242,83 @@ static uint8_t TableCheck(void *Ctx, const uint8_t *Body, size_t Len)
     return (uint8_t)rc;
 }
 
+/* ----------------------------------------------------------------- RC4: the install statements of the run */
+/* one install statement to install.jsonl, an install.trust with its seq */
+static int LogStatement(PP_AppDist_t *D, const uint8_t *Sealed, size_t SealedLen, const uint8_t *Body, size_t BodyLen,
+                        uint8_t EnvelopeId[32])
+{
+    static pp_envelope envelope;
+    const uint8_t     *bytes = NULL;
+    size_t             len   = 0;
+    pp_entry           entries[PP_MAX_ENTRIES];
+    size_t             n = 0;
+
+    if (pp_unseal(Sealed, SealedLen, &bytes, &len, entries, &n) != 0 || pp_read_envelope(bytes, len, &envelope) != 0)
+    {
+        return -1; /* the core applied it, so it read: this does not happen */
+    }
+    memcpy(EnvelopeId, envelope.envelope_id, 32);
+    if (D->Io == NULL)
+    {
+        return 0;
+    }
+    return PP_Run_Install(&D->Record.Run, D->Io, Sealed, SealedLen, Body, BodyLen,
+                          envelope.artifact == PP_ART_INSTALL_TRUST, (int64_t)envelope.seq);
+}
+
+/* pp_config.applied: an install statement the core applied, durable and before its event */
+static void Applied(void *Ctx, const uint8_t *Sealed, size_t SealedLen, const uint8_t *Body, size_t BodyLen)
+{
+    PP_AppDist_t *D = (PP_AppDist_t *)Ctx;
+    uint8_t       id[32];
+
+    if (LogStatement(D, Sealed, SealedLen, Body, BodyLen, id) != 0)
+    {
+        D->Step.RunError = 1;
+        return;
+    }
+    if (D->Starting)
+    {
+        if (D->NSeen < PP_APP_SEEN_MAX)
+        {
+            memcpy(D->Seen[D->NSeen++], id, 32);
+        }
+        return; /* the caller saves the record once the start is done */
+    }
+    (void)PP_AppDist_SaveRun(D);
+}
+
+/* a new run's install.jsonl: every install set the core holds that this start did not apply already */
+static void SeedSets(PP_AppDist_t *D)
+{
+    int k;
+
+    for (k = 0; k < PP_SETS; k++)
+    {
+        const pp_install_set *set = &D->Pep.d.sets[k];
+        const pp_statement   *st  = &set->held;
+        const uint8_t        *body;
+        size_t                len = 0;
+        size_t                j;
+        int                   seen = 0;
+        uint8_t               id[32];
+
+        if (!D->Pep.d.has_install || !D->Pep.d.install.sets[k].held || D->Pep.set_lost[k] || !set->has_held)
+        {
+            continue;
+        }
+        for (j = 0; j < D->NSeen; j++)
+        {
+            seen |= memcmp(D->Seen[j], st->envelope.envelope_id, 32) == 0;
+        }
+        body = pp_statement_bytes(st, &len);
+        if (!seen && LogStatement(D, st->sealed, st->sealed_len, body, len, id) != 0)
+        {
+            D->Step.RunError = 1;
+        }
+    }
+}
+
 /* ----------------------------------------------------------------- the frames */
 /* frames.admit_through_v8: the sealed envelope verified with no body, V9's body mismatch the only refusal that means it
  * passed V2 to V8 (B9) */
@@ -443,6 +520,8 @@ int PP_AppDist_Start(PP_AppDist_t *D, const PP_AppDistConfig_t *Cfg, int Record,
 
     Begin(D, Now);
     (void)NowMs;
+    D->Starting = 1;
+    D->NSeen    = 0;
     D->Started = 0;
     D->Due     = 0;
     D->Pending = 0;
@@ -473,6 +552,7 @@ int PP_AppDist_Start(PP_AppDist_t *D, const PP_AppDistConfig_t *Cfg, int Record,
     D->Config.runtime     = Runtime;
     D->Config.context     = D;
     D->Config.table_check = TableCheck;
+    D->Config.applied     = Applied;
 
     /* the durable state from its stores: the record's parts, the release files, each install part from its first
      * copy that reads */
@@ -536,6 +616,14 @@ int PP_AppDist_Start(PP_AppDist_t *D, const PP_AppDistConfig_t *Cfg, int Record,
     {
         PP_Run_Init(&D->Record.Run); /* a new run, as a store that held none or one that does not read begins */
         memset(D->Record.Len, 0, sizeof(D->Record.Len));
+        if (D->Io != NULL && PP_Run_Begin(D->Io) != 0)
+        {
+            D->Step.RunError = 1;
+        }
+    }
+    else if (D->Io != NULL)
+    {
+        (void)PP_Run_Recover(&D->Record.Run, D->Io); /* before the core opens, so a statement it applies follows */
     }
 
     if (Record == PP_APP_STORE_LOST && Cfg->LostFloor == PP_LOST_FLOOR_MINIMUM)
@@ -545,6 +633,7 @@ int PP_AppDist_Start(PP_AppDist_t *D, const PP_AppDistConfig_t *Cfg, int Record,
         D->Pep.n_out = 0;
         if (Provision(D, Cfg, 0, Now) != 0)
         {
+            D->Starting = 0;
             return -1;
         }
         D->Pep.d.floor_seq   = Cfg->MinSeq > 1 ? Cfg->MinSeq - 1 : 0;
@@ -556,6 +645,7 @@ int PP_AppDist_Start(PP_AppDist_t *D, const PP_AppDistConfig_t *Cfg, int Record,
     {
         if (pp_pep_open(&D->Pep, &D->Config, NULL, Now) != 0 || Provision(D, Cfg, 1, Now) != 0)
         {
+            D->Starting = 0;
             return -1; /* P1: with no anchor the PEP believes nothing */
         }
     }
@@ -563,11 +653,17 @@ int PP_AppDist_Start(PP_AppDist_t *D, const PP_AppDistConfig_t *Cfg, int Record,
     {
         if (pp_pep_open(&D->Pep, &D->Config, &s_Saved, Now) != 0)
         {
+            D->Starting = 0;
             return -1; /* X10, K2 */
         }
         Collect(D);
         D->Step.Locked = Record == PP_APP_STORE_LOST;
     }
+    if (Record != PP_APP_STORE_READ)
+    {
+        SeedSets(D); /* RC4: the sets a new run decides under from its start */
+    }
+    D->Starting = 0;
     pp_assembler_init(&D->Assembler, Admit, D, 0, PP_FRAME_LIMIT, PP_CFS_TABLE_MAX);
     D->Started = 1;
     D->WasHeld = D->Pep.held;
@@ -811,19 +907,69 @@ static uint8_t KindOf(uint8_t Outcome)
     return Outcome == PP_OUT_ALLOW ? PP_KIND_ALLOW : Outcome == PP_OUT_ESCALATE ? PP_KIND_ESCALATE : PP_KIND_REFUSE;
 }
 
+/* RC4: the install set's table of `Set`, as the app's table struct, or NULL */
+static PP_PolicyTable_t s_SetTable;
+
+static const pp_statement *SetTable(const PP_AppDist_t *D, int Set)
+{
+    const pp_install_set *set = &D->Pep.d.sets[Set];
+
+    if (!set->has_held || set->held.body_len != PP_CFS_TABLE_MAX)
+    {
+        return NULL;
+    }
+    memset(&s_SetTable, 0, sizeof(s_SetTable));
+    memcpy(&s_SetTable, set->held.body, PP_CFS_TABLE_MAX);
+    return &set->held;
+}
+
+/* the verdict a set's table gave, from the core's decision: the rule of its matching edge, or its no-match refusal.
+ * -1 when the rule's action is not the decision's, which leaves nothing to carry out */
+static int SetVerdict(const PP_PolicyTable_t *Table, int Rule, uint8_t Outcome, uint8_t Cause, PP_Verdict_t *V)
+{
+    V->Reason = PP_REASON_NONE;
+    V->Field  = -1;
+    if (Rule >= 0)
+    {
+        if (Rule >= (int)Table->RuleCount || Rule >= PRISMPATH_APP_MAX_RULES)
+        {
+            return -1;
+        }
+        V->Rule  = (int16_t)Rule;
+        V->Kind  = Table->Rules[Rule].Kind;
+        V->Cause = Table->Rules[Rule].Cause;
+    }
+    else
+    {
+        V->Rule  = -1;
+        V->Kind  = PP_KIND_REFUSE;
+        V->Cause = Table->NoMatchCause;
+    }
+    return V->Kind == KindOf(Outcome) && (V->Kind == PP_KIND_ALLOW || (uint8_t)V->Cause == Cause) ? 0 : -1;
+}
+
+/* a working copy of the run, so a decision's lines (the receipt, its `would` and its rate) are written whole or not at
+ * all */
+static PP_RunState_t s_Work;
+
 void PP_AppDist_Propose(PP_AppDist_t *D, const PP_RunIo_t *Io, const uint8_t *Payload, size_t PayloadLen,
                         uint32_t MonitorAge, long long Now, PP_AppDecision_t *Out)
 {
-    static uint8_t regs[4 + 8 * PRISMPATH_APP_FIELD_COUNT];
-    uint32_t       ages[PRISMPATH_APP_FIELD_COUNT];
-    PP_Verdict_t   verdict;
-    pp_decision    asked;
-    size_t         n;
-    int            k;
-    int            receipt = 0;
+    static uint8_t      regs[4 + 8 * PRISMPATH_APP_FIELD_COUNT];
+    uint32_t            ages[PRISMPATH_APP_FIELD_COUNT];
+    PP_Verdict_t        verdict;
+    PP_Verdict_t        would;
+    pp_decision         asked;
+    const pp_statement *set   = NULL; /* the install statement whose table decided */
+    int                 kind  = PP_CASE_RELEASE;
+    int                 with_would = 0;
+    size_t              n;
+    int                 k;
+    int                 receipt = 0;
 
     Begin(D, Now);
     memset(Out, 0, sizeof(*Out));
+    memset(&asked, 0, sizeof(asked));
     Out->Kind  = PP_KIND_REFUSE;
     Out->Cause = PP_NO_IMAGE_CAUSE;
     Out->Rule  = -1;
@@ -839,13 +985,27 @@ void PP_AppDist_Propose(PP_AppDist_t *D, const PP_RunIo_t *Io, const uint8_t *Pa
     n = PP_Kernel_Registers(Payload, PayloadLen, regs, sizeof(regs), &verdict);
     if (n == 0)
     {
-        /* the boundary: a reading outside its field definitions is refused before any set decides (section 9.4) */
-        int mark = 0;
-        (void)pp_pep_decide(&D->Pep, &mark, Now);
+        /* the boundary: a reading outside its field definitions is refused before any set decides (section 9.4), in
+         * the case of the release or of the fallback policy that decides now */
+        int     mark  = 0;
+        uint8_t cause = pp_pep_decide(&D->Pep, &mark, Now);
         Collect(D);
-        Out->Basis = PP_Kernel_Active() ? PP_BASIS_RELEASE : PP_BASIS_NONE;
-        Out->Held  = mark;
-        receipt    = PP_Kernel_Active();
+        Out->Held = mark;
+        if (PP_Kernel_Active())
+        {
+            Out->Basis = PP_BASIS_RELEASE;
+            receipt    = 1;
+        }
+        else if (cause == 0 && (set = SetTable(D, PP_SET_FALLBACK)) != NULL)
+        {
+            Out->Basis = PP_BASIS_FALLBACK; /* FB1: no release decides, and the fallback policy does */
+            kind       = PP_CASE_FALLBACK;
+            receipt    = 1;
+        }
+        else
+        {
+            Out->Basis = PP_BASIS_NONE;
+        }
     }
     else
     {
@@ -864,18 +1024,55 @@ void PP_AppDist_Propose(PP_AppDist_t *D, const PP_RunIo_t *Io, const uint8_t *Pa
             }
             receipt = 1;
         }
-        else
+        else if (asked.basis == PP_BASIS_FLOOR && asked.rate_escalated)
         {
-            verdict.Kind   = PP_KIND_REFUSE;
-            verdict.Cause  = asked.basis == PP_BASIS_NONE ? asked.cause : PP_NO_IMAGE_CAUSE;
-            verdict.Rule   = -1;
-            verdict.Field  = -1;
-            verdict.Reason = PP_REASON_NONE;
-            Out->NotEnacted = asked.basis == PP_BASIS_FLOOR || asked.basis == PP_BASIS_FALLBACK;
-            if (asked.basis == PP_BASIS_FLOOR && asked.outcome == PP_OUT_ESCALATE)
+            /* AF8: past the signed rate the floor escalates with dist:floor-rate, which is no decision of its table, so
+             * no line of a core run carries it: refused, unreceipted, and the escalation opened (OP3) */
+            verdict.Kind    = PP_KIND_REFUSE;
+            verdict.Cause   = asked.cause;
+            verdict.Rule    = -1;
+            verdict.Field   = -1;
+            verdict.Reason  = PP_REASON_NONE;
+            Out->NotEnacted = 1;
+            Escalate(D, &asked, Payload, PayloadLen, Out);
+        }
+        else if (asked.basis == PP_BASIS_FLOOR || asked.basis == PP_BASIS_FALLBACK)
+        {
+            /* RC4: decided by the install set's table, enacted, and receipted in a case of its basis */
+            kind = asked.basis == PP_BASIS_FLOOR ? PP_CASE_FLOOR : PP_CASE_FALLBACK;
+            set  = SetTable(D, asked.basis == PP_BASIS_FLOOR ? PP_SET_FLOOR : PP_SET_FALLBACK);
+            if (set == NULL || SetVerdict(&s_SetTable, asked.decided_rule, asked.outcome, asked.cause, &verdict) != 0)
+            {
+                Out->RecordError = 1;
+                End(D);
+                return;
+            }
+            if (kind == PP_CASE_FLOOR && asked.would != PP_OUT_NONE && PP_Kernel_Active())
+            {
+                /* AF7: the release decides, so its answer for the same reading is a not enacted line */
+                PP_Kernel_Decide(Payload, PayloadLen, &would);
+                if (would.Kind != KindOf(asked.would) ||
+                    (would.Kind != PP_KIND_ALLOW && (uint8_t)would.Cause != asked.would_cause))
+                {
+                    Out->RecordError = 1;
+                    End(D);
+                    return;
+                }
+                with_would = 1;
+            }
+            if (kind == PP_CASE_FLOOR && asked.outcome == PP_OUT_ESCALATE)
             {
                 Escalate(D, &asked, Payload, PayloadLen, Out);
             }
+            receipt = 1;
+        }
+        else
+        {
+            verdict.Kind   = PP_KIND_REFUSE;
+            verdict.Cause  = asked.cause;
+            verdict.Rule   = -1;
+            verdict.Field  = -1;
+            verdict.Reason = PP_REASON_NONE;
         }
     }
     Out->Kind  = verdict.Kind;
@@ -884,14 +1081,40 @@ void PP_AppDist_Propose(PP_AppDist_t *D, const PP_RunIo_t *Io, const uint8_t *Pa
     Out->Field = verdict.Field;
     if (receipt)
     {
-        if (PP_Run_Record(&D->Record.Run, Io, &D->Keys, &D->Active, D->ActiveDigest, Payload, PayloadLen, &verdict,
-                          Out->Held, &Out->Receipt) == 0)
+        uint8_t  leaf[32];
+        uint64_t index;
+        int      rc;
+
+        s_Work = D->Record.Run;
+        if (kind == PP_CASE_RELEASE)
         {
+            rc = PP_Run_RecordCase(&s_Work, Io, &D->Keys, kind, NULL, &D->Active, D->ActiveDigest, Payload, PayloadLen,
+                                   &verdict, Out->Held, &Out->Receipt, leaf);
+        }
+        else
+        {
+            rc = PP_Run_RecordCase(&s_Work, Io, &D->Keys, kind, set->envelope.envelope_id, &s_SetTable,
+                                   set->envelope.body_sha256, Payload, PayloadLen, &verdict, Out->Held, &Out->Receipt,
+                                   leaf);
+        }
+        if (rc == 0 && asked.counted)
+        {
+            rc = PP_Run_Rate(&s_Work, Io, (uint32_t)asked.rule, (uint64_t)asked.window, asked.count, leaf); /* AF8 */
+        }
+        if (rc == 0 && with_would)
+        {
+            rc = PP_Run_RecordCase(&s_Work, Io, &D->Keys, PP_CASE_WOULD, NULL, &D->Active, D->ActiveDigest, Payload,
+                                   PayloadLen, &would, Out->Held, &index, leaf);
+        }
+        if (rc == 0)
+        {
+            D->Record.Run  = s_Work;
             Out->Receipted = 1;
             (void)PP_AppDist_SaveRun(D);
         }
         else
         {
+            (void)PP_Run_Recover(&D->Record.Run, Io); /* cut back every line of this decision */
             Out->RecordError = 1;
         }
     }

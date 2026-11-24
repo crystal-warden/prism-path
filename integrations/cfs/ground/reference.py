@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
-"""What the app's receipts must be, from the Python reference: the reading a payload is, its receipt line, and which
-receipts the app made while held.
+"""What the app's receipts must be, from the Python reference: the reading a payload is, its receipt line, which
+receipts the app made while held, and the RC4 files of an app with install statements, each written as
+`core_evidence.produce` writes it.
 
 The app writes both in C (fsw/src/prismpath_app_run.c). These are written from the layout header and the
 reference's own writers (`canon2.dumps`, `core_evidence._decision`, the reference decision path through
@@ -68,4 +69,25 @@ def held_receipts(run: Path) -> List[int]:
         if case.get("hold") is True:
             out.extend(range(idx, idx + count))
         idx += count
+    return out
+
+
+def install_lines(statements) -> bytes:
+    """install.jsonl for (sealed, body) install statements in the order the app applied them (RC4), as
+    core_evidence.produce writes it."""
+    return b"".join(canon2.dumps({"body": bytes(body).hex(), "sealed": bytes(sealed).hex()}) + b"\n"
+                    for sealed, body in statements)
+
+
+def rate_line(rule: int, window: int, count: int, receipt_sha256: str) -> bytes:
+    """One line of rates.jsonl: a counted override of the action floor (AF8, RC3), naming its receipt's leaf."""
+    return canon2.dumps({"count": count, "receipt_sha256": receipt_sha256, "rule": rule, "window": window}) + b"\n"
+
+
+def bases(run: Path) -> List[Tuple[str, str, bool, int]]:
+    """(case id, basis, enacted, readings) of every case of a run, in order (RC4)."""
+    out = []
+    for line in core_evidence._lines(Path(run) / "cases.jsonl"):
+        case = canon2.loads(line)
+        out.append((case["case"], case.get("basis", "release"), case.get("enacted", True), len(case["readings"])))
     return out

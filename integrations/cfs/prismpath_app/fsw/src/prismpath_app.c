@@ -400,7 +400,7 @@ static void PRISMPATH_APP_Report(void)
             snprintf(&hex[2 * i], 3, "%02x", Step->AnswerReceipt[i]);
         }
         /* OP3, OP4: the answered record is in housekeeping; the request is not republished, since an operator receipt
-         * has no case in a core run yet (RC4) */
+         * needs the basis `operator`, which a core run does not have yet (RC4) */
         if (Step->AnswerAllow)
         {
             PRISMPATH_APP_Data.HkTlm.Payload.NotEnacted++;
@@ -408,6 +408,12 @@ static void PRISMPATH_APP_Report(void)
         CFE_EVS_SendEvent(PRISMPATH_APP_ANSWERED_EID, CFE_EVS_EventType_CRITICAL,
                           "PRISMPATH_APP ANSWERED %s receipt=%s: not enacted, the request is not republished",
                           Step->AnswerAllow ? "allow" : "refuse", hex);
+    }
+    if (Step->RunError && DIST->Started)
+    {
+        CFE_EVS_SendEvent(PRISMPATH_APP_STATE_ERR_EID, CFE_EVS_EventType_ERROR,
+                          "PRISMPATH_APP an install statement could not be written to %s/install.jsonl; the run will "
+                          "not verify", PRISMPATH_APP_PLATFORM_RUN_DIR);
     }
     if (Step->Dropped != 0)
     {
@@ -553,6 +559,7 @@ static void PRISMPATH_APP_InitState(void)
                                                   PP_APP_BOOT_MAX);
     PRISMPATH_APP_LoadKeys();
 
+    DIST->Io                       = &PP_Io; /* a new run's files are begun by the start, which writes install.jsonl */
     PRISMPATH_APP_Data.DistStarted = PP_AppDist_Start(DIST, &s_Config, record, copy, PP_NowMs(), PP_Now()) == 0;
     if (!PRISMPATH_APP_Data.DistStarted)
     {
@@ -574,7 +581,7 @@ static void PRISMPATH_APP_InitState(void)
     }
     else
     {
-        if (PP_Run_Begin(&PP_Io) != 0)
+        if (DIST->Step.RunError)
         {
             CFE_EVS_SendEvent(PRISMPATH_APP_STATE_ERR_EID, CFE_EVS_EventType_ERROR,
                               "PRISMPATH_APP could not create the run files under %s", PRISMPATH_APP_PLATFORM_RUN_DIR);
@@ -702,25 +709,26 @@ static void PRISMPATH_APP_Proposal(const CFE_SB_Buffer_t *SBBufPtr)
     CFE_ES_PerfLogExit(PRISMPATH_APP_DECIDE_PERF_ID);
     PRISMPATH_APP_Report();
 
+    if (Decision.Escalated)
+    {
+        char hex[65];
+        int  i;
+        for (i = 0; i < 32; i++)
+        {
+            snprintf(&hex[2 * i], 3, "%02x", Decision.EscalationReceipt[i]);
+        }
+        /* OP3: the receipt hash the ground seals an operator's answer to, beside the PEP id of the state record */
+        CFE_EVS_SendEvent(PRISMPATH_APP_ESCALATION_EID, CFE_EVS_EventType_CRITICAL,
+                          "PRISMPATH_APP ESCALATION seq=%u receipt=%s", (unsigned int)Seq, hex);
+    }
     if (Decision.NotEnacted)
     {
         PRISMPATH_APP_Data.HkTlm.Payload.NotEnacted++;
         PRISMPATH_APP_Data.HkTlm.Payload.Refused++;
         CFE_EVS_SendEvent(PRISMPATH_APP_NOT_ENACTED_EID, CFE_EVS_EventType_ERROR,
-                          "PRISMPATH_APP NOT ENACTED seq=%u basis=%s: a core run cannot attest this set's case yet, so "
-                          "the decision is refused", (unsigned int)Seq, Decision.Basis == PP_BASIS_FLOOR ? "floor" : "fallback");
-        if (Decision.Escalated)
-        {
-            char hex[65];
-            int  i;
-            for (i = 0; i < 32; i++)
-            {
-                snprintf(&hex[2 * i], 3, "%02x", Decision.EscalationReceipt[i]);
-            }
-            /* OP3: the receipt hash the ground seals an operator's answer to, beside the PEP id of the state record */
-            CFE_EVS_SendEvent(PRISMPATH_APP_ESCALATION_EID, CFE_EVS_EventType_CRITICAL,
-                              "PRISMPATH_APP ESCALATION seq=%u receipt=%s", (unsigned int)Seq, hex);
-        }
+                          "PRISMPATH_APP NOT ENACTED seq=%u basis=floor cause=%u: an escalation past the floor's "
+                          "rate has no line in a core run, so the request is refused unreceipted", (unsigned int)Seq,
+                          (unsigned int)Decision.Cause);
         return;
     }
     if (Decision.RecordError)
