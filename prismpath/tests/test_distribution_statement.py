@@ -157,7 +157,7 @@ def test_case_260_a_trust_controller_may_not_name_a_key_of_another_role(tmp_path
 
 
 def test_case_261_the_controller_key_signs_no_envelope_and_no_rotation_adds_it(tmp_path):
-    """case_261: K6, K4, S3, O4, the half without install keys (IS11 waits for section 21). A release, a revocation
+    """case_261: K6, K4, S3, O4, the half without install keys (the IS11 half is in test_distribution_install_controller.py). A release, a revocation
     and a rotation signed only by the controller key are `dist:unknown-key`, and a rotation that adds the
     controller key is `dist:rotation-invalid`."""
     point = _dist.HostPep(tmp_path / "host", controller="C")
@@ -429,7 +429,7 @@ def test_case_279_a_store_gains_a_controller_key_and_keeps_its_bound(tmp_path):
 
 
 def test_case_280_an_anchor_whose_controller_key_is_the_instance_key_is_refused(tmp_path):
-    """case_280: P2, K4, K6, the instance key half (the install and operator keys wait for section 21). The anchor is
+    """case_280: P2, K4, K6, the instance key half (the install and operator keys are in test_distribution_install_controller.py). The anchor is
     refused at provisioning and the PEP is unchanged."""
     point = _dist.HostPep(tmp_path / "host")
     before = point.pep.trust.document(), point.pep.store.path("anchor.json")

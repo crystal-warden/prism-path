@@ -168,10 +168,14 @@ def sandbox_input(hook_input: Mapping[str, Any], workspace: str, profile, python
     return out
 
 
-def sandbox_profile_for_call(hook_input: Mapping[str, Any], home: Path, image: bytes, nested: Optional[Nested] = None):
+def sandbox_profile_for_call(hook_input: Mapping[str, Any], home: Path, image: bytes, nested: Optional[Nested] = None,
+                             floor: Optional[bytes] = None):
     """The profile an allowed Bash call runs under, after the checks that make it runnable. Raises SandboxRefused.
     Nested, it also refuses when the outer sandbox cannot host the per call one, and when the profile asks for a
-    view of the host (`/` read only): inside, `/` is the outer sandbox's own root, which holds the model credential."""
+    view of the host (`/` read only): inside, `/` is the outer sandbox's own root, which holds the model credential.
+    `floor` is the `policy.core` of the action floor a home that follows a stream holds: the profile is then the one
+    compiled from `image` and the floor together, so the sandbox never blocks what the floor allows (AF1). A floor that
+    does not compile to a profile adds nothing."""
     from prismpath.agent import sandbox_exec
     tool_input = hook_input.get("tool_input")
     if not isinstance(tool_input, dict) or not isinstance(tool_input.get("command"), str):
@@ -182,6 +186,12 @@ def sandbox_profile_for_call(hook_input: Mapping[str, Any], home: Path, image: b
     if not sandbox_exec.available():
         raise SandboxRefused(f"{sandbox_exec.BWRAP} is missing, so the command cannot be sandboxed")
     profile = profile_for(home, image)
+    if floor is not None and floor != image:
+        from prismpath.agent import profile as profile_module
+        try:
+            profile = profile_module.join(profile, profile_for(home, floor))
+        except SandboxRefused:
+            pass
     if nested is not None and "/" in profile.ro_mounts:
         raise SandboxRefused("the policy lets a shell command see the host, and inside the agent sandbox that view would "
                              "include the model credential, so the command was not run")

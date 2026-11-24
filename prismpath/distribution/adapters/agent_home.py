@@ -91,6 +91,11 @@ class AgentHomeAdapter(Adapter):
             raise SessionsRunning(f"{len(left)} sandboxed session(s) have not ended: {left}")
 
 
+    def floor_counts(self) -> Tuple[int, int]:
+        """AF7, H10: the floor answers and overrides the home's deciders made since the last call, taken off their
+        spool, for the counts of the next state record."""
+        return take_floor_counts(self.home)
+
     def withdraw_to(self, fallback, cause: str) -> None:
         """FB1: every sandboxed session of the release that fell ends, as at a lapse, and every reader of the home then
         finds the fallback set (`pep.read_committed_release`)."""
@@ -245,6 +250,151 @@ def _reaped(pid: int) -> bool:
     except ChildProcessError:
         return False
     return done == pid
+
+
+# ------------------------------------------------------------------ AF1: the action floor, asked first
+
+FLOOR_SPOOL = "floor-answers.jsonl"               # under dist/install/: one line per floor answer, for H10's counts
+FLOOR_LOCK = "floor.lock"
+FLOOR_RECEIPTS = "floor-receipts.jsonl"           # the receipt of every floor answer, basis `floor` and `would`
+
+
+def _install_dir(home) -> str:
+    return os.path.join(str(home), "dist", "install")
+
+
+def held_floor(home, kind: str = "agent"):
+    """(the action floor the home's PEP holds, the install part) read as a start reads them (IS10), or (None, part)
+    when it holds none or its install record is lost."""
+    from prismpath.distribution import install
+    installed = install.Installed(os.path.join(str(home), "dist"), reads_meta=kinds.TARGETS[kind].reads_meta)
+    installed.load()
+    if installed.record is None or installed.record_lost:
+        return None, installed
+    return installed.held(install.FLOOR), installed
+
+
+def floor_image(home) -> Optional[bytes]:
+    """The `policy.core` of the action floor the home's PEP holds, or None."""
+    if not is_distributed(home):
+        return None
+    held, _installed = held_floor(home)
+    return None if held is None else held.bodies.get("policy.core")
+
+
+def ask_floor(home, request: Mapping[str, Any], *, kind: str = "agent", now: Optional[int] = None) -> Optional[dict]:
+    """AF1, AF2, AF7, AF8: what the action floor of a distributed home answers `request`, asked by the hook, the egress
+    proxy and the MCP proxy before the release, in every state, through the PEP's committed state as the PEP machine
+    asks it (`Pep._floor_answer`). None when the home holds no floor or the floor is silent, and then the caller
+    decides as it would with no floor. When it answers, the release in force, or the fallback set when that decides,
+    is asked too and its answer is `would`; an override, a floor answer whose `would` is not an allow, past the signed
+    `rate` of its rule is escalated with `dist:floor-rate`, or leaves the floor silent on a rule that may only allow.
+    The count is durable before the caller acts, under the home's floor lock, and the answer is spooled for the PEP's
+    counts of H10. An escalation opens one an operator may answer (OP3). Returns the decision, its cause, the basis
+    `floor`, the floor's policy hash, `would`, the zone it overrode, whether it is an override, and the receipt."""
+    if not is_distributed(home):
+        return None
+    from prismpath.distribution import floor as floors
+    from prismpath.distribution.pep import read_committed_release
+    held, installed = held_floor(home, kind)
+    if held is None:
+        return None
+    ceiling = installed.ceiling
+    names = tuple(kinds.read_zones(ceiling.bodies["agent.zones"])["protected"]) \
+        if ceiling is not None and "agent.zones" in ceiling.bodies else ()
+    answer = floors.ask(kind, held.bodies, request, floor=True, ceiling_names=names)
+    if answer.outcome not in (floors.ALLOW, floors.ESCALATE):
+        return None
+    now = int(clock() if now is None else now)
+    try:
+        release = read_committed_release(str(home), kind, now)
+        would, would_policy = floors.ask(kind, release.bodies, request), release.policy_sha256
+    except Refused:
+        would, would_policy = floors.SILENT, None
+    override = would.outcome != floors.ALLOW
+    meta = next(iter(held.envelopes.values())).meta if held.envelopes else {}
+    import fcntl
+    os.makedirs(_install_dir(home), exist_ok=True)
+    with open(os.path.join(_install_dir(home), FLOOR_LOCK), "a+b") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        book = floors.Book.load((os.path.join(installed.dir, "rates.json"), os.path.join(installed.copy, "rates.json")))
+        outcome, cause, counted = answer.outcome, answer.cause, None
+        if outcome == floors.ALLOW and override and meta.get("rate") is not None:
+            counted = book.spend(answer.rule, meta["rate"], now)
+            if counted is None:
+                if answer.allow_only or kind not in floors.ESCALATING:
+                    return None                                       # AF8: past the rate the release decides
+                outcome, cause = floors.ESCALATE, floors.RATE
+        if outcome == floors.ALLOW:
+            cause = floors.ALLOWED                                     # RC3
+        from prismpath.kernel import canon2
+        with open(os.path.join(_install_dir(home), FLOOR_SPOOL), "ab") as handle:
+            handle.write(canon2.dumps({"override": override}) + b"\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        doc = {"basis": "floor", "cause": cause, "outcome": outcome, "policy_sha256": held.policy_sha256,
+               "would": would.document(would_policy), "zone": answer.zone, "time": now}
+        if counted is not None:
+            doc.update(rule=answer.rule, window=counted[0], count=counted[1])
+        data, digest = floors.receipt(doc)
+        with open(os.path.join(_install_dir(home), FLOOR_RECEIPTS), "ab") as handle:
+            handle.write(data + b"\n")                                 # RC1: every floor answer's receipt, durably
+            handle.flush()
+            os.fsync(handle.fileno())
+        if outcome == floors.ESCALATE:
+            book.escalated(digest, held.policy_sha256, now)            # OP3
+    return {"decision": outcome, "cause": cause, "basis": "floor", "policy_sha256": held.policy_sha256,
+            "would": would.document(would_policy), "zone": answer.zone, "override": override, "receipt": data,
+            "receipt_sha256": digest, **({"rule": answer.rule, "window": counted[0], "count": counted[1]}
+                                         if counted is not None else {})}
+
+
+def take_floor_counts(home) -> Tuple[int, int]:
+    """(answers, overrides) spooled by the home's deciders, and the spool emptied, as `take_readings` takes its."""
+    from prismpath.kernel import canon2
+    path = os.path.join(_install_dir(home), FLOOR_SPOOL)
+    taking = path + ".taking"
+    try:
+        os.replace(path, taking)
+        lines = Path(taking).read_bytes().splitlines()
+        os.unlink(taking)
+    except OSError:
+        return 0, 0
+    answers = overrides = 0
+    for line in lines:
+        try:
+            answers += 1
+            overrides += 1 if canon2.loads(line).get("override") else 0
+        except Exception:  # noqa: BLE001 - a torn line still counts as an answer, and as an override, the safer side
+            overrides += 1
+    return answers, overrides
+
+
+def floor_hosts(home) -> Tuple[str, ...]:
+    """AF1: the hosts of the action floor's `egress.hosts`, which the egress proxy asks before the release's."""
+    if not is_distributed(home):
+        return ()
+    held, _installed = held_floor(home)
+    if held is None or "egress.hosts" not in held.bodies:
+        return ()
+    return tuple(kinds.read_hosts(held.bodies["egress.hosts"]))
+
+
+def running_profile(home, role: str = "agent"):
+    """AF1: the sandbox profile of a distributed home, compiled from the policy in force and the action floor's
+    together, so the sandbox never blocks what the floor allows (`profile.join`). A floor whose policy cannot be
+    projected onto a profile adds nothing, and the profile is the release's alone."""
+    from prismpath.agent import profile as profiles
+    from prismpath.distribution.pep import read_committed_release
+    release = read_committed_release(str(home), "agent", int(clock()))
+    compiled = profiles.compile_profile(release.bodies["policy.core"], role)
+    image = floor_image(home)
+    if image is None:
+        return compiled
+    try:
+        return profiles.join(compiled, profiles.compile_profile(image, role))
+    except profiles.ProfileError:
+        return compiled
 
 
 SPOOL = "recent.jsonl"
