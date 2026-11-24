@@ -20,6 +20,11 @@ command (F1). `verify` runs the one verifier on a sealed envelope and its body.
 fingerprint, and again with `--confirm` takes that fingerprint (P2), `poll` pulls from a controller,
 `status` prints the PEP's state and `rollback` returns to the release kept before the active one (RB1).
 
+The engineer's commands run where the install keys are (section 21): `anchor` with `--install-pub` writes the
+install part of a `/2` anchor, `install` seals a fallback policy or a ceiling, compared with the set it follows
+(IS12) and held to the ceiling (CL3), and `install-trust` seals an install trust statement against the engineer's
+list of retired key ids (IS11, K4). `seal --ceiling` refuses a release above the ceiling (CL2).
+
 Exit 0 when the command did what it was asked, 1 when it was refused, with the cause on stderr, and 2 for a
 usage error.
 """
@@ -62,6 +67,9 @@ def add_parser(subparsers) -> None:
     seal.add_argument('--meta', default=None, metavar='FILE', help='the meta object, JSON')
     seal.add_argument('--qualification', default=None, metavar='FILE',
                       help='for policy.ppt, fill meta from the image and this qualification envelope')
+    seal.add_argument('--ceiling', default=None, metavar='DIR',
+                      help='the ceiling the stream\'s PEPs hold, as `dist install` wrote it; a release above it is '
+                           'refused before it is sealed (CL2)')
     seal.set_defaults(func=seal_cmd)
 
     widen = commands.add_parser('widen', help='sign the widening statement a release that allows more needs (W4)')
@@ -82,8 +90,59 @@ def add_parser(subparsers) -> None:
                              'anchor that names it as the first controller key (K6, P4)')
     anchor.add_argument('--fresh', type=int, default=0, metavar='SECONDS',
                         help='with --controller, the longest lifetime of a fresh statement; 0 leaves freshness off (H16)')
+    anchor.add_argument('--install-pub', action='append', default=[], metavar='FILE',
+                        help='an install public key, 32 raw bytes, repeatable; writes the anchor\'s install part (P4)')
+    anchor.add_argument('--install-threshold', type=int, default=1, help='the install threshold (IS2)')
+    anchor.add_argument('--operator-pub', action='append', default=[], metavar='FILE',
+                        help='an operator public key, 32 raw bytes, repeatable (OP1)')
+    anchor.add_argument('--install-seq', type=int, default=0, help='the install trust sequence the keys stand at')
+    anchor.add_argument('--domain', default=None, metavar='SHA256',
+                        help='the hash of the reading domain the PEP was built with (P4, CL4); default the one this '
+                             'build gives the target kind')
     anchor.add_argument('--out', required=True, metavar='FILE')
     anchor.set_defaults(func=anchor_cmd)
+
+    inst = commands.add_parser('install', help='seal an install set: a fallback policy or a ceiling (section 21)')
+    inst.add_argument('--kind', required=True, choices=('fallback', 'ceiling'),
+                      help='the install kind; this version builds the fallback policy and the ceiling')
+    inst.add_argument('--set', dest='bodies', action='append', default=[], metavar='AS=FILE',
+                      help='an artifact of the set and its body, repeatable, such as policy.ppt=table.ppt')
+    inst.add_argument('--list', dest='tables', action='append', default=[], metavar='FILE',
+                      help='for a ceiling of a kind that cannot decide, a table the list holds, repeatable (CL1)')
+    inst.add_argument('--empty', action='store_true', help='the empty set, which withdraws the held one (IS6)')
+    inst.add_argument('--stream', required=True)
+    inst.add_argument('--seq', type=int, required=True, help='the install sequence of this kind on the stream')
+    inst.add_argument('--target', required=True, help='the one target kind of the set (IS1)')
+    inst.add_argument('--key', action='append', required=True, metavar='PEM', help='an install private key')
+    inst.add_argument('--not-before', type=int, default=None, help='Unix seconds (default now)')
+    inst.add_argument('--qualification', default=None, metavar='FILE',
+                      help='for a policy.ppt, fill its meta from the image and this qualification envelope')
+    inst.add_argument('--follows', default=None, metavar='DIR',
+                      help='the set this one follows, as this command wrote it; sets replaces and is compared (IS12)')
+    inst.add_argument('--ceiling', default=None, metavar='DIR', help='the held ceiling, as this command wrote it (CL3)')
+    inst.add_argument('--widens', action='store_true', help='say the set allows more than the one it follows')
+    inst.add_argument('--out', required=True, metavar='DIR', help='where each <as>.sealed and <as>.body is written')
+    inst.set_defaults(func=install_cmd)
+
+    itrust = commands.add_parser('install-trust', help='seal an install trust statement (IS11)')
+    itrust.add_argument('--current-pub', action='append', required=True, metavar='FILE',
+                        help='an install public key as the PEP holds it now, repeatable')
+    itrust.add_argument('--current-threshold', type=int, required=True)
+    itrust.add_argument('--current-operator', action='append', default=[], metavar='FILE')
+    itrust.add_argument('--install-pub', action='append', required=True, metavar='FILE', help='a key of the new set')
+    itrust.add_argument('--operator-pub', action='append', default=[], metavar='FILE')
+    itrust.add_argument('--threshold', type=int, required=True)
+    itrust.add_argument('--retired', required=True, metavar='FILE',
+                        help='the engineer\'s list of every retired key id, one per line, kept here and appended to '
+                             '(K4): a key once retired is never added again')
+    itrust.add_argument('--stream', required=True)
+    itrust.add_argument('--seq', type=int, required=True, help='the install trust sequence, the held one plus one')
+    itrust.add_argument('--target', required=True)
+    itrust.add_argument('--key', action='append', required=True, metavar='PEM',
+                        help='a signer: the current install keys at the threshold and every key the statement adds')
+    itrust.add_argument('--not-before', type=int, default=None, help='Unix seconds (default now)')
+    itrust.add_argument('--out', required=True, metavar='FILE', help='the sealed statement; the body goes beside it')
+    itrust.set_defaults(func=install_trust_cmd)
 
     verify = commands.add_parser('verify', help='run the verifier on a sealed envelope and its body')
     verify.add_argument('--sealed', required=True, metavar='FILE')
@@ -329,6 +388,11 @@ def seal_cmd(args) -> int:
     meta = _json(args.meta)
     if meta is None and args.artifact == "policy.ppt" and args.qualification:
         meta = policy_meta(body, _json(args.qualification))
+    if args.ceiling:
+        from prismpath.distribution import install
+        held = read_set_dir(args.ceiling)
+        if not install.inside(args.target[0], held, {args.artifact: body}, whole=False):
+            return _fail(install.ABOVE_CEILING, "the release is above the ceiling (CL2)")
     replaces, previous = replaced(args.held, args.artifact, args.stream, args.seq, args.replaces)
     # W7: `widens` is false only when the release is compared with the one it replaces and is not larger, so
     # a release that replaces nothing, or one the directory holds nothing for, widens
@@ -506,18 +570,146 @@ def rekey_cmd(args) -> int:
     return 0
 
 
+def default_domain(target: str) -> str:
+    """P4: the domain hash this build gives a PEP of `target` built with its defaults (`install.domain_sha256`). A
+    `host` PEP's domain is its qualification envelope's fields, so name it with --domain there."""
+    from prismpath.distribution import install
+    from prismpath.distribution.adapters import Adapter
+    if target == "host":
+        raise Refused(kinds.BAD_FORMAT, "a host PEP's domain is its qualification envelope's fields; name --domain")
+    probe = Adapter()
+    probe.kind = target
+    if target == "cfs":
+        from integrations.cfs import dist_kind
+        probe.layout = dist_kind.built_layout()
+    return install.domain_sha256(probe)
+
+
 def anchor_cmd(args) -> int:
     from prismpath.distribution.trust import anchor_bytes, read_anchor
     try:
         if args.fresh and not args.controller:
             return _fail("dist:bad-format", "freshness needs a controller key to sign it (--controller)")
+        part = None
+        if args.install_pub:
+            from prismpath.distribution import install
+            if not args.controller:
+                return _fail("dist:bad-format", "an install part is on a prismpath.dist-trust/2 anchor (--controller)")
+            domain = args.domain or default_domain(args.target)
+            part = install.anchor_part([_read(path) for path in args.install_pub], threshold=args.install_threshold,
+                                       operators=[_read(path) for path in args.operator_pub], seq=args.install_seq,
+                                       domain=domain)
         raw = anchor_bytes([_read(path) for path in args.pub], target=args.target, stream=args.stream,
-                           controller=_read(args.controller) if args.controller else None, fresh=args.fresh)
+                           controller=_read(args.controller) if args.controller else None, fresh=args.fresh,
+                           install=part)
     except Refused as refused:
         return _fail(refused.cause, str(refused))
     _write(args.out, raw)
     _print({"anchor": args.out, "fingerprint": read_anchor(raw).fingerprint, "target": args.target,
             "stream": args.stream})
+    return 0
+
+
+def read_set_dir(directory: str):
+    """The install set `dist install` wrote to `directory`, as a held set, each statement checked against its body."""
+    from prismpath.distribution import install
+    statements, envelopes, bodies = {}, {}, {}
+    for name in sorted(os.listdir(directory)):
+        if not name.endswith(".sealed"):
+            continue
+        sealed = _read(os.path.join(directory, name))
+        body = _read(os.path.join(directory, name[:-len(".sealed")] + ".body"))
+        envelope = env.read(env.unseal(sealed)[0])
+        if envelope.body_sha256 != canon.sha256_hex(body) or envelope.artifact not in install.SET_KINDS:
+            raise Refused("dist:body-mismatch", f"{name} is not an install statement with its body")
+        named = envelope.meta["as"]
+        statements[named] = (envelope.envelope_id, canon.sha256_hex(sealed), envelope.body_sha256)
+        envelopes[named], bodies[named] = envelope, body
+    if not envelopes:
+        raise Refused(kinds.BAD_FORMAT, f"{directory} holds no install set")
+    first = next(iter(envelopes.values()))
+    return install.HeldSet(first.artifact, first.seq, env.set_id(one[0] for one in statements.values()),
+                           first.policy_sha256, first.release, first.replaces, first.widens, statements, envelopes,
+                           bodies)
+
+
+def install_cmd(args) -> int:
+    """The sealing tool's install set (section 21). It compares the set with the one it follows and refuses one it
+    computes as larger whose `widens` is false, on a `cfs` table by the core image inside it (IS12, H13), and holds
+    a fallback policy to the held ceiling (CL3)."""
+    from prismpath.distribution import install, widening
+    kind = {"fallback": install.FALLBACK, "ceiling": install.CEILING}[args.kind]
+    try:
+        if args.empty:
+            bodies = {kinds.NONE: b""}
+        elif args.tables:
+            bodies = {kinds.POLICY_LIST: install.ceiling_body(_read(path) for path in args.tables)}
+        else:
+            bodies = {}
+            for item in args.bodies:
+                named, _, path = item.partition("=")
+                bodies[named] = _read(path)
+        if not bodies:
+            return _fail(kinds.BAD_FORMAT, "a set holds at least one artifact (--set, --list or --empty)")
+        follows = read_set_dir(args.follows) if args.follows else None
+        ceiling = read_set_dir(args.ceiling) if args.ceiling else None
+        real = {name: body for name, body in bodies.items() if name != kinds.NONE}
+        if kind == install.FALLBACK and real and not install.inside(args.target, ceiling, real):
+            return _fail(install.ABOVE_CEILING, "the set is above the held ceiling (CL3)")
+        larger = install.set_larger(args.target, kind, follows, bodies)
+        if larger is None:                          # H13: a cfs table, by the core image inside it
+            larger = widening.compare_release(dict(follows.bodies), real) != widening.NOT_LARGER
+        if larger and not args.widens:
+            return _fail(install.UNSIGNED, "the set allows more than the one it follows; seal it with --widens")
+        metas = {}
+        if "policy.ppt" in bodies and args.qualification:
+            metas["policy.ppt"] = policy_meta(bodies["policy.ppt"], _json(args.qualification))
+        pairs = install.seal_set(kind, bodies, stream=args.stream, seq=args.seq, target=args.target,
+                                 signers=_authority(args.key), replaces=follows.policy_sha256 if follows and not follows.empty else "",
+                                 widens=bool(args.widens), metas=metas,
+                                 not_before=args.not_before or int(time.time()))
+    except Refused as refused:
+        return _fail(refused.cause, str(refused))
+    os.makedirs(args.out, exist_ok=True)
+    out = []
+    for sealed, body in pairs:
+        named = env.read(env.unseal(sealed)[0]).meta["as"]
+        _write(os.path.join(args.out, f"{named}.sealed"), sealed)
+        _write(os.path.join(args.out, f"{named}.body"), body)
+        out.append({"as": named, "envelope_id": env.envelope_id(env.unseal(sealed)[0])})
+    _print({"set": args.out, "kind": kind, "seq": args.seq, "statements": out, "widens": bool(args.widens)})
+    return 0
+
+
+def install_trust_cmd(args) -> int:
+    """IS11, K4: the sealing tool's install trust statement. It keeps every retired id in `--retired`, so a key the
+    PEP has forgotten is still never added again, and refuses a statement that needs more than four signatures."""
+    from prismpath.distribution import install
+    try:
+        current = [_read(path) for path in args.current_pub]
+        operators = [_read(path) for path in args.current_operator]
+        retired = []
+        if os.path.exists(args.retired):
+            retired = [line.strip() for line in _read(args.retired).decode("ascii").splitlines() if line.strip()]
+        record = install.Record(keys={env.key_id(one): one for one in current}, threshold=args.current_threshold,
+                                operators={env.key_id(one): one for one in operators})
+        body = install.trust_body([_read(path) for path in args.install_pub], threshold=args.threshold,
+                                  operators=[_read(path) for path in args.operator_pub])
+        sealed = install.seal_trust(record, body, stream=args.stream, seq=args.seq, targets=[args.target],
+                                    signers=_authority(args.key), not_before=args.not_before or int(time.time()),
+                                    retired=retired)
+    except Refused as refused:
+        return _fail(refused.cause, str(refused))
+    doc = kinds.read_install_trust(body)
+    kept = {env.key_id(bytes.fromhex(one)) for one in doc["keys"] + doc["operators"]}
+    dropped = sorted((set(record.keys) | set(record.operators)) - kept)
+    _write(args.retired, "".join(line + "\n" for line in retired + [one for one in dropped if one not in retired])
+           .encode("ascii"))
+    _write(args.out, sealed)
+    body_path = os.path.splitext(args.out)[0] + ".body"
+    _write(body_path, body)
+    _print({"sealed": args.out, "body": body_path, "seq": args.seq, "retired": dropped,
+            "envelope_id": env.envelope_id(env.unseal(sealed)[0])})
     return 0
 
 

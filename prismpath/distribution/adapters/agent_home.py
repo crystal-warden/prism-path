@@ -91,6 +91,13 @@ class AgentHomeAdapter(Adapter):
             raise SessionsRunning(f"{len(left)} sandboxed session(s) have not ended: {left}")
 
 
+    def withdraw_to(self, fallback, cause: str) -> None:
+        """FB1: every sandboxed session of the release that fell ends, as at a lapse, and every reader of the home then
+        finds the fallback set (`pep.read_committed_release`)."""
+        self.deactivate(cause)
+        self.running = fallback.policy_sha256
+
+
 class SessionsRunning(RuntimeError):
     """A sandboxed session of a release that fell is still running, so the withdrawal has not worked (C10)."""
 
