@@ -11,10 +11,8 @@ components:
     files:
       - source: policy.ppt
         target: deployed/policy.ppt
-      - source: policy.ppt.manifest.json
-        target: deployed/policy.ppt.manifest.json
-      - source: policy.ppt.manifest.sig
-        target: deployed/policy.ppt.manifest.sig
+      - source: policy.ppt.sealed
+        target: deployed/policy.ppt.sealed
       - source: authority.pub
         target: deployed/authority.pub
       - source: env1.envelope.json

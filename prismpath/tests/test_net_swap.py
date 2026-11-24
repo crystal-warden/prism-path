@@ -123,7 +123,8 @@ def test_a_dry_run_runs_every_gate_and_never_reaches_the_loader_or_moves_the_flo
     assert not (Path(env["state"]) / "active_version").exists()
     assert _swap(env, loader, dry_run=True)["ok"]                        # the floor did not move, so it repeats
     audit = ns.AuditLog(str(Path(env["state"]) / "net_swaps.log"))
-    assert [event["action"] for event in audit.events] == ["swap_dry_run", "swap_dry_run"]
+    # the edge's pack is the older form, read with a legacy_form event each time (L3)
+    assert [event["action"] for event in audit.events] == ["legacy_form", "swap_dry_run"] * 2
     raw = bytearray(Path(env["ppt"]).read_bytes()); raw[-1] ^= 1
     Path(env["ppt"]).write_bytes(bytes(raw))
     refused = _swap(env, loader, dry_run=True)                           # a gate that refuses still refuses a dry run

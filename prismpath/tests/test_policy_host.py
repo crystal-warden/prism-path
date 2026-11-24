@@ -44,11 +44,13 @@ def env(tmp_path):
     return {"keys": keys, "envelope": envelope, "tmp": tmp_path}
 
 
-def _pack(env, name, version, hot=100, envelope_id="env1", fields=FIELDS):
+def _pack(env, name, version, hot=100, envelope_id="env1", fields=FIELDS, older=False):
+    """A pack as `swap pack` writes it, a sealed `policy.ppt` envelope, or with `older` the older `ppt-pack/1`
+    manifest a host still reads through the 0.3 series (L3)."""
     ppt = env["tmp"] / f"{name}.ppt"
     ppt.write_bytes(pc.compile_flow(parse(_flow(hot))).serialize())
-    pp.build_pack(str(ppt), fields, version=version, envelope_id=envelope_id,
-                  priv_path=env["keys"]["private"], pub_path=env["keys"]["public"])
+    (pp.build_pack if older else pp.seal_pack)(str(ppt), fields, version=version, envelope_id=envelope_id,
+                                               priv_path=env["keys"]["private"], pub_path=env["keys"]["public"])
     return str(ppt)
 
 
@@ -93,8 +95,8 @@ def test_out_of_envelope_swap_rejected_active_unchanged(env):
     ppt.write_bytes(pc.compile_flow(parse(
         "# f\n## start\n-> hot: when humidity >= 5\n-> cold: else\n## hot\n-> end\n## cold\n-> end\n## end\n"
     )).serialize())
-    pp.build_pack(str(ppt), {"humidity": "int"}, version=2, envelope_id="env1",
-                  priv_path=env["keys"]["private"], pub_path=env["keys"]["public"])
+    pp.seal_pack(str(ppt), {"humidity": "int"}, version=2, envelope_id="env1",
+                 priv_path=env["keys"]["private"], pub_path=env["keys"]["public"])
     swap_result = host.swap(str(ppt))
     assert not swap_result["ok"] and any("unknown-field" in reason for reason in swap_result["reasons"])
     assert host.active() == before                        # untouched
@@ -488,7 +490,7 @@ def test_a_pack_whose_manifest_holds_a_non_finite_number_is_an_audited_bad_forma
     `CanonicalReadError`, so the swap audits a rejection and the Rust host does the same."""
     host = _host(env)
     host.swap(_pack(env, "v1", 1))
-    path = _pack(env, "v2", 2)
+    path = _pack(env, "v2", 2, older=True)
     manifest = Path(path + ".manifest.json")
     original = manifest.read_text()
     for number in ("NaN", "1e400", "-Infinity"):

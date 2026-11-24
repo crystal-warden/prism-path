@@ -154,7 +154,9 @@ def test_an_instance_key_that_does_not_match_fails(setup):
 
 def test_an_edited_attestation_fails(setup):
     path = setup["agent"] / commands.ATTESTATION_FILE
-    path.write_bytes(path.read_bytes().replace(b'"sig":"', b'"sig":"00', 1))
+    sealed = bytearray(path.read_bytes())
+    sealed[6 + 32] ^= 1                             # one bit of the first signature in the sealed envelope
+    path.write_bytes(bytes(sealed))
     rows = _by(_report(setup))
     row = rows["policy"]
     assert row["status"] == "fail" and "attestation" in row["detail"] and row["fix"] == "prismpath agent init"
@@ -164,7 +166,10 @@ def test_an_edited_attestation_fails(setup):
 def test_an_older_shipped_image_warns_and_names_it(setup):
     # record an attested policy that is not the shipped one, with the older image's hash as its name
     from prismpath.agent import doctor as d
-    image = (setup["agent"] / commands.POLICY_FILE).read_bytes() + b"\n"
+    from prismpath.kernel import canon2
+    doc = canon2.loads((setup["agent"] / commands.POLICY_FILE).read_bytes())
+    doc["rules"].append(doc["rules"][0])            # the first rule again, last: it decides nothing new
+    image = canon2.dumps(doc)
     (setup["agent"] / commands.POLICY_FILE).write_bytes(image)
     (setup["agent"] / commands.ATTESTATION_FILE).write_bytes(commands._attestation(setup["agent"], image))
     row = _only_problem(_report(setup), "policy", "warn")

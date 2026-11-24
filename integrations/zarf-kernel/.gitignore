@@ -5,6 +5,7 @@ policy.ppt
 policy.tampered.ppt
 *.manifest.json
 *.manifest.sig
+*.sealed
 *.envelope.json
 *.envelope.sig
 *.cdx.json

@@ -645,12 +645,13 @@ def pack_report(ppt_path: Any, pins: Optional[Iterable[Any]] = None,
     real, root = _confine(ppt_path, roots)
     _read_bounded(real, SETTINGS.max_evidence_bytes, "the policy image")
     sides = (real + ".manifest.json", real + ".manifest.sig")
-    for side in sides:
+    sealed = real + policy_pack.SEALED              # the pack as a sealed envelope (L1), read first
+    for side in (*sides, sealed):
         if os.path.lexists(side):
             confined, _root = _confine(side, roots)
             _read_bounded(confined, SETTINGS.max_file_bytes, "the pack manifest")
     pin_paths = [_pin_file(path, roots, "a pinned authority key") for path in (pins or [])]
-    present = all(os.path.lexists(side) for side in sides)
+    present = os.path.lexists(sealed) or all(os.path.lexists(side) for side in sides)
     if not pin_paths:
         ok, found, manifest = None, ([] if present else ["sig:missing"]), None
         status = "unchecked" if present else "unsigned"
