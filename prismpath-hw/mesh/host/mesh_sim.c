@@ -226,8 +226,8 @@ static void bounds(void) {
     d.install.n_operators = PP_OPERATOR_KEYS;
     d.install.n_retired = PP_INSTALL_RETIRED;
     d.has_kept = 1;
-    for (int k = 0; k < PP_SETS; k++) { /* a set held and one staged, each at the bounds of a statement */
-        d.sets[k].has_held = d.sets[k].has_staged = 1;
+    for (int k = 0; k < PP_SETS; k++) { /* a set held, one staged and its change statement (IS15), at the bounds */
+        d.sets[k].has_held = d.sets[k].has_staged = d.sets[k].has_change = 1;
         d.sets[k].held.sealed_len = d.sets[k].staged.sealed_len = PP_MAX_SEALED;
         d.sets[k].held.body_len = d.sets[k].staged.body_len = PP_INSTALL_BODY_MAX;
     }

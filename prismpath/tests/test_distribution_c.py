@@ -894,8 +894,11 @@ def test_case_137_138_every_commit_case_of_the_corpus_answers_on_the_c_core_as_r
     """case_137, case_138: C2, E10. Each commit case of the corpus on a mesh node: a table whose signed release id
     also names a `policy.spiral` the transport withheld is dist:incomplete at commit, on a first install with
     nothing active after and on an update with the old release still active, and the same update without the
-    spiral in its id commits. The C core answers as the Python machine and as the corpus records."""
-    assert {entry["case"] for entry in COMMITS} == {137, 138} and all(e["kind"] == "mesh" for e in COMMITS)
+    spiral in its id commits. case_294, case_295: W10, W11. A table carried by a change statement from the active
+    hash commits and the same table alone does not, and a change statement that says it widens, sits on a first
+    install, names another hash or follows a widening statement of its release is refused. The C core answers as
+    the Python machine and as the corpus records."""
+    assert {entry["case"] for entry in COMMITS} == {137, 138, 294, 295} and all(e["kind"] == "mesh" for e in COMMITS)
     for entry in COMMITS:
         script = [("provision", S, entry["now"])]
         for step in entry["steps"]:
@@ -1701,8 +1704,8 @@ def test_case_204_205_everything_the_pep_decides_under_is_inside_its_ceiling(hos
     """case_204: CL2, C3, RB2. A staged release, and a kept one, outlive a narrower ceiling they are above and are
     refused with dist:above-ceiling at the commit and at the rollback and dropped. case_205: CL3, IS12, the C half. A
     floor, a fallback policy and a ceiling the held floor is above are dist:above-ceiling with nothing changed; a
-    ceiling the active release is above, with widens false, is applied as install-widened and the release lapses
-    with dist:above-ceiling, to the fallback policy and to no-policy."""
+    ceiling the active release is above, with widens false, narrows, so it is applied as install-applied and the
+    release lapses with dist:above-ceiling, to the fallback policy and to no-policy."""
     wide = _ceiling(RELEASE, BODIES[1], BODIES[2])
     def ceiling(seq, *bodies, widens=False, replaces=canon.sha256_hex(wide)):
         return _install("install.ceiling", _ceiling(*bodies), seq=seq, widens=widens, replaces=replaces)
@@ -1736,7 +1739,7 @@ def test_case_204_205_everything_the_pep_decides_under_is_inside_its_ceiling(hos
             _stage(_install("install.ceiling", _ceiling(FALLBACK), seq=2, replaces=canon.sha256_hex(everything)))])
         records = _recs(out[4])
         assert [(one["event"], one["cause"]) for one in records] == [
-            ("staged", None), ("install-widened", "dist:install-widened"), (after[0], "dist:above-ceiling")]
+            ("staged", None), ("install-applied", None), (after[0], "dist:above-ceiling")]
         assert records[-1]["fallback"] is after[1] and records[-1]["active_seq"] == 0
 
 
@@ -1997,6 +2000,98 @@ def test_the_signed_rate_counts_overrides_durably_on_a_mesh_node(host_check):
     assert asked[0]["window"] == asked[2]["window"] == N and asked[-1]["window"] == N + 61
     assert [one["override"] for one in asked if one["basis"] == "floor"] == [True, True, True, False, False, True]
     assert (_last(out[-1])["answers"], _last(out[-1])["overrides"]) == (6, 4)
+
+
+# ------------------------------------------------------------------ IS14, IS15: the install change statement
+
+def _change(kind: str, carried: bytes, seq: int, source: str, *, replaces=None, widens=False, policy=None,
+            signers=("J", "K"), targets=("mesh",), not_before=NB):
+    """An install change statement for the set of `kind` whose table is `carried` at `seq`, from `source`."""
+    statement = canon.canon2_bytes({"basis": "prismpath.table-compare/1", "encoding": "canon/2",
+                                    "format": "prismpath.dist-install-change/1", "from": source, "set": kind})
+    return _install("install.change", statement, seq=seq, meta={}, widens=widens,
+                    replaces=source if replaces is None else replaces,
+                    policy=canon.sha256_hex(carried) if policy is None else policy,
+                    release=_release_id("policy.ppt", carried), signers=signers, targets=targets, not_before=not_before)
+
+
+NARROW_FLOOR = _floor_table(low=12, high=18)            # allows less than FLOOR: the parameter in [12, 18]
+
+
+def test_case_296_an_install_change_statement_out_of_its_form_is_refused(host_check):
+    """case_296: IS14, IS2, V5, IS4, the mesh half. A change statement that says it widens, replaces nothing, names
+    another hash than its replaces, carries a ceiling or the empty set is dist:bad-format, one signed by authority keys
+    is dist:unknown-key, a second one for a set that has one staged is dist:incomplete, and a node whose install
+    threshold is 1 takes none in a message. Nothing is staged."""
+    held = canon.sha256_hex(FLOOR)
+    good = _change("install.floor", NARROW_FLOOR, 2, held)
+    out = _run21(host_check, [
+        *_node(), *_anchor(), f"provision {S} {N}", _stage(_install("install.floor", FLOOR)), "installid",
+        _stage(_change("install.floor", NARROW_FLOOR, 2, held, widens=True)),
+        _stage(_change("install.floor", NARROW_FLOOR, 2, held, replaces="")),
+        _stage(_change("install.floor", NARROW_FLOOR, 2, held, replaces=canon.sha256_hex(FALLBACK))),
+        _stage(_change("install.ceiling", NARROW_FLOOR, 2, held)),
+        _stage(_change("install.floor", NARROW_FLOOR, 2, held, policy=ZERO)),
+        _stage(_change("install.floor", NARROW_FLOOR, 2, held, signers=("A",))), "installid",
+        _stage(good)])
+    assert [_refused(line)[0] for line in out[3:9]] == ["dist:bad-format"] * 5 + ["dist:unknown-key"]
+    assert out[9] == out[2]
+    assert (_last(out[10])["event"], _last(out[10])["subject"]) == ("staged", 1)
+    out = _run21(host_check, [
+        *_node(), *_anchor(("J", "K", "L")), f"provision {S} {N}", _stage(_install("install.floor", FLOOR)),
+        _stage(good), _stage(_change("install.floor", NARROW_FLOOR, 2, held, not_before=NB + 1))])
+    assert _refused(out[3]) == ("dist:incomplete", 1)
+    out = _run21(host_check, [*_node(), *_anchor(threshold=1, bring=[_install("install.floor", FLOOR)]),
+                              f"provision {S} {N}", _stage(_change("install.floor", NARROW_FLOOR, 2, held))])
+    assert _refused(out[1]) == ("dist:target-mismatch", 1)
+
+
+def test_case_297_299_a_narrower_floor_or_fallback_carried_by_a_change_statement_is_applied(host_check):
+    """case_297: IS15, IS12, the mesh half. With a change statement from the held set's policy hash, a floor table
+    and a fallback table that allow less with widens false are applied as install-applied with no cause, and a
+    narrower floor with no change statement is dist:widening-unsigned with the floor before it still held. case_299:
+    IS15, IS4. The change statement staged survives a restart, and the floor it carries is then applied."""
+    floor, fallback = _install("install.floor", FLOOR), _install("install.fallback", FALLBACK)
+    narrow = _install("install.floor", NARROW_FLOOR, seq=2, widens=False, replaces=canon.sha256_hex(FLOOR))
+    narrow_fallback = _install("install.fallback", FALLBACK_B, seq=2, widens=False,
+                               replaces=canon.sha256_hex(FALLBACK))
+    out = _run21(host_check, [
+        *_node(), *_anchor(), f"provision {S} {N}", _stage(floor), _stage(fallback),
+        _stage(_change("install.floor", NARROW_FLOOR, 2, canon.sha256_hex(FLOOR))), _stage(narrow),
+        _stage(_change("install.fallback", FALLBACK_B, 2, canon.sha256_hex(FALLBACK))), _stage(narrow_fallback),
+        "installid",
+        _stage(_install("install.floor", _floor_table(low=13, high=17), seq=3, widens=False,
+                        replaces=canon.sha256_hex(NARROW_FLOOR))), "installid"])
+    assert [(_last(line)["event"], _last(line)["cause"], _last(line)["subject"]) for line in out[3:7]] == [
+        ("staged", None, 1), ("install-applied", None, 1), ("staged", None, 2), ("install-applied", None, 2)]
+    assert out[7] == f"installid {_install_id(floor=(narrow[0], 2), fallback=(narrow_fallback[0], 2))}"
+    assert _refused(out[8]) == ("dist:widening-unsigned", 1) and out[9] == out[7]
+    out = _run21(host_check, [
+        *_node(), *_anchor(), f"provision {S} {N}", _stage(floor),
+        _stage(_change("install.floor", NARROW_FLOOR, 2, canon.sha256_hex(FLOOR))), "restart", _stage(narrow)])
+    assert (_last(out[-1])["event"], _last(out[-1])["cause"]) == ("install-applied", None)
+
+
+def test_case_298_a_change_statement_stands_only_for_a_set_it_can_carry(host_check):
+    """case_298: IS15, AF8, V10, the mesh half. A change statement on a node with no floor, and one from another hash,
+    are dist:widening-unsigned with nothing staged. Beside a change statement a floor with a looser rate is
+    dist:widening-unsigned, and a set that says it widens is dist:incomplete."""
+    held = canon.sha256_hex(FLOOR)
+    other = canon.sha256_hex(FALLBACK)
+    out = _run21(host_check, [
+        *_node(), *_anchor(), f"provision {S} {N}", _stage(_change("install.floor", NARROW_FLOOR, 2, held)),
+        _stage(_install("install.floor", FLOOR)), _stage(_change("install.floor", NARROW_FLOOR, 2, other))])
+    assert _refused(out[1]) == ("dist:widening-unsigned", 1) and _refused(out[3]) == ("dist:widening-unsigned", 1)
+    rate = lambda allows: {"as": "policy.ppt", "command": 0, "layout": LAYOUT,  # noqa: E731
+                           "rate": {"allows": allows, "window": 60}}
+    out = _run21(host_check, [
+        *_node(), *_anchor(), f"provision {S} {N}", _stage(_install("install.floor", FLOOR, meta=rate(3))),
+        _stage(_change("install.floor", NARROW_FLOOR, 2, held)),
+        _stage(_install("install.floor", NARROW_FLOOR, seq=2, meta=rate(5), widens=False, replaces=held)),
+        _stage(_change("install.floor", NARROW_FLOOR, 3, held)),
+        _stage(_install("install.floor", NARROW_FLOOR, seq=3, meta=rate(3), widens=True, replaces=held))])
+    assert _last(out[2])["event"] == "staged" and _refused(out[3]) == ("dist:widening-unsigned", 1)
+    assert _last(out[4])["event"] == "staged" and _refused(out[5]) == ("dist:incomplete", 1)
 
 
 # ------------------------------------------------------------------ the controller key and statement (K6, K7, H9, H15, H16)

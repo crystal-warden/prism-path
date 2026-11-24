@@ -39,8 +39,8 @@ use super::envelope::{self as env, Entry, Envelope};
 use super::pep::HeldDoc;
 use super::trust::TrustStore;
 use super::{
-    load, require, ArtifactKind, Canon2Tag, CeilingFormat, Hex64, InstallTrustFormat, MarksFormat, MaybeHex64, Meta, RecordFormat, Refused, SortedSet, StagedSetsFormat,
-    Verdict, BAD_FORMAT, MAX_SEQ, ROTATION_INVALID, SIG_INVALID, SIG_REVOKED_KEY, TOO_LARGE, UNKNOWN_KEY, WIDENING_UNSIGNED,
+    load, require, ArtifactKind, Canon2Tag, CeilingFormat, ChangeBasis, Hex64, InstallChangeFormat, InstallTrustFormat, MarksFormat, MaybeHex64, Meta, PepView,
+    RecordFormat, Refused, SortedSet, StagedSetsFormat, Verdict, BAD_FORMAT, MAX_SEQ, ROTATION_INVALID, SIG_INVALID, SIG_REVOKED_KEY, TOO_LARGE, UNKNOWN_KEY, WIDENING_UNSIGNED,
 };
 use crate::host::{atomic_write_bytes, HostError};
 use prismpath_rs::canon2::{codec, Doc};
@@ -264,6 +264,10 @@ pub fn check_envelope(envelope: &Envelope) -> Result<(), Refused> {
                 && matches!(envelope.form(), Meta::None),
             "an install trust statement's stream, policy hash, release, replaces and meta (IS11)",
         ),
+        ArtifactKind::InstallChange => require(
+            !on_trust && envelope.targets.len() == 1 && matches!(envelope.form(), Meta::None),
+            "an install change statement's stream, target and meta (IS14)",
+        ),
         _ => {
             require(!on_trust && envelope.targets.len() == 1, "an install set names exactly one kind and the PEP's stream")?;
             let meta = install_meta(envelope).ok_or_else(|| Refused::new(BAD_FORMAT, "an install statement names its artifact in as"))?;
@@ -284,7 +288,51 @@ pub fn check_envelope(envelope: &Envelope) -> Result<(), Refused> {
     }
 }
 
-// ------------------------------------------------------------------ the bodies (IS11, CL1)
+// ------------------------------------------------------------------ the bodies (IS11, IS14, CL1)
+
+/// IS14: an install change statement's body.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct InstallChangeDoc {
+    basis: ChangeBasis,
+    encoding: Canon2Tag,
+    format: InstallChangeFormat,
+    from: Hex64,
+    set: String,
+}
+
+/// IS14: the set kind an install change statement carries, an action floor or a fallback policy, and the policy hash
+/// `from` of the set it replaces, resting on the table comparator. A ceiling's is `dist:bad-format`, since a `host`
+/// PEP compares two policy lists itself.
+pub fn read_install_change(body: &[u8]) -> Result<(SetKind, Hex64), Refused> {
+    let doc: InstallChangeDoc = load(body, "install change body")?;
+    match doc.set.as_str() {
+        "install.floor" => Ok((SetKind::Floor, doc.from)),
+        "install.fallback" => Ok((SetKind::Fallback, doc.from)),
+        _ => Err(Refused::new(BAD_FORMAT, "an install change statement carries an action floor or a fallback policy (IS14)")),
+    }
+}
+
+/// `install.change` (V11, IS14): the body reads, its `from` is the envelope's `replaces`, the envelope does not widen,
+/// and its policy hash is a set's and not the empty set's 64 zeros. Anything else is `dist:bad-format`.
+pub fn check_install_change(envelope: &Envelope, body: &[u8], _pep: &PepView) -> Option<String> {
+    match read_install_change(body) {
+        Err(refused) => Some(refused.cause.to_string()),
+        Ok((_, from))
+            if envelope.widens || envelope.replaces.0.as_ref() != Some(&from) || envelope.policy_sha256 == Hex64::zero() =>
+        {
+            Some(BAD_FORMAT.to_string())
+        }
+        Ok(_) => None,
+    }
+}
+
+/// IS15: an install change statement stands for a set of `kind` on a PEP whose held set of that kind has the policy
+/// hash `held`. A PEP that holds no set of the kind has none, so none stands for a first set.
+pub fn changes_set(change: Option<&[u8]>, kind: SetKind, held: Option<&Hex64>) -> bool {
+    let (Some(change), Some(held)) = (change, held) else { return false };
+    read_install_change(change).is_ok_and(|(set, from)| set == kind && from == *held)
+}
 
 /// IS11: an install trust statement's body.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -361,15 +409,20 @@ pub struct SetDoc {
     pub seq: i64,
     pub statements: BTreeMap<AsName, HeldDoc>,
     pub widens: bool,
+    /// IS15: the install change statement staged before the set, on a staged set only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub change: Option<HeldDoc>,
 }
 
-/// One install set as the PEP holds it, held or staged, with its envelopes and bodies read from the blobs.
+/// One install set as the PEP holds it, held or staged, with its envelopes and bodies read from the blobs, and the
+/// body of the install change statement staged before it (IS15).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InstallSet {
     pub kind: SetKind,
     pub doc: SetDoc,
     pub envelopes: BTreeMap<AsName, Envelope>,
     pub bodies: BTreeMap<AsName, Vec<u8>>,
+    pub change_body: Option<Vec<u8>>,
 }
 
 impl InstallSet {
@@ -383,9 +436,11 @@ impl InstallSet {
                 seq: envelope.seq,
                 statements: BTreeMap::new(),
                 widens: envelope.widens,
+                change: None,
             },
             envelopes: BTreeMap::new(),
             bodies: BTreeMap::new(),
+            change_body: None,
         }
     }
 
@@ -425,6 +480,12 @@ impl InstallSet {
     /// AF8: the signed rate of an action floor, shared by every statement (V10).
     pub fn rate(&self) -> Option<Rate> {
         self.envelopes.values().next().and_then(install_meta).and_then(|meta| meta.rate)
+    }
+
+    /// AF9, AF10: the `layout` and the `command` register a table floor is read with.
+    fn reading(&self) -> (Option<Hex64>, Option<i64>) {
+        let meta = self.envelopes.values().next().and_then(install_meta);
+        (meta.and_then(|meta| meta.layout.clone()), meta.and_then(|meta| meta.command))
     }
 
     /// IS4: the set is whole when it holds what the `host` kind needs, a `policy.ppt`, and the release id computed
@@ -823,7 +884,11 @@ pub fn looser(old: Option<Rate>, new: Option<Rate>) -> bool {
 /// first fallback policy widen and the empty one does not. A first ceiling does not widen, the empty ceiling does,
 /// and a list that holds a hash the one before did not is larger. A looser `rate` widens. Otherwise a table that
 /// is not byte for byte the held one is larger (W2).
-pub fn set_larger(kind: SetKind, held: Option<&InstallSet>, new: &InstallSet) -> bool {
+///
+/// With `carried`, an install change statement from the held set's policy hash stands for the tables of an action
+/// floor or a fallback policy (IS15): their bytes are not compared, and everything else is, the rate and a floor's
+/// `layout` and `command` included, and the set holds the same artifacts as the held one.
+pub fn set_larger(kind: SetKind, held: Option<&InstallSet>, new: &InstallSet, carried: bool) -> bool {
     let empty = new.is_empty_set();
     if kind == SetKind::Ceiling {
         return match (empty, held) {
@@ -839,15 +904,26 @@ pub fn set_larger(kind: SetKind, held: Option<&InstallSet>, new: &InstallSet) ->
     if kind == SetKind::Floor && looser(held.rate(), new.rate()) {
         return true;
     }
+    if carried {
+        return held.bodies.keys().ne(new.bodies.keys()) || held.reading() != new.reading();
+    }
     held.bodies != new.bodies
 }
 
 /// IS12: (cause, stands out) of a set whose signer said `widens` and `replaces`. A set the PEP computes as larger
 /// whose `widens` is false is `dist:widening-unsigned`, and a `host` PEP, which cannot decide, takes `widens` false
 /// only when `replaces` is the policy hash of the set it holds, empty when it holds none. A set stands out, with
-/// event `install-widened`, when its `widens` is true or it is larger.
+/// event `install-widened`, when its `widens` is true or it is larger. The install change statement staged before
+/// `new`, from the held set's policy hash, stands for its table when `new` says it does not widen and replaces that
+/// hash (IS15), so the set is applied with event `install-applied`.
 pub fn widens_ok(kind: SetKind, held: Option<&InstallSet>, new: &InstallSet) -> (Option<&'static str>, bool) {
-    let larger = set_larger(kind, held, new);
+    let held_policy = held.map(InstallSet::policy_sha256);
+    let carried = kind != SetKind::Ceiling
+        && !new.doc.widens
+        && held_policy.is_some()
+        && new.doc.replaces.0.as_ref() == held_policy
+        && changes_set(new.change_body.as_deref(), kind, held_policy);
+    let larger = set_larger(kind, held, new, carried);
     if new.doc.widens {
         return (None, true);
     }
@@ -1010,11 +1086,14 @@ impl Installed {
     }
 
     fn read_set(&self, kind: SetKind, doc: &SetDoc, both: bool) -> Option<InstallSet> {
-        let mut set = InstallSet { kind, doc: doc.clone(), envelopes: BTreeMap::new(), bodies: BTreeMap::new() };
+        let mut set = InstallSet { kind, doc: doc.clone(), envelopes: BTreeMap::new(), bodies: BTreeMap::new(), change_body: None };
         for (name, held) in &doc.statements {
             let (envelope, body) = self.read_statement(held, both)?;
             set.envelopes.insert(*name, envelope);
             set.bodies.insert(*name, body);
+        }
+        if let Some(change) = &doc.change {
+            set.change_body = Some(self.read_statement(change, both)?.1); // IS15: it survives a restart
         }
         Some(set)
     }
@@ -1058,6 +1137,20 @@ impl Installed {
         self.staged.insert(kind, set);
         self.save_staged()?;
         Ok(&self.staged[&kind])
+    }
+
+    /// IS15: stage a verified install change statement for the set of `kind` it carries, before that set. A set at
+    /// another `seq` staged of the kind is replaced.
+    pub fn stage_change(&mut self, kind: SetKind, envelope: &Envelope, sealed: &[u8], body: &[u8]) -> Result<(), HostError> {
+        let mut set = match self.staged.get(&kind) {
+            Some(staged) if staged.seq() == envelope.seq => staged.clone(),
+            _ => InstallSet::of(kind, envelope),
+        };
+        let (sealed_name, body_name) = self.put(sealed, body, false)?;
+        set.doc.change = Some(HeldDoc { body: body_name, envelope_id: envelope.envelope_id(), sealed: sealed_name });
+        set.change_body = Some(body.to_vec());
+        self.staged.insert(kind, set);
+        self.save_staged()
     }
 
     /// Drop every staged set, as a provisioning does.
@@ -1114,7 +1207,7 @@ impl Installed {
         let held = self.record.iter().flat_map(|record| record.sets.iter().flatten());
         let keep: BTreeSet<Hex64> = held
             .chain(self.staged.values())
-            .flat_map(|set| set.doc.statements.values().flat_map(|one| [one.sealed.clone(), one.body.clone()]))
+            .flat_map(|set| set.doc.statements.values().chain(set.doc.change.as_ref()).flat_map(|one| [one.sealed.clone(), one.body.clone()]))
             .collect();
         for dir in self.blob_dirs() {
             let Ok(entries) = std::fs::read_dir(&dir) else { continue };

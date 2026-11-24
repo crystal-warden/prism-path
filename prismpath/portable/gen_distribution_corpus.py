@@ -313,6 +313,44 @@ def build_commits(spec: Dict[int, dict]) -> List[dict]:
             installed + release(second, 2, replaces=canon.sha256_hex(first), names_spiral=True), "dist:incomplete", 1)
         add(138, "the_same_update_without_the_spiral_in_its_release_id",
             installed + release(second, 2, replaces=canon.sha256_hex(first), names_spiral=False), None, 2)
+
+        def statement_step(artifact, statement, body, seq, *, replaces, widens=False):
+            common = {"targets": [kind], "seq": seq, "release": release_of(body), "replaces": replaces, "widens": widens}
+            doc = {**envelope_doc(body, **common), "artifact": artifact, "body_sha256": canon.sha256_hex(statement),
+                   "body_size": len(statement), "expires": 0, "meta": {}}
+            return {"op": "stage", "sealed": env.seal(canon2.dumps(doc), [test_key("A")]).hex(), "body": statement.hex()}
+
+        def change(source):
+            return canon.canon2_bytes({"basis": "prismpath.table-compare/1", canon.ENCODING_KEY: canon.CANON2,
+                                       "format": "prismpath.dist-change/1", "from": source})
+
+        def table(body, seq, *, replaces, widens=False):
+            common = {"targets": [kind], "seq": seq, "replaces": replaces, "widens": widens}
+            return [{"op": "stage", "sealed": env.seal(canon2.dumps(envelope_doc(body, **common)), [test_key("A")]).hex(),
+                     "body": body.hex()},
+                    {"op": "commit", "seq": seq, "policy_sha256": canon.sha256_hex(body)}]
+
+        held = canon.sha256_hex(first)
+        other = canon.sha256_hex(b"another policy")
+        add(294, "a_table_carried_by_a_change_statement_from_the_active_hash",
+            installed + [statement_step("trust.change", change(held), second, 2, replaces=held)]
+            + table(second, 2, replaces=held), None, 2)
+        add(294, "the_same_table_without_its_change_statement", installed + table(second, 2, replaces=held)[:1],
+            "dist:widening-unsigned", 1)
+        add(295, "a_change_statement_that_says_it_widens",
+            installed + [statement_step("trust.change", change(held), second, 2, replaces=held, widens=True)],
+            "dist:bad-format", 1)
+        add(295, "a_change_statement_on_a_first_install",
+            [statement_step("trust.change", change(other), first, 1, replaces=other)], "dist:widening-unsigned", 0)
+        add(295, "a_change_statement_from_another_hash",
+            installed + [statement_step("trust.change", change(other), second, 2, replaces=other)],
+            "dist:widening-unsigned", 1)
+        widening_from = canon.canon2_bytes({canon.ENCODING_KEY: canon.CANON2, "format": "prismpath.dist-widening/1",
+                                            "from": [held]})
+        add(295, "a_change_statement_beside_a_widening_statement_of_its_release",
+            installed + [statement_step("trust.widening", widening_from, second, 2, replaces=held),
+                         statement_step("trust.change", change(held), second, 2, replaces=held)],
+            "dist:bad-format", 1)
     return out
 
 

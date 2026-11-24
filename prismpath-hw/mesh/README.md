@@ -59,8 +59,8 @@ fails a build whose sdkconfig does not hold it. The firmware owns UART0, whose l
 
 ## The NVS partitions
 
-At the bounds of `pp_dist.h` the durable parts take 69,510 bytes on `nvs` with the instance key's seed, and the
-install parts 28,064 bytes on `nvs_copy`. A part is always written whole, so NVS needs room to write the largest
+At the bounds of `pp_dist.h` the durable parts take 69,930 bytes on `nvs` with the instance key's seed, and the
+install parts 28,484 bytes on `nvs_copy`. A part is always written whole, so NVS needs room to write the largest
 part again before it erases the old one, and it keeps one page free. `nvs` then needs 22 pages of 4 kB with PHY
 calibration and has 32, and `nvs_copy` needs 11 and has 16. The default partition of 24 kB holds neither.
 

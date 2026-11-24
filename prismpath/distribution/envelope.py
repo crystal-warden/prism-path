@@ -168,7 +168,8 @@ def read(envelope_bytes: bytes, *, reads_meta: bool = True) -> Envelope:
         _require(isinstance(doc["meta"], dict) and _depth(doc["meta"]) <= META_DEPTH, "meta is not a bounded object")
         if install:                                  # IS1: the scanners read these members of an install kind too
             meta = doc["meta"]
-            _require(artifact == "install.trust" or "as" in meta, "an install statement names its artifact in as")
+            _require(artifact in ("install.trust", kinds.INSTALL_CHANGE) or "as" in meta,
+                     "an install statement names its artifact in as")
             _require(all(kinds.FORMS[name](meta[name]) for name in kinds.READ_ALWAYS if name in meta),
                      "an install member that is not of its form")
             _require(artifact == "install.floor" or not (kinds.FLOOR_META & set(meta)), "a floor member off a floor")
@@ -200,13 +201,17 @@ EMPTY_SHA256 = canon.sha256_hex(b"")
 def _check_install(doc: dict) -> None:
     """IS1, IS11: an install statement's own members. A set names exactly one kind and the PEP's stream; the empty
     set has `as` `none`, an empty body and 64 zeros for its policy hash; a policy list's policy hash is the hash of
-    the list. An `install.trust` carries 64 zeros for its policy hash and release, no `replaces` and no `meta`."""
+    the list. An `install.trust` carries 64 zeros for its policy hash and release, no `replaces` and no `meta`, and an
+    `install.change` names one target kind and has no `meta` (IS14)."""
     _require(doc["stream"] != TRUST_STREAM, "an install statement is on the PEP's own stream")
     if doc["artifact"] == "install.trust":
         _require(doc["policy_sha256"] == doc["release"] == ZERO_HASH and doc["replaces"] == "" and doc["meta"] == {},
                  "an install trust statement's policy hash, release, replaces and meta")
         return
     _require(len(doc["targets"]) == 1, "an install set names exactly one target kind")
+    if doc["artifact"] == kinds.INSTALL_CHANGE:     # IS14: the set it carries is named in its body
+        _require(doc["meta"] == {}, "an install change statement's meta")
+        return
     meta = doc["meta"] if isinstance(doc["meta"], dict) else {}
     named = meta.get("as")
     if named == kinds.NONE:

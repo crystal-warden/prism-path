@@ -1,6 +1,6 @@
 # Name,   Type, SubType, Offset,  Size, Flags
 # The durable state of policy distribution is kept in NVS part by part (main/mesh_node.c). At the bounds of the C
-# core every part takes 69,510 bytes on `nvs` and the install parts 28,064 bytes on `nvs_copy` (host/sim_fleet.py,
+# core every part takes 69,930 bytes on `nvs` and the install parts 28,484 bytes on `nvs_copy` (host/sim_fleet.py,
 # nvs_pages). `nvs` is 32 pages of 4 kB and needs at most 22 with room to write its largest part again, PHY
 # calibration and the one free page NVS keeps. `nvs_copy` is 16 pages and needs at most 11.
 nvs,      data, nvs,     0x9000,  0x20000,

@@ -74,7 +74,7 @@ use super::trust::{read_anchor, Anchor, TrustStore};
 use super::verify::{self, Floor, InstallView, PepKind, PepView, Staged, SKEW};
 use super::{
     load, ActiveFormat, ArtifactKind, PendingInstallFormat, Canon2Tag, CounterFormat, FloorFormat, FreshFormat, Hex64, MaybeHex64, Meta, PendingFormat,
-    Refused, SettingFormat, SortedSet, StagedFormat, Stream, Target, TargetKind, AUTHORITY, EXPIRED, FLOOR_LOST, HELD,
+    Refused, SettingFormat, SortedSet, StagedFormat, Stream, Target, TargetKind, AUTHORITY, BAD_FORMAT, EXPIRED, FLOOR_LOST, HELD,
     INCOMPLETE, MAX_SEQ, NOT_STAGED, NOT_YET_VALID, POLICY_LAPSED, REVOKED, SEQ_REPLAY, SIDECAR_MISMATCH,
     SIDECAR_MISSING, UNKNOWN_KEY, WIDENING_UNSIGNED, RECONCILING, ABOVE_CEILING, FALLBACK, FLOOR_ALLOWED, INSTALL_LOST,
     INSTALL_WIDENED, TRUST_REPLAY,
@@ -217,13 +217,23 @@ pub fn covers(statement: Option<&[u8]>, active_policy: Option<&Hex64>) -> bool {
     widening.from.is_empty() || active_policy.is_some_and(|policy| widening.from.contains(policy))
 }
 
+/// W11: a change statement stands for a release on a PEP whose active policy hash is its `from`. A PEP with no
+/// policy has none, so no change statement stands for a first install.
+pub fn changes(change: Option<&[u8]>, active_policy: Option<&Hex64>) -> bool {
+    let Some(change) = change.and_then(|body| super::read_change(body).ok()) else { return false };
+    active_policy == Some(&change.from)
+}
+
 /// V12 for a release with these `widens` and `replaces` on a PEP of `target` whose active policy hash is
 /// `active_policy`. `answer` is the PEP's own comparison: of the release when it can decide (W1), and on a kind
 /// that cannot, of the artifacts its row compares, a table any change of which is larger (W2). `statement` is the
 /// body of the `trust.widening` envelope staged for the same release. None when the release may be staged or
 /// committed, else `dist:widening-unsigned`. Going from no policy to any is larger on every kind, so a first
 /// install whose `widens` is false is refused with a statement or without, as is a larger release that says it
-/// does not widen (W6). Otherwise a larger release needs a statement that covers the PEP (W3, W4).
+/// does not widen (W6). Otherwise a larger release needs a statement that covers the PEP (W3, W4). `change` is the
+/// body of a `trust.change` envelope staged for the same release. On a kind that cannot decide it stands in place of
+/// a widening statement for a release whose `widens` is false and whose `replaces` is the active policy hash, when its
+/// `from` is that hash (W11). The PEP compares nothing more than W2 does.
 pub fn widening_check(
     target: &super::Target,
     widens: bool,
@@ -231,6 +241,7 @@ pub fn widening_check(
     active_policy: Option<&Hex64>,
     answer: Option<Comparison>,
     statement: Option<&[u8]>,
+    change: Option<&[u8]>,
 ) -> Option<&'static str> {
     let answer = if active_policy.is_none() { Some(Comparison::Larger) } else { answer };
     let larger = if target.decides {
@@ -241,6 +252,14 @@ pub fn widening_check(
     };
     if !larger {
         return None;
+    }
+    if !target.decides
+        && !widens
+        && replaces.0.as_ref() == active_policy
+        && target.applies.contains(&ArtifactKind::TrustChange)
+        && changes(change, active_policy)
+    {
+        return None; // W11: the authority signed that the table allows nothing more
     }
     if !widens && (target.decides || answer == Some(Comparison::Larger)) {
         return Some(WIDENING_UNSIGNED); // W6: the signer said it does not widen, and it does
@@ -1601,7 +1620,11 @@ impl<A: Adapter> Pep<A> {
         let verdict = verify::verify(sealed, body, &self.trust, &view, (self.clock)());
         let artifact = verdict.envelope.as_ref().map(|envelope| envelope.artifact);
         let installing = artifact.is_some_and(ArtifactKind::is_install);
-        let subject = artifact.filter(|_| installing).map(ArtifactKind::name);
+        let mut subject = artifact.filter(|_| installing).map(ArtifactKind::name);
+        if artifact == Some(ArtifactKind::InstallChange) {
+            // H10: the set an install change statement carries, or none when its body does not read
+            subject = install::read_install_change(body).ok().map(|(kind, _)| kind.name());
+        }
         let on_trust = artifact.is_some_and(ArtifactKind::on_trust_stream);
         let id_of = |verdict: &super::Verdict| json!(verdict.envelope.as_ref().map(|envelope| envelope.envelope_id().to_string()));
         if self.installed.record_lost && !on_trust {
@@ -1642,11 +1665,26 @@ impl<A: Adapter> Pep<A> {
                 return self.refuse(SEQ_REPLAY, vec![("envelope_id", envelope_id)]); // G2
             }
         }
-        if envelope.artifact != ArtifactKind::TrustWidening {
+        if envelope.artifact.is_statement() {
+            // W11: a release carries one statement, a widening statement or a change statement, never both
+            let other = if envelope.artifact == ArtifactKind::TrustChange { ArtifactKind::TrustWidening } else { ArtifactKind::TrustChange };
+            let same = self.staged.as_ref().filter(|staged| staged.stream == envelope.stream && staged.seq == envelope.seq);
+            if same.is_some_and(|staged| staged.bodies.contains_key(&other)) {
+                return self.refuse(BAD_FORMAT, vec![("envelope_id", envelope_id)]);
+            }
+        }
+        if envelope.artifact == ArtifactKind::TrustChange
+            && !changes(Some(body), self.active.as_ref().map(|active| &active.policy_sha256))
+        {
+            return self.refuse(WIDENING_UNSIGNED, vec![("envelope_id", envelope_id)]); // W11: a first install widens
+        }
+        if !envelope.artifact.is_statement() {
             let same = self.staged.as_ref().filter(|staged| staged.stream == envelope.stream && staged.seq == envelope.seq);
             let statement = same.and_then(|staged| staged.bodies.get(&ArtifactKind::TrustWidening)).cloned();
+            let change = same.and_then(|staged| staged.bodies.get(&ArtifactKind::TrustChange)).cloned();
             let artifacts = BTreeMap::from([(envelope.artifact, body.to_vec())]);
-            if let Some(cause) = self.widening(envelope.widens, &envelope.replaces, &artifacts, statement.as_deref(), false) {
+            let statements = (statement.as_deref(), change.as_deref());
+            if let Some(cause) = self.widening(envelope.widens, &envelope.replaces, &artifacts, statements, false) {
                 return self.refuse(cause, vec![("envelope_id", envelope_id)]); // V12
             }
         }
@@ -1683,6 +1721,9 @@ impl<A: Adapter> Pep<A> {
     /// G1 stages an envelope, with event `staged` and its subject, a set at a higher `seq` replacing the one staged of
     /// its kind, and the set is applied when it is whole.
     fn stage_install(&mut self, envelope: &Envelope, sealed: &[u8], body: &[u8]) -> Result<Vec<u8>, PepError> {
+        if envelope.artifact == ArtifactKind::InstallChange {
+            return self.stage_install_change(envelope, sealed, body);
+        }
         let Some(kind) = SetKind::of(envelope.artifact) else { return self.apply_install_trust(envelope, body) };
         let whole = self.installed.stage(kind, envelope, sealed, body)?.whole();
         let named = install::install_meta(envelope).map_or("", |meta| meta.as_name.name());
@@ -1703,6 +1744,31 @@ impl<A: Adapter> Pep<A> {
             return Ok(ack);
         }
         self.apply_set(kind)
+    }
+
+    /// IS15: an install change statement is staged before the set it carries, durably and with event `staged` whose
+    /// subject is that set's kind. One staged on a PEP that holds no set of the kind, or whose `from` is not the held
+    /// set's policy hash, is `dist:widening-unsigned`, and the rule is held again when the set is applied.
+    fn stage_install_change(&mut self, envelope: &Envelope, sealed: &[u8], body: &[u8]) -> Result<Vec<u8>, PepError> {
+        let (kind, _from) = install::read_install_change(body).map_err(|refusal| refused(refusal.to_string()))?;
+        let held = self.installed.held(kind).map(|held| held.policy_sha256().clone());
+        if !install::changes_set(Some(body), kind, held.as_ref()) {
+            return self.refuse_about(WIDENING_UNSIGNED, Some(kind.name()), vec![("envelope_id", json!(envelope.envelope_id().as_str()))]);
+        }
+        self.installed.stage_change(kind, envelope, sealed, body)?;
+        self.audit.append(
+            "distribution",
+            "staged",
+            vec![
+                ("envelope_id", json!(envelope.envelope_id().as_str())),
+                ("artifact", json!(ArtifactKind::InstallChange.name())),
+                ("set", json!(kind.name())),
+                ("seq", json!(envelope.seq)),
+                ("release", json!(envelope.release.as_str())),
+                ("result", json!("staged")),
+            ],
+        )?;
+        self.make_record_about("staged", None, Some(kind.name()))
     }
 
     fn refuse_set(&mut self, kind: SetKind, cause: &str, seq: i64) -> Result<Vec<u8>, PepError> {
@@ -1748,9 +1814,12 @@ impl<A: Adapter> Pep<A> {
         if let Some(cause) = cause {
             return self.refuse_set(kind, cause, seq);
         }
+        // CL3: a ceiling that narrows below the active release is no widening; the release lapses and says so itself
         let active_table = self.active.as_ref().and_then(|active| active.bodies.get(&ArtifactKind::PolicyPpt)).cloned();
         let lapses = kind == SetKind::Ceiling && !empty && active_table.is_some() && !install::table_inside(Some(&staged), active_table.as_deref());
-        let stands_out = stands_out || lapses; // IS12: it hands the PEP to its fallback policy
+        let change = staged.doc.change.as_ref().filter(|_| !stands_out).map(|held| held.envelope_id.clone());
+        let mut staged = staged;
+        (staged.doc.change, staged.change_body) = (None, None); // the change statement is no member of the set held
         let before = self.fallback_decides();
         let ceiling_mark = (kind == SetKind::Ceiling).then_some(!empty);
         self.installed.mark(true, false, ceiling_mark)?; // IS9: before the first install statement is applied
@@ -1765,17 +1834,17 @@ impl<A: Adapter> Pep<A> {
             self.installed.ceiling_lost = false;
         }
         let event = if stands_out { "install-widened" } else { "install-applied" };
-        self.audit.append(
-            "distribution",
-            event,
-            vec![
-                ("artifact", json!(kind.name())),
-                ("seq", json!(seq)),
-                ("set_id", json!(staged.set_id().as_str())),
-                ("envelopes", json!(self.installed.statement_ids().iter().map(Hex64::as_str).collect::<Vec<_>>())),
-                ("result", json!(event)),
-            ],
-        )?;
+        let mut details = vec![
+            ("artifact", json!(kind.name())),
+            ("seq", json!(seq)),
+            ("set_id", json!(staged.set_id().as_str())),
+            ("envelopes", json!(self.installed.statement_ids().iter().map(Hex64::as_str).collect::<Vec<_>>())),
+            ("result", json!(event)),
+        ];
+        if let Some(change) = change {
+            details.push(("change", json!(change.as_str()))); // IS15: the statement the set was taken on
+        }
+        self.audit.append("distribution", event, details)?;
         let cause = stands_out.then_some(INSTALL_WIDENED);
         if lapses {
             let applied = self.make_record_about(event, cause, Some(kind.name()))?;
@@ -1819,8 +1888,8 @@ impl<A: Adapter> Pep<A> {
         self.make_record_about(event, widened.then_some(INSTALL_WIDENED), Some(ArtifactKind::InstallTrust.name()))
     }
 
-    /// V12 against the held release (C8). `artifacts` are the bodies judged and `statement` the widening statement
-    /// staged for the same release. A kind that cannot decide compares what its row compares (W2), so on `host` a
+    /// V12 against the held release (C8). `artifacts` are the bodies judged and `statements` the widening statement
+    /// and the change statement staged for the same release. A kind that cannot decide compares what its row compares (W2), so on `host` a
     /// table that is not byte for byte the active one is larger. One that can decide compares one artifact at
     /// staging and the whole release at commit (`whole`), which also sees an artifact the release drops.
     fn widening(
@@ -1828,7 +1897,7 @@ impl<A: Adapter> Pep<A> {
         widens: bool,
         replaces: &MaybeHex64,
         artifacts: &BTreeMap<ArtifactKind, Vec<u8>>,
-        statement: Option<&[u8]>,
+        statements: (Option<&[u8]>, Option<&[u8]>),
         whole: bool,
     ) -> Option<&'static str> {
         let active = self.active.as_ref();
@@ -1850,7 +1919,8 @@ impl<A: Adapter> Pep<A> {
                 _ => Comparison::Larger,
             });
         }
-        widening_check(&self.target, widens, replaces, active.map(|active| &active.policy_sha256), answer, statement)
+        let (statement, change) = statements;
+        widening_check(&self.target, widens, replaces, active.map(|active| &active.policy_sha256), answer, statement, change)
     }
 
     // ------------------------------------------------------------------ B2: the trust statements
@@ -2028,8 +2098,11 @@ impl<A: Adapter> Pep<A> {
         }
         // C3: V12 again against what is active now, since a lapse, a rollback or another commit may have changed it.
         // A refused release stays staged.
-        let statement = staged.bodies.get(&ArtifactKind::TrustWidening).map(Vec::as_slice);
-        if let Some(cause) = self.widening(staged.widens, &staged.replaces, &staged.bodies, statement, true) {
+        let statements = (
+            staged.bodies.get(&ArtifactKind::TrustWidening).map(Vec::as_slice),
+            staged.bodies.get(&ArtifactKind::TrustChange).map(Vec::as_slice),
+        );
+        if let Some(cause) = self.widening(staged.widens, &staged.replaces, &staged.bodies, statements, true) {
             return self.refuse(cause, vec![("seq", json!(seq))]);
         }
         let floor = Floor { seq: staged.seq, ids: staged.envelope_ids() };
@@ -2615,8 +2688,11 @@ impl<A: Adapter> Pep<A> {
         if self.active.as_ref().is_some_and(|active| active.release == kept.release) {
             return true;
         }
-        let statement = kept.bodies.get(&ArtifactKind::TrustWidening).map(Vec::as_slice);
-        self.widening(kept.widens, &kept.replaces, &kept.bodies, statement, true).is_none()
+        let statements = (
+            kept.bodies.get(&ArtifactKind::TrustWidening).map(Vec::as_slice),
+            kept.bodies.get(&ArtifactKind::TrustChange).map(Vec::as_slice),
+        );
+        self.widening(kept.widens, &kept.replaces, &kept.bodies, statements, true).is_none()
     }
 
     // ------------------------------------------------------------------ P2, P3, P5: provisioning

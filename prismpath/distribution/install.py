@@ -51,7 +51,8 @@ MAX_RETIRED = 8                                    # IS10: the retired install a
 FLOOR, FALLBACK, CEILING, TRUST = "install.floor", "install.fallback", "install.ceiling", "install.trust"
 SET_KINDS = (FLOOR, FALLBACK, CEILING)             # H10: the order of the install id
 SUBJECT = {FLOOR: 1, FALLBACK: 2, CEILING: 3, TRUST: 4, "operator.answer": 5}       # H10
-BUILT = frozenset({FLOOR, FALLBACK, CEILING, TRUST})   # the install kinds this version admits
+CHANGE = kinds.INSTALL_CHANGE                         # IS14: an install change statement
+BUILT = frozenset({FLOOR, FALLBACK, CEILING, TRUST, CHANGE})   # the install kinds this version admits
 INSTALL_LOST, ABOVE_CEILING, WIDENED = "dist:install-lost", "dist:above-ceiling", "dist:install-widened"
 UNKNOWN_KEY, INVALID, REVOKED_KEY = "dist:unknown-key", "sig:invalid", "sig:revoked-key"
 ROTATION_INVALID, UNSIGNED = "dist:rotation-invalid", "dist:widening-unsigned"
@@ -444,13 +445,15 @@ def looser(old: Any, new: Any) -> bool:
 
 
 def set_larger(kind: str, install_kind: str, held: Optional[HeldSet], bodies: Mapping[str, bytes],
-               envelopes: Optional[Mapping[str, Any]] = None) -> Optional[bool]:
+               envelopes: Optional[Mapping[str, Any]] = None, *, change: bool = False) -> Optional[bool]:
     """IS12: whether the set `bodies` allows or escalates more than `held`, the set it follows or None, or None when
     the PEP cannot tell. A first action floor and a first fallback policy widen, the empty one does not; a first
     ceiling does not, the empty ceiling does, and a ceiling that allows more does. A list that holds a hash the one
     before did not is larger, and every PEP compares two lists. On a kind that can decide the sets are compared by
     section 9.4, and on `host` and `mesh` a table that is not byte for byte the held one is larger. A `cfs` PEP
-    cannot tell for a table, and takes the signer's word (H13)."""
+    cannot tell for a table, and takes the signer's word (H13). With `change`, an install change statement from the
+    held set's policy hash stands for the tables of a floor or a fallback policy on `host` and `mesh` (IS15): their
+    bytes are not compared, and everything else is, the rates and a floor's `layout` and `command` included."""
     from prismpath.distribution import widening
     empty = set(bodies) == {kinds.NONE}
     before = None if held is None or held.empty else dict(held.bodies)
@@ -475,27 +478,53 @@ def set_larger(kind: str, install_kind: str, held: Optional[HeldSet], bodies: Ma
     if kinds.TARGETS[kind].decides:
         return widening.compare_release(before, dict(bodies)) != NOT_LARGER
     if kind in ("host", "mesh"):
+        if change and install_kind in kinds.CHANGES_SETS and envelopes is not None and held is not None:
+            # IS15: the change statement stands for the tables, and only when the set holds the same artifacts and a
+            # floor reads its table with the same layout and command register as the one before (AF9, AF10)
+            return set(before) != set(bodies) or _reading(held.envelopes) != _reading(envelopes)
         return {name: bytes(body) for name, body in before.items()} != {name: bytes(body) for name, body in bodies.items()}
     return None
 
 
+def _reading(envelopes: Mapping[str, Any]) -> Tuple[Any, Any]:
+    """AF9, AF10: the `layout` and the `command` register a table floor is read with."""
+    first = next(iter(envelopes.values()), None) if envelopes else None
+    meta = first.meta if first is not None else {}
+    return meta.get("layout"), meta.get("command")
+
+
 def widens_ok(kind: str, install_kind: str, held: Optional[HeldSet], bodies: Mapping[str, bytes], *, widens: bool,
-              replaces: str, envelopes: Optional[Mapping[str, Any]] = None) -> Tuple[Optional[str], bool]:
+              replaces: str, envelopes: Optional[Mapping[str, Any]] = None,
+              change: Optional[bytes] = None) -> Tuple[Optional[str], bool]:
     """IS12: (cause, stands out) of a set whose signer said `widens` and `replaces`. A set the PEP computes as larger
     whose `widens` is false is `dist:widening-unsigned`. A PEP that cannot decide also takes `widens` false only when
     `replaces` is the policy hash of the set it holds, the empty string when it holds none. A set stands out, with
     event `install-widened`, when its `widens` is true or the PEP computes it as larger. A kind the empty set withdrew
-    holds none, so the set after it names the empty string (IS6)."""
-    larger = set_larger(kind, install_kind, held, bodies, envelopes)
+    holds none, so the set after it names the empty string (IS6). `change` is the body of the install change statement
+    staged before the set, or None. On `host` and `mesh` it stands for a floor's or a fallback policy's tables when
+    its `from` is the held set's policy hash, its `set` is `install_kind`, and the set says it does not widen and
+    replaces that hash (IS15), so the set is applied with event `install-applied`."""
+    held_policy = held.policy_sha256 if held is not None and not held.empty else ""
+    carried = (change is not None and not widens and held_policy != "" and replaces == held_policy
+               and changes_set(change, install_kind, held_policy))
+    larger = set_larger(kind, install_kind, held, bodies, envelopes, change=carried)
     if widens:
         return None, True
     if larger:
         return UNSIGNED, True
     if not kinds.TARGETS[kind].decides:
-        held_policy = held.policy_sha256 if held is not None and not held.empty else ""
         if replaces != held_policy:
             return UNSIGNED, True
     return None, False
+
+
+def changes_set(change: Optional[bytes], install_kind: str, held_policy: Optional[str]) -> bool:
+    """IS15: an install change statement stands for a set of `install_kind` on a PEP whose held set of that kind has
+    the policy hash `held_policy`. A PEP that holds no set of the kind has none, so none stands for a first set."""
+    if change is None or not held_policy or held_policy == env.ZERO_HASH:
+        return False
+    doc = kinds.read_install_change(change)
+    return doc["set"] == install_kind and doc["from"] == held_policy
 
 
 # ------------------------------------------------------------------ the PEP's install part on disk
@@ -527,12 +556,17 @@ class Staged:
     statements: Dict[str, Tuple[str, str, str]] = field(default_factory=dict)
     envelopes: Dict[str, Any] = field(default_factory=dict)
     bodies: Dict[str, bytes] = field(default_factory=dict)
+    change: Optional[Tuple[str, str, str]] = None   # IS15: the install change statement staged before the set
+    change_body: Optional[bytes] = None
 
     def document(self) -> dict:
-        return {"policy_sha256": self.policy_sha256, "release": self.release, "replaces": self.replaces,
-                "seq": self.seq, "widens": self.widens,
-                "statements": {name: {"envelope_id": one[0], "sealed": one[1], "body": one[2]}
-                               for name, one in sorted(self.statements.items())}}
+        doc = {"policy_sha256": self.policy_sha256, "release": self.release, "replaces": self.replaces,
+               "seq": self.seq, "widens": self.widens,
+               "statements": {name: {"envelope_id": one[0], "sealed": one[1], "body": one[2]}
+                              for name, one in sorted(self.statements.items())}}
+        if self.change is not None:
+            doc["change"] = {"envelope_id": self.change[0], "sealed": self.change[1], "body": self.change[2]}
+        return doc
 
     def whole(self, kind: str) -> bool:
         """IS4: the set is whole when it holds what its kind needs and the release id computed over the statements is
@@ -681,6 +715,12 @@ class Installed:
                         raise KeyError(name)
                     staged.statements[name] = (held["envelope_id"], held["sealed"], held["body"])
                     staged.envelopes[name], staged.bodies[name] = read
+                if "change" in one:                 # IS15: a change statement staged survives a restart
+                    held = one["change"]
+                    read = self._read_statement(held["envelope_id"], held["sealed"], held["body"])
+                    if read is None:
+                        raise KeyError("change")
+                    staged.change, staged.change_body = (held["envelope_id"], held["sealed"], held["body"]), read[1]
             except (KeyError, TypeError):
                 continue                            # a staged set that does not read is dropped, as a staged release is
             if kind in SET_KINDS:
@@ -723,6 +763,8 @@ class Installed:
                     keep |= {name for one in held.statements.values() for name in one[1:]}
         for staged in self.staged.values():
             keep |= {name for one in staged.statements.values() for name in one[1:]}
+            if staged.change is not None:
+                keep |= set(staged.change[1:])
         for directory in (os.path.join(self.dir, "blobs"), os.path.join(self.copy, "blobs")):
             try:
                 names = os.listdir(directory)
@@ -902,6 +944,32 @@ def seal_set(install_kind: str, bodies: Mapping[str, bytes], *, stream: str, seq
     return out
 
 
+def change_body(install_kind: str, source: str) -> bytes:
+    """IS14: the canon/2 body of an install change statement for a set of `install_kind` that replaces the set whose
+    policy hash is `source`, resting on the table comparator."""
+    body = canon.canon2_bytes({"basis": kinds.CHANGE_BASIS, canon.ENCODING_KEY: canon.CANON2,
+                               "format": kinds.INSTALL_CHANGE_FORMAT, "from": source, "set": install_kind})
+    kinds.read_install_change(body)
+    return body
+
+
+def seal_change(set_sealed: bytes, signers) -> Tuple[bytes, bytes]:
+    """IS14: the (sealed, body) of the install change statement for the set one of whose statements is `set_sealed`.
+    It shares the set's stream, target, `seq`, policy hash, release id, `replaces` and `widens`, which is false, and is
+    signed by the install keys in `signers`. `Refused` for a set it can never stand for: a ceiling, the empty set, a
+    first set, a set that says it widens, or a target other than `host` and `mesh`."""
+    first = env.read(env.unseal(set_sealed)[0])
+    if (first.artifact not in kinds.CHANGES_SETS or first.widens or not first.replaces
+            or first.policy_sha256 == env.ZERO_HASH or tuple(first.targets) not in (("host",), ("mesh",))):
+        raise Refused(kinds.BAD_FORMAT, "an install change statement is for a host or mesh floor or fallback policy "
+                                        "that replaces one and does not widen (IS14)")
+    body = change_body(first.artifact, first.replaces)
+    envelope_bytes = env.build(CHANGE, body, stream=first.stream, seq=first.seq, targets=list(first.targets),
+                               not_before=first.not_before, expires=0, policy_sha256=first.policy_sha256,
+                               release=first.release, replaces=first.replaces, widens=False)
+    return env.seal(envelope_bytes, signers), body
+
+
 def trust_body(keys: Sequence[bytes], *, threshold: int, operators: Sequence[bytes] = ()) -> bytes:
     """IS11: the canon/2 body of an install trust statement."""
     body = canon.canon2_bytes({canon.ENCODING_KEY: canon.CANON2, "format": kinds.INSTALL_TRUST_FORMAT,
@@ -948,5 +1016,6 @@ def ceiling_body(tables: Iterable[bytes]) -> bytes:
 
 
 __all__ = ["Record", "HeldSet", "Staged", "Installed", "check_trust", "trust_widens", "read_anchor_part",
+           "change_body", "seal_change", "changes_set",
            "anchor_part", "domain_sha256", "inside", "set_larger", "widens_ok", "protected_names", "seal_set",
            "trust_body", "seal_trust", "ceiling_body", "CANNOT_DECIDE", "LARGER"]
