@@ -27,6 +27,20 @@ check ported from Lean (`prismpath.kernel.core_policy`), so every receipted deci
 run whose keys the reader does not pin verifies as `signed-unpinned`: its signatures hold under the keys it
 carries, which says nothing about whose keys they are.
 
+A cFS core run with an action floor or a fallback policy (spec-policy-distribution.md, RC4) gives each basis its own
+case, `release` (the default), `floor` or `fallback`, and the `would` lines of AF7 a case of the release marked not
+enacted. `install.jsonl` holds every install statement the PEP decided under and every `install.trust` it applied, as
+sealed envelopes in the order applied, and `rates.jsonl` one line per counted override (RC3): the floor rule, the
+start of its window, the count after it and the hash of its receipt. `run.json` names both by hash and the install
+trust sequence the run ends at. The image attestation of a `floor` or `fallback` case is the signature block of its
+install statement, named by its envelope id. `verify` then pins the install key set beside the authority key
+(`pin_install`, the `install` part of an anchor), refuses a run that holds a `floor` or `fallback` case without it,
+applies each `install.trust` from the pinned set by IS11, requires each install set to be signed at the threshold
+under the key set in force when it was applied, holds each such case's image to the policy hash its statement signs,
+requires a not enacted line of the release for every reading the floor decided, and checks that the counts of AF8
+rise by one within a window and never pass the signed `allows`. Every case, `would` lines included, is then replayed
+under its own image. The receipt lines keep their format.
+
 A run whose root statement is `prismpath.core-run-root/1` was written over the retired Merkle tree (no domain
 prefixes, the last node of an odd layer duplicated, so [a, b, c] and [a, b, c, c] shared a root); it is refused
 as such, never checked under the new tree, and has to be produced again.
@@ -63,6 +77,9 @@ IMAGE_DOMAIN = b"prismpath.core-image/1\x00"
 LOG_CORE_RUN = "core-run"
 FILES = ("run.json", "cases.jsonl", "images.jsonl", "receipts.jsonl", "receipts.roots.jsonl",
          "authority.pub", "instance.pub")
+INSTALL_FILES = ("install.jsonl", "rates.jsonl")   # RC4: in a run whose run.json names them
+BASES = ("release", "floor", "fallback")           # RC1, RC4: a case's basis; `release` when none is named
+INSTALL_OF = {"floor": "install.floor", "fallback": "install.fallback"}
 REFERENCE = "the reference kernel"   # what `replay_through_reference` holds a receipt to, in its messages
 
 
@@ -94,7 +111,9 @@ def read_cases(path: Path):
         image = bytes.fromhex(row["image"])
         cases.append({"id": row["case"], "image": image, "flow": row["flow"],
                       "flow_why": None if row["flow"] is not None else core_render.flow_of(image)[1],
-                      "readings": [bytes.fromhex(raw) for raw in row["readings"]]})
+                      "readings": [bytes.fromhex(raw) for raw in row["readings"]],
+                      "basis": row.get("basis", "release"), "enacted": row.get("enacted", True),
+                      "install": row.get("install")})
     return cases
 
 
@@ -105,8 +124,12 @@ def write_cases(cases, out: Path) -> None:
     with open(out, "wb") as handle:
         for case in cases:
             flow, _why = core_render.flow_of(case["image"])
-            handle.write(canon2.dumps({"case": case["id"], "image": case["image"].hex(), "flow": flow,
-                                       "readings": [raw.hex() for raw in case["readings"]]}) + b"\n")
+            row = {"case": case["id"], "image": case["image"].hex(), "flow": flow,
+                   "readings": [raw.hex() for raw in case["readings"]]}
+            for key, default in (("basis", "release"), ("enacted", True), ("install", None)):
+                if case.get(key, default) != default:
+                    row[key] = case[key]               # RC4: only a cFS run with install statements names these
+            handle.write(canon2.dumps(row) + b"\n")
 
 
 def flow_problem(case) -> str:
@@ -204,8 +227,11 @@ def ensure_keys(keys: Path):
     return keys / "authority.key", keys / "authority.pub", keys / "instance.key", keys / "instance.pub"
 
 
-def produce(cases_path: Path, out: Path, keys: Path, decider: str = "python", time_us: int = None) -> dict:
-    """Decide every case of a cases file with the Python reference and write the run to `out`."""
+def produce(cases_path: Path, out: Path, keys: Path, decider: str = "python", time_us: int = None, *,
+            install=None, rates=None) -> dict:
+    """Decide every case of a cases file with the Python reference and write the run to `out`. For a cFS run with
+    install statements (RC4), `install` is every (sealed, body) the PEP decided under or applied, in order, and
+    `rates` the counted overrides, each {rule, window, count, case, reading} naming its receipt."""
     from prismpath.hotswap import policy_pack
     cases_path, out = Path(cases_path), Path(out)
     authority_key, authority_pub, instance_key, instance_pub = ensure_keys(keys)
@@ -225,11 +251,15 @@ def produce(cases_path: Path, out: Path, keys: Path, decider: str = "python", ti
     authority_id = sha256_hex(authority_pub.read_bytes())
     images = bytearray()
     for case in cases:
+        if case["basis"] != "release":            # RC4: attested by the signature block of its install statement
+            images += canon2.dumps({"format": IMAGE_FORMAT, "case": case["id"], "image_sha256": sha256_hex(case["image"]),
+                                    "install": case["install"]}) + b"\n"
+            continue
         images += canon2.dumps({"format": IMAGE_FORMAT, "case": case["id"], "image_sha256": sha256_hex(case["image"]),
                                 "key_id": authority_id, "sig": signer.sign(IMAGE_DOMAIN + case["image"]).hex()}) + b"\n"
     (out / "images.jsonl").write_bytes(bytes(images))
 
-    receipts, leaves, excluded = bytearray(), [], []
+    receipts, leaves, excluded, placed = bytearray(), [], [], {}
     for case in cases:
         why = outside_core(case["image"], case["flow"])
         if why is not None:
@@ -244,13 +274,28 @@ def produce(cases_path: Path, out: Path, keys: Path, decider: str = "python", ti
             line = canon2.dumps(receipt)
             receipts += line + b"\n"
             leaves.append(sha256_hex(line))
+            placed[(case["id"], index)] = sha256_hex(line)
     (out / "receipts.jsonl").write_bytes(bytes(receipts))
+    extra = {}
+    if install is not None:
+        from prismpath.distribution import envelope as env
+        lines = b"".join(canon2.dumps({"body": bytes(body).hex(), "sealed": bytes(sealed).hex()}) + b"\n"
+                         for sealed, body in install)
+        rate_lines = b"".join(canon2.dumps({"count": one["count"], "receipt_sha256": placed[(one["case"], one["reading"])],
+                                            "rule": one["rule"], "window": one["window"]}) + b"\n"
+                              for one in rates or [])
+        (out / "install.jsonl").write_bytes(lines)
+        (out / "rates.jsonl").write_bytes(rate_lines)
+        trusts = [env.read(env.unseal(sealed)[0]).seq for sealed, _body in install
+                  if env.read(env.unseal(sealed)[0]).artifact == "install.trust"]
+        extra = {"install_sha256": sha256_hex(lines), "rates_sha256": sha256_hex(rate_lines),
+                 "install_trust_seq": max(trusts) if trusts else None}
 
     instance = root_statement.InstanceKey.load(str(instance_key))
     manifest = {"format": RUN_FORMAT, "decider": decider, "cases": len(cases), "receipts": len(leaves),
                 "excluded": excluded, "cases_sha256": sha256_hex(cases_bytes),
                 "images_sha256": sha256_hex(bytes(images)), "authority_key_id": authority_id,
-                "instance_key_id": instance.key_id}
+                "instance_key_id": instance.key_id, **extra}
     manifest_bytes = canon2.dumps(manifest)
     (out / "run.json").write_bytes(manifest_bytes + b"\n")
     (out / "authority.pub").write_bytes(authority_pub.read_bytes())
@@ -346,16 +391,18 @@ def _norm(verdict) -> tuple:
             verdict.get("reason") or None)
 
 
-def verify(run: Path, *, sample=200, seed=0, pin_authority=None, pin_instance=None, replay=None) -> dict:
+def verify(run: Path, *, sample=200, seed=0, pin_authority=None, pin_instance=None, replay=None,
+           pin_install=None) -> dict:
     """Every check of a run, or Bad naming the first that fails. Returns a summary.
 
     `sample` is how many receipts to replay (None for every one), chosen with `seed`; `pin_authority` and
     `pin_instance` name the reader's own copies of the two public keys. Without both the checks all run and the
     pass is refused with `dist:hatch-refused`, except in a dev build, where the root statement is `signed-unpinned`. `replay` decides the chosen receipts again, `replay_through_reference` when None;
     the research tool passes its replay through the Lean oracle. A file that does not read as its format is
-    refused like any other failed check."""
+    refused like any other failed check. `pin_install` names the reader's copy of the install key set the run's PEP
+    started from, the `install` part of its anchor, which a run with a `floor` or `fallback` case needs (RC4)."""
     try:
-        summary, receipts = _check(Path(run), pin_authority, pin_instance)
+        summary, receipts = _check(Path(run), pin_authority, pin_instance, pin_install)
     except (KeyError, TypeError, ValueError, AttributeError, IndexError) as error:   # a malformed part of the run
         raise Bad(f"the run does not read as a core run ({type(error).__name__}: {error})") from None
     # every decision, or a sample, decided again
@@ -376,7 +423,7 @@ def verify(run: Path, *, sample=200, seed=0, pin_authority=None, pin_instance=No
     return {**summary, **counts}
 
 
-def _check(run: Path, pin_authority, pin_instance):
+def _check(run: Path, pin_authority, pin_instance, pin_install=None):
     """Every check of a run but the replay: the summary so far and the receipts, each with its case and
     reading index, or Bad."""
     for name in FILES:
@@ -430,7 +477,11 @@ def _check(run: Path, pin_authority, pin_instance):
     image_lines = _lines(run / "images.jsonl")
     if len(image_lines) != len(cases):
         raise Bad("images.jsonl does not hold one attestation per case")
+    sets = _install_chain(run, manifest, cases, pin_install)
     for case, line in zip(cases, image_lines):
+        if case["basis"] != "release":
+            _check_install_image(case, canon2.loads(line), line, sets)
+            continue
         attestation = canon2.loads(line)
         if canon2.dumps(attestation) != line or attestation.get("format") != IMAGE_FORMAT \
                 or attestation.get("case") != case["id"] or attestation.get("key_id") != authority_id \
@@ -474,9 +525,134 @@ def _check(run: Path, pin_authority, pin_instance):
         else:
             raise Bad(f"receipt {idx}: the decision is a route or a refusal")
         receipts.append((case, index, receipt))
+    if sets is not None:
+        _check_install_receipts(run, cases, receipts, sets)
     return {"run": str(run), "decider": manifest["decider"], "cases": len(cases), "excluded": len(excluded),
             "receipts": len(receipts), "root": statement["root"],
             "root_statement": "signed" if pinned else "signed-unpinned", "images": len(cases)}, receipts
+
+
+# ----------------------------------------------------------------- RC4: the install statements of a cFS run
+def _install_chain(run: Path, manifest: dict, cases, pin_install):
+    """RC4: {envelope id: envelope} of the install sets in `install.jsonl`, each signed at the threshold under the
+    install key set in force when it was applied, from the pinned set through each `install.trust` by IS11; None for
+    a run with no install statements. Bad for a `floor` or `fallback` case with no install key pinned."""
+    for case in cases:
+        if case["basis"] not in BASES or not isinstance(case["enacted"], bool) or (
+                case["basis"] != "release") != (case["install"] is not None) or (
+                not case["enacted"] and case["basis"] != "release"):
+            raise Bad(f"case {case['id']}: a basis of release, floor or fallback, and only a release line not enacted")
+    installed = any(case["basis"] != "release" for case in cases) or "install_sha256" in manifest
+    if not installed:
+        return None
+    if pin_install is None:
+        raise Bad("a run with a floor or fallback case needs the install key set pinned beside the authority key (RC4)")
+    for name in INSTALL_FILES:
+        if not (run / name).exists():
+            raise Bad(f"the run has no {name}")
+    if sha256_hex((run / "install.jsonl").read_bytes()) != manifest.get("install_sha256") or \
+            sha256_hex((run / "rates.jsonl").read_bytes()) != manifest.get("rates_sha256"):
+        raise Bad("install.jsonl or rates.jsonl is not the file run.json names")
+    import json
+    from prismpath.distribution import envelope as env
+    from prismpath.distribution import install
+    from prismpath.distribution.kinds import Refused
+    try:
+        record = install.read_anchor_part(json.loads(Path(pin_install).read_bytes().decode("utf-8")))
+    except (Refused, ValueError, UnicodeDecodeError) as error:
+        raise Bad(f"the pinned install key set does not read ({error})") from None
+    sets, start = {}, record.trust_seq
+    for number, line in enumerate(_lines(run / "install.jsonl")):
+        row = canon2.loads(line)
+        sealed, body = bytes.fromhex(row["sealed"]), bytes.fromhex(row["body"])
+        try:
+            envelope_bytes, entries = env.unseal(sealed)
+            envelope = env.read(envelope_bytes, reads_meta=True)
+        except Refused as refused:
+            raise Bad(f"install statement {number} does not read ({refused.cause})") from None
+        if envelope.body_sha256 != sha256_hex(body) or envelope.body_size != len(body):
+            raise Bad(f"install statement {number}: its body is not the one it signs")
+        message = env.signed_message(envelope_bytes)
+        counted = record.counting(entries, message)
+        if not counted.ok:
+            raise Bad(f"install statement {number} is not signed at the threshold under the install keys in force "
+                      f"when it was applied ({counted.cause})")
+        if envelope.artifact == install.TRUST:
+            if envelope.seq != record.trust_seq + 1:
+                raise Bad(f"install statement {number}: an install.trust at {envelope.seq} where "
+                          f"{record.trust_seq + 1} is next, so one is left out (IS11)")
+            cause = install.check_trust(record, body, entries, message, widens=envelope.widens, instance_key_id=None,
+                                        trust=None)
+            if cause is not None:
+                raise Bad(f"install statement {number}: an install.trust IS11 refuses ({cause})")
+            record = record.apply_trust(envelope, body)
+        elif envelope.artifact in install.SET_KINDS:
+            sets[envelope.envelope_id] = envelope
+        else:
+            raise Bad(f"install statement {number} is not an install kind")
+    if record.trust_seq != (start if manifest.get("install_trust_seq") is None else manifest["install_trust_seq"]):
+        raise Bad(f"run.json names install trust sequence {manifest.get('install_trust_seq')} and install.jsonl ends "
+                  f"at {record.trust_seq}, so an install.trust is left out")
+    return sets
+
+
+def _check_install_image(case, attestation, line: bytes, sets) -> None:
+    """RC4: a `floor` or `fallback` case is attested by the install statement it names, of its basis's kind, whose
+    signed policy hash is the case's image."""
+    if sets is None:
+        raise Bad(f"case {case['id']}: a {case['basis']} case in a run with no install statements")
+    if canon2.dumps(attestation) != line or set(attestation) != {"format", "case", "image_sha256", "install"} \
+            or attestation["format"] != IMAGE_FORMAT or attestation["case"] != case["id"] \
+            or attestation["image_sha256"] != sha256_hex(case["image"]) or attestation["install"] != case["install"]:
+        raise Bad(f"case {case['id']}: the image attestation does not name the case's install statement")
+    envelope = sets.get(case["install"])
+    if envelope is None or envelope.artifact != INSTALL_OF[case["basis"]]:
+        raise Bad(f"case {case['id']}: no {INSTALL_OF[case['basis']]} statement of the run attests its image")
+    if envelope.policy_sha256 != sha256_hex(case["image"]):
+        raise Bad(f"case {case['id']}: its image is not the policy its install statement signs")
+
+
+def _check_install_receipts(run: Path, cases, receipts, sets) -> None:
+    """RC4, AF7, AF8: every reading the floor decided has a not enacted line of the release, and each counted override
+    names a floor receipt, rises by one within a window of its rule and never passes the signed `allows`."""
+    wanted = {}
+    for case in cases:
+        if case["basis"] == "floor":
+            for raw in case["readings"]:
+                wanted[sha256_hex(raw)] = wanted.get(sha256_hex(raw), 0) + 1
+    for case in cases:
+        if case["basis"] == "release" and not case["enacted"]:
+            for raw in case["readings"]:
+                if wanted.get(sha256_hex(raw)):
+                    wanted[sha256_hex(raw)] -= 1
+    if any(wanted.values()):
+        raise Bad("a reading the floor decided has no not enacted line of the release that records `would` (AF7)")
+    by_leaf = {sha256_hex(canon2.dumps(receipt)): (case, receipt) for case, _index, receipt in receipts}
+    last = {}
+    for number, line in enumerate(_lines(run / "rates.jsonl")):
+        row = canon2.loads(line)
+        if canon2.dumps(row) != line or set(row) != {"count", "receipt_sha256", "rule", "window"} or not all(
+                type(row[key]) is int and row[key] >= 0 for key in ("count", "rule", "window")):
+            raise Bad(f"rates line {number} is not a counted override")
+        found = by_leaf.get(row["receipt_sha256"])
+        if found is None or found[0]["basis"] != "floor":
+            raise Bad(f"rates line {number} names no floor receipt of the run")
+        rate = sets[found[0]["install"]].meta.get("rate")
+        if not isinstance(rate, dict):
+            raise Bad(f"rates line {number}: a counted override under a floor that signs no rate")
+        key = (found[0]["install"], row["rule"])
+        window, count = last.get(key, (None, 0))
+        if window == row["window"]:
+            expected = count + 1
+        elif window is None or row["window"] > window:
+            expected = 1
+        else:
+            raise Bad(f"rates line {number}: a window that goes back")
+        if row["count"] != expected:
+            raise Bad(f"rates line {number}: the count is {row['count']} where {expected} is next (AF8)")
+        if row["count"] > rate["allows"]:
+            raise Bad(f"rates line {number}: {row['count']} overrides in a window that allows {rate['allows']} (AF8)")
+        last[key] = (row["window"], row["count"])
 
 
 def replay_through_reference(chosen) -> dict:

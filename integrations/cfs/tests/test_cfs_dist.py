@@ -661,3 +661,141 @@ def test_case_203_a_cfs_app_with_a_list_takes_only_the_tables_on_it(tmp_path):
     assert point.send(listed(2, first, ALLOW_3))[-1].cause == "dist:widening-unsigned"
     assert point.send(listed(2, first, ALLOW_3, widens=True))[-1].event == "install-widened"
     assert point.send(_cfs_floor(point, ALLOW_3))[-1].event == "install-widened"
+
+
+# ------------------------------------------------------------------ RC4: a cFS core run with one case per basis
+
+def _reading(cmd, slew=5):
+    from prismpath.kernel import canon2 as c2
+    return c2.dumps({"cmd_class": cmd, "ground_contact": False, "monitor_ok": True, "slew_deg": slew, "thrust_pct": 10})
+
+
+def _resign(run, keys, *, cases=None, receipts=None, install_lines=None, rates=None):
+    """The run rewritten as a producer holding its instance key could rewrite it: the files changed, run.json's
+    hashes and counts made to match, and the root statement signed again, so only RC4's checks can refuse it."""
+    from prismpath.kernel import canon2 as c2
+    from prismpath.ledgers import core_evidence, root_statement
+    for name, lines in (("cases.jsonl", cases), ("receipts.jsonl", receipts), ("install.jsonl", install_lines),
+                        ("rates.jsonl", rates)):
+        if lines is not None:
+            (run / name).write_bytes(b"".join(line + b"\n" for line in lines))
+    manifest = c2.loads((run / "run.json").read_bytes().rstrip(b"\n"))
+    receipt_lines = core_evidence._lines(run / "receipts.jsonl")
+    manifest.update(cases_sha256=core_evidence.sha256_hex((run / "cases.jsonl").read_bytes()),
+                    install_sha256=core_evidence.sha256_hex((run / "install.jsonl").read_bytes()),
+                    rates_sha256=core_evidence.sha256_hex((run / "rates.jsonl").read_bytes()),
+                    receipts=len(receipt_lines))
+    manifest_bytes = c2.dumps(manifest)
+    (run / "run.json").write_bytes(manifest_bytes + b"\n")
+    leaves = [core_evidence.sha256_hex(line) for line in receipt_lines]
+    instance = root_statement.InstanceKey.load(str(keys / "instance.key"))
+    statement = core_evidence.make_root_statement(instance, root_statement.merkle_root(leaves), len(leaves),
+                                                  manifest_bytes, time_us=1)
+    (run / "receipts.roots.jsonl").write_bytes(c2.dumps(statement) + b"\n")
+
+
+def test_case_209_a_cfs_core_run_is_verified_per_basis_under_the_pinned_install_keys(tmp_path):
+    """case_209: RC4, RC3, AF7. A cFS core run with a case for each basis, its not enacted lines and its
+    `rates.jsonl`, whose floor changed across an `install.trust` that dropped a key (and added the one the later
+    floor is signed with), at an install threshold of 2, verifies with the authority key and the starting install key
+    set pinned. It is refused with a floor receipt moved to the release's case, a `would` line whose outcome is
+    changed, a rate count that skips a number, the `install.trust` left out, a floor case with one signature, and no
+    install key pinned."""
+    import json
+    import shutil
+    from prismpath.distribution import install
+    from prismpath.kernel import canon2 as c2
+    from prismpath.ledgers import core_evidence
+    point = _floor_point(tmp_path)
+    rate = {"allows": 3, "window": 60}
+    first = _cfs_floor(point, ALLOW_3, rate=rate)
+    fallback = point.install_set("install.fallback", {"cfs.table": _body(2)}, 1, widens=True)
+    trust = point.install_trust(1, ["N1", "N2", "N4"], threshold=2, signers=["N1", "N2", "N4"])
+    allow_4 = _table_of(("allow", _cmd(4)))
+    second = _cfs_floor(point, allow_4, 2, rate=rate, signers=["N1", "N4"])
+    statements = [*first, *fallback, trust, *second]
+    eid = lambda pairs: env.envelope_id(env.unseal(pairs[0][0])[0])          # noqa: E731
+    core = table.core_of
+    cases = [{"id": "release", "image": core(_body(1)), "readings": [_reading(1), _reading(2)]},
+             {"id": "floor-1", "image": core(ALLOW_3), "readings": [_reading(3)], "basis": "floor", "install": eid(first)},
+             {"id": "floor-2", "image": core(allow_4), "readings": [_reading(4, 1), _reading(4, 2), _reading(4, 3)],
+              "basis": "floor", "install": eid(second)},
+             {"id": "fallback", "image": core(_body(2)), "readings": [_reading(1)], "basis": "fallback",
+              "install": eid(fallback)},
+             {"id": "would", "image": core(_body(1)), "enacted": False,
+              "readings": [_reading(3), _reading(4, 1), _reading(4, 2), _reading(4, 3)]}]
+    cases_path = tmp_path / "cases.jsonl"
+    core_evidence.write_cases(cases, cases_path)
+    keys = tmp_path / "keys"
+    window = _dist.NOW // 60 * 60
+    rates = [{"rule": 0, "window": window, "count": count, "case": "floor-2", "reading": count - 1} for count in (1, 2)]
+    core_evidence.produce(cases_path, tmp_path / "run", keys, install=statements, rates=rates, time_us=1)
+    pin = tmp_path / "install.json"
+    pin.write_text(json.dumps(install.anchor_part([_dist.public(name) for name in ("N1", "N2", "N3")], threshold=2,
+                                                  domain="0" * 64)))
+    pins = {"pin_authority": keys / "authority.pub", "pin_instance": keys / "instance.pub", "pin_install": pin}
+    summary = core_evidence.verify(tmp_path / "run", sample=None, **pins)
+    assert summary["disagree"] == 0 and summary["receipts"] == 11
+
+    def copy(name):
+        target = tmp_path / name
+        shutil.copytree(tmp_path / "run", target)
+        return target
+
+    def lines(run, name):
+        return core_evidence._lines(run / name)
+
+    def refused(run, **changes):
+        _resign(run, keys, **changes)
+        with pytest.raises(core_evidence.Bad) as bad:
+            core_evidence.verify(run, sample=None, **pins)
+        return str(bad.value)
+    # a floor receipt moved to the release's case
+    moved = copy("moved")
+    rows = [c2.loads(line) for line in lines(moved, "cases.jsonl")]
+    taken = rows[2]["readings"].pop()
+    rows[0]["readings"].append(taken)
+    receipts = [c2.loads(line) for line in lines(moved, "receipts.jsonl")]
+    floor_receipt = next(one for one in receipts if one["case"] == "floor-2" and one["reading"] == 2)
+    receipts.remove(floor_receipt)
+    receipts.insert(2, {**floor_receipt, "case": "release", "reading": 2, "image_sha256": receipts[0]["image_sha256"]})
+    for index, one in enumerate(receipts):
+        one["idx"] = index
+    leaf = {(one["case"], one["reading"]): core_evidence.sha256_hex(c2.dumps(one)) for one in receipts}
+    counted = [c2.dumps({**c2.loads(line), "receipt_sha256": leaf[("floor-2", c2.loads(line)["count"] - 1)]})
+               for line in lines(moved, "rates.jsonl")]
+    assert "differ" in refused(moved, cases=[c2.dumps(row) for row in rows],
+                               receipts=[c2.dumps(one) for one in receipts], rates=counted)
+    # a would line whose outcome is changed
+    changed = copy("changed")
+    receipts = [c2.loads(line) for line in lines(changed, "receipts.jsonl")]
+    would = next(one for one in receipts if one["case"] == "would" and one["reading"] == 1)
+    assert would["decision"] == "route"
+    would["target"] = "allow"
+    assert "differ" in refused(changed, receipts=[c2.dumps(one) for one in receipts])
+    # a rate count that skips a number
+    skipped = copy("skipped")
+    rows = [c2.loads(line) for line in lines(skipped, "rates.jsonl")]
+    rows[1]["count"] = 3
+    assert "the count is 3 where 2 is next" in refused(skipped, rates=[c2.dumps(row) for row in rows])
+    # the install.trust left out
+    left = copy("left")
+    kept = [line for line in lines(left, "install.jsonl")
+            if env.read(env.unseal(bytes.fromhex(c2.loads(line)["sealed"]))[0]).artifact != "install.trust"]
+    assert "not signed at the threshold" in refused(left, install_lines=kept)
+    # a floor case with one signature
+    single = copy("single")
+    rows = [c2.loads(line) for line in lines(single, "install.jsonl")]
+    envelope_bytes, entries = env.unseal(bytes.fromhex(rows[-1]["sealed"]))
+    rows[-1]["sealed"] = env.seal_entries(envelope_bytes, entries[:1]).hex()
+    assert "not signed at the threshold" in refused(single, install_lines=[c2.dumps(row) for row in rows])
+    # no install key pinned
+    with pytest.raises(core_evidence.Bad) as bad:
+        core_evidence.verify(tmp_path / "run", sample=None, pin_authority=pins["pin_authority"],
+                             pin_instance=pins["pin_instance"])
+    assert "install key set pinned" in str(bad.value)
+    from prismpath import cli
+    args = cli.build_parser().parse_args(["evidence", "verify", str(tmp_path / "run"), "--sample", "all",
+                                          "--pin-authority", str(pins["pin_authority"]),
+                                          "--pin-instance", str(pins["pin_instance"]), "--pin-install", str(pin)])
+    assert args.func(args) == 0
