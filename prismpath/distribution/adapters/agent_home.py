@@ -110,10 +110,11 @@ def is_distributed(home) -> bool:
     return (Path(home) / "dist" / "trust.json").is_file()
 
 
-def committed_until(home, now: Optional[int] = None) -> Tuple[Dict[str, bytes], int]:
-    """`committed`, and the earliest `expires` of the release's envelopes, 0 when none expires."""
+def committed_until(home, now: Optional[int] = None, kind: str = "agent") -> Tuple[Dict[str, bytes], int]:
+    """`committed`, and the earliest `expires` of the release's envelopes, 0 when none expires. `kind` is the
+    target the home is, `agent` or `gateway`, whose homes have one layout."""
     from prismpath.distribution.pep import read_committed_release
-    release = read_committed_release(str(home), "agent", int(clock() if now is None else now))
+    release = read_committed_release(str(home), kind, int(clock() if now is None else now))
     expiries = [envelope.expires for envelope in release.envelopes.values() if envelope.expires]
     return dict(release.bodies), min(expiries, default=0)
 

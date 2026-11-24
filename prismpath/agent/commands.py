@@ -148,11 +148,12 @@ def _attestation(home: Path, image: bytes, case: str = POLICY_CASE) -> bytes:
                          "sig": signer.sign(core_evidence.IMAGE_DOMAIN + image).hex()}) + b"\n"
 
 
-def load_distributed(home: Path, *, until: Optional[list] = None):
+def load_distributed(home: Path, *, until: Optional[list] = None, kind: str = "agent"):
     """The policy of a home that follows a stream (spec-policy-distribution.md, section 3): the committed
     `policy.core`, every envelope of the release checked again on this load (`agent_home.committed`). Such a home
     holds its instance key and no authority key. Returns the policy and the committed bodies, and appends to
-    `until`, when given, the earliest `expires` of the release (0 when none expires)."""
+    `until`, when given, the earliest `expires` of the release (0 when none expires). A gateway home has the same
+    layout and passes `kind` `gateway`."""
     from prismpath.agent.policy import Policy
     from prismpath.distribution.adapters import agent_home
     from prismpath.distribution.kinds import Refused
@@ -166,7 +167,7 @@ def load_distributed(home: Path, *, until: Optional[list] = None):
     if instance.key_id != _key_id(home, "instance"):
         raise AgentError("instance.key and instance.pub are not one key pair")
     try:
-        bodies, expires = agent_home.committed_until(home)
+        bodies, expires = agent_home.committed_until(home, kind=kind)
     except Refused as refused:
         raise AgentError(f"the home's release does not stand: {refused}") from None
     if until is not None:
@@ -182,8 +183,8 @@ class Committed:
     release that no longer stands stops deciding at the next one (section 9, X3, R5)."""
     WATCHED = ("anchor.json", "setting.json", "counter.json", "floor.json", "trust.json", "active.json")
 
-    def __init__(self, home: Path):
-        self.home = Path(home)
+    def __init__(self, home: Path, kind: str = "agent"):
+        self.home, self.kind = Path(home), kind
         self._stamp: Any = None
         self._until = 0
         self._loaded: Any = None
@@ -205,7 +206,7 @@ class Committed:
         if stamp != self._stamp or (self._until and agent_home.clock() >= self._until):
             self._stamp, until = stamp, []
             try:
-                self._loaded, self._error = load_distributed(self.home, until=until), None
+                self._loaded, self._error = load_distributed(self.home, until=until, kind=self.kind), None
                 self._until = until[0]
             except AgentError as exc:
                 self._loaded, self._error, self._until = None, exc, 0

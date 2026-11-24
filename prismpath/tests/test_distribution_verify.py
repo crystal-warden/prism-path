@@ -211,7 +211,7 @@ def test_the_staged_release_must_agree_at_its_seq():
 
 def test_a_pep_view_names_a_built_kind_and_a_stream():
     with pytest.raises(ValueError):
-        verifier.PepView("gateway", GEN.STREAM)
+        verifier.PepView("xdp", GEN.STREAM)
     with pytest.raises(ValueError):
         verifier.PepView("host", env.TRUST_STREAM)
 

@@ -11,6 +11,11 @@ The home holds what `prismpath agent init` makes (`authority` and `instance` key
 attestation under the authority key, `runs/`), under `<config>/prismpath/gateway` unless `--home` names another.
 `init --policy` takes a compiled `.core.json` image or a `.rules.md` source (compiled here); without it the shipped
 demo policy is recorded.
+
+A home that follows a stream (a PEP of kind `gateway`, `prismpath dist pep --kind gateway`) holds its instance key
+and no authority key. Its policy and route table are the release its PEP committed, so `serve` refuses `--routes`
+there, `init` refuses to record a policy in it, a grant for it is issued where the authority key is (`grant
+--stream`), and a grant is revoked through the signed revocation list (`prismpath dist revoke`), not `revoke`.
 """
 from __future__ import annotations
 
@@ -37,7 +42,8 @@ def add_parser(subparsers) -> None:
     gateway.add_argument('--upstream', default=None, metavar='URL', help='serve: the one service, http://HOST[:PORT]')
     gateway.add_argument('--listen', default='127.0.0.1:8080', metavar='ADDR', help='serve: HOST:PORT (default 127.0.0.1:8080)')
     gateway.add_argument('--routes', default=None, metavar='FILE',
-                         help='serve: the route table, required (the demo one is prismpath/gateway/policy/demo.routes.json)')
+                         help='serve: the route table, required unless the home follows a stream, where it is the committed '
+                              'gateway.routes and refused here (the demo one is prismpath/gateway/policy/demo.routes.json)')
     gateway.add_argument('--session', default=None, help='serve: the id of the run (default a fresh one)')
     gateway.add_argument('--forward-header', action='append', default=[], metavar='NAME',
                          help='serve: also pass this request header to the service (repeatable)')
@@ -52,6 +58,8 @@ def add_parser(subparsers) -> None:
     gateway.add_argument('--method-class', action='append', default=[], metavar='CLASS',
                          help='grant: a method class the grant covers, read, write, delete or other (repeat for more)')
     gateway.add_argument('--ttl', type=int, default=3600, help='grant: seconds the grant lasts (default 3600)')
+    gateway.add_argument('--stream', default=None, metavar='NAME',
+                         help='grant: the stream of the gateway the grant is for (default this home\'s own)')
     gateway.add_argument('--grant-id', default=None, metavar='ID', help='revoke: the id of the grant to revoke')
     gateway.add_argument('--json', action='store_true', help='machine readable output')
     gateway.set_defaults(func=gateway_cmd)
@@ -62,11 +70,29 @@ def _home(args) -> Path:
     return Path(args.home) if args.home else gateway_home()
 
 
+def _distributed(home: Path) -> bool:
+    from prismpath.distribution.adapters import agent_home
+    return agent_home.is_distributed(home)
+
+
+def _load(home: Path):
+    """(policy, run store) of the home: the committed release of a home that follows a stream, else the recorded,
+    attested policy."""
+    from prismpath.agent import commands
+    if _distributed(home):
+        from prismpath.distribution.adapters import gateway as gateway_adapter
+        return gateway_adapter.load(home)
+    return commands.load_checked(home)
+
+
 def init(home: Path, policy: Optional[str], out=None) -> int:
     from prismpath.agent import commands
     from prismpath.agent.policy import Policy
     from prismpath.kernel import policy_source
     out = out or sys.stdout
+    if _distributed(home):
+        raise commands.AgentError(f"{home} follows a stream, so its policy is the release its PEP commits and none is "
+                                  f"recorded here")
     path = Path(policy) if policy else DEMO_POLICY
     if path.name.endswith(".rules.md"):
         image = policy_source.compile_source(path.read_text(encoding="utf-8"))
@@ -98,11 +124,18 @@ def serve(args) -> int:
     if not args.upstream:
         raise SystemExit("prismpath gateway: name the service with --upstream URL")
     host, _, port = args.listen.rpartition(":")
-    if not args.routes:
+    home = _home(args)
+    if _distributed(home):
+        if args.routes:
+            raise SystemExit("prismpath gateway: this home follows a stream, so its route table is the committed "
+                             "gateway.routes; --routes is refused here, and a new table is released on the stream")
+        routes = None
+    elif not args.routes:
         raise SystemExit("prismpath gateway: name the route table with --routes FILE; without one every path reads `other` "
                          f"and a policy that allows `other` would allow all of them (the demo table is {DEMO_ROUTES})")
-    routes = Routes.load(Path(args.routes))
-    gateway = Gateway(args.upstream, routes, _home(args), args.session, args.forward_header, args.timeout,
+    else:
+        routes = Routes.load(Path(args.routes))
+    gateway = Gateway(args.upstream, routes, home, args.session, args.forward_header, args.timeout,
                       args.deadline, args.upstream_timeout, args.max_response, args.max_connections)
     if gateway.failure:
         sys.stderr.write(f"prismpath gateway: every request will be refused: {gateway.failure}\n")
@@ -163,21 +196,27 @@ def verify(home: Path, as_json: bool, out=None) -> int:
 def rules(home: Path, as_json: bool, out=None) -> int:
     from prismpath.agent import commands, rules as agent_rules
     out = out or sys.stdout
-    commands._require_keys(home)
-    policy, _store = commands.load_checked(home)
+    if not _distributed(home):
+        commands._require_keys(home)
+    policy, _store = _load(home)
     data = agent_rules.report(home, policy, "custom", None, None)
     out.write(json.dumps(data, indent=2) + "\n" if as_json else agent_rules.render(data))
     return 0
 
 
-def grant(home: Path, path_classes, method_classes, ttl: int, as_json: bool, out=None) -> int:
-    """Sign a grant under the recorded policy and print the header value a client sends."""
+def grant(home: Path, path_classes, method_classes, ttl: int, as_json: bool, out=None, stream: Optional[str] = None) -> int:
+    """Seal a grant envelope under the recorded policy for the gateway on `stream` (this home's own by default) and
+    print the header value a client sends."""
     from prismpath.agent import commands
     from prismpath.gateway import grants
     out = out or sys.stdout
+    if _distributed(home):
+        raise commands.AgentError(f"{home} follows a stream and holds no authority key; issue the grant where the "
+                                  f"authority key is, with --stream naming this gateway's stream")
     policy, _store = commands.load_checked(home)
     try:
-        value, doc = grants.issue(home, commands._sha256_hex(policy.image), path_classes, method_classes, ttl)
+        value, doc = grants.issue(home, commands._sha256_hex(policy.image), path_classes, method_classes, ttl,
+                                  stream=stream or grants.LOCAL_STREAM)
     except grants.GrantError as exc:
         raise commands.AgentError(str(exc))
     if as_json:
@@ -218,7 +257,7 @@ def gateway_cmd(args) -> int:
         if args.action == 'rules':
             return rules(_home(args), args.json)
         if args.action == 'grant':
-            return grant(_home(args), args.path_class, args.method_class, args.ttl, args.json)
+            return grant(_home(args), args.path_class, args.method_class, args.ttl, args.json, stream=args.stream)
         if args.action == 'revoke':
             return revoke(_home(args), args.grant_id)
         return serve(args)

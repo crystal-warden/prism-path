@@ -112,7 +112,7 @@ _HEX64 = re.compile(r"[0-9a-f]{64}")
 # Digests of a launcher or server argument that is not part of the signed policy: the gateway's route table
 # (`routes_sha256`) and the egress proxy's allowed host list (`hosts_sha256`).
 BOUND_DIGESTS = ("routes_sha256", "hosts_sha256")
-_GRANT_ID = re.compile(r"[0-9a-f]{32}")
+_GRANT_ID = re.compile(r"[0-9a-f]{32}(?:[0-9a-f]{32})?")     # an older grant's id, or a grant envelope's id
 
 
 def _counts_ok(state: Any) -> bool:
