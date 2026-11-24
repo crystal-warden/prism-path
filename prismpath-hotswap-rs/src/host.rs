@@ -942,6 +942,19 @@ impl PolicyHost {
                 return self.reject(&state, Some(&to_hash), Value::Null, reasons, strict);
             }
             let verified = verified.expect("ok verify has a manifest");
+            // L3: this host reads only the older `ppt-pack/1` form, and each read says so in the log, as the
+            // reference's does (docs/design/spec-policy-distribution.md, section 17)
+            self.audit.append(
+                "distribution",
+                "legacy_form",
+                vec![
+                    ("form", json!("ppt-pack/1")),
+                    ("reader", json!("policy_host.swap")),
+                    ("sha256", json!(to_hash)),
+                    ("key_id", verified.get("key_id").cloned().unwrap_or(Value::Null)),
+                    ("refused_from", json!("0.4.0")),
+                ],
+            )?;
             let (ok, reasons) = check_envelope(&verified, &image, &self.envelope);
             if !ok {
                 let version = verified.get("version").cloned().unwrap_or(Value::Null);
