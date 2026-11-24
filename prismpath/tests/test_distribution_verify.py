@@ -209,7 +209,9 @@ def test_the_staged_release_must_agree_at_its_seq():
                                               staged=agreeing)).ok
 
 
-def test_a_pep_view_names_a_built_kind_and_a_stream():
+def test_a_pep_view_names_a_built_kind_and_a_stream(monkeypatch):
+    """Every kind of the closed list has a row now, so the xdp row is taken out to show a kind without one."""
+    monkeypatch.delitem(verifier.kinds.TARGETS, "xdp")
     with pytest.raises(ValueError):
         verifier.PepView("xdp", GEN.STREAM)
     with pytest.raises(ValueError):

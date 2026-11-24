@@ -48,15 +48,22 @@ An address constant is the s32 bit pattern the front end puts in the register (`
 above 128.0.0.0 is a negative constant that net_compile would refuse in a hand written flow (`bit_pattern_constants`).
 An ordering on an address is still refused. Only equality and membership are used on addresses.
 
-The owner's destination table is signed by the owner's authority key (`sign_destinations`, the Ed25519 signing of
-`policy_pack`), and `compile` refuses a table that is unsigned, signed by another key, revoked or edited after signing.
-The signed table travels in the edge directory (`edge.dests.json`), the signed flow names its canonical hash, and every
-check below and the attach gate refuse an edge whose carried table does not verify.
+The owner's destination table is signed by the owner's authority key (`sign_destinations`), and `compile` refuses a
+table that is unsigned, signed by another key, revoked or edited after signing. The signed table travels in the edge
+directory (`edge.dests.json`), the signed flow names its canonical hash, and every check below and the attach gate
+refuse an edge whose carried table does not verify.
+
+The writers emit only distribution envelopes (L1 of docs/design/spec-policy-distribution.md). `sign-dests` writes
+`<table>.sealed`, a `net.dests` envelope over the table's canonical bytes, and `sign` writes the edge's release, the
+`policy.core`, `net.dests` and `net.edge` envelopes an `xdp` enforcement point (`net_dist.py`) commits, each a
+`<artifact>.sealed` beside its `<artifact>.body` in `<edge dir>/release/`, the pairs a controller's inbox takes. The
+readers still take the older forms, the `prismpath.net_dests_pack/1` manifest beside a table and the `ppt-pack/1`
+manifest beside `edge.ppt`, which `verify` and `attach` check through the 0.3 series (L3).
 
 The signed table. The compile writes the table, the names sidecar, the flow it was compiled from and a summary. The
 flow names the SHA-256 of the source image and of the destination table and the governed sources, and `policy_pack`
 signs the table with the flow's own SHA-256 (`flow_sha256`) and the flow's field dictionary in the manifest, so the
-signature covers the image hash by way of the flow. `verify` is the dry run: the pack signature, the envelope and the
+signature covers the image hash by way of the flow, as the `net.edge` envelope's `meta` does. `verify` is the dry run: the pack signature, the envelope and the
 version floor through `net_swap.preload_swap(dry_run=True)`, then the flow against the manifest, the table recompiled
 from the flow byte for byte, the names file against the flow, optionally the whole projection recompiled from the image
 and destination table, and the loader's own parser (`ppt_image.c`, through `formal/diff/ebpf_batch.c`). It loads nothing.
@@ -64,9 +71,9 @@ and destination table, and the loader's own parser (`ppt_image.c`, through `form
 the signed destination table), then `loader netattach` handed the SHA-256 of the verified table. The loader refuses
 `netattach` and `netupdate` without it, so the table loaded is the table checked.
 
-    net_from_policy.py sign-dests DESTS --priv KEY --pub KEY [--version N]
+    net_from_policy.py sign-dests DESTS --priv KEY --pub KEY --expires T [--version N] [--stream S]
     net_from_policy.py compile IMAGE DESTS OUT_DIR --pub KEY [--source IPV4 ...]
-    net_from_policy.py sign OUT_DIR --priv KEY --pub KEY --envelope-id ID --version N
+    net_from_policy.py sign OUT_DIR IMAGE --priv KEY --pub KEY --stream S --seq N --qualification ID --expires T
     net_from_policy.py verify OUT_DIR --pub KEY [--envelope BASE] [--state DIR] [--image IMAGE --dests DESTS]
     net_from_policy.py attach OUT_DIR IFACE --pub KEY [--envelope BASE] [--state DIR] [--loader PATH] [--dry-run]
     net_from_policy.py resolve HOST [HOST ...]       # the owner's one lookup, prints addresses (needs a network)
@@ -101,6 +108,7 @@ from prismpath.agent import classifier  # noqa: E402
 from prismpath.agent.egress_policy import PROXY_CLASSES  # noqa: E402
 from prismpath.agent.policy import Policy  # noqa: E402
 from prismpath.agent.profile import ProfileError, compile_profile  # noqa: E402
+from prismpath.distribution.kinds import Refused  # noqa: E402
 from prismpath import canon  # noqa: E402
 from prismpath.hotswap import policy_pack as pp  # noqa: E402
 from prismpath.kernel import canon2  # noqa: E402
@@ -108,7 +116,10 @@ from prismpath.kernel.parser import parse  # noqa: E402
 
 DEST_FORMAT = "prismpath.net_dests/1"
 DEST_PACK_FORMAT = "prismpath.net_dests_pack/1"   # the detached signed manifest beside a destination table
-DEST_COPY = "edge.dests.json"                     # the signed table an edge directory carries, with its .manifest.json/.sig
+DEST_COPY = "edge.dests.json"                     # the signed table an edge directory carries, with its .sealed
+SEALED = ".sealed"                                # the `net.dests` envelope beside a table (L1)
+RELEASE_DIR = "release"                           # the edge's release envelopes, in an edge directory
+LOCAL_STREAM = "local"                            # the stream of a table signed for its owner's own compile
 EDGE_PORT = classifier.MODEL_API_PORT
 TCP = 6
 MAX_ADDRESSES_PER_HOST = 16
@@ -236,35 +247,96 @@ def _dest_manifest_paths(path) -> Tuple[str, str]:
     return str(path) + ".manifest.json", str(path) + ".manifest.sig"
 
 
-def sign_destinations(path, priv_path: str, pub_path: str, version: int = 1) -> dict:
-    """Sign the owner's destination table with the owner's authority key, the Ed25519 signing the policy packs and
-    flow authorizations use (`policy_pack`: canon/2 manifest, `signed_bytes`, `key_id` the key's SHA-256). Writes
-    `<path>.manifest.json` and `<path>.manifest.sig`. The manifest names the SHA-256 of the file's bytes and of the
-    table's canonical form, which is the hash the compiled edge flow carries. A table the edge cannot use is not signed."""
-    destinations = Destinations.load(path)
-    if int(version) < 1:
-        raise ValueError("the version must be a positive integer")
+def _signer(priv_path: str, pub_path: str):
+    """The owner's authority key, loaded once: the private key and its key id, after checking the two halves match."""
     _Priv, _Pub, ser, _Inv = pp._ed25519()
     _pub, key_id = pp.load_public(pub_path)
     private_key = pp._load_private(priv_path)
     if pp.sha256_hex(private_key.public_key().public_bytes(ser.Encoding.Raw, ser.PublicFormat.Raw)) != key_id:
         raise ValueError(f"{priv_path} is not the private half of {pub_path}")
-    manifest = {"format": DEST_PACK_FORMAT, canon.ENCODING_KEY: canon.CANON2,
-                "file_sha256": pp.sha256_hex(Path(path).read_bytes()), "destinations_sha256": destinations.sha256(),
-                "version": int(version), "key_id": key_id,
-                "created": datetime.now(timezone.utc).isoformat(timespec="seconds")}
-    json_path, sig_path = _dest_manifest_paths(path)
-    pp.write_signed_document(json_path, manifest)
-    Path(sig_path).write_bytes(private_key.sign(pp.signed_bytes(manifest)))
-    return manifest
+    return private_key, key_id
+
+
+def _now() -> int:
+    return int(datetime.now(timezone.utc).timestamp())
+
+
+def sign_destinations(path, priv_path: str, pub_path: str, version: int = 1, *, expires: int,
+                      not_before: Optional[int] = None, stream: str = LOCAL_STREAM) -> dict:
+    """Sign the owner's destination table with the owner's authority key as a `net.dests` distribution envelope
+    (L1), written to `<path>.sealed`. The body is the table's canonical bytes, whose SHA-256 is the hash the
+    compiled edge flow carries, and `version` is its `seq`. A table the edge cannot use is not signed."""
+    from prismpath.distribution import envelope as env
+    destinations = Destinations.load(path)
+    if int(version) < 1:
+        raise ValueError("the version must be a positive integer")
+    private_key, key_id = _signer(priv_path, pub_path)
+    body = destinations.canonical()
+    start = _now() if not_before is None else int(not_before)
+    envelope_bytes = env.build("net.dests", body, stream=stream, seq=int(version), policy_sha256=pp.sha256_hex(body),
+                               release=env.release_id([("net.dests", pp.sha256_hex(body))]), targets=("xdp",),
+                               not_before=start, expires=int(expires))
+    Path(str(path) + SEALED).write_bytes(env.seal(envelope_bytes, [private_key]))
+    return {"format": "prismpath.dist/1", "artifact": "net.dests", "envelope_id": env.envelope_id(envelope_bytes),
+            "destinations_sha256": destinations.sha256(), "version": int(version), "key_id": key_id, "stream": stream}
+
+
+def _verify_sealed(path, raw: bytes, pubkeys: Sequence[str], revoked: frozenset
+                   ) -> Tuple[List[str], Optional["Destinations"], Optional[dict]]:
+    """The `net.dests` envelope at `<path>.sealed` over the table at `path`: signed by a trusted key that is not
+    revoked, an envelope of that artifact, its body the table's canonical bytes and a table the edge can use."""
+    from prismpath.distribution import envelope as env
+    _Priv, _Pub, _ser, InvalidSignature = pp._ed25519()
+    try:
+        envelope_bytes, entries = env.unseal(Path(str(path) + SEALED).read_bytes())
+        envelope = env.read(envelope_bytes)
+    except (OSError, Refused):
+        return ["dests:bad-manifest"], None, None
+    manifest = {"format": "prismpath.dist/1", "artifact": envelope.artifact, "envelope_id": env.envelope_id(envelope_bytes),
+                "version": envelope.seq, "stream": envelope.stream}
+    if envelope.artifact != "net.dests":
+        return ["dests:bad-manifest"], None, manifest
+    keys = {}
+    for key_path in pubkeys:
+        public_key, key_id = pp.load_public(key_path)
+        keys[key_id] = public_key
+    message, signer = env.signed_message(envelope_bytes), None
+    for key_id, signature in entries:
+        if key_id not in keys:
+            continue
+        try:
+            keys[key_id].verify(signature, message)
+            signer = key_id
+            break
+        except InvalidSignature:
+            continue
+    if signer is None:
+        return ["dests:sig-invalid"], None, manifest
+    manifest["key_id"] = signer
+    if signer in revoked:
+        return ["dests:revoked-key"], None, manifest
+    try:
+        destinations = Destinations.from_object(json.loads(raw.decode("utf-8")))
+    except (DestinationError, ValueError):
+        return ["dests:invalid"], None, manifest
+    body = destinations.canonical()
+    if len(body) != envelope.body_size or pp.sha256_hex(body) != envelope.body_sha256:
+        return ["dests:tampered"], None, manifest
+    manifest["destinations_sha256"] = destinations.sha256()
+    return [], destinations, manifest
 
 
 def verify_destinations(path, pubkeys: Sequence[str], revoked: frozenset = frozenset()
                         ) -> Tuple[List[str], Optional["Destinations"], Optional[dict]]:
     """(reasons, table, manifest) for a signed destination table. The first refusal is the only one reported, in the
     order a reader asks: is it signed, by a trusted unrevoked key, does the manifest name that key, is the file the one
-    signed, is it a table the edge can use. An unsigned, wrongly signed or edited table gives reasons and no table."""
+    signed, is it a table the edge can use. An unsigned, wrongly signed or edited table gives reasons and no table.
+
+    The table is signed by its `net.dests` envelope, `<path>.sealed` (L1). A table with none is read in the older
+    form, a `prismpath.net_dests_pack/1` manifest and signature beside it, through the 0.3 series (L3)."""
     _Priv, _Pub, _ser, InvalidSignature = pp._ed25519()
+    if Path(path).is_file() and Path(str(path) + SEALED).is_file():
+        return _verify_sealed(path, Path(path).read_bytes(), pubkeys, revoked)
     json_path, sig_path = _dest_manifest_paths(path)
     if not Path(path).is_file() or not Path(json_path).is_file() or not Path(sig_path).is_file():
         return ["dests:unsigned"], None, None
@@ -461,9 +533,15 @@ def write_edge(out_dir, edge: Edge, signed_destinations: Optional[str] = None) -
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     if signed_destinations:
-        for source, target in zip((str(signed_destinations), *_dest_manifest_paths(signed_destinations)),
-                                  (DEST_COPY, *_dest_manifest_paths(DEST_COPY))):
-            shutil.copyfile(source, out / target)
+        source = str(signed_destinations)
+        if Path(source + SEALED).is_file():
+            pairs = [(source, DEST_COPY), (source + SEALED, DEST_COPY + SEALED)]
+        else:                                                           # the older form (L3)
+            pairs = list(zip((source, *_dest_manifest_paths(source)), (DEST_COPY, *_dest_manifest_paths(DEST_COPY))))
+        for name in (DEST_COPY, DEST_COPY + SEALED, *_dest_manifest_paths(DEST_COPY)):
+            (out / name).unlink(missing_ok=True)
+        for source_path, target in pairs:
+            shutil.copyfile(source_path, out / target)
     (out / "edge.ppt").write_bytes(edge.ppt)
     (out / "edge.names").write_text(edge.names_text())
     (out / "edge.flow.md").write_text(edge.flow, encoding="utf-8")
@@ -473,15 +551,49 @@ def write_edge(out_dir, edge: Edge, signed_destinations: Optional[str] = None) -
     return {name: str(out / name) for name in ("edge.ppt", "edge.names", "edge.flow.md", "edge.json")}
 
 
-def sign(out_dir, priv_path: str, pub_path: str, envelope_id: str, version: int, envelope_dir: Optional[str] = None) -> dict:
-    """Sign `edge.ppt` with its flow (`policy_pack.build_pack`: manifest, `flow_sha256` and the field dictionary) and,
-    when `envelope_dir` is given, the matching envelope. The owner's authority key signs both."""
+def sign(out_dir, image, priv_path: str, pub_path: str, *, stream: str, seq: int, qualification: str, expires: int,
+         not_before: Optional[int] = None, replaces: str = "", widens: bool = False) -> dict:
+    """Seal the edge's release with the owner's authority key (L1): the `policy.core` of `image`, the carried
+    `net.dests` and the `net.edge` table, one release id over the three, each a `<artifact>.sealed` and
+    `<artifact>.body` pair in `<out_dir>/release/`. The `net.edge` envelope's `meta` signs the SHA-256 of the flow
+    and of the names file and the qualification envelope id. Nothing is sealed that an `xdp` enforcement point
+    would refuse: the image must be the flow's source, the carried table must verify under `pub_path` and be the
+    flow's, and the table must be the one compiled again from the two. `widens` and `replaces` are the owner's
+    (W1, W2), and a larger release also needs a `trust.widening` statement of the same release."""
+    from prismpath.distribution import envelope as env
     out = Path(out_dir)
     flow = (out / "edge.flow.md").read_text(encoding="utf-8")
-    manifest = pp.build_pack(str(out / "edge.ppt"), {}, version, envelope_id, priv_path, pub_path, flow_text=flow)
-    if envelope_dir:
-        pp.build_envelope(envelope_id, pp.field_dictionary_of(flow), None, priv_path, pub_path, envelope_dir)
-    return manifest
+    table = (out / "edge.ppt").read_bytes()
+    policy = Policy(image if isinstance(image, (bytes, bytearray)) else Path(image).read_bytes())
+    header = parse_flow_header(flow)
+    if header is None or header[0] != image_sha256(policy):
+        raise ProjectionError("the image is not the source the edge flow names")
+    reasons, carried, _manifest = verify_destinations(out / DEST_COPY, [pub_path])
+    if carried is None:
+        raise DestinationError(f"the carried destination table does not verify: {', '.join(reasons)}")
+    if carried.sha256() != header[1]:
+        raise DestinationError("the carried destination table is not the one the edge flow names")
+    edge = project(policy, carried, [address_text(a) for a in _flow_sources(flow)])
+    if edge.ppt != table or edge.flow != flow:
+        raise ProjectionError("edge.ppt is not the table compiled from the image and the carried destination table")
+    private_key, key_id = _signer(priv_path, pub_path)
+    bodies = {"policy.core": policy.image, "net.dests": carried.canonical(), "net.edge": table}
+    release = env.release_id([(name, pp.sha256_hex(body)) for name, body in bodies.items()])
+    meta = {"net.edge": {"flow_sha256": pp.sha256_hex(flow.encode("utf-8")),
+                         "names_sha256": pp.sha256_hex(edge.names_text().encode("utf-8")), "qualification": qualification}}
+    start = _now() if not_before is None else int(not_before)
+    directory = out / RELEASE_DIR
+    directory.mkdir(exist_ok=True)
+    envelopes = {}
+    for name, body in bodies.items():
+        envelope_bytes = env.build(name, body, stream=stream, seq=int(seq), policy_sha256=pp.sha256_hex(policy.image),
+                                   release=release, targets=("xdp",), not_before=start, expires=int(expires),
+                                   replaces=replaces, widens=widens, meta=meta.get(name))
+        (directory / f"{name}.sealed").write_bytes(env.seal(envelope_bytes, [private_key]))
+        (directory / f"{name}.body").write_bytes(body)
+        envelopes[name] = env.envelope_id(envelope_bytes)
+    return {"release": release, "policy_sha256": pp.sha256_hex(policy.image), "stream": stream, "seq": int(seq),
+            "key_id": key_id, "envelopes": envelopes, "directory": str(directory)}
 
 
 # -------------------------------------------------------------------------- the userspace C evaluator
@@ -752,14 +864,22 @@ def main(argv=None) -> int:
     sd.add_argument("dests")
     sd.add_argument("--priv", required=True)
     sd.add_argument("--pub", required=True)
-    sd.add_argument("--version", type=int, default=1)
+    sd.add_argument("--version", type=int, default=1, help="the envelope's seq")
+    sd.add_argument("--stream", default=LOCAL_STREAM)
+    sd.add_argument("--not-before", type=int, help="Unix seconds; now when not given")
+    sd.add_argument("--expires", type=int, required=True, help="Unix seconds")
     s = sub.add_parser("sign")
     s.add_argument("out")
+    s.add_argument("image", help="the signed agent image the edge was compiled from, sealed as the release's policy.core")
     s.add_argument("--priv", required=True)
     s.add_argument("--pub", required=True)
-    s.add_argument("--envelope-id", required=True)
-    s.add_argument("--version", type=int, required=True)
-    s.add_argument("--envelope-dir")
+    s.add_argument("--stream", required=True, help="the stream the xdp enforcement point follows")
+    s.add_argument("--seq", type=int, required=True)
+    s.add_argument("--qualification", required=True, help="the qualification envelope id the net.edge meta names")
+    s.add_argument("--not-before", type=int, help="Unix seconds; now when not given")
+    s.add_argument("--expires", type=int, required=True, help="Unix seconds")
+    s.add_argument("--replaces", default="", help="the policy hash of the release this one replaces")
+    s.add_argument("--widens", action="store_true", help="the release allows more than the one it replaces")
     v = sub.add_parser("verify")
     v.add_argument("out")
     v.add_argument("--pub", nargs="+", required=True)
@@ -786,16 +906,18 @@ def main(argv=None) -> int:
             edge = project(Path(args.image).read_bytes(), Destinations.load_signed(args.dests, args.pub, revoked), args.source)
             print(json.dumps({"written": write_edge(args.out, edge, args.dests), "report": edge.report}, indent=1))
         elif args.verb == "sign-dests":
-            manifest = sign_destinations(args.dests, args.priv, args.pub, args.version)
-            print(json.dumps({"destinations_sha256": manifest["destinations_sha256"], "key_id": manifest["key_id"]}, indent=1))
+            manifest = sign_destinations(args.dests, args.priv, args.pub, args.version, expires=args.expires,
+                                         not_before=args.not_before, stream=args.stream)
+            print(json.dumps({"destinations_sha256": manifest["destinations_sha256"], "key_id": manifest["key_id"],
+                              "envelope_id": manifest["envelope_id"]}, indent=1))
         elif args.verb == "attach":
             result = attach(args.out, args.iface, args.pub, args.envelope, args.state, args.revoked, args.loader, dry_run=args.dry_run)
             print(json.dumps(result, indent=1))
             return 0 if result.get("ok") else 1
         elif args.verb == "sign":
-            manifest = sign(args.out, args.priv, args.pub, args.envelope_id, args.version, args.envelope_dir)
-            print(json.dumps({"image_sha256": manifest["image_sha256"], "flow_sha256": manifest["flow_sha256"],
-                              "version": manifest["version"]}, indent=1))
+            print(json.dumps(sign(args.out, args.image, args.priv, args.pub, stream=args.stream, seq=args.seq,
+                                  qualification=args.qualification, expires=args.expires, not_before=args.not_before,
+                                  replaces=args.replaces, widens=args.widens), indent=1))
         elif args.verb == "verify":
             image = Policy(Path(args.image).read_bytes()) if args.image else None
             dests = Destinations.load(args.dests) if args.dests else None
@@ -805,7 +927,7 @@ def main(argv=None) -> int:
             return 0 if result["ok"] else 1
         else:
             print(json.dumps({"format": DEST_FORMAT, "resolved": resolve(args.hosts)}, indent=1))
-    except (DestinationError, ProjectionError, ValueError, OSError) as error:
+    except (DestinationError, ProjectionError, ValueError, OSError, Refused) as error:
         print(f"refused: {error}", file=sys.stderr)
         return 2
     return 0

@@ -226,8 +226,8 @@ def test_case_049_an_agent_release_without_its_host_list_is_incomplete(home):
 
 
 def test_case_045_a_staged_sandbox_profile_that_is_not_the_compiled_one_is_derived_mismatch(home):
-    """Case 45's profile half (its net.edge half is the XDP edge's): V11 at commit. A `sandbox.profile` must be the profile the staged `policy.core`
-    compiles to, and the compiled one commits."""
+    """case_045: V11 at commit, the profile half (the net.edge half is test_distribution_xdp.py's). A
+    `sandbox.profile` must be the profile the staged `policy.core` compiles to, and the compiled one commits."""
     compiled = compile_profile(STRICT, "bash").canonical()
     other = canon.canon2_bytes({**json.loads(compiled), "max_processes": 512})
     records = home.release(STRICT, 1, extra=[("sandbox.profile", other)])
