@@ -32,7 +32,7 @@ import threading
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from prismpath.distribution import devbuild
+from prismpath.distribution import devbuild, legacy
 from prismpath.hotswap import policy_pack as pp
 from prismpath.ledgers.audit_log import AuditLog
 from prismpath.ledgers import root_statement
@@ -294,7 +294,8 @@ class PolicyHost:
         """Verify -> envelope -> version -> stage -> atomic flip. Returns {ok, reasons} (or the
         active dict on success). Every outcome is one audit event; the active policy only changes
         on full success. A state directory whose enforcement point committed a distribution envelope
-        refuses every pack with `dist:legacy-refused` (L2). `allow_unsigned` is an escape hatch that works
+        refuses every pack with `dist:legacy-refused` (L2). A pack is the sealed `policy.ppt` envelope beside the
+        image, or the older `ppt-pack/1` manifest, read with a `legacy_form` audit event (L3). `allow_unsigned` is an escape hatch that works
         only in a dev build. In a production build the hatch is refused and the pack is checked as signed."""
         with self._lock:
             if self._distribution_floor():
@@ -326,6 +327,9 @@ class PolicyHost:
                 ok, reasons, manifest = pp.verify_pack(ppt_path, self.pubkey_paths, self.revoked)
                 if not ok:
                     return self._reject(to_hash, None, reasons, strict)
+                if pp.is_older(manifest):           # L3: an older pack is read, and says so in the log
+                    legacy.record(self.audit, legacy.PACK, reader="policy_host.swap", sha256=to_hash,
+                                  key_id=manifest.get("key_id"))
                 ok, reasons = pp.check_envelope(manifest, image, self.envelope)
                 if not ok:
                     return self._reject(to_hash, manifest.get("version"), reasons, strict)

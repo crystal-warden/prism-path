@@ -1596,10 +1596,12 @@ def swap_cmd(args):
                 print('pack needs --ppt --priv --pub', file=sys.stderr)
                 return 2
             flow_text = _read_text(args.flow) if args.flow else None
-            manifest = policy_pack.build_pack(args.ppt, _parse_fields(args.fields), args.version,
-                                              args.envelope_id, args.priv, args.pub[0], overlay_of=args.overlay_of,
-                                              flow_text=flow_text)
-            print(_json.dumps(manifest, indent=1))
+            # L1: the pack is a sealed `policy.ppt` envelope, `<ppt>.sealed`, on the stream `local` with a lifetime of
+            # ten years; the flags mean what they meant for the older manifest
+            manifest = policy_pack.seal_pack(args.ppt, _parse_fields(args.fields), args.version,
+                                             args.envelope_id, args.priv, args.pub[0], overlay_of=args.overlay_of,
+                                             flow_text=flow_text)
+            print(_json.dumps({**manifest, "sealed": args.ppt + policy_pack.SEALED}, indent=1))
             return 0
         if action == 'verify':
             if not (args.ppt and args.pub):

@@ -4,6 +4,7 @@ authority.pub
 policy.tampered.ppt
 *.manifest.json
 *.manifest.sig
+*.sealed
 *.envelope.json
 *.envelope.sig
 *.tar.zst

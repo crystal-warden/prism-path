@@ -264,7 +264,9 @@ def _deployment(state_dir: str, roots, pins: List[str], flow_sha: str) -> Dict[s
         manifest = pack.get("manifest")
         checked = isinstance(manifest, dict)
         if not checked and pack.get("status") == "unchecked":
-            manifest = _bounded_document(ppt_path + ".manifest.json", roots)
+            from prismpath.hotswap import policy_pack
+            manifest = (policy_pack.read_sealed_manifest(ppt_path) if os.path.exists(ppt_path + policy_pack.SEALED)
+                        else _bounded_document(ppt_path + ".manifest.json", roots))
         manifest = manifest if isinstance(manifest, dict) else {}
         pack = {"ppt": pack.get("ppt", ppt_path), "status": pack.get("status"), "causes": pack.get("causes", []),
                 "key": pack.get("key"), "message": pack.get("message"), "command": pack.get("command"),
