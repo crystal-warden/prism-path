@@ -8,6 +8,14 @@ spec stable.
 
 ## [Unreleased]
 
+### Changed: grants and route tables travel in distribution envelopes, and a grant is revoked through the signed list (2026-11-23)
+
+- **The `gateway` row joins the kind table.** A gateway release needs `policy.core` and `gateway.routes`, a route table must read as `Routes.from_doc` reads it and be its canonical spelling, and any change of the table is a widening. `prismpath dist pep --kind gateway` runs the PEP of a gateway home that holds its instance key and no authority key.
+- **A gateway home that follows a stream reads its policy, its route table and its grants' trust store from the committed release at every request.** A revocation, an expiry or a new route table takes effect at the next request, a commit of another policy refuses the run that began under the old one, and the gateway's decisions reach the PEP's heartbeat. `--routes` is refused in such a home, as are `init`, `grant` and `revoke`.
+- **`prismpath gateway grant` writes a grant envelope.** Its header value is the sealed envelope and its `prismpath.dist-grant/1` body joined by a dot, its id is the envelope id, and `--stream` names the gateway it is for. A gateway reads it with the verifier's GR2 rules, V2 to V7 and V9, then holds it to its policy, its classes and its lifetime of at most 30 days.
+- **A grant is revoked by its envelope id in the signed `trust.revocation`, and a gateway that follows a stream reads no other list.** A home that holds its own authority key still lists ids in `grants.revoked`, now in the trust store its grants are verified under.
+- **The older `prismpath.grant/1` form is still read in a home that holds its own authority key and refused in one that follows a stream.** Nothing writes it any more. A receipt's journal line takes either form's grant id.
+
 ### Added: an agent home can follow a policy stream, with a floor, an expiry and no authority key on the machine (2026-11-23)
 
 - **`prismpath agent init --follow STREAM --anchor FILE` makes the agent home follow a stream.** It shows the anchor's fingerprint, takes it back with `--confirm`, writes the hook entries, and the home holds an instance key and no authority key. `prismpath dist pep --kind agent` pulls its releases.

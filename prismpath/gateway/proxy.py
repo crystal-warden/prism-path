@@ -9,6 +9,13 @@ classes, and the grant), the reading is decided by the core under the policy rec
 home (the layout of `prismpath agent init`: keys, `policy.core.json`, `policy.attestation.json`, `runs/`), and the
 decision is appended to the gateway's run as a receipt, durably, before anything else happens to the request.
 
+A home that follows a stream (spec-policy-distribution.md, section 3, the `gateway` target) holds no policy file and
+takes no route table from the command line: at every request the gateway reads the release its PEP committed, the
+`policy.core`, the `gateway.routes` and the trust store its grants are verified under
+(`prismpath.distribution.adapters.gateway.Following`). A revocation, an expiry or a new route table takes effect at
+the next request, and a release that no longer stands refuses every request until one does. One run is decided by
+one policy, so a release with another policy refuses until the gateway is started again under it.
+
   allow    the request goes to the upstream as the reading says it is: the target that was read, the
            body that was read, and a short list of headers (Accept, Accept-Language, Content-Type, User-Agent, and
            the names given with --forward-header), plus `X-PrismPath-Run` and `X-PrismPath-Receipt` so the service can
@@ -70,7 +77,7 @@ class Outcome:
 class Gateway:
     """The decisions and the receipts of one gateway: one policy, one run."""
 
-    def __init__(self, upstream: str, routes: rd.Routes, home: Path, session: Optional[str] = None,
+    def __init__(self, upstream: str, routes: Optional[rd.Routes], home: Path, session: Optional[str] = None,
                  forward_headers: Sequence[str] = (), timeout: float = 10.0, deadline: float = 30.0,
                  upstream_timeout: float = 10.0, max_response: int = 8 * 1024 * 1024, max_connections: int = 64):
         parts = urlsplit(upstream)
@@ -85,26 +92,67 @@ class Gateway:
         self.timeout, self.deadline, self.upstream_timeout = timeout, deadline, upstream_timeout
         self.max_response, self.max_connections = max_response, max_connections
         self.lock = threading.Lock()
-        self.policy = self.run = self.grants = None
+        self.policy = self.run = self.grants = self.follow = None
         self.failure: Optional[str] = None
+        from prismpath.distribution.adapters import agent_home
+        distributed = agent_home.is_distributed(self.home)
+        if distributed and routes is not None:
+            raise ValueError("this gateway home follows a stream, so its route table is the committed gateway.routes "
+                             "and none is given here")
+        if not distributed and routes is None:
+            raise ValueError("a gateway home that does not follow a stream is given its route table")
         try:
             from prismpath.agent import commands
-            policy, store = commands.load_checked(self.home)
+            from . import grants
+            if distributed:
+                from prismpath.distribution.adapters.gateway import Following
+                from prismpath.agent.run import RunStore
+                self.follow = Following(self.home)
+                state = self.follow.current()
+                policy, store = state.policy, RunStore(self.home / commands.RUNS_DIR)
+                self.routes, self.grants = state.routes, state.grants
+            else:
+                policy, store = commands.load_checked(self.home)
+                self.grants = grants.Verifier(commands._key_paths(self.home, "authority")[1].read_bytes(),
+                                              commands._sha256_hex(policy.image), self.home / grants.REVOKED_FILE)
             if sorted(policy.fields) != sorted(rd.FIELDS):
                 raise commands.AgentError(f"the recorded policy's fields {policy.fields} are not the gateway reading's "
                                           f"{sorted(rd.FIELDS)}")
             self.policy = policy
-            from . import grants
-            self.grants = grants.Verifier(commands._key_paths(self.home, "authority")[1].read_bytes(),
-                                          commands._sha256_hex(policy.image), self.home / grants.REVOKED_FILE)
             self.run = store.open(self.session, policy.image)
         except Exception as exc:   # noqa: BLE001 - nothing can be decided, so everything is refused
             self.failure = f"the policy could not be loaded or the run opened ({type(exc).__name__}: {exc})"
 
     # ------------------------------------------------------------------ decide
-    def decide(self, reading: Dict[str, Any], grant: Optional[Dict[str, str]] = None) -> Outcome:
+    def current(self) -> Tuple[Optional[str], Optional[rd.Routes], Any]:
+        """(failure, routes, grant verifier) the next request is read and decided under. A home that follows a
+        stream reads its committed release again here, so the answer follows a commit, a revocation or an expiry."""
+        if self.failure:
+            return self.failure, None, None
+        if self.follow is None:
+            return None, self.routes, self.grants
+        from prismpath.agent import commands
+        try:
+            state = self.follow.current()
+        except commands.AgentError as exc:
+            return f"the home's release no longer decides ({exc})", None, None
+        if state.policy.image != self.policy.image:
+            return ("the home committed another policy since this run began, and one run is decided by one policy",
+                    None, None)
+        return None, state.routes, state.grants
+
+    def decide(self, reading: Dict[str, Any], grant: Optional[Dict[str, str]] = None,
+               routes: Optional[rd.Routes] = None) -> Outcome:
+        """The decision and receipt of `reading`, read under `routes` (by default the routes `current` answers)."""
         if self.failure:
             return Outcome("refuse", failure=self.failure)
+        if routes is None:
+            failure, routes, _grants = self.current()
+            if failure:
+                return Outcome("refuse", failure=failure)
+        if self.follow is not None:
+            from prismpath.distribution.adapters import agent_home
+            agent_home.note(self.home, reading)                  # for the PEP's heartbeat (H5)
         try:
             raw = self.policy.reading_bytes(reading)
             decision = self.policy.decide(raw)
@@ -112,7 +160,7 @@ class Gateway:
             return Outcome("refuse", failure=f"the request could not be decided ({type(exc).__name__}: {exc})")
         try:
             with self.lock:
-                index = self.run.append(raw, decision.verdict, extras=Extras(grant=grant, routes_sha256=self.routes.digest()))
+                index = self.run.append(raw, decision.verdict, extras=Extras(grant=grant, routes_sha256=routes.digest()))
         except Exception as exc:   # noqa: BLE001 - never forward a request whose receipt is not durable
             return Outcome("refuse", failure=f"its receipt could not be written ({type(exc).__name__}: {exc})")
         return Outcome(decision.kind, decision.cause, decision.cause_code, index)
@@ -305,11 +353,16 @@ class _Handler(BaseHTTPRequestHandler):
                 held = None
             else:
                 body = taken
+        failure, routes, verifier = gateway.current()
+        if failure:
+            status, doc = gateway.refusal(Outcome("refuse", failure=failure))
+            self._json(status, doc, head)
+            return
         try:
-            reading, grant = rd.read(self.command, self.path, headers, gateway.routes, held, gateway.grants)
+            reading, grant = rd.read(self.command, self.path, headers, routes, held, verifier)
         except Exception:   # noqa: BLE001 - a request that cannot be read is unknown, never forwarded
             reading, grant = dict(rd.UNREADABLE), None
-        outcome = gateway.decide(reading, grant)
+        outcome = gateway.decide(reading, grant, routes)
         if outcome.kind == "allow" and (held is None or length is None or length > rd.MAX_BODY):
             outcome = Outcome("refuse", failure="its body could not be taken whole")     # belt and braces: the policy refused these
         if outcome.kind != "allow":

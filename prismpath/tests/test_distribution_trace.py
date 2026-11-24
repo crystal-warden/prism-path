@@ -42,9 +42,10 @@ C_KINDS = frozenset({"mesh", "cfs"})
 # has its test. 16: the Rust PEP allows nothing; 66, 70, 72, 73, 79, 123, 130, 134: the Rust verifier decides them,
 # and applying the trust statement, a commit or a release staying active is the Rust PEP's (PR 14). 60: the C core
 # runs the mesh half, and the cfs half, a table taken on the signer's word, waits for the cfs kind in the C core.
-PARTIAL = {"P": frozenset(), "R": frozenset({16, 66, 70, 72, 73, 79, 123, 130, 134}), "C": frozenset({60})}
+# 100: Python's grant writer emits an envelope, and the other older forms' writers wait for PRs 11 and 12.
+PARTIAL = {"P": frozenset({100}), "R": frozenset({16, 66, 70, 72, 73, 79, 123, 130, 134}), "C": frozenset({60})}
 PENDING = {
-    "P": "45 59 81 100 102 104-105 161-239",
+    "P": "45 100 102 104-105 161-239",
     "R": "16-17 23-24 26 31 43 46-48 50-53 62-63 66 69-70 72-73 77 79 82 84-85 101 104 111 123 126 130 134 137-140 143 161-163 165-166 169-172 174-178 182-183 186 188-190 193 195 197 199 201-202 204-205 207 213 215 218 221 223-227 230 233-236",
     "C": "25 60 97 104-105 122 161-163 165-167 169-172 174-178 180 182-184 186 188-195 197-205 207-208 210 213 215-216 218-221 223-227 230-236",
 }
