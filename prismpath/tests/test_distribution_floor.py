@@ -703,3 +703,96 @@ def test_case_265_a_reconciling_pep_asks_its_floor_first(tmp_path):
             assert silent["basis"] == "fallback" and (beat.fallback, beat.state) == (True, "reconciling")
         else:
             assert silent["cause"] == "dist:reconciling" and not beat.fallback
+
+
+# ------------------------------------------------------------------ OP1, K4: the operator keys
+
+def test_case_224_no_key_is_held_in_two_roles(tmp_path):
+    """case_224: K4, O4, IS11. An anchor whose operator key is an authority key and one whose operator key is an
+    install key are refused at provisioning. A `trust.rotation` whose `add` is an operator key and one whose `add` is
+    a retired operator key, an `install.trust` that puts one key in `keys` and in `operators` and one that adds to
+    `operators` a key the PEP retired as an install key are `dist:rotation-invalid`. One that drops an operator key
+    is applied with the key retired, and one that adds it again is `dist:rotation-invalid`."""
+    from prismpath.distribution.pep import PepRefused
+    fresh = _agent(tmp_path, "fresh", install_keys=[])
+    for changes in (dict(keys=["N1", "N2"], operators=["A"]), dict(keys=["N1", "N2"], operators=["N1"])):
+        with pytest.raises((Refused, PepRefused)):
+            fresh.pep.provision(_agent(tmp_path, "template").anchor(**changes))
+    assert fresh.pep.installed.record is None
+    point = _agent(tmp_path, operators=["O1", "O2"])
+    assert _read(point, point.rotate(1, "O1")).cause == "dist:rotation-invalid"
+    sealed, body = point.install_trust(1, KEYS, threshold=2, operators=["O1"], signers=["N1", "N2"])
+    assert _read(point, point.pep.stage(sealed, body)).event == "install-applied"
+    assert _dist.key_id("O2") in point.pep.installed.record.retired
+    assert _read(point, point.rotate(1, "O2")).cause == "dist:rotation-invalid"
+    both = install.trust_body([_dist.public(name) for name in KEYS], threshold=2,
+                              operators=[_dist.public("O1"), _dist.public("N3")])
+    raw = env.build("install.trust", both, stream=STREAM, seq=2, targets=("agent",), not_before=NOT_BEFORE,
+                    expires=0, policy_sha256=env.ZERO_HASH, release=env.ZERO_HASH, widens=True)
+    assert _read(point, point.pep.stage(env.seal(raw, [GEN.test_key(name) for name in ("N1", "N2")]), both)).cause \
+        == "dist:rotation-invalid"
+    sealed, body = point.install_trust(2, ["N1", "N2"], threshold=2, operators=["O1"], signers=["N1", "N2"])
+    assert _read(point, point.pep.stage(sealed, body)).event == "install-applied"
+    sealed, body = point.install_trust(3, ["N1", "N2"], threshold=2, operators=["N3", "O1"],
+                                       signers=["N1", "N2", "N3"], widens=True)
+    assert _read(point, point.pep.stage(sealed, body)).cause == "dist:rotation-invalid"
+    sealed, body = point.install_trust(3, ["N1", "N2"], threshold=2, operators=["O1", "O2"],
+                                       signers=["N1", "N2", "O2"], widens=True)
+    assert _read(point, point.pep.stage(sealed, body)).cause == "dist:rotation-invalid"
+
+
+def test_case_233_an_install_provisioning_takes_an_operator_key_back(tmp_path):
+    """case_233: IS13, IS11. A PEP with an install threshold of 1 and two operator keys takes an install provisioning
+    whose `install.trust` drops one of them, which is retired with its trust state and floor unchanged, and an answer
+    that key signs is `dist:target-mismatch`, as the threshold is 1."""
+    point = _agent(tmp_path, install_threshold=1, operators=["O1", "O2"])
+    trust, sequence = point.pep.trust.to_bytes(), point.pep.floor
+    sealed, body = point.install_trust(1, KEYS, threshold=1, operators=["O1"], signers=["N1"])
+    records = [_read(point, one) for one in point.pep.provision_install([(sealed, body)])]
+    assert records[-1].event == "install-applied" and _dist.key_id("O2") in point.pep.installed.record.retired
+    assert point.pep.trust.to_bytes() == trust and point.pep.floor == sequence
+    assert _read(point, point.pep.stage(*_dist.answer(point, "ab" * 32, signer="O2"))).cause == "dist:target-mismatch"
+
+
+def test_case_236_an_anchor_keeps_the_instance_key_out_of_every_role(tmp_path):
+    """case_236: P2, K4. An anchor whose operator key is the PEP's instance key, one whose install key is also an
+    operator key, and one whose install key is the instance key are each refused at provisioning and the PEP is
+    unchanged."""
+    from prismpath.distribution.pep import PepRefused
+    point = _agent(tmp_path)
+    before = (point.pep.trust.to_bytes(), point.pep.installed.record)
+    template = _agent(tmp_path, "template")
+    for changes in (dict(operators=["I"]), dict(keys=["N1", "N2"], operators=["N2"]), dict(keys=["I", "N2"])):
+        with pytest.raises((Refused, PepRefused)):
+            point.pep.provision(template.anchor(**changes))
+    assert (point.pep.trust.to_bytes(), point.pep.installed.record) == before
+
+
+def test_case_235_an_anchor_without_an_install_part_leaves_the_install_record(tmp_path):
+    """case_235: P4, P2, K4. An anchor whose `keys` holds an entry in the role `install` is `dist:bad-format`. A PEP
+    that holds an install record is provisioned with a `/1` anchor and with a `/2` anchor with no `install` member,
+    its install record, sets and sequences unchanged each time, and refuses a `/1` anchor whose authority key is a
+    held install key and one whose authority key is an operator key it retired."""
+    from prismpath.distribution import trust as trust_module
+    from prismpath.distribution.pep import PepRefused
+    point = _agent(tmp_path, operators=["O1", "O2"])
+    doc = canon.canon2_bytes({canon.ENCODING_KEY: canon.CANON2, "format": "prismpath.dist-trust/1",
+                              "keys": {_dist.key_id("A"): {"public": _dist.public("A").hex(), "role": "install"}},
+                              "stream": STREAM, "target": "agent", "threshold": 1})
+    with pytest.raises(Refused) as refused:
+        trust_module.read_anchor(doc)
+    assert refused.value.cause == "dist:bad-format"
+    _floor(point)
+    sealed, body = point.install_trust(1, KEYS, threshold=2, operators=["O1"], signers=["N1", "N2"])
+    point.pep.stage(sealed, body)
+    held = point.pep.installed.record
+    for anchor in (trust_module.anchor_bytes([_dist.public("A")], target="agent", stream=STREAM),
+                   trust_module.anchor_bytes([_dist.public("A")], target="agent", stream=STREAM,
+                                             controller=_dist.public("C"))):
+        point.pep.confirm(point.pep.provision(anchor))
+        record = point.pep.installed.record
+        assert (record.sets, record.seqs, record.keys, record.trust_seq) == (held.sets, held.seqs, held.keys,
+                                                                             held.trust_seq)
+    for authority in ("N1", "O2"):
+        with pytest.raises((Refused, PepRefused)):
+            point.pep.provision(trust_module.anchor_bytes([_dist.public(authority)], target="agent", stream=STREAM))

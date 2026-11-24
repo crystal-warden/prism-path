@@ -362,6 +362,24 @@ class AgentPep(Point):
         return refused[0] if refused else acks[-1]
 
 
+def answer(point, receipt, answer="allow", *, signer="O1", pep=None, not_before=None, lifetime=300, policy=None,
+           kind=None):
+    """A sealed `operator.answer` to the escalation whose receipt hash is `receipt`, and its body."""
+    from prismpath.distribution import floor, kinds
+    pep = pep or state_record.pep_id(point.key.public_raw).hex()
+    kind = kind or point.kind
+    body = floor.answer_body(answer, pep, receipt)
+    start = point.clock.now - 10 if not_before is None else not_before
+    held = point.pep.floor_set()
+    doc = {"artifact": kinds.ANSWER, "body_sha256": canon.sha256_hex(body), "body_size": len(body),
+           "encoding": "canon/2", "expires": start + lifetime, "format": env.FORMAT, "meta": {}, "not_before": start,
+           "policy_sha256": policy or (held.policy_sha256 if held else "00" * 32), "release": env.ZERO_HASH,
+           "replaces": "", "seq": 1, "stream": STREAM, "targets": [kind], "widens": False}
+    raw = canon.canon2_bytes(doc)                     # raw, so a lifetime the writer refuses can be sent
+    key = GEN.test_key(signer)
+    return env.seal_entries(raw, [(key_id(signer), key.sign(env.signed_message(raw)))]), body
+
+
 # ------------------------------------------------------------------ the hold cases, on every kind with HOLD
 
 def _read(point: Point, signed: bytes):

@@ -155,6 +155,11 @@ def read(envelope_bytes: bytes, *, reads_meta: bool = True) -> Envelope:
         _require(doc["expires"] == 0, "a trust or an install kind's expires is 0")         # E5, X4, IS1
     else:
         _require(doc["expires"] > doc["not_before"], "expires is not above not_before")      # E5
+    if artifact == kinds.ANSWER:                     # OP2: one PEP, one escalation, at most 600 seconds
+        _require(doc["expires"] - doc["not_before"] <= kinds.ANSWER_LIFE, "an answer lives at most 600 seconds")
+        _require(doc["seq"] == 1 and doc["release"] == ZERO_HASH and doc["replaces"] == "" and not doc["widens"]
+                 and len(targets) == 1 and stream != TRUST_STREAM, "an answer's seq, release, replaces, widens, "
+                                                                   "targets or stream")
     if install:
         _check_install(doc)
     if reads_meta:

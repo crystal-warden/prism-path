@@ -126,9 +126,12 @@ def _verify(sealed: bytes, body: bytes, trust: TrustStore, pep: PepView, now: in
     counted = trust.counting(entries, message, kinds.AUTHORITY)
     record = pep.install.record if pep.install is not None else None
     installed = record.counting(entries, message) if record is not None else None
-    if not counted.ok and not (installed is not None and installed.ok):
+    answering = record.answering(entries, message) if record is not None else None       # OP1
+    if not counted.ok and not (installed is not None and installed.ok) and not (answering is not None and answering.ok):
+        if _answer_out_of_place(envelope_bytes, pep, record, target):
+            return Verdict("dist:target-mismatch")                                # OP1: whatever its signatures
         if counted.cause == "dist:unknown-key" and installed is not None:
-            return installed
+            return installed if installed.cause != "dist:unknown-key" else answering
         return counted
     # V4: the envelope reads
     try:
@@ -138,6 +141,8 @@ def _verify(sealed: bytes, body: bytes, trust: TrustStore, pep: PepView, now: in
     # V5, K4: the role the artifact needs is one it is signed under. An install kind is checked on its own path
     if envelope.artifact in kinds.INSTALL_ARTIFACTS:
         return _verify_install(envelope, entries, message, body, trust, pep, now, installed, through_v8=through_v8)
+    if envelope.artifact == kinds.ANSWER:
+        return _verify_answer(envelope, body, trust, pep, now, answering, through_v8=through_v8)
     if not counted.ok:
         return Verdict(counted.cause, envelope)
     # V5: for this PEP's kind, an artifact its kind uses or a trust kind its machine applies, on its stream or
@@ -208,6 +213,48 @@ def _verify(sealed: bytes, body: bytes, trust: TrustStore, pep: PepView, now: in
     if cause is not None:
         return refused(cause)
     return Verdict(None, envelope, time_floor=time_floor)
+
+
+def _answer_out_of_place(envelope_bytes: bytes, pep: "PepView", record, target) -> bool:
+    """OP1: an `operator.answer` on a PEP whose kind has no escalation or whose install threshold is 1 is
+    `dist:target-mismatch` whatever its signatures, as IS4 says of an install kind in a message. Read only to name
+    that cause, after V3 failed, and nothing read is trusted."""
+    from prismpath.distribution import floor
+    try:
+        envelope = env.read(envelope_bytes, reads_meta=target.reads_meta)
+    except Refused:
+        return False
+    return envelope.artifact == kinds.ANSWER and (pep.kind not in floor.ESCALATING or record is None
+                                                  or record.threshold < 2)
+
+
+def _verify_answer(envelope, body: bytes, trust: TrustStore, pep: "PepView", now: int, answering: Optional[Verdict],
+                   *, through_v8: bool) -> Verdict:
+    """OP2: an `operator.answer` through V2 to V6 and V9. V3 counted one operator key (OP1). V5 takes it on the PEP's
+    own stream for its own kind, only on a kind with escalation (`agent`, `gateway`, `cfs`) and an install threshold of
+    2 or more, and `dist:target-mismatch` otherwise. V6 holds it to its own time and never raises the time floor
+    (V13). Whether it names this PEP and an open escalation is the PEP's (`dist:answer-unbound`)."""
+    from prismpath.distribution import floor
+    view = pep.install
+    record = view.record if view is not None else None
+    if answering is None or not answering.ok:
+        return Verdict(answering.cause if answering is not None else "dist:unknown-key", envelope)
+    if (pep.kind not in floor.ESCALATING or record is None or record.threshold < 2 or envelope.stream != pep.stream
+            or envelope.targets != (pep.kind,)):
+        return Verdict("dist:target-mismatch", envelope)
+    if envelope.body_size > kinds.TARGETS[pep.kind].trust_bound:
+        return Verdict("dist:too-large", envelope)
+    time = max(now, trust.time_floor if trust.readable else 0)
+    if pep.has_clock and envelope.not_before - time > SKEW:
+        return Verdict("dist:not-yet-valid", envelope)
+    if time >= envelope.expires:
+        return Verdict("dist:expired", envelope)
+    if through_v8:
+        return Verdict(None, envelope)
+    if len(body) != envelope.body_size or canon.sha256_hex(body) != envelope.body_sha256:
+        return Verdict("dist:body-mismatch", envelope)
+    cause = kinds.ARTIFACTS[kinds.ANSWER].check(envelope, body, pep)
+    return Verdict(cause, envelope)
 
 
 def _floor_statement(kind: str, named: str, body: bytes, meta: Mapping[str, Any], layout: Optional[bytes]) -> Optional[str]:

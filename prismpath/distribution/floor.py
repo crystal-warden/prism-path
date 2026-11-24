@@ -14,7 +14,7 @@ floor silent and the decision to what would decide with no floor. This module ho
     ask             the answer one set gives one request, in the form of its kind, with the rule that gave it
     Book            AF8, OP3, OP4: the durable rate counts of floor overrides and operator answers, and the open
                     escalations an operator may answer
-    read_answer     OP2: the body of an `operator.answer`
+    read_answer     OP2: the body of an `operator.answer`, and `answer_body` the operator's tool
     receipt         RC1 to RC3: the receipt document of one decision and its hash
 
 A request is the reading the kind's policy reads, as a mapping:
@@ -44,7 +44,6 @@ from prismpath.distribution.kinds import Refused, is_hex64, is_int
 
 BROAD, RATE, ALLOWED, UNBOUND = "dist:floor-broad", "dist:floor-rate", "dist:floor-allowed", "dist:answer-unbound"
 LAYOUT_FORMAT = "prismpath.dist-layout/1"
-ANSWER_FORMAT = "prismpath.dist-answer/1"
 RATES_FORMAT = "prismpath.dist-rates/1"
 RECEIPT_FORMAT = "prismpath.dist-receipt/1"
 MAX_RULES = 8                                      # AF9: rules that allow or escalate, zones, hosts, routes
@@ -656,21 +655,15 @@ def ask(kind: str, bodies: Mapping[str, bytes], request: Mapping[str, Any], *, f
 # ------------------------------------------------------------------ OP2: the operator's answer
 
 def read_answer(body: bytes) -> dict:
-    """OP2: an answer body, `answer` `allow` or `refuse`, `pep` the PEP id of H1 in lower case hex and `receipt` the
-    SHA-256 of the receipt of the escalation it answers. `Refused` with `dist:bad-format` otherwise."""
-    doc = kinds.load_canonical(body, "operator answer")
-    if not (isinstance(doc, dict) and set(doc) == {"answer", "encoding", "format", "pep", "receipt"}
-            and doc["format"] == ANSWER_FORMAT and doc["encoding"] == canon.CANON2 and doc["answer"] in (ALLOW, REFUSE)
-            and isinstance(doc["pep"], str) and len(doc["pep"]) == 32 and doc["pep"] == doc["pep"].lower()
-            and all(char in "0123456789abcdef" for char in doc["pep"]) and is_hex64(doc["receipt"])):
-        raise Refused(kinds.BAD_FORMAT, "not an operator answer")
-    return doc
+    """OP2: the body of an `operator.answer` (`kinds.read_answer`)."""
+    return kinds.read_answer(body)
 
 
 def answer_body(answer: str, pep: str, receipt: str) -> bytes:
-    body = canon.canon2_bytes({"answer": answer, canon.ENCODING_KEY: canon.CANON2, "format": ANSWER_FORMAT,
+    """The operator's tool: the canon/2 body of an answer to the escalation whose receipt hash is `receipt`."""
+    body = canon.canon2_bytes({"answer": answer, canon.ENCODING_KEY: canon.CANON2, "format": kinds.ANSWER_FORMAT,
                                "pep": pep, "receipt": receipt})
-    read_answer(body)
+    kinds.read_answer(body)
     return body
 
 

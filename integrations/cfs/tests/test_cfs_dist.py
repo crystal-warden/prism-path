@@ -421,3 +421,136 @@ def test_case_216_a_cfs_floor_tests_only_what_the_proposer_cannot_write(tmp_path
         floor.layout_body([{"name": "cmd_class", "register": 0, "role": "command", "min": 0, "max": 10, "stale": 0},
                            {"name": "monitor_ok", "register": 2, "role": "independent", "min": 0, "max": 1,
                             "stale": 0}])
+
+
+# ------------------------------------------------------------------ the operator's answer on a modelled cFS app (21.5)
+
+from prismpath.distribution import envelope as env  # noqa: E402
+
+
+def _answer(point, receipt, answer="allow", **args):
+    return _dist.answer(point, receipt, answer, **args)
+
+
+def _escalating(tmp_path, name="app", **settings):
+    """A cFS app with an install threshold of 2 and one operator key whose floor allows command 4 once in 60 seconds
+    past its release, which refuses it, so the next asks escalate with `dist:floor-rate`."""
+    settings.setdefault("operators", ["O1"])
+    point = _floor_point(tmp_path, name, **settings)
+    point.send(_cfs_floor(point, _table_of(("allow", _cmd(4))), rate={"allows": 1, "window": 60}))
+    point.commit(_body(1))
+    assert _decide(point, _ask(4))["decision"] == "allow"
+    return point
+
+
+def _escalate(point):
+    decided = _decide(point, _ask(4))
+    assert (decided["decision"], decided["cause"], decided["basis"]) == ("escalate", "dist:floor-rate", "floor")
+    return decided["receipt_sha256"]
+
+
+def _said(point, pair):
+    return state_record.read(point.pep.stage(*pair), point.key.public_raw)
+
+
+def test_case_220_an_answer_is_signed_by_an_operator_used_once_and_bound_to_one_escalation(tmp_path):
+    """case_220: OP2, OP3, AF8. A cFS app with an install threshold of 2 escalates a floor action with
+    `dist:floor-rate`. An answer `allow` by an enrolled operator key lets the request pass once and leaves a receipt
+    with basis `operator`, the answer's envelope id and the escalation's hash, and the same answer again, also after a
+    restart, is `dist:answer-unbound`. Answers signed by an install key and by an authority key are
+    `dist:unknown-key`, one whose lifetime is 601 seconds `dist:bad-format`, one past `expires` `dist:expired`, one
+    whose `receipt` names no escalation and one for an escalation older than 600 seconds `dist:answer-unbound`, an
+    unsigned message that claims to be an answer changes nothing, and an answer `refuse` keeps its request refused
+    with its own `operator` receipt."""
+    point = _escalating(tmp_path)
+    receipt = _escalate(point)
+    good = _answer(point, receipt)
+    answered = _said(point, good)
+    assert (answered.event, answered.install.subject) == ("answered", "operator.answer")
+    [passed] = point.pep.operator_receipts
+    envelope_id = env.envelope_id(env.unseal(good[0])[0])
+    assert (passed["decision"], passed["basis"], passed["answer"], passed["answers"]) == ("allow", "operator",
+                                                                                        envelope_id, receipt)
+    assert _said(point, good).cause == "dist:answer-unbound"
+    point.pep = point.open()
+    assert _said(point, good).cause == "dist:answer-unbound"
+    other = _escalate(point)
+    assert _said(point, _answer(point, other, signer="N1")).cause == "dist:unknown-key"
+    assert _said(point, _answer(point, other, signer="A")).cause == "dist:unknown-key"
+    assert _said(point, _answer(point, other, lifetime=601)).cause == "dist:bad-format"
+    assert _said(point, _answer(point, other, not_before=point.clock.now - 400)).cause == "dist:expired"
+    assert _said(point, _answer(point, "ab" * 32)).cause == "dist:answer-unbound"
+    old = other
+    point.clock.now += 601
+    assert _said(point, _answer(point, old)).cause == "dist:answer-unbound"
+    assert _decide(point, _ask(4))["decision"] == "allow"                # a new window of the floor's rate
+    fresh = _escalate(point)
+    unsigned = env.seal_entries(env.unseal(_answer(point, fresh)[0])[0], [])
+    before = point.pep.book().open
+    point.pep.stage(unsigned, floor.answer_body("allow", state_record.pep_id(point.key.public_raw).hex(), fresh))
+    assert point.pep.book().open == before and len(point.pep.operator_receipts) == 0
+    refused = _said(point, _answer(point, fresh, "refuse"))
+    assert refused.event == "answered" and point.pep.operator_receipts[-1]["decision"] == "refuse"
+
+
+def test_case_225_an_answer_reaches_only_a_kind_with_escalation_and_never_moves_the_time_floor(tmp_path):
+    """case_225: V5, V13, OP1, OP2, the `host`, `mesh` and `cfs` halves. A `host` and a `mesh` PEP are each sent a
+    well signed `operator.answer` and refuse it with `dist:target-mismatch`, and a cFS app with an install threshold
+    of 2 and an open floor escalation applies a good answer whose `not_before` is above its time floor, which does
+    not move. The `xdp` half waits for its kind."""
+    from prismpath.tests.test_distribution_floor import HostFloor, MeshFloor
+    for cls, kind in ((HostFloor, "host"), (MeshFloor, "mesh")):
+        other = cls(tmp_path / kind, install_keys=["N1", "N2", "N3"], install_threshold=2, operators=["O1"])
+        assert _said(other, _answer(other, "ab" * 32, kind=kind)).cause == "dist:target-mismatch"
+    point = _escalating(tmp_path)
+    receipt = _escalate(point)
+    before = point.pep.trust.time_floor
+    assert _said(point, _answer(point, receipt, not_before=point.clock.now + 100)).event == "answered"
+    assert point.pep.trust.time_floor == before
+
+
+def test_case_231_an_answer_binds_to_one_pep_and_one_escalation(tmp_path):
+    """case_231: OP1, OP2. A cFS app whose install threshold is 1 refuses a well signed answer with
+    `dist:target-mismatch`, and one with a threshold of 2 refuses an answer whose `pep` is another PEP's id with
+    `dist:answer-unbound`. Two cFS apps write receipts of the same bytes for one escalation each, and an answer for
+    the first is applied there and is `dist:answer-unbound` on the second."""
+    lone = _floor_point(tmp_path, "lone", install_threshold=1, operators=["O1"])
+    lone.pep.provision_install(_cfs_floor(lone, ALLOW_3, signers=["N1"]))
+    assert _said(lone, _answer(lone, "ab" * 32)).cause == "dist:target-mismatch"
+    first = _escalating(tmp_path, "first")
+    second = _escalating(tmp_path, "second", key=_dist.instance_key("I2"))
+    receipts = [_decide(one, _ask(4)) for one in (first, second)]
+    assert receipts[0]["receipt"] == receipts[1]["receipt"]
+    other_pep = state_record.pep_id(second.key.public_raw).hex()
+    assert _said(first, _answer(first, receipts[0]["receipt_sha256"], pep=other_pep)).cause == "dist:answer-unbound"
+    answer = _answer(first, receipts[0]["receipt_sha256"])
+    assert _said(first, answer).event == "answered"
+    assert _said(second, answer).cause == "dist:answer-unbound"
+
+
+def test_case_232_operator_answers_are_counted_against_a_signed_rate(tmp_path):
+    """case_232: OP4, H1, AF8. A cFS app whose floor has an `answer_rate` of 2 in 600 seconds applies two good
+    `allow` answers for three open escalations, each with a record with event `answered` and subject 5, a restart
+    after the second changing nothing, refuses the third with `dist:floor-rate` with its escalation still open, and
+    applies a `refuse`. An `agent` PEP refuses a floor that can escalate and has no `answer_rate` with
+    `dist:bad-format`."""
+    point = _floor_point(tmp_path, operators=["O1"])
+    point.send(_cfs_floor(point, _table_of(("allow", _cmd(4))), rate={"allows": 1, "window": 60},
+                          answer_rate={"allows": 2, "window": 600}))
+    point.commit(_body(1))
+    _decide(point, _ask(4))
+    receipts = [_escalate(point) for _ in range(3)]
+    sent = [_said(point, _answer(point, receipts[0]))]
+    point.pep = point.open()
+    sent.append(_said(point, _answer(point, receipts[1])))
+    assert [(one.event, one.install.subject) for one in sent] == [("answered", "operator.answer")] * 2
+    third = _said(point, _answer(point, receipts[2]))
+    assert (third.cause, third.install.subject) == ("dist:floor-rate", "operator.answer")
+    assert point.pep.book().find(receipts[2], point.pep.floor_set().policy_sha256, point.clock.now) is not None
+    assert _said(point, _answer(point, receipts[2], "refuse")).event == "answered"
+    from prismpath.tests.test_distribution_floor import _agent, _set, core
+    agent = _agent(tmp_path, "agent")
+    escalating = core('-> escalate agent:change-asked: when tool == "delete_path" and path_scope == "workspace" '
+                      'and not path_control')
+    answers = agent.send(_set(agent, "install.floor", escalating, check=False))
+    assert "dist:bad-format" in [one.cause for one in answers]

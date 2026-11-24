@@ -200,6 +200,26 @@ class Record:
             return Verdict(REVOKED_KEY)
         return Verdict(INVALID if held_fails else UNKNOWN_KEY)
 
+    def answering(self, entries: Sequence[Tuple[str, bytes]], message: bytes) -> Verdict:
+        """OP1, S3 to S5 for the role `operator`: one signature by an operator key the record holds is enough, and
+        no other key signs an answer. Otherwise `sig:revoked-key` when an entry verifies under a retired id,
+        `sig:invalid` when one names a held operator key and does not verify, and `dist:unknown-key`."""
+        from prismpath.hotswap import policy_pack
+        _priv, Public, _ser, InvalidSignature = policy_pack._ed25519()
+        held_fails = False
+        for kid, signature in entries:
+            key = self.operators.get(kid)
+            if key is None:
+                continue
+            try:
+                Public.from_public_bytes(key).verify(signature, message)
+                return Verdict(None)
+            except (InvalidSignature, ValueError):
+                held_fails = True
+        if any(kid in self.retired for kid, _signature in entries):
+            return Verdict(REVOKED_KEY)
+        return Verdict(INVALID if held_fails else UNKNOWN_KEY)
+
     @property
     def ids(self) -> FrozenSet[str]:
         """Every install and operator key id the record holds or remembers as retired (K4)."""

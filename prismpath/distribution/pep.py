@@ -37,7 +37,9 @@ The install part (section 21, `prismpath.distribution.install`) is kept apart fr
 install record and of every held statement. The PEP stages install statements, applies a set when it is whole (IS4),
 holds every release, action floor and fallback policy inside the held ceiling (CL2, CL3), and decides under its
 fallback policy while no release decides (FB1). Its records carry bit 4 while the fallback policy decides and the
-install entry of H10 once it holds install keys.
+install entry of H10 once it holds install keys. It asks its action floor first on every request in every state, and
+applies an operator's signed answer to an escalation the floor made (`prismpath.distribution.floor`, AF1, OP2). Every
+receipt of a PEP that holds an install record names the basis and the policy hash of the set that decided (RC1).
 
 The epoch id (H9) is taken only from a controller statement that verifies under the controller key the trust store
 holds at its key sequence, and is kept in memory only (H15). Where the anchor sets `fresh`, a fresh statement is
@@ -388,6 +390,7 @@ class Pep:
         self.recent: deque = deque(maxlen=heartbeat.MAX_FRAMES)    # H5: the readings decided since the last record
         self.bad_readings = 0                                        # readings the Facet codec refused, not carried
         self.receipts = 0                                            # RC1: the receipts written since start
+        self.operator_receipts: list = []                            # OP3: the receipts of the answers applied
         self._load()
         self._check_setting()
         self._check_separation(self.trust)
@@ -839,14 +842,15 @@ class Pep:
         verdict = verify(sealed, body, trust=self.trust, pep=self.view(message), now=int(self.clock()))
         envelope = verdict.envelope
         envelope_id = envelope.envelope_id if envelope is not None else None
+        answer = envelope is not None and envelope.artifact == kinds.ANSWER
         installing = envelope is not None and envelope.artifact in kinds.INSTALL_ARTIFACTS
-        subject = envelope.artifact if installing else None
+        subject = envelope.artifact if installing or answer else None
         if self.installed.record_lost and (envelope is None or envelope.artifact not in kinds.ON_TRUST_STREAM):
             return self._refuse(install.INSTALL_LOST, envelope_id=envelope_id, subject=subject)   # IS10
-        if self.locked and not installing:
+        if self.locked and not (installing or answer):
             return self._refuse("dist:floor-lost")                   # Q5: a locked PEP still takes install statements
         if (self.installed.ceiling_lost and envelope is not None and envelope.artifact not in kinds.ON_TRUST_STREAM
-                and envelope.artifact not in (install.CEILING, install.TRUST)):
+                and envelope.artifact not in (install.CEILING, install.TRUST, kinds.ANSWER)):
             return self._refuse(install.INSTALL_LOST, envelope_id=envelope_id, subject=subject)   # IS10: frozen
         if verdict.time_floor is not None and self.trust.readable and verdict.time_floor > self.trust.time_floor:
             self.trust = replace(self.trust, time_floor=verdict.time_floor).save()      # V13, T1
@@ -856,6 +860,8 @@ class Pep:
             return self._record("beat")                               # Q3, R1, IS6: changes nothing, reports its state
         if installing:
             return self._stage_install(envelope, bytes(sealed), bytes(body))
+        if answer:
+            return self._apply_answer(envelope, bytes(body))
         if envelope.artifact == "trust.revocation":
             return self._apply_revocation(envelope, body)
         if envelope.artifact == "trust.rotation":
@@ -1017,6 +1023,39 @@ class Pep:
         self.audit.append("distribution", event, {"artifact": install.TRUST, "seq": envelope.seq,
                                                   "envelope_id": envelope.envelope_id, "result": event})
         return self._record(event, install.WIDENED if widened else None, install.TRUST)
+
+    # ------------------------------------------------------------------ OP1 to OP4: the operator's answer
+    def _apply_answer(self, envelope, body: bytes) -> bytes:
+        """OP2 to OP4: an answer that verified names this PEP's id and an open escalation the action floor made under
+        the floor it still holds, `dist:answer-unbound` otherwise. An `allow` past the signed `answer_rate` is
+        `dist:floor-rate` and the escalation stays open. Otherwise the count and then the escalation, written as
+        answered, are durable before the PEP acts, the answer leaves a receipt with basis `operator`, the answer's
+        envelope id and the receipt hash it answered, and the PEP sends `answered` with subject 5. An `allow` lets
+        the one request of that escalation through once, uncounted by AF8, and a `refuse` keeps it refused."""
+        doc = kinds.read_answer(body)
+        held = self.floor_set()
+        book = self.book()
+        now = self.time()
+        own = state_record.pep_id(self.instance_key.public_raw).hex()
+        bound = (doc["pep"] == own and held is not None and held.policy_sha256 == envelope.policy_sha256)
+        open_one = book.find(doc["receipt"], held.policy_sha256, now) if bound else None
+        if open_one is None:
+            return self._refuse(floors.UNBOUND, subject=kinds.ANSWER, envelope_id=envelope.envelope_id)
+        if doc["answer"] == floors.ALLOW:
+            meta = next(iter(held.envelopes.values())).meta if held.envelopes else {}
+            rate = meta.get("answer_rate")
+            if rate is None or book.spend_answer(rate, now) is None:
+                return self._refuse(floors.RATE, subject=kinds.ANSWER, envelope_id=envelope.envelope_id)   # OP4
+        book.answered(open_one)                                      # OP3: before the PEP acts on it
+        data, digest = floors.receipt({"basis": "operator", "outcome": doc["answer"], "answer": envelope.envelope_id,
+                                       "answers": doc["receipt"], "policy_sha256": held.policy_sha256,
+                                       "mark": self.receipt_mark(), **self._receipt_place(None)})
+        self.operator_receipts.append({"decision": doc["answer"], "basis": "operator",
+                                       "answer": envelope.envelope_id, "answers": doc["receipt"],
+                                       "policy_sha256": held.policy_sha256, "receipt": data, "receipt_sha256": digest})
+        self.audit.append("distribution", "answered", {"envelope_id": envelope.envelope_id, "answer": doc["answer"],
+                                                      "receipt": doc["receipt"], "result": "answered"})
+        return self._record("answered", None, kinds.ANSWER)
 
     # ------------------------------------------------------------------ B2: the trust statements
     def _adopt(self, envelope, store: TrustStore) -> None:
