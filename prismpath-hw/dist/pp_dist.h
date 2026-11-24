@@ -291,6 +291,10 @@ typedef struct {
     int has_instance_key_id;        /* the PEP's own instance key id, which a rotation may never add (O4) */
     uint8_t instance_key_id[32];
     const pp_install_view *install; /* NULL for a PEP that holds no install record */
+    /* V11: the PEP's own check of a table of its kind beyond the core's, run after it on a release's table and on a
+     * table an install set names (section 3: on cfs, the app's kernel check). NULL for none. 0, or its cause. */
+    uint8_t (*table_check)(void *context, const uint8_t *body, size_t len);
+    void *table_context;
 } pp_pep;
 
 /* A verifier's answer: `cause` 0 when it passed. `has_envelope` once the envelope read, with its id.
@@ -538,6 +542,7 @@ typedef struct {
     pp_persist_fn persist;
     pp_runtime_fn runtime;
     void *context;
+    uint8_t (*table_check)(void *context, const uint8_t *body, size_t len); /* V11, as in pp_pep, given `context` */
 } pp_config;
 
 #define PP_OUTBOX 6
@@ -665,6 +670,10 @@ void pp_pep_tick(pp_pep_machine *pep, uint32_t now_ms, long long now);
 /* RB1 to RB3, X9: return to the release the active one replaced. 0, or PP_CAUSE_NOT_STAGED when no release
  * is kept, which writes no record. */
 uint8_t pp_pep_rollback(pp_pep_machine *pep, long long now);
+
+/* A step the PEP's runtime refused before the core changed anything, such as a cFS table whose image attestation does
+ * not verify: a state record with event refused and `cause`, and nothing else changes. */
+void pp_pep_refuse(pp_pep_machine *pep, uint8_t cause, long long now);
 
 /* A state record of the PEP as it is now, after the expiry check (X1). */
 void pp_pep_record(pp_pep_machine *pep, uint8_t event, long long now);

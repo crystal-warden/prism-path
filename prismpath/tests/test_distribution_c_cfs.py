@@ -652,3 +652,353 @@ def host_check(tmp_path_factory):
     subprocess.run([CC, *base.FLAGS, f"-I{DIST}", f"-I{MONOCYPHER}", "-o", str(out), *map(str, sources)], check=True,
                    capture_output=True, text=True)
     return out
+
+
+# ------------------------------------------------------------------ the cFS app's own harness (integrations/cfs)
+APP = CFS / "prismpath_app"
+
+
+@pytest.fixture(scope="module")
+def app(tmp_path_factory):
+    """integrations/cfs/tests/dist_check.c: the app's enforcement point, kernel and run with the C core, no cFS."""
+    if not (CFS / "tests" / "dist_check.c").exists() or not (DIST / "pp_dist.c").exists():
+        pytest.skip("the cFS app and the C core are in integrations/cfs and prismpath-hw, which this tree does not carry")
+    if CC is None:
+        pytest.skip("no C compiler (cc) on this host, so the cFS app is not built here")
+    work = tmp_path_factory.mktemp("dist_check")
+    probe = subprocess.run([CC, "-x", "c", "-", "-lcrypto", "-o", str(work / "probe")],
+                           input="#include <openssl/sha.h>\nint main(void){return 0;}", capture_output=True, text=True)
+    if probe.returncode != 0:
+        pytest.skip("no OpenSSL development files (the run's Merkle accumulator uses OpenSSL's SHA-256)")
+    out = work / "dist_check"
+    includes = [f"-I{ROOT / 'prismpath-hw'}", f"-I{DIST}", f"-I{ROOT / 'prismpath-ebpf'}", f"-I{MONOCYPHER}",
+                f"-I{APP / 'fsw' / 'inc'}", f"-I{APP / 'fsw' / 'src'}", f"-I{APP / 'fsw' / 'tables'}"]
+    subprocess.run([CC, *base.FLAGS, "-DPP_TABLE_MAX=4692", *includes, "-o", str(out), str(CFS / "tests" / "dist_check.c"),
+                    str(DIST / "pp_dist.c"), str(MONOCYPHER / "monocypher.c"), str(MONOCYPHER / "monocypher-ed25519.c"),
+                    "-lcrypto"], check=True, capture_output=True, text=True)
+    return out
+
+
+def _private(name: str):
+    return _dist.GEN.test_key(name)
+
+
+def _public(name: str) -> bytes:
+    return _dist.GEN.public_raw(_dist.GEN.test_key(name))
+
+
+def app_table(rules=None, version: int = 1) -> bytes:
+    """A whole table struct as the ground signs it: the body, and its core image attested by the authority A."""
+    table, gen_image = _modules()
+    from prismpath.ledgers import core_evidence
+    if rules is None:
+        from prismpath.kernel import canon2
+        rules = canon2.loads(gen_image.CORE.read_bytes().rstrip(b"\n"))["rules"]
+    data = table.pack(gen_image.build(core(rules)))
+    table.set_version(data, version)
+    data[table.OFF["ImageSig"]:table.OFF["ImageSig"] + 64] = _private("A").sign(
+        core_evidence.IMAGE_DOMAIN + table.core_of(data))
+    return bytes(data)
+
+
+def app_anchor(*, install=(), threshold=2, stale=0) -> bytes:
+    """The /2 trust anchor the ground writes for the app: A the authority, C the controller, and install keys whose
+    domain is the app's layout document as it was built with `stale` (CL4)."""
+    from integrations.cfs.ground import provision
+    return provision.anchor_document([_public("A")], controller_public=_public("C"), stream=S, target="cfs",
+                                     install_publics=[_public(name) for name in install], threshold=threshold,
+                                     domain=provision.domain(stale))
+
+
+def app_head(*, install=(), stale=0, bring=()) -> list:
+    from integrations.cfs.ground import table
+    lines = [f"authority {_public('A').hex()}", f"instance {base.INSTANCE_SEED}",
+             f"anchor {app_anchor(install=install, stale=stale).hex()}", f"stale {stale}"]
+
+    return lines + [f"bring {table.statement_file(sealed, body).hex()}" for sealed, body in bring]
+
+
+def offer(sealed: bytes, body: bytes, transfer: int, now: int) -> list:
+    table, _gen = _modules()
+    return [f"frame {frame.hex()} 0 {now}" for frame in table.frames(sealed, body, transfer)]
+
+
+def release_lines(data: bytes, seq: int, transfer: int, *, now=N, widens=True, replaces="", froms=None,
+                  not_before=NB, expires=E, sig=None, commit=True) -> list:
+    """The frames of a release of the table `data` and of its widening statement, and its commit frame."""
+    table, _gen = _modules()
+    pairs = table.seal_table(data, [_private("A")], seq=seq, stream=S, not_before=not_before, expires=expires,
+                             replaces=replaces, widens=widens, froms=froms)
+    lines = []
+    for k, (sealed, body_bytes) in enumerate(pairs):
+        lines += offer(sealed, body_bytes, transfer + k, now)
+    if commit:
+        frame = table.commit_frame(transfer, S, seq, table.policy_of(data))
+        lines.append(f"control {frame.hex()} {(sig or table.image_sig(data)).hex()} 0 {now}")
+    return lines
+
+
+def app_run(exe, tmp_path, lines: list) -> list:
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    (tmp_path / "run").mkdir(exist_ok=True)
+    (tmp_path / "dist").mkdir(exist_ok=True)
+    done = subprocess.run([str(exe), str(tmp_path / "run"), str(tmp_path / "dist")],
+                          input="\n".join([*lines, "done"]) + "\n", capture_output=True, text=True, timeout=300)
+    assert done.returncode == 0, done.stderr[-4000:]
+    return done.stdout.splitlines()
+
+
+def steps(out: list) -> list:
+    """[(records, step flags)] of every step, the lines of `out` that are neither."""
+    pairs, k = [], 0
+    while k < len(out):
+        if out[k].startswith("records"):
+            pairs.append((_recs(out[k]), [int(word) for word in out[k + 1].split()[1:]]))
+            k += 2
+        else:
+            k += 1
+    return pairs
+
+
+def decisions(out: list) -> list:
+    keys = ("kind", "cause", "rule", "basis", "held", "receipted", "receipt", "not_enacted", "record_error")
+    return [dict(zip(keys, map(int, line.split()[1:]))) for line in out if line.startswith("decision")]
+
+
+def payload(cmd_class=3, ground=0, slew=0, thrust=0) -> str:
+    from integrations.cfs.tests import run_scenario
+    return run_scenario.reading_payload(dict(cmd_class=cmd_class, ground_contact=ground, slew_deg=slew,
+                                             thrust_pct=thrust)).hex()
+
+
+def test_d9_a_table_offered_on_the_bus_loads_through_the_table_service_and_an_older_seq_is_refused_after_a_reset(
+        app, tmp_path):
+    """D9, Q1 to Q3, section 9.5 on the cFS app. A first table offered on the command topic in frames, with its
+    widening statement, is staged and committed through the table service, and decides, its receipts in the run. A
+    table service that refuses the load leaves the core where it was, and the commit goes in at the next try; a commit
+    whose image attestation does not verify is refused with sig:invalid and the release stays staged; a ground table
+    load from a file has no envelope and is refused with dist:not-staged. After a processor reset the run, the floor
+    and the release continue, and a table at an older seq is dist:seq-replay. The run, sealed and downlinked, verifies
+    with both keys pinned."""
+    table, _gen = _modules()
+    from integrations.cfs.ground import downlink
+    first, second, third = app_table(version=1), app_table(version=2), app_table([rule(2), rule(3)], version=3)
+    bad_sig = bytes(64)
+    lines = [*app_head(), f"start 0 0 1 {N}", *release_lines(first, 1, 10, sig=bad_sig), "state",
+             *release_lines(first, 1, 10)[-1:], "state", "service",
+             f"propose {payload(3)} 1 - {N}", f"propose {payload(2, thrust=150)} 1 - {N}",
+             *release_lines(second, 2, 20, widens=False, replaces=table.policy_of(first), commit=False),
+             "tblfail 1", *release_lines(second, 2, 20, widens=False, replaces=table.policy_of(first))[-1:], "state",
+             *release_lines(second, 2, 20, widens=False, replaces=table.policy_of(first))[-1:], "state", "service",
+             f"groundload {first.hex()}", f"propose {payload(1, slew=30)} 1 - {N}", "seal 1000",
+             "reset", f"start 0 0 1 {N + 5}", "state", "service", f"propose {payload(3)} 1 - {N + 5}",
+             *release_lines(third, 1, 30, now=N + 5, commit=False), "state", "seal 2000"]
+    out = app_run(app, tmp_path / "a", lines)
+    done = steps(out)
+    assert [(one["event"], one["cause"]) for one in done[0][0]] == [("provisioned", None)]
+    states = [line for line in out if line.startswith("state")]
+    services = [line for line in out if line.startswith("service")]
+    refused = [one for records, _flags in done for one in records if one["event"] == "refused"]
+    assert refused[0]["cause"] == "sig:invalid" and states[0] == "state 0 0 0 0 0 0"
+    assert states[1] == "state 1 1 1 0 0 1" and services[0] == "service 1"
+    busy = [flags for _records, flags in done if flags[6]]
+    assert len(busy) == 1 and states[2] == "state 1 1 1 0 0 1"            # the table service kept v1, and so did the core
+    assert states[3] == "state 1 2 2 0 0 1" and services[1] == "service 2"
+    assert f"validation {causes.code('dist:not-staged')}" in out
+    assert states[4] == "state 1 2 2 0 0 1" and services[2] == "service 2"   # after the reset, and shown again
+    assert refused[-1]["cause"] == "dist:seq-replay" and states[5] == "state 1 2 2 0 0 1"
+    made = decisions(out)
+    assert [(one["kind"], one["receipted"], one["receipt"]) for one in made] == [(0, 1, 0), (1, 1, 1), (0, 1, 2),
+                                                                                (0, 1, 3)]
+    assert [line for line in out if line.startswith("sealed")] == ["sealed 0", "sealed 0"]
+    keys = tmp_path / "keys"
+    keys.mkdir()
+    (keys / "authority.pub").write_bytes(_public("A"))
+    (keys / "instance.pub").write_bytes(_public("I"))
+    summary = downlink.verify(downlink.fetch(tmp_path / "a" / "run", tmp_path / "ground"), keys)
+    assert summary["receipts"] == 4 and summary["disagree"] == 0 and summary["cases"] == 2
+    assert [one["leaves"] for one in summary["roots"]] == [3, 4]
+
+
+def test_case_025_the_cfs_app_with_its_store_lost_locks_by_default_and_admits_from_the_minimum_when_set(app, tmp_path):
+    """case_025: Q5. With the Critical Data Store record lost at a processor reset, the app under LOCK is locked: it
+    admits no table, with dist:floor-lost, and refuses every proposal unreceipted. Under MINIMUM it provisions itself
+    again from its anchor with the floor one below the minimum, so a release below it is dist:seq-replay and one at it
+    is committed and decides."""
+    first = app_table(version=1)
+    prefix = [*app_head(), f"start 0 0 5 {N}", *release_lines(first, 6, 10), "reset", "lose record"]
+    out = app_run(app, tmp_path / "lock", [*prefix, f"start 0 0 5 {N + 1}", "state",
+                                           *release_lines(app_table(version=2), 9, 20, now=N + 1),
+                                           f"propose {payload(3)} 1 - {N + 1}"])
+    done = steps(out)
+    locked = [k for k, (_records, flags) in enumerate(done) if flags[3]]
+    assert len(locked) == 1 and [line for line in out if line.startswith("state")][-1] == "state 0 0 0 1 0 0"
+    assert {one["cause"] for records, _flags in done[locked[0] + 1:] for one in records} == {"dist:floor-lost"}
+    assert decisions(out)[-1]["receipted"] == 0 and decisions(out)[-1]["basis"] == 0
+    out = app_run(app, tmp_path / "minimum", [*prefix, f"start 0 1 5 {N + 1}", "state",
+                                              *release_lines(app_table(version=2), 4, 20, now=N + 1),
+                                              *release_lines(app_table(version=3), 5, 30, now=N + 1), "state",
+                                              f"propose {payload(3)} 1 - {N + 1}"])
+    done = steps(out)
+    started = [pair for pair in done if pair[1][4]]
+    assert len(started) == 1 and [one["event"] for one in started[0][0]] == ["provisioned"]
+    states = [line for line in out if line.startswith("state")]
+    assert states[-2] == "state 0 0 4 0 0 0" and states[-1] == "state 1 5 5 0 0 1"
+    refused = [one["cause"] for records, _flags in done for one in records if one["event"] == "refused"]
+    # the release at 4 and its widening statement, then its commit, which names nothing staged
+    assert refused == ["dist:seq-replay", "dist:seq-replay", "dist:not-staged"]
+    assert decisions(out)[-1]["receipted"] == 1 and decisions(out)[-1]["kind"] == 0
+
+
+def _python_app(tmp_path, script, *, hold):
+    """The Python machine on a modelled cFS app, through the steps the app's harness runs, each step's records."""
+    from integrations.cfs.tests.test_cfs_dist import CfsPep
+    from prismpath.distribution.pep import PepRefused
+    out, point = [], None
+    for op, *args in script:
+        if op == "start":
+            point = CfsPep(tmp_path, clock=_dist.Clock(args[0]), expiry_response="hold" if hold else "refuse")
+        elif op == "reset":
+            point.clock.now = args[0]
+            try:
+                point.pep = point.open(provision=False)
+            except PepRefused:
+                out.append(None)
+                continue
+        else:
+            point.clock.now = args[-1]
+            if op == "stage":
+                for sealed, body_bytes in args[0]:
+                    point.pep.stage(sealed, body_bytes)
+            elif op == "commit":
+                point.pep.commit(S, args[0], args[1])
+            elif op == "tick":
+                point.pep.tick()
+            elif op == "rollback":
+                try:
+                    point.pep.rollback()
+                except PepRefused:
+                    pass
+        out.append([record.hex() for record in point.pep.drain()])
+    return out
+
+
+def _app_script(script) -> list:
+    """The harness lines of `script`, each step's lines in a group."""
+    table, _gen = _modules()
+    groups, transfer = [], 100
+    for op, *args in script:
+        if op == "start":
+            groups.append([f"start {{hold}} 0 1 {args[0]}"])
+        elif op == "reset":
+            groups.append(["reset", f"start {{hold}} 0 1 {args[0]}"])
+        elif op == "stage":
+            group = []
+            for sealed, body_bytes in args[0]:
+                group += offer(sealed, body_bytes, transfer, args[-1])
+                transfer += 1
+            groups.append(group)
+        elif op == "commit":
+            frame = table.commit_frame(1, S, args[0], args[1])
+            groups.append([f"control {frame.hex()} {args[2].hex()} 0 {args[-1]}"])
+        elif op == "tick":
+            groups.append([f"tick 0 {args[0]}"])
+        elif op == "rollback":
+            groups.append([f"rollback {args[0]}"])
+    return groups
+
+
+@pytest.mark.parametrize("hold", [False, True])
+def test_case_106_107_108_109_110_the_cfs_app_answers_expiry_as_the_python_machine_under_each_setting(app, tmp_path,
+                                                                                                         hold):
+    """case_106: X6, X1. case_107: X6, X7. case_108: X8, R5. case_109: X8. case_110: X9. The app's own harness under
+    the setting left alone and under HOLD: its release lapses at expiry, or is held with bit 5 in every record, the
+    hold mark on every receipt in a case of its own and an event when it begins and ends; a held app refuses a table
+    below the floor, an expired one and a larger one without a statement, refuses a rollback with dist:held, takes a
+    release that passes every rule with bit 5 clear, lapses with dist:revoked at a revocation, and locks with
+    dist:floor-lost when its store is lost. Every signed record is the Python machine's, byte for byte."""
+    table, _gen = _modules()
+    from integrations.cfs.ground import downlink, reference
+    first, second, third = app_table(version=1), app_table(version=2), app_table([rule(2), rule(3)], version=3)
+    p1, p3 = table.policy_of(first), table.policy_of(third)
+    seal = lambda data, seq, **args: table.seal_table(data, [_private("A")], seq=seq, stream=S, **args)  # noqa: E731
+    script = [("start", N), ("stage", seal(first, 1, not_before=NB, expires=E - 100), N), ("commit", 1, p1, table.image_sig(first), N),
+              ("stage", seal(second, 2, not_before=NB, expires=E, widens=False, replaces=p1), N),
+              ("commit", 2, p1, table.image_sig(second), N),
+              ("tick", E), ("rollback", E),
+              ("stage", seal(first, 1, not_before=NB, expires=E + 900), E),                  # below the floor
+              ("stage", seal(third, 3, not_before=NB, expires=E - 1, widens=False, replaces=p1), E),   # expired
+              ("stage", [seal(third, 4, not_before=E, expires=E + 900, widens=True)[1]], E),  # larger, no statement
+              ("reset", E + 1),
+              ("stage", seal(third, 5, not_before=E, expires=E + 900, froms=[]), E + 1),
+              ("commit", 5, p3, table.image_sig(third), E + 1),
+              ("tick", E + 900)]
+    python = _python_app(tmp_path / "python", script, hold=hold)
+    groups = [[line.format(hold=int(hold)) for line in group] for group in _app_script(script)]
+    proposals = {2: N, 5: E, 12: E + 1}                                  # a proposal after these steps
+    lines = list(app_head())
+    for k, group in enumerate(groups):
+        lines += group
+        if k in proposals:
+            lines.append(f"propose {payload(3)} 1 - {proposals[k]}")
+    out = app_run(app, tmp_path / "app", [*lines, "seal 1000"])
+    lost_out = app_run(app, tmp_path / "lost", [*lines, "reset", "lose record", f"start {int(hold)} 0 1 {E + 2}",
+                                                f"propose {payload(3)} 1 - {E + 2}"])
+    record_lines = [line for line in out if line.startswith("records")]
+    flag_lines = [line.split()[1:] for line in out if line.startswith("step")]
+    c_groups, cursor = [], 0
+    for k, group in enumerate(groups):
+        c_groups.append([item for line in record_lines[cursor:cursor + len(group)] for item in line.split()[1:]])
+        cursor += len(group) + (k in proposals)
+    assert c_groups == python                                            # every signed record, byte for byte
+    events = [(one["event"], one["cause"], one["held"]) for line in record_lines for one in _recs(line)]
+    made = decisions(out)
+    if hold:
+        held_at = events.index(("held", "dist:held", True))
+        assert ("refused", "dist:held", True) in events[held_at:]       # X9: the rollback
+        assert {cause for event, cause, mark in events[held_at:events.index(("committed", None, False), held_at)]
+                if event == "refused"} == {"dist:held", "dist:seq-replay", "dist:expired", "dist:widening-unsigned"}
+        assert all(mark for _event, _cause, mark in events[held_at:events.index(("committed", None, False), held_at)])
+        # X7: an event when the hold begins and when it ends, and again when the last release expires
+        assert [flags[0] for flags in flag_lines].count("1") == 2 and [flags[1] for flags in flag_lines].count("1") == 1
+        assert [(one["receipted"], one["held"]) for one in made[:3]] == [(1, 0), (1, 1), (1, 0)]
+        assert reference.held_receipts(tmp_path / "app" / "run") == [1]
+    else:
+        assert ("lapsed", "dist:expired", False) in events
+        assert [(one["receipted"], one["held"]) for one in made[:3]] == [(1, 0), (0, 0), (1, 0)]
+    lost_flags = [line.split()[1:] for line in lost_out if line.startswith("step")]
+    assert decisions(lost_out)[-1]["receipted"] == 0 and lost_flags[-2][3] == "1"   # the store lost: locked (Q5)
+    assert decisions(lost_out)[-1]["cause"] == causes.code("dist:floor-lost")
+    keys = tmp_path / "keys"
+    keys.mkdir()
+    (keys / "authority.pub").write_bytes(_public("A"))
+    (keys / "instance.pub").write_bytes(_public("I"))
+    summary = downlink.verify(downlink.fetch(tmp_path / "app" / "run", tmp_path / "ground"), keys)
+    assert summary["disagree"] == 0 and summary["receipts"] == (3 if hold else 2)
+
+
+def test_case_226_a_cfs_app_that_loses_the_file_of_its_install_record_uses_the_copy_in_the_critical_data_store(
+        app, tmp_path):
+    """case_226: IS10, the cfs half in the app. Provisioned with two install keys, an action floor and a fallback
+    policy, the app keeps the first copy of its install record and of each set in files and the second in a Critical
+    Data Store area apart from them. After a processor reset with the file of the record and the file of the floor
+    gone, it reads the second copies, holds both sets, reports no loss, and asks its floor first; with the copy area
+    lost as well it holds no set and reports dist:install-lost."""
+    floor = install("install.floor", floors()["one"])
+    fallback = install("install.fallback", floors()["fallback"])
+    brought = [(bytes.fromhex(sealed), bytes.fromhex(body_hex)) for sealed, body_hex in (floor, fallback)]
+    ids = f"held {base._envelope_id(floor[0])} {base._envelope_id(fallback[0])} -"
+    head = app_head(install=("J", "K"), bring=brought, stale=5)          # the layout the floor names: a monitor, 5 s
+    out = app_run(app, tmp_path / "copy", [*head, f"start 0 0 1 {N}", "held", "reset", "unlink install.ppd",
+                                           "unlink floor.ppd", f"start 0 0 1 {N + 1}", "held",
+                                           f"propose {payload(3, slew=15, thrust=20)} 1 - {N + 1}",
+                                           "reset", "unlink install.ppd", "lose copy", f"start 0 0 1 {N + 2}", "held"])
+    helds = [line for line in out if line.startswith("held")]
+    assert helds[0] == helds[1] == ids and helds[2] == "held - - -"
+    done = steps(out)
+    assert [one["event"] for one in done[0][0]] == ["provisioned"] and done[0][1][2] == 1
+    assert decisions(out)[0]["basis"] == 2 and decisions(out)[0]["not_enacted"] == 1     # the floor answered first
+    restarts = [records for records, _flags in done[1:]]
+    assert ("refused", "dist:install-lost") in [(one["event"], one["cause"]) for records in restarts[-1:]
+                                                 for one in records]
+    assert all(one["cause"] != "dist:install-lost" for records in restarts[:-1] for one in records)

@@ -1268,6 +1268,7 @@ static void pp_verify_install(const pp_envelope *e, const pp_entry *entries, siz
     }
     int cfs = pep->kind == PP_TGT_CFS;
     if ((out->cause = cfs ? pp_check_cfs_table(e, body, body_len) : pp_validate_image(body, body_len))) return;
+    if (pep->table_check && (out->cause = pep->table_check(pep->table_context, body, body_len))) return;
     if (set == PP_SET_FLOOR) {
         if (view->layout == NULL || !e->has_layout || memcmp(e->layout, view->layout->sha256, 32) != 0) {
             out->cause = PP_CAUSE_TARGET_MISMATCH; /* AF10: the layout the PEP was built with, or no table floor */
@@ -1387,6 +1388,8 @@ void pp_verify(const uint8_t *sealed, size_t sealed_len, const uint8_t *body, si
     /* V11: the artifact's own check on this kind */
     struct pp_check_args args = {e->artifact, e, body, body_len, trust, pep, entries, n_entries, message, message_len};
     out->cause = row->check(&args);
+    if (!out->cause && e->artifact == pp_table_artifact(pep->kind) && pep->table_check)
+        out->cause = pep->table_check(pep->table_context, body, body_len); /* V11: the PEP's own check of its table */
     /* CL2: the table of a release is on the held ceiling's list */
     if (!out->cause && e->artifact == pp_table_artifact(pep->kind) && !pp_inside(pep->install, e->body_sha256))
         out->cause = PP_CAUSE_ABOVE_CEILING;
@@ -2055,7 +2058,7 @@ static uint8_t pp_next_record(const pp_pep_machine *pep, const pp_install_anchor
     for (size_t k = 0; k < held->n_keys + held->n_operators; k++) { /* sorted within the provisioning, as _retire */
         const uint8_t *id = k < held->n_keys ? held->keys[k].id : held->operators[k - held->n_keys].id;
         if (pp_ikey_listed(part.keys, part.n_keys, id) || pp_ikey_listed(part.operators, part.n_operators, id) ||
-            pp_listed(part.retired, part.n_retired, id))
+            pp_listed((const uint8_t (*)[32])part.retired, part.n_retired, id))
             continue;
         if (part.n_retired == PP_INSTALL_RETIRED) {
             memmove(part.retired[0], part.retired[1], (PP_INSTALL_RETIRED - 1) * 32);
@@ -2094,6 +2097,8 @@ uint8_t pp_pep_provision_install(pp_pep_machine *pep, const pp_trust *anchor, co
         view.has_clock = pep->config.has_clock;
         view.has_instance_key_id = 1;
         pp_sha256(pep->instance_public, 32, view.instance_key_id);
+        view.table_check = pep->config.table_check;
+        view.table_context = pep->config.context;
         iview.record = &next;
         iview.layout = pep->config.layout;
         iview.trust = anchor;
@@ -2218,7 +2223,7 @@ static void pp_apply_rotation(pp_pep_machine *pep, const pp_envelope *e, const u
     uint8_t add[32], retire[32], id[32];
     int has_retire = 0;
     pp_read_rotation(body, len, add, &has_retire, retire); /* V11 read it and held it to O2 to O4 and K5 */
-    if (has_retire && !pp_listed(t->retired, t->n_retired, retire)) {
+    if (has_retire && !pp_listed((const uint8_t (*)[32])t->retired, t->n_retired, retire)) {
         if (t->n_retired == PP_MAX_RETIRED) { /* K5: forget the oldest retired id and its key */
             for (size_t k = 0; k < t->n_keys; k++)
                 if (memcmp(t->keys[k].id, t->retired[0], 32) == 0) {
@@ -2314,6 +2319,8 @@ void pp_pep_view(const pp_pep_machine *pep, pp_pep *out) {
     out->has_clock = pep->config.has_clock;
     out->has_instance_key_id = 1;
     pp_sha256(pep->instance_public, 32, out->instance_key_id);
+    out->table_check = pep->config.table_check;
+    out->table_context = pep->config.context;
     if (pp_has_record(pep)) { /* section 21: the install part, a view the machine keeps */
         pp_install_view *v = (pp_install_view *)&pep->install_view;
         memset(v, 0, sizeof *v);
@@ -2479,7 +2486,7 @@ static void pp_apply_install_trust(pp_pep_machine *pep, const pp_envelope *e, co
             pp_sha256(j < b.n_keys ? b.keys[j] : b.operators[j - b.n_keys], 32, other);
             kept |= memcmp(other, id, 32) == 0;
         }
-        if (!kept && !pp_listed(r->retired, r->n_retired, id)) memcpy(dropped[n_dropped++], id, 32);
+        if (!kept && !pp_listed((const uint8_t (*)[32])r->retired, r->n_retired, id)) memcpy(dropped[n_dropped++], id, 32);
     }
     for (size_t k = 1; k < n_dropped; k++) /* sorted, as install._retire appends them */
         for (size_t j = k; j > 0 && memcmp(dropped[j - 1], dropped[j], 32) > 0; j--) {
@@ -2824,6 +2831,11 @@ uint8_t pp_pep_rollback_check(pp_pep_machine *pep, long long now) {
     int drops = 0;
     pep->now = now;
     return pp_rollback_cause(pep, &drops);
+}
+
+void pp_pep_refuse(pp_pep_machine *pep, uint8_t cause, long long now) {
+    pp_begin(pep, now);
+    pp_refuse(pep, cause);
 }
 
 void pp_pep_record(pp_pep_machine *pep, uint8_t event, long long now) {
