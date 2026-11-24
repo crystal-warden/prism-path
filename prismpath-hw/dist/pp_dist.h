@@ -20,6 +20,7 @@
 #define PP_CAUSE_NO_MATCHING_EDGE 32      /* route:no-matching-edge */
 #define PP_CAUSE_SIG_INVALID 2            /* sig:invalid */
 #define PP_CAUSE_SIG_REVOKED_KEY 3        /* sig:revoked-key */
+#define PP_CAUSE_IMAGE_SHA256_MISMATCH 6  /* image:sha256-mismatch */
 #define PP_CAUSE_IMAGE_CAPS_EXCEEDED 16   /* image:caps-exceeded */
 #define PP_CAUSE_IMAGE_TRUNCATED_HEADER 69 /* image:truncated-header */
 #define PP_CAUSE_IMAGE_BAD_MAGIC 70       /* image:bad-magic */
@@ -61,6 +62,7 @@
 #define PP_CAUSE_ABOVE_CEILING 165        /* dist:above-ceiling */
 #define PP_CAUSE_FLOOR_RATE 166           /* dist:floor-rate */
 #define PP_CAUSE_FLOOR_BROAD 167          /* dist:floor-broad */
+#define PP_CAUSE_ANSWER_UNBOUND 168       /* dist:answer-unbound */
 
 /* ------------------------------------------------------------------ bounds */
 #define PP_MAX_ENVELOPE 2048  /* E6 */
@@ -81,6 +83,31 @@
 #define PP_TRUST_BOUND 16384  /* E6: every kind's bound on a trust body, which holds the largest list R7 allows */
 #define PP_MAX_FLOOR_IDS 4    /* envelope ids committed at one floor */
 #define PP_MESH_TABLE_MAX 640 /* E6: TBL_MAX in prismpath-hw/mesh/main/ppt_mesh.c */
+#define PP_CFS_TABLE_MAX 4692 /* E6: the PP_PolicyTable_t bytes before ImageSig (integrations/cfs, section 3) */
+/* The largest table this build holds, which sizes every release and install slot. A mesh node's by default, so the
+ * firmware keeps its RAM; the cFS app and the host check of the cfs kind build with PP_CFS_TABLE_MAX, and a build
+ * whose bound is below a kind's has no row for that kind (a PEP of it does not open). */
+#ifndef PP_TABLE_MAX
+#define PP_TABLE_MAX PP_MESH_TABLE_MAX
+#endif
+/* The members of a cfs.table body (PP_PolicyTable_t in integrations/cfs/prismpath_app/fsw/inc/prismpath_app_kernel.h,
+ * which holds itself to these offsets at compile time). Little endian, no padding. */
+#define PP_CFS_OFF_LAYOUT 0
+#define PP_CFS_OFF_IMAGE_LEN 4
+#define PP_CFS_OFF_RULE_COUNT 6
+#define PP_CFS_OFF_CONTRACT 8
+#define PP_CFS_OFF_NOMATCH 10
+#define PP_CFS_OFF_VERSION 12
+#define PP_CFS_OFF_CORE_LEN 16
+#define PP_CFS_OFF_FLOW_LEN 18
+#define PP_CFS_OFF_RULES 20
+#define PP_CFS_RULES_MAX 16
+#define PP_CFS_IMAGE_MAX 1024
+#define PP_CFS_CORE_MAX 2048
+#define PP_CFS_FLOW_MAX 1536
+#define PP_CFS_OFF_IMAGE (PP_CFS_OFF_RULES + 4 * PP_CFS_RULES_MAX)
+#define PP_CFS_OFF_CORE (PP_CFS_OFF_IMAGE + PP_CFS_IMAGE_MAX)
+#define PP_CFS_OFF_FLOW (PP_CFS_OFF_CORE + PP_CFS_CORE_MAX)
 #define PP_META_MAX_DEPTH 3   /* E9: the scanner's bound on meta's nesting */
 #define PP_INSTALL_KEYS 4     /* IS2, IS11: install keys */
 #define PP_OPERATOR_KEYS 4    /* OP1: operator keys */
@@ -102,7 +129,7 @@ typedef enum {
 
 /* The three install sets, in the order of the install id (H10), and what `as` names (IS1, CL1). */
 enum { PP_SET_FLOOR, PP_SET_FALLBACK, PP_SET_CEILING, PP_SETS };
-enum { PP_AS_ABSENT, PP_AS_NONE, PP_AS_POLICY_PPT, PP_AS_POLICY_LIST, PP_AS_OTHER };
+enum { PP_AS_ABSENT, PP_AS_NONE, PP_AS_POLICY_PPT, PP_AS_POLICY_LIST, PP_AS_OTHER, PP_AS_CFS_TABLE };
 
 typedef enum { PP_TGT_AGENT, PP_TGT_CFS, PP_TGT_GATEWAY, PP_TGT_HOST, PP_TGT_MESH, PP_TGT_XDP, PP_TGT_COUNT } pp_target;
 
@@ -264,6 +291,10 @@ typedef struct {
     int has_instance_key_id;        /* the PEP's own instance key id, which a rotation may never add (O4) */
     uint8_t instance_key_id[32];
     const pp_install_view *install; /* NULL for a PEP that holds no install record */
+    /* V11: the PEP's own check of a table of its kind beyond the core's, run after it on a release's table and on a
+     * table an install set names (section 3: on cfs, the app's kernel check). NULL for none. 0, or its cause. */
+    uint8_t (*table_check)(void *context, const uint8_t *body, size_t len);
+    void *table_context;
 } pp_pep;
 
 /* A verifier's answer: `cause` 0 when it passed. `has_envelope` once the envelope read, with its id.
@@ -364,12 +395,17 @@ typedef struct {
 void pp_assembler_init(pp_assembler *a, pp_admit_fn admit, void *context, int ordered, size_t limit,
                        long long artifact_bound);
 
+/* Whether a commit or abort frame names the release at `seq` of `policy_sha256` on `stream` (frames.Abort.names). */
+int pp_frame_names(const uint8_t *frame, size_t len, const char *stream, long long seq, const uint8_t policy_sha256[32]);
+/* The delay in milliseconds a commit frame carries (B8), 0 for an abort. */
+uint16_t pp_frame_delay(const uint8_t *frame, size_t len);
+
 /* One frame's bytes at the PEP's monotonic time `now_ms`. Answers PP_ASM_* with the cause of a drop. */
 int pp_assembler_receive(pp_assembler *a, const uint8_t *frame, size_t len, uint32_t now_ms, uint8_t *cause);
 
 /* ------------------------------------------------------------------ the enforcement point machine (section 9) */
 
-#define PP_RELEASE_BODY_MAX PP_MESH_TABLE_MAX /* every body of a mesh release is within the kind's bound */
+#define PP_RELEASE_BODY_MAX PP_TABLE_MAX /* every body of a release is within its kind's table bound */
 #define PP_WIDENING_HASHES 64                 /* W4: the hashes a widening statement's `from` holds at most */
 /* W4: the canonical bytes of a widening statement whose `from` holds 64 hashes, the most a release slot keeps */
 #define PP_WIDENING_MAX (sizeof("{\"encoding\":\"canon/2\",\"format\":\"prismpath.dist-widening/1\",\"from\":[]}") - 1 + \
@@ -441,7 +477,7 @@ uint8_t *pp_held_body(pp_release *release, size_t k);
 
 /* A statement of an install set as the PEP holds it: the sealed envelope and the body, a table, or for a policy
  * list its hashes, 32 bytes each, from which the canonical body is written again to check its hash (CL1). */
-#define PP_INSTALL_BODY_MAX (PP_CEILING_BODIES * 32 > PP_MESH_TABLE_MAX ? PP_CEILING_BODIES * 32 : PP_MESH_TABLE_MAX)
+#define PP_INSTALL_BODY_MAX (PP_CEILING_BODIES * 32 > PP_TABLE_MAX ? PP_CEILING_BODIES * 32 : PP_TABLE_MAX)
 typedef struct {
     pp_envelope envelope;
     size_t sealed_len;
@@ -506,6 +542,7 @@ typedef struct {
     pp_persist_fn persist;
     pp_runtime_fn runtime;
     void *context;
+    uint8_t (*table_check)(void *context, const uint8_t *body, size_t len); /* V11, as in pp_pep, given `context` */
 } pp_config;
 
 #define PP_OUTBOX 6
@@ -551,7 +588,7 @@ void pp_pep_provision(pp_pep_machine *pep, const pp_trust *anchor, const char *s
 
 /* P4: the `install` member of a `/2` anchor, which the owner's tool reads on the host. `fingerprint` is the anchor's,
  * the install trust id it starts (IS10). */
-typedef struct {
+typedef struct pp_install_anchor_s {
     int present;
     uint8_t keys[PP_INSTALL_KEYS][32];
     size_t n_keys;
@@ -562,6 +599,15 @@ typedef struct {
     uint8_t domain[32];
     uint8_t fingerprint[32];
 } pp_install_anchor;
+
+/* P2, P4: a trust anchor, `prismpath.dist-trust/1` or `/2`, read into the store it starts, the install member of a /2
+ * anchor (`install->present` 0 for none), its stream and its target kind, and its fingerprint, the SHA-256 of its
+ * bytes. 0, or PP_CAUSE_NOT_CANONICAL or PP_CAUSE_BAD_FORMAT (a key in a role other than authority, a threshold other
+ * than 1, more keys than K5 holds). A /2 anchor's controller key is checked apart from every other key and not held,
+ * since this core takes no controller statement (K6, H9), and one with `fresh` other than 0 is refused with
+ * PP_CAUSE_BAD_FORMAT, since this core cannot honour freshness (H16). */
+uint8_t pp_read_anchor(const uint8_t *bytes, size_t len, pp_trust *trust, struct pp_install_anchor_s *install,
+                       char stream[PP_STREAM_MAX + 1], pp_target *target, uint8_t fingerprint[32]);
 
 /* One install statement brought by provisioning (P2 step 3, IS13). */
 typedef struct {
@@ -605,6 +651,16 @@ void pp_pep_stage(pp_pep_machine *pep, const uint8_t *sealed, size_t sealed_len,
 void pp_pep_commit(pp_pep_machine *pep, const char *stream, long long seq, const uint8_t policy_sha256[32],
                    uint16_t delay_ms, uint32_t now_ms, long long now);
 
+/* What pp_pep_commit with no delay would answer at `now` for the release it names: 0 when it would commit, else the
+ * cause of its refusal. Nothing changes and no record is made. A runtime whose switch can fail, the cFS table
+ * service (section 9.5), switches first under this answer and commits after: at one `now` the two answer alike,
+ * since the PEP does nothing in between, so its active record is never ahead of what the runtime holds. */
+uint8_t pp_pep_commit_check(pp_pep_machine *pep, const char *stream, long long seq, const uint8_t policy_sha256[32],
+                            long long now);
+
+/* The same for pp_pep_rollback: 0 when it would roll back, PP_CAUSE_NOT_STAGED when no release is kept. */
+uint8_t pp_pep_rollback_check(pp_pep_machine *pep, long long now);
+
 /* A1: drop the staged release the abort names, and change nothing otherwise. */
 void pp_pep_abort(pp_pep_machine *pep, const char *stream, long long seq, const uint8_t policy_sha256[32], long long now);
 
@@ -614,6 +670,10 @@ void pp_pep_tick(pp_pep_machine *pep, uint32_t now_ms, long long now);
 /* RB1 to RB3, X9: return to the release the active one replaced. 0, or PP_CAUSE_NOT_STAGED when no release
  * is kept, which writes no record. */
 uint8_t pp_pep_rollback(pp_pep_machine *pep, long long now);
+
+/* A step the PEP's runtime refused before the core changed anything, such as a cFS table whose image attestation does
+ * not verify: a state record with event refused and `cause`, and nothing else changes. */
+void pp_pep_refuse(pp_pep_machine *pep, uint8_t cause, long long now);
 
 /* A state record of the PEP as it is now, after the expiry check (X1). */
 void pp_pep_record(pp_pep_machine *pep, uint8_t event, long long now);

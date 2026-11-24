@@ -30,20 +30,30 @@ foreach(_need "${PRISMPATH_EBPF_DIR}/merkle.h" "${PRISMPATH_MONOCYPHER_DIR}/mono
   endif()
 endforeach()
 
+# The C core of policy distribution, prismpath-hw/dist, is compiled from the checkout as the mesh firmware compiles it,
+# with the bound of a cfs.table (the PP_PolicyTable_t bytes before ImageSig) as its table bound.
+set(PRISMPATH_DIST_DIR "${PRISMPATH_HW_DIR}/dist")
+if (NOT EXISTS "${PRISMPATH_DIST_DIR}/pp_dist.c")
+  message(FATAL_ERROR "prismpath_app: ${PRISMPATH_DIST_DIR}/pp_dist.c not found; PRISMPATH_HW_DIR must be the prismpath-hw of a PrismPath checkout")
+endif()
+
 add_cfe_app(prismpath_app
   fsw/src/prismpath_app.c
   fsw/src/prismpath_app_kernel.c
   fsw/src/prismpath_app_run.c
+  fsw/src/prismpath_app_dist.c
+  "${PRISMPATH_DIST_DIR}/pp_dist.c"
   "${PRISMPATH_MONOCYPHER_DIR}/monocypher.c"
   "${PRISMPATH_MONOCYPHER_DIR}/monocypher-ed25519.c"
 )
+target_compile_definitions(prismpath_app PRIVATE PP_TABLE_MAX=4692)
 
 # a mission with a runtime monitor sets the staleness bound of its verdict (seconds) when it builds
 if (DEFINED ENV{PP_MONITOR_STALE_SECS})
   target_compile_definitions(prismpath_app PRIVATE PRISMPATH_APP_MONITOR_STALE_SECS=$ENV{PP_MONITOR_STALE_SECS})
 endif()
 
-target_include_directories(prismpath_app PUBLIC fsw/inc "${PRISMPATH_EBPF_DIR}" "${PRISMPATH_MONOCYPHER_DIR}")
+target_include_directories(prismpath_app PUBLIC fsw/inc "${PRISMPATH_EBPF_DIR}" "${PRISMPATH_MONOCYPHER_DIR}" "${PRISMPATH_DIST_DIR}")
 target_include_directories(prismpath_app PRIVATE "${PRISMPATH_HW_DIR}")
 # as a link flag, not a bare name: a mission may define a CMake target called crypto of its own (NOS3 does)
 target_link_libraries(prismpath_app -lcrypto)

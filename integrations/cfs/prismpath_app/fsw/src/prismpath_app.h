@@ -19,6 +19,7 @@
 #include "prismpath_app_msgids.h"
 #include "prismpath_app_msg.h"
 #include "prismpath_app_run.h"
+#include "prismpath_app_dist.h"
 
 typedef struct
 {
@@ -35,20 +36,23 @@ typedef struct
     bool                        MonitorSeen;  /**< a verdict has arrived */
     uint8                       MonitorVerdict; /**< the latest verdict: 1 ok */
     uint32                      MonitorAt;    /**< mission elapsed seconds when it arrived */
-    CFE_ES_CDSHandle_t          CdsHandle;
+    CFE_ES_CDSHandle_t          CdsHandle;    /**< the record: the run and the core's floor, trust store and anchor */
     bool                        HaveCds;
-    PP_RunState_t               Run;          /**< the receipts and the version floor; the CDS's copy */
-    PP_RunKeys_t                Keys;
-    PP_PolicyTable_t            Active;       /**< the active table, as it was checked and activated */
-    uint8                       ActiveDigest[32];
+    CFE_ES_CDSHandle_t          CopyHandle;   /**< the second copy of the install record and its sets (IS10) */
+    bool                        HaveCopy;
+    bool                        DistStarted;  /**< the enforcement point started (X10, K2) */
 } PRISMPATH_APP_Data_t;
 
 extern PRISMPATH_APP_Data_t PRISMPATH_APP_Data;
 
+/** The app's enforcement point of policy distribution, the run with it (PRISMPATH_APP_Dist.Record.Run). */
+extern PP_AppDist_t PRISMPATH_APP_Dist;
+
 void         PRISMPATH_APP_Main(void);
 CFE_Status_t PRISMPATH_APP_Init(void);
 
-/** The table validation callback: the kernel's own checks on the candidate image. Returns CFE_SUCCESS to accept. */
+/** The table validation callback: the table is the switch the enforcement point is making, the kernel passes it, and
+ *  the core still answers the switch as it did. Returns CFE_SUCCESS to accept. */
 int32 PRISMPATH_APP_TblValidationFunc(void *TblData);
 
 #endif

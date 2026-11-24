@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
-"""What the app's receipts must be, from the Python reference: the reading a payload is, and its receipt line.
+"""What the app's receipts must be, from the Python reference: the reading a payload is, its receipt line, and which
+receipts the app made while held.
 
 The app writes both in C (fsw/src/prismpath_app_run.c). These are written from the layout header and the
 reference's own writers (`canon2.dumps`, `core_evidence._decision`, the reference decision path through
@@ -54,3 +55,17 @@ def receipt_line(policy: Policy, idx: int, case: str, reading: int, payload: byt
                "image_sha256": core_evidence.sha256_hex(policy.image), "reading_sha256": core_evidence.sha256_hex(raw),
                "decider": DECIDER, **core_evidence._decision(policy.verdict(raw))}
     return canon2.dumps(receipt)
+
+
+def held_receipts(run: Path) -> List[int]:
+    """The index of every receipt the app made while held past its release's expiry (X7). A hold opens a case of its
+    own, whose line carries "hold": true, and its end opens another, so the receipts keep their format and their case
+    says they were held. The receipts follow the cases in order, one per reading of each case."""
+    out, idx = [], 0
+    for line in core_evidence._lines(Path(run) / "cases.jsonl"):
+        case = canon2.loads(line)
+        count = len(case["readings"])
+        if case.get("hold") is True:
+            out.extend(range(idx, idx + count))
+        idx += count
+    return out
