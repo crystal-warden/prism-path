@@ -2608,6 +2608,160 @@
     ],
     "rationale": "A rule names a value its field's reading domain does not hold."
    }
+  },
+  "161": {
+   "name": "dist:fallback",
+   "class": "state",
+   "kind": "internal",
+   "owasp_asi": {
+    "ids": [],
+    "none": "The fallback the install engineer signed for an enforcement point with no release, marked in every record while it decides. It records a condition, not a weakness or an attack."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "The fallback the install engineer signed for an enforcement point with no release, marked in every record while it decides. It records a condition, not a weakness or an attack."
+   },
+   "cwe": {
+    "ids": [],
+    "none": "The fallback the install engineer signed for an enforcement point with no release, marked in every record while it decides. It records a condition, not a weakness or an attack."
+   }
+  },
+  "162": {
+   "name": "dist:floor-allowed",
+   "class": "state",
+   "kind": "internal",
+   "owasp_asi": {
+    "ids": [],
+    "none": "An allow the install engineer signed in advance for every state of the enforcement point. It records which signed body allowed the request, not a weakness or an attack."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "An allow the install engineer signed in advance for every state of the enforcement point. It records which signed body allowed the request, not a weakness or an attack."
+   },
+   "cwe": {
+    "ids": [],
+    "none": "An allow the install engineer signed in advance for every state of the enforcement point. It records which signed body allowed the request, not a weakness or an attack."
+   }
+  },
+  "163": {
+   "name": "dist:install-lost",
+   "class": "state",
+   "kind": "internal",
+   "owasp_asi": {
+    "ids": [],
+    "none": "A loss of the enforcement point's own installed state that the design handles by running without it and reporting it. It records a condition, not a weakness or an attack."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "A loss of the enforcement point's own installed state that the design handles by running without it and reporting it. It records a condition, not a weakness or an attack."
+   },
+   "cwe": {
+    "ids": [],
+    "none": "A loss of the enforcement point's own installed state that the design handles by running without it and reporting it. It records a condition, not a weakness or an attack."
+   }
+  },
+  "164": {
+   "name": "dist:install-widened",
+   "class": "state",
+   "kind": "internal",
+   "owasp_asi": {
+    "ids": [],
+    "none": "A widening the install engineer signed, made to stand out and held until it is acknowledged at the controller. It records a condition, not a weakness or an attack."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "A widening the install engineer signed, made to stand out and held until it is acknowledged at the controller. It records a condition, not a weakness or an attack."
+   },
+   "cwe": {
+    "ids": [],
+    "none": "A widening the install engineer signed, made to stand out and held until it is acknowledged at the controller. It records a condition, not a weakness or an attack."
+   }
+  },
+  "165": {
+   "name": "dist:above-ceiling",
+   "class": "envelope",
+   "kind": "security-control",
+   "owasp_asi": {
+    "ids": [
+     "ASI04"
+    ],
+    "rationale": "A release that allows what the install engineer's signed ceiling does not is refused whoever signed it, so a policy update cannot grant what the resource was never meant to do."
+   },
+   "mitre_atlas": {
+    "ids": [
+     "AML.T0010.001"
+    ],
+    "rationale": "A permissive policy slipped in as an ordinary update is refused where it goes past the installed ceiling."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-863"
+    ],
+    "rationale": "Nearest entry. The release is authentic, and it is refused because it grants more than the installed bound permits."
+   }
+  },
+  "166": {
+   "name": "dist:floor-rate",
+   "class": "routing",
+   "kind": "routing",
+   "owasp_asi": {
+    "ids": [],
+    "none": "An escalation the install engineer signed for a floor action asked more often than its rate. It is an intended routing outcome, not a weakness or an attack."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "An escalation the install engineer signed for a floor action asked more often than its rate. It is an intended routing outcome, not a weakness or an attack."
+   },
+   "cwe": {
+    "ids": [],
+    "none": "An escalation the install engineer signed for a floor action asked more often than its rate. It is an intended routing outcome, not a weakness or an attack."
+   }
+  },
+  "167": {
+   "name": "dist:floor-broad",
+   "class": "envelope",
+   "kind": "security-control",
+   "owasp_asi": {
+    "ids": [
+     "ASI04"
+    ],
+    "rationale": "An always allowed floor that is not narrow would let one signed statement bypass the policy wholesale, so a broad one is refused whoever signed it."
+   },
+   "mitre_atlas": {
+    "ids": [
+     "AML.T0010.001"
+    ],
+    "rationale": "A permissive floor slipped in as an install update is refused where it does not name each action it allows."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-863"
+    ],
+    "rationale": "Nearest entry. The floor is authentic, and it is refused because it grants more broadly than the installed bound permits."
+   }
+  },
+  "168": {
+   "name": "dist:answer-unbound",
+   "class": "authority",
+   "kind": "security-control",
+   "owasp_asi": {
+    "ids": [
+     "ASI04"
+    ],
+    "rationale": "An approval that is replayed, or that names an escalation the enforcement point never made, carries no authority for the request it is sent with."
+   },
+   "mitre_atlas": {
+    "ids": [
+     "AML.T0010.001"
+    ],
+    "rationale": "A captured or substituted approval is refused because it is bound to one escalation and used once."
+   },
+   "cwe": {
+    "ids": [
+     "CWE-347"
+    ],
+    "rationale": "Nearest entry. The signature is good, and the answer is refused because what it signs is not an open escalation of this enforcement point."
+   }
   }
  }
 }

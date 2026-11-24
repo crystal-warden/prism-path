@@ -1,7 +1,7 @@
 {
  "version": 1,
  "comment": "FROZEN. The cause registry of prismpath.kernel.causes: every row, its hash, the engine stop mapping and the lookups a consumer must answer. prismpath-rs/src/causes.rs is generated from the same registry and prismpath-rs/tests/test_causes.rs replays this file. Appending a row regenerates it.",
- "registry_sha256": "ec2ea6dafaa3f2230a34314887d653d42055dd218ae7cab91031b1ba6e54a37b",
+ "registry_sha256": "db8bffeb055c77435cecbad64858ab2b5c720c3429dd24d17d06a09b111f15bb",
  "registry": [
   {
    "code": 1,
@@ -758,6 +758,54 @@
    "name": "policy:out-of-domain",
    "class": "envelope",
    "description": "a policy whose rule names a value outside its field's reading domain, the values the installer defined for it (a tool or a category value the classifier does not produce, a bool constant that is not true or false, an int named outside its min and max); refused when the policy is loaded and when it is checked, since such a value is a resource nobody accounted for"
+  },
+  {
+   "code": 161,
+   "name": "dist:fallback",
+   "class": "state",
+   "description": "an enforcement point deciding under its installed fallback policy because no release is active; marked in every state record while it lasts and filed by the controller"
+  },
+  {
+   "code": 162,
+   "name": "dist:floor-allowed",
+   "class": "state",
+   "description": "a request the installed action floor allowed, whatever the policy says; an allow that was not the policy's"
+  },
+  {
+   "code": 163,
+   "name": "dist:install-lost",
+   "class": "state",
+   "description": "an install set or an install record that no longer reads at start, so the enforcement point runs without that action floor, fallback policy or ceiling"
+  },
+  {
+   "code": 164,
+   "name": "dist:install-widened",
+   "class": "state",
+   "description": "an install set applied or handed over that allows more than the one before it, or is the first of its kind; filed until it is acknowledged at the controller, which is detection only"
+  },
+  {
+   "code": 165,
+   "name": "dist:above-ceiling",
+   "class": "envelope",
+   "description": "a release or an install set that allows what the installed ceiling does not, or a ceiling the held sets are above"
+  },
+  {
+   "code": 166,
+   "name": "dist:floor-rate",
+   "class": "routing",
+   "description": "a request the action floor would have allowed, escalated because the signed rate of floor allows is spent, or an operator's answer refused past its signed answer rate"
+  },
+  {
+   "code": 167,
+   "name": "dist:floor-broad",
+   "class": "envelope",
+   "description": "an action floor with a default or catch all, a rule that names no one action or lacks a required test, a test of a field that is not independent, or more rules or entries than its bound"
+  },
+  {
+   "code": 168,
+   "name": "dist:answer-unbound",
+   "class": "authority",
+   "description": "an operator's signed answer that names no open escalation of this enforcement point, or one already answered"
   }
  ],
  "engine_stop_to_cause": {

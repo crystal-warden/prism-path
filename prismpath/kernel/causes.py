@@ -206,6 +206,14 @@ _REGISTRY: Tuple[Tuple[int, str, str, str], ...] = (
     (158, "fleet:silent",                "wire",      "no accepted state record from an enforcement point for three heartbeat intervals; filed by the controller"),
     (159, "dist:held",                   "state",     "an enforcement point deciding under an expired release because its deployment chose to hold at expiry, or an action refused because of that hold; marked in every state record and receipt while it lasts"),
     (160, "policy:out-of-domain",        "envelope",  "a policy whose rule names a value outside its field's reading domain, the values the installer defined for it (a tool or a category value the classifier does not produce, a bool constant that is not true or false, an int named outside its min and max); refused when the policy is loaded and when it is checked, since such a value is a resource nobody accounted for"),
+    (161, "dist:fallback",               "state",     "an enforcement point deciding under its installed fallback policy because no release is active; marked in every state record while it lasts and filed by the controller"),
+    (162, "dist:floor-allowed",          "state",     "a request the installed action floor allowed, whatever the policy says; an allow that was not the policy's"),
+    (163, "dist:install-lost",           "state",     "an install set or an install record that no longer reads at start, so the enforcement point runs without that action floor, fallback policy or ceiling"),
+    (164, "dist:install-widened",        "state",     "an install set applied or handed over that allows more than the one before it, or is the first of its kind; filed until it is acknowledged at the controller, which is detection only"),
+    (165, "dist:above-ceiling",          "envelope",  "a release or an install set that allows what the installed ceiling does not, or a ceiling the held sets are above"),
+    (166, "dist:floor-rate",             "routing",   "a request the action floor would have allowed, escalated because the signed rate of floor allows is spent, or an operator's answer refused past its signed answer rate"),
+    (167, "dist:floor-broad",            "envelope",  "an action floor with a default or catch all, a rule that names no one action or lacks a required test, a test of a field that is not independent, or more rules or entries than its bound"),
+    (168, "dist:answer-unbound",         "authority", "an operator's signed answer that names no open escalation of this enforcement point, or one already answered"),
 )
 
 CODES: Dict[int, Tuple[str, str, str]] = {cause_code: (canonical_name, class_name, description)
