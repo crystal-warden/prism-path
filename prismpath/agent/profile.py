@@ -609,6 +609,24 @@ def allow_set(policy):
 
 
 # ------------------------------------------------------------------------------------------- the compile
+NET_ORDER = ("none", "proxy_model", "proxy_allow")
+
+
+def join(*profiles: Profile) -> Profile:
+    """The least profile that permits what each of `profiles` permits (spec-policy-distribution.md, AF1): the mounts
+    of each, the host mount read write where one has it, the host network where one shares it, and the widest proxy
+    state, which the host network replaces since a profile never has both. The limits are the first profile's."""
+    if not profiles:
+        raise ProfileError("a join of no profiles")
+    first = profiles[0]
+    mounts = ("/",) if any("/" in one.ro_mounts for one in profiles) else tuple(sorted({mount for one in profiles
+                                                                                       for mount in one.ro_mounts}))
+    network = any(one.network for one in profiles)
+    net = "none" if network else max((one.net for one in profiles), key=NET_ORDER.index)
+    return Profile(ro_mounts=mounts, rw_path=first.rw_path, host_write=any(one.host_write for one in profiles),
+                   network=network, max_processes=first.max_processes, timeout_s=first.timeout_s, net=net)
+
+
 def compile_profile(image: Union[bytes, "Policy"], role: str = "bash") -> Profile:  # noqa: F821
     """The profile an image needs: the strictest one its allow set permits. `role` is `bash` (one allowed shell
     command, never a proxy) or `agent` (the whole agent process tree, `net` from the allow set). Raises ProfileError."""

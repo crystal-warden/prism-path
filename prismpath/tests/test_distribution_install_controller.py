@@ -929,3 +929,277 @@ def test_case_203_no_release_above_the_ceiling_is_staged_or_offered(tmp_path):
     with pytest.raises(Refused) as refused:
         meshes.offer("nodes", STREAM, 2)
     assert refused.value.cause == "dist:above-ceiling"
+
+
+# ------------------------------------------------------------------ the PEP halves left from parts one and two
+
+def _host_point(tmp_path, name):
+    return _dist.HostPep(tmp_path / name, install_keys=KEYS, install_threshold=2)
+
+
+def test_case_195_the_fallback_policy_decides_whenever_no_release_does(tmp_path):
+    """case_195: FB1, FB2, FB3, the Python half. A `mesh` and a `host` PEP with a fallback policy see their release
+    expire, have it revoked, start with nothing committed and lose their floor of section 6. The fallback policy
+    decides each time, with event `fallback` and `dist:expired`, `dist:revoked`, `dist:fallback` and
+    `dist:floor-lost`, bit 4 set, status 0 three times and 2 once, zeros for the active hash, and no decision is
+    `dist:policy-lapsed`."""
+    for kind, make in (("host", _host_point), ("mesh", _mesh)):
+        seen = []
+        for index, how in enumerate(("expire", "revoke", "start", "lose")):
+            point = make(tmp_path / kind, f"p{index}")
+            point.send(point.install_set(FALLBACK, {"policy.ppt": _dist.image(9)}, 1, widens=True))
+            if how != "start":
+                point.commit(_dist.image(5))
+            point.pep.drain()
+            if how == "expire":
+                point.clock.now = _dist.EXPIRES
+                point.pep.tick()
+            elif how == "revoke":
+                point.revoke(1, envelopes=sorted(point.pep.active.envelope_ids))
+            elif how == "start":
+                point.pep = point.open()
+            else:
+                (point.state_dir / "dist" / "floor.json").write_bytes(b"not a floor")
+                point.pep = point.open(provision=False)
+            fell = next(state_record.read(one, point.key.public_raw) for one in point.pep.drain()
+                        if state_record.read(one, point.key.public_raw).event == "fallback")
+            decided = point.pep.decide(lambda: "fallback")
+            assert decided["basis"] == "fallback" and decided["cause"] != "dist:policy-lapsed"
+            assert fell.fallback and fell.active_policy == bytes(16) and fell.active_seq == 0
+            seen.append((fell.cause, fell.status & 0x03))
+        assert seen == [("dist:expired", 0), ("dist:revoked", 0), ("dist:fallback", 0), ("dist:floor-lost", 2)]
+
+
+def test_case_215_a_lost_ceiling_holds_everything_until_a_ceiling_comes_again(tmp_path):
+    """case_215: IS10, the Python half. A `host` PEP with a ceiling starts with every copy of the ceiling unreadable:
+    event `refused` with `dist:install-lost`, its release keeps deciding, and an offered release, a rollback and an
+    action floor are `dist:install-lost`; then a ceiling at a new `seq` is applied and a release inside it stages. A
+    PEP that held a ceiling starts with its install record unreadable and refuses a release with `dist:install-lost`
+    until it is provisioned."""
+    from prismpath.tests.test_distribution_floor import HostFloor
+    image = _dist.image
+    point = _table_point(HostFloor, tmp_path, "host")
+    listed = lambda seq, *tables: point.install_set(CEILING, {kinds.POLICY_LIST: install.ceiling_body(tables)}, seq,  # noqa: E731
+                                                    widens=False, replaces=(point.pep.installed.record.sets[CEILING]
+                                                                            or install.HeldSet(CEILING, 0, "", "", "", "",
+                                                                                               False, {})).policy_sha256)
+    floor_table = table("cmd == 3 and p >= 2 and p <= 5")
+    assert point.send(listed(1, image(5), image(6), image(7)))[-1].event == "install-applied"
+    point.commit(image(5))
+    point.commit(image(6), 2)
+    assert point.pep.previous is not None
+    for directory in (point.state_dir / "dist" / "install" / "blobs", point.state_dir / "dist" / "install-copy" / "blobs"):
+        for blob in directory.iterdir():
+            blob.write_bytes(b"gone")
+    point.pep = point.open()
+    sent = [state_record.read(one, point.key.public_raw) for one in point.pep.drain()]
+    assert ("refused", "dist:install-lost") in [(one.event, one.cause) for one in sent]
+    assert point.pep.decide(lambda: "release")["basis"] == "release" and point.pep.active.seq == 2
+    lost = lambda signed: state_record.read(signed, point.key.public_raw).cause  # noqa: E731
+    assert lost(point.stage(image(7), 3)) == "dist:install-lost"
+    assert lost(point.pep.rollback()) == "dist:install-lost"
+    assert point.send(_table_floor(point, floor_table, 1))[-1].cause == "dist:install-lost"
+    assert point.send(listed(2, image(6), image(7)))[-1].event == "install-applied"
+    assert state_record.read(point.stage(image(7), 3), point.key.public_raw).event == "staged"
+    second = _host_point(tmp_path, "second")
+    second.send(second.install_set(CEILING, {kinds.POLICY_LIST: install.ceiling_body([image(5)])}, 1))
+    second.commit(image(5))
+    for path in (second.state_dir / "dist" / "install" / "record.json",
+                 second.state_dir / "dist" / "install-copy" / "record.json"):
+        path.write_bytes(b"gone")
+    second.pep = second.open()
+    assert state_record.read(second.stage(image(5), 2, widens=False, replaces=H(image(5))),
+                             second.key.public_raw).cause == "dist:install-lost"
+    second.pep.confirm(second.pep.provision(second.anchor()))
+    assert state_record.read(second.stage(image(5), 2), second.key.public_raw).event == "staged"
+
+
+def case_161_provisioned_with_a_floor_and_a_fallback(point, floor_pairs, fallback_pairs):
+    """case_161 on one PEP: provisioned with its anchor, a floor and a fallback policy, then restarted."""
+    statements = [*floor_pairs, *fallback_pairs]
+    fingerprint = point.pep.provision(point.anchor(), statements)
+    assert point.pep.printed == {"fingerprint": fingerprint, "install": _ids(statements)}
+    point.pep.confirm(fingerprint)
+    provisioned = [event for event in point.pep.audit.events if event["action"] == "provisioned"][-1]
+    assert sorted(provisioned["data"]["install"]) == sorted(_ids(statements))
+    point.pep = point.open()
+    assert point.pep.installed.held(FLOOR) is not None and point.pep.installed.held(FALLBACK) is not None
+    assert {*point.pep.installed.statement_ids()} == set(_ids(statements))
+
+
+def test_case_161_a_pep_provisioned_with_install_statements_prints_and_keeps_them(tmp_path):
+    """case_161: IS1, IS2, IS8, IS10, P4, the `host` and `mesh` halves. Each is provisioned with an anchor that holds
+    two install keys, an action floor and a fallback policy: at P2 step 4 it prints the envelope id of every install
+    statement beside the anchor's fingerprint, the `provisioned` audit event names them, and both sets are held after
+    a restart. The `cfs` half is in integrations/cfs/tests."""
+    from prismpath.tests.test_distribution_floor import HostFloor
+    for cls, name in ((MeshFloor, "mesh"), (HostFloor, "host")):
+        point = _table_point(cls, tmp_path, name, install_keys=["N1", "N2"])
+        floor_pairs = _table_floor(point, table("cmd == 3 and p >= 2 and p <= 5"), 1)
+        fallback = point.install_set(FALLBACK, {"policy.ppt": _dist.image(9)}, 1, widens=True)
+        case_161_provisioned_with_a_floor_and_a_fallback(point, floor_pairs, fallback)
+
+
+def test_case_167_an_install_set_needs_no_commit_and_a_forged_commit_or_abort_changes_nothing(tmp_path):
+    """case_167: IS4, the Python half. With an install threshold of 2 an action floor is sent to a `mesh` PEP over
+    the frame binding and pulled by a `host` PEP over the pull client, with no `commit`: each applies it when it
+    verifies, durable before the event is reported. A forged `abort` and a forged `commit` that name it change
+    nothing."""
+    from prismpath.distribution import frames
+    from prismpath.distribution.controller import FrameDriver
+    from prismpath.tests.test_distribution_floor import HostFloor
+    clock = _dist.Clock()
+    floor_table = table("cmd == 3 and p >= 2 and p <= 5")
+    mesh = _table_point(MeshFloor, tmp_path, "mesh", clock=clock, key=_dist.instance_key("m1"))
+    meshes = Controller(str(tmp_path / "meshes"), _dist.instance_key("C"), clock=clock)
+    meshes.add_anchor(mesh.anchor(), layout=LAYOUT)
+    meshes.enroll(mesh.key.public_raw, "mesh", STREAM, "nodes")
+    host = _table_point(HostFloor, tmp_path, "host", clock=clock, key=_dist.instance_key("h1"))
+    hosts = Controller(str(tmp_path / "hosts"), _dist.instance_key("C"), clock=clock)
+    hosts.add_anchor(host.anchor(), dict(GEN.QUALIFICATION), layout=LAYOUT)
+    host_id = hosts.enroll(host.key.public_raw, "host", STREAM, "hosts")
+    for point, controller in ((mesh, meshes), (host, hosts)):
+        pairs = _table_floor(point, floor_table, 1)
+        for sealed, body in pairs:
+            controller.put(sealed, body)
+        controller.acknowledge(_ids(pairs), by="engineer")
+    driver = FrameDriver(meshes, "nodes", limit=frames.ESPNOW_LIMIT)
+    monotonic = {"now": 0.0}
+    events = []
+    for _ in range(2):
+        for reply in _node_round(mesh, driver.send(), monotonic):
+            events.append(state_record.read(frames.decode(reply).record, mesh.key.public_raw).event)
+            driver.receive(reply)
+    client = PullClient(host.pep, LocalTransport(hosts))
+    client.poll()
+    assert "install-widened" in events and hosts.members[host_id].last["event"] in ("install-widened", "beat")
+    for point in (mesh, host):
+        held = point.pep.floor_set()
+        assert held is not None and point.open(provision=False).floor_set().set_id == held.set_id   # durable
+        record = point.pep.installed.record
+        for forged in (point.pep.abort(STREAM, 1, held.policy_sha256), point.pep.commit(STREAM, 1, held.policy_sha256)):
+            assert state_record.read(forged, point.key.public_raw).event != "committed"
+        assert point.pep.installed.record == record and point.pep.active is None and point.pep.floor_set() == held
+
+
+def test_case_170_a_provisioning_follows_is6_for_the_install_part(tmp_path):
+    """case_170: IS6, IS10, P4, the Python half. A PEP that holds an action floor at `seq` 5 and a fallback policy is
+    provisioned with its own install key set and a floor at 4, which is `dist:seq-replay` with the held floor kept;
+    with an anchor alone; with an anchor whose install trust sequence is lower, `dist:trust-replay`; with a higher one
+    that shares a key with the held set, drops another and brings a floor at 1, whose key set is taken with the
+    dropped key retired and the anchor's fingerprint as the install trust id while the floor at 1 is
+    `dist:seq-replay`; and with a higher one that shares no key and brings a floor at 1 and no fallback policy, which
+    holds the floor at 1 with every old install key retired and the fallback policy dropped. The floor at 5 sent again
+    is `sig:revoked-key`."""
+    from prismpath.distribution.pep import PepRefused
+    from prismpath.distribution.trust import read_anchor
+    point = _agent(tmp_path, "a", install_seq=2)
+    five = _set(point, FLOOR, NARROW, 5)
+    point.send(five)
+    point.send(_set(point, FALLBACK, NARROW, 1))
+
+    def provision(anchor, statements=()):
+        point.pep.confirm(point.pep.provision(anchor, statements))
+        return point.pep.installed
+
+    def refused_in_audit():
+        return [event["data"].get("cause") for event in point.pep.audit.events if event["action"] == "refused"]
+    held = provision(point.anchor(), _set(point, FLOOR, NARROW, 4))
+    assert held.held(FLOOR).seq == 5 and refused_in_audit()[-1] == "dist:seq-replay"
+    held = provision(point.anchor())
+    assert held.held(FLOOR).seq == 5 and held.held(FALLBACK) is not None
+    with pytest.raises(PepRefused) as refused:
+        provision(point.anchor(seq=1))
+    assert "dist:trust-replay" in str(refused.value)
+    shared = point.anchor(seq=3, keys=["N1", "N2", "N4"])
+    held = provision(shared, _set(point, FLOOR, NARROW, 1, signers=["N1", "N2"]))
+    assert held.held(FLOOR).seq == 5 and refused_in_audit()[-1] == "dist:seq-replay"
+    assert held.record.retired == (_dist.key_id("N3"),) and held.record.trust_id == read_anchor(shared).fingerprint
+    disjoint = point.anchor(seq=4, keys=["M1", "M2"])
+    held = provision(disjoint, _set(point, FLOOR, NARROW, 1, signers=["M1", "M2"]))
+    assert held.held(FLOOR).seq == 1 and held.held(FALLBACK) is None
+    assert {_dist.key_id(name) for name in ("N1", "N2", "N3", "N4")} <= set(held.record.retired)
+    assert point.send(five)[0].cause == "sig:revoked-key"
+
+
+def test_case_183_a_pep_uses_a_good_copy_and_never_decides_under_a_body_it_cannot_verify(tmp_path):
+    """case_183: IS10, IS6, the Python half. A PEP that starts with one byte of its stored action floor changed and a
+    second good copy uses the good copy. With no good copy it reports `refused` with `dist:install-lost`, its install
+    id no longer counts the floor and it decides as a PEP that never had one. The same floor sent again changes
+    nothing, refused at its held `seq`, and one at a new `seq` is applied. A PEP that starts with one copy of its
+    install record unreadable uses the second, and with both unreadable it holds no set, reports
+    `dist:install-lost`, keeps deciding under its release and takes no install statement by message and no release
+    until it is provisioned."""
+    point = _agent(tmp_path, "a")
+    floor = _set(point, FLOOR, NARROW, 1)
+    point.send(floor)
+    statement = next(iter(point.pep.installed.held(FLOOR).statements.values()))[1]
+    first, second = (point.state_dir / "dist" / name / "blobs" / statement for name in ("install", "install-copy"))
+    changed = bytearray(first.read_bytes())
+    changed[10] ^= 1
+    first.write_bytes(bytes(changed))
+    point.pep = point.open()
+    assert point.pep.installed.held(FLOOR) is not None and point.pep.decide(lambda: "r", request=ASK)["basis"] == "floor"
+    second.write_bytes(bytes(changed))
+    point.pep = point.open()
+    sent = [state_record.read(one, point.key.public_raw) for one in point.pep.drain()]
+    assert [(one.event, one.cause, one.install.subject) for one in sent] == [("refused", "dist:install-lost", FLOOR)]
+    record = point.pep.installed.record
+    without = replace(record, sets={**record.sets, FLOOR: None}).install_id()
+    assert sent[-1].install.install_id == without
+    assert point.pep.decide(lambda: "r", request=ASK)["cause"] == "dist:policy-lapsed"
+    assert {one.cause for one in point.send(floor)} == {"dist:seq-replay"} and point.pep.floor_set() is None
+    assert point.send(_set(point, FLOOR, NARROW, 2))[-1].event == "install-widened"
+    other = _agent(tmp_path, "b")
+    other.send(_set(other, FALLBACK, NARROW, 1))
+    other.commit(RELEASE)
+    copies = [other.state_dir / "dist" / name / "record.json" for name in ("install", "install-copy")]
+    copies[0].write_bytes(b"gone")
+    other.pep = other.open()
+    assert other.pep.installed.held(FALLBACK) is not None and not other.pep.installed.record_lost
+    for path in copies:
+        path.write_bytes(b"gone")
+    other.pep = other.open()
+    assert [state_record.read(one, other.key.public_raw).cause for one in other.pep.drain()][-1] == "dist:install-lost"
+    assert other.pep.installed.fallback is None and other.pep.decide(lambda: "release")["basis"] == "release"
+    assert other.send(_set(other, FALLBACK, NARROW, 2))[-1].cause == "dist:install-lost"
+    assert state_record.read(other.stage(RELEASE, 2, widens=False, replaces=H(RELEASE)),
+                             other.key.public_raw).cause == "dist:install-lost"
+    other.pep.confirm(other.pep.provision(other.anchor()))
+    assert not other.pep.installed.record_lost
+
+
+def _resealed(sealed, meta_change, signers=("N1", "N2")):
+    """The install statement `sealed` with its `meta` changed, written as raw canon/2 bytes and signed again, so a
+    member the writer refuses can be sent."""
+    import json
+    envelope_bytes, _entries = env.unseal(sealed)
+    doc = json.loads(envelope_bytes.decode("utf-8"))
+    doc["meta"] = meta_change(dict(doc["meta"]))
+    raw = canon.canon2_bytes(doc)
+    return env.seal_entries(raw, sorted((_dist.key_id(name), GEN.test_key(name).sign(env.signed_message(raw)))
+                                        for name in signers))
+
+
+def test_case_223_a_table_floor_s_meta_is_read_as_its_policy_ppt_s(tmp_path):
+    """case_223: IS1, IS5, the `host` and `mesh` parts. A `host` PEP refuses a floor whose `meta` carries `counts`
+    that differ from the table with `manifest:count-mismatch` and one with no `qualification` with
+    `dist:bad-format`, and applies one whose members are those of its `policy.ppt`. A `mesh` PEP applies a floor whose
+    `meta` holds `counts` as a string, since it skips it. The `xdp` part waits for its kind."""
+    from prismpath.tests.test_distribution_floor import HostFloor
+    body = table("cmd == 3 and p >= 2 and p <= 5")
+    host = _table_point(HostFloor, tmp_path, "host")
+    (good, data), = _table_floor(host, body, 1)
+
+    def counted(meta):
+        name = sorted(meta["counts"])[0]
+        return {**meta, "counts": {**meta["counts"], name: meta["counts"][name] + 1}}
+    assert state_record.read(host.pep.stage(_resealed(good, counted), data), host.key.public_raw).cause \
+        == "manifest:count-mismatch"
+    unqualified = _resealed(good, lambda meta: {key: value for key, value in meta.items() if key != "qualification"})
+    assert state_record.read(host.pep.stage(unqualified, data), host.key.public_raw).cause == "dist:bad-format"
+    assert state_record.read(host.pep.stage(good, data), host.key.public_raw).event == "install-widened"
+    mesh = _table_point(MeshFloor, tmp_path, "mesh")
+    (sealed, data), = _table_floor(mesh, body, 1)
+    loose = _resealed(sealed, lambda meta: {**meta, "counts": "7"})
+    assert state_record.read(mesh.pep.stage(loose, data), mesh.key.public_raw).event == "install-widened"

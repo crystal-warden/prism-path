@@ -296,7 +296,7 @@ def test_a_home_that_holds_its_authority_key_still_needs_its_route_table(tmp_pat
 
 
 def test_a_gateway_floor_allows_one_exact_route_and_method_and_is_silent_beside_it(tmp_path, monkeypatch):
-    """AF1, AF9 on `gateway`: a floor that allows `read` on the class of one exact route allows a read of that path
+    """case_187: AF1, AF9 on `gateway`, the `gateway` part: a floor that allows `read` on the class of one exact route allows a read of that path
     with basis `floor` whatever the release says, is silent for a write of it and for a path beside it, and a floor
     route that ends in `*` or a rule with no `method_class` test is `dist:floor-broad`."""
     from prismpath.distribution import floor

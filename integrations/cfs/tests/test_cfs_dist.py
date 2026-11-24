@@ -799,3 +799,13 @@ def test_case_209_a_cfs_core_run_is_verified_per_basis_under_the_pinned_install_
                                           "--pin-authority", str(pins["pin_authority"]),
                                           "--pin-instance", str(pins["pin_instance"]), "--pin-install", str(pin)])
     assert args.func(args) == 0
+
+
+def test_case_161_a_cfs_app_provisioned_with_install_statements_prints_and_keeps_them(tmp_path):
+    """case_161: IS1, IS2, IS8, IS10, P4, the `cfs` half. A cFS app is provisioned with an anchor that holds two
+    install keys, an action floor and a fallback policy, prints their envelope ids beside the fingerprint, names them
+    in its `provisioned` audit event and holds both after a restart."""
+    from prismpath.tests.test_distribution_install_controller import case_161_provisioned_with_a_floor_and_a_fallback
+    point = _floor_point(tmp_path, install_keys=["N1", "N2"])
+    fallback = point.install_set("install.fallback", {"cfs.table": _body(2)}, 1, widens=True)
+    case_161_provisioned_with_a_floor_and_a_fallback(point, _cfs_floor(point, ALLOW_3), fallback)

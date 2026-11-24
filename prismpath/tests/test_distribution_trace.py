@@ -52,9 +52,12 @@ PARTIAL["P"] = PARTIAL["P"] | frozenset({246, 260, 261, 280})
 # writer of section 21 (RC4).
 PARTIAL["P"] = PARTIAL["P"] | frozenset({193, 194})
 # 225: a `host`, a `mesh` and a `cfs` PEP take or refuse an operator's answer, and the `xdp` third waits for its kind.
-PARTIAL["P"] = PARTIAL["P"] | frozenset({225})
+# 187: the `agent` home's hook, proxies and sandbox profile and the `gateway` ask the floor first, and the `xdp` part
+# waits for its kind (PR 11).
+# 223: the `host` and `mesh` floors' `meta` is read as their `policy.ppt`'s, and the `xdp` part waits for its kind.
+PARTIAL["P"] = PARTIAL["P"] | frozenset({187, 223, 225})
 PENDING = {
-    "P": "104-105 161 164 167 170 183 187 191 193-195 206 215 223 225 246 260-261 266 272-273 280",
+    "P": "104-105 164 187 191 193-194 206 223 225 246 260-261 266 272-273 280",
     "R": "137-138 161-163 165-166 169-172 174-178 182-183 186 188-190 193 195 197 199 201-202 204-205 207 213 215 218 221 223-227 230 233-236 243 246 256-262 265-266 269-272 276-280",
     "C": "25 60 97 104-105 122 161 184 186 188 192-194 200 202-203 213 216 220 225-226 230-232 235 256-261 269-271 276-280",
 }
