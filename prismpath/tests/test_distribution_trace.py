@@ -43,12 +43,11 @@ C_KINDS = frozenset({"mesh", "cfs"})
 # runs the mesh half, and the cfs half, a table taken on the signer's word, waits for the cfs kind in the C core.
 # 100: Python's grant writer emits an envelope, and the other older forms' writers wait for PRs 11 and 12.
 # 243: the Rust PEP stages, aborts and applies trust statements while reconciling, and taking a controller statement
-# waits for the controller key in Rust. 246: the Rust PEP lapses a held release that expires or is revoked while
-# reconciling, and the ceiling and fallback runs wait for section 21 in Rust.
-PARTIAL = {"P": frozenset({100}), "R": frozenset({243, 246}), "C": frozenset({60})}
+# waits for the controller key in Rust.
+PARTIAL = {"P": frozenset({100}), "R": frozenset({243}), "C": frozenset({60})}
 PENDING = {
     "P": "100 102 104-105 161-280",
-    "R": "137-138 161-163 165-166 169-172 174-178 182-183 186 188-190 193 195 197 199 201-202 204-205 207 213 215 218 221 223-227 230 233-236 243 246 256-262 265-266 269-272 276-280",
+    "R": "137-138 243 256-260 262 269-272 276-279",
     "C": "25 60 97 104-105 122 161-163 165-167 169-172 174-178 180 182-184 186 188-195 197-205 207-208 210 213 215-216 218-221 223-227 230-236 256-261 269-271 276-280",
 }
 

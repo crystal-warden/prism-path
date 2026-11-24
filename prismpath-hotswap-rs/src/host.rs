@@ -48,8 +48,9 @@
 //! passed: the distribution enforcement point (`dist::pep`) installs a committed release with it, so the
 //! host's record, audit log and restore on start are what they always were. [`PolicyHost::withdraw`] makes
 //! the host hold nothing when that enforcement point lapses or is locked (X3). Once the enforcement point in
-//! `<state_dir>/dist/` has committed an envelope, `swap` and `rollback` refuse with `dist:legacy-refused`
-//! (L2), and so does a provisioned directory whose floor is missing or cannot be read.
+//! `<state_dir>/dist/` has committed an envelope or held an install statement, `swap` and `rollback` refuse with
+//! `dist:legacy-refused` (L2, IS9), and so does a provisioned directory whose floor is missing or cannot be read.
+//! The enforcement point keeps both as marks of its anchor part, so no provisioning reopens the older forms.
 //!
 //! The event line is the event's canon/2 bytes, so the file is byte for byte what Python writes for the
 //! same event. The intent record and the active policy record are canon/2 documents too.
@@ -880,6 +881,9 @@ impl PolicyHost {
     /// still 0, keeps the older path open.
     fn distribution_floor(&self) -> bool {
         let dist = format!("{}/dist", self.state_dir);
+        if crate::dist::install::older_forms_closed(&dist) {
+            return true; // L2, IS9: a mark of the anchor part, which no provisioning clears
+        }
         match std::fs::read(format!("{dist}/floor.json")) {
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => std::path::Path::new(&format!("{dist}/anchor.json")).exists(),
             Err(_) => true,

@@ -8,6 +8,18 @@ spec stable.
 
 ## [Unreleased]
 
+### Added: the Rust host takes the bounds its engineer installs (2026-11-24)
+
+- **The Rust host PEP takes install statements and install trust statements under an install record kept apart from the trust store (IS1 to IS13).** The record is written in two copies, on a second file system where the deployment names one. Install keys count against their own threshold and sign nothing else, and every two roles are checked apart at the anchor and at every statement that adds a key. A set is staged until it is whole and is held to the ceiling again when it is applied. A stream with an install threshold of 1 takes install statements by provisioning only. A set that does not read at a start is lost and reported, and a PEP whose install record is lost or whose ceiling is lost changes nothing until it is provisioned or given a ceiling again.
+- **The Rust PEP reads `prismpath.dist-trust/2` anchors.** An anchor brings the install keys, the operator keys and the install statements beside it, prints their envelope ids beside its fingerprint, and is refused when its domain is not the one the host was built with. The controller key is held in its own role and signs no envelope. The controller statement itself is not built yet.
+- **A ceiling list holds every release, action floor and fallback policy of the host inside it (CL1 to CL3).** A ceiling that the active release is above lapses that release with `dist:above-ceiling`, and a staged or kept release meets a newer ceiling at commit and at rollback.
+- **A fallback policy decides whenever no release does (FB1 to FB9).** The host runs the fallback table in place of a withdrawn release, at a lapse, at a revocation, at a start with nothing committed, while locked and while reconciling with its runtime withdrawn. Each record sets bit 4 while it decides, and the PEP reports `fallback` in place of `lapsed`.
+- **An action floor is asked first on every request in every state (AF1 to AF10).** A `host` floor only allows, is held narrow to the layout the host was built with, reads an independent field only while it is fresh, records what the release or the fallback policy would have decided, and is silent past its signed rate, whose counts are written before the PEP acts.
+- **Every record of a PEP that holds an install record carries the install entry of H10**, with its install id, its install trust sequence, the subject of an install event and the counts of floor answers and overrides.
+- **An empty install set withdraws its kind and holds none**, so the install id counts zeros for it and the next set of the kind replaces nothing, as the C core does.
+- **A PEP that has held an install statement or committed a release refuses the older signed forms after any provisioning (IS9, L2).**
+- **An operator answer on a `host` PEP is `dist:target-mismatch`**, since a table floor has no escalation.
+
 ### Added: the Rust host follows a policy stream and reports signed state records (2026-11-23)
 
 - **`prismpath_hotswap_rs::dist::pep` is the enforcement point machine in Rust.** It is provisioned by a trust anchor's fingerprint, stages, commits, aborts and rolls back, applies a revocation or a rotation as soon as it verifies, lapses at expiry, locks on a floor, anchor or setting it cannot read, and keeps its state under the file names the Python machine uses. A counter it cannot read locks it for that start only, and its records count on from its time so none repeats.

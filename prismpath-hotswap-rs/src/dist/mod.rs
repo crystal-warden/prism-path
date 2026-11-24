@@ -10,12 +10,15 @@
 //! writer (`prismpath_rs::canon2::codec`), so its field list is its member list and a member missing or
 //! extra is refused by the type. `envelope` is the envelope and the sealed container, `trust` the trust
 //! store and the trust anchor, `verify` the one verifier, `pep` the enforcement point machine with the
-//! host adapter, and `state_record` the signed record it reports every transition with.
+//! host adapter, `state_record` the signed record it reports every transition with, `install` the install
+//! statements, the install record and the ceiling of section 21, and `floor` the action floor of a table kind.
 //!
 //! What a trust statement does to the trust store (R1 to R7, O1 to O4) is the trust store's, applied by
 //! the machine, not by this table.
 
 pub mod envelope;
+pub mod floor;
+pub mod install;
 pub mod pep;
 pub mod state_record;
 pub mod trust;
@@ -55,14 +58,22 @@ pub const LEGACY_REFUSED: &str = "dist:legacy-refused";
 pub const STATE_INVALID: &str = "fleet:state-invalid";
 pub const SIDECAR_MISSING: &str = "spiral:sidecar-missing";
 pub const SIDECAR_MISMATCH: &str = "spiral:sidecar-hash-mismatch";
+pub const INSTALL_LOST: &str = "dist:install-lost";
+pub const INSTALL_WIDENED: &str = "dist:install-widened";
+pub const ABOVE_CEILING: &str = "dist:above-ceiling";
+pub const FALLBACK: &str = "dist:fallback";
+pub const FLOOR_ALLOWED: &str = "dist:floor-allowed";
+pub const FLOOR_RATE: &str = "dist:floor-rate";
+pub const FLOOR_BROAD: &str = "dist:floor-broad";
 /// D2: a dev build is the cargo feature `dev-hatches`, off by default, and no environment or setting makes one.
 pub const DEV_BUILD: bool = cfg!(feature = "dev-hatches");
 /// Every cause this module reports itself, each a registered name (`tests` checks the registry).
-pub const CAUSES: [&str; 26] = [
+pub const CAUSES: [&str; 33] = [
     BAD_FORMAT, NOT_CANONICAL, UNKNOWN_KEY, TARGET_MISMATCH, BODY_MISMATCH, SEQ_REPLAY, NOT_YET_VALID,
     EXPIRED, REVOKED, TRUST_REPLAY, TOO_LARGE, INCOMPLETE, SIG_INVALID, SIG_REVOKED_KEY, ROTATION_INVALID,
     HATCH_REFUSED, NOT_STAGED, POLICY_LAPSED, FLOOR_LOST, HELD, WIDENING_UNSIGNED, LEGACY_REFUSED, STATE_INVALID,
-    SIDECAR_MISSING, SIDECAR_MISMATCH, RECONCILING,
+    SIDECAR_MISSING, SIDECAR_MISMATCH, RECONCILING, INSTALL_LOST, INSTALL_WIDENED, ABOVE_CEILING, FALLBACK, FLOOR_ALLOWED,
+    FLOOR_RATE, FLOOR_BROAD,
 ];
 
 /// E1 `seq`, and every integer the format carries: canon/2's exact range.
@@ -70,8 +81,15 @@ pub const MAX_SEQ: i64 = canon2::EXACT_LIMIT;
 
 /// K4: the key role every artifact kind needs in this version.
 pub const AUTHORITY: &str = "authority";
-/// K4: the key roles this version knows.
-pub const ROLES: [&str; 1] = [AUTHORITY];
+/// K4, IS2: install keys sign the install kinds and nothing else.
+pub const INSTALL: &str = "install";
+/// K4, OP1: operator keys sign answers and nothing else.
+pub const OPERATOR: &str = "operator";
+/// K4, K6: the controller key signs controller statements and no envelope.
+pub const CONTROLLER: &str = "controller";
+/// K4: the key roles this version knows. The trust store holds `authority` and `controller` keys, and the
+/// install record the `install` and `operator` keys (K3, IS10).
+pub const ROLES: [&str; 4] = [AUTHORITY, CONTROLLER, INSTALL, OPERATOR];
 
 /// A distribution check failed. `cause` is the registered cause name, the only thing reported.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -370,9 +388,33 @@ fixed_string!(RevocationFormat = "prismpath.dist-revocation/1");
 fixed_string!(RotationFormat = "prismpath.dist-rotation/1");
 fixed_string!(WideningFormat = "prismpath.dist-widening/1");
 fixed_string!(
-    /// P2: a trust anchor.
+    /// P2, P4: a trust anchor of the first version, which holds authority keys only.
     AnchorFormat = "prismpath.dist-trust/1"
 );
+fixed_string!(
+    /// P4: a trust anchor of this version, with the controller key, `fresh` and the install part.
+    Anchor2Format = "prismpath.dist-trust/2"
+);
+fixed_string!(
+    /// IS11: an install trust statement's body.
+    InstallTrustFormat = "prismpath.dist-install-trust/1"
+);
+fixed_string!(
+    /// CL1: the policy list of a ceiling for a kind that cannot decide.
+    CeilingFormat = "prismpath.dist-ceiling/1"
+);
+fixed_string!(
+    /// IS10, the install part's durable documents (`install`), each written whole.
+    RecordFormat = "prismpath.dist-install/1"
+);
+fixed_string!(StagedSetsFormat = "prismpath.dist-install-staged/1");
+fixed_string!(MarksFormat = "prismpath.dist-marks/1");
+fixed_string!(
+    /// AF10: the layout document a table kind is built with, and AF8 the rate counts (`floor`).
+    LayoutFormat = "prismpath.dist-layout/1"
+);
+fixed_string!(RatesFormat = "prismpath.dist-rates/1");
+fixed_string!(PendingInstallFormat = "prismpath.dist-install-pending/1");
 fixed_string!(
     /// The enforcement point's durable documents (`pep`), each written whole.
     FloorFormat = "prismpath.dist-floor/1"
@@ -456,6 +498,11 @@ kind_names!(
         TrustWidening = "trust.widening",
         TrustRevocation = "trust.revocation",
         TrustRotation = "trust.rotation",
+        InstallFloor = "install.floor",
+        InstallFallback = "install.fallback",
+        InstallCeiling = "install.ceiling",
+        InstallTrust = "install.trust",
+        OperatorAnswer = "operator.answer",
     }
 );
 
@@ -505,8 +552,35 @@ impl ArtifactKind {
             TrustWidening => Artifact { check: Some(|_, body, _| read_widening(body).err().map(cause_of)), ..PLAIN },
             TrustRevocation => Artifact { check: Some(|_, body, _| read_revocation(body).err().map(cause_of)), ..PLAIN },
             TrustRotation => Artifact { check: Some(|_, body, _| read_rotation(body).err().map(cause_of)), ..PLAIN },
+            InstallFloor => Artifact { meta: |doc| install::read_meta(doc, true), role: INSTALL, ..PLAIN },
+            InstallFallback | InstallCeiling => Artifact { meta: |doc| install::read_meta(doc, false), role: INSTALL, ..PLAIN },
+            InstallTrust => Artifact {
+                check: Some(|_, body, _| install::read_install_trust(body).err().map(cause_of)),
+                role: INSTALL,
+                ..PLAIN
+            },
+            OperatorAnswer => Artifact { role: OPERATOR, ..PLAIN },
             PolicyCore | EgressHosts | GatewayRoutes | NetDests | CfsTable | Grant => PLAIN,
         }
+    }
+
+    /// IS1: one of the four install kinds, signed by install keys only (IS2).
+    pub fn is_install(self) -> bool {
+        matches!(
+            self,
+            ArtifactKind::InstallFloor | ArtifactKind::InstallFallback | ArtifactKind::InstallCeiling | ArtifactKind::InstallTrust
+        )
+    }
+
+    /// IS1: an install kind whose statements make a set: the action floor, the fallback policy and the ceiling.
+    pub fn is_install_set(self) -> bool {
+        matches!(self, ArtifactKind::InstallFloor | ArtifactKind::InstallFallback | ArtifactKind::InstallCeiling)
+    }
+
+    /// E11: an artifact an install statement's `as` may name, one a release holds, never a trust kind, a grant, an
+    /// install kind or an answer.
+    pub fn may_be_installed(self) -> bool {
+        !(self.is_trust() || self.is_install() || matches!(self, ArtifactKind::Grant | ArtifactKind::OperatorAnswer))
     }
 
     /// One of the three trust kinds, whose `expires` is 0 (E5) and which a target admits when its machine applies it (V5).
@@ -679,6 +753,18 @@ pub enum Meta {
     PolicyPpt(PptMeta),
     NetEdge(NetEdgeMeta),
     SandboxProfile(ProfileMeta),
+    Install(Box<install::InstallMeta>),
+}
+
+impl Meta {
+    /// The members of the artifact an envelope carries: an install statement's are those of the artifact its `as`
+    /// names (IS1), any other's its own.
+    pub fn artifact_form(&self) -> &Meta {
+        match self {
+            Meta::Install(install) => &install.inner,
+            other => other,
+        }
+    }
 }
 
 // ------------------------------------------------------------------ the artifact checks (V11)
@@ -691,7 +777,7 @@ fn first_cause(reasons: &[String]) -> Option<String> {
 /// WCET, the packing profile, and the qualification envelope gate the PEP holds, each with its existing
 /// cause. The members' forms were read at V4 (E11), so no check here meets another form.
 pub fn check_policy_ppt(envelope: &Envelope, body: &[u8], pep: &PepView) -> Option<String> {
-    let Meta::PolicyPpt(ppt) = envelope.form() else {
+    let Meta::PolicyPpt(ppt) = envelope.form().artifact_form() else {
         return Some(BAD_FORMAT.to_string());
     };
     let meta = serde_json::to_value(ppt).expect("a policy.ppt meta is a JSON object");
