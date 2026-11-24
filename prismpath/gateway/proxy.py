@@ -124,9 +124,13 @@ class Gateway:
                 policy, store = state.policy, RunStore(self.home / commands.RUNS_DIR)
                 self.routes, self.grants, self.identity = state.routes, state.grants, state.identity
             else:
+                from prismpath.distribution import legacy
+                from prismpath.ledgers.root_statement import InstanceKey
                 policy, store = commands.load_checked(self.home)
                 self.grants = grants.Verifier(commands._key_paths(self.home, "authority")[1].read_bytes(),
-                                              commands._sha256_hex(policy.image), self.home / grants.REVOKED_FILE)
+                                              commands._sha256_hex(policy.image), self.home / grants.REVOKED_FILE,
+                                              legacy_log=self.home / legacy.AUDIT_FILE,
+                                              instance_key=InstanceKey.load(str(commands._key_paths(self.home, "instance")[0])))
                 self.identity = _local_identity(policy, identity_setting, identity_bodies)
             if not rd.fields_ok(policy.fields):
                 raise commands.AgentError(f"the recorded policy's fields {policy.fields} are not the gateway reading's "

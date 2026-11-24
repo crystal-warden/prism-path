@@ -253,8 +253,15 @@ def python_chain(work: Path, report: dict) -> dict:
     except quantizer.InputRefused as refusal:
         report["refused"] = {"field": refusal.field, "reason": refusal.reason}
     require(report["refused"] == {"field": "temp", "reason": "wrong_type"}, "the boundary refuses a numeric string (Python)", str(report["refused"]))
+    # `swap pack` seals a policy.ppt envelope (L1). The Rust crate's `verify_pack` reads the older ppt-pack/1 form
+    # until its host reads envelopes, so its check gets the same image signed in the older form, which hosts still
+    # read through the 0.3 series (L3)
+    older = work / "perimeter.older.ppt"
+    older.write_bytes(image)
+    policy_pack.build_pack(str(older), dict(item.split(":") for item in fields.split(",")), 1, "env1",
+                           str(work / "keys" / "authority.key"), str(work / "keys" / "authority.pub"))
     return {"flow": FLOW, "readings": READINGS, "accepted": accepted_readings, "refused": REFUSED_READING,
-            "ppt": str(work / "perimeter.ppt"), "pub": str(work / "keys" / "authority.pub")}
+            "ppt": str(older), "pub": str(work / "keys" / "authority.pub")}
 
 
 def mission_control_chain(work: Path, report: dict) -> None:

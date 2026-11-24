@@ -217,6 +217,7 @@ def launch(command: Sequence[str], workspace: str, credential: Optional[str] = N
         if not os.path.exists(path):
             raise LaunchError(f"the read only path {path} does not exist, so nothing was run")
     gate = None
+    follow = None
     zone_paths: Tuple[str, ...] = ()
     home_dir = Path(home) if home else commands.config_dir()
     if decider is None:
@@ -284,7 +285,13 @@ def launch(command: Sequence[str], workspace: str, credential: Optional[str] = N
             os.close(write_fd)
         if on_start:
             on_start(proc.pid)
-        status = _wait(proc)
+        if follow is not None:                   # C6: a lapse or a revocation of the home's release ends it
+            agent_home.register_session(home_dir, proc.pid, commands._sha256_hex(policy.image))
+        try:
+            status = _wait(proc)
+        finally:
+            if follow is not None:
+                agent_home.forget_session(home_dir, proc.pid)
         info = b""
         try:
             info = os.read(read_fd, 65536)

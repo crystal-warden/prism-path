@@ -61,7 +61,7 @@ def run_prismpath(policy) -> None:
     def pack(version: int, name: str, image: bytes) -> str:
         pack_path = tmp / f"{name}.ppt"
         pack_path.write_bytes(image)
-        policy_pack.build_pack(str(pack_path), fields, version, "comparison-a6", keys["private"], keys["public"])
+        policy_pack.seal_pack(str(pack_path), fields, version, "comparison-a6", keys["private"], keys["public"])
         return str(pack_path)
 
     log: Dict[str, Any] = {}

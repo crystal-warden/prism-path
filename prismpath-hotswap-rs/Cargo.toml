@@ -19,6 +19,10 @@ serde_json = { version = "1.0", features = ["float_roundtrip"] }
 # A dev build (docs/design/spec-policy-distribution.md, D2): the only build in which an escape hatch works.
 # Off by default, so a built crate refuses every hatch with dist:hatch-refused and runs the check.
 dev-hatches = []
+# What the crate's own tests reach that no build exposes: `Pep::replace_trust`. Turned on only by the
+# dev-dependency on this crate below.
+test-support = []
 
 [dev-dependencies]
 base64 = "0.22"
+prismpath-hotswap-rs = { path = ".", features = ["test-support"] }

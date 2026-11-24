@@ -39,7 +39,10 @@ prismpath swap pack     --ppt flow.ppt --fields temp:int,armed:bool --version 3 
 ```
 
 The envelope declares what a host will accept (fields, capabilities, size caps); the pack binds the
-image, its fields, its version, and its computed worst case bound to your key. The operator swaps and
+image, its fields, its version, and its computed worst case bound to your key. The pack is a sealed
+`policy.ppt` distribution envelope, `flow.ppt.sealed` beside the image (`docs/design/spec-policy-distribution.md`,
+section 17). A host still reads a pack made before 0.3.0, the `.manifest.json` and `.manifest.sig` beside the
+image, and writes a `legacy_form` event to its audit log each time. The operator swaps and
 attests; the assessor verifies. `docs/design/spec-secure-hotswap.md` is the specification. Signed hot
 swap packs (`.ppt`) are for Level M flows compiled for table substrates, and the compiler lives in the
 repository's `prismpath-hw/`, not in the pip package.

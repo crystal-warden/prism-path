@@ -86,7 +86,7 @@ def test_case_019_commit_abort_an_offer_and_a_state_record_never_change_the_trus
     point.pep.abort(STREAM, 2, H(NEW))
     point.pep.needs([H(NEW), H(NEWER)])
     point.pep.record("beat")
-    point.pep.see_epoch(5)
+    point.pep.take_statement(b"PPEP" + bytes(98))                  # a statement no key verifies (H9)
     point.pep.commit(STREAM, 9, H(NEW))
     assert k1(point.pep) == before == k1(point.open())
 
