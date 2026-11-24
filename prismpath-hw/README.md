@@ -66,7 +66,9 @@ images and are judged against the same frozen conformance corpus.
 | `avr/` | the same evaluator on an ATmega328P (a stock Arduino Uno R3), tables streamed over serial |
 | `rp2350/` | the evaluator on the Pico 2, built for both the ARM Cortex-M33 and the Hazard3 RISC-V core from one source, plus `ppt_tof.c`, a VL53L0X time-of-flight proximity policy that decides on device |
 | `esp/`, `esp-*` | the evaluator over ESP-IDF on the ESP32 (Xtensa) and ESP32-C6 (RISC-V), and the sensor, fusion, vision and relay nodes built on it |
-| `mesh/`, `mesh-fusion/` | three ESP32s swapping policy together over ESP-NOW with a two phase commit, and the fusion variant with a field test logger |
+| `mesh/` | three ESP32s as policy distribution enforcement points of kind `mesh` over ESP-NOW, on the C core in `dist/`, with a host build of the node's logic that runs three simulated nodes (`mesh/host/`) |
+| `mesh-fusion/` | the fusion variant of the earlier two phase commit mesh, with a field test logger |
+| `fleet/` | finds the attached boards by path and MAC, builds once per family and variant, flashes each and runs its family's checks into one report |
 | `spiral-node/`, `spiral-mesh/` | the spiral packing profile on the air: Facet streams over ESP-NOW between nodes, with the referee scripts that check them |
 | `walker-demo/`, `demo/`, `demo-display/` | the demo flows and signed packs, the walker demo's firmware and host scripts, and the display demo flow |
 | `hyst-cert/` | the silicon certification harness for the signed hysteresis policy and the resident-band OLED driver, with [`VERIFY.md`](hyst-cert/VERIFY.md) |
@@ -121,7 +123,8 @@ Every figure below is recorded in `evidence/` or in the directory named, and ind
 - **The mesh.** Three ESP32s swap policy together: a PREPARE broadcast, every follower re-hashing the
   table and checking its id against a baked allowlist before staging, an ACK, and on quorum a COMMIT at
   a shared tick. The fleet flips together within 0.7 ms. The FNV-1a id and allowlist stand in for a
-  signature, with Ed25519 on the mesh the named follow on. (#100.)
+  signature, with Ed25519 on the mesh the named follow on. (#100.) That demo is in the history of `mesh/`, whose
+  firmware now takes signed distribution envelopes through the C core instead.
 - **On device decisions.** The RP2350 reads a VL53L0X over I2C and runs a signed proximity policy with
   no host in the loop, flipping at the authored 100, 300 and 800 mm thresholds. (#99.)
 - **Decisions entirely in fabric.** The datapath overlay reads the XADC pot, evaluates, and drives a

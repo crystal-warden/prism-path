@@ -8,6 +8,16 @@ spec stable.
 
 ## [Unreleased]
 
+### Changed: the ESP32 mesh takes signed distribution envelopes, with stage, commit, abort, revocation and rotation (2026-11-24)
+
+- **A mesh node now runs the C core of policy distribution.** It takes every policy as a sealed envelope over ESP-NOW, verifies it before it reads the body, stages it, flips with the group on a commit, applies revocations and rotations, decides every request under the core with a layout of command, parameter and independent fields, so an action floor works, and signs a state record for every transition with its own instance key, which it also sends as a frame of type 3. Its firmware carries only the trust anchor, the layout and the domain hash.
+- **The node keeps each durable part under its own NVS name, and the install parts on a second partition as well (IS10).** `partitions.csv` gives `nvs` 128 kB and `nvs_copy` 64 kB, which hold the largest durable state the core allows with room to write a part again.
+- **The node's logic builds without ESP-IDF.** `prismpath-hw/mesh/host/` runs three simulated nodes on an in-memory radio, and the seven checks the boards run (`mesh/mesh_checks.py`) pass there frame by frame: a release committed on all three, a bad signature, a replay across a reset, a widening without its statement, a revocation, and expiry refused by default and held on a HOLD build.
+- **The expiry response is a build setting.** `CONFIG_PPT_MESH_EXPIRY_HOLD` is off by default, which refuses at expiry, and on it holds.
+- **One build runs on every ESP32 classic board.** `sdkconfig.defaults` sets the crystal to auto, and the harness fails a build whose sdkconfig does not.
+- **`prismpath-hw/fleet/` finds, builds, flashes and checks whatever boards are attached.** It keys each board by its MAC and reaches it by its by-path name, builds once per family and variant, and writes one report. `mesh/board_run.py` runs the mesh's checks on the boards in the board validation pass.
+- **The C core takes the controller key, `trust.controller` and the controller statement (K6, K7, H9, H16).** A frame of type 6 carries a statement of 102 or 126 bytes, which sets the epoch id under the rules of H9 and sends no record. Where the anchor sets `fresh`, the node keeps its latest fresh statement in a part of its own and lapses or holds once it runs out, and a node with no clock takes its time floor from the first one of each start.
+
 ### Added: the gateway reads a SPIFFE ID from the client certificate as a workload class
 
 - **Two artifact kinds, `identity.bundle` and `identity.map`, travel in ordinary envelopes.** A bundle is each trust domain's X.509 CA certificates and a map is SPIFFE ID patterns to classes, read in order as the route table is. A gateway release carries both when its policy reads `workload` and neither when it does not, and a map that names a trust domain its bundle does not hold is `dist:incomplete`.
