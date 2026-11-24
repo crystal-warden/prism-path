@@ -304,8 +304,8 @@ def test_an_in_toto_statement_resigned_over_changed_fields_does_not_check(tmp_pa
 # ------------------------------------------------------------------ scope: a widening only when scope grew
 
 def test_only_a_rollout_whose_scope_grew_exports_as_a_widening(tmp_path):
-    """The first install is larger by comparison and exports as a widening. The second release is larger only by
-    the host rule that any table change counts, and never exports as a widening, nor does a change, not larger."""
+    """The first install is larger by comparison and exports as a widening. The second release changes the table
+    and allows nothing more, so it is a change, not larger, and never exports as a widening."""
     fleet = Fleet(tmp_path, names=("p1",))
     fleet.put(OLD, 1)
     fleet.controller.offer("fleet", STREAM, 1)
@@ -320,7 +320,7 @@ def test_only_a_rollout_whose_scope_grew_exports_as_a_widening(tmp_path):
         fleet.round()
     for doc in (_states(_otel(fleet), "committed")[0]["attributes"],
                 [one for one in export.ocsf_events(fleet.controller) if one["class_uid"] == 5019][0]["unmapped"]):
-        assert doc["prismpath.dist.controller.scope"] == "larger by rule"
+        assert doc["prismpath.dist.controller.scope"] == export.CHANGE_NOT_LARGER
         assert doc["prismpath.dist.controller.widening"] is False
     (envelope,) = export.intoto_envelopes(fleet.controller)
     assert json.loads(base64.b64decode(envelope["payload"]))["predicate"]["controller"]["widening"] is False

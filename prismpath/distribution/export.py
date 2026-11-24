@@ -24,10 +24,10 @@ that name and never as a widening.
 Integers. A 64 bit field is a JSON integer up to 2^53 - 1 and a decimal string above it, the canon/2 rule, so no
 reader rounds it. The record bytes always hold the exact value.
 
-The OCSF mapping is NOT CHECKED against the OCSF 1.10.0 schema files, which were not at hand: it is written from
-the class and attribute names of the OCSF categories and classes as published (5019 Device Config State Change in
-Discovery, 2004 Detection Finding in Findings). The activity of 5019 is 99 `Other`, named `Commit` or `Lapse`,
-so it holds whatever that class's activity enumeration is. Every PrismPath field is under `unmapped`.
+The OCSF mapping is checked against the OCSF 1.10.0 schema by prismpath/tests/test_distribution_ocsf_schema.py:
+5019 Device Config State Change in Discovery and 2004 Detection Finding in Findings. The activities of 5019 say
+how a state was discovered (1 Log, 2 Collect), so a commit or a lapse is 99 `Other`, named `Commit` or `Lapse`.
+Every PrismPath field is under `unmapped`.
 """
 from __future__ import annotations
 

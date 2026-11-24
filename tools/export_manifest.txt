@@ -725,6 +725,7 @@ prismpath/tests/fixtures/compiler/gallery__incident_severity__incident_severity.
 prismpath/tests/fixtures/core_evidence/cases.jsonl
 prismpath/tests/fixtures/kappa_dataset.jsonl
 prismpath/tests/fixtures/mcp_fake_server.py
+prismpath/tests/fixtures/ocsf/ocsf-1.10.0-subset.json
 prismpath/tests/fixtures/reference_hashes.json
 prismpath/tests/test__sandbox_child.py
 prismpath/tests/test_agent_adversary.py
@@ -806,6 +807,7 @@ prismpath/tests/test_distribution_identity.py
 prismpath/tests/test_distribution_install.py
 prismpath/tests/test_distribution_install_controller.py
 prismpath/tests/test_distribution_legacy.py
+prismpath/tests/test_distribution_ocsf_schema.py
 prismpath/tests/test_distribution_pep.py
 prismpath/tests/test_distribution_reconciling.py
 prismpath/tests/test_distribution_revocation.py

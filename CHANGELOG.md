@@ -15,6 +15,7 @@ spec stable.
 - **OCSF 1.10.0.** A commit or a lapse is Device Config State Change (5019), a finding is Detection Finding (2004), with the signed record in `raw_data`. The mapping is not yet checked against the OCSF schema files.
 - **in-toto.** A Statement v1 about each commit, in a DSSE envelope signed by the controller's instance key through `prismpath/ledgers/intoto.py`, which gains `sign_statement` and `open_statement`.
 - **`check_otel`, `check_ocsf` and `check_intoto` check an export back against the signed record it carries.** A rollout's scope is exported as the controller marks it, and only a widening is exported as one.
+- **The OCSF export is checked against the OCSF 1.10.0 schema.** A subset of the release 1.10 schema for classes 5019 and 2004 and the objects they reach is a test fixture, and every exported commit, lapse and finding has each required attribute, no unknown one and values in their type and enum.
 
 ### Added: the sealing tool shows a ceiling's lapse preview before it signs, and a ceiling may be staged to a canary group
 
