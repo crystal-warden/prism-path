@@ -14,6 +14,12 @@ refuses `netattach` and `netupdate` unless it is handed the SHA-256 of the table
 host-side checks of what the table carries (net_from_policy's signed destination table); one that returns a
 reason refuses the load.
 
+The gate ends in `run_loader(table, verb, iface, ...)`, the one loader call. The `xdp` enforcement point of
+policy distribution (`net_dist.py`) ends in the same call, so a table reaches the kernel one way and leaves one
+audit event. The version floor is written before the loader runs (C4 of spec-policy-distribution.md), so a load
+that fails part way never leaves the floor below a table the kernel may hold, and the audit log is signed by the
+instance key when one is given.
+
 Pure userspace and privilege-free up to the loader exec, so the whole gate is testable without root
 (the loader call is injectable). Loud absence: no `cryptography` -> refuse (policy_pack raises).
 """
@@ -64,21 +70,65 @@ def _hatch(asked: bool, audit) -> bool:
     return True
 
 
+VERBS = {"swap": "netupdate", "attach": "netattach"}
+
+
+def audit_log(state_dir: str, instance_key=None) -> AuditLog:
+    """The gate's audit log, `net_swaps.log` in `state_dir`, each append signed by `instance_key` when given."""
+    return AuditLog(os.path.join(state_dir, "net_swaps.log"), instance_key=instance_key,
+                    sign_appends=instance_key is not None)
+
+
+def run_loader(table: bytes, verb: str, iface: str, *, path: str, audit: AuditLog, action: str,
+               loader: str = "./loader", run: Callable = subprocess.run, names_path: Optional[str] = None,
+               record: Optional[dict] = None) -> dict:
+    """The one loader call: `loader <path> <verb> <iface> [names]`, handed the SHA-256 of `table`
+    (`PPT_NET_VERIFIED_SHA256`), so the loader refuses any other table. `path` is written with `table` first when
+    it does not hold it already. One audit event either way: `action` with `record` when the loader succeeds, and
+    `loader_failed` when it does not. The caller has run every gate and written its floor before this call."""
+    if verb not in VERBS.values():
+        raise ValueError(f"the loader verb is netupdate or netattach, not {verb!r}")
+    to_hash = pp.sha256_hex(table)
+    try:
+        with open(path, "rb") as handle:
+            held = handle.read()
+    except OSError:
+        held = None
+    if held != table:
+        tmp = path + ".tmp"
+        with open(tmp, "wb") as handle:
+            handle.write(table)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp, path)
+    argv = [loader, path, verb, iface] + ([names_path] if verb == "netattach" and names_path else [])
+    r = run(argv, capture_output=True, text=True, env={**os.environ, "PPT_NET_VERIFIED_SHA256": to_hash})
+    if r.returncode != 0:
+        audit.append("net_swap", "loader_failed",
+                     {"to_hash": to_hash, "iface": iface, "verb": verb, "stderr": (r.stderr or "")[-300:]})
+        return {"ok": False, "reasons": ["loader:failed"],
+                "loader_output": ((r.stdout or "") + (r.stderr or ""))[-400:]}
+    audit.append("net_swap", action, {**(record or {}), "to_hash": to_hash, "iface": iface, "verb": verb,
+                                      "result": "accepted"})
+    return {"ok": True, "active": to_hash, "loader_output": (r.stdout or "")[-400:]}
+
+
 def preload_swap(ppt_path: str, iface: str, pubkey_paths: List[str], envelope_base: Optional[str],
                  state_dir: str, *, allow_unsigned: bool = False, revoked_path: Optional[str] = None,
                  loader: str = "./loader", run: Callable = subprocess.run, dry_run: bool = False,
                  action: str = "swap", names_path: Optional[str] = None,
-                 extra_checks: Sequence[Callable[[bytes], List[str]]] = ()) -> dict:
+                 extra_checks: Sequence[Callable[[bytes], List[str]]] = (), instance_key=None) -> dict:
     """Verify (sig -> envelope -> version) on the host, then exec `loader <ppt> netupdate <iface>`, or with
     `action="attach"` the first attach, `loader <ppt> netattach <iface> [names]`. `extra_checks` each get the image
     bytes and return refusal reasons, run after the pack gates and before the loader.
-    Returns {ok, ...}; the kernel loader is reached only on full verification success. Every
-    outcome is one audit row. `dry_run` runs every gate and stops where the loader would be called: no
-    loader, no kernel, no version floor written, and one `swap_dry_run` audit row."""
-    if action not in ("swap", "attach"):
+    Returns {ok, ...}; the kernel loader is reached only on full verification success, through `run_loader`, and
+    the version floor is written before it. Every outcome is one audit row, signed by `instance_key` when given.
+    `dry_run` runs every gate and stops where the loader would be called: no loader, no kernel, no version floor
+    written, and one `swap_dry_run` audit row."""
+    if action not in VERBS:
         raise ValueError(f"action is swap or attach, not {action!r}")
     os.makedirs(state_dir, exist_ok=True)
-    audit = AuditLog(os.path.join(state_dir, "net_swaps.log"))
+    audit = audit_log(state_dir, instance_key)
     vpath = os.path.join(state_dir, "active_version")
     allow_unsigned = _hatch(allow_unsigned, audit)
 
@@ -128,21 +178,15 @@ def preload_swap(ppt_path: str, iface: str, pubkey_paths: List[str], envelope_ba
                                                   "unsigned": unsigned, "iface": iface, "result": "verified"})
         return {"ok": True, "dry_run": True, "active": to_hash, "version": version, "unsigned": unsigned}
 
-    # Verified. Now, and only now, touch the kernel.
-    verb = "netattach" if action == "attach" else "netupdate"
-    argv = [loader, ppt_path, verb, iface] + ([names_path] if action == "attach" and names_path else [])
-    r = run(argv, capture_output=True, text=True, env={**os.environ, "PPT_NET_VERIFIED_SHA256": to_hash})
-    if r.returncode != 0:
-        audit.append("net_swap", "loader_failed",
-                     {"to_hash": to_hash, "iface": iface, "stderr": (r.stderr or "")[-300:]})
-        return {"ok": False, "reasons": ["loader:failed"],
-                "loader_output": ((r.stdout or "") + (r.stderr or ""))[-400:]}
+    # Verified. Now, and only now, touch the kernel: the floor first (C4), then the one loader call.
     if version is not None:
         _write_version(vpath, version)
-    audit.append("net_swap", action, {"to_hash": to_hash, "version": version, "key_id": key_id,
-                                      "unsigned": unsigned, "iface": iface, "result": "accepted"})
-    return {"ok": True, "active": to_hash, "version": version, "unsigned": unsigned,
-            "loader_output": (r.stdout or "")[-400:]}
+    result = run_loader(image, VERBS[action], iface, path=ppt_path, audit=audit, action=action, loader=loader, run=run,
+                        names_path=names_path if action == "attach" else None,
+                        record={"version": version, "key_id": key_id, "unsigned": unsigned})
+    if not result["ok"]:
+        return result
+    return {**result, "version": version, "unsigned": unsigned}
 
 
 def _reject(audit: AuditLog, to_hash: Optional[str], reasons: List[str]) -> dict:
@@ -158,6 +202,7 @@ def main(argv=None) -> int:
     ap.add_argument("--pub", nargs="+", required=True, help="authority public key(s)")
     ap.add_argument("--envelope", help="envelope base path (without .json/.sig)")
     ap.add_argument("--state", default="./net_swap_state", help="state dir (audit log + version)")
+    ap.add_argument("--key", help="the host's instance key (`prismpath ledger keygen`), which signs the audit log")
     ap.add_argument("--revoked", help="revocation list JSON")
     ap.add_argument("--loader", default="./loader", help="path to the kernel loader binary")
     ap.add_argument("--attach", action="store_true", help="the first attach (loader netattach), not a swap")
@@ -173,10 +218,15 @@ def main(argv=None) -> int:
         import net_from_policy
         checks.append(net_from_policy.edge_check(args.edge, args.pub, args.revoked, args.ppt))
     try:
+        instance_key = None
+        if args.key:
+            from prismpath.ledgers.root_statement import InstanceKey
+            instance_key = InstanceKey.load(args.key)
         res = preload_swap(args.ppt, args.iface, args.pub, args.envelope, args.state,
                            allow_unsigned=args.allow_unsigned, revoked_path=args.revoked,
                            loader=args.loader, dry_run=args.dry_run,
-                           action="attach" if args.attach else "swap", names_path=args.names, extra_checks=checks)
+                           action="attach" if args.attach else "swap", names_path=args.names, extra_checks=checks,
+                           instance_key=instance_key)
     except RuntimeError as e:                              # loud absence (no cryptography)
         print(str(e), file=sys.stderr)
         return 2

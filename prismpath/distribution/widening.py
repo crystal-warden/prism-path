@@ -14,10 +14,11 @@ answer that per artifact, `LARGER`, `NOT_LARGER` or `CANNOT_DECIDE`:
     policy.ppt       any change is larger, since the table format gives its nodes no meaning and nothing in
                      the image says which outcome is the more permissive one
     cfs.table        ordered by the core image inside it, registered from `integrations/cfs/dist_kind.py`
+    net.dests        larger when the edge it compiles to would allow an address the active one's does not,
+                     registered from `prismpath-ebpf/net_dist.py`, which the `net.dests` check loads
 
-Going from no policy to any policy is larger, and an answer that cannot be reached is treated as larger. A
-kind registered from outside this package, such as the XDP edge's `net.dests`, adds its comparator with
-`register_comparator`.
+Going from no policy to any policy is larger, and an answer that cannot be reached is treated as larger. An
+artifact whose reader lives outside this package adds its comparator with `register_comparator`.
 
 `check` is V12 for one envelope at staging and `check_release` for a whole release at commit. A PEP that can
 decide computes the answer itself (W1) and refuses a release it finds larger whose `widens` is false, even

@@ -313,7 +313,11 @@ jobs:
       - name: Hot swap port (prismpath-hotswap-rs) — a pack signed on either runtime verifies on the other
         run: cargo test --manifest-path prismpath-hotswap-rs/Cargo.toml -q
       - name: Hot swap port clippy
-        run: cargo clippy --manifest-path prismpath-hotswap-rs/Cargo.toml --all-targets -- -D warnings
+        run: |
+          cargo clippy --manifest-path prismpath-hotswap-rs/Cargo.toml --all-targets -- -D warnings
+          # the library alone, as a dependent builds it: without the test-support feature its own tests turn on
+          cargo build --manifest-path prismpath-hotswap-rs/Cargo.toml --lib
+          cargo clippy --manifest-path prismpath-hotswap-rs/Cargo.toml --lib -- -D warnings
       - name: Hot swap port as a dev build (the dev-hatches feature, where an escape hatch works)
         run: |
           cargo test --manifest-path prismpath-hotswap-rs/Cargo.toml -q --features dev-hatches
@@ -381,7 +385,7 @@ jobs:
         run: |
           set -o pipefail
           export PRISMPATH_PYTHON="$(command -v python)"
-          cargo test -p prismpath-hotswap-rs --test test_hotswap_conformance --test test_host_trace --test test_host_crash --test test_host_cross_language -- --nocapture 2>&1 | tee cross_language.log
+          cargo test -p prismpath-hotswap-rs --test test_hotswap_conformance --test test_host_trace --test test_host_crash --test test_host_cross_language --test test_distribution_pep --test test_distribution_cross_language -- --nocapture 2>&1 | tee cross_language.log
           cargo test -p prismpath-rs --test test_connector file_deferral_store_is_cross_runtime -- --nocapture 2>&1 | tee -a cross_language.log
           cargo test -p prismpath-rs --test test_causes -- --nocapture 2>&1 | tee -a cross_language.log
           cargo test -p prismpath-rs --test test_contract --test test_engine_surface --test test_engine_cross_language --test test_parse_limits -- --nocapture 2>&1 | tee -a cross_language.log
@@ -392,6 +396,9 @@ jobs:
           grep -q "cross-language host: each runtime recovered the other's interrupted commit" cross_language.log
           grep -q "cross-language host: non ASCII log identical in both runtimes" cross_language.log
           grep -q "host trace: .* cases" cross_language.log
+          grep -q "cross-language distribution: the Python controller accepted the Rust host PEP's records" cross_language.log
+          grep -q "cross-language distribution: Rust read the Python host PEP's records of a release Rust sealed" cross_language.log
+          grep -q "cross-language distribution: the Python controller accepted the Rust host PEP's refused and lapsed records" cross_language.log
           grep -q "engine cross language: .* scenarios" cross_language.log
           grep -q "cross-language telemetry: Python decoded, re-encoded, demultiplexed and replayed what Rust wrote" cross_language.log
           grep -q "cross-language telemetry: Rust decoded, re-encoded, demultiplexed and replayed what Python wrote" cross_language.log

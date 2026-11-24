@@ -165,7 +165,7 @@ rust_cases! {
     case_013_revoked_key_only => "013_revoked_key_only",
     /// case_013: S5.
     case_013_retired_key_only => "013_retired_key_only",
-    // case 16's X3 half, that the PEP allows nothing, is the Rust PEP's (PR 14), so it is not claimed here
+    /// case_016: K1, the verifier's half; the PEP's half, that it allows nothing, is in test_distribution_pep.rs.
     case_016_trust_store_unreadable => "016_trust_store_unreadable",
     /// case_020: Q1, Q2, V8.
     case_020_seq_below_floor => "020_seq_below_floor",
@@ -221,11 +221,11 @@ rust_cases! {
     case_117_unsigned_with_a_failing_entry_added => "117_unsigned_with_a_failing_entry_added",
     /// case_118: K4, S3.
     case_118_unknown_role_signs => "118_unknown_role_signs",
-    // case 72's verdict; applying the rotation and the commit are the Rust PEP's (PR 14), so it is not claimed here
+    /// case_072: O1, O2, O3, the verdict; applying the rotation and the commit are in test_distribution_pep.rs.
     case_072_signed_by_the_old_and_the_new_key => "072_signed_by_the_old_and_the_new_key",
-    // case 72's verdict; applying the rotation and the commit are the Rust PEP's (PR 14), so it is not claimed here
+    /// case_072: O1, O2, O3, the verdict; applying the rotation and the commit are in test_distribution_pep.rs.
     case_072_a_pack_under_the_new_key => "072_a_pack_under_the_new_key",
-    // case 73's verdict; the release staying active is the Rust PEP's (PR 14), so it is not claimed here
+    /// case_073: O3, S5, the verdict; the release staying active is in test_distribution_pep.rs.
     case_073_a_pack_signed_by_the_retired_key => "073_a_pack_signed_by_the_retired_key",
     /// case_074: O2.
     case_074_signed_only_by_an_unknown_key => "074_signed_only_by_an_unknown_key",
@@ -241,7 +241,7 @@ rust_cases! {
     case_135_a_statement_from_64_hashes => "135_a_statement_from_64_hashes",
     /// case_135: W4.
     case_135_a_statement_from_65_hashes => "135_a_statement_from_65_hashes",
-    // case 134's verdicts; applying the two statements is the Rust PEP's (PR 14), so it is not claimed here
+    /// case_134: V5, R1, the verdict; applying the two statements is in test_distribution_pep.rs.
     case_134_a_revocation_naming_only_mesh => "134_a_revocation_naming_only_mesh",
     case_134_then_a_rotation_naming_every_kind => "134_then_a_rotation_naming_every_kind",
     /// case_076: O1.
@@ -250,37 +250,37 @@ rust_cases! {
     case_131_a_ninth_key => "131_a_ninth_key",
     /// case_131: K5.
     case_131_a_pack_by_the_first_of_seventeen_retired => "131_a_pack_by_the_first_of_seventeen_retired",
-    // case 123's verdict; applying the rotations is the Rust PEP's (PR 14), so it is not claimed here
+    /// case_123: O1, R1, the verdict; applying the rotations is in test_distribution_pep.rs.
     case_123_two_above_the_trust_sequence => "123_two_above_the_trust_sequence",
-    // case 123's verdict; applying the rotations is the Rust PEP's (PR 14), so it is not claimed here
+    /// case_123: O1, R1, the verdict; applying the rotations is in test_distribution_pep.rs.
     case_123_the_same_once_the_skipped_one_is_in => "123_the_same_once_the_skipped_one_is_in",
-    // case 66's verdict; applying the list is the Rust PEP's (PR 14), so it is not claimed here
+    /// case_066: R1, the verdict; applying the list is in test_distribution_pep.rs.
     case_066_one_above_the_trust_sequence => "066_one_above_the_trust_sequence",
-    // case 66's verdict; applying the list is the Rust PEP's (PR 14), so it is not claimed here
+    /// case_066: R1, the verdict; applying the list is in test_distribution_pep.rs.
     case_066_the_same_one_again => "066_the_same_one_again",
-    // case 66's verdict; applying the list is the Rust PEP's (PR 14), so it is not claimed here
+    /// case_066: R1, the verdict; applying the list is in test_distribution_pep.rs.
     case_066_an_older_one => "066_an_older_one",
-    // case 66's verdict; applying the list is the Rust PEP's (PR 14), so it is not claimed here
+    /// case_066: R1, the verdict; applying the list is in test_distribution_pep.rs.
     case_066_one_that_skips_a_number => "066_one_that_skips_a_number",
     /// case_067: R2.
     case_067_a_pack_signed_by_a_revoked_key => "067_a_pack_signed_by_a_revoked_key",
     /// case_068: R4, Q4.
     case_068_a_release_below_a_raised_floor => "068_a_release_below_a_raised_floor",
-    // case 70's verdict; applying the list is the Rust PEP's (PR 14), so it is not claimed here
+    /// case_070: R6, the verdict; applying the list is in test_distribution_pep.rs.
     case_070_a_later_list_dropping_the_key => "070_a_later_list_dropping_the_key",
-    // case 70's verdict; applying the list is the Rust PEP's (PR 14), so it is not claimed here
+    /// case_070: R6, the verdict; applying the list is in test_distribution_pep.rs.
     case_070_the_key_still_refused => "070_the_key_still_refused",
-    // case 130's verdict; applying the list is the Rust PEP's (PR 14), so it is not claimed here
+    /// case_130: R6, R8, the verdict; applying the list is in test_distribution_pep.rs.
     case_130_a_floor_past_a_revoked_envelope => "130_a_floor_past_a_revoked_envelope",
-    // case 130's verdict; applying the list is the Rust PEP's (PR 14), so it is not claimed here
+    /// case_130: R6, R8, the verdict; applying the list is in test_distribution_pep.rs.
     case_130_the_next_list_dropping_it => "130_the_next_list_dropping_it",
-    // case 130's verdict; applying the list is the Rust PEP's (PR 14), so it is not claimed here
+    /// case_130: R6, R8, the verdict; applying the list is in test_distribution_pep.rs.
     case_130_the_envelope_again => "130_the_envelope_again",
     /// case_071: R7.
     case_071_sixty_five_entries => "071_sixty_five_entries",
-    // case 79's verdict; applying the list is the Rust PEP's (PR 14), so it is not claimed here
+    /// case_079: X4, E5, the verdict; applying the list is in test_distribution_pep.rs.
     case_079_trust_kind_with_expires => "079_trust_kind_with_expires",
-    // case 79's verdict; applying the list is the Rust PEP's (PR 14), so it is not claimed here
+    /// case_079: X4, E5, the verdict; applying the list is in test_distribution_pep.rs.
     case_079_revocation_read_years_later => "079_revocation_read_years_later",
 }
 
@@ -293,6 +293,7 @@ fn every_case_the_corpus_runs_on_rust_has_its_test() {
     assert_eq!(named, rust);
 }
 
+/// case_104: I1, Rust's part. Every corpus case on the host kind replays to the verdict Python recorded.
 #[test]
 fn every_case_on_a_kind_rust_has_built_decides_as_python_did() {
     // the host cases that run on Python alone included: one verifier answers alike everywhere it runs. The
@@ -490,4 +491,88 @@ fn a_dev_build_takes_the_unsigned_swap_and_says_so() {
     let (result, hatch) = unsigned_swap();
     assert_eq!(result["ok"], json!(true));
     assert_eq!(hatch, json!({"hatch": "--allow-unsigned", "dev_build": true, "result": "allowed"}));
+}
+
+// ------------------------------------------------------------------ the widening cases (V12, W1 to W7)
+
+fn widening_cases() -> &'static [Value] {
+    corpus()["widening"].as_array().expect("the corpus has widening cases")
+}
+
+fn hex_or_none(entry: &Value, member: &str) -> Option<Vec<u8>> {
+    entry[member].as_str().map(|text| hex::decode(text).unwrap())
+}
+
+/// V12 on the Rust host PEP's rule, in the corpus's `expect` form: the table compared with the active one, as a
+/// kind that cannot decide compares it (W2), then the rule with the staged statement (W3 to W6).
+fn decide_widening(entry: &Value) -> Value {
+    use prismpath_hotswap_rs::dist::pep::{compare_artifact, widening_check};
+    use prismpath_hotswap_rs::dist::TargetKind;
+    let sealed = bytes(entry, "sealed");
+    let envelope = env::read(env::unseal(&sealed).unwrap().0).unwrap();
+    let target = TargetKind::Host.target().unwrap();
+    let active_table = hex_or_none(entry, "active_table");
+    let answer = active_table.as_deref().filter(|_| target.compares.contains(&envelope.artifact)).map(|active| {
+        compare_artifact(envelope.artifact, Some(active), Some(&bytes(entry, "table")))
+    });
+    let active_policy = entry["active_policy"].as_str().map(|text| Hex64::try_from(text).unwrap());
+    let statement = hex_or_none(entry, "statement");
+    let cause = widening_check(&target, envelope.widens, &envelope.replaces, active_policy.as_ref(), answer, statement.as_deref());
+    json!({"cause": cause})
+}
+
+fn replay_widening(name: &str) {
+    let entry = widening_cases().iter().find(|entry| entry["name"] == name).unwrap_or_else(|| panic!("no widening case {name}"));
+    assert!(runs_on(entry, "R") && entry["kind"] == "host", "{name} does not run on Rust");
+    assert_eq!(decide_widening(entry), entry["expect"], "{name}");
+}
+
+macro_rules! widening_cases {
+    ($($(#[$doc:meta])* $test:ident => $name:literal,)+) => {
+        $(
+            $(#[$doc])*
+            #[test]
+            fn $test() {
+                replay_widening($name);
+            }
+        )+
+        /// Every widening case a test above replays.
+        const WIDENING_NAMED: &[&str] = &[$($name),+];
+    };
+}
+
+widening_cases! {
+    /// case_062: W4, W5, the rule's half; the commits are in test_distribution_pep.rs.
+    case_062_a_statement_from_the_active_hash => "062_a_statement_from_the_active_hash",
+    /// case_062: W4, W5.
+    case_062_a_statement_from_any => "062_a_statement_from_any",
+    /// case_062: W4, W5.
+    case_062_a_statement_from_another_hash_only => "062_a_statement_from_another_hash_only",
+    /// case_063: W2, W3.
+    case_063_a_first_install_with_no_statement => "063_a_first_install_with_no_statement",
+    /// case_063: W2, W3.
+    case_063_a_first_install_with_a_statement => "063_a_first_install_with_a_statement",
+    /// case_139: W2, W6.
+    case_139_a_first_install_that_says_it_does_not_widen_with_a_statement => "139_a_first_install_that_says_it_does_not_widen_with_a_statement",
+    /// case_140: RB3, W2, W6.
+    case_140_a_rollback_to_a_kept_renewal_that_says_it_does_not_widen_with_a_statement => "140_a_rollback_to_a_kept_renewal_that_says_it_does_not_widen_with_a_statement",
+}
+
+#[test]
+fn every_widening_case_the_corpus_runs_on_rust_has_its_test() {
+    let mut rust: Vec<&str> = widening_cases().iter().filter(|entry| runs_on(entry, "R")).map(|entry| entry["name"].as_str().unwrap()).collect();
+    let mut named = WIDENING_NAMED.to_vec();
+    rust.sort_unstable();
+    named.sort_unstable();
+    assert_eq!(named, rust);
+}
+
+/// Every widening case on `host`, the ones that run on Python alone included, decides as Python recorded.
+#[test]
+fn every_widening_case_on_host_decides_as_python_did() {
+    let host: Vec<_> = widening_cases().iter().filter(|entry| entry["kind"] == "host").collect();
+    assert!(host.len() >= WIDENING_NAMED.len());
+    for entry in host {
+        assert_eq!(decide_widening(entry), entry["expect"], "{}", entry["name"]);
+    }
 }

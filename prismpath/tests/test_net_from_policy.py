@@ -423,6 +423,37 @@ def test_a_table_the_loaders_parser_refuses_is_an_error_not_a_decision(evaluator
 
 
 # ----------------------------------------------------------------------------------- the signed table
+def older_sign_destinations(path, priv_path, pub_path, version=1):
+    """The older signed form of a destination table, a `prismpath.net_dests_pack/1` manifest and signature beside it,
+    as writers before 0.3.0 made it. Nothing in the tree writes this form any more (L1), and the readers take it
+    through the 0.3 series (L3)."""
+    from datetime import datetime, timezone
+    from prismpath import canon
+    from prismpath.hotswap import policy_pack as pp
+    destinations = nf.Destinations.load(path)
+    _pub, key_id = pp.load_public(pub_path)
+    manifest = {"format": nf.DEST_PACK_FORMAT, canon.ENCODING_KEY: canon.CANON2,
+                "file_sha256": pp.sha256_hex(Path(path).read_bytes()), "destinations_sha256": destinations.sha256(),
+                "version": int(version), "key_id": key_id,
+                "created": datetime.now(timezone.utc).isoformat(timespec="seconds")}
+    json_path, sig_path = str(path) + ".manifest.json", str(path) + ".manifest.sig"
+    pp.write_signed_document(json_path, manifest)
+    Path(sig_path).write_bytes(pp._load_private(priv_path).sign(pp.signed_bytes(manifest)))
+    return manifest
+
+
+def older_sign(out_dir, priv_path, pub_path, envelope_id, version, envelope_dir=None):
+    """The older signed form of an edge, a `ppt-pack/1` manifest beside `edge.ppt` with the flow's hash and field
+    dictionary, and its qualification envelope, as `sign` wrote them before 0.3.0 (L1). The older gate reads them (L3)."""
+    from prismpath.hotswap import policy_pack as pp
+    out = Path(out_dir)
+    flow = (out / "edge.flow.md").read_text(encoding="utf-8")
+    manifest = pp.build_pack(str(out / "edge.ppt"), {}, version, envelope_id, priv_path, pub_path, flow_text=flow)
+    if envelope_dir:
+        pp.build_envelope(envelope_id, pp.field_dictionary_of(flow), None, priv_path, pub_path, envelope_dir)
+    return manifest
+
+
 @pytest.fixture()
 def signed(tmp_path):
     pytest.importorskip("cryptography")
@@ -432,9 +463,9 @@ def signed(tmp_path):
     keys = pp.keygen(str(tmp_path / "keys"))
     dests = tmp_path / "dests.json"
     dests.write_text(json.dumps(DESTS.to_object()))
-    nf.sign_destinations(dests, keys["private"], keys["public"], 1)
+    older_sign_destinations(dests, keys["private"], keys["public"], 1)
     nf.write_edge(out, edge, str(dests))
-    manifest = nf.sign(out, keys["private"], keys["public"], "edge-env", 1, str(tmp_path / "env"))
+    manifest = older_sign(out, keys["private"], keys["public"], "edge-env", 1, str(tmp_path / "env"))
     return {"out": out, "edge": edge, "keys": keys, "manifest": manifest, "env": str(tmp_path / "env" / "edge-env.envelope"),
             "state": str(tmp_path / "state"), "tmp": tmp_path, "pp": pp, "dests": dests}
 
@@ -526,10 +557,13 @@ def test_the_command_line_compiles_signs_and_dry_runs_a_table(tmp_path, evaluato
     dests.write_text(json.dumps(DESTS.to_object()))
     keys = pp.keygen(str(tmp_path / "keys"))
     assert nf.main(["compile", str(image), str(dests), str(out), "--pub", keys["public"]]) == 2    # unsigned table: refused
-    assert nf.main(["sign-dests", str(dests), "--priv", keys["private"], "--pub", keys["public"]]) == 0
+    assert nf.main(["sign-dests", str(dests), "--priv", keys["private"], "--pub", keys["public"], "--expires", "4102444800"]) == 0
     assert nf.main(["compile", str(image), str(dests), str(out), "--pub", keys["public"], "--source", "192.168.4.20"]) == 0
-    assert nf.main(["sign", str(out), "--priv", keys["private"], "--pub", keys["public"], "--envelope-id", "e", "--version", "3",
-                    "--envelope-dir", str(tmp_path / "env")]) == 0
+    assert nf.main(["sign", str(out), str(image), "--priv", keys["private"], "--pub", keys["public"], "--stream", "edge/a",
+                    "--seq", "3", "--qualification", "e", "--expires", "4102444800", "--widens"]) == 0
+    assert sorted(path.name for path in (out / nf.RELEASE_DIR).iterdir()) == [
+        f"{name}.{part}" for name in ("net.dests", "net.edge", "policy.core") for part in ("body", "sealed")]
+    older_sign(out, keys["private"], keys["public"], "e", 3, str(tmp_path / "env"))          # the older gate reads the older form
     capsys.readouterr()
     assert nf.main(["verify", str(out), "--pub", keys["public"], "--envelope", str(tmp_path / "env" / "e.envelope"),
                     "--state", str(tmp_path / "state"), "--image", str(image), "--dests", str(dests)]) == 0
@@ -549,8 +583,9 @@ def owner(tmp_path):
     return {"keys": keys, "dests": dests, "pub": [keys["public"]], "tmp": tmp_path, "pp": pp}
 
 
-def test_a_signed_destination_table_loads_and_carries_the_owners_key(owner):
-    manifest = nf.sign_destinations(owner["dests"], owner["keys"]["private"], owner["keys"]["public"], 2)
+def test_an_older_signed_destination_table_loads_and_carries_the_owners_key(owner):
+    """L3: the older form is still read. The envelope form is test_distribution_xdp.py's."""
+    manifest = older_sign_destinations(owner["dests"], owner["keys"]["private"], owner["keys"]["public"], 2)
     assert manifest["key_id"] == owner["keys"]["key_id"] and manifest["destinations_sha256"] == DESTS.sha256() and manifest["version"] == 2
     assert nf.Destinations.load_signed(owner["dests"], owner["pub"]) == DESTS
     assert nf.verify_destinations(owner["dests"], owner["pub"])[0] == []
@@ -559,7 +594,7 @@ def test_a_signed_destination_table_loads_and_carries_the_owners_key(owner):
 def test_an_unsigned_destination_table_is_refused_by_the_compile(owner):
     with pytest.raises(nf.DestinationError, match="dests:unsigned"):
         nf.Destinations.load_signed(owner["dests"], owner["pub"])
-    nf.sign_destinations(owner["dests"], owner["keys"]["private"], owner["keys"]["public"])
+    older_sign_destinations(owner["dests"], owner["keys"]["private"], owner["keys"]["public"])
     Path(str(owner["dests"]) + ".manifest.sig").unlink()
     assert nf.verify_destinations(owner["dests"], owner["pub"])[0] == ["dests:unsigned"]
 
@@ -568,10 +603,10 @@ def test_an_unsigned_destination_table_is_refused_by_the_compile(owner):
     ("edit-address", "dests:tampered"), ("add-host", "dests:tampered"), ("whitespace", "dests:tampered"),
     ("manifest-hash", "dests:sig-invalid"), ("signature", "dests:sig-invalid"), ("manifest-junk", "dests:bad-manifest"),
     ("other-key", "dests:sig-invalid"), ("revoked", "dests:revoked-key"), ("not-a-table", "dests:invalid")])
-def test_a_tampered_or_wrongly_signed_destination_table_is_refused(owner, tamper, reason):
+def test_a_tampered_or_wrongly_signed_older_destination_table_is_refused(owner, tamper, reason):
     path, pp = owner["dests"], owner["pp"]
     keys = owner["keys"]
-    nf.sign_destinations(path, keys["private"], keys["public"])
+    older_sign_destinations(path, keys["private"], keys["public"])
     manifest_path, sig_path = Path(str(path) + ".manifest.json"), Path(str(path) + ".manifest.sig")
     revoked = frozenset()
     pub = owner["pub"]
@@ -610,11 +645,12 @@ def test_a_tampered_or_wrongly_signed_destination_table_is_refused(owner, tamper
 def test_a_table_the_edge_cannot_use_is_not_signed(owner):
     owner["dests"].write_text(json.dumps({"format": nf.DEST_FORMAT, "allowed_host": {"a.example": ["2606:4700::1"]}}))
     with pytest.raises(nf.DestinationError, match="dotted quad"):
-        nf.sign_destinations(owner["dests"], owner["keys"]["private"], owner["keys"]["public"])
+        nf.sign_destinations(owner["dests"], owner["keys"]["private"], owner["keys"]["public"], expires=4102444800)
     other = owner["pp"].keygen(str(owner["tmp"] / "other"))
     owner["dests"].write_text(json.dumps(DESTS.to_object()))
     with pytest.raises(ValueError, match="private half"):
-        nf.sign_destinations(owner["dests"], other["private"], owner["keys"]["public"])
+        nf.sign_destinations(owner["dests"], other["private"], owner["keys"]["public"], expires=4102444800)
+    assert not Path(str(owner["dests"]) + nf.SEALED).exists()
     assert not Path(str(owner["dests"]) + ".manifest.json").exists()
 
 
@@ -673,11 +709,11 @@ def test_an_attach_the_gates_refuse_never_reaches_the_loader(signed, tmp_path, t
             (out / name).unlink()
     elif tamper == "dests-resigned-by-another":
         other = pp.keygen(str(tmp_path / "other"))
-        nf.sign_destinations(dests, other["private"], other["public"])
+        older_sign_destinations(dests, other["private"], other["public"])
     elif tamper == "dests-swapped-for-another-signed-table":
         other_table = tmp_path / "other.json"
         other_table.write_text(json.dumps({**DESTS.to_object(), "allowed_host": {"docs.example.com": ["93.184.216.99"]}}))
-        nf.sign_destinations(other_table, signed["keys"]["private"], signed["keys"]["public"])
+        older_sign_destinations(other_table, signed["keys"]["private"], signed["keys"]["public"])
         for suffix in ("", ".manifest.json", ".manifest.sig"):
             shutil.copyfile(str(other_table) + suffix, str(dests) + suffix)
     elif tamper == "table":
