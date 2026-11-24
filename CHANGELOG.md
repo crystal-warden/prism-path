@@ -8,6 +8,14 @@ spec stable.
 
 ## [Unreleased]
 
+### Changed: the XDP edge takes its table and destination table from one release, through the same gate as every other enforcement point (2026-11-23)
+
+- **The `xdp` row joins the kind table.** An edge release needs `policy.core`, `net.dests` and `net.edge`. A destination table must be one the edge can use in its canonical spelling, and at commit the edge compiles its table again from the staged policy and destination table for its own governed sources and refuses any other table, or a flow or names hash in the `net.edge` envelope that is not the compiled one's, with `dist:derived-mismatch`.
+- **A destination table is larger when the edge it compiles to would allow an address the active one's does not, under any set of classes the policy may pass.** A new address is a widening, one fewer is not, and dropping the refused name of a shared address is a widening though the table shrinks.
+- **`prismpath-ebpf/net_dist.py` is the edge's enforcement point.** It loads the committed table, loads a closed table that drops every governed packet when the edge holds no release or its release lapses, and calls no loader on a restart that finds the table loaded. A loader that fails leaves the commit to be finished at the next start.
+- **`net_swap.py` ends in one loader call, `run_loader`, which the edge's enforcement point ends in too.** The version floor is written before the loader runs, each load is one audit event, and `--key` signs the audit log with the host's instance key.
+- **`net_from_policy.py sign-dests` and `sign` write distribution envelopes.** `sign-dests` writes a `net.dests` envelope over the table's canonical bytes beside the table, which `compile` reads. `sign` takes the image and seals the edge's release, its `policy.core`, `net.dests` and `net.edge` under one release id, in `release/` beside the edge, as the pairs a controller's inbox takes. The older signed manifests are still read by `compile`, `verify` and `attach`, and nothing writes them any more.
+
 ### Changed: grants and route tables travel in distribution envelopes, and a grant is revoked through the signed list (2026-11-23)
 
 - **The `gateway` row joins the kind table.** A gateway release needs `policy.core` and `gateway.routes`, a route table must read as `Routes.from_doc` reads it and be its canonical spelling, and any change of the table is a widening. `prismpath dist pep --kind gateway` runs the PEP of a gateway home that holds its instance key and no authority key.

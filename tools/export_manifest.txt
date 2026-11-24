@@ -786,6 +786,7 @@ prismpath/tests/test_distribution_state_record.py
 prismpath/tests/test_distribution_trace.py
 prismpath/tests/test_distribution_verify.py
 prismpath/tests/test_distribution_widening.py
+prismpath/tests/test_distribution_xdp.py
 prismpath/tests/test_doc_references.py
 prismpath/tests/test_egress_policy.py
 prismpath/tests/test_emits_types.py
