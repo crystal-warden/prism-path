@@ -654,17 +654,18 @@ def _machine(host_check, steps: list) -> list:
 
 
 def test_a_state_record_writes_the_counter_alone_and_the_durable_state_fits_its_parts(host_check):
-    """H3, C4: the core persists in parts. A state record writes only the counter, 12 bytes, however long the PEP
-    runs, and the largest part a commit writes is a release, a few kilobytes on a mesh node, inside a 24 kilobyte
-    NVS partition."""
+    """H3, H10, C4: the core persists in parts. A state record writes only the counter and the two counts of H10
+    that ride with it, 20 bytes, however long the PEP runs, and the largest part a commit writes is a release, a few
+    kilobytes on a mesh node, inside a 24 kilobyte NVS partition. The durable state with its install parts stays
+    under 96 kilobytes and a held statement under 5."""
     out = _machine(host_check, ["sizes", f"provision {S} {N}", f"stage {_sealed(0, 1)} {BODIES[0].hex()} {N}",
                                 f"commit {S} 1 {H[0]} 0 0 {N}", "written", *[f"record 0 {N}"] * 500, "written"])
-    durable, release, machine = (int(value) for value in out[0].split()[1:])
-    assert durable < 64 * 1024 and release < 16 * 1024
+    durable, release, machine, _record, statement = (int(value) for value in out[0].split()[1:])
+    assert durable < 96 * 1024 and release < 16 * 1024 and statement < 5 * 1024
     total, writes, largest = (int(value) for value in out[4].split()[1:])
     assert largest < 8 * 1024 and total < 24 * 1024
     total, writes, largest = (int(value) for value in out[-1].split()[1:])
-    assert (total, writes, largest) == (12 * 500, 500, 12)
+    assert (total, writes, largest) == (20 * 500, 500, 20)
 
 
 def test_a_widening_statement_holds_at_most_64_hashes(host_check):
@@ -936,3 +937,1013 @@ def test_case_143_a_renewal_whose_active_release_lapsed_before_its_commit_is_ref
     assert _events(lines[4]) == [("staged", None)] and _events(lines[5])[0][0] == "lapsed"
     last = _records(lines[-1])[-1]
     assert (last.event, last.cause, last.state) == ("refused", "dist:widening-unsigned", "no-policy")
+
+
+# ------------------------------------------------------------------ section 21 on the C core: install statements, the
+# action floor, the fallback policy and the ceiling on a mesh node
+#
+# The Python machine on this branch has no section 21, so these steps are held to the spec's expectations directly:
+# each install statement is built here from its canon/2 document and sealed by the test keys, and each record the C
+# core signs is read back under its instance key with the type 3 entry of H10.
+
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey  # noqa: E402
+
+G = _generator()
+NB = _dist.NOT_BEFORE
+ZERO = "0" * 64
+DOMAIN = hashlib.sha256(b"the mesh domain this node was built with").hexdigest()
+FINGERPRINT = hashlib.sha256(b"the anchor").hexdigest()
+LAYOUT = hashlib.sha256(b"the layout document of the node").hexdigest()
+COMMAND, PARAMETER, INDEPENDENT, PROPOSER = range(4)
+# AF10: register 0 the command, 1 its parameter, 2 a reading the PEP takes itself (5 s), 3 the proposer's reading
+FIELDS = [(0, COMMAND, -1000, 1000, 0), (1, PARAMETER, 0, 100, 0), (2, INDEPENDENT, 0, 1, 5), (3, PROPOSER, 0, 1, 0)]
+EVENTS21 = [*state_record.EVENTS, "fallback", "install-applied", "install-widened", "answered"]
+SUBJECT = {"install.floor": 1, "install.fallback": 2, "install.ceiling": 3, "install.trust": 4}
+ALLOW, REFUSE = 1, 2
+BASIS = {0: None, 1: "release", 2: "floor", 3: "fallback"}
+
+
+def _pub(name: str) -> bytes:
+    return G.public_raw(G.test_key(name))
+
+
+def _kid(name: str) -> str:
+    return env.key_id(_pub(name))
+
+
+def _ppt(edges, *, atoms=None, nodes=2, pad_to=0, fields=4) -> bytes:
+    """A `.ppt` image of a start node 0 whose edges are `edges`, each a postfix program of atom indexes and the
+    opcodes "and", "or", "not", "true", "false", all to node 1, over `atoms` (register, op, type, value). Unused
+    TRUE words pad it to `pad_to` bytes."""
+    import struct
+    opcodes = {"not": 0x8000, "and": 0x8001, "or": 0x8002, "true": 0x8003, "false": 0x8004}
+    atoms = atoms or []
+    words, table = [], []
+    for program in edges:
+        table.append((1, len(words), len(program)))
+        words += [opcodes[word] if isinstance(word, str) else word for word in program]
+    node_list = [(0, len(edges))] + [(len(edges), 0)] * (nodes - 1)
+    def build(extra):
+        out = struct.pack("<4sHHHHHHHHHHHBB", b"PPTM", 1, fields, 0, len(atoms), nodes, len(edges), len(words) + extra,
+                          0, 0xFFFF, 16, 16, 0, 0)
+        out += b"".join(struct.pack("<HBBi", *atom) for atom in atoms)
+        out += b"".join(struct.pack("<HH", *node) for node in node_list)
+        out += b"".join(struct.pack("<HHH", *edge) for edge in table)
+        out += b"".join(struct.pack("<H", word) for word in words + [0x8003] * extra)
+        return out
+    image = build(0)
+    return build((pad_to - len(image)) // 2) if pad_to else image
+
+
+EQ, NE, LT, LE, GT, GE = range(6)
+INT = 2
+
+
+def _rule(command: int, low: int = 10, high: int = 20, *, extra=()) -> tuple:
+    """One narrow floor rule: the command register equal to `command` and the parameter in [low, high], each a
+    conjunct of the whole program (AF9), with `extra` atoms joined by `and`."""
+    atoms = [(0, EQ, INT, command), (1, GE, INT, low), (1, LE, INT, high), *extra]
+    return atoms, len(atoms)
+
+
+def _floor_table(commands=(3,), *, low=10, high=20, extra=(), pad_to=0) -> bytes:
+    atoms, edges = [], []
+    for command in commands:
+        rule, n = _rule(command, low, high, extra=extra)
+        first = len(atoms)
+        atoms += rule
+        program = [first, first + 1, "and"] + [word for k in range(2, n) for word in (first + k, "and")]
+        edges.append(program)
+    return _ppt(edges, atoms=atoms, pad_to=pad_to)
+
+
+FLOOR = _floor_table()
+FLOOR_B = _floor_table((3, 4))
+FALLBACK = _ppt([[0]], atoms=[(0, GE, INT, 100)])       # allows a command of 100 and above
+FALLBACK_B = _ppt([[0]], atoms=[(0, GE, INT, 200)])
+RELEASE = BODIES[0]                                      # allows x >= 5, where x is register 0
+
+
+def _regs(command: int, parameter: int = 15, independent: int = 1, proposer: int = 0) -> str:
+    import struct
+    return (b"\x00" * 4 + b"".join(struct.pack("<ii", INT, value)
+                                   for value in (command, parameter, independent, proposer))).hex()
+
+
+def _release_id(name: str, body: bytes) -> str:
+    return hashlib.sha256(canon.canon2_bytes([[name, hashlib.sha256(body).hexdigest()]])).hexdigest()
+
+
+def _ceiling(*bodies, hashes=None) -> bytes:
+    listed = sorted(hashes if hashes is not None else {hashlib.sha256(body).hexdigest() for body in bodies})
+    return canon.canon2_bytes({"bodies": listed, "encoding": "canon/2", "format": "prismpath.dist-ceiling/1"})
+
+
+def _trust_body(keys, threshold, operators=()) -> bytes:
+    return canon.canon2_bytes({"encoding": "canon/2", "format": "prismpath.dist-install-trust/1",
+                               "keys": sorted(_pub(name).hex() for name in keys),
+                               "operators": sorted(_pub(name).hex() for name in operators), "threshold": threshold})
+
+
+def _install(artifact: str, body: bytes = b"", *, seq: int = 1, signers=("J", "K"), as_=None, widens=None,
+             replaces: str = "", meta=None, not_before: int = NB, expires: int = 0, targets=("mesh",), stream=S,
+             policy=None, release=None, body_size=None, envelope_only=False):
+    """An install statement as the engineer's tool seals it, and its body: (sealed hex, body hex)."""
+    trust = artifact == "install.trust"
+    if as_ is None and not trust:
+        as_ = "none" if body == b"" else ("policy.list" if artifact == "install.ceiling" else "policy.ppt")
+    if meta is None:
+        meta = {} if trust else {"as": as_}
+        if artifact == "install.floor" and as_ == "policy.ppt":
+            meta.update(layout=LAYOUT, command=0)
+    if widens is None:
+        widens = trust or (artifact in ("install.floor", "install.fallback") and as_ != "none")
+    body_sha = hashlib.sha256(body).hexdigest()
+    if policy is None:
+        policy = ZERO if trust or as_ == "none" else body_sha
+    if release is None:
+        release = ZERO if trust else _release_id(as_, body)
+    doc = {"artifact": artifact, "body_sha256": body_sha, "body_size": len(body) if body_size is None else body_size,
+           "encoding": "canon/2", "expires": expires, "format": "prismpath.dist/1", "meta": meta,
+           "not_before": not_before, "policy_sha256": policy, "release": release, "replaces": replaces, "seq": seq,
+           "stream": stream, "targets": sorted(targets), "widens": widens}
+    raw = canon.canon2_bytes(doc)
+    if envelope_only:
+        return raw
+    return env.seal(raw, [G.test_key(name) for name in signers]).hex(), body.hex() or "-"
+
+
+def _envelope_id(sealed_hex: str) -> str:
+    return hashlib.sha256(env.unseal(bytes.fromhex(sealed_hex))[0]).hexdigest()
+
+
+def _install_id(*, floor=None, fallback=None, ceiling=None, trust_seq=0, trust_id=FINGERPRINT) -> str:
+    """H10: the install id of the sets held, each (sealed hex, seq) or None, and the install trust state."""
+    out = b""
+    for held in (floor, fallback, ceiling):
+        if held is None:
+            out += b"\x00" * 40
+        else:
+            out += hashlib.sha256(bytes.fromhex(_envelope_id(held[0]))).digest() + held[1].to_bytes(8, "little")
+    out += trust_seq.to_bytes(8, "little") + bytes.fromhex(trust_id)
+    return hashlib.sha256(out).hexdigest()[:32]
+
+
+def _anchor(keys=("J", "K"), threshold=2, *, operators=(), seq=0, fingerprint=FINGERPRINT, authorities=("A",),
+            domain=DOMAIN, bring=()) -> list:
+    """The lines of an anchor of `authorities` with an install member of `keys` (None for none), and the statements
+    the engineer brings with it."""
+    lines = ["anchor_clear", *(f"akey {_kid(name)} {_pub(name).hex()}" for name in authorities)]
+    if keys is not None:
+        lines += [f"ikey {_pub(name).hex()}" for name in keys] + [f"iop {_pub(name).hex()}" for name in operators]
+        lines.append(f"install {threshold} {seq} {domain} {fingerprint}")
+    lines += [f"bring {sealed} {body}" for sealed, body in bring]
+    return lines
+
+
+def _node(*, hold=False, clock=True, layout=True) -> list:
+    lines = [f"machine {int(hold)} {int(clock)} {INSTANCE_SEED}", f"domain {DOMAIN}"]
+    if layout:
+        lines += [f"layout {LAYOUT}", *(f"field {reg} {role} {low} {high} {stale}" for reg, role, low, high, stale in FIELDS)]
+    return lines
+
+
+def _run21(host_check, lines: list) -> list:
+    done = subprocess.run([str(host_check)], input="\n".join([*lines, "done"]) + "\n", capture_output=True, text=True,
+                          timeout=120)
+    assert done.returncode == 0, done.stderr
+    return done.stdout.splitlines()
+
+
+def _read21(item: str) -> dict:
+    """One state record of the C core, its signature checked under the instance key, with its type 3 entry."""
+    raw = bytes.fromhex(item)
+    x = int.from_bytes(raw[146:148], "little")
+    body = raw[:148 + x]
+    Ed25519PublicKey.from_public_bytes(_dist.instance_key().public_raw).verify(
+        raw[148 + x:], b"DSSEv1 36 application/vnd.prismpath.dist-state %d " % len(body) + body)
+    out = {"event": EVENTS21[raw[5]], "state": state_record.STATES[raw[6] & 3], "staged": bool(raw[6] & 0x80),
+           "held": bool(raw[6] & 0x20), "fallback": bool(raw[6] & 0x10),
+           "cause": causes.name(raw[7]) if raw[7] else None, "time": int.from_bytes(raw[32:40], "little"),
+           "active_seq": int.from_bytes(raw[96:104], "little"), "floor": int.from_bytes(raw[104:112], "little"),
+           "trust_seq": int.from_bytes(raw[136:144], "little"), "size": len(raw), "entries": x}
+    if x:
+        entry = raw[148:148 + x]
+        assert (entry[0], int.from_bytes(entry[1:3], "little"), x) == (3, 27, 30)   # H10: type 3 alone, 27 bytes
+        out.update(install_id=entry[3:19].hex(), trust_low=int.from_bytes(entry[19:21], "little"), subject=entry[21],
+                   answers=int.from_bytes(entry[22:26], "little"), overrides=int.from_bytes(entry[26:30], "little"))
+    return out
+
+
+def _recs(line: str) -> list:
+    assert line.startswith("records"), line
+    return [_read21(item) for item in line.split()[1:]]
+
+
+def _last(line: str) -> dict:
+    return _recs(line)[-1]
+
+
+def _ask(line: str) -> dict:
+    words = line.split()
+    assert words[0] == "ask", line
+    return {"outcome": int(words[1]), "cause": causes.name(int(words[2])) if int(words[2]) else None,
+            "basis": BASIS[int(words[3])], "held": words[4] == "1", "policy": None if words[5] == "-" else words[5],
+            "would": int(words[6]), "would_cause": causes.name(int(words[7])) if int(words[7]) else None,
+            "would_policy": None if words[8] == "-" else words[8], "override": words[9] == "1",
+            "counted": words[10] == "1", "rule": int(words[11]), "window": int(words[12]), "count": int(words[13])}
+
+
+def _stage(statement, now=N) -> str:
+    return f"stage {statement[0]} {statement[1]} {now}"
+
+
+def _h16(body: bytes) -> str:
+    return hashlib.sha256(body).hexdigest()[:32]
+
+
+def _release_steps21(body: bytes, seq: int, *, now=N, widens=True, replaces="", not_before=NB, expires=E) -> list:
+    """Stage a mesh release of `body` with its widening statement, and commit it."""
+    release = env.release_id([("policy.ppt", canon.sha256_hex(body))])
+    policy = canon.sha256_hex(body)
+    lines = []
+    if widens:
+        statement = _dist.widening()
+        lines.append(f"stage {_dist.seal('trust.widening', statement, seq=seq, release=release, policy_sha256=policy, targets=('mesh',), replaces=replaces, widens=True, not_before=not_before).hex()} {statement.hex()} {now}")
+    lines.append(f"stage {_dist.seal('policy.ppt', body, seq=seq, targets=('mesh',), widens=widens, replaces=replaces, not_before=not_before, expires=expires).hex()} {body.hex()} {now}")
+    lines.append(f"commit {S} {seq} {policy} 0 0 {now}")
+    return lines
+
+
+def _refused(line: str):
+    """The cause and subject of the one refused record of a step."""
+    record = _last(line)
+    assert record["event"] == "refused", record
+    return record["cause"], record["subject"]
+
+
+def test_case_162_an_install_statement_out_of_its_form_is_refused_and_nothing_changes(host_check):
+    """case_162: IS1, IS2, IS5. Signed only by authority keys, an expiry, two target kinds, another stream, a body one
+    byte short, a body the image check refuses, no `as`, and a not_before 301 seconds ahead of a PEP with a clock."""
+    short = _install("install.fallback", FALLBACK, seq=2)
+    statements = [
+        _install("install.fallback", FALLBACK, seq=2, signers=("A",)),
+        _install("install.fallback", FALLBACK, seq=2, expires=NB + 30 * 86400),
+        _install("install.fallback", FALLBACK, seq=2, targets=("host", "mesh")),
+        _install("install.fallback", FALLBACK, seq=2, stream="mesh/other"),
+        (short[0], FALLBACK[:-1].hex()),
+        _install("install.fallback", b"PPTX" + FALLBACK[4:], seq=2),
+        _install("install.fallback", FALLBACK, seq=2, meta={"other": 1}),
+        _install("install.fallback", FALLBACK, seq=2, not_before=N + 301),
+    ]
+    held = _install("install.fallback", FALLBACK_B, seq=1)
+    out = _run21(host_check, [*_node(), *_anchor(bring=[held]), f"provision {S} {N}", "installid",
+                              *(_stage(one) for one in statements), "installid"])
+    assert [_refused(line) for line in out[2:-1]] == [
+        ("dist:unknown-key", 2), ("dist:bad-format", 0), ("dist:bad-format", 0), ("dist:target-mismatch", 2),
+        ("dist:body-mismatch", 2), ("image:bad-magic", 2), ("dist:bad-format", 0), ("dist:not-yet-valid", 2)]
+    assert out[1] == out[-1] == f"installid {_install_id(fallback=(held[0], 1))}"
+
+
+def test_case_163_236_the_roles_are_apart_at_the_anchor_and_after(host_check):
+    """case_163: IS2, K4, O4. case_236: P2, K4. An anchor that holds one key in both roles, or whose install key or
+    operator key is the instance key, or whose install key is also an operator key, is refused and the PEP is left
+    as it was. A release, a widening statement, a revocation and a rotation signed only by install keys are
+    dist:unknown-key, and a rotation that adds an install key, held or retired, is dist:rotation-invalid."""
+    release = _dist.seal("policy.ppt", RELEASE, seq=1, targets=("mesh",), widens=True, signer="J")
+    statement = _dist.widening()
+    widening = _dist.seal("trust.widening", statement, seq=1, policy_sha256=canon.sha256_hex(RELEASE),
+                          release=env.release_id([("policy.ppt", canon.sha256_hex(RELEASE))]), targets=("mesh",),
+                          widens=True, signer="J")
+    revocation = _dist.trust_statement("trust.revocation", _dist.revocation(), seq=1, signers=("J",), targets=("mesh",))
+    rotation = _dist.trust_statement("trust.rotation", _dist.rotation(_pub("B").hex()), seq=1, signers=("J", "B"),
+                                     targets=("mesh",))
+    adds_install = _dist.trust_statement("trust.rotation", _dist.rotation(_pub("K").hex()), seq=1, signers=("A", "K"),
+                                         targets=("mesh",))
+    adds_retired = _dist.trust_statement("trust.rotation", _dist.rotation(_pub("L").hex()), seq=1, signers=("A", "L"),
+                                         targets=("mesh",))
+    drop_l = _install("install.trust", _trust_body(("J", "K"), 2), seq=1, signers=("J", "K", "L"), widens=False)
+    out = _run21(host_check, [
+        *_node(), *_anchor(("A", "K")), f"provision {S} {N}",                       # one key in both roles
+        *_anchor(("I", "K")), f"provision {S} {N}",                                 # the instance key
+        *_anchor(("J", "K"), operators=("I",)), f"provision {S} {N}",               # an operator key that is it
+        *_anchor(("J", "K"), operators=("K",)), f"provision {S} {N}",               # an install key also an operator
+        *_anchor(("J", "K", "L")), f"provision {S} {N}",
+        f"stage {release.hex()} {RELEASE.hex()} {N}", f"stage {widening.hex()} {statement.hex()} {N}",
+        f"stage {revocation.hex()} {_dist.revocation().hex()} {N}",
+        f"stage {rotation.hex()} {_dist.rotation(_pub('B').hex()).hex()} {N}",
+        _stage(drop_l),
+        f"stage {adds_install.hex()} {_dist.rotation(_pub('K').hex()).hex()} {N}",
+        f"stage {adds_retired.hex()} {_dist.rotation(_pub('L').hex()).hex()} {N}"])
+    assert out[:4] == [f"provision-refused {causes.NAMES['dist:rotation-invalid']}"] * 4
+    assert _last(out[4])["event"] == "provisioned"
+    assert [_refused(line)[0] for line in out[5:9]] == ["dist:unknown-key"] * 4
+    assert _last(out[9])["event"] == "install-applied"
+    assert [_refused(line)[0] for line in out[10:]] == ["dist:rotation-invalid"] * 2
+
+
+def test_case_165_177_the_install_threshold_and_the_retired_install_keys(host_check):
+    """case_165: IS2. With three install keys at a threshold of 2, one good signature is dist:unknown-key, two apply,
+    and one good with one by a retired install key is sig:revoked-key. case_177: IS11. Nine install keys retired one
+    after another forget the first, so a floor it signs with one current key is dist:unknown-key."""
+    retire_l = _install("install.trust", _trust_body(("J", "K", "M"), 2), seq=1, signers=("J", "K", "M"))
+    out = _run21(host_check, [
+        *_node(), *_anchor(("J", "K", "L")), f"provision {S} {N}", _stage(retire_l),
+        _stage(_install("install.fallback", FALLBACK, seq=1, signers=("J",))),
+        _stage(_install("install.fallback", FALLBACK, seq=1, signers=("J", "K"))),
+        _stage(_install("install.fallback", FALLBACK_B, seq=2, signers=("J", "L")))])
+    assert _last(out[1])["event"] == "install-widened"
+    assert _refused(out[2])[0] == "dist:unknown-key"
+    assert [one["event"] for one in _recs(out[3])] == ["staged", "install-widened"]
+    assert _refused(out[4])[0] == "sig:revoked-key"
+    steps, keys = [], ["K0"]
+    for n in range(1, 10):                           # K0 to K8 retired in turn, the ninth forgetting K0
+        steps.append(_stage(_install("install.trust", _trust_body(("J", f"K{n}"), 2), seq=n, signers=("J", f"K{n - 1}", f"K{n}"))))
+        keys.append(f"K{n}")
+    out = _run21(host_check, [*_node(), *_anchor(("J", "K0")), f"provision {S} {N}", *steps,
+                              _stage(_install("install.fallback", FALLBACK, seq=1, signers=("J", "K0"))),
+                              _stage(_install("install.fallback", FALLBACK, seq=1, signers=("J", "K1")))])
+    assert all(_last(line)["event"] == "install-widened" for line in out[1:10])
+    assert [_refused(line)[0] for line in out[10:]] == ["dist:unknown-key", "sig:revoked-key"]
+
+
+def test_case_166_a_threshold_of_1_takes_install_statements_by_provisioning_only(host_check):
+    """case_166: IS4, IS2. With an install threshold of 1 a floor and an install.trust in a message are
+    dist:target-mismatch whatever their signatures, and the same floor brought by provisioning is held."""
+    floor = _install("install.floor", FLOOR, seq=1, signers=("J",))
+    trust = _install("install.trust", _trust_body(("J", "K"), 1), seq=1, signers=("J", "K"))
+    out = _run21(host_check, [*_node(), *_anchor(("J",), 1), f"provision {S} {N}", _stage(floor), _stage(trust),
+                              "installid", *_anchor(("J",), 1, bring=[floor]), f"provision {S} {N}", "installid"])
+    assert [_refused(line) for line in out[1:3]] == [("dist:target-mismatch", 1), ("dist:target-mismatch", 4)]
+    assert out[3] == f"installid {_install_id()}"
+    assert (_last(out[4])["event"], _last(out[4])["cause"]) == ("provisioned", "dist:install-widened")
+    assert out[5] == f"installid {_install_id(floor=(floor[0], 1))}"
+
+
+def test_case_169_the_install_sequence_of_each_kind_only_rises(host_check):
+    """case_169: IS6. A floor at 2 and another at 3 below or beside the held one at 3 are dist:seq-replay, the same
+    one again changes nothing, one at 5 applies, one at 4 is dist:seq-replay, and a fallback policy at 1 applies."""
+    held = _install("install.floor", FLOOR, seq=3)
+    out = _run21(host_check, [*_node(), *_anchor(), f"provision {S} {N}", _stage(held),
+                              _stage(_install("install.floor", FLOOR_B, seq=2)),
+                              _stage(_install("install.floor", FLOOR_B, seq=3)), _stage(held),
+                              _stage(_install("install.floor", FLOOR_B, seq=5)),
+                              _stage(_install("install.floor", FLOOR, seq=4)),
+                              _stage(_install("install.fallback", FALLBACK, seq=1))])
+    assert _last(out[1])["event"] == "install-widened"
+    assert [_refused(line)[0] for line in out[2:4]] == ["dist:seq-replay"] * 2
+    assert [one["event"] for one in _recs(out[4])] == ["beat"]
+    assert _last(out[5])["event"] == "install-widened"
+    assert _refused(out[6])[0] == "dist:seq-replay"
+    assert (_last(out[7])["event"], _last(out[7])["subject"]) == ("install-widened", 2)
+
+
+def test_case_180_an_install_statement_never_moves_the_time_floor(host_check):
+    """case_180: IS5, T1. A mesh node with no clock and a release that expires in a month takes an action floor whose
+    not_before is a year ahead, and its time floor and its release stay as they were."""
+    floor = _install("install.floor", FLOOR, seq=1, not_before=NB + 365 * 86400)
+    out = _run21(host_check, [*_node(clock=False), *_anchor(), f"provision {S} {N}", *_release_steps21(RELEASE, 1),
+                              _stage(floor), f"record 0 {N}"])
+    committed, applied, beat = _last(out[3]), _last(out[4]), _last(out[5])
+    assert committed["event"] == "committed" and applied["event"] == "install-widened"
+    assert (beat["time"], beat["state"], beat["active_seq"]) == (committed["time"], "active", 1)
+
+
+def test_case_223_a_mesh_floor_skips_the_meta_members_it_does_not_read(host_check):
+    """case_223: IS1, IS5, the mesh half. A floor whose meta holds `counts` as a string is applied, since the mesh
+    reader reads `as`, `layout`, `command`, `rate` and `answer_rate` and skips the rest (E9)."""
+    floor = _install("install.floor", FLOOR, meta={"as": "policy.ppt", "command": 0, "counts": "three",
+                                                    "layout": LAYOUT})
+    out = _run21(host_check, [*_node(), *_anchor(), f"provision {S} {N}", _stage(floor)])
+    assert _last(out[1])["event"] == "install-widened"
+
+
+def test_case_174_an_install_key_retired_later_does_not_remove_what_it_signed(host_check):
+    """case_174: IS11, AF3. An install.trust adds L, a floor L signs applies, a second drops K, a floor K signs is
+    sig:revoked-key, and after a restart the fallback policy K signed is still held."""
+    fallback = _install("install.fallback", FALLBACK, seq=1, signers=("J", "K"))
+    out = _run21(host_check, [
+        *_node(), *_anchor(("J", "K")), f"provision {S} {N}", _stage(fallback),
+        _stage(_install("install.trust", _trust_body(("J", "K", "L"), 2), seq=1, signers=("J", "K", "L"))),
+        _stage(_install("install.floor", FLOOR, seq=1, signers=("J", "L"))),
+        _stage(_install("install.trust", _trust_body(("J", "L"), 2), seq=2, signers=("J", "L"), widens=False)),
+        _stage(_install("install.floor", FLOOR_B, seq=2, signers=("J", "K"))), f"restart {N}", "installid"])
+    assert [_last(line)["event"] for line in out[1:5]] == ["install-widened", "install-widened", "install-widened",
+                                                          "install-applied"]
+    assert _refused(out[5])[0] == "sig:revoked-key"
+    assert out[7] == f"installid {_install_id(floor=(_install('install.floor', FLOOR, seq=1, signers=('J', 'L'))[0], 1), fallback=(fallback[0], 1), trust_seq=2, trust_id=_envelope_id(_install('install.trust', _trust_body(('J', 'L'), 2), seq=2, signers=('J', 'L'), widens=False)[0]))}"
+
+
+def test_case_175_an_install_trust_statement_is_held_to_its_rules_and_the_trust_store_never_moves(host_check):
+    """case_175: IS11, IS7. Two above the install trust sequence, no signature by the key it adds, fewer signatures
+    than the threshold, five keys, a threshold of 0, and adding the instance key, a trusted authority key, a revoked
+    key id or a retired install key, and one signed only by authority keys."""
+    revoke = _dist.trust_statement("trust.revocation", _dist.revocation(keys=[_kid("X")]), seq=1, signers=("A",),
+                                   targets=("mesh",))
+    retire = _install("install.trust", _trust_body(("J", "K", "M"), 2), seq=1, signers=("J", "K", "M"))
+    def trust(keys, threshold, signers, seq=2, body=None):
+        return _install("install.trust", body or _trust_body(keys, threshold), seq=seq, signers=signers)
+    five = canon.canon2_bytes({"encoding": "canon/2", "format": "prismpath.dist-install-trust/1",
+                               "keys": sorted(_pub(name).hex() for name in ("J", "K", "M", "P", "Q")),
+                               "operators": [], "threshold": 2})
+    out = _run21(host_check, [
+        *_node(), *_anchor(("J", "K", "L")), f"provision {S} {N}",
+        f"stage {revoke.hex()} {_dist.revocation(keys=[_kid('X')]).hex()} {N}", _stage(retire),
+        _stage(trust(("J", "K", "M", "P"), 2, ("J", "K", "P"), seq=3)),
+        _stage(trust(("J", "K", "M", "P"), 2, ("J", "K"))),
+        _stage(trust(("J", "K", "M", "P"), 2, ("J", "P"))),
+        _stage(trust(None, 2, ("J", "K"), body=five)),
+        _stage(trust(None, 0, ("J", "K"), body=_trust_body(("J", "K"), 0))),
+        _stage(trust(("J", "K", "I"), 2, ("J", "K", "I"))),
+        _stage(trust(("J", "K", "A"), 2, ("J", "K", "A"))),
+        _stage(trust(("J", "K", "X"), 2, ("J", "K", "X"))),
+        _stage(trust(("J", "K", "L"), 2, ("J", "K", "L"))),
+        _stage(trust(("J", "K"), 2, ("A",))), f"record 0 {N}"])
+    assert _last(out[1])["event"] == "trust-applied" and _last(out[2])["event"] == "install-widened"
+    assert [_refused(line)[0] for line in out[3:13]] == [
+        "dist:trust-replay", "dist:rotation-invalid", "dist:unknown-key", "dist:too-large", "dist:bad-format",
+        "dist:rotation-invalid", "dist:rotation-invalid", "dist:rotation-invalid", "dist:rotation-invalid",
+        "dist:unknown-key"]
+    assert (_last(out[13])["trust_seq"], _last(out[13])["trust_low"]) == (1, 1)
+
+
+def test_case_176_four_keys_at_a_threshold_of_4_add_a_fifth_in_two_statements(host_check):
+    """case_176: IS11, the C half. A sealed envelope holds four signatures (S2), so a statement that would need five
+    cannot be sealed. The engineer drops a key at a threshold of 3, then adds the new one, and both are applied."""
+    with pytest.raises(Refused):
+        _install("install.trust", _trust_body(("J", "K", "L", "M", "P"), 4), signers=("J", "K", "L", "M", "P"))
+    out = _run21(host_check, [
+        *_node(), *_anchor(("J", "K", "L", "M"), 4), f"provision {S} {N}",
+        _stage(_install("install.trust", _trust_body(("J", "K", "L"), 3), seq=1, signers=("J", "K", "L", "M"))),
+        _stage(_install("install.trust", _trust_body(("J", "K", "L", "P"), 3), seq=2, signers=("J", "K", "L", "P")))])
+    assert [_last(line)["event"] for line in out[1:]] == ["install-widened", "install-widened"]   # lowers, then adds
+
+
+def test_case_218_an_install_trust_or_a_rate_that_widens_says_so(host_check):
+    """case_218: IS11, IS12, AF8. An install.trust that adds a key with widens false is dist:widening-unsigned, one
+    that lowers the threshold with widens true is applied as install-widened, and a floor of the same table with a
+    looser rate and widens false is dist:widening-unsigned."""
+    rate = lambda allows: {"as": "policy.ppt", "command": 0, "layout": LAYOUT,  # noqa: E731
+                           "rate": {"allows": allows, "window": 60}}
+    floor = _install("install.floor", FLOOR, seq=1, meta=rate(3), signers=("J", "K", "L"))
+    out = _run21(host_check, [
+        *_node(), *_anchor(("J", "K", "L"), 3), f"provision {S} {N}", _stage(floor),
+        _stage(_install("install.trust", _trust_body(("J", "K", "L", "M"), 3), seq=1, signers=("J", "K", "L", "M"),
+                        widens=False)),
+        _stage(_install("install.trust", _trust_body(("J", "K", "L"), 2), seq=1, signers=("J", "K", "L"))),
+        _stage(_install("install.floor", FLOOR, seq=2, meta=rate(5), widens=False, replaces=canon.sha256_hex(FLOOR)))])
+    assert _last(out[1])["event"] == "install-widened"
+    assert _refused(out[2]) == ("dist:widening-unsigned", 4)
+    assert (_last(out[3])["event"], _last(out[3])["cause"]) == ("install-widened", "dist:install-widened")
+    assert _refused(out[4]) == ("dist:widening-unsigned", 1)
+
+
+def test_case_221_224_233_operator_keys_are_kept_apart_and_never_used_on_a_mesh_node(host_check):
+    """case_221: OP1, IS11, the PEP's half. An anchor enrolls one operator key, an install.trust that adds a second
+    is dist:widening-unsigned with widens false and applied as install-widened with widens true, one that adds an
+    install key as an operator is dist:rotation-invalid, and an operator key signs neither an install statement
+    nor a release. case_224: K4, O4, IS11. An anchor whose operator key is an authority or an install key is refused,
+    a rotation that adds an operator key, held or retired, is dist:rotation-invalid, and so is an install.trust that
+    puts one key in both lists or adds as an operator a key retired as an install key; one that drops an operator
+    key retires it, and adding it again is dist:rotation-invalid. case_233: IS13, IS11. With a threshold of 1, an
+    install provisioning drops an operator key, and an answer that key signs is dist:target-mismatch."""
+    floor = _install("install.floor", FLOOR, seq=1, signers=("O",))
+    release = _dist.seal("policy.ppt", RELEASE, seq=1, targets=("mesh",), widens=True, signer="O")
+    adds_op = _dist.trust_statement("trust.rotation", _dist.rotation(_pub("O").hex()), seq=1, signers=("A", "O"),
+                                    targets=("mesh",))
+    adds_retired_op = _dist.trust_statement("trust.rotation", _dist.rotation(_pub("P").hex()), seq=1,
+                                            signers=("A", "P"), targets=("mesh",))
+    both = canon.canon2_bytes({"encoding": "canon/2", "format": "prismpath.dist-install-trust/1",
+                               "keys": sorted([_pub("J").hex(), _pub("K").hex(), _pub("Q").hex()]),
+                               "operators": sorted([_pub("O").hex(), _pub("Q").hex()]), "threshold": 2})
+    out = _run21(host_check, [
+        *_node(), *_anchor(("J", "K"), operators=("A",)), f"provision {S} {N}",
+        *_anchor(("J", "K"), operators=("J",)), f"provision {S} {N}",
+        *_anchor(("J", "K", "L"), operators=("O",)), f"provision {S} {N}",
+        _stage(_install("install.trust", _trust_body(("J", "K", "L"), 2, ("O", "P")), seq=1, signers=("J", "K", "P"),
+                        widens=False)),
+        _stage(_install("install.trust", _trust_body(("J", "K", "L"), 2, ("O", "P")), seq=1, signers=("J", "K", "P"))),
+        _stage(_install("install.trust", _trust_body(("J", "L"), 2, ("K", "O", "P")), seq=2, signers=("J", "L"))),
+        _stage(floor), f"stage {release.hex()} {RELEASE.hex()} {N}",
+        f"stage {adds_op.hex()} {_dist.rotation(_pub('O').hex()).hex()} {N}",
+        _stage(_install("install.trust", _trust_body(("J", "K", "L"), 2, ("O",)), seq=2, signers=("J", "K"),
+                        widens=False)),
+        f"stage {adds_retired_op.hex()} {_dist.rotation(_pub('P').hex()).hex()} {N}",
+        _stage(_install("install.trust", both, seq=3, signers=("J", "K", "Q"))),
+        _stage(_install("install.trust", _trust_body(("J", "K"), 2, ("O",)), seq=3, signers=("J", "K"), widens=False)),
+        _stage(_install("install.trust", _trust_body(("J", "K"), 2, ("L", "O")), seq=4, signers=("J", "K", "L"))),
+        _stage(_install("install.trust", _trust_body(("J", "K"), 2, ("O", "P")), seq=4, signers=("J", "K", "P")))])
+    assert out[:2] == [f"provision-refused {causes.NAMES['dist:rotation-invalid']}"] * 2
+    assert _last(out[2])["event"] == "provisioned"
+    assert _refused(out[3]) == ("dist:widening-unsigned", 4)
+    assert (_last(out[4])["event"], _last(out[4])["subject"]) == ("install-widened", 4)
+    assert _refused(out[5]) == ("dist:rotation-invalid", 4)
+    assert [_refused(line)[0] for line in out[6:9]] == ["dist:unknown-key", "dist:unknown-key", "dist:rotation-invalid"]
+    assert (_last(out[9])["event"], _last(out[9])["trust_low"]) == ("install-applied", 2)   # P retired
+    assert [_refused(line)[0] for line in out[10:12]] == ["dist:rotation-invalid"] * 2
+    assert (_last(out[12])["event"], _last(out[12])["trust_low"]) == ("install-applied", 3)   # L retired as install
+    assert [_refused(line)[0] for line in out[13:]] == ["dist:rotation-invalid"] * 2
+    answer_body = canon.canon2_bytes({"answer": "allow", "encoding": "canon/2", "format": "prismpath.dist-answer/1",
+                                      "pep": _h16(_dist.instance_key().public_raw), "receipt": ZERO})
+    def answer(signer):
+        raw = canon.canon2_bytes({"artifact": "operator.answer", "body_sha256": canon.sha256_hex(answer_body),
+                                  "body_size": len(answer_body), "encoding": "canon/2", "expires": N + 600,
+                                  "format": "prismpath.dist/1", "meta": {}, "not_before": N, "policy_sha256": ZERO,
+                                  "release": ZERO, "replaces": "", "seq": 1, "stream": S, "targets": ["mesh"],
+                                  "widens": False})
+        return f"stage {env.seal(raw, [G.test_key(signer)]).hex()} {answer_body.hex()} {N}"
+    out = _run21(host_check, [
+        *_node(), *_anchor(("J",), 1, operators=("O", "P")), f"provision {S} {N}", answer("O"),
+        "bring " + " ".join(_install("install.trust", _trust_body(("J",), 1, ("O",)), seq=1, signers=("J",),
+                                     widens=False)), f"install_provision {N}", answer("P"), f"record 0 {N}"])
+    assert _refused(out[1])[0] == "dist:target-mismatch"
+    assert (_last(out[2])["event"], _last(out[2])["trust_low"]) == ("install-applied", 1)
+    assert _refused(out[3])[0] == "dist:target-mismatch"
+    assert (_last(out[4])["trust_seq"], _last(out[4])["floor"]) == (0, 0)
+
+
+def test_case_170_a_provisioning_never_lowers_the_install_part_and_a_disjoint_key_set_starts_it_again(host_check):
+    """case_170: IS6, IS10, P4. A PEP holding a floor at 5 and a fallback policy is provisioned with its own install
+    key set and a floor at 4 (seq-replay, the held floor stays), with an anchor alone, with a lower install trust
+    sequence (dist:trust-replay), with a higher one that shares a key and drops another and brings a floor at 1
+    (the key set changes, the dropped key is retired, the install trust id is the anchor's fingerprint and the
+    floor at 1 is seq-replay), and with a higher one that shares no key and brings a floor at 1 and no fallback
+    policy (the floor is held, every old key retired, the fallback policy dropped). The floor at 5 is then
+    sig:revoked-key."""
+    floor5 = _install("install.floor", FLOOR, seq=5)
+    fallback = _install("install.fallback", FALLBACK, seq=1)
+    second, third = (hashlib.sha256(name).hexdigest() for name in (b"second anchor", b"third anchor"))
+    floor1_shared = _install("install.floor", FLOOR_B, seq=1, signers=("J", "L"))
+    floor1_new = _install("install.floor", FLOOR_B, seq=1, signers=("P", "Q"))
+    out = _run21(host_check, [
+        *_node(), *_anchor(seq=1, bring=[floor5, fallback]), f"provision {S} {N}", "installid",
+        *_anchor(seq=1, bring=[_install("install.floor", FLOOR_B, seq=4)]), f"provision {S} {N}", "installid",
+        *_anchor(seq=1), f"provision {S} {N}", "installid",
+        *_anchor(seq=0), f"provision {S} {N}",
+        *_anchor(("J", "L"), seq=2, fingerprint=second, bring=[floor1_shared]), f"provision {S} {N}", "installid",
+        _stage(_install("install.fallback", FALLBACK_B, seq=2, signers=("J", "K"))),
+        *_anchor(("P", "Q"), seq=3, fingerprint=third, bring=[floor1_new]), f"provision {S} {N}", "installid",
+        _stage(floor5)])
+    held = _install_id(floor=(floor5[0], 5), fallback=(fallback[0], 1), trust_seq=1)
+    assert [out[1], out[3], out[5]] == [f"installid {held}"] * 3
+    assert out[6] == f"provision-refused {causes.NAMES['dist:trust-replay']}"
+    assert out[8] == f"installid {_install_id(floor=(floor5[0], 5), fallback=(fallback[0], 1), trust_seq=2, trust_id=second)}"
+    assert _refused(out[9])[0] == "sig:revoked-key"                          # K was retired
+    assert out[11] == f"installid {_install_id(floor=(floor1_new[0], 1), trust_seq=3, trust_id=third)}"
+    assert _refused(out[12])[0] == "sig:revoked-key"
+
+
+def test_case_171_227_a_locked_pep_and_an_install_provisioning_keep_their_state(host_check):
+    """case_171: IS6, FB1. A locked PEP with a threshold of 2 applies a fallback policy and stays locked. case_227:
+    IS13, IS6, P3. With a threshold of 1, a floor of section 6 at 7, a time floor a day ahead of its clock and a floor
+    at 2, an install provisioning with a floor at 3 is applied as install-applied with the floor, the trust sequence
+    and the time floor unchanged, the same again changes nothing, one at 2 is seq-replay, a release at 6 is
+    seq-replay, and a locked PEP takes an install provisioning and stays locked."""
+    out = _run21(host_check, [*_node(), *_anchor(), f"provision {S} {N}", "lose floor", f"restart {N}",
+                              _stage(_install("install.fallback", FALLBACK, seq=1))])
+    assert out[1] == "records"                       # a start sends no record of its own
+    record = _last(out[2])
+    assert (record["event"], record["state"], record["fallback"]) == ("install-widened", "locked", True)
+    ahead = NB + 86400
+    floor2 = _install("install.floor", FLOOR, seq=2, signers=("J",))
+    renewal = _install("install.floor", FLOOR, seq=3, signers=("J",), widens=False, replaces=canon.sha256_hex(FLOOR))
+    out = _run21(host_check, [
+        *_node(clock=False), *_anchor(("J",), 1, bring=[floor2]), f"provision {S} {N}",
+        *_release_steps21(RELEASE, 7, not_before=ahead, expires=ahead + 30 * 86400), f"record 0 {N}",
+        "bring " + " ".join(renewal), f"install_provision {N}", "bring " + " ".join(renewal), f"install_provision {N}",
+        "bring " + " ".join(_install("install.floor", FLOOR_B, seq=2, signers=("J",))), f"install_provision {N}",
+        f"stage {_dist.seal('policy.ppt', BODIES[1], seq=6, targets=('mesh',), widens=True).hex()} {BODIES[1].hex()} {N}",
+        "lose floor", f"restart {N}",
+        "bring " + " ".join(_install("install.floor", FLOOR, seq=4, signers=("J",), widens=False,
+                                     replaces=canon.sha256_hex(FLOOR))), f"install_provision {N}"])
+    before = _last(out[4])
+    assert (before["floor"], before["time"], before["trust_seq"]) == (7, ahead, 0)
+    applied = _last(out[5])
+    assert (applied["event"], applied["subject"], applied["floor"], applied["time"], applied["trust_seq"]) == (
+        "install-applied", 1, 7, ahead, 0)
+    assert _last(out[6])["event"] == "beat"
+    assert _refused(out[7])[0] == "dist:seq-replay"
+    assert _refused(out[8])[0] == "dist:seq-replay"
+    assert (_last(out[10])["event"], _last(out[10])["state"]) == ("install-applied", "locked")
+
+
+def test_case_172_the_authority_s_revocation_never_reaches_an_install_statement(host_check):
+    """case_172: IS7, AF3, the PEP's half. A revocation that lists an install key id, the floor's envelope id and its
+    policy hash is applied, the floor allows as before and the install key still counts, and a rotation whose retire
+    names an install key is dist:rotation-invalid."""
+    floor = _install("install.floor", FLOOR, seq=1)
+    body = _dist.revocation(keys=[_kid("J")], envelopes=[_envelope_id(floor[0])], policies=[canon.sha256_hex(FLOOR)])
+    revocation = _dist.trust_statement("trust.revocation", body, seq=1, signers=("A",), targets=("mesh",))
+    rotation = _dist.trust_statement("trust.rotation", _dist.rotation(_pub("B").hex(), _kid("K")), seq=2,
+                                     signers=("A", "B"), targets=("mesh",))
+    out = _run21(host_check, [*_node(), *_anchor(), f"provision {S} {N}", _stage(floor),
+                              f"stage {revocation.hex()} {body.hex()} {N}", f"ask {N} {_regs(3)} -",
+                              _stage(_install("install.fallback", FALLBACK, seq=1)),
+                              f"stage {rotation.hex()} {_dist.rotation(_pub('B').hex(), _kid('K')).hex()} {N}"])
+    assert _last(out[2])["event"] == "trust-applied"
+    assert _ask(out[3])["basis"] == "floor"
+    assert _last(out[4])["event"] == "install-widened"
+    assert _refused(out[5])[0] == "dist:rotation-invalid"
+
+
+def test_case_178_the_empty_set_withdraws_its_kind(host_check):
+    """case_178: IS1, IS6, IS12. The empty floor at a higher seq withdraws the floor with install-applied, the held
+    floor again is seq-replay, and the empty ceiling withdraws the ceiling with install-widened."""
+    floor = _install("install.floor", FLOOR, seq=1)
+    ceiling = _install("install.ceiling", _ceiling(FLOOR, RELEASE), seq=1)
+    out = _run21(host_check, [*_node(), *_anchor(), f"provision {S} {N}", _stage(ceiling), _stage(floor),
+                              _stage(_install("install.floor", seq=2, widens=False, replaces=canon.sha256_hex(FLOOR))),
+                              _stage(floor), "installid",
+                              _stage(_install("install.ceiling", seq=2, widens=True,
+                                              replaces=canon.sha256_hex(_ceiling(FLOOR, RELEASE)))), "installid"])
+    assert (_last(out[1])["event"], _last(out[2])["event"]) == ("install-applied", "install-widened")
+    assert (_last(out[3])["event"], _last(out[3])["subject"]) == ("install-applied", 1)
+    assert _refused(out[4])[0] == "dist:seq-replay"
+    assert out[5] == f"installid {_install_id(ceiling=(ceiling[0], 1))}"
+    record = _last(out[6])
+    assert (record["event"], record["cause"], record["subject"]) == ("install-widened", "dist:install-widened", 3)
+    assert out[7] == f"installid {_install_id()}"
+
+
+def test_case_182_234_the_older_forms_stay_refused(host_check):
+    """case_182: IS9, L2. A PEP that holds an install statement and committed nothing refuses the older forms, again
+    after a second provisioning and after its install record is made unreadable. case_234: L2, P3. A PEP that never
+    held one refuses them on a stream it committed on, also after it is provisioned again."""
+    out = _run21(host_check, [*_node(), *_anchor(bring=[_install("install.floor", FLOOR)]), f"provision {S} {N}",
+                              f"legacy {S}", f"legacy mesh/other", *_anchor(), f"provision {S} {N}", f"legacy {S}",
+                              "lose install", "lose2 install", f"restart {N}", f"legacy {S}"])
+    refused = f"legacy {causes.NAMES['dist:legacy-refused']}"
+    assert out[1:3] == [refused, refused] and out[4] == refused and out[6] == refused
+    assert _refused(out[5])[0] == "dist:install-lost"
+    out = _run21(host_check, [*_node(), *_anchor(None), f"provision {S} {N}", f"legacy {S}",
+                              *_release_steps21(RELEASE, 1), f"legacy {S}", f"legacy mesh/other",
+                              *_anchor(None), f"provision {S} {N}", f"legacy {S}"])
+    assert out[1] == "legacy 0" and out[5] == refused and out[6] == "legacy 0" and out[8] == refused
+
+
+def test_case_195_197_198_201_the_fallback_policy_decides_whenever_no_release_does(host_check):
+    """case_195: FB1, FB2, FB3. A mesh PEP with a fallback policy sees its release expire, has its release revoked,
+    starts with nothing committed and loses its floor of section 6: the fallback policy decides each time, event
+    fallback with dist:expired, dist:revoked, dist:fallback and dist:floor-lost, bit 4 set, no-policy three times and
+    locked once, the active hash zeros, and no decision is dist:policy-lapsed. case_198: FB4. Going to it sends the
+    state record and nothing else. case_201: FB7, X2. A cut off PEP decides under its release until it expires and
+    then under the fallback policy for a year. case_197: FB1, X3. With an action floor and no fallback policy, the
+    release expires to no-policy with lapsed, bit 4 clear, and what the floor is silent on is dist:policy-lapsed."""
+    fallback = _install("install.fallback", FALLBACK, seq=1)
+    second = BODIES[1]
+    revoke = _dist.trust_statement("trust.revocation", _dist.revocation(policies=[canon.sha256_hex(second)]), seq=1,
+                                   signers=("A",), targets=("mesh",))
+    out = _run21(host_check, [
+        *_node(), *_anchor(bring=[fallback]), f"provision {S} {N}", *_release_steps21(RELEASE, 1),
+        f"ask {E - 1} {_regs(150)} -", f"tick 0 {E}", f"ask {E} {_regs(150)} -", f"ask {E + 365 * 86400} {_regs(150)} -",
+        *_release_steps21(second, 2, now=N, replaces=""),
+        f"stage {revoke.hex()} {_dist.revocation(policies=[canon.sha256_hex(second)]).hex()} {N}",
+        f"ask {N} {_regs(150)} -", f"restart {N}", "lose floor", f"restart {N}", f"ask {N} {_regs(150)} -"])
+    assert _ask(out[4])["basis"] == "release"
+    expired = _recs(out[5])
+    assert [(one["event"], one["cause"], one["state"], one["fallback"], one["active_seq"]) for one in expired] == [
+        ("fallback", "dist:expired", "no-policy", True, 0)]                  # FB4: one record and nothing else
+    assert [_ask(line)["basis"] for line in out[6:8]] == ["fallback", "fallback"]
+    assert [(one["event"], one["cause"], one["fallback"]) for one in _recs(out[11])] == [
+        ("fallback", "dist:revoked", True), ("trust-applied", None, True)]
+    assert _ask(out[12])["basis"] == "fallback"
+    assert [(one["event"], one["cause"], one["state"]) for one in _recs(out[13])] == [
+        ("fallback", "dist:fallback", "no-policy")]
+    assert [(one["event"], one["cause"], one["state"], one["fallback"]) for one in _recs(out[14])] == [
+        ("fallback", "dist:floor-lost", "locked", True)]
+    assert (_ask(out[15])["basis"], _ask(out[15])["cause"]) == ("fallback", None)
+    out = _run21(host_check, [*_node(), *_anchor(bring=[_install("install.floor", FLOOR)]), f"provision {S} {N}",
+                              *_release_steps21(RELEASE, 1), f"tick 0 {E}", f"ask {E} {_regs(150)} -"])
+    lapsed = _last(out[4])
+    assert (lapsed["event"], lapsed["cause"], lapsed["fallback"]) == ("lapsed", "dist:expired", False)
+    assert (_ask(out[5])["basis"], _ask(out[5])["cause"]) == (None, "dist:policy-lapsed")
+
+
+def test_case_199_the_only_way_out_of_the_fallback_policy_is_a_commit(host_check):
+    """case_199: FB5, FB2. Under the fallback policy a release with no widening statement, or one whose `from` holds
+    the fallback policy's hash, is dist:widening-unsigned, and one whose `from` is empty commits with bit 4 clear. A
+    locked PEP under its fallback policy admits no release and decides under it until it is provisioned."""
+    fallback = _install("install.fallback", FALLBACK, seq=1)
+    release = _dist.seal("policy.ppt", RELEASE, seq=1, targets=("mesh",), widens=True)
+    named = _dist.widening([canon.sha256_hex(FALLBACK)])
+    statement = _dist.seal("trust.widening", named, seq=1, policy_sha256=canon.sha256_hex(RELEASE),
+                           release=env.release_id([("policy.ppt", canon.sha256_hex(RELEASE))]), targets=("mesh",),
+                           widens=True)
+    commit = f"commit {S} 1 {canon.sha256_hex(RELEASE)} 0 0 {N}"
+    out = _run21(host_check, [*_node(), *_anchor(bring=[fallback]), f"provision {S} {N}",
+                              f"stage {release.hex()} {RELEASE.hex()} {N}", commit,
+                              f"stage {statement.hex()} {named.hex()} {N}", f"stage {release.hex()} {RELEASE.hex()} {N}",
+                              commit, *_release_steps21(RELEASE, 2)])
+    assert _refused(out[1])[0] == "dist:widening-unsigned"
+    assert _refused(out[4])[0] == "dist:widening-unsigned"
+    assert _refused(out[2])[0] == "dist:not-staged"
+    committed = _last(out[8])
+    assert (committed["event"], committed["fallback"], committed["state"]) == ("committed", False, "active")
+    out = _run21(host_check, [*_node(), *_anchor(bring=[fallback]), f"provision {S} {N}", "lose floor", f"restart {N}",
+                              *_release_steps21(RELEASE, 1), f"ask {N} {_regs(150)} -",
+                              *_anchor(bring=[]), f"provision {S} {N}", f"ask {N} {_regs(150)} -"])
+    assert [_refused(line)[0] for line in out[2:5]] == ["dist:floor-lost"] * 3
+    assert _ask(out[5])["basis"] == "fallback"
+    assert _last(out[6])["state"] == "no-policy" and _ask(out[7])["basis"] == "fallback"
+
+
+def test_case_204_205_everything_the_pep_decides_under_is_inside_its_ceiling(host_check):
+    """case_204: CL2, C3, RB2. A staged release, and a kept one, outlive a narrower ceiling they are above and are
+    refused with dist:above-ceiling at the commit and at the rollback and dropped. case_205: CL3, IS12, the C half. A
+    floor, a fallback policy and a ceiling the held floor is above are dist:above-ceiling with nothing changed; a
+    ceiling the active release is above, with widens false, is applied as install-widened and the release lapses
+    with dist:above-ceiling, to the fallback policy and to no-policy."""
+    wide = _ceiling(RELEASE, BODIES[1], BODIES[2])
+    def ceiling(seq, *bodies, widens=False, replaces=canon.sha256_hex(wide)):
+        return _install("install.ceiling", _ceiling(*bodies), seq=seq, widens=widens, replaces=replaces)
+    staged = _dist.seal("policy.ppt", BODIES[1], seq=2, targets=("mesh",), widens=True)
+    out = _run21(host_check, [
+        *_node(), *_anchor(bring=[_install("install.ceiling", wide)]), f"provision {S} {N}",
+        *_release_steps21(RELEASE, 1)[:2],                                   # staged, not committed
+        _stage(ceiling(2, BODIES[1], BODIES[2])), "state", f"commit {S} 1 {canon.sha256_hex(RELEASE)} 0 0 {N}", "state"])
+    assert _last(out[3])["event"] == "install-applied" and out[4] == "state - - 1"
+    assert _refused(out[5])[0] == "dist:above-ceiling" and out[6] == "state - - -"
+    out = _run21(host_check, [
+        *_node(), *_anchor(bring=[_install("install.ceiling", wide)]), f"provision {S} {N}",
+        *_release_steps21(RELEASE, 1), *_release_steps21(BODIES[1], 2, replaces=canon.sha256_hex(RELEASE)),
+        _stage(ceiling(2, BODIES[1], BODIES[2])), "state", f"rollback {N}", "state"])
+    assert _last(out[7])["event"] == "install-applied" and out[8] == "state 2 1 -"
+    assert _refused(out[9])[0] == "dist:above-ceiling" and out[10] == "state 2 - -"
+    floor_out = _install("install.floor", FLOOR_B, seq=2)
+    out = _run21(host_check, [
+        *_node(), *_anchor(bring=[_install("install.ceiling", _ceiling(FLOOR, FALLBACK, RELEASE))]), f"provision {S} {N}",
+        _stage(_install("install.floor", FLOOR)), _stage(floor_out), _stage(_install("install.fallback", FALLBACK_B)),
+        _stage(_install("install.ceiling", _ceiling(FALLBACK, RELEASE), seq=2,
+                        replaces=canon.sha256_hex(_ceiling(FLOOR, FALLBACK, RELEASE)))), "installid"])
+    assert _last(out[1])["event"] == "install-widened"
+    assert [_refused(line) for line in out[2:5]] == [("dist:above-ceiling", 1), ("dist:above-ceiling", 2),
+                                                     ("dist:above-ceiling", 3)]
+    for bring, after in (([_install("install.fallback", FALLBACK)], ("fallback", True)), ([], ("lapsed", False))):
+        everything = _ceiling(FALLBACK, RELEASE)
+        out = _run21(host_check, [
+            *_node(), *_anchor(bring=[_install("install.ceiling", everything), *bring]), f"provision {S} {N}",
+            *_release_steps21(RELEASE, 1),
+            _stage(_install("install.ceiling", _ceiling(FALLBACK), seq=2, replaces=canon.sha256_hex(everything)))])
+        records = _recs(out[4])
+        assert [(one["event"], one["cause"]) for one in records] == [
+            ("staged", None), ("install-widened", "dist:install-widened"), (after[0], "dist:above-ceiling")]
+        assert records[-1]["fallback"] is after[1] and records[-1]["active_seq"] == 0
+
+
+def test_case_207_208_each_decision_names_its_basis_and_the_set_that_decided(host_check):
+    """case_207: RC1. A release allows and refuses with basis release, the action floor allows with basis floor, the
+    fallback policy allows and refuses with basis fallback, each with the policy hash of its set, and a PEP with no
+    fallback policy refuses in no-policy with no basis and dist:policy-lapsed. case_208: RC2, RC3. A held PEP decides
+    under its release with the hold mark, and a floor allow carries the hold mark and dist:floor-allowed."""
+    out = _run21(host_check, [
+        *_node(), *_anchor(bring=[_install("install.floor", FLOOR), _install("install.fallback", FALLBACK)]),
+        f"provision {S} {N}", f"ask {N} {_regs(150)} -", f"ask {N} {_regs(50)} -", *_release_steps21(RELEASE, 1),
+        f"ask {N} {_regs(7)} -", f"ask {N} {_regs(4)} -", f"ask {N} {_regs(3)} -"])
+    asked = [_ask(line) for line in (out[1], out[2], out[6], out[7], out[8])]
+    assert [(one["outcome"], one["basis"], one["policy"]) for one in asked] == [
+        (ALLOW, "fallback", _h16(FALLBACK)), (REFUSE, "fallback", _h16(FALLBACK)), (ALLOW, "release", _h16(RELEASE)),
+        (REFUSE, "release", _h16(RELEASE)), (ALLOW, "floor", _h16(FLOOR))]
+    assert (asked[-1]["cause"], asked[-1]["would"], asked[-1]["would_policy"]) == (
+        "dist:floor-allowed", REFUSE, _h16(RELEASE))
+    out = _run21(host_check, [*_node(), *_anchor(bring=[_install("install.floor", FLOOR)]), f"provision {S} {N}",
+                              f"ask {N} {_regs(50)} -"])
+    assert (_ask(out[1])["basis"], _ask(out[1])["cause"], _ask(out[1])["policy"]) == (None, "dist:policy-lapsed", None)
+    out = _run21(host_check, [*_node(hold=True), *_anchor(bring=[_install("install.floor", FLOOR)]),
+                              f"provision {S} {N}", *_release_steps21(RELEASE, 1), f"tick 0 {E}",
+                              f"ask {E} {_regs(7)} -", f"ask {E} {_regs(3)} -"])
+    assert _last(out[4])["event"] == "held"
+    release, floor = _ask(out[5]), _ask(out[6])
+    assert (release["basis"], release["held"], release["outcome"]) == ("release", True, ALLOW)
+    assert (floor["basis"], floor["held"], floor["cause"]) == ("floor", True, "dist:floor-allowed")
+
+
+def test_case_210_a_record_carries_the_install_entry_in_one_frame(host_check):
+    """case_210: H10, H1, B10. After three floor allows of which one overrode the release, a record carries a type 3
+    entry of 27 bytes with the install id, the low 16 bits of the install trust sequence and counts of 3 and 1 that
+    never go down, also after a restart, and a new floor is install-applied with subject 1 and another install id.
+    Each record is 242 bytes, a frame of 246, with no type 1 or type 2 entry."""
+    floor = _install("install.floor", _floor_table((7, 3)))
+    renewal = _install("install.floor", _floor_table((7, 3)), seq=2, widens=False,
+                       replaces=canon.sha256_hex(_floor_table((7, 3))))
+    trust = _install("install.trust", _trust_body(("J", "K"), 2), seq=1, widens=False)
+    out = _run21(host_check, [
+        *_node(), *_anchor(bring=[floor]), f"provision {S} {N}", _stage(trust), *_release_steps21(RELEASE, 1),
+        f"ask {N} {_regs(7)} -", f"ask {N} {_regs(7)} -", f"ask {N} {_regs(3)} -", f"record 0 {N}", f"record 0 {N}",
+        f"restart {N}", f"record 0 {N}", _stage(renewal)])
+    first, none, after = _last(out[8]), _last(out[9]), _last(out[11])
+    held = _install_id(floor=(floor[0], 1), trust_seq=1, trust_id=_envelope_id(trust[0]))
+    assert (first["install_id"], first["trust_low"], first["answers"], first["overrides"]) == (held, 1, 3, 1)
+    assert (none["answers"], none["overrides"]) == (after["answers"], after["overrides"]) == (3, 1)
+    applied = _last(out[12])
+    assert (applied["event"], applied["subject"]) == ("install-applied", 1)
+    assert applied["install_id"] == _install_id(floor=(renewal[0], 2), trust_seq=1, trust_id=_envelope_id(trust[0]))
+    every = [one for line in out if line.startswith("records") for one in _recs(line)]
+    assert {one["size"] for one in every} == {242} and all(one["entries"] == 30 for one in every)
+    assert 4 + 242 <= 250                                                   # B10: a state frame of 246 bytes
+
+
+def test_case_215_183_a_lost_ceiling_freezes_and_a_lost_set_or_record_is_reported(host_check):
+    """case_215: IS10. A PEP whose ceiling no copy holds reports dist:install-lost, its release keeps deciding, and an
+    offer, a rollback and a floor are dist:install-lost until a ceiling at a new seq is applied, after which a release
+    inside it stages; a PEP that held a ceiling and lost its install record refuses a release with dist:install-lost
+    until it is provisioned. case_183: IS10, IS6. One changed byte of a stored floor beside a good second copy reads
+    the good copy; with no good copy the floor is lost, leaves the install id and the PEP decides as one that never
+    had it, the same floor again changes nothing and one at a new seq applies. A PEP with one copy of its install
+    record unreadable uses the second, and with both holds no set, reports dist:install-lost, keeps deciding under
+    its release and takes no install statement in a message and no release until it is provisioned."""
+    ceiling_body = _ceiling(RELEASE, BODIES[1], BODIES[2])
+    ceiling = _install("install.ceiling", ceiling_body)
+    out = _run21(host_check, [
+        *_node(), *_anchor(bring=[ceiling]), f"provision {S} {N}", *_release_steps21(RELEASE, 1),
+        *_release_steps21(BODIES[1], 2, replaces=canon.sha256_hex(RELEASE)),
+        "lose set_ceiling", "lose2 set_ceiling", f"restart {N}", f"ask {N} {_regs(7)} -",
+        f"stage {_dist.seal('policy.ppt', BODIES[2], seq=3, targets=('mesh',), widens=True).hex()} {BODIES[2].hex()} {N}",
+        f"rollback {N}", _stage(_install("install.floor", FLOOR)),
+        _stage(_install("install.ceiling", ceiling_body, seq=2, widens=True)),
+        *_release_steps21(BODIES[2], 3, replaces=canon.sha256_hex(BODIES[1]))[:2]])
+    assert _refused(out[7]) == ("dist:install-lost", 3)
+    assert _ask(out[8])["basis"] == "release"
+    assert [_refused(line)[0] for line in out[9:12]] == ["dist:install-lost"] * 3
+    assert _last(out[12])["event"] == "install-widened"
+    assert _last(out[13])["event"] == _last(out[14])["event"] == "staged"
+    floor = _install("install.floor", FLOOR)
+    ceiling = _install("install.ceiling", _ceiling(FLOOR, RELEASE, BODIES[1]))
+    out = _run21(host_check, [
+        *_node(), *_anchor(bring=[floor, ceiling]), f"provision {S} {N}", *_release_steps21(RELEASE, 1), "installid",
+        "corrupt set_floor", f"restart {N}", "installid", "lose2 set_floor", f"restart {N}",
+        "installid", f"ask {N} {_regs(3)} -", _stage(floor), "installid", _stage(_install("install.floor", FLOOR, seq=2)),
+        "lose install", f"restart {N}", "installid", "lose2 install", f"restart {N}", f"ask {N} {_regs(7)} -",
+        _stage(_install("install.floor", FLOOR, seq=3)), *_release_steps21(BODIES[1], 2, replaces=canon.sha256_hex(RELEASE))[1:2],
+        *_anchor(bring=[]), f"provision {S} {N}", "installid"])
+    both = _install_id(floor=(floor[0], 1), ceiling=(ceiling[0], 1))
+    assert out[4] == f"installid {both}" and out[5] == "records" and out[6] == f"installid {both}"
+    assert _refused(out[7]) == ("dist:install-lost", 1)
+    assert out[8] == f"installid {_install_id(ceiling=(ceiling[0], 1))}"
+    assert (_ask(out[9])["basis"], _ask(out[9])["outcome"]) == ("release", REFUSE)
+    assert _last(out[10])["event"] == "beat" and out[11] == out[8]
+    assert _last(out[12])["event"] == "install-widened"
+    assert out[13] == "records" and out[14] == f"installid {_install_id(floor=(_install('install.floor', FLOOR, seq=2)[0], 2), ceiling=(ceiling[0], 1))}"
+    lost = _recs(out[15])
+    assert [(one["event"], one["cause"], one["install_id"]) for one in lost] == [("refused", "dist:install-lost", "0" * 32)]
+    assert _ask(out[16])["basis"] == "release"
+    assert [_refused(line)[0] for line in out[17:19]] == ["dist:install-lost"] * 2
+    assert _last(out[19])["event"] == "provisioned" and out[20] == f"installid {_install_id()}"
+
+
+def test_case_167_an_install_set_over_frames_applies_when_verified_and_no_commit_or_abort_reaches_it(host_check):
+    """case_167: IS4, the mesh half. With an install threshold of 2 a floor and a ceiling of 64 hashes, held to the
+    trust bound, assemble over the frame binding past an admit check that holds the install record, and each
+    applies when it verifies, durably before its event, with no commit. A forged abort and commit that name the
+    floor change nothing."""
+    frames = _frames_module()
+    floor = _install("install.floor", FLOOR, seq=1)
+    hashes = sorted({canon.sha256_hex(FLOOR), canon.sha256_hex(RELEASE),
+                     *(hashlib.sha256(bytes([n])).hexdigest() for n in range(62))})
+    ceiling = _install("install.ceiling", _ceiling(hashes=hashes), seq=1)
+    whole = []
+    for transfer, (sealed, body) in enumerate((ceiling, floor), start=3):
+        lines = ["case frames", "trust 1 0 - 0", f"pep mesh {S} 0 640 1", f"ikey {_pub('J').hex()}",
+                 f"ikey {_pub('K').hex()}", "install 2", f"now {N}", "assembler 0 250 640",
+                 *(f"frame {data.hex()} {index}" for index, data in enumerate(
+                     frames.frames_for(transfer, bytes.fromhex(sealed), bytes.fromhex(body), 250)))]
+        done = subprocess.run([str(host_check)], input="\n".join(lines + ["done"]) + "\n", capture_output=True,
+                              text=True, timeout=60)
+        assert done.returncode == 0, done.stderr
+        events = done.stdout.splitlines()
+        assert events[-1] == f"whole {sealed} {body}" and all(one == "none" for one in events[:-1])
+        whole.append(events[-1].split()[1:])
+    policy = canon.sha256_hex(FLOOR)
+    out = _run21(host_check, [*_node(), *_anchor(), f"provision {S} {N}", *(f"stage {a} {b} {N}" for a, b in whole),
+                              "installid", f"abort {S} 1 {policy} {N}", f"commit {S} 1 {policy} 0 0 {N}",
+                              f"restart {N}", "installid"])
+    assert [one["event"] for one in _recs(out[1])] == ["staged", "install-applied"]
+    assert [one["event"] for one in _recs(out[2])] == ["staged", "install-widened"]
+    held = f"installid {_install_id(floor=(floor[0], 1), ceiling=(ceiling[0], 1))}"
+    assert out[3] == out[7] == held
+    assert _last(out[4])["event"] == "beat" and _refused(out[5])[0] == "dist:not-staged"
+
+
+def test_case_189_190_the_action_floor_never_lapses_and_a_release_never_narrows_it(host_check):
+    """case_189: AF3. The floor allows the same request after the release expires, after a revocation of everything
+    the authority signed, after the floor of section 6 is lost, after every unsigned message, after the install key
+    that signed it is retired and ten years past its not_before. case_190: AF4, the PEP's half. A release that
+    refuses what the floor allows is renewed with no widening statement and the floor still allows it."""
+    ask = f"ask {{}} {_regs(3)} -"
+    everything = _dist.revocation(keys=[_kid("A")], policies=[canon.sha256_hex(RELEASE)])
+    revocation = _dist.trust_statement("trust.revocation", everything, seq=1, signers=("A",), targets=("mesh",))
+    out = _run21(host_check, [
+        *_node(), *_anchor(("J", "K", "L"), bring=[_install("install.floor", FLOOR, signers=("J", "K"))]),
+        f"provision {S} {N}", *_release_steps21(RELEASE, 1), ask.format(N),
+        *_release_steps21(RELEASE, 2, widens=False, replaces=canon.sha256_hex(RELEASE)), ask.format(N),
+        f"tick 0 {E}", ask.format(E), f"stage {revocation.hex()} {everything.hex()} {E}", ask.format(E),
+        "lose floor", f"restart {E}", ask.format(E), f"abort {S} 2 {canon.sha256_hex(RELEASE)} {E}",
+        f"commit {S} 2 {canon.sha256_hex(RELEASE)} 0 0 {E}", "epoch 9", ask.format(E),
+        _stage(_install("install.trust", _trust_body(("J", "L"), 2), seq=1, signers=("J", "L"), widens=False), E),
+        ask.format(E), ask.format(NB + 10 * 365 * 86400)])
+    assert _last(out[6])["event"] == "committed" and len(_recs(out[5])) == 1       # renewed with no statement
+    asked = [_ask(line) for line in out if line.startswith("ask")]
+    assert len(asked) == 8 and all((one["outcome"], one["basis"]) == (ALLOW, "floor") for one in asked)
+    assert _last(out[8])["event"] == "lapsed" and _last(out[18])["event"] == "install-applied"
+
+
+def test_case_191_three_sets_at_their_bounds_fit_a_mesh_node(host_check):
+    """case_191: AF5, IS5. A floor and a fallback policy of 640 bytes and a ceiling of 64 hashes are held with no
+    release, a request the floor is silent on is decided by the fallback policy, the install record packs under
+    1,024 bytes, and a floor of 641 bytes is dist:too-large from its signed body_size."""
+    floor_body = _floor_table(pad_to=640)
+    fallback_body = _ppt([[0]], atoms=[(0, GE, INT, 100)], pad_to=640)
+    assert len(floor_body) == len(fallback_body) == 640
+    hashes = sorted({canon.sha256_hex(floor_body), canon.sha256_hex(fallback_body),
+                     *(hashlib.sha256(bytes([n])).hexdigest() for n in range(62))})
+    assert len(hashes) == 64
+    sets = [_install("install.ceiling", _ceiling(hashes=hashes)), _install("install.floor", floor_body),
+            _install("install.fallback", fallback_body)]
+    big = _install("install.floor", b"\x00" * 641, seq=2)
+    out = _run21(host_check, [*_node(), *_anchor(bring=sets), f"provision {S} {N}", "installid",
+                              f"ask {N} {_regs(150)} -", "sizes", _stage(big)])
+    assert out[1] == f"installid {_install_id(floor=(sets[1][0], 1), fallback=(sets[2][0], 1), ceiling=(sets[0][0], 1))}"
+    assert (_ask(out[2])["basis"], _ask(out[2])["outcome"]) == ("fallback", ALLOW)
+    record_bytes = int(out[3].split()[4])
+    assert record_bytes < 1024 and 2 * record_bytes < 2048                       # IS10: two copies under 2,048
+    assert _refused(out[4]) == ("dist:too-large", 1)
+
+
+def test_case_219_a_set_spreads_by_itself_and_the_install_ids_show_the_mix(host_check):
+    """case_219: H13, H6, IS4, the PEPs' half. A first action floor brought by provisioning reports provisioned with
+    dist:install-widened, and of three mesh PEPs sent a new floor, two apply it and one, whose ceiling does not list
+    it, refuses it, with no abort and three install ids that show the mix."""
+    first = _install("install.floor", FLOOR)
+    new = _install("install.floor", FLOOR_B, seq=2)
+    ids = []
+    for listed in ((FLOOR, FLOOR_B), (FLOOR, FLOOR_B), (FLOOR,)):
+        ceiling = _install("install.ceiling", _ceiling(*listed))
+        out = _run21(host_check, [*_node(), *_anchor(bring=[ceiling, first]), f"provision {S} {N}", _stage(new),
+                                  "installid"])
+        assert (_last(out[0])["event"], _last(out[0])["cause"]) == ("provisioned", "dist:install-widened")
+        ids.append((_last(out[1])["event"], out[2].split()[1]))
+    assert [event for event, _id in ids] == ["install-widened", "install-widened", "refused"]
+    assert ids[0][1] == ids[1][1] != ids[2][1]                                   # the mix, PEP by PEP
+
+
+def test_the_action_floor_is_narrow_and_tests_only_what_the_proposer_cannot_write(host_check):
+    """AF9, AF10 on a mesh node (case 213 and case 216 wait for their cfs halves). A floor whose edge tests no command,
+    tests the command only inside an or, leaves a parameter unbounded or bounded by its whole domain, has a second
+    decision node or nine rules, names a register the layout does not label as its command, or tests the proposer's
+    reading is dist:floor-broad; one whose layout is another layout's hash, or reaches a PEP built with no layout, is
+    dist:target-mismatch; eight narrow rules apply, the floor allows inside the bound and leaves the rest to the
+    release, and a rule that tests an independent field is silent when its value is stale or absent."""
+    no_command = _ppt([[0, 1, "and"]], atoms=[(1, GE, INT, 10), (1, LE, INT, 20)])
+    in_or = _ppt([[0, 3, "or", 1, "and", 2, "and"]], atoms=[(0, EQ, INT, 3), (1, GE, INT, 10), (1, LE, INT, 20),
+                                                            (0, EQ, INT, 4)])
+    unbounded = _ppt([[0]], atoms=[(0, EQ, INT, 3)])
+    whole = _floor_table(low=0, high=100)
+    two_nodes = _ppt([[0, 1, "and", 2, "and"], ["true"]], atoms=_rule(3)[0])
+    two_nodes = bytearray(two_nodes)
+    import struct
+    struct.pack_into("<HH", two_nodes, 28 + 8 * 3 + 4, 1, 1)                  # node 1 decides by edge 1
+    struct.pack_into("<HH", two_nodes, 28 + 8 * 3, 0, 1)
+    nine = _floor_table(tuple(range(1, 10)))
+    proposer = _floor_table(extra=[(3, EQ, INT, 1)])
+    eight = _floor_table(tuple(range(1, 9)))
+    fresh = _floor_table((3,), extra=[(2, EQ, INT, 1)])
+    def floor(body, seq, **meta):
+        return _install("install.floor", bytes(body), seq=seq,
+                        meta={"as": "policy.ppt", "command": 0, "layout": LAYOUT, **meta})
+    broad = [floor(no_command, 1), floor(in_or, 1), floor(unbounded, 1), floor(whole, 1), floor(two_nodes, 1),
+             floor(nine, 1), floor(eight, 1, command=1), floor(proposer, 1)]
+    out = _run21(host_check, [*_node(), *_anchor(), f"provision {S} {N}", *(_stage(one) for one in broad),
+                              _stage(floor(eight, 1, layout=ZERO)), _stage(floor(eight, 1)),
+                              *_release_steps21(RELEASE, 1), f"ask {N} {_regs(3, 15)} -", f"ask {N} {_regs(3, 25)} -",
+                              f"ask {N} {_regs(9, 15)} -", _stage(floor(fresh, 2)),
+                              f"ask {N} {_regs(3, 15)} 0,0,5,0", f"ask {N} {_regs(3, 15)} 0,0,6,0",
+                              f"ask {N} {_regs(3, 15)} -", f"ask {N} {_regs(3, 15, independent=0)} 0,0,1,0"])
+    assert [_refused(line) for line in out[1:9]] == [("dist:floor-broad", 1)] * 8
+    assert _refused(out[9]) == ("dist:target-mismatch", 1)
+    assert _last(out[10])["event"] == "install-widened"
+    inside, outside, other = (_ask(line) for line in out[14:17])
+    assert (inside["basis"], outside["basis"], outside["outcome"]) == ("floor", "release", REFUSE)
+    assert (other["basis"], other["outcome"]) == ("release", ALLOW)
+    assert _last(out[17])["event"] == "install-widened"
+    assert [_ask(line)["basis"] for line in out[18:22]] == ["floor", "release", "release", "release"]
+    out = _run21(host_check, [*_node(layout=False), *_anchor(), f"provision {S} {N}", _stage(floor(eight, 1))])
+    assert _refused(out[1]) == ("dist:target-mismatch", 1)
+
+
+def test_the_signed_rate_counts_overrides_durably_on_a_mesh_node(host_check):
+    """AF8, H10 on a mesh node (case 194 waits for its cfs half). With a rate of 3 in 60 seconds, five overrides in one
+    window are allowed three times and then left to the release, a restart after the second changing nothing; a
+    request the release allows is never counted; the next window allows again; the counts of H10 rise only with
+    floor answers."""
+    meta = {"as": "policy.ppt", "command": 0, "layout": LAYOUT, "rate": {"allows": 3, "window": 60}}
+    floor = _install("install.floor", _floor_table((3, 7)), meta=meta)
+    ask = lambda now, command=3: f"ask {now} {_regs(command)} -"  # noqa: E731
+    out = _run21(host_check, [*_node(), *_anchor(bring=[floor]), f"provision {S} {N}", *_release_steps21(RELEASE, 1),
+                              ask(N), ask(N + 1), f"restart {N + 2}", ask(N + 2), ask(N + 3), ask(N + 4),
+                              ask(N + 5, 7), ask(N + 6, 7), ask(N + 61), f"record 0 {N + 61}"])
+    asked = [_ask(line) for line in out if line.startswith("ask")]
+    assert [(one["basis"], one["outcome"], one["count"]) for one in asked] == [
+        ("floor", ALLOW, 1), ("floor", ALLOW, 2), ("floor", ALLOW, 3), ("release", REFUSE, 0), ("release", REFUSE, 0),
+        ("floor", ALLOW, 0), ("floor", ALLOW, 0), ("floor", ALLOW, 1)]
+    assert asked[0]["window"] == asked[2]["window"] == N and asked[-1]["window"] == N + 61
+    assert [one["override"] for one in asked if one["basis"] == "floor"] == [True, True, True, False, False, True]
+    assert (_last(out[-1])["answers"], _last(out[-1])["overrides"]) == (6, 4)
