@@ -273,6 +273,27 @@ def _floor_statement(kind: str, named: str, body: bytes, meta: Mapping[str, Any]
         return refused.cause if refused.cause != kinds.BAD_FORMAT else floor.BROAD
 
 
+def _verify_install_change(envelope, body: bytes, pep: PepView, record, view) -> Verdict:
+    """IS14 from V8 on, once V9 checked the body: V8 is IS6 against the set kind the body names, V10 holds the
+    statement to the set staged of that kind at its `seq`, and V11 is its own check."""
+    cause = kinds.ARTIFACTS[kinds.INSTALL_CHANGE].check(envelope, body, pep)
+    if cause is not None:
+        return Verdict(cause, envelope)
+    kind = kinds.read_install_change(body)["set"]
+    if envelope.seq <= record.seqs[kind]:
+        return Verdict("dist:seq-replay", envelope)                           # V8, IS6: a set already superseded
+    staged = view.staged.get(kind)
+    if staged is not None and envelope.seq < staged.seq:
+        return Verdict("dist:seq-replay", envelope)                           # IS4, G2
+    if staged is not None and staged.seq == envelope.seq:
+        if staged.change is not None and staged.change[0] == envelope.envelope_id:
+            return Verdict(None, envelope, unchanged=True)
+        if staged.change is not None or (staged.policy_sha256, staged.release, staged.replaces, staged.widens) != (
+                envelope.policy_sha256, envelope.release, envelope.replaces, envelope.widens):
+            return Verdict("dist:incomplete", envelope)                       # V10: one statement for one set
+    return Verdict(None, envelope)
+
+
 @dataclass(frozen=True)
 class InstallView:
     """What the verifier needs of a PEP's install part (section 21): the install record, the staged install sets by
@@ -300,17 +321,20 @@ def _verify_install(envelope, entries, message: bytes, body: bytes, trust: Trust
         return Verdict(installed.cause if installed is not None else "dist:unknown-key", envelope)
     target = kinds.TARGETS[pep.kind]
     artifact = envelope.artifact
-    named = envelope.meta.get("as") if artifact != install.TRUST else None
+    named = envelope.meta.get("as") if artifact not in (install.TRUST, install.CHANGE) else None
     # V5
     if view.message and record.threshold < 2:
         return Verdict("dist:target-mismatch", envelope)                      # IS4: provisioning only
     if envelope.stream != pep.stream or artifact not in install.BUILT:
         return Verdict("dist:target-mismatch", envelope)
-    if artifact != install.TRUST:
+    if artifact == install.CHANGE:
+        if pep.kind not in envelope.targets or pep.kind not in ("host", "mesh"):
+            return Verdict("dist:target-mismatch", envelope)                  # IS14: only host and mesh take it
+    elif artifact != install.TRUST:
         _needed, allowed = kinds.install_form(pep.kind, artifact)
         if pep.kind not in envelope.targets or not (named in allowed or named == kinds.NONE):
             return Verdict("dist:target-mismatch", envelope)
-    listed = artifact == install.TRUST or named == kinds.POLICY_LIST
+    listed = artifact in (install.TRUST, install.CHANGE) or named == kinds.POLICY_LIST
     bound = target.trust_bound if listed else min(pep.body_bound, target.body_bound)
     if envelope.body_size > bound or len(body) > bound:
         return Verdict("dist:too-large", envelope)
@@ -325,7 +349,7 @@ def _verify_install(envelope, entries, message: bytes, body: bytes, trust: Trust
             return Verdict(None, envelope, unchanged=True)
         if envelope.seq != record.trust_seq + 1:
             return Verdict("dist:trust-replay", envelope)
-    else:
+    elif artifact != install.CHANGE:                # an install change statement's set is in its body, read after V9
         held, held_seq = record.sets[artifact], record.seqs[artifact]
         if envelope.seq == held_seq and held is not None and envelope_id in held.envelope_ids:
             return Verdict(None, envelope, unchanged=True)
@@ -339,15 +363,18 @@ def _verify_install(envelope, entries, message: bytes, body: bytes, trust: Trust
     # V9
     if len(body) != envelope.body_size or canon.sha256_hex(body) != envelope.body_sha256:
         return Verdict("dist:body-mismatch", envelope)
+    if artifact == install.CHANGE:
+        return _verify_install_change(envelope, body, pep, record, view)
     # V10: the statements of one set share stream, seq, policy hash, release id, replaces, widens and rate
     if artifact != install.TRUST:
         staged = view.staged.get(artifact)
         if staged is not None and staged.seq == envelope.seq:
-            first = next(iter(staged.envelopes.values()))
-            if ((first.policy_sha256, first.release, first.replaces, first.widens, first.meta.get("rate"),
-                 first.meta.get("answer_rate"))
-                    != (envelope.policy_sha256, envelope.release, envelope.replaces, envelope.widens,
-                        envelope.meta.get("rate"), envelope.meta.get("answer_rate"))):
+            if (staged.policy_sha256, staged.release, staged.replaces, staged.widens) != (
+                    envelope.policy_sha256, envelope.release, envelope.replaces, envelope.widens):
+                return Verdict("dist:incomplete", envelope)
+            first = next(iter(staged.envelopes.values()), None)
+            if first is not None and (first.meta.get("rate"), first.meta.get("answer_rate")) != (
+                    envelope.meta.get("rate"), envelope.meta.get("answer_rate")):
                 return Verdict("dist:incomplete", envelope)
             if named in staged.statements and staged.statements[named][0] != envelope_id:
                 return Verdict("dist:incomplete", envelope)

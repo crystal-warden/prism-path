@@ -125,6 +125,9 @@ def add_parser(subparsers) -> None:
                       help='the set this one follows, as this command wrote it; sets replaces and is compared (IS12)')
     inst.add_argument('--ceiling', default=None, metavar='DIR', help='the held ceiling, as this command wrote it (CL3)')
     inst.add_argument('--widens', action='store_true', help='say the set allows more than the one it follows')
+    inst.add_argument('--yes', action='store_true',
+                      help='sign the install change statement for a floor or fallback table the comparator finds '
+                           'allows nothing more, without asking at the terminal (IS15)')
     inst.add_argument('--rate', default=None, metavar='ALLOWS/WINDOW', help="a floor's signed rate of overrides (AF8)")
     inst.add_argument('--answer-rate', default=None, metavar='ALLOWS/WINDOW',
                       help="a floor's signed rate of operator allows (OP4)")
@@ -452,9 +455,9 @@ def scope_mark(artifact: str, previous: Optional[bytes], body: bytes, comparison
     return WIDENING
 
 
-def _confirmed(args, comparison, replaces: str) -> bool:
-    """W9: the owner is shown what W8 found before a change statement is signed, and says yes, at the terminal
-    or with `--yes` for a script."""
+def _confirmed(args, comparison, replaces: str, *, keys: str = "the release's keys") -> bool:
+    """W9, IS15: the owner or the engineer is shown what W8 found before a change statement is signed, and says yes,
+    at the terminal or with `--yes` for a script."""
     shown = {"comparison": comparison.document(), "replaces": replaces,
              "change": "this table allows nothing more than the one it replaces, by the table comparator (W8)"}
     print(json.dumps(shown, indent=2, sort_keys=True), file=sys.stderr)
@@ -463,7 +466,7 @@ def _confirmed(args, comparison, replaces: str) -> bool:
     if not sys.stdin.isatty():
         return False
     try:
-        answer = input("sign a change statement that says so, with the release's keys? [y/N] ")
+        answer = input(f"sign a change statement that says so, with {keys}? [y/N] ")
     except EOFError:
         return False
     return answer.strip().lower() in ("y", "yes")
@@ -778,6 +781,8 @@ def read_set_dir(directory: str):
         sealed = _read(os.path.join(directory, name))
         body = _read(os.path.join(directory, name[:-len(".sealed")] + ".body"))
         envelope = env.read(env.unseal(sealed)[0])
+        if envelope.artifact == install.CHANGE and envelope.body_sha256 == canon.sha256_hex(body):
+            continue                                 # IS14: the change statement written beside the set
         if envelope.body_sha256 != canon.sha256_hex(body) or envelope.artifact not in install.SET_KINDS:
             raise Refused("dist:body-mismatch", f"{name} is not an install statement with its body")
         named = envelope.meta["as"]
@@ -811,10 +816,48 @@ def _rated(kind: str, rates) -> Optional[dict]:
     return {"set": SimpleNamespace(meta={name: value for name, value in rates.items() if value is not None})}
 
 
+INSTALL_NOT_CONFIRMED = ("the table allows nothing more than the one it follows, and an install change statement is "
+                         "signed only when the engineer says yes; run again at a terminal or with --yes, or with "
+                         "--widens to seal it as a widening")
+
+
+def _install_comparison(target: str, kind: str, follows, bodies: dict, metas: dict):
+    """W8 at the sealing tool for an action floor or a fallback policy on `host` and `mesh`: the table comparator's
+    answer for the set's `policy.ppt` against the one of the set it follows, or None when there is nothing to compare."""
+    from prismpath.distribution import table_compare
+    if (target not in ("host", "mesh") or kind not in kinds.CHANGES_SETS or follows is None or follows.empty
+            or "policy.ppt" not in bodies or "policy.ppt" not in follows.bodies):
+        return None
+    fields = (metas.get("policy.ppt") or {}).get("fields")
+    return table_compare.compare_tables(
+        follows.bodies["policy.ppt"], bodies["policy.ppt"],
+        active_fields=table_compare.table_fields(follows.envelopes.get("policy.ppt")),
+        staged_fields=dict(fields) if isinstance(fields, dict) else None)
+
+
+def _as_sealed(kind: str, rates, metas: dict, layout: Optional[bytes]) -> dict:
+    """The statements of a set as IS12 and IS15 compare them beside their tables: one whose `meta` holds the rates, and
+    on a table floor its `layout` hash and `command` register."""
+    from types import SimpleNamespace
+    from prismpath.distribution import install
+    meta = {}
+    if kind == install.FLOOR:
+        meta = {name: value for name, value in rates.items() if value is not None}
+        if layout is not None:
+            meta["layout"] = canon.sha256_hex(layout)
+        command = (metas.get("policy.ppt") or {}).get("command")
+        if command is not None:
+            meta["command"] = command
+    return {"set": SimpleNamespace(meta=meta)}
+
+
 def install_cmd(args) -> int:
     """The sealing tool's install set (section 21). It compares the set with the one it follows and refuses one it
     computes as larger whose `widens` is false, on a `cfs` table by the core image inside it (IS12, H13), and holds
-    a fallback policy to the held ceiling (CL3)."""
+    a fallback policy to the held ceiling (CL3). On `host` and `mesh` it compares an action floor's or a fallback
+    policy's table by W8, shows the engineer the answer, and for a table that allows nothing more signs an install
+    change statement beside a set whose `widens` is false only on the engineer's yes, at the terminal or with `--yes`
+    (IS15). It never signs one for a table W8 finds larger or cannot decide."""
     from prismpath.distribution import floor, install, widening
     kind = {"floor": install.FLOOR, "fallback": install.FALLBACK, "ceiling": install.CEILING}[args.kind]
     try:
@@ -839,22 +882,31 @@ def install_cmd(args) -> int:
         layout = _read(args.layout) if args.layout else None
         if kind == install.FLOOR and layout is not None:
             floor.read_layout(layout)                 # AF10: a staleness bound of 0 is refused here
-        larger = install.set_larger(args.target, kind, follows, bodies, _rated(kind, rates))
-        if larger is None:                          # H13: a cfs table, by the core image inside it
-            larger = widening.compare_release(dict(follows.bodies), real) != widening.NOT_LARGER
-        if larger and not args.widens:
-            return _fail(install.UNSIGNED, "the set allows more than the one it follows; seal it with --widens")
         metas = {}
         if "policy.ppt" in bodies and args.qualification:
             metas["policy.ppt"] = policy_meta(bodies["policy.ppt"], _json(args.qualification))
         for name in ("policy.ppt", "cfs.table"):
             if kind == install.FLOOR and name in bodies and args.command is not None:
                 metas.setdefault(name, {})["command"] = args.command
+        larger = install.set_larger(args.target, kind, follows, bodies, _rated(kind, rates))
+        if larger is None:                          # H13: a cfs table, by the core image inside it
+            larger = widening.compare_release(dict(follows.bodies), real) != widening.NOT_LARGER
+        comparison = _install_comparison(args.target, kind, follows, bodies, metas)
+        change = (larger and not args.widens and comparison is not None and comparison.answer == widening.NOT_LARGER
+                  and not install.set_larger(args.target, kind, follows, bodies,
+                                             _as_sealed(kind, rates, metas, layout), change=True))
+        if comparison is not None:
+            print(json.dumps({"comparison": comparison.document()}, indent=2, sort_keys=True), file=sys.stderr)
+        if change and not _confirmed(args, comparison, follows.policy_sha256, keys="the install keys"):
+            return _fail(install.UNSIGNED, INSTALL_NOT_CONFIRMED)
+        if larger and not args.widens and not change:
+            return _fail(install.UNSIGNED, "the set allows more than the one it follows; seal it with --widens")
         pairs = install.seal_set(kind, bodies, stream=args.stream, seq=args.seq, target=args.target,
                                  signers=_authority(args.key),
                                  replaces=follows.policy_sha256 if follows and not follows.empty else "",
                                  widens=bool(args.widens), metas=metas,
                                  not_before=args.not_before or int(time.time()), layout=layout, **rates)
+        statement = install.seal_change(pairs[0][0], _authority(args.key)) if change else None
     except Refused as refused:
         return _fail(refused.cause, str(refused))
     os.makedirs(args.out, exist_ok=True)
@@ -864,7 +916,17 @@ def install_cmd(args) -> int:
         _write(os.path.join(args.out, f"{named}.sealed"), sealed)
         _write(os.path.join(args.out, f"{named}.body"), body)
         out.append({"as": named, "envelope_id": env.envelope_id(env.unseal(sealed)[0])})
-    _print({"set": args.out, "kind": kind, "seq": args.seq, "statements": out, "widens": bool(args.widens)})
+    printed = {"set": args.out, "kind": kind, "seq": args.seq, "statements": out, "widens": bool(args.widens)}
+    if comparison is not None:
+        printed["comparison"] = comparison.document()
+        printed["scope"] = "widening" if larger and not change else "change, not larger"
+    if statement is not None:                       # IS15: handed to the controller before the set it carries
+        _write(os.path.join(args.out, f"{install.CHANGE}.sealed"), statement[0])
+        _write(os.path.join(args.out, f"{install.CHANGE}.body"), statement[1])
+        printed["change"] = {"sealed": os.path.join(args.out, f"{install.CHANGE}.sealed"),
+                             "envelope_id": env.envelope_id(env.unseal(statement[0])[0]),
+                             "from": follows.policy_sha256, "basis": kinds.CHANGE_BASIS}
+    _print(printed)
     return 0
 
 

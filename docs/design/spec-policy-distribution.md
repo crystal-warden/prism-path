@@ -135,6 +135,7 @@ home holds one release, so they cannot hold different versions of one policy.
 | `install.fallback` | One artifact of a fallback policy (section 21), in the same form | `as`, and the members this table gives the artifact that `as` names | The same |
 | `install.ceiling` | One artifact of a ceiling, or a policy list (CL1) | `as`, and the members this table gives the artifact that `as` names | CL1 |
 | `install.trust` | An install trust statement (IS11) | none | IS11 |
+| `install.change` | An install change statement (IS14), taken by `host` and `mesh` alone | none | IS14 and IS15 |
 | `operator.answer` | An operator's answer to one escalation (OP2) | none | OP2 |
 | `trust.controller` | A controller key statement (K7) | none | K7 |
 
@@ -1311,16 +1312,16 @@ An acknowledgement lets the controller offer a set and expect its install id, an
 reads it, and a PEP takes only what its install signatures carry. The acknowledgement names the
 envelope ids of the statements, never a release id, and goes to the controller's audit log (F5). A statement with no
 envelope id on file cannot be acknowledged. A controller also treats as widening, for each PEP, a ceiling
-that would lapse the release it expects of that PEP (IS12). A set that does not widen, and a set of another install kind, never waits behind an unacknowledged one.
-A release carried by a change statement is no widening and waits for nothing (W9, W11). On `host` and `mesh`
-an install set whose table W8 finds not larger than the table of the set it follows is a change, not larger.
-It is offered at once and its install id expected, and it counts as acknowledged for the finding below. A set
-W8 finds larger or cannot decide, and one whose set before it the controller does not hold, waits for its
-acknowledgement. This version has no change statement for an install set, so the PEP still applies such a set
-with event `install-widened` by IS12's byte rule, and the controller shows it as a change. An install change
-statement signed by the install keys is left to a later version. The controller and the sealing tool compare every install
+that withdraws the held one. A ceiling that would lapse the release it expects of a PEP narrows and is no
+widening (IS12), so it is offered at once, and the fleet view names the PEPs whose release it lapses. A set that does not widen, and a set of another install kind, never waits behind an unacknowledged one.
+A release carried by a change statement is no widening and waits for nothing (W9, W11), and on `host` and `mesh`
+neither does an install set carried by an install change statement that W8 bears out (IS15). A set whose
+`widens` is `true` waits for its acknowledgement whatever W8 finds, because its signer says it widens, and the
+fleet view shows a set W8 finds not larger as a change, not larger, with the note that an install change
+statement would carry it. The controller and the sealing tool compare every install
 set with the one it follows and refuse one whose `widens` is `false` and which they compute as larger
-(W7). On `host` and `mesh` a table that is not byte for byte the one before is larger. A `cfs.table` is compared
+(W7). On `host` and `mesh` a table that is not byte for byte the one before is larger, unless an install change
+statement carries it and W8 bears that out (IS15). A `cfs.table` is compared
 by the core image inside it, as section 9.4 orders it, and any other change of the table is larger. The
 cFS app itself cannot make that comparison, which is why section 3 says it cannot decide and why the duty
 is here. A record with event `install-widened` is filed as `dist:install-widened` against
@@ -1535,7 +1536,7 @@ written. If another change lands first the numbers move up together and the name
 | 161 | `dist:fallback` | state | A PEP deciding under its installed fallback policy because no release is active |
 | 162 | `dist:floor-allowed` | state | A request the installed action floor allowed, whatever the policy says |
 | 163 | `dist:install-lost` | state | An install set or an install record that no longer reads at start, so the PEP runs without it |
-| 164 | `dist:install-widened` | state | An install set applied or handed over that allows more than the one before it, or is the first of its kind |
+| 164 | `dist:install-widened` | state | An install set applied or handed over that allows more than the one before it, is the first of its kind, or says it widens. Never a set that only narrows (IS12) |
 | 165 | `dist:above-ceiling` | envelope | A release or an install set that allows what the installed ceiling does not, or a ceiling the held sets are above |
 | 166 | `dist:floor-rate` | routing | A request the action floor would have allowed, escalated because the signed rate of floor allows is spent, or an operator's answer past its signed rate (OP3) |
 | 167 | `dist:floor-broad` | envelope | An action floor with a default or catch all, a rule that names no one action or lacks a required test, a test of a field that is not independent, or more rules or entries than its bound |
@@ -1771,7 +1772,7 @@ are the change statement on every PEP that takes it.
 | 202 | A PEP under its fallback policy is sent a narrower one and then a wider one, and a PEP with an active release is sent the wider one | the first decides under each at once with bit 4 still set, the wider one with event `install-widened`, and the second holds it with the same event while its release keeps deciding | FB8, IS12 | P R C |
 | 203 | An `agent` PEP with a ceiling is offered a release whose policy allows a reading the ceiling refuses, one with a host the ceiling's `egress.hosts` lacks, one that drops a name the ceiling's `agent.zones` protects, and one inside the ceiling. A `gateway` PEP with a ceiling is offered a route table that gives one path another class than the ceiling's, and one that names fewer routes. A `mesh` and a `cfs` PEP with a list are each offered a table whose body hash is on it and one off it, the `cfs` one with the listed core image and other rules, then a floor table off the list, then a list that adds that floor's hash with `widens` false and with `widens` true, then the floor again. A controller that holds each ceiling is given the same releases | `dist:above-ceiling` three times, staged, `dist:above-ceiling`, staged, then staged and `dist:above-ceiling` on each, `dist:above-ceiling` for the floor, `dist:widening-unsigned` and `install-widened` for the lists, then the floor is applied, and the controller refuses to offer the releases above | CL1, CL2, IS12 | P C |
 | 204 | A release inside the ceiling is staged, a narrower ceiling it is above is applied, and the release is committed. The same with a kept release and a rollback | the staged and the kept release are still held after the ceiling is applied, then `dist:above-ceiling` at the commit and at the rollback and each is dropped | CL2, C3, RB2 | P R C |
-| 205 | A PEP with a ceiling is sent an action floor above it, a fallback policy above it, and a ceiling its held floor is above. Then it is sent a ceiling its active release is above with `widens` false, once with a fallback policy and once without. An `agent` PEP whose ceiling protects a name is asked for a call on that name that a floor rule testing `zone_reach` allows | `dist:above-ceiling` three times with nothing changed, then the ceiling is applied with event `install-widened` and the release lapses with `dist:above-ceiling`, to the fallback policy and to `no-policy`, and the floor is silent for the call | CL3, IS12, AF1 | P R C |
+| 205 | A PEP with a ceiling is sent an action floor above it, a fallback policy above it, and a ceiling its held floor is above. Then it is sent a ceiling its active release is above with `widens` false, once with a fallback policy and once without. An `agent` PEP whose ceiling protects a name is asked for a call on that name that a floor rule testing `zone_reach` allows | `dist:above-ceiling` three times with nothing changed, then the ceiling is applied with event `install-applied` and no cause and the release lapses with `dist:above-ceiling`, to the fallback policy and to `no-policy`, and the floor is silent for the call | CL3, IS12, AF1 | P R C |
 | 206 | An `agent` PEP with a ceiling is offered a release whose rule names a tool the ceiling's fields do not define, a ceiling whose fields define a tool the PEP was not built with, and an `agent` PEP with no ceiling the first release | `policy:out-of-domain` twice, then judged by the domain the PEP was built with | CL4 | P |
 | 207 | One PEP writes a receipt for a request its release allows, one its release refuses, one the action floor allows, one the fallback policy allows and one it refuses, and a PEP with no fallback policy writes one for a request it refuses in `no-policy` | basis `release` twice, `floor`, `fallback` twice, each with the policy hash of the set that decided, then no basis and `dist:policy-lapsed` | RC1 | P R C |
 | 208 | A held PEP writes a receipt for a request its release allows and for one the action floor allows, in a receipt format with a cause field | `release` with the hold mark, then `floor` with the hold mark and `dist:floor-allowed` | RC2, RC3 | P C |
@@ -1859,9 +1860,15 @@ are the change statement on every PEP that takes it.
 | 290 | Against a mesh table a controller holds, the sealing tool is given a table that allows less, first with no yes and then with `--yes`, and then a table that allows more. A mesh node is sent the first table alone, then with the tool's change statement, and the second without a statement | nothing written and `dist:widening-unsigned` with the comparison shown, then the first sealed with `widens` false, shown as a change, not larger, with a change statement from the held table's hash beside it and no widening statement, the second shown as a widening with its witness and no statement, then `dist:widening-unsigned`, staged and committed, and `dist:widening-unsigned` | W8, W9, W10, W11, W2 | P |
 | 291 | A controller is handed a host table that allows less with a change statement, one that allows more with a widening statement, one whose signed field dictionary differs, a table that allows more with a change statement, and a table with neither statement that says it does not widen | rollouts shown as a change, not larger, as a widening with the witness register file, and as a widening with the frame as the witness, kept across a restart, then two not offered with `dist:widening-unsigned` | W8, W9, W11, F4, W7 | P |
 | 292 | `rekey` is run with a table that allows more than the one it replaces and no `--widens`, after a rekey whose table allows less went with a change statement on `--yes` | refused with `dist:widening-unsigned`, and no rotation is stored | W9, W11, R5 | P |
-| 293 | A controller holds a `mesh` floor and is handed a floor set whose table allows less with `widens` true, then one whose table allows more, and a PEP reports `install-widened` for each | the first is offered at once with its install id expected, shown as a change, not larger, and its finding clears with the record, the second is held with `dist:install-widened` open until it is acknowledged | H13, W8, W9, IS12 | P |
+| 293 | A controller holds a `mesh` floor and is handed a floor set whose table allows less with `widens` true, then one whose table allows more, and a PEP reports `install-widened` for each | each is held with `dist:install-widened` open until it is acknowledged, the first shown as a change, not larger, with the note that an install change statement would carry it, the second as a widening with its witness | H13, W8, W9, IS12 | P |
 | 294 | A `host` and a `mesh` PEP with a table active are sent a change statement from its policy hash and then a table that allows less with `widens` false and `replaces` that hash, and then that table alone | staged and committed, then `dist:widening-unsigned` with the held table still active | W10, W11, W2 | P R C |
 | 295 | A `host` and a `mesh` PEP are sent a change statement whose `widens` is true, one on a first install, one from another policy hash, and one after a widening statement of the same release, and an `agent` PEP is sent a change statement | `dist:bad-format`, `dist:widening-unsigned` twice and `dist:bad-format`, with nothing changed, and `dist:target-mismatch` | W10, W11, V5 | P R C |
+| 296 | A `host` and a `mesh` PEP holding an action floor are sent install change statements whose `widens` is true, whose `replaces` is empty, whose `from` is not its `replaces`, whose `set` is `install.ceiling`, whose policy hash is the empty set's, one signed by authority keys only, and a second one for a set that has one staged. An `agent` PEP is sent one, and a `mesh` PEP whose install threshold is 1 is sent one in a message | `dist:bad-format` five times, `dist:unknown-key`, `dist:incomplete`, and `dist:target-mismatch` twice, with nothing staged | IS14, IS2, V5, IS4 | P R C |
+| 297 | A `host` and a `mesh` PEP holding an action floor are sent an install change statement from its policy hash, then a floor table that allows less with `widens` false and `replaces` that hash. They hold a fallback policy too and take a narrower one the same way. Then each is sent a narrower floor with no change statement | staged, then `install-applied` with no cause and the new floor held, the same for the fallback policy, then `dist:widening-unsigned` with the floor before it still held | IS15, IS12 | P R C |
+| 298 | A `host` and a `mesh` PEP with no floor are sent an install change statement, and with a floor one whose `from` is another hash. With a rated floor each is sent a change statement and then a floor whose `rate` is looser, and then a change statement and a floor whose `widens` is true | `dist:widening-unsigned` twice with nothing staged, then staged and `dist:widening-unsigned`, then staged and `dist:incomplete` | IS15, AF8, V10 | P R C |
+| 299 | A `mesh` and a `host` PEP stage an install change statement, restart, and are sent the narrower floor it carries | the statement is still staged after the restart and the floor is applied with event `install-applied` | IS15, IS4 | P R C |
+| 300 | A controller holds a `mesh` floor and is handed an install change statement and a floor table that allows less with `widens` false, then a change statement and a floor table that allows more, then a change statement after the set it carries is whole. A PEP pulls | the first is offered at once with the change statement first, shown as a change, not larger, with W8's answer, and the PEP applies it with event `install-applied` and its install id is the expected one with no finding, then `dist:widening-unsigned` with nothing of it stored, then `dist:incomplete` | IS15, W8, H13, F4 | P |
+| 301 | `prismpath dist install --kind fallback` is given a `mesh` fallback table that allows less than the one it follows, first with no yes and then with `--yes`, then a table that allows more without and with `--widens` | nothing written and `dist:widening-unsigned` with the comparison shown, then the set sealed with `widens` false and an install change statement beside it, then `dist:widening-unsigned`, then the set sealed with `widens` true and no change statement | IS15, W8, W9 | P |
 
 ## 21. The action floor, the fallback policy and the ceiling
 
@@ -1892,7 +1899,7 @@ release active. The fallback policy is only what decides when no release does.
 ### 21.1 The install statement
 
 **IS1.** An install statement is a sealed envelope (section 4) whose `artifact` is an install kind. They
-are `install.floor`, `install.fallback`, `install.ceiling` and `install.trust`. For the first three the
+are `install.floor`, `install.fallback`, `install.ceiling`, `install.trust` and `install.change` (IS14). For the first three the
 body is one artifact a release of the target kind holds, and `meta` names that artifact in `as`.
 `targets` names exactly one kind and `stream` is the stream of the PEP it is for. `policy_sha256` is the
 policy hash of the set and `release` is the release id of E10 taken over the `[as, body_sha256]` pairs of
@@ -2073,11 +2080,15 @@ set it holds, and refuses any other with `dist:widening-unsigned`. A `host` and 
 compare bytes, as W2 does. A table that is not byte for byte the one of the set it holds is larger, and
 they refuse it with `dist:widening-unsigned` when its `widens` is `false`. Only a `cfs` PEP takes the
 signers' word beyond the `replaces` test, and for `cfs` the comparison is the duty of the sealing tool
-and the controller (H13). A set that widens is applied on its install signatures with event
-`install-widened` and cause `dist:install-widened`. A ceiling that lapses the PEP's active release
-(CL3) is reported the same way whatever its `widens` says, because it hands the PEP to its fallback
-policy. Every other set is applied with event `install-applied`. A held PEP takes a set that widens as
-any PEP does (X9), and the widening waits for its acknowledgement all the same (H13).
+and the controller (H13). On `host` and `mesh` an install change statement stands in place of the byte rule
+for the table of an action floor or a fallback policy (IS14, IS15). A widening is a set that extends or
+enlarges what the PEP allows, and only that. A set that widens is applied on its install signatures with event
+`install-widened` and cause `dist:install-widened`. Every other set is applied with event `install-applied`.
+So a narrower ceiling is no widening, a ceiling that holds a hash the one before did not is one, and so is the
+empty set of the ceiling, which removes the bound. A ceiling that the PEP's active release is above narrows, and
+it is applied with event `install-applied` whatever lapses after it. The release then lapses as CL3 says, and the
+`lapsed` or `fallback` record that follows names `dist:above-ceiling`, so the lapse stands out on its own. A held PEP
+takes a set that widens as any PEP does (X9), and the widening waits for its acknowledgement all the same (H13).
 
 **IS13.** An install provisioning brings install statements and no anchor. It is how the engineer
 replaces an action floor, a fallback policy or a ceiling on a PEP whose install threshold is 1, by the
@@ -2087,6 +2098,60 @@ of section 6, the time floor, the epoch id and the PEP's state stay as they were
 `locked`. It may carry an `install.trust`, held to IS11, that removes an operator key, which is how the
 engineer takes one back on a PEP whose install threshold is 1. It is written to the audit log as a
 provisioning.
+
+**IS14.** An install change statement is a sealed envelope with artifact `install.change`. It says that an
+action floor or a fallback policy replaces the set before it and allows nothing more. It is signed by the install
+keys at the install threshold, as every install statement is (IS2), and never by the authority keys, because
+install sets are the engineer's. Its `stream`, `targets`, `seq`, `policy_sha256`, `release`, `replaces` and
+`widens` are those of the set it carries, `expires` is 0, `meta` is empty, and the body is this canon/2 document.
+
+```json
+{"basis":"prismpath.table-compare/1","encoding":"canon/2","format":"prismpath.dist-install-change/1",
+ "from":"<policy hash>","set":"install.floor"}
+```
+
+`set` is `install.floor` or `install.fallback`, `from` is the policy hash of the set it replaces, and `basis`
+names the comparison the statement rests on, the table comparator of W8 in this version. A statement whose `set`
+is `install.ceiling` is `dist:bad-format`, since a `host` and a `mesh` PEP compare two policy lists themselves
+(IS12) and narrowing a ceiling is never a widening. So is one whose `from` is not its envelope's `replaces`, whose
+`replaces` is empty, whose `widens` is `true`, or whose policy hash is the 64 zeros of the empty set, because a
+first set and a set that says it widens are widenings and the empty set never needs one (V11). Only `host` and
+`mesh` take the kind, as they alone take `trust.change` (V5), and on any other kind it is `dist:target-mismatch`.
+A PEP whose install threshold is 1 takes one by provisioning only, as IS4 says of every install kind. The
+statement is not a member of the set. The release id and the set id are over the set's own statements, and a set
+carries at most one change statement, so a second one for the same set is `dist:incomplete` (V10). V8 is IS6
+against the install sequence of the kind `set` names, read once V9 has checked the body. A statement at or below
+that sequence is `dist:seq-replay`, and the same statement staged again changes nothing.
+
+**IS15.** On `host` and `mesh` an install change statement stands in place of IS12's byte rule for the table of
+the set it carries. It is staged before that set, durably, with event `staged` whose subject byte names the set's
+kind, and it survives a restart as a staged statement does (IS4). One staged on a PEP that holds no set of that
+kind, or whose `from` is not the policy hash of the held set, is refused with `dist:widening-unsigned`. When the
+set is whole the rule is held again against the set the PEP holds then (IS4). A set whose `widens` is `false`,
+whose `replaces` is the held set's policy hash and whose table is not byte for byte the held one is then applied
+with event `install-applied` and no cause, and it waits for no acknowledgement (H13). The PEP compares nothing
+more than IS12 does, and everything IS12 compares beside the table still counts. A looser `rate` or a removed one
+widens (AF8), a floor whose `layout` or `command` is not the held floor's is larger, and so is a set that does not
+hold the same artifacts as the held one. Each is refused with `dist:widening-unsigned` when `widens` is `false`.
+A set that does widen goes as IS12 says, with `widens` `true`, event `install-widened` and an acknowledgement. The
+sealing tool and the controller do what W9 says of a release, for the install keys and the engineer.
+
+1. The sealing tool compares an action floor's or a fallback policy's table on `host` and `mesh` with the table of
+   the set it follows by W8 and shows the engineer the answer and its witness. For a table W8 finds not larger,
+   with nothing else IS12 counts larger, it signs the install change statement with the install keys only after
+   the engineer says yes, at the terminal or with `--yes` for a script, and seals the set with `widens` `false`.
+   Without a yes it signs nothing. For a table W8 finds larger or cannot decide it writes no change statement,
+   and the engineer seals the set with `widens` `true` on purpose.
+2. The controller compares the same tables by W8 and shows the set as a widening, as a change, not larger, or as
+   neither for a renewal, with W8's answer and witness (F4). It offers the change statement before the set, and
+   refuses to store a set whose change statement W8 does not bear out, or that IS12 finds larger beside its table,
+   with `dist:widening-unsigned`, dropping the statement with it. It refuses a change statement handed after the
+   set it carries is whole with `dist:incomplete`, because a PEP stages it first.
+
+The PEP cannot check what W8 found, so it takes an install change statement for the signature of the install keys
+and no more, which is the trust IS12 already gives them on `cfs`. A PEP reached by a set whose change statement W8
+would not bear out applies it unseen by any event, and what shows it is its install id, which the controller does
+not expect (H12).
 
 ### 21.2 The action floor
 
@@ -2421,7 +2486,7 @@ install keys as the threshold can do there, what a controller can do with none, 
 | | Sign an install `seq` so high that the engineer's own sets cannot follow | Move the time floor, and so expire a release (IS5) |
 | | Replace the install key set and lock the engineer out, or enroll an operator key and answer the floor's escalations | Make a PEP originate an action. A wider floor answers only what is proposed to the PEP (FB4) |
 | | Sign a ceiling that lapses every release, an empty list for one, and a fallback policy inside it that then decides everything | Change what a PEP holds unseen. Every change gives a new install id in every record (H10) |
-| | On `cfs`, sign a wider table with `widens` `false`. The PEP takes their word, and only a controller or a sealing tool that compares catches it (H13) | Sign a wrong `widens` past any PEP but a `cfs` one (IS12), or a broad floor past any PEP (AF9) |
+| | On `cfs`, sign a wider table with `widens` `false`, and on `host` and `mesh` an install change statement for a wider floor or fallback table. The PEP takes their word, and only a controller or a sealing tool that compares catches it (H13, IS15) | Sign a wrong `widens` past any PEP but a `cfs` one (IS12), or a broad floor past any PEP (AF9) |
 | An operator key in the wrong hands | Answer `allow` to escalations the action floor made, on PEPs of a stream whose install threshold is 2 or more, up to the signed answer rate, each shown by an `answered` record (OP4) | Answer what the floor did not escalate, answer for another PEP or twice (OP2, OP3), sign any other kind (OP1), or act where the install threshold is 1 |
 | A controller, with no key | Withhold an install set for as long as it likes. No expiry bounds this | Make or change an install statement (IS8) |
 | The controller key in the wrong hands | Raise the epoch ids of a stream until a start or a `trust.controller` begins them again, keep a PEP fresh while it withholds, and move the time floor of a PEP with no clock and freshness on once per start, which can expire its release (K6, H16) | Admit, commit, revoke or install anything, count on any envelope, or keep a good statement from giving freshness (K6, H16) |

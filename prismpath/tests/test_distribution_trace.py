@@ -56,7 +56,7 @@ PARTIAL["P"] = PARTIAL["P"] | frozenset({193, 194})
 # 223: the `host` and `mesh` floors' `meta` is read as their `policy.ppt`'s, and the `xdp` part waits for its kind.
 PARTIAL["P"] = PARTIAL["P"] | frozenset({187, 223, 225})
 PENDING = {
-    "P": "104-105 164 187 191 193-194 206 223 225 266 272-273 293",
+    "P": "104-105 164 187 191 193-194 206 223 225 266 272-273",
     "R": "137-138 243 256-260 262 269-272 276-279 281",
     "C": "97 104-105 122 193 202 220 225 230-232 235 256-261 269-271 276-280 281",
 }
@@ -100,10 +100,11 @@ def _covered(impl: str) -> set:
     return covered - PARTIAL[impl]
 
 
-def test_the_spec_has_278_numbered_cases_each_naming_rules_and_implementations():
+def test_the_spec_has_284_numbered_cases_each_naming_rules_and_implementations():
     # 144 to 160 are left to the pull requests in flight that number their cases from 144; section 21 starts after them,
-    # and 289 to 295 are the table comparator's and the change statement's (W8 to W11)
-    assert sorted(SPEC) == [*range(1, 144), *range(161, 296)]
+    # 289 to 295 are the table comparator's and the change statement's (W8 to W11), and 296 to 301 the install change
+    # statement's (IS14, IS15)
+    assert sorted(SPEC) == [*range(1, 144), *range(161, 302)]
     assert all(case["rules"].strip() and case["runs_on"] for case in SPEC.values())
 
 

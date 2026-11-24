@@ -513,7 +513,8 @@ ON_TRUST_STREAM = frozenset({"trust.revocation", "trust.rotation", "trust.contro
 # ------------------------------------------------------------------ the install kinds (section 21)
 
 INSTALL_SETS = frozenset({"install.floor", "install.fallback", "install.ceiling"})      # IS1: a set of one kind
-INSTALL_ARTIFACTS = INSTALL_SETS | {"install.trust"}
+INSTALL_CHANGE = "install.change"                   # IS14: an install change statement, signed by the install keys
+INSTALL_ARTIFACTS = INSTALL_SETS | {"install.trust", INSTALL_CHANGE}
 POLICY_LIST, NONE = "policy.list", "none"           # CL1: the list of a ceiling; IS1: the empty set
 FLOOR_META = frozenset({"rate", "answer_rate", "command", "layout"})   # AF8, OP4, AF9, AF10: on an action floor only
 READ_ALWAYS = frozenset({"as"}) | FLOOR_META        # IS1: every reader reads these, the E9 scanners too
@@ -567,6 +568,36 @@ ARTIFACTS["install.floor"] = Artifact(role=INSTALL)
 ARTIFACTS["install.fallback"] = Artifact(role=INSTALL)
 ARTIFACTS["install.ceiling"] = Artifact(role=INSTALL)
 ARTIFACTS["install.trust"] = Artifact(check=_reads(read_install_trust), role=INSTALL)
+
+INSTALL_CHANGE_FORMAT = "prismpath.dist-install-change/1"      # IS14
+CHANGES_SETS = frozenset({"install.floor", "install.fallback"})  # IS14: the sets an install change statement carries
+
+
+def read_install_change(body: bytes) -> dict:
+    """IS14: an install change statement, the install kind of the set it carries in `set`, the one policy hash that
+    set replaces in `from` and the comparison it rests on in `basis`, W8's table comparator in this version. Only an
+    action floor or a fallback policy is carried: a `host` and a `mesh` PEP compare two ceiling lists themselves."""
+    doc = _trust_body(body, INSTALL_CHANGE_FORMAT, frozenset({"basis", "encoding", "format", "from", "set"}))
+    if doc["basis"] != CHANGE_BASIS or not is_hex64(doc["from"]) or doc["set"] not in CHANGES_SETS:
+        raise Refused(BAD_FORMAT, "an install change statement whose basis, from or set does not read")
+    return doc
+
+
+def check_install_change(envelope, body: bytes, _pep) -> Optional[str]:
+    """`install.change` (V11, IS14): the body reads, its `from` is the envelope's `replaces`, the envelope says it
+    does not widen, and its policy hash is a set's and not the empty set's 64 zeros. Anything else is
+    `dist:bad-format`: a first set and a set that says it widens are widenings, and the empty set never needs one."""
+    try:
+        doc = read_install_change(body)
+    except Refused as refused:
+        return refused.cause
+    if envelope.widens or not envelope.replaces or doc["from"] != envelope.replaces or \
+            envelope.policy_sha256 == "0" * 64:
+        return BAD_FORMAT
+    return None
+
+
+ARTIFACTS[INSTALL_CHANGE] = Artifact(check=check_install_change, role=INSTALL)
 # E11: what `as` may name, an artifact a release holds, never a trust kind, a grant or an install kind
 INSTALL_AS = frozenset(name for name in ARTIFACTS
                        if name not in TRUST_ARTIFACTS | INSTALL_ARTIFACTS and name not in ("grant", ANSWER))
@@ -576,7 +607,7 @@ def install_meta(artifact: str, meta: Any) -> Tuple[FrozenSet[str], FrozenSet[st
     """E11, IS1: the (required, optional) `meta` members of an install statement whose `meta` names `as`: `as`,
     then the members section 3 gives the artifact it names, and on an action floor `rate`, `answer_rate`,
     `command` and `layout`. An `install.trust` has none."""
-    if artifact == "install.trust":
+    if artifact in ("install.trust", INSTALL_CHANGE):
         return frozenset(), frozenset()
     named = meta.get("as") if isinstance(meta, dict) else None
     inner = ARTIFACTS.get(named) if named in INSTALL_AS else None

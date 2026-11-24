@@ -354,6 +354,15 @@ class _Store:
             canon.fsync_dir(self.blobs)
 
 
+def _change_subject(body: bytes) -> str:
+    """H10: the subject of a record about an install change statement, the set kind it carries, or `none` when its
+    body does not read."""
+    try:
+        return kinds.read_install_change(body)["set"]
+    except Refused:
+        return "none"
+
+
 class Pep:
     """One enforcement point following one stream. `adapter` is the target's, `instance_key` the PEP's own
     `root_statement.InstanceKey`, `clock` a function answering Unix seconds. `has_clock` False is a PEP with
@@ -851,6 +860,8 @@ class Pep:
         answer = envelope is not None and envelope.artifact == kinds.ANSWER
         installing = envelope is not None and envelope.artifact in kinds.INSTALL_ARTIFACTS
         subject = envelope.artifact if installing or answer else None
+        if subject == install.CHANGE:
+            subject = _change_subject(bytes(body))                  # H10: the set an install change statement carries
         if self.installed.record_lost and (envelope is None or envelope.artifact not in kinds.ON_TRUST_STREAM):
             return self._refuse(install.INSTALL_LOST, envelope_id=envelope_id, subject=subject)   # IS10
         if self.locked and not (installing or answer):
@@ -936,6 +947,8 @@ class Pep:
         kind = envelope.artifact
         if kind == install.TRUST:
             return self._apply_install_trust(envelope, body)
+        if kind == install.CHANGE:
+            return self._stage_install_change(envelope, sealed, body)
         named = envelope.meta["as"]
         staged = self.installed.staged.get(kind)
         if staged is None or staged.seq != envelope.seq:
@@ -953,6 +966,26 @@ class Pep:
         if not staged.whole(self.adapter.kind):
             return ack
         return self._apply_set(staged)
+
+    def _stage_install_change(self, envelope, sealed: bytes, body: bytes) -> bytes:
+        """IS15: an install change statement is staged before the set it carries, durably and with event `staged`
+        whose subject is that set's kind. One staged on a PEP that holds no set of the kind, or whose `from` is not
+        the held set's policy hash, is `dist:widening-unsigned`, and at apply the rule is held again."""
+        kind = kinds.read_install_change(body)["set"]
+        held = self.installed.held(kind)
+        if not install.changes_set(body, kind, held.policy_sha256 if held is not None else None):
+            return self._refuse(install.UNSIGNED, envelope_id=envelope.envelope_id, subject=kind)
+        staged = self.installed.staged.get(kind)
+        if staged is None or staged.seq != envelope.seq:
+            staged = install.Staged(kind, envelope.seq, envelope.policy_sha256, envelope.release, envelope.replaces,
+                                    envelope.widens)
+        staged.change, staged.change_body = (envelope.envelope_id, *self.installed.put(sealed, body, both=False)), body
+        self.installed.staged[kind] = staged
+        self.installed.save_staged()
+        self.audit.append("distribution", "staged", {"envelope_id": envelope.envelope_id, "artifact": install.CHANGE,
+                                                     "set": kind, "seq": envelope.seq, "release": envelope.release,
+                                                     "result": "staged"})
+        return self._record("staged", subject=kind)
 
     def _drop_install_staged(self, kind: str) -> None:
         self.installed.staged.pop(kind, None)
@@ -987,12 +1020,13 @@ class Pep:
                 if held is not None and not install.inside(target, new, held.bodies, whole=other != install.FLOOR):
                     return refuse(install.ABOVE_CEILING)             # CL3: the engineer narrows those first
         cause, stands_out = install.widens_ok(target, kind, held_raw, staged.bodies, widens=staged.widens,
-                                              replaces=staged.replaces, envelopes=staged.envelopes)
+                                              replaces=staged.replaces, envelopes=staged.envelopes,
+                                              change=staged.change_body)
         if cause is not None:
             return refuse(cause)
+        # CL3: a ceiling that narrows below the active release is no widening; the release lapses and says so itself
         lapses = (kind == install.CEILING and self.active is not None and bodies
                   and not install.inside(target, new, self.active.bodies))
-        stands_out = stands_out or bool(lapses)                      # IS12: it hands the PEP to its fallback policy
         before = self.fallback_decides()
         self.installed.mark(install=True, **({"ceiling": True} if kind == install.CEILING and bodies else {}))
         for name, (envelope_id, sealed_name, body_name) in new.statements.items():
@@ -1006,8 +1040,11 @@ class Pep:
         if kind == install.CEILING:
             self.installed.ceiling_lost = False
         event = "install-widened" if stands_out else "install-applied"
-        self.audit.append("distribution", event, {"artifact": kind, "seq": staged.seq, "set_id": new.set_id,
-                                                  "envelopes": self.installed.statement_ids(), "result": event})
+        detail = {"artifact": kind, "seq": staged.seq, "set_id": new.set_id,
+                  "envelopes": self.installed.statement_ids(), "result": event}
+        if staged.change is not None and not stands_out:
+            detail["change"] = staged.change[0]                      # IS15: the statement the set was taken on
+        self.audit.append("distribution", event, detail)
         owed = (event, install.WIDENED if stands_out else None, kind)
         if lapses:
             applied = self._record(*owed)

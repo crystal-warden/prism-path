@@ -10,18 +10,22 @@ to store one that fails. A whole set is then held to the ceiling the controller 
 set it follows (IS12, W7): a set the controller computes as larger whose `widens` is false is refused, on `host` and
 `mesh` by its bytes and on `cfs` by the core image inside its table.
 
-H13 is detection and not prevention. A set whose `widens` is true, a ceiling that withdraws or empties the held one
-or would lapse the release the controller expects of a PEP, and an `install.trust` that adds a key of either role or
-lowers the threshold are held with `dist:install-widened` open, offered to nobody, and their install id is expected
-of no PEP until an acknowledger acknowledges them by the envelope ids of their statements. The acknowledger is a
+H13 is detection and not prevention. A set whose `widens` is true, the empty ceiling that withdraws the held one, and
+an `install.trust` that adds a key of either role or lowers the threshold are held with `dist:install-widened` open,
+offered to nobody, and their install id is expected of no PEP until an acknowledger acknowledges them by the envelope
+ids of their statements. A widening is only a set that extends or enlarges scope: a ceiling that narrows below the
+release the controller expects of a PEP is offered at once, and the fleet view names the PEPs it lapses. On `host`
+and `mesh` an action floor's or a fallback policy's table is compared by W8 (`table_compare`), and a set carried by
+an install change statement W8 bears out is offered at once, the statement before it (IS15). The acknowledger is a
 person the controller lets do this by its own login. It holds no key and signs nothing, and no PEP reads what it
 does: a PEP applies a well signed widening set from any sender, a hostile controller included, so what H13 gives is
 that a widening cannot spread from this controller unseen, nor stay unseen when it reaches a PEP another way.
 
 The state it adds to `controller.json`, under `install`:
 
-    sets       every install set stored, by `<stream>/<kind>/<seq>/<release id>`: its statements by `as`, whether it is
-               whole, and its state, `partial`, `held` (waiting for its acknowledgement) or `offered`
+    sets       every install set stored, by `<stream>/<kind>/<seq>/<release id>`: its statements by `as`, the install
+               change statement before it, whether it is whole, its state, `partial`, `held` (waiting for its
+               acknowledgement) or `offered`, and its scope, `widening` or `change, not larger`, with W8's answer
     trust      per stream, the `install.trust` statements stored, in install trust order, each `held` or `offered`
     findings   the open `dist:install-widened` of each held set or statement, by its key
     pending    `provisioned` records from PEPs not yet enrolled, at most 8 per PEP id and 64 PEP ids (H13, H6)
@@ -37,13 +41,15 @@ from dataclasses import replace
 from typing import Dict, List, Optional, Sequence, Tuple
 
 from prismpath.distribution import envelope as env
-from prismpath.distribution import install, kinds, state_record, widening
+from prismpath.distribution import install, kinds, state_record, table_compare, widening
 from prismpath.distribution.kinds import Refused
 from prismpath.distribution.trust import read_anchor
 from prismpath.distribution.verify import InstallView, PepView, verify
 
 WIDENED, FALLBACK_FINDING = install.WIDENED, "dist:fallback"
 PARTIAL_SET, HELD_SET, OFFERED_SET = "partial", "held", "offered"
+# F4: what a set does to the scope a PEP allows, as the controller computes it, the words a rollout uses (W9)
+WIDENING, CHANGE_NOT_LARGER = "widening", "change, not larger"
 MAX_PENDING_PER_PEP = 8                            # the provisioned records kept for one PEP id not yet enrolled
 MAX_PENDING_PEPS = 64                              # and the PEP ids kept, the oldest dropped first
 
@@ -197,6 +203,9 @@ class InstallDesk:
         staged = install.Staged(kind, info["seq"], info["policy"], info["release"], info["replaces"], info["widens"],
                                 {named: (one, one, envelopes[named].body_sha256)
                                  for named, one in info["statements"].items()}, envelopes, bodies)
+        if info.get("change"):
+            staged.change = (info["change"], info["change"], self.stored[info["change"]]["body_sha256"])
+            staged.change_body = self.blob(self.stored[info["change"]]["body_sha256"])
         return {kind: staged}
 
     def _set_by_id(self, stream: str, set_id: str) -> Optional[dict]:
@@ -221,11 +230,15 @@ class InstallDesk:
             if envelope.artifact == install.TRUST:
                 self._check_trust_keys(anchor["stream"], record, body)
             kind = envelope.artifact
+            if kind == install.CHANGE:
+                kind = self._change_set(body)
+                self._check_change_unsettled(envelope, kind)
             # IS4: on a stream whose install threshold is 1 a statement reaches a PEP by provisioning only, so it is
             # verified as a provisioning brings it, stored for the enrollment of install ids, and never offered
             view = PepView(kind=anchor["target"], stream=anchor["stream"], qualification=anchor["qualification"],
                            install=InstallView(record=record,
-                                               staged=self._staged_view(anchor["stream"], kind) if kind != install.TRUST else {},
+                                               staged=self._staged_view(anchor["stream"], kind)
+                                               if kind not in (install.TRUST, None) else {},
                                                ceiling=self.offered_set(anchor["stream"], install.CEILING),
                                                message=record.threshold >= 2, layout=self._layout(fingerprint)))
             verdict = verify(sealed, body, trust=self._anchor_store(fingerprint), pep=view, now=int(self.clock()),
@@ -237,6 +250,25 @@ class InstallDesk:
             checked += 1
         if not checked:
             raise Refused("dist:target-mismatch", "the controller serves no stream with install keys this statement names")
+
+    @staticmethod
+    def _change_set(body: bytes) -> Optional[str]:
+        """IS14: the set kind an install change statement carries, None when its body does not read (V11 says why)."""
+        try:
+            return kinds.read_install_change(body)["set"]
+        except Refused:
+            return None
+
+    def _check_change_unsettled(self, envelope, kind: Optional[str]) -> None:
+        """IS15: an install change statement is handed before the set it carries is whole, as a PEP stages it before
+        the set. One for a set the controller already settled is `dist:incomplete`, so a set it offered or held is
+        never carried after the fact."""
+        if kind is None:
+            return
+        info = self.install_sets.get(set_key(envelope.stream, kind, envelope.seq, envelope.release))
+        if info is not None and info["state"] != PARTIAL_SET:
+            raise Refused("dist:incomplete", "the set this install change statement carries is settled already; hand "
+                                             "the statement before the set (IS15)")
 
     def _layout(self, fingerprint: str) -> Optional[bytes]:
         layout = self.anchors[fingerprint].get("layout")
@@ -263,14 +295,21 @@ class InstallDesk:
             if widened:
                 self._hold(envelope_id, "an install trust statement that adds a key or lowers the threshold")
             return
-        named = envelope.meta["as"]
-        key = set_key(envelope.stream, envelope.artifact, envelope.seq, envelope.release)
+        kind = envelope.artifact
+        if kind == install.CHANGE:
+            kind = kinds.read_install_change(self.blob(envelope.body_sha256))["set"]
+        key = set_key(envelope.stream, kind, envelope.seq, envelope.release)
         info = self.install_sets.setdefault(key, {
-            "stream": envelope.stream, "kind": envelope.artifact, "seq": envelope.seq, "release": envelope.release,
+            "stream": envelope.stream, "kind": kind, "seq": envelope.seq, "release": envelope.release,
             "policy": envelope.policy_sha256, "replaces": envelope.replaces, "widens": envelope.widens,
             "target": envelope.targets[0], "statements": {}, "state": PARTIAL_SET, "set_id": "",
             "acknowledged": None, "reasons": []})
-        info["statements"][named] = envelope_id
+        if envelope.artifact == install.CHANGE:
+            info["change"] = envelope_id                 # IS15: offered before the set it carries
+        else:
+            info["statements"][envelope.meta["as"]] = envelope_id
+        if not info["statements"]:
+            return
         envelopes, bodies = self._set_statements(key)
         staged = install.Staged(info["kind"], info["seq"], info["policy"], info["release"], info["replaces"],
                                 info["widens"], {name: (one, one, "") for name, one in info["statements"].items()},
@@ -281,6 +320,8 @@ class InstallDesk:
     def _drop_set(self, key: str) -> None:
         for envelope_id in self.install_sets[key]["statements"].values():
             self.stored.pop(envelope_id, None)
+        if self.install_sets[key].get("change"):
+            self.stored.pop(self.install_sets[key]["change"], None)
         del self.install_sets[key]
 
     def _settle(self, key: str) -> None:
@@ -307,6 +348,10 @@ class InstallDesk:
             if larger is None:                    # H13: a cfs table, by the core image inside it
                 before = None if follows is None or follows.empty else dict(follows.bodies)
                 larger = before is None or widening.compare_release(before, real) != widening.NOT_LARGER
+            comparison = self._compare_tables(target, kind, follows, new)
+            if info.get("change"):
+                self._bear_out(info, kind, follows, new, comparison)
+                larger = False                    # IS15: W8 bears the change statement out
             if larger and not info["widens"]:
                 raise Refused(install.UNSIGNED, "the set allows more than the one it follows and says it does not (W7)")
             held_policy = follows.policy_sha256 if follows is not None else ""
@@ -317,23 +362,79 @@ class InstallDesk:
             self._log("refused", artifact=kind, stream=stream, seq=info["seq"], cause=refused.cause, detail=str(refused),
                       result="refused")
             raise
+        if comparison is not None:              # W8 in place of the byte rule, and everything else IS12 counts
+            larger = comparison.answer != widening.NOT_LARGER or bool(install.set_larger(
+                target, kind, follows, bodies, dict(new.envelopes), change=True))
+        scope = self._set_scope(kind, follows, new, bool(larger))
         reasons = []
         if info["widens"]:
-            reasons.append("its widens is true")
-        if kind == install.CEILING and (not real or (kinds.POLICY_LIST in real and not kinds.read_ceiling_list(
-                real[kinds.POLICY_LIST])["bodies"])):
-            reasons.append("it withdraws or empties the ceiling")
+            reasons.append("its widens is true" + (
+                ", though the table comparator finds it allows nothing more: an install change statement would carry "
+                "it without an acknowledgement (IS15)" if scope == CHANGE_NOT_LARGER else ""))
+        if kind == install.CEILING and not real and follows is not None and not follows.empty:
+            reasons.append("it withdraws the ceiling")
+        lapsed = []
         if kind == install.CEILING and real:
+            # CL3: a ceiling that narrows below a release is no widening; the release lapses and the PEP says so
             lapsed = [pep for pep, member in sorted(self.members.items())
                       if member.stream == stream and self._expected_bodies(member) is not None
                       and not install.inside(target, new, self._expected_bodies(member))]
-            if lapsed:
-                reasons.append("it would lapse the release expected of " + ", ".join(lapsed))
-        info.update(set_id=new.set_id, reasons=reasons, state=HELD_SET if reasons else OFFERED_SET)
+        info.update(set_id=new.set_id, reasons=reasons, state=HELD_SET if reasons else OFFERED_SET, scope=scope,
+                    comparison=comparison.document() if comparison is not None else None, lapses=lapsed)
         if reasons:
             self._hold(key, "; ".join(reasons))
         self._log("install-set", key=key, set_id=new.set_id, envelopes=sorted(info["statements"].values()),
                   state=info["state"], result="stored")
+
+    def _compare_tables(self, target: str, kind: str, follows: Optional[install.HeldSet], new: install.HeldSet):
+        """W8 over the `policy.ppt` of an action floor or a fallback policy on `host` and `mesh` and the one of the set
+        it follows, with their signed field dictionaries, or None when there is nothing to compare."""
+        if target not in ("host", "mesh") or kind not in kinds.CHANGES_SETS or follows is None or follows.empty:
+            return None
+        if "policy.ppt" not in follows.bodies or "policy.ppt" not in new.bodies:
+            return None
+        return table_compare.compare_tables(
+            follows.bodies["policy.ppt"], new.bodies["policy.ppt"],
+            active_fields=table_compare.table_fields(follows.envelopes.get("policy.ppt")),
+            staged_fields=table_compare.table_fields(new.envelopes.get("policy.ppt")))
+
+    def _bear_out(self, info: dict, kind: str, follows: Optional[install.HeldSet], new: install.HeldSet,
+                  comparison) -> None:
+        """IS15, W9: the controller offers a set carried by an install change statement only when the statement stands
+        for it as a PEP takes it, from the policy hash of the set it follows, and W8 finds the table allows nothing
+        more. Everything else a PEP compares is compared too. `Refused` with `dist:widening-unsigned` otherwise."""
+        held_policy = follows.policy_sha256 if follows is not None and not follows.empty else ""
+        body = self.blob(self.stored[info["change"]]["body_sha256"])
+        if info["widens"] or not install.changes_set(body, kind, held_policy) or info["replaces"] != held_policy:
+            raise Refused(install.UNSIGNED, "the install change statement does not stand for this set (IS15)")
+        if comparison is None or comparison.answer != widening.NOT_LARGER:
+            raise Refused(install.UNSIGNED, "the table comparator does not bear the install change statement out (W8): "
+                          + str(comparison.document() if comparison is not None else "no table to compare"))
+        if install.set_larger(info["target"], kind, follows, dict(new.bodies), dict(new.envelopes), change=True):
+            raise Refused(install.UNSIGNED, "the set allows more than the one it follows beside its table, by its rate, "
+                                            "its layout or its command register (IS12)")
+
+    @staticmethod
+    def _set_scope(kind: str, follows: Optional[install.HeldSet], new: install.HeldSet, larger: bool) -> str:
+        """F4: what the set does to the scope a PEP allows, whatever its `widens` says: a widening when it allows more
+        than the set it follows or is the first of an action floor or a fallback policy, a change, not larger, when it
+        differs and allows nothing more, a table by W8, and empty when it is the same."""
+        empty = set(new.bodies) == {kinds.NONE}
+        before = None if follows is None or follows.empty else dict(follows.bodies)
+        if kind == install.CEILING:
+            if empty:
+                return WIDENING if before is not None else ""
+            if before is None:
+                return CHANGE_NOT_LARGER                 # IS12: a first ceiling does not widen
+        elif empty:
+            return CHANGE_NOT_LARGER if before is not None else ""
+        elif before is None:
+            return WIDENING
+        if larger:
+            return WIDENING
+        same = before is not None and {name: bytes(body) for name, body in before.items()} == {
+            name: bytes(body) for name, body in new.bodies.items()}
+        return "" if same else CHANGE_NOT_LARGER
 
     def _expected_bodies(self, member) -> Optional[dict]:
         """{artifact: body} of the release the controller expects of `member`, or None."""
@@ -498,7 +599,7 @@ class InstallDesk:
             if one is not None and one != before["sets"].get(kind):
                 info = self._set_by_id(member.stream, one[0])
                 if info is not None:
-                    ids += sorted(info["statements"].values())
+                    ids += ([info["change"]] if info.get("change") else []) + sorted(info["statements"].values())
         return ids
 
     # ------------------------------------------------------------------ H11, H12: what a record must carry
@@ -602,7 +703,8 @@ class InstallDesk:
             out.setdefault(info["stream"], {"sets": [], "trust": []})["sets"].append(
                 {"key": key, "kind": info["kind"], "seq": info["seq"], "set_id": info["set_id"], "state": info["state"],
                  "envelopes": sorted(info["statements"].values()), "acknowledged": info["acknowledged"],
-                 "finding": self.install_findings.get(key)})
+                 "finding": self.install_findings.get(key), "scope": info.get("scope", ""),
+                 "comparison": info.get("comparison"), "change": info.get("change"), "lapses": info.get("lapses", [])})
         for stream, items in sorted(self.install_trust.items()):
             out.setdefault(stream, {"sets": [], "trust": []})["trust"] = [
                 {**item, "finding": self.install_findings.get(item["envelope_id"])} for item in self._trust_items(stream)]

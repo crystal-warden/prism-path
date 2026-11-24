@@ -408,6 +408,10 @@ fixed_string!(
     InstallTrustFormat = "prismpath.dist-install-trust/1"
 );
 fixed_string!(
+    /// IS14: an install change statement's body.
+    InstallChangeFormat = "prismpath.dist-install-change/1"
+);
+fixed_string!(
     /// CL1: the policy list of a ceiling for a kind that cannot decide.
     CeilingFormat = "prismpath.dist-ceiling/1"
 );
@@ -511,6 +515,7 @@ kind_names!(
         InstallFallback = "install.fallback",
         InstallCeiling = "install.ceiling",
         InstallTrust = "install.trust",
+        InstallChange = "install.change",
         OperatorAnswer = "operator.answer",
     }
 );
@@ -569,16 +574,21 @@ impl ArtifactKind {
                 role: INSTALL,
                 ..PLAIN
             },
+            InstallChange => Artifact { check: Some(install::check_install_change), role: INSTALL, ..PLAIN },
             OperatorAnswer => Artifact { role: OPERATOR, ..PLAIN },
             PolicyCore | EgressHosts | GatewayRoutes | NetDests | CfsTable | Grant => PLAIN,
         }
     }
 
-    /// IS1: one of the four install kinds, signed by install keys only (IS2).
+    /// IS1, IS14: one of the five install kinds, signed by install keys only (IS2).
     pub fn is_install(self) -> bool {
         matches!(
             self,
-            ArtifactKind::InstallFloor | ArtifactKind::InstallFallback | ArtifactKind::InstallCeiling | ArtifactKind::InstallTrust
+            ArtifactKind::InstallFloor
+                | ArtifactKind::InstallFallback
+                | ArtifactKind::InstallCeiling
+                | ArtifactKind::InstallTrust
+                | ArtifactKind::InstallChange
         )
     }
 

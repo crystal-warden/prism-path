@@ -125,6 +125,7 @@ typedef enum {
     PP_ART_INSTALL_FLOOR, PP_ART_INSTALL_FALLBACK, PP_ART_INSTALL_CEILING, PP_ART_INSTALL_TRUST, /* section 21 */
     PP_ART_OPERATOR_ANSWER,                                                                    /* OP2 */
     PP_ART_TRUST_CHANGE,                                                                       /* W10 */
+    PP_ART_INSTALL_CHANGE,                                                                     /* IS14 */
     PP_ART_COUNT
 } pp_artifact;
 
@@ -264,11 +265,19 @@ typedef struct {
     pp_layout_field fields[PP_LAYOUT_FIELDS];
 } pp_layout;
 
+/* IS14, IS15: an install change statement staged before the set it carries, by what V10 and IS15 hold it to: its seq,
+ * policy hash, release id and `from`, which V11 held to its `replaces`, and its envelope id. */
+typedef struct {
+    long long seq;
+    uint8_t policy_sha256[32], release[32], from[32], envelope_id[32];
+} pp_change;
+
 /* What the verifier needs of a PEP's install part. NULL `record` for a PEP that holds none, which takes no
  * install statement (`dist:unknown-key`). */
 typedef struct {
     const pp_install *record;
     const pp_envelope *staged[PP_SETS]; /* the statement staged of each kind, NULL for none (IS4, G2, V10) */
+    const pp_change *change[PP_SETS];   /* the install change statement staged of each kind, NULL for none (IS15) */
     int message;                    /* 1 in a message, where a threshold of 1 takes no install statement (IS4) */
     int has_ceiling;                /* a policy list is held (CL1) */
     const uint8_t (*ceiling)[32];
@@ -310,6 +319,8 @@ typedef struct {
     int trust_bounded;              /* the body is held to the trust bound: a trust body, a policy list or an
                                        install.trust (E6, IS5) */
     int install_widens;             /* IS11: an install.trust that adds a key or lowers the threshold */
+    int change_set;                 /* IS14: the set kind an install change statement carries, once V11 read it */
+    uint8_t change_from[32];
 } pp_verdict;
 
 /* ------------------------------------------------------------------ the functions */
@@ -490,6 +501,8 @@ typedef struct {
 typedef struct {
     int has_held, has_staged;
     pp_statement held, staged;
+    int has_change;                 /* IS15: a change statement is staged for this kind */
+    pp_change change;
 } pp_install_set;
 typedef struct {
     int provisioned;            /* the anchor is confirmed (P2) */

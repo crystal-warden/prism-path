@@ -544,8 +544,8 @@ def test_case_217_a_set_is_whole_only_when_its_signed_release_id_is_computed_aga
 
 
 def test_a_ceiling_the_active_release_is_above_lapses_it_to_the_fallback_policy(tmp_path):
-    """CL3, IS12, FB3: a ceiling the active release is above is applied with `install-widened`, whatever its `widens`
-    says, and the release lapses with `dist:above-ceiling` to the fallback policy, which must be inside the ceiling."""
+    """CL3, IS12, FB3: a ceiling the active release is above narrows, so it is applied with `install-applied` and no
+    cause, and the release lapses with `dist:above-ceiling` to the fallback policy, which must be inside the ceiling."""
     point = _host(tmp_path)
     point.send(_list(point, 1, image(5), image(9)))
     point.send(_fallback(point, image(9)))
@@ -553,8 +553,8 @@ def test_a_ceiling_the_active_release_is_above_lapses_it_to_the_fallback_policy(
     point.pep.drain()
     applied = point.send(_list(point, 2, image(9)))[-1]
     sent = [_read(point, one) for one in point.pep.drain()]
-    assert (applied.event, applied.cause) == ("install-widened", "dist:install-widened")
-    assert [(one.event, one.cause) for one in sent][-2:] == [("install-widened", "dist:install-widened"),
+    assert (applied.event, applied.cause) == ("install-applied", None)
+    assert [(one.event, one.cause) for one in sent][-2:] == [("install-applied", None),
                                                              ("fallback", "dist:above-ceiling")]
     assert point.pep.active is None and point.pep.decide(lambda: 1)["basis"] == "fallback"
     above = point.send(_list(point, 3, image(5)))[-1]
@@ -870,6 +870,59 @@ def test_the_engineer_s_tool_writes_the_anchor_s_install_part_sets_and_install_t
                "--current-threshold", "1", "--not-before", str(NOT_BEFORE), "--install-pub", str(tmp_path / "N1.pub"),
                "--install-pub", str(tmp_path / "N2.pub"), "--threshold", "1", "--key", str(keys["N1"]),
                "--key", str(keys["N2"]), "--out", str(tmp_path / "back.sealed")) == 1
+
+
+def test_case_301_the_engineer_s_tool_signs_an_install_change_statement_only_on_a_yes(tmp_path, capsys):
+    """case_301: IS15, W8, W9. `prismpath dist install --kind fallback` given a `mesh` fallback table that allows less
+    than the one it follows writes nothing without a yes and says `dist:widening-unsigned` with the comparison shown,
+    and with `--yes` seals the set with `widens` false and an install change statement beside it, which a node takes
+    with event `install-applied`. A table that allows more is refused without `--widens`, and with it is sealed with
+    `widens` true and no change statement."""
+    import json
+    from prismpath import cli
+    from prismpath.hotswap import policy_pack
+    _priv, _pub, ser, _invalid = policy_pack._ed25519()
+    keys = {}
+    for name in ("N1", "N2"):
+        keys[name] = tmp_path / f"{name}.pem"
+        keys[name].write_bytes(GEN.test_key(name).private_bytes(ser.Encoding.PEM, ser.PrivateFormat.PKCS8,
+                                                                 ser.NoEncryption()))
+
+    def run(*argv):
+        args = cli.build_parser().parse_args(["dist", *argv])
+        return args.func(args)
+
+    for threshold in (8, 9, 10):
+        (tmp_path / f"t{threshold}.ppt").write_bytes(image(threshold))
+    (tmp_path / "qualification.json").write_text(json.dumps(GEN.QUALIFICATION))
+    common = ["--stream", STREAM, "--target", "mesh", "--key", str(keys["N1"]), "--key", str(keys["N2"]),
+              "--not-before", str(NOT_BEFORE), "--qualification", str(tmp_path / "qualification.json")]
+    point = _dist.MeshPep(tmp_path / "mesh", install_keys=["N1", "N2"], install_threshold=2)
+    assert run("install", "--kind", "fallback", "--set", f"policy.ppt={tmp_path / 't9.ppt'}", "--seq", "1",
+               "--widens", *common, "--out", str(tmp_path / "first")) == 0
+    assert point.send(install_pairs(tmp_path / "first"))[-1].event == "install-widened"
+    capsys.readouterr()
+    narrower = ["install", "--kind", "fallback", "--set", f"policy.ppt={tmp_path / 't10.ppt'}", "--seq", "2",
+                "--follows", str(tmp_path / "first"), *common]
+    assert run(*narrower, "--out", str(tmp_path / "unconfirmed")) == 1
+    shown = capsys.readouterr()
+    assert "dist:widening-unsigned" in shown.err and '"answer": "not-larger"' in shown.err
+    assert not (tmp_path / "unconfirmed").exists()
+    assert run(*narrower, "--yes", "--out", str(tmp_path / "narrow")) == 0
+    printed = json.loads(capsys.readouterr().out)
+    assert printed["widens"] is False and printed["scope"] == "change, not larger"
+    assert printed["change"]["basis"] == "prismpath.table-compare/1"
+    pairs = install_pairs(tmp_path / "narrow")
+    assert env.read(env.unseal(pairs[0][0])[0]).artifact == "install.change"     # sorted first: offered first
+    assert [(one.event, one.cause) for one in point.send(pairs)] == [("staged", None), ("install-applied", None)]
+    wider = ["install", "--kind", "fallback", "--set", f"policy.ppt={tmp_path / 't8.ppt'}", "--seq", "3",
+             "--follows", str(tmp_path / "narrow"), *common]
+    assert run(*wider, "--yes", "--out", str(tmp_path / "unsaid")) == 1
+    capsys.readouterr()
+    assert run(*wider, "--widens", "--out", str(tmp_path / "wider")) == 0
+    printed = json.loads(capsys.readouterr().out)
+    assert printed["widens"] is True and printed["scope"] == "widening" and "change" not in printed
+    assert not (tmp_path / "wider" / "install.change.sealed").exists()
 
 
 def install_pairs(directory: Path):

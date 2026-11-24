@@ -113,6 +113,14 @@ takes `--yes` for a change statement. The fleet view shows each rollout as a wid
 and only a widening waits for an acknowledgement. No PEP runs the comparator, so each still checks bytes and
 the statement it is given (W2).
 
+The engineer's install sets work the same way on a host or a mesh node. `dist install --kind floor` or
+`--kind fallback` with `--follows` compares the new table with the one it follows and shows the answer. For a
+table that allows nothing more it asks you to confirm, or takes `--yes`, then seals the set with `widens` false
+and writes an install change statement signed by the install keys beside it, as `install.change.sealed` and
+`.body` (IS14). Hand it to the controller before the set. The node then applies the set as `install-applied`, and
+nothing waits for an acknowledgement (IS15). A ceiling that only narrows needs no statement, since the node compares
+two lists itself. Only a set that extends or enlarges what a node allows is a widening.
+
 The reading domain an agent policy is compared over is the one the engineer who installs PrismPath defines: the
 values the classifier produces for each category, true and false, and each int's min to max. A policy whose
 rule names a value outside it, such as a tool the classifier does not produce, is refused when it is loaded and

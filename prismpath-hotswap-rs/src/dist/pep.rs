@@ -1479,7 +1479,11 @@ impl<A: Adapter> Pep<A> {
         let verdict = verify::verify(sealed, body, &self.trust, &view, (self.clock)());
         let artifact = verdict.envelope.as_ref().map(|envelope| envelope.artifact);
         let installing = artifact.is_some_and(ArtifactKind::is_install);
-        let subject = artifact.filter(|_| installing).map(ArtifactKind::name);
+        let mut subject = artifact.filter(|_| installing).map(ArtifactKind::name);
+        if artifact == Some(ArtifactKind::InstallChange) {
+            // H10: the set an install change statement carries, or none when its body does not read
+            subject = install::read_install_change(body).ok().map(|(kind, _)| kind.name());
+        }
         let on_trust = artifact.is_some_and(ArtifactKind::on_trust_stream);
         let id_of = |verdict: &super::Verdict| json!(verdict.envelope.as_ref().map(|envelope| envelope.envelope_id().to_string()));
         if self.installed.record_lost && !on_trust {
@@ -1575,6 +1579,9 @@ impl<A: Adapter> Pep<A> {
     /// G1 stages an envelope, with event `staged` and its subject, a set at a higher `seq` replacing the one staged of
     /// its kind, and the set is applied when it is whole.
     fn stage_install(&mut self, envelope: &Envelope, sealed: &[u8], body: &[u8]) -> Result<Vec<u8>, PepError> {
+        if envelope.artifact == ArtifactKind::InstallChange {
+            return self.stage_install_change(envelope, sealed, body);
+        }
         let Some(kind) = SetKind::of(envelope.artifact) else { return self.apply_install_trust(envelope, body) };
         let whole = self.installed.stage(kind, envelope, sealed, body)?.whole();
         let named = install::install_meta(envelope).map_or("", |meta| meta.as_name.name());
@@ -1595,6 +1602,31 @@ impl<A: Adapter> Pep<A> {
             return Ok(ack);
         }
         self.apply_set(kind)
+    }
+
+    /// IS15: an install change statement is staged before the set it carries, durably and with event `staged` whose
+    /// subject is that set's kind. One staged on a PEP that holds no set of the kind, or whose `from` is not the held
+    /// set's policy hash, is `dist:widening-unsigned`, and the rule is held again when the set is applied.
+    fn stage_install_change(&mut self, envelope: &Envelope, sealed: &[u8], body: &[u8]) -> Result<Vec<u8>, PepError> {
+        let (kind, _from) = install::read_install_change(body).map_err(|refusal| refused(refusal.to_string()))?;
+        let held = self.installed.held(kind).map(|held| held.policy_sha256().clone());
+        if !install::changes_set(Some(body), kind, held.as_ref()) {
+            return self.refuse_about(WIDENING_UNSIGNED, Some(kind.name()), vec![("envelope_id", json!(envelope.envelope_id().as_str()))]);
+        }
+        self.installed.stage_change(kind, envelope, sealed, body)?;
+        self.audit.append(
+            "distribution",
+            "staged",
+            vec![
+                ("envelope_id", json!(envelope.envelope_id().as_str())),
+                ("artifact", json!(ArtifactKind::InstallChange.name())),
+                ("set", json!(kind.name())),
+                ("seq", json!(envelope.seq)),
+                ("release", json!(envelope.release.as_str())),
+                ("result", json!("staged")),
+            ],
+        )?;
+        self.make_record_about("staged", None, Some(kind.name()))
     }
 
     fn refuse_set(&mut self, kind: SetKind, cause: &str, seq: i64) -> Result<Vec<u8>, PepError> {
@@ -1640,9 +1672,12 @@ impl<A: Adapter> Pep<A> {
         if let Some(cause) = cause {
             return self.refuse_set(kind, cause, seq);
         }
+        // CL3: a ceiling that narrows below the active release is no widening; the release lapses and says so itself
         let active_table = self.active.as_ref().and_then(|active| active.bodies.get(&ArtifactKind::PolicyPpt)).cloned();
         let lapses = kind == SetKind::Ceiling && !empty && active_table.is_some() && !install::table_inside(Some(&staged), active_table.as_deref());
-        let stands_out = stands_out || lapses; // IS12: it hands the PEP to its fallback policy
+        let change = staged.doc.change.as_ref().filter(|_| !stands_out).map(|held| held.envelope_id.clone());
+        let mut staged = staged;
+        (staged.doc.change, staged.change_body) = (None, None); // the change statement is no member of the set held
         let before = self.fallback_decides();
         let ceiling_mark = (kind == SetKind::Ceiling).then_some(!empty);
         self.installed.mark(true, false, ceiling_mark)?; // IS9: before the first install statement is applied
@@ -1657,17 +1692,17 @@ impl<A: Adapter> Pep<A> {
             self.installed.ceiling_lost = false;
         }
         let event = if stands_out { "install-widened" } else { "install-applied" };
-        self.audit.append(
-            "distribution",
-            event,
-            vec![
-                ("artifact", json!(kind.name())),
-                ("seq", json!(seq)),
-                ("set_id", json!(staged.set_id().as_str())),
-                ("envelopes", json!(self.installed.statement_ids().iter().map(Hex64::as_str).collect::<Vec<_>>())),
-                ("result", json!(event)),
-            ],
-        )?;
+        let mut details = vec![
+            ("artifact", json!(kind.name())),
+            ("seq", json!(seq)),
+            ("set_id", json!(staged.set_id().as_str())),
+            ("envelopes", json!(self.installed.statement_ids().iter().map(Hex64::as_str).collect::<Vec<_>>())),
+            ("result", json!(event)),
+        ];
+        if let Some(change) = change {
+            details.push(("change", json!(change.as_str()))); // IS15: the statement the set was taken on
+        }
+        self.audit.append("distribution", event, details)?;
         let cause = stands_out.then_some(INSTALL_WIDENED);
         if lapses {
             let applied = self.make_record_about(event, cause, Some(kind.name()))?;

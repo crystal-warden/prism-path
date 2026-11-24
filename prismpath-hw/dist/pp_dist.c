@@ -71,7 +71,8 @@ void pp_sha256(const uint8_t *data, size_t len, uint8_t out[32]) {
 static const char *const pp_artifact_names[PP_ART_COUNT] = {
     "policy.core", "policy.ppt", "policy.spiral", "sandbox.profile", "egress.hosts", "agent.zones", "gateway.routes",
     "net.dests", "net.edge", "cfs.table", "grant", "trust.widening", "trust.revocation", "trust.rotation",
-    "install.floor", "install.fallback", "install.ceiling", "install.trust", "operator.answer", "trust.change"};
+    "install.floor", "install.fallback", "install.ceiling", "install.trust", "operator.answer", "trust.change",
+    "install.change"};
 static const char *const pp_target_names[PP_TGT_COUNT] = {"agent", "cfs", "gateway", "host", "mesh", "xdp"};
 
 const char *pp_artifact_name(pp_artifact artifact) {
@@ -117,7 +118,7 @@ static int pp_is_trust(pp_artifact artifact) {
 
 /* Section 21: the install kinds, and the set kind of each of the three that make a set. */
 static int pp_is_install(pp_artifact artifact) {
-    return artifact >= PP_ART_INSTALL_FLOOR && artifact <= PP_ART_INSTALL_TRUST;
+    return (artifact >= PP_ART_INSTALL_FLOOR && artifact <= PP_ART_INSTALL_TRUST) || artifact == PP_ART_INSTALL_CHANGE;
 }
 
 static int pp_set_of(pp_artifact artifact) {
@@ -333,7 +334,8 @@ static int pp_scan_install_meta(pp_c2 *c, pp_envelope *e) {
         }
     }
     if (e->artifact == PP_ART_OPERATOR_ANSWER) return 1;
-    if (e->artifact == PP_ART_INSTALL_TRUST) return members == 0;         /* IS11: its meta is empty */
+    if (e->artifact == PP_ART_INSTALL_TRUST || e->artifact == PP_ART_INSTALL_CHANGE)
+        return members == 0;                                              /* IS11, IS14: its meta is empty */
     if (e->as == PP_AS_ABSENT) return 0;                                  /* a set names its artifact in as */
     return e->artifact == PP_ART_INSTALL_FLOOR ||
            !(e->has_layout || e->has_command || e->has_rate || e->has_answer_rate); /* a floor's members on a floor */
@@ -424,6 +426,7 @@ static int pp_install_reads(const pp_envelope *e) {
         return memcmp(e->policy_sha256, pp_zero32, 32) == 0 && memcmp(e->release, pp_zero32, 32) == 0 &&
                !e->has_replaces;
     if (e->targets & (e->targets - 1)) return 0;
+    if (e->artifact == PP_ART_INSTALL_CHANGE) return 1; /* IS14: its set is in its body, checked at V11 */
     if (e->as == PP_AS_NONE) {
         uint8_t nothing[32], release[32];
         pp_sha256((const uint8_t *)"", 0, nothing);
@@ -478,6 +481,36 @@ static uint8_t pp_check_change(const pp_envelope *e, const uint8_t *body, size_t
     uint8_t cause = pp_read_change(body, len, from);
     if (cause) return cause;
     return e->widens || !e->has_replaces || memcmp(from, e->replaces, 32) != 0 ? PP_CAUSE_BAD_FORMAT : PP_CAUSE_NONE;
+}
+
+/* IS14: an install change statement, `set` the kind of the set it carries, `from` the policy hash that set replaces
+ * and `basis` the table comparator, as canonical canon/2. A ceiling's is dist:bad-format, since this core compares two
+ * policy lists itself. The set kind is written to `set` and `from` to `from` when it reads. */
+static uint8_t pp_read_install_change(const uint8_t *body, size_t len, int *set, uint8_t from[32]) {
+    int form = pp_c2_check(body, len);
+    if (form == PP_C2_NOT_CANONICAL) return PP_CAUSE_NOT_CANONICAL;
+    if (form != PP_C2_OK) return PP_CAUSE_BAD_FORMAT;
+    pp_c2 c = {body, len, 0, 1};
+    if (!pp_c2_lit(&c, "{\"basis\":\"prismpath.table-compare/1\",\"encoding\":\"canon/2\","
+                       "\"format\":\"prismpath.dist-install-change/1\",\"from\":") ||
+        !pp_scan_hash(&c, from) || !pp_c2_lit(&c, ",\"set\":"))
+        return PP_CAUSE_BAD_FORMAT;
+    if (pp_c2_lit(&c, "\"install.floor\"")) *set = PP_SET_FLOOR;
+    else if (pp_c2_lit(&c, "\"install.fallback\"")) *set = PP_SET_FALLBACK;
+    else return PP_CAUSE_BAD_FORMAT;
+    return pp_c2_lit(&c, "}") && c.i == c.n ? PP_CAUSE_NONE : PP_CAUSE_BAD_FORMAT;
+}
+
+/* `install.change` (V11, IS14): the body reads, its `from` is the envelope's `replaces`, the envelope does not widen,
+ * and its policy hash is a set's and not the empty set's 64 zeros. Anything else is dist:bad-format. */
+static uint8_t pp_check_install_change(const pp_envelope *e, const uint8_t *body, size_t len, int *set,
+                                       uint8_t from[32]) {
+    uint8_t cause = pp_read_install_change(body, len, set, from);
+    if (cause) return cause;
+    return e->widens || !e->has_replaces || memcmp(from, e->replaces, 32) != 0 ||
+                   memcmp(e->policy_sha256, pp_zero32, 32) == 0
+               ? PP_CAUSE_BAD_FORMAT
+               : PP_CAUSE_NONE;
 }
 
 /* W4: a widening statement, `from` a sorted list of at most 64 hashes without repeats, as canonical canon/2. */
@@ -1225,8 +1258,13 @@ static void pp_verify_install(const pp_envelope *e, const pp_entry *entries, siz
     /* V5: on the PEP's own stream, by provisioning or, where the install threshold is 2 or more, in a message (IS4),
      * and a set in the form of its kind (IS3): a `mesh` floor or fallback policy is a policy.ppt, its ceiling a list */
     int set = pp_set_of(e->artifact);
+    int change = e->artifact == PP_ART_INSTALL_CHANGE;
     if ((view->message && r->threshold < 2) || strcmp(e->stream, pep->stream) != 0) {
         out->cause = PP_CAUSE_TARGET_MISMATCH;
+        return;
+    }
+    if (change && (!(e->targets & PP_BIT(pep->kind)) || pep->kind != PP_TGT_MESH)) {
+        out->cause = PP_CAUSE_TARGET_MISMATCH; /* IS14: of the kinds this core has, only mesh takes it */
         return;
     }
     if (set >= 0 && (!(e->targets & PP_BIT(pep->kind)) ||
@@ -1242,8 +1280,9 @@ static void pp_verify_install(const pp_envelope *e, const pp_entry *entries, siz
      * read against an install kind (IS7) */
     long long time = trust->readable && trust->time_floor > now ? trust->time_floor : now;
     if (pep->has_clock && e->not_before - time > PP_SKEW) { out->cause = PP_CAUSE_NOT_YET_VALID; return; }
-    /* V8: IS6, IS11 */
-    if (set < 0) {
+    /* V8: IS6, IS11. An install change statement's set is in its body, so its V8 follows V9 */
+    if (change) {
+    } else if (set < 0) {
         if (e->seq == r->trust_seq && memcmp(e->envelope_id, r->trust_id, 32) == 0) { out->unchanged = 1; return; }
         if (e->seq != r->trust_seq + 1) { out->cause = PP_CAUSE_TRUST_REPLAY; return; }
     } else {
@@ -1252,7 +1291,8 @@ static void pp_verify_install(const pp_envelope *e, const pp_entry *entries, siz
             out->unchanged = 1;
             return;
         }
-        if (e->seq <= slot->seq || (view->staged[set] && e->seq < view->staged[set]->seq)) {
+        if (e->seq <= slot->seq || (view->staged[set] && e->seq < view->staged[set]->seq) ||
+            (view->change[set] && e->seq < view->change[set]->seq)) {
             out->cause = PP_CAUSE_SEQ_REPLAY; /* IS4, G2 */
             return;
         }
@@ -1264,7 +1304,31 @@ static void pp_verify_install(const pp_envelope *e, const pp_entry *entries, siz
         out->cause = PP_CAUSE_BODY_MISMATCH;
         return;
     }
+    if (change) { /* IS14: V11, then V8 against the kind its body names, then V10 against what is staged of it */
+        if ((out->cause = pp_check_install_change(e, body, body_len, &out->change_set, out->change_from))) return;
+        int k = out->change_set;
+        const pp_change *ch = view->change[k];
+        if (e->seq <= r->sets[k].seq || (view->staged[k] && e->seq < view->staged[k]->seq) || (ch && e->seq < ch->seq)) {
+            out->cause = PP_CAUSE_SEQ_REPLAY;
+            return;
+        }
+        if (ch && ch->seq == e->seq && memcmp(ch->envelope_id, e->envelope_id, 32) == 0) { out->unchanged = 1; return; }
+        const pp_envelope *with = view->staged[k];
+        if ((ch && ch->seq == e->seq) ||
+            (with && with->seq == e->seq &&
+             (memcmp(with->policy_sha256, e->policy_sha256, 32) != 0 || memcmp(with->release, e->release, 32) != 0 ||
+              !pp_same(with->replaces, with->has_replaces, e->replaces, e->has_replaces) || with->widens)))
+            out->cause = PP_CAUSE_INCOMPLETE; /* V10: one change statement for one set */
+        return;
+    }
     /* V10: a set at the seq of the one staged is that set: the same members, and a `mesh` set is one statement */
+    const pp_change *carried = set >= 0 ? view->change[set] : NULL;
+    if (carried && carried->seq == e->seq &&
+        (memcmp(carried->policy_sha256, e->policy_sha256, 32) != 0 || memcmp(carried->release, e->release, 32) != 0 ||
+         !e->has_replaces || memcmp(carried->from, e->replaces, 32) != 0 || e->widens)) {
+        out->cause = PP_CAUSE_INCOMPLETE; /* V10: the set its change statement was staged for (IS15) */
+        return;
+    }
     const pp_envelope *st = set >= 0 ? view->staged[set] : NULL;
     if (st && st->seq == e->seq &&
         (memcmp(st->policy_sha256, e->policy_sha256, 32) != 0 || memcmp(st->release, e->release, 32) != 0 ||
@@ -2367,7 +2431,10 @@ void pp_pep_view(const pp_pep_machine *pep, pp_pep *out) {
         pp_install_view *v = (pp_install_view *)&pep->install_view;
         memset(v, 0, sizeof *v);
         v->record = &d->install;
-        for (int k = 0; k < PP_SETS; k++) v->staged[k] = d->sets[k].has_staged ? &d->sets[k].staged.envelope : NULL;
+        for (int k = 0; k < PP_SETS; k++) {
+            v->staged[k] = d->sets[k].has_staged ? &d->sets[k].staged.envelope : NULL;
+            v->change[k] = d->sets[k].has_change ? &d->sets[k].change : NULL;
+        }
         v->message = pep->message;
         const pp_statement *ceiling = pp_held_set(pep, PP_SET_CEILING);
         if (ceiling) {
@@ -2453,6 +2520,12 @@ static uint8_t pp_apply_set(pp_pep_machine *pep, int kind) {
         }
     }
     int larger = 0;
+    /* IS15: a change statement staged for this set, from the held set's policy hash, stands for its table */
+    const pp_install_set *slot_set = &d->sets[kind];
+    int carried = !cause && kind != PP_SET_CEILING && !empty && held != NULL && slot_set->has_change &&
+                  slot_set->change.seq == e->seq && !e->widens && e->has_replaces &&
+                  memcmp(e->replaces, held->envelope.policy_sha256, 32) == 0 &&
+                  memcmp(slot_set->change.from, held->envelope.policy_sha256, 32) == 0;
     if (!cause) {
         if (kind == PP_SET_CEILING) {
             if (empty) larger = held != NULL;
@@ -2461,8 +2534,13 @@ static uint8_t pp_apply_set(pp_pep_machine *pep, int kind) {
                     larger |= !pp_on_list(held, st->body + 32 * k); /* a hash the list before did not hold */
         } else if (!empty) {
             /* IS12: a mesh PEP compares bytes, and a cfs PEP takes the signers' word beyond the replaces test */
-            larger = held == NULL || (pep->config.kind == PP_TGT_MESH &&
+            larger = held == NULL || (pep->config.kind == PP_TGT_MESH && !carried &&
                                       (held->body_len != st->body_len || memcmp(held->body, st->body, st->body_len) != 0));
+            if (carried && kind == PP_SET_FLOOR &&
+                (held->envelope.has_layout != e->has_layout || held->envelope.has_command != e->has_command ||
+                 (e->has_layout && memcmp(held->envelope.layout, e->layout, 32) != 0) ||
+                 (e->has_command && held->envelope.command != e->command)))
+                larger = 1; /* IS15: the table read with another layout or command register (AF9, AF10) */
             const pp_envelope *before = held ? &held->envelope : NULL;
             if (kind == PP_SET_FLOOR && before && before->has_rate &&
                 (!e->has_rate || e->rate_allows > before->rate_allows || e->rate_window < before->rate_window))
@@ -2473,14 +2551,15 @@ static uint8_t pp_apply_set(pp_pep_machine *pep, int kind) {
             cause = PP_CAUSE_WIDENING_UNSIGNED;
     }
     if (cause) {
-        set->has_staged = 0;
+        set->has_staged = set->has_change = 0;
         pp_persist(pep, pp_set_part(kind));
         pp_emit_about(pep, PP_EV_REFUSED, cause, subject);
         return cause;
     }
     uint8_t active_hash[32];
+    /* CL3: a ceiling that narrows below the active release is no widening; the release lapses and says so itself */
     int lapses = kind == PP_SET_CEILING && !empty && pp_active_hash(pep, active_hash) && !pp_on_list(st, active_hash);
-    int stands_out = e->widens || larger || lapses; /* IS12: a ceiling that lapses the release, whatever widens says */
+    int stands_out = e->widens || larger; /* IS12: only a set that extends or enlarges scope */
     int before = pp_fallback_decides(pep);
     if (!d->install_mark) { /* IS9: before the first install statement is applied */
         d->install_mark = 1;
@@ -2495,7 +2574,7 @@ static uint8_t pp_apply_set(pp_pep_machine *pep, int kind) {
     pp_persist(pep, PP_PART_INSTALL);
     if (!empty) set->held = *st;
     set->has_held = !empty;
-    set->has_staged = 0;
+    set->has_staged = set->has_change = 0;
     pp_persist(pep, pp_set_part(kind));
     pep->set_lost[kind] = 0;
     if (kind == PP_SET_CEILING && d->ceiling_mark != !empty) { /* IS10: the mark of a ceiling held */
@@ -2568,6 +2647,31 @@ static void pp_apply_install_trust(pp_pep_machine *pep, const pp_envelope *e, co
                   PP_SUBJECT_TRUST);
 }
 
+/* IS15: an install change statement is staged before the set it carries, durably, with event staged whose subject is
+ * that set's kind. One on a PEP that holds no set of the kind, or whose `from` is not the held set's policy hash, is
+ * dist:widening-unsigned, and the rule is held again when the set is applied. */
+static uint8_t pp_stage_change(pp_pep_machine *pep, const pp_verdict *v) {
+    const pp_envelope *e = &v->envelope;
+    int kind = v->change_set;
+    uint8_t subject = (uint8_t)(kind + 1);
+    const pp_statement *held = pp_held_set(pep, kind);
+    if (held == NULL || memcmp(v->change_from, held->envelope.policy_sha256, 32) != 0) {
+        pp_emit_about(pep, PP_EV_REFUSED, PP_CAUSE_WIDENING_UNSIGNED, subject);
+        return PP_CAUSE_WIDENING_UNSIGNED;
+    }
+    pp_install_set *set = &pep->d.sets[kind];
+    if (set->has_staged && set->staged.envelope.seq != e->seq) set->has_staged = 0; /* G2: the set it replaces */
+    set->has_change = 1;
+    set->change.seq = e->seq;
+    memcpy(set->change.policy_sha256, e->policy_sha256, 32);
+    memcpy(set->change.release, e->release, 32);
+    memcpy(set->change.from, v->change_from, 32);
+    memcpy(set->change.envelope_id, e->envelope_id, 32);
+    pp_persist(pep, pp_set_part(kind));
+    pp_emit_about(pep, PP_EV_STAGED, 0, subject);
+    return PP_CAUSE_NONE;
+}
+
 /* IS4: a statement of a set is staged durably, as G1 stages an envelope, with event staged and its subject, a set at
  * a higher seq replacing the one staged of its kind, and the set is applied when it is whole: when the release id of
  * E10 over its [as, body_sha256] is the signed release. A list is kept as its hashes. */
@@ -2578,8 +2682,10 @@ static uint8_t pp_stage_install(pp_pep_machine *pep, const pp_verdict *v, const 
         pp_apply_install_trust(pep, e, body, body_len, v->install_widens);
         return PP_CAUSE_NONE;
     }
+    if (e->artifact == PP_ART_INSTALL_CHANGE) return pp_stage_change(pep, v);
     int kind = pp_set_of(e->artifact);
     pp_install_set *set = &pep->d.sets[kind];
+    if (set->has_change && set->change.seq != e->seq) set->has_change = 0; /* G2: a set at another seq replaces it */
     pp_statement *st = &set->staged;
     memset(st, 0, sizeof *st);
     st->envelope = *e;
@@ -2623,6 +2729,11 @@ static uint8_t pp_stage_one(pp_pep_machine *pep, const uint8_t *sealed, size_t s
     const pp_envelope *e = verdict.has_envelope ? &verdict.envelope : NULL;
     int installing = e && pp_is_install(e->artifact);
     uint8_t subject = e ? pp_subject_of(e) : 0, cause = verdict.cause;
+    if (e && e->artifact == PP_ART_INSTALL_CHANGE) { /* H10: the set an install change statement carries, or none */
+        int k;
+        uint8_t from[32];
+        subject = pp_read_install_change(body, body_len, &k, from) ? 0 : (uint8_t)(k + 1);
+    }
     if (pep->record_lost && (e == NULL || !pp_on_trust_stream(e->artifact))) cause = PP_CAUSE_INSTALL_LOST; /* IS10 */
     else if (pep->locked && !installing) cause = PP_CAUSE_FLOOR_LOST; /* Q5: a locked PEP still takes install statements */
     else if (pp_ceiling_lost(pep) && e && !pp_on_trust_stream(e->artifact) && e->artifact != PP_ART_INSTALL_CEILING &&
@@ -3221,6 +3332,14 @@ static void pp_io_part(pp_io *io, pp_durable *d, int part) {
         pp_io_bytes(io, &set->has_staged, sizeof(int));
         if (io->ok && set->has_held) pp_io_statement(io, &set->held);
         if (io->ok && set->has_staged) pp_io_statement(io, &set->staged);
+        pp_io_bytes(io, &set->has_change, sizeof(int));
+        if (io->ok && set->has_change) { /* IS15: the change statement staged, as V10 and IS15 hold it */
+            pp_io_bytes(io, &set->change.seq, sizeof set->change.seq);
+            pp_io_bytes(io, set->change.policy_sha256, 32);
+            pp_io_bytes(io, set->change.release, 32);
+            pp_io_bytes(io, set->change.from, 32);
+            pp_io_bytes(io, set->change.envelope_id, 32);
+        }
         break;
     }
     default: io->ok = 0;
@@ -3248,7 +3367,7 @@ static void pp_part_lost(pp_durable *d, int part, int absent) {
     case PP_PART_RATES: d->rates_reads = 0; memset(d->rate_count, 0, sizeof d->rate_count); break;
     case PP_PART_SET_FLOOR: case PP_PART_SET_FALLBACK: case PP_PART_SET_CEILING: {
         pp_install_set *set = &d->sets[pp_part_index(part) - pp_part_index(PP_PART_SET_FLOOR)];
-        set->has_held = set->has_staged = 0;
+        set->has_held = set->has_staged = set->has_change = 0;
         break;
     }
     }
