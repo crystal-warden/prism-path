@@ -259,17 +259,19 @@ def test_the_edge_loads_once_per_table_with_the_floor_written_first_and_a_signed
 
 
 def test_a_loader_that_fails_leaves_the_commit_to_be_finished_at_the_next_start(tmp_path):
-    """C4: the floor and the active record are written before the loader runs, so a loader that refuses the table
-    stops the commit there, and the next start with a working loader finishes it and loads the table."""
+    """C4 and C6: the floor and the active record are written before the loader runs, so a loader that refuses the
+    table leaves the PEP reconciling (9.5), not raised out of the commit, and the next start with a working loader
+    finishes it and loads the table."""
     point = EdgePep(tmp_path / "edge")
     point.loader.rc = 2
-    with pytest.raises(net_dist.LoaderFailed):
-        point.release(DEFAULT, 1)
-    assert point.loader.floors[-1] == 1
+    before = len(point.loader.calls)                         # the start's own closed table, loaded with no policy
+    point.release(DEFAULT, 1)
+    assert point.loader.floors[before] == 1                  # the floor was on disk when the commit's load ran
+    assert point.pep.state() == "reconciling"
     point.loader = Loader()
     point.pep = point.open()
-    assert point.pep.active is not None and point.pep.active.seq == 1
-    assert point.loader.tables == [net_dist.compiled_edge(DEFAULT, DESTS, GOVERNED).ppt]
+    assert point.pep.state() == "active" and point.pep.active.seq == 1
+    assert net_dist.compiled_edge(DEFAULT, DESTS, GOVERNED).ppt in point.loader.tables
     assert not (point.state_dir / "dist" / "pending.json").exists()
 
 

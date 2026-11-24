@@ -101,7 +101,7 @@ class Target:
     decides: bool
     when_declared: FrozenSet[str] = frozenset()
     expiry_hold: bool = False
-    applies: FrozenSet[str] = frozenset({"trust.widening", "trust.revocation", "trust.rotation"})
+    applies: FrozenSet[str] = frozenset({"trust.widening", "trust.revocation", "trust.rotation", "trust.controller"})
     body_bound: int = 16777215
     trust_bound: int = 16384
     checks: Any = None
@@ -117,8 +117,8 @@ class Target:
         return (self.checks or {}).get(artifact) or ARTIFACTS[artifact].check
 
 
-ROLES = frozenset({"authority"})                    # K4: the key roles this version knows
-AUTHORITY = "authority"
+ROLES = frozenset({"authority", "controller"})      # K4: the key roles this version builds
+AUTHORITY, CONTROLLER = "authority", "controller"   # K6: the controller key signs controller statements only
 
 
 # ------------------------------------------------------------------ the forms of the meta members (E11)
@@ -260,6 +260,7 @@ REVOCATION_FORMAT = "prismpath.dist-revocation/1"
 REVOCATION_ENTRIES, REVOCATION_FLOORS = 64, 16       # section 10, R7
 ROTATION_FORMAT = "prismpath.dist-rotation/1"
 WIDENING_FORMAT = "prismpath.dist-widening/1"
+CONTROLLER_FORMAT = "prismpath.dist-controller/1"
 
 
 def read_revocation(body: bytes) -> dict:
@@ -285,6 +286,14 @@ def read_rotation(body: bytes) -> dict:
     doc = _trust_body(body, ROTATION_FORMAT, frozenset({"add", "encoding", "format", "retire"}))
     if not is_hex64(doc["add"]) or not (doc["retire"] == "" or is_hex64(doc["retire"])):
         raise Refused(BAD_FORMAT, "rotation members")
+    return doc
+
+
+def read_controller(body: bytes) -> dict:
+    """K7: a controller key statement, the controller's public key in `key`, 64 lower case hex digits."""
+    doc = _trust_body(body, CONTROLLER_FORMAT, frozenset({"encoding", "format", "key"}))
+    if not is_hex64(doc["key"]):
+        raise Refused(BAD_FORMAT, "a controller key statement whose key is not 64 hex digits")
     return doc
 
 
@@ -422,9 +431,11 @@ ARTIFACTS: Dict[str, Artifact] = {
     "trust.widening": Artifact(check=_reads(read_widening)),
     "trust.revocation": Artifact(check=_reads(read_revocation)),
     "trust.rotation": Artifact(check=_reads(read_rotation)),
+    "trust.controller": Artifact(check=_reads(read_controller)),
 }
-TRUST_ARTIFACTS = frozenset({"trust.widening", "trust.revocation", "trust.rotation"})
-ON_TRUST_STREAM = frozenset({"trust.revocation", "trust.rotation"})     # R1, O1: they travel on `@trust`
+TRUST_ARTIFACTS = frozenset({"trust.widening", "trust.revocation", "trust.rotation", "trust.controller"})
+# R1, O1, K7: they travel on `@trust` and share the one trust sequence
+ON_TRUST_STREAM = frozenset({"trust.revocation", "trust.rotation", "trust.controller"})
 
 TRUST_BOUND = 16384                                # E6: every kind takes the largest revocation list R7 allows
 MESH_TABLE_MAX = 640                               # E6: TBL_MAX in prismpath-hw/mesh/main/ppt_mesh.c
