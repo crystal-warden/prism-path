@@ -7,6 +7,11 @@ The rules run in the order V2 to V11 and the first that fails is the only cause 
 is a function of its arguments: it reads no clock, no file and no floor of its own. What the enforcement
 point holds comes in as a `PepView` and its trust store, and the time floor the PEP should make durable
 after V6 passed comes back in the `Verdict` (V13). The widening rule V12 joins with W1 to W7.
+
+`rules` names the rule set. `RELEASE`, the default, is V2 to V11 for an envelope a PEP may stage. `GR2` is how a
+gateway reads a grant (section 13): V2 to V7 and V9, with V5 admitting only a `grant` on the gateway's own stream.
+A grant is not a release, so it has no floor (V8), no staged release to agree with (V10) and no widening rule, and
+what it covers is the gateway's to read after the verdict.
 """
 from __future__ import annotations
 
@@ -20,7 +25,8 @@ from prismpath.distribution.kinds import Refused, Verdict
 from prismpath.distribution.trust import TrustStore
 
 SKEW = 300                                         # section 7: a PEP's clock is within 300 seconds of true time
-__all__ = ["SKEW", "Floor", "Staged", "PepView", "Verdict", "verify"]
+RELEASE, GR2 = "release", "gr2"                    # the rule sets: V2 to V11, and a gateway's reading of a grant
+__all__ = ["SKEW", "RELEASE", "GR2", "Floor", "Staged", "PepView", "Verdict", "verify"]
 
 
 @dataclass(frozen=True)
@@ -83,11 +89,14 @@ def _floor_check(envelope: env.Envelope, trust: TrustStore, pep: PepView) -> Opt
 
 
 def verify(sealed: bytes, body: bytes, *, trust: TrustStore, pep: PepView, now: int,
-           reads_meta: Optional[bool] = None) -> Verdict:
+           reads_meta: Optional[bool] = None, rules: str = RELEASE) -> Verdict:
     """V1: the sealed envelope and its body checked in the order V2 to V11 for `pep` at the PEP's clock
-    reading `now` (Unix seconds). Returns the first failure's cause, or the accepted envelope. `reads_meta` True
-    reads `meta` in full whatever the kind, as a controller always does (F1)."""
-    return _verify(sealed, bytes(body), trust, pep, now, reads_meta, through_v8=False)
+    reading `now` (Unix seconds), or with `rules` GR2 the rules a gateway reads a grant with. Returns the first
+    failure's cause, or the accepted envelope. `reads_meta` True reads `meta` in full whatever the kind, as a
+    controller always does (F1)."""
+    if rules not in (RELEASE, GR2):
+        raise ValueError(f"{rules!r} is not a rule set")
+    return _verify(sealed, bytes(body), trust, pep, now, reads_meta, through_v8=False, grant=rules == GR2)
 
 
 def verify_envelope(sealed: bytes, *, trust: TrustStore, pep: PepView, now: int,
@@ -99,7 +108,7 @@ def verify_envelope(sealed: bytes, *, trust: TrustStore, pep: PepView, now: int,
 
 
 def _verify(sealed: bytes, body: bytes, trust: TrustStore, pep: PepView, now: int, reads_meta: Optional[bool],
-            *, through_v8: bool) -> Verdict:
+            *, through_v8: bool, grant: bool = False) -> Verdict:
     # V2: the container reads, and the envelope and body fit the bounds (B9: nothing past either is read)
     try:
         envelope_bytes, entries = env.unseal(sealed)
@@ -123,7 +132,11 @@ def _verify(sealed: bytes, body: bytes, trust: TrustStore, pep: PepView, now: in
     # counts the same for all of them (R1)
     on_trust = envelope.artifact in kinds.ON_TRUST_STREAM
     stream = env.TRUST_STREAM if on_trust else pep.stream
-    if (not (on_trust or pep.kind in envelope.targets) or envelope.stream != stream
+    if grant:                                                       # GR2: a grant, for this gateway, on its stream
+        if envelope.artifact != "grant" or pep.kind != "gateway" or pep.kind not in envelope.targets \
+                or envelope.stream != pep.stream:
+            return Verdict("dist:target-mismatch", envelope)
+    elif (not (on_trust or pep.kind in envelope.targets) or envelope.stream != stream
             or not (envelope.artifact in target.uses or envelope.artifact in target.applies)):
         return Verdict("dist:target-mismatch", envelope)
     # ...then the signed size against the bound of that artifact, before any body is read (E6, B9)
@@ -145,6 +158,10 @@ def _verify(sealed: bytes, body: bytes, trust: TrustStore, pep: PepView, now: in
     # V7: revocation
     if envelope.envelope_id in trust.revoked_envelopes or envelope.policy_sha256 in trust.revoked_policies:
         return refused("dist:revoked")
+    if grant:                                                       # GR2: V9 and no other rule
+        if len(body) != envelope.body_size or canon.sha256_hex(body) != envelope.body_sha256:
+            return refused("dist:body-mismatch")
+        return Verdict(None, envelope, time_floor=time_floor)
     # V8: the sequence
     floor = _floor_check(envelope, trust, pep)
     if floor is not None:

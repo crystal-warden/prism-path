@@ -5,7 +5,7 @@ new kind is one row.
 
 The names are closed lists of the format: an envelope naming any other artifact or target kind is
 `dist:bad-format` (E8), and each artifact's `meta` members are its row's. A target kind has a row in
-`TARGETS` once an enforcement point of that kind is built: `host` and `mesh` here, and `cfs`, whose table
+`TARGETS` once an enforcement point of that kind is built: `host`, `agent`, `gateway` and `mesh` here, and `cfs`, whose table
 layout lives with the cFS app, registered by `integrations/cfs/dist_kind.py` through `register_target`. A
 PEP of a kind with no row cannot be described to the verifier. Each artifact's own check (V11) is
 `check(envelope, body, pep)`, which answers None or the cause. A target row may hold its own check of an
@@ -323,6 +323,41 @@ def read_zones(body: bytes) -> dict:
     return doc
 
 
+def read_routes(body: bytes):
+    """`gateway.routes`: a route table in canon/2 bytes, read by `Routes.from_doc` and spelled as
+    `Routes.canonical` spells it, so one table is one body. `Refused` with `dist:bad-format` otherwise."""
+    from prismpath.gateway.reading import RouteError, Routes
+    doc = load_canonical(body, "gateway.routes")
+    try:
+        routes = Routes.from_doc(doc)
+    except RouteError as error:
+        raise Refused(BAD_FORMAT, f"gateway.routes is not a route table ({error})") from None
+    if routes.canonical() != bytes(body):
+        raise Refused(BAD_FORMAT, "gateway.routes is not the table's canonical spelling")
+    return routes
+
+
+GRANT_FORMAT = "prismpath.dist-grant/1"
+GRANT_METHOD_CLASSES = ("delete", "other", "read", "write")
+_GRANT_CLASS = re.compile(r"[a-z][a-z0-9_]{0,31}")
+
+
+def read_grant(body: bytes) -> dict:
+    """Section 13: a grant body, a canon/2 object with `encoding`, `format` `prismpath.dist-grant/1` and the classes
+    it covers, `method_classes` of read, write, delete and other and `path_classes` route classes other than
+    `other` and `unknown`, each sorted, without repeats and holding at least one. `Refused` with `dist:bad-format`
+    otherwise."""
+    doc = _trust_body(body, GRANT_FORMAT, frozenset({"encoding", "format", "method_classes", "path_classes"}))
+    for name, allowed in (("method_classes", GRANT_METHOD_CLASSES), ("path_classes", None)):
+        values = doc[name]
+        if (not isinstance(values, list) or not values or values != sorted(set(values))
+                or not all(isinstance(value, str) and _GRANT_CLASS.fullmatch(value) for value in values)
+                or (allowed is not None and not set(values) <= set(allowed))
+                or (allowed is None and {"other", "unknown"} & set(values))):
+            raise Refused(BAD_FORMAT, f"a grant's {name} are not classes it can cover")
+    return doc
+
+
 def _reads(reader: Callable[[bytes], dict]) -> Callable[[Any, bytes, Any], Optional[str]]:
     def check(_envelope, body: bytes, _pep) -> Optional[str]:
         try:
@@ -343,11 +378,11 @@ ARTIFACTS: Dict[str, Artifact] = {
     "sandbox.profile": Artifact(frozenset({"compiler"}), check=_reads(lambda body: read_profile(body))),
     "egress.hosts": Artifact(check=_reads(read_hosts)),
     "agent.zones": Artifact(check=_reads(read_zones)),
-    "gateway.routes": Artifact(),
+    "gateway.routes": Artifact(check=_reads(read_routes)),
     "net.dests": Artifact(),
     "net.edge": Artifact(frozenset({"flow_sha256", "names_sha256", "qualification"})),
     "cfs.table": Artifact(),
-    "grant": Artifact(),
+    "grant": Artifact(check=_reads(read_grant)),
     "trust.widening": Artifact(check=_reads(read_widening)),
     "trust.revocation": Artifact(check=_reads(read_revocation)),
     "trust.rotation": Artifact(check=_reads(read_rotation)),
@@ -363,6 +398,7 @@ TARGETS: Dict[str, Target] = {
                    compares=frozenset({"policy.ppt"})),
     "agent": Target(needs=frozenset({"policy.core", "egress.hosts"}), decides=True,
                     when_declared=frozenset({"agent.zones", "sandbox.profile"})),
+    "gateway": Target(needs=frozenset({"policy.core", "gateway.routes"}), decides=True),
     "mesh": Target(needs=frozenset({"policy.ppt"}), decides=False, expiry_hold=True, body_bound=MESH_TABLE_MAX,
                    checks={"policy.ppt": check_mesh_table}, reads_meta=False, compares=frozenset({"policy.ppt"})),
 }

@@ -248,6 +248,7 @@ prismpath/deferral.py
 prismpath/distribution/__init__.py
 prismpath/distribution/adapters/__init__.py
 prismpath/distribution/adapters/agent_home.py
+prismpath/distribution/adapters/gateway.py
 prismpath/distribution/adapters/host.py
 prismpath/distribution/adapters/mesh.py
 prismpath/distribution/cli.py
@@ -774,6 +775,7 @@ prismpath/tests/test_distribution_corpus.py
 prismpath/tests/test_distribution_crash.py
 prismpath/tests/test_distribution_envelope.py
 prismpath/tests/test_distribution_frames.py
+prismpath/tests/test_distribution_gateway.py
 prismpath/tests/test_distribution_hatches.py
 prismpath/tests/test_distribution_heartbeat.py
 prismpath/tests/test_distribution_http.py
