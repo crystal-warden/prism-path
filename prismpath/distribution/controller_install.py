@@ -214,11 +214,13 @@ class InstallDesk:
             if envelope.artifact == install.TRUST:
                 self._check_trust_keys(anchor["stream"], record, body)
             kind = envelope.artifact
+            # IS4: on a stream whose install threshold is 1 a statement reaches a PEP by provisioning only, so it is
+            # verified as a provisioning brings it, stored for the enrollment of install ids, and never offered
             view = PepView(kind=anchor["target"], stream=anchor["stream"], qualification=anchor["qualification"],
                            install=InstallView(record=record,
                                                staged=self._staged_view(anchor["stream"], kind) if kind != install.TRUST else {},
                                                ceiling=self.offered_set(anchor["stream"], install.CEILING),
-                                               message=True, layout=self._layout(fingerprint)))
+                                               message=record.threshold >= 2, layout=self._layout(fingerprint)))
             verdict = verify(sealed, body, trust=self._anchor_store(fingerprint), pep=view, now=int(self.clock()),
                              reads_meta=True)
             if not verdict.ok:
@@ -452,6 +454,9 @@ class InstallDesk:
         before stays allowed, and what differs stays on offer, until the PEP's record shows the new one or a refusal."""
         if member.install is None:
             return []
+        record = self.install_record(member.stream, member.kind)
+        if record is None or record.threshold < 2:
+            return []                              # IS4: by provisioning only, so nothing travels to this PEP
         comps = {"sets": dict(member.install["sets"]), "trust_seq": member.install["trust_seq"],
                  "trust_id": member.install["trust_id"]}
         held_trust = self._pep_trust_seq(member)

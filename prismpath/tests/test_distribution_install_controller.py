@@ -1203,3 +1203,106 @@ def test_case_223_a_table_floor_s_meta_is_read_as_its_policy_ppt_s(tmp_path):
     (sealed, data), = _table_floor(mesh, body, 1)
     loose = _resealed(sealed, lambda meta: {**meta, "counts": "7"})
     assert state_record.read(mesh.pep.stage(loose, data), mesh.key.public_raw).event == "install-widened"
+
+
+# ------------------------------------------------------------------ the section 21 halves of 246, 260, 261 and 280
+
+def test_case_246_a_ceiling_or_a_fallback_policy_while_reconciling_lapses_the_held_release_once(tmp_path):
+    """case_246: C10, R5, X1, CL3, Q4, H14, the ceiling and fallback runs. While a commit is reconciling with its
+    runtime withdrawn, a ceiling the held release is above is applied: the release is never installed, the PEP is
+    `no-policy` at once with one `lapsed` record with `dist:above-ceiling` and no `committed` record, and the floor
+    is the commit's. On a PEP with a fallback policy the held release expires and there is one `fallback` record with
+    `dist:expired`. The expiry and revocation runs are in test_distribution_reconciling.py."""
+    from prismpath.distribution.adapters.host import HostAdapter
+    from prismpath.tests.test_distribution_reconciling import NEW, OLD, Flaky, FlakyHost
+
+    class Withdrawing(Flaky):
+        """A runtime that will not take the new release and does take the fallback set it is withdrawn to."""
+
+        def withdraw_to(self, fallback, cause):
+            self.switches.withdrawals += 1
+            HostAdapter.activate(self, fallback)
+
+    class Rig(FlakyHost):
+        def adapter(self):
+            return Withdrawing(self.host(), self.switches)
+    for run in ("ceiling", "fallback"):
+        rig = Rig(tmp_path / run, install_keys=KEYS, install_threshold=2)
+        if run == "ceiling":
+            rig.send(rig.install_set(CEILING, {kinds.POLICY_LIST: install.ceiling_body([OLD, NEW])}, 1))
+        else:
+            rig.send(rig.install_set(FALLBACK, {"policy.ppt": _dist.image(9)}, 1, widens=True))
+        rig.commit(OLD)
+        rig.stage(NEW, 2)
+        rig.switches.set(True, False)
+        rig.pep.commit(STREAM, 2, H(NEW))
+        rig.pep.drain()
+        activations = rig.switches.activations
+        if run == "ceiling":
+            held = rig.pep.installed.record.sets[CEILING].policy_sha256
+            rig.send(rig.install_set(CEILING, {kinds.POLICY_LIST: install.ceiling_body([OLD])}, 2, replaces=held))
+            event, cause = "lapsed", "dist:above-ceiling"
+        else:
+            rig.clock.now = _dist.EXPIRES
+            rig.pep.record("beat")
+            event, cause = "fallback", "dist:expired"
+        records = rig.records()
+        fell = [record for record in records if record.event == event]
+        assert [(one.cause, one.state, one.active_seq) for one in fell] == [(cause, "no-policy", 0)], run
+        assert all(record.event != "committed" for record in records) and rig.switches.activations == activations
+        assert (rig.pep.state(), rig.pep.floor.seq) == ("no-policy", 2)
+
+
+def test_case_260_a_trust_controller_may_not_name_an_install_or_an_operator_key(tmp_path):
+    """case_260: K6, K7, K4, the section 21 half. A `trust.controller` whose key is an install key or an operator key
+    is `dist:rotation-invalid`, and the trust sequence does not move. The other keys are in
+    test_distribution_statement.py."""
+    from prismpath.tests.test_distribution_statement import rekey
+    point = _dist.HostPep(tmp_path / "ops", install_keys=KEYS, install_threshold=2, operators=["O1"], controller="C")
+    causes = [state_record.read(rekey(point, name, 1), point.key.public_raw).cause for name in ("N1", "O1")]
+    assert causes == ["dist:rotation-invalid"] * 2 and point.pep.trust.trust_seq == 0
+
+
+def test_case_261_no_install_trust_adds_the_controller_key(tmp_path):
+    """case_261: K6, K4, IS11, the section 21 half. An `install.trust` that adds the controller key, as an install key
+    or as an operator key, is `dist:rotation-invalid`. The rest is in test_distribution_statement.py."""
+    point = _dist.HostPep(tmp_path / "host", install_keys=KEYS, install_threshold=2, controller="C")
+    as_install = point.install_trust(1, KEYS + ["C"], threshold=2, signers=["N1", "N2", "C"])
+    as_operator = point.install_trust(1, KEYS, threshold=2, operators=["C"], signers=["N1", "N2", "C"])
+    assert [point.send([one])[-1].cause for one in (as_install, as_operator)] == ["dist:rotation-invalid"] * 2
+    assert point.pep.installed.record.trust_seq == 0
+
+
+def test_case_280_an_anchor_whose_controller_key_is_an_install_or_an_operator_key_is_refused(tmp_path):
+    """case_280: P2, K4, K6, the section 21 half. An anchor whose controller key is one of its install keys or one of
+    its operator keys is refused at provisioning and the PEP is unchanged. The instance key half is in
+    test_distribution_statement.py."""
+    from prismpath.distribution.pep import PepRefused
+    from prismpath.distribution.trust import anchor_bytes
+    point = _dist.HostPep(tmp_path / "host", install_keys=KEYS, install_threshold=2, operators=["O1"])
+    before = point.pep.trust.document(), point.pep.installed.record
+    for name in ("N1", "O1"):
+        part = install.anchor_part([_dist.public(one) for one in KEYS], threshold=2, operators=[_dist.public("O1")],
+                                   domain=install.domain_sha256(point.adapter()))
+        with pytest.raises((PepRefused, Refused)):
+            point.pep.provision(anchor_bytes([_dist.public("A")], target="host", stream=STREAM,
+                                             controller=_dist.public(name), install=part))
+        assert (point.pep.trust.document(), point.pep.installed.record) == before
+        assert not point.pep.store.exists("anchor.pending")
+
+
+def test_a_stream_whose_install_threshold_is_1_has_its_statements_stored_and_never_offered(tmp_path):
+    """IS4, IS8: on a stream whose install threshold is 1 an install statement reaches a PEP by provisioning only. The
+    controller verifies it as a provisioning brings it and stores it, so the PEP's install id can be enrolled, and
+    offers it to nobody."""
+    fleet = Fleet(tmp_path, install_threshold=1, enroll=False)
+    point = fleet.first
+    floor = _set(point, FLOOR, NARROW)
+    point.pep.confirm(point.pep.provision(point.anchor(), floor))
+    fleet.put(floor)
+    fleet.enroll("p1", install_envelopes=_ids(floor))
+    assert install_id_of(fleet.member("p1").install) == point.pep.installed.record.install_id()
+    fleet.controller.acknowledge(_ids(floor), by="engineer")
+    later = _set(point, FLOOR, NARROW, 2, widens=False, replaces=H(NARROW))
+    fleet.put(later)
+    assert fleet.controller.answer(fleet.ids["p1"])["offers"] == []
