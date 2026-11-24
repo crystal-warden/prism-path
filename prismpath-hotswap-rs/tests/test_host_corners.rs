@@ -215,7 +215,9 @@ fn a_host_shared_between_threads_commits_one_swap_at_a_time() {
     assert_eq!(host.active_info()["version"], last);
     assert_eq!(std::fs::read_to_string(format!("{}/active_version", setup.state())).unwrap(), last.to_string());
     assert!(!std::path::Path::new(&format!("{}/pending_swap", setup.state())).exists());
-    assert_eq!(host.history().len(), packs.len(), "one audit event per attempt");
+    // one audit event per attempt, after the legacy_form event each read of an older pack writes (L3)
+    let outcomes = host.history().iter().filter(|event| event["action"] != "legacy_form").count();
+    assert_eq!(outcomes, packs.len(), "one audit event per attempt");
     assert!(host.audit.verify_log() && host.audit.verify_persisted().unwrap());
     let fresh = setup.host().unwrap();
     assert_eq!(fresh.active_info()["active"], host.active_info()["active"]);

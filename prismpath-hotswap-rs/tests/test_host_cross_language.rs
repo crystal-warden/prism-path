@@ -196,7 +196,7 @@ fn an_interrupted_commit_is_recovered_by_the_other_runtime() {
     assert_eq!(python["results"][0]["ok"], false, "another image at the floor version stays refused: {python}");
     assert_eq!(python["results"][1]["ok"], true, "the interrupted swap completes in Python: {python}");
     assert_eq!(python["pending"], false);
-    let actions: Vec<&str> = python["actions"].as_array().unwrap().iter().map(|action| action.as_str().unwrap()).collect();
+    let actions: Vec<&str> = python["actions"].as_array().unwrap().iter().map(|action| action.as_str().unwrap()).filter(|action| *action != "legacy_form").collect();
     assert_eq!(actions, ["swap", "swap_incomplete", "swap_rejected", "swap"], "{python}");
     let rust = pair.rust_host("default");
     assert_eq!(rust.active_info()["active"], pair.hash("v2").as_str());
@@ -248,7 +248,7 @@ fn a_rollback_that_dies_in_one_runtime_is_recovered_by_the_other() {
     let python = pair.python_host("default", &["swap:v3"]);
     assert_eq!(python["results"][0]["ok"], true, "{python}");
     assert_eq!(python["active"]["active"], pair.hash("v3"));
-    let actions: Vec<&str> = python["actions"].as_array().unwrap().iter().map(|action| action.as_str().unwrap()).collect();
+    let actions: Vec<&str> = python["actions"].as_array().unwrap().iter().map(|action| action.as_str().unwrap()).filter(|action| *action != "legacy_form").collect();
     assert_eq!(actions, ["swap", "swap", "rollback", "rollback_incomplete", "swap"], "{python}");
     assert_eq!(python["stored_floor"], 3);
     assert_eq!(images(&pair), vec![format!("active-{}.ppt", pair.hash("v3"))], "the next commit removed the strays");

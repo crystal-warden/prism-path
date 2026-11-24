@@ -338,19 +338,25 @@ def test_case_126_a_declared_spiral_sidecar_is_needed_and_must_be_the_declared_o
     assert _read(point, point.stage(NEW, seq=4, meta=other)).cause == "packing:unknown-profile"
 
 
-def test_case_111_a_host_pep_refuses_to_start_with_hold(tmp_path):
-    """case_111: X6, X10. A host has no HOLD setting, so a host PEP given one refuses to start, as does a gateway
-    PEP, and so does a PEP of a kind with no row yet (the xdp row joins the table with its adapter)."""
+def test_case_111_a_host_pep_refuses_to_start_with_hold(tmp_path, monkeypatch):
+    """case_111: X6, X10. A host has no HOLD setting, so a host PEP given one refuses to start, as do an agent and a
+    gateway PEP (the xdp PEP is test_distribution_xdp.py's). A PEP of a
+    kind whose row is not in the table refuses to start whatever its setting: every kind of the closed list has a
+    row now, so the test takes the xdp row out to show it."""
+    from prismpath.distribution import kinds
+    from prismpath.distribution.adapters.agent_home import AgentHomeAdapter
     from prismpath.distribution.adapters.gateway import GatewayHomeAdapter
     with pytest.raises(PepRefused):
         _dist.HostPep(tmp_path, expiry_response="hold")
-    with pytest.raises(PepRefused):
-        Pep(str(tmp_path / "gateway"), GatewayHomeAdapter(tmp_path / "gateway"), _dist.instance_key(), _dist.Clock(),
-            expiry_response="hold")
+    for name, adapter in (("agent", AgentHomeAdapter), ("gateway", GatewayHomeAdapter)):
+        with pytest.raises(PepRefused, match="no HOLD setting"):
+            Pep(str(tmp_path / name), adapter(tmp_path / name), _dist.instance_key(), _dist.Clock(),
+                expiry_response="hold")
 
     class Edge(HostAdapter):
         kind = "xdp"
-    with pytest.raises(PepRefused):
+    monkeypatch.delitem(kinds.TARGETS, "xdp")
+    with pytest.raises(PepRefused, match="no enforcement point"):
         Pep(str(tmp_path / "xdp"), Edge(_dist.HostPep(tmp_path / "h").host()), _dist.instance_key(), _dist.Clock())
 
 

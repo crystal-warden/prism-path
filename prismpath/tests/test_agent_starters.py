@@ -12,6 +12,7 @@ gives to every Claude Code equivalent of the governed harness's 51 case adversar
 fixtures/claude_code_hooks.json, the same world as tests/test_agent_claude_code.py), and the hazards are held
 to never allowed over every reading the classifier can produce, not only over the recordings.
 """
+import hashlib
 import itertools
 import json
 import os
@@ -260,8 +261,10 @@ def test_init_policy_review_then_the_hook_asks_for_an_in_project_write(tmp_path)
     assert report["policy"]["state"] == "recorded"
     agent_dir = home / ".config" / "prismpath" / "agent"
     assert (agent_dir / "policy.core.json").read_bytes() == starter_path("review").read_bytes().rstrip(b"\n")
-    attestation = json.loads((agent_dir / "policy.attestation.json").read_bytes())
-    assert attestation["case"] == "agent_review"
+    from prismpath.distribution import envelope as env
+    sealed = env.read(env.unseal((agent_dir / "policy.attestation.json").read_bytes())[0])
+    assert (sealed.artifact, sealed.targets, sealed.stream) == ("policy.core", ("agent",), "local")
+    assert sealed.body_sha256 == hashlib.sha256(starter_path("review").read_bytes().rstrip(b"\n")).hexdigest()
 
     write = {"session_id": "s1", "cwd": str(ws), "hook_event_name": "PreToolUse", "tool_name": "Write",
              "tool_input": {"file_path": str(ws / "notes.txt"), "content": "x\n"}}

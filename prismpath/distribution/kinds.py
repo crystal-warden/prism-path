@@ -5,8 +5,10 @@ new kind is one row.
 
 The names are closed lists of the format: an envelope naming any other artifact or target kind is
 `dist:bad-format` (E8), and each artifact's `meta` members are its row's. A target kind has a row in
-`TARGETS` once an enforcement point of that kind is built: `host`, `agent`, `gateway` and `mesh` here, and `cfs`, whose table
-layout lives with the cFS app, registered by `integrations/cfs/dist_kind.py` through `register_target`. A
+`TARGETS` once an enforcement point of that kind is built: `host`, `agent`, `gateway`, `mesh` and `xdp` here, and `cfs`, whose table
+layout lives with the cFS app, registered by `integrations/cfs/dist_kind.py` through `register_target`. The `xdp`
+row's destination table is read by the edge's own reader (`prismpath-ebpf/net_dist.py`), which lives beside the
+loader it feeds and is found from here, so a tree without it refuses the artifact rather than guessing at it. A
 PEP of a kind with no row cannot be described to the verifier. Each artifact's own check (V11) is
 `check(envelope, body, pep)`, which answers None or the cause. A target row may hold its own check of an
 artifact in `checks`, as a mesh node reads a `policy.ppt` with its own table parser and ignores `meta`.
@@ -17,8 +19,11 @@ with `dist:target-mismatch`, so a statement is never verified and then left unap
 from __future__ import annotations
 
 import hashlib
+import importlib
 import re
+import sys
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Callable, Dict, FrozenSet, Optional
 
 from prismpath import canon
@@ -367,6 +372,37 @@ def read_grant(body: bytes) -> dict:
     return doc
 
 
+EDGE_DIR = Path(__file__).resolve().parents[2] / "prismpath-ebpf"
+
+
+def edge_reader():
+    """`net_dist`, the XDP edge's reader of `net.dests` and its loader adapter, from `prismpath-ebpf/` beside the
+    package. `Refused` with `dist:bad-format` in a tree that does not carry it, so a destination table is never
+    taken unread."""
+    if "net_dist" in sys.modules:
+        return sys.modules["net_dist"]
+    if not (EDGE_DIR / "net_dist.py").is_file():
+        raise Refused(BAD_FORMAT, "this tree has no reader of the XDP edge's destination table")
+    if str(EDGE_DIR) not in sys.path:
+        sys.path.insert(0, str(EDGE_DIR))
+    return importlib.import_module("net_dist")
+
+
+def read_dests(body: bytes):
+    """`net.dests`: a `prismpath.net_dests/1` destination table in its canonical spelling, one the edge can use
+    (`net_from_policy.Destinations`). `Refused` with `dist:bad-format` otherwise."""
+    return edge_reader().read_dests(body)
+
+
+def check_net_edge(_envelope, body: bytes, _pep) -> Optional[str]:
+    """`net.edge` when it is staged (V11): the image check, with its existing causes. That it is byte for byte the
+    table compiled from the staged `policy.core` and `net.dests` is the edge adapter's check at commit (C2), with
+    `dist:derived-mismatch`, as the agent home holds a `sandbox.profile`."""
+    from prismpath.hotswap import policy_pack
+    ok, reasons = policy_pack.validate_image(body)
+    return None if ok else _first_cause(reasons)
+
+
 def _reads(reader: Callable[[bytes], dict]) -> Callable[[Any, bytes, Any], Optional[str]]:
     def check(_envelope, body: bytes, _pep) -> Optional[str]:
         try:
@@ -388,8 +424,8 @@ ARTIFACTS: Dict[str, Artifact] = {
     "egress.hosts": Artifact(check=_reads(read_hosts)),
     "agent.zones": Artifact(check=_reads(read_zones)),
     "gateway.routes": Artifact(check=_reads(read_routes)),
-    "net.dests": Artifact(),
-    "net.edge": Artifact(frozenset({"flow_sha256", "names_sha256", "qualification"})),
+    "net.dests": Artifact(check=_reads(read_dests)),
+    "net.edge": Artifact(frozenset({"flow_sha256", "names_sha256", "qualification"}), check=check_net_edge),
     "cfs.table": Artifact(),
     "grant": Artifact(check=_reads(read_grant)),
     "trust.widening": Artifact(check=_reads(read_widening)),
@@ -410,6 +446,7 @@ TARGETS: Dict[str, Target] = {
     "agent": Target(needs=frozenset({"policy.core", "egress.hosts"}), decides=True,
                     when_declared=frozenset({"agent.zones", "sandbox.profile"})),
     "gateway": Target(needs=frozenset({"policy.core", "gateway.routes"}), decides=True),
+    "xdp": Target(needs=frozenset({"policy.core", "net.dests", "net.edge"}), decides=True),
     "mesh": Target(needs=frozenset({"policy.ppt"}), decides=False, expiry_hold=True, body_bound=MESH_TABLE_MAX,
                    checks={"policy.ppt": check_mesh_table}, reads_meta=False, compares=frozenset({"policy.ppt"})),
 }
