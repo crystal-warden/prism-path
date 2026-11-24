@@ -2666,15 +2666,15 @@
    "kind": "internal",
    "owasp_asi": {
     "ids": [],
-    "none": "A widening the install engineer signed, made to stand out and held for an operator's acknowledgement. It records a condition, not a weakness or an attack."
+    "none": "A widening the install engineer signed, made to stand out and held until it is acknowledged at the controller. It records a condition, not a weakness or an attack."
    },
    "mitre_atlas": {
     "ids": [],
-    "none": "A widening the install engineer signed, made to stand out and held for an operator's acknowledgement. It records a condition, not a weakness or an attack."
+    "none": "A widening the install engineer signed, made to stand out and held until it is acknowledged at the controller. It records a condition, not a weakness or an attack."
    },
    "cwe": {
     "ids": [],
-    "none": "A widening the install engineer signed, made to stand out and held for an operator's acknowledgement. It records a condition, not a weakness or an attack."
+    "none": "A widening the install engineer signed, made to stand out and held until it is acknowledged at the controller. It records a condition, not a weakness or an attack."
    }
   },
   "165": {

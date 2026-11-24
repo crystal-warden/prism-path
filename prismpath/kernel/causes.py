@@ -209,7 +209,7 @@ _REGISTRY: Tuple[Tuple[int, str, str, str], ...] = (
     (161, "dist:fallback",               "state",     "an enforcement point deciding under its installed fallback policy because no release is active; marked in every state record while it lasts and filed by the controller"),
     (162, "dist:floor-allowed",          "state",     "a request the installed action floor allowed, whatever the policy says; an allow that was not the policy's"),
     (163, "dist:install-lost",           "state",     "an install set or an install record that no longer reads at start, so the enforcement point runs without that action floor, fallback policy or ceiling"),
-    (164, "dist:install-widened",        "state",     "an install set applied or handed over that allows more than the one before it, or is the first of its kind; filed until an operator acknowledges it"),
+    (164, "dist:install-widened",        "state",     "an install set applied or handed over that allows more than the one before it, or is the first of its kind; filed until it is acknowledged at the controller, which is detection only"),
     (165, "dist:above-ceiling",          "envelope",  "a release or an install set that allows what the installed ceiling does not, or a ceiling the held sets are above"),
     (166, "dist:floor-rate",             "routing",   "a request the action floor would have allowed, escalated because the signed rate of floor allows is spent"),
     (167, "dist:floor-broad",            "envelope",  "an action floor with a default or catch all, a rule that names no one action or lacks a required test, a test of a field that is not independent, or more rules or entries than its bound"),

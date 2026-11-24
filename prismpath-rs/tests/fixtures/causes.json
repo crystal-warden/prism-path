@@ -781,7 +781,7 @@
    "code": 164,
    "name": "dist:install-widened",
    "class": "state",
-   "description": "an install set applied or handed over that allows more than the one before it, or is the first of its kind; filed until an operator acknowledges it"
+   "description": "an install set applied or handed over that allows more than the one before it, or is the first of its kind; filed until it is acknowledged at the controller, which is detection only"
   },
   {
    "code": 165,
