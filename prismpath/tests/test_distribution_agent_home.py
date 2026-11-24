@@ -536,3 +536,97 @@ def test_without_proc_a_withdrawal_signals_nothing_and_reports_the_session(home,
     with pytest.raises(agent_home.SessionsRunning):
         agent_home.AgentHomeAdapter(home.state_dir).deactivate("dist:expired")
     assert sent == [] and agent_home.sessions(home.state_dir) == [4242]
+
+
+# ------------------------------------------------------------------ AF1: the floor in the real home's deciders
+
+FLOOR_FIELDS = ("tool", "path_scope", "command_class", "git_op", "net_dest", "path_control", "zone_reach", "zone_name")
+
+
+def _floor_core(*rules):
+    from prismpath.kernel.policy_source import compile_source
+    head = "".join(f"field.{name}: {'bool' if name == 'path_control' else 'category'}\n" for name in FLOOR_FIELDS)
+    return compile_source("---\nname: floor\nstart: core_decision\n" + head + "---\n## core_decision\n"
+                          + "".join(rule + "\n" for rule in rules))
+
+
+def test_case_187_the_real_home_asks_its_floor_first_in_the_hook_the_proxies_and_the_sandbox(tmp_path, monkeypatch):
+    """case_187: AF1, AF9, IS3, the `agent` part. With a release that refuses each, an `agent` home whose floor's
+    `policy.core` allows a call allows it through the hook and through the MCP proxy, with basis `floor` and a receipt
+    of the floor's own run, and its egress proxy reaches a host of the floor's `egress.hosts`. Its running sandbox
+    profile is the one compiled from the release's policy and the floor's together. The `gateway` part is in
+    test_distribution_gateway.py and the `xdp` part waits for its kind."""
+    from prismpath.agent import egress_policy, mcp_proxy, profile as profiles
+    from prismpath.distribution import floor as floors
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)    # the hook is given HOME only, so both find one home
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr(commands.sys, "platform", "linux")
+    monkeypatch.setattr(agent_home, "clock", lambda: _dist.NOW)
+    home_dir = commands.config_dir()
+    point = HomePep(home_dir, install_keys=["N1", "N2", "N3"], install_threshold=2)
+    release = _with_rules(NO_READS, {"target": "refuse_104", "when": ["cmp", "tool", "==", ["str", "list_dir"]]})
+    assert point.release(release, 1)[-1].event == "committed"
+    floor = _floor_core('-> allow: when tool == "read_file" and path_scope == "workspace"',
+                        '-> allow: when tool == "read_file" and path_scope == "outside"')
+    hosts = canon.canon2_bytes(["floor.example.com"])
+    sent = point.send(point.install_set("install.floor", {"policy.core": floor, "egress.hosts": hosts}, 1, widens=True))
+    assert sent[-1].event == "install-widened"
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "a.txt").write_text("x\n")
+    data = {"session_id": "s1", "hook_event_name": "PreToolUse", "tool_name": "Read",
+            "tool_input": {"file_path": str(project / "a.txt")}, "cwd": str(project)}
+    answer = commands.hook(json.dumps(data).encode(), {"HOME": str(tmp_path), "CLAUDE_PROJECT_DIR": str(project)})
+    assert answer["hookSpecificOutput"]["permissionDecision"] == "allow", answer
+    from prismpath.agent.run import RunStore
+    runs = RunStore(home_dir / commands.RUNS_DIR)
+    assert commands.floor_session("s1") in runs.sessions()
+    receipts = (home_dir / "dist" / "install" / agent_home.FLOOR_RECEIPTS).read_bytes().splitlines()
+    first = json.loads(receipts[0])
+    assert first["basis"] == "floor" and first["would"]["outcome"] == "refuse" and first["cause"] == floors.ALLOWED
+    governor = mcp_proxy.Governor(home_dir, tmp_path / "runs", "m1", project, str(project))
+    outcome = governor.decide({"name": "read_file", "arguments": {"path": str(project / "a.txt")}})
+    assert outcome.kind == "allow" and outcome.receipt == 0
+    listed = governor.decide({"name": "list_dir", "arguments": {"path": str(project)}})
+    assert listed.kind == "refuse"                                 # the floor is silent, so the release decides
+    policy, store = commands.load_checked(home_dir)
+    gate = egress_policy.PolicyGate(policy, store, "egress-s", project, compile_profile(policy, "agent"),
+                                    commands.hosts_of(home_dir), home=home_dir, follow=commands.Committed(home_dir))
+    assert gate("floor.example.com:443") == (True, "floor-allow")
+    assert gate("elsewhere.example.com:443")[0] is False
+    expected = profiles.join(compile_profile(release, "bash"), compile_profile(floor, "bash"))
+    assert agent_home.running_profile(home_dir, "bash") == expected
+    assert expected != compile_profile(release, "bash") and "/" in expected.ro_mounts
+    record = state_record.read(point.pep.record("beat"), point.key.public_raw)
+    assert record.install.answers == 3 and record.install.overrides == 3
+
+
+def test_the_classifier_names_the_one_zone_a_change_reaches(tmp_path):
+    """AF1: `zone_name` is the one protected name a change reaches, empty when it reaches none or the point cannot
+    say which, and a change that reaches two names reads `zone_reach` `unknown`, so no floor rule overrides it."""
+    from prismpath.agent import classifier
+
+    class Named:
+        control_paths = ()
+
+        def __init__(self, names):
+            self.names = names
+
+        def reach(self, raw, config=None):
+            return "protected" if self.names.get(os.path.basename(raw)) is not None else "none"
+
+        def reach_names(self, raw, config=None):
+            found = self.names.get(os.path.basename(raw))
+            return ("protected", frozenset(found)) if found is not None else ("none", frozenset())
+    (tmp_path / "a.py").write_text("x\n")
+    point = Named({"a.py": {"pkg.secure.check"}, "b.py": {"pkg.secure.check", "pkg.pay"}, "c.py": set()})
+    config = classifier.Config.for_workspace(str(tmp_path), zones=point)
+
+    def of(name):
+        call = {"tool": "write_file", "args": {"path": name, "content": "y"}}
+        reading = classifier.classify(call, config)
+        return reading["zone_reach"], classifier.zone_of(call, reading, config)
+    assert of("a.py") == ("protected", ("protected", "pkg.secure.check"))
+    assert of("b.py") == ("protected", ("unknown", ""))
+    assert of("c.py") == ("protected", ("protected", ""))
+    assert of("d.py") == ("none", ("none", ""))

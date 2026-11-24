@@ -259,6 +259,7 @@ prismpath/distribution/adapters/host.py
 prismpath/distribution/adapters/mesh.py
 prismpath/distribution/cli.py
 prismpath/distribution/controller.py
+prismpath/distribution/controller_install.py
 prismpath/distribution/devbuild.py
 prismpath/distribution/envelope.py
 prismpath/distribution/floor.py
@@ -795,6 +796,7 @@ prismpath/tests/test_distribution_heartbeat.py
 prismpath/tests/test_distribution_identity.py
 prismpath/tests/test_distribution_http.py
 prismpath/tests/test_distribution_install.py
+prismpath/tests/test_distribution_install_controller.py
 prismpath/tests/test_distribution_legacy.py
 prismpath/tests/test_distribution_pep.py
 prismpath/tests/test_distribution_reconciling.py

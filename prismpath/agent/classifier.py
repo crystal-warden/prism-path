@@ -729,6 +729,38 @@ def zone_reach(call: Any, reading: Dict[str, Any], config: Config) -> str:
     return "protected" if "protected" in answers else ("unknown" if "unknown" in answers else "none")
 
 
+def zone_of(call: Any, reading: Dict[str, Any], config: Config) -> Tuple[str, str]:
+    """(`zone_reach`, `zone_name`) of a call for the action floor (spec-policy-distribution.md, AF1): `zone_name` is
+    the one protected name the call reaches, empty when it reaches none. A call that reaches more than one name, or
+    whose point cannot say which, has no name, and one that reaches more than one reads `zone_reach` `unknown`, so no
+    floor rule overrides it. The release's own reading keeps `zone_reach` as `zone_reach` gives it."""
+    reach = reading.get("zone_reach", "none")
+    if reading.get("tool") == "unknown" or reach != "protected":
+        return reach, ""
+    tool, args = reading["tool"], call.get("args", {}) if isinstance(call, dict) else {}
+    if tool in ("write_file", "delete_path"):
+        raws = [args.get("path", ".")]
+    elif tool == "run_command" and reading.get("command_class") == "mutating":
+        raws = _path_like_args(args["argv"][1:])
+    else:
+        return reach, ""
+    names: set = set()
+    point = config.zones
+    for raw in (one for one in raws if path_ok(one)):
+        try:
+            fact, reached = point.reach_names(raw, config) if hasattr(point, "reach_names") else (zone_fact(raw, config),
+                                                                                                    frozenset())
+        except Exception:   # noqa: BLE001 - a point that fails says nothing
+            return "unknown", ""
+        if fact == "protected":
+            if not reached:
+                return reach, ""                  # protected, and the point cannot say by which name
+            names |= set(reached)
+    if len(names) > 1:
+        return "unknown", ""
+    return reach, (next(iter(names)) if names else "")
+
+
 def _classify(call: Any, config: Config) -> Dict[str, Any]:
     reading = _classify_base(call, config)
     if reading["tool"] != "unknown":
