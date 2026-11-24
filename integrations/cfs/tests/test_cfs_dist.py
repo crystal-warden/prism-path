@@ -107,7 +107,7 @@ def test_case_113_a_controller_files_a_cfs_app_held_while_its_records_carry_bit_
     point.commit(first)
     point.clock.now = _dist.EXPIRES
     controller.tick()
-    point.pep.see_epoch(controller.epoch)
+    point.pep.take_statement(controller.statement(_dist.STREAM))   # a /1 anchor: no key to take it under
     point.pep.tick()
     controller.members[pep_id].expected = (point.policy_of(first), point.pep.active.release, 1)
     held = point.pep.drain()
@@ -163,3 +163,22 @@ def test_a_cfs_table_with_another_core_image_is_taken_on_the_signers_word():
     assert record.event == "staged"
     committed = point.pep.commit(_dist.STREAM, 2, point.policy_of(other))
     assert state_record.read(committed, point.key.public_raw).event == "committed"
+
+
+def test_case_269_a_cfs_app_with_hold_cut_off_past_its_fresh_statement_is_held(tmp_path):
+    """case_269: H16, X7, the `cfs` half. With `fresh` 3600 and HOLD, a cFS app that took a fresh statement and is
+    cut off for 3901 seconds is held, with bit 5 set, and keeps deciding under its release."""
+    from prismpath.distribution.controller import Controller
+    point = CfsPep(tmp_path / "app", expiry_response="hold", controller="C", fresh=3600)
+    controller = Controller(str(tmp_path / "controller"), _dist.instance_key("C"), clock=point.clock)
+    controller.add_anchor(point.anchor())
+    controller.enroll(point.key.public_raw, "cfs", _dist.STREAM)
+    first = _body(1)
+    for sealed, body in _dist.release_with_statement(point, first, 1, widen=True, replaces=""):
+        controller.put(sealed, body)
+    point.commit(first)
+    assert point.pep.take_statement(controller.statement(_dist.STREAM)) and point.pep.kept is not None
+    point.clock.now += 3901
+    held = state_record.read(point.pep.tick(), point.key.public_raw)
+    assert (held.event, held.cause, held.held, held.state) == ("held", "dist:held", True, "active")
+    assert point.pep.decide(lambda: point.pep.adapter.decide(READING))["mark"] == "held"

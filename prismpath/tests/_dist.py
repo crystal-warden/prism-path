@@ -56,7 +56,7 @@ def seal(artifact: str, body: bytes, *, seq: int = 1, signer: str = "A", release
     """A sealed envelope for `body`, by default a `policy.ppt` release of one artifact."""
     if meta is None:
         meta = GEN.image_meta(body) if artifact == "policy.ppt" else {}
-    trust_kind = artifact in ("trust.revocation", "trust.rotation")
+    trust_kind = artifact in ("trust.revocation", "trust.rotation", "trust.controller")
     envelope_bytes = env.build(
         artifact, body, stream=stream, seq=seq, targets=targets, not_before=not_before,
         expires=0 if artifact.startswith("trust.") else expires, meta=meta,
@@ -83,6 +83,12 @@ def rotation(add: str, retire: str = "") -> bytes:
     """The canon/2 body of a rotation (section 11) adding the test key `add` and retiring the test key `retire`."""
     return canon.canon2_bytes({canon.ENCODING_KEY: canon.CANON2, "format": "prismpath.dist-rotation/1",
                                "add": GEN.public_raw(GEN.test_key(add)).hex(), "retire": key_id(retire) if retire else ""})
+
+
+def controller_key(key: str) -> bytes:
+    """The canon/2 body of a controller key statement (K7) naming the test key `key`."""
+    return canon.canon2_bytes({canon.ENCODING_KEY: canon.CANON2, "format": "prismpath.dist-controller/1",
+                               "key": GEN.public_raw(GEN.test_key(key)).hex()})
 
 
 def trust_statement(artifact: str, body: bytes, *, seq: int, signers=("A",), targets=("host",)) -> bytes:
@@ -112,20 +118,27 @@ class Point:
     expiry_response: str = "refuse"
     kind: str = "host"
     artifact: str = "policy.ppt"
+    controller: Optional[str] = None               # the test key named as the controller key, for a /2 anchor
+    fresh: int = 0                                 # H16
+    has_clock: bool = True
+    stream: str = STREAM
 
     def __post_init__(self):
         self.pep = self.open()
 
     def anchor(self) -> bytes:
+        controller = GEN.public_raw(GEN.test_key(self.controller)) if self.controller else None
         return trust_module.anchor_bytes([GEN.public_raw(GEN.test_key(name)) for name in self.authorities],
-                                         target=self.kind, stream=STREAM)
+                                         target=self.kind, stream=self.stream, controller=controller,
+                                         fresh=self.fresh)
 
     def adapter(self):
         raise NotImplementedError("a Point names its adapter")
 
     def open(self, provision: bool = True) -> Pep:
         """A fresh PEP over the state directory, as after a restart, provisioned on first open."""
-        pep = Pep(str(self.state_dir), self.adapter(), self.key, self.clock, expiry_response=self.expiry_response)
+        pep = Pep(str(self.state_dir), self.adapter(), self.key, self.clock, expiry_response=self.expiry_response,
+                  has_clock=self.has_clock)
         if provision and not pep.provisioned:
             pep.confirm(pep.provision(self.anchor()))
         return pep
@@ -379,7 +392,7 @@ def case_112_no_message_changes_the_setting(make: Callable[..., Point], bodies, 
         pep.stage(point.seal(bodies[1], seq=3), bodies[1])
         pep.commit(STREAM, 3, point.policy_of(bodies[1]))
         pep.record("beat")
-        pep.see_epoch(7)
+        pep.take_statement(b"PPEP" + bytes(98))
         pep.needs(["00" * 32])
         try:
             pep.rollback()

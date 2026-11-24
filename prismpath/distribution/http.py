@@ -19,6 +19,7 @@ The offers answer is a hint and is not signed (B5), so a wrong one costs a fetch
 """
 from __future__ import annotations
 
+import base64
 import hashlib
 import http.client
 import json
@@ -184,20 +185,19 @@ class PullClient:
         self.send()
 
     def send(self) -> None:
-        """Send every record the PEP made since the last send, oldest first. A record made before the PEP saw any
-        epoch (H9) carries 0, which no controller accepts, so it is kept in the PEP's audit log and not sent."""
+        """Send every record the PEP made since the last send, oldest first. A record made before the PEP took a
+        controller statement carries epoch 0, and the controller still uses it, marked unverified for freshness
+        where the PEP holds a controller key (H6), so it is sent as every other record is."""
         for record in self.pep.drain():
-            if struct_epoch(record) == 0:
-                continue
             try:
                 self.transport.post(record)
             except FetchFailed as error:
                 self.failures.append(("state", str(error)))
 
     def _act(self, answer: dict) -> None:
-        epoch = answer.get("epoch")
-        if kinds.is_int(epoch, 0, 2 ** 64 - 1):
-            self.pep.see_epoch(epoch)
+        statement = _statement(answer.get("epoch"))
+        if statement is not None:
+            self.pep.take_statement(statement)             # H9: only a statement that verifies changes anything
         for offer in _list(answer.get("offers")):
             if isinstance(offer, dict) and kinds.is_hex64(offer.get("envelope_id")):
                 self._stage(offer["envelope_id"])
@@ -266,9 +266,15 @@ class PullClient:
             self.done.discard(envelope_id)
 
 
-def struct_epoch(record: bytes) -> int:
-    """The epoch field of a signed state record (H1 bytes 40 to 47)."""
-    return int.from_bytes(bytes(record)[40:48], "little")
+def _statement(value) -> Optional[bytes]:
+    """The controller statement of an `offers` answer, base64url without padding (H9), or None when the member is
+    not one. An epoch id that comes with no statement is not one."""
+    if not isinstance(value, str) or not value or len(value) > 256:
+        return None
+    try:
+        return base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))
+    except (ValueError, TypeError):
+        return None
 
 
 def _list(value) -> list:

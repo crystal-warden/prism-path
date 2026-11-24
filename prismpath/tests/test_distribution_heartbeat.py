@@ -65,7 +65,7 @@ class Agents:
         return member
 
     def record(self, point, **changes):
-        point.pep.see_epoch(self.controller.epoch)
+        point.pep.take_statement(self.controller.statement(point.pep.stream))
         signed = point.pep.record("beat")
         point.pep.drain()
         if not changes:

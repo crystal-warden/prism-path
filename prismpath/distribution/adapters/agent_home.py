@@ -16,10 +16,18 @@ Its own check at commit (V11, C2) holds a staged `sandbox.profile` to the profil
 
 A decider that runs long, the egress proxy's gate and the MCP proxy, follows the committed state through
 `commands.Committed`, so a revocation, an expiry or a commit reaches it at its next decision.
+
+A commit and a rollback have no runtime step here (C6): the durable active record is the switch, and a session
+already running keeps its sandbox profile while the hook decides each of its calls under the new release. A lapse
+and a revocation do have one. The launcher registers every sandboxed session it starts in a distributed home under
+`<home>/dist/sessions/`, and the withdrawal ends each of them, a terminate first and a kill at a later try. A
+session that has not ended makes the withdrawal fail, so the PEP stays `reconciling` with the release that fell as
+the running release, and sends `lapsed` only once every session has ended (C6, H14).
 """
 from __future__ import annotations
 
 import os
+import signal
 import time as _time
 from pathlib import Path
 from typing import Any, Dict, Mapping, Optional, Tuple
@@ -37,9 +45,11 @@ class AgentHomeAdapter(Adapter):
     """The adapter of one agent home at `home`. `home` is also the directory K2 looks in for an authority key."""
     kind = "agent"
 
-    def __init__(self, home):
+    def __init__(self, home, *, end_session=None):
         self.home = str(home)
         self.running = None
+        self.end_session = end_session or end_process
+        self.tries: Dict[int, int] = {}                # withdrawals each session has been asked to end in
 
     def check(self, artifact: str, body: bytes, staged: Mapping[str, Tuple[Any, bytes]]) -> Optional[str]:
         if artifact == "sandbox.profile" and "policy.core" in staged:
@@ -56,10 +66,87 @@ class AgentHomeAdapter(Adapter):
         return take_readings(self.home)
 
     def activate(self, release) -> None:
-        self.running = release.policy_sha256
+        self.running = release.policy_sha256       # no runtime step: every reader finds the active record (C6)
 
     def deactivate(self, cause: str) -> None:
+        """The runtime step of a lapse or a revocation: end every sandboxed session still running. Raises
+        `SessionsRunning` when one has not ended, so the PEP tries again at its next tick (C9, C10)."""
         self.running = None
+        left = []
+        for pid in sessions(self.home):
+            tries = self.tries.get(pid, 0)
+            if self.end_session(pid, tries):
+                self.tries.pop(pid, None)
+                forget_session(self.home, pid)
+            else:
+                self.tries[pid] = tries + 1
+                left.append(pid)
+        if left:
+            raise SessionsRunning(f"{len(left)} sandboxed session(s) have not ended: {left}")
+
+
+class SessionsRunning(RuntimeError):
+    """A sandboxed session of a release that fell is still running, so the withdrawal has not worked (C10)."""
+
+
+SESSIONS = "sessions"
+
+
+def register_session(home, pid: int, policy_sha256: str) -> None:
+    """The launcher's note of a sandboxed session it started in a distributed home, so a lapse can end it (C6)."""
+    if not is_distributed(home):
+        return
+    from prismpath.kernel import canon2
+    directory = Path(home) / "dist" / SESSIONS
+    directory.mkdir(exist_ok=True)
+    canon.atomic_write_bytes(str(directory / f"{int(pid)}.json"),
+                             canon2.dumps({"pid": int(pid), "policy_sha256": policy_sha256}))
+
+
+def forget_session(home, pid: int) -> None:
+    """A session that ended, by the launcher when its program exits or by a withdrawal that ended it."""
+    try:
+        os.remove(Path(home) / "dist" / SESSIONS / f"{int(pid)}.json")
+    except OSError:
+        return
+
+
+def sessions(home) -> list:
+    """The process ids of the sandboxed sessions registered in the home, in order."""
+    try:
+        names = os.listdir(Path(home) / "dist" / SESSIONS)
+    except OSError:
+        return []
+    return sorted(int(name[:-5]) for name in names if name.endswith(".json") and name[:-5].isdigit())
+
+
+def end_process(pid: int, tries: int) -> bool:
+    """End the session whose process group leader is `pid`: a terminate at the first try, a kill after. True once
+    the process is gone. A launcher starts each session in a new session, so its process group is its pid."""
+    try:
+        os.killpg(pid, signal.SIGTERM if tries == 0 else signal.SIGKILL)
+    except ProcessLookupError:
+        return True
+    except PermissionError:
+        return False
+    for _ in range(20):
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return True
+        if _reaped(pid):
+            return True
+        _time.sleep(0.01)
+    return False
+
+
+def _reaped(pid: int) -> bool:
+    """A child of this process that ended is reaped, so it no longer reads as running."""
+    try:
+        done, _status = os.waitpid(pid, os.WNOHANG)
+    except ChildProcessError:
+        return False
+    return done == pid
 
 
 SPOOL = "recent.jsonl"

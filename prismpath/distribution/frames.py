@@ -42,7 +42,7 @@ _OFFER = struct.Struct(f"<{PREFIX}sHI")            # envelope id prefix, sealed 
 _CHUNK = struct.Struct("<BIH")                     # part, offset, length
 _ABORT = struct.Struct(f"<{PREFIX}sQ{PREFIX}s")    # stream hash prefix, seq, policy hash prefix
 _COMMIT = struct.Struct(f"<{PREFIX}sQ{PREFIX}sH")  # the same, and the delay in milliseconds
-_EPOCH = struct.Struct("<Q")
+STATEMENT_SIZE, FRESH_STATEMENT_SIZE = 102, 126       # H9: a controller statement, and one with H16's fields
 CHUNK_OVERHEAD = _HEAD.size + _CHUNK.size          # 11 bytes before a chunk's data
 
 
@@ -98,9 +98,10 @@ class Commit(Abort):
 
 @dataclass(frozen=True)
 class Epoch:
-    """The controller's epoch id (H9)."""
+    """One controller statement (H9), 102 bytes or 126 with the freshness fields of H16, as its bytes. Whether a
+    PEP takes it is the PEP's (`Pep.take_statement`)."""
     transfer: int
-    epoch: int
+    statement: bytes
 
 
 Frame = Union[Offer, Chunk, State, Commit, Abort, Epoch]
@@ -120,7 +121,7 @@ def encode(frame: Frame, limit: int = ESPNOW_LIMIT) -> bytes:
         elif isinstance(frame, Abort):
             kind, rest = ABORT, _ABORT.pack(frame.stream_prefix, frame.seq, frame.policy_prefix)
         elif isinstance(frame, Epoch):
-            kind, rest = EPOCH, _EPOCH.pack(frame.epoch)
+            kind, rest = EPOCH, bytes(frame.statement)
         else:
             raise Refused(FRAME_INVALID, f"not a frame: {frame!r}")
         data = _HEAD.pack(kind, VERSION, frame.transfer) + rest
@@ -160,7 +161,8 @@ def decode(data: bytes, limit: int = ESPNOW_LIMIT) -> Frame:
         _require(values[1] <= MAX_SEQ, "a seq past 2^53 - 1")
         return Commit(transfer, *values) if kind == COMMIT else Abort(transfer, *values)
     if kind == EPOCH:
-        return Epoch(transfer, *exactly(_EPOCH))
+        _require(len(rest) in (STATEMENT_SIZE, FRESH_STATEMENT_SIZE), f"an epoch frame of {len(data)} bytes")
+        return Epoch(transfer, rest)
     raise Refused(FRAME_INVALID, f"frame type {kind}")
 
 
