@@ -49,8 +49,8 @@ PARTIAL = {"P": frozenset(), "R": frozenset({243, 246}), "C": frozenset({60})}
 PARTIAL["P"] = PARTIAL["P"] | frozenset({246, 260, 261, 280})
 PENDING = {
     "P": "104-105 161-239 246 260-261 265-266 272-273 280",
-    "R": "137-138 161-163 165-166 169-172 174-178 182-183 186 188-190 193 195 197 199 201-202 204-205 207 213 215 218 221 223-227 230 233-236 243 246 256-262 265-266 269-272 276-280",
-    "C": "25 60 97 104-105 122 161 184 186 188 192-194 200 202-203 213 216 220 225-226 230-232 235 256-261 269-271 276-280",
+    "R": "137-138 161-163 165-166 169-172 174-178 182-183 186 188-190 193 195 197 199 201-202 204-205 207 213 215 218 221 223-227 230 233-236 243 246 256-262 265-266 269-272 276-280 281",
+    "C": "25 60 97 104-105 122 161 184 186 188 192-194 200 202-203 213 216 220 225-226 230-232 235 256-261 269-271 276-280 281",
 }
 
 
@@ -92,9 +92,9 @@ def _covered(impl: str) -> set:
     return covered - PARTIAL[impl]
 
 
-def test_the_spec_has_263_numbered_cases_each_naming_rules_and_implementations():
+def test_the_spec_has_271_numbered_cases_each_naming_rules_and_implementations():
     # 144 to 160 are left to the pull requests in flight that number their cases from 144; section 21 starts after them
-    assert sorted(SPEC) == [*range(1, 144), *range(161, 281)]
+    assert sorted(SPEC) == [*range(1, 144), *range(161, 289)]
     assert all(case["rules"].strip() and case["runs_on"] for case in SPEC.values())
 
 

@@ -11,6 +11,10 @@ a release is the PEP's active record, which the gateway then finds, and deactiva
 shows. The staged `gateway.routes` is read by the artifact's own V11 check (`kinds.read_routes`), and the adapter
 adds nothing to it.
 
+A release whose policy reads `workload` carries `identity.bundle` and `identity.map`, and one whose policy does not
+carries neither (ID3). The adapter holds that at commit, with every trust domain the map names held by the bundle,
+and refuses anything else with `dist:incomplete`, since the envelopes of the release then disagree.
+
 A gateway that runs long follows the committed state through `Following`: at every decision it takes the committed
 policy, the committed route table and a grant verifier over the PEP's trust store, loaded again only when a file of
 the store changed or the release's earliest expiry came. So a revocation, an expiry or a new route table reaches it
@@ -20,7 +24,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Mapping, Optional
 
 from prismpath.distribution import kinds
 from prismpath.distribution.adapters import Adapter, agent_home
@@ -35,6 +39,13 @@ class GatewayHomeAdapter(Adapter):
         self.home = str(home)
         self.running = None
 
+    def check(self, artifact: str, body: bytes, staged) -> Optional[str]:
+        """ID3 at commit, once, on the release's `policy.core`: the identity artifacts are there exactly when the
+        policy reads `workload`, and the map names no trust domain the bundle does not hold."""
+        if artifact != "policy.core":
+            return None
+        return identity_refusal(body, {name: pair[1] for name, pair in staged.items()})
+
     def readings(self) -> list:
         """The readings the gateway decided since the last call, oldest first, taken off the spool (H5)."""
         return agent_home.take_readings(self.home)
@@ -44,6 +55,29 @@ class GatewayHomeAdapter(Adapter):
 
     def deactivate(self, cause: str) -> None:
         self.running = None
+
+
+def identity_refusal(policy_body: bytes, bodies: Mapping[str, bytes]) -> Optional[str]:
+    """ID3: None when the identity artifacts of `bodies` agree with the policy, else `dist:incomplete`. The bodies
+    themselves were read by their own checks (V11)."""
+    from prismpath.agent.policy import Policy
+    from prismpath.gateway import identity
+    try:
+        reads = identity.FIELD in Policy(bytes(policy_body)).fields
+    except ValueError:
+        return None                                    # the policy's own check refuses it
+    held = [name in bodies for name in ("identity.bundle", "identity.map")]
+    if held != [reads, reads]:
+        return "dist:incomplete"
+    if reads:
+        try:
+            domains = set(kinds.read_identity_bundle(bodies["identity.bundle"]))
+            entries = kinds.read_identity_map(bodies["identity.map"])
+        except Refused as refused:
+            return refused.cause
+        if any(entry.domain not in domains for entry in entries):
+            return "dist:incomplete"
+    return None
 
 
 def stream_of(home) -> str:
@@ -60,11 +94,14 @@ class State:
     routes: Any
     grants: Any
     bodies: Dict[str, bytes]
+    identity: Any = None
 
 
-def state_of(home, policy, bodies: Dict[str, bytes]) -> State:
-    """The `State` of a committed release, its route table read as V11 reads it and its grants verified under the
-    trust store the PEP holds now. AgentError when the table does not read."""
+def state_of(home, policy, bodies: Dict[str, bytes], setting=None) -> State:
+    """The `State` of a committed release, its route table read as V11 reads it, its grants verified under the
+    trust store the PEP holds now and, when its policy reads `workload`, its workload reader over the committed
+    bundle and map with the front proxy `setting` (ID3, ID4). AgentError when the table does not read, the identity
+    artifacts disagree with the policy, or the policy reads `workload` and no front proxy is set."""
     from prismpath.agent import commands
     from prismpath.distribution.trust import TrustStore
     from prismpath.gateway import grants
@@ -79,7 +116,27 @@ def state_of(home, policy, bodies: Dict[str, bytes]) -> State:
         raise commands.AgentError(f"the home's anchor cannot be read ({error})") from None
     verifier = grants.Verifier(None, commands._sha256_hex(policy.image), trust=trust, stream=stream,
                                clock=lambda: agent_home.clock())
-    return State(policy, routes, verifier, dict(bodies))
+    return State(policy, routes, verifier, dict(bodies), workload_reader(policy, bodies, setting))
+
+
+def workload_reader(policy, bodies: Mapping[str, bytes], setting):
+    """The `identity.Identity` a policy that reads `workload` is decided with, or None for one that does not.
+    AgentError when it cannot be built (ID3, ID4)."""
+    from prismpath.agent import commands
+    from prismpath.gateway import identity
+    if identity.FIELD not in policy.fields:
+        return None
+    if identity_refusal(policy.image, bodies) is not None:
+        raise commands.AgentError("the committed release's identity.bundle and identity.map do not agree with its "
+                                  "policy, which reads workload (ID3)")
+    if setting is None:
+        raise commands.AgentError("the policy reads workload, and no front proxy header is set to read the client "
+                                  "certificate from (--client-cert-header and --front-proxy)")
+    try:
+        return identity.Identity.from_bodies(bodies["identity.bundle"], bodies["identity.map"], setting,
+                                             clock=lambda: agent_home.clock())
+    except identity.IdentityError as error:
+        raise commands.AgentError(f"the committed identity artifacts do not read ({error})") from None
 
 
 class Following:
@@ -87,9 +144,10 @@ class Following:
     answers the `State` of the next decision or raises `commands.AgentError` with why the release no longer
     decides. It builds the state again only when `commands.Committed` loaded the release again."""
 
-    def __init__(self, home):
+    def __init__(self, home, setting=None):
         from prismpath.agent import commands
         self.home = Path(home)
+        self.setting = setting
         self.committed = commands.Committed(self.home, kind="gateway")
         self._loaded: Any = None
         self._state: Any = None
@@ -98,7 +156,7 @@ class Following:
         loaded = self.committed.current()
         if loaded is not self._loaded:
             policy, bodies = loaded
-            self._state, self._loaded = state_of(self.home, policy, bodies), loaded
+            self._state, self._loaded = state_of(self.home, policy, bodies, self.setting), loaded
         return self._state
 
 

@@ -8,6 +8,14 @@ spec stable.
 
 ## [Unreleased]
 
+### Added: the gateway reads a SPIFFE ID from the client certificate as a workload class
+
+- **Two artifact kinds, `identity.bundle` and `identity.map`, travel in ordinary envelopes.** A bundle is each trust domain's X.509 CA certificates and a map is SPIFFE ID patterns to classes, read in order as the route table is. A gateway release carries both when its policy reads `workload` and neither when it does not, and a map that names a trust domain its bundle does not hold is `dist:incomplete`.
+- **A policy may add the field `workload` to the gateway's reading.** It is `none` without a certificate, `invalid` for one that fails the check, `other` for a valid SPIFFE ID the map does not name, and otherwise the class of the first entry that matches. The policy decides what each is worth.
+- **The gateway takes the client certificate from the front proxy that terminates TLS.** `--client-cert-header` names the header that carries the percent encoded PEM chain and `--front-proxy` the addresses it is read from. The header is never passed to the service. The leaf must have one URI SAN with a SPIFFE ID, `cA` false and digitalSignature without keyCertSign or cRLSign, and its chain is validated by RFC 5280 against its own trust domain's CAs at the gateway's time.
+- **A changed bundle or map is a widening unless it only removes entries.** A map entry taken out whose IDs a later entry would take counts as a widening.
+- **`prismpath gateway identity-bundle` and `identity-map` write the bodies** that `prismpath dist seal` seals, and a home that holds its own policy takes them at `serve` with `--identity-bundle` and `--identity-map`. Spec section 13.1 holds rules ID1 to ID8 and cases 281 to 288.
+
 ### Added: the Python enforcement point reconciles a failed switch, and the controller signs the epoch and freshness
 
 - **A runtime step that fails after its record is durable makes the Python PEP `reconciling`, as section 9.5 says.** It withdraws the runtime at once, refuses every decision, commit, delayed commit and rollback with `dist:reconciling`, and goes on staging, aborting, applying trust statements, taking an anchor and taking a controller statement. Only a tick and a start try again. Each try holds the held release, and the running release while it will not withdraw, to revocation, expiry and freshness first, so a release that falls is lapsed and never installed. Every record has status 3 and the 58 byte reconciling entry of H14, the record the transition owed goes once a try works, and a start that finds the state reports it again. A renewal whose step fails stays active and is tried again at each tick, and provisioning over a runtime that will not withdraw is refused (P5). A locked PEP whose runtime will not withdraw carries the entry with `dist:floor-lost` (C13).
