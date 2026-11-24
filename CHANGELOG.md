@@ -8,6 +8,14 @@ spec stable.
 
 ## [Unreleased]
 
+### Added: state records and fleet findings export as OpenTelemetry events, OCSF and in-toto (2026-11-24)
+
+- **`prismpath dist fleet --export otel|ocsf|intoto` writes what the fleet view holds as JSON lines, at the controller only.** Per PEP that is the last accepted record of each event and each open finding. The controller now keeps the signed bytes of those records and of the record each finding was filed on, so every export carries them.
+- **OpenTelemetry events `prismpath.dist.state` and `prismpath.dist.finding`** through the sink pattern of `prismpath/ledgers/otel.py`, testable with no SDK, with every record field, the reconciling and install entries, the cause code, the hashes, `seq` and the controller statement's epoch id as attributes. `to_otel_sink` hands them to an OpenTelemetry logger.
+- **OCSF 1.10.0.** A commit or a lapse is Device Config State Change (5019), a finding is Detection Finding (2004), with the signed record in `raw_data`. The mapping is not yet checked against the OCSF schema files.
+- **in-toto.** A Statement v1 about each commit, in a DSSE envelope signed by the controller's instance key through `prismpath/ledgers/intoto.py`, which gains `sign_statement` and `open_statement`.
+- **`check_otel`, `check_ocsf` and `check_intoto` check an export back against the signed record it carries.** A rollout's scope is exported as the controller marks it, and only a widening is exported as one.
+
 ### Added: the Rust host takes the controller key and the controller statement (2026-11-24)
 
 - **The controller key is named by `trust.controller` in Rust too (K6, K7).** It travels on `@trust`, shares the trust sequence and replaces the controller key the store held, retiring it, at a new key sequence. It is never an authority key, the instance key, an install or operator key, a revoked or a retired key, each `dist:rotation-invalid`, and a store that would then hold a ninth key is `dist:too-large`. The trust store writes `key_seq` once it holds a controller key, so a store that never did keeps its bytes.

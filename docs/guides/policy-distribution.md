@@ -159,6 +159,46 @@ cause the PEP gave. Each finding stays open until a later record clears it (F4).
 The controller writes every offer, ack, commit, abort, finding and trust statement to its own audit log,
 signed with its instance key (F5).
 
+### Exports
+
+The controller exports what the fleet view holds, and only the controller does. No PEP exports anything.
+
+```bash
+prismpath dist fleet --dir ctl --key controller/instance.key --export otel     # OpenTelemetry events
+prismpath dist fleet --dir ctl --key controller/instance.key --export ocsf     # OCSF 1.10.0
+prismpath dist fleet --dir ctl --key controller/instance.key --export intoto   # in-toto statements in DSSE
+```
+
+Each writes one JSON document per line. For each PEP that is the last accepted record of each event and
+each open finding. The signed record stays the evidence. Every export carries the record's signed bytes in
+base64, and `prismpath.distribution.export` has `check_otel`, `check_ocsf` and `check_intoto`, which read
+those bytes again under the PEP's enrolled key and refuse an export whose fields are not the record's. A
+finding carries the record it was filed on. One filed with no record, such as `fleet:silent`, carries the
+PEP's last accepted record and says so. A record from a sender that is not enrolled carries its bytes and
+has no key to check them by. A held install statement (H13) carries its sealed envelope.
+
+The OpenTelemetry events are named `prismpath.dist.state` and `prismpath.dist.finding`. Their attributes
+are every field of the record under `prismpath.dist.record.`, with the cause code, the hashes, `seq`, the
+reconciling entry and the install entry, and the controller's own reading under
+`prismpath.dist.controller.`, which is the group, the stream, the controller statement's epoch id, the full policy
+hash and the scope of the rollout a commit ends. `export.to_otel_sink` hands them to an OpenTelemetry
+logger.
+
+In OCSF a commit or a lapse is Device Config State Change (5019) with activity 99, named `Commit` or
+`Lapse`, and a finding is Detection Finding (2004). The record is in `raw_data` and its SHA-256 in
+`raw_data_hash`. Every PrismPath field is under `unmapped`. Other events go to the OpenTelemetry export
+only. This mapping is not yet checked against the OCSF 1.10.0 schema files. It follows the published class
+and attribute names.
+
+The in-toto export is one Statement v1 per commit, in a DSSE envelope signed by the controller's instance
+key. Its subject is the record by its SHA-256 and the committed policy and release by theirs. Its predicate
+holds the record and its fields.
+
+A rollout's scope is exported as the controller marks it. `prismpath.dist.controller.widening` is true only
+for `widening`, a release that allows more than the one it replaces. A change that is not larger is never
+exported as a widening, and neither is the older mark `larger by rule`, which says only that a table
+changed. A 64 bit field above 2^53 - 1 is written as a decimal string.
+
 ## 7. Revoking and rotating keys
 
 A revocation list replaces the one before it and is applied as soon as a PEP verifies it. `revoke` starts
