@@ -655,10 +655,10 @@ def pep_id(name: str = "I") -> str:
 def answer(receipt: str, verdict: str = "allow", *, signer="O1", pep=None, now=N, not_before=None, lifetime=300,
            floor=None, stream=S, targets=("cfs",), signed=True) -> str:
     """A stage line of a sealed operator.answer (OP2) to the escalation whose receipt hash is `receipt`."""
-    from prismpath.distribution import floor as floors, kinds
-    body = floors.answer_body(verdict, pep or pep_id(), receipt)
+    body = canon.canon2_bytes({"answer": verdict, canon.ENCODING_KEY: canon.CANON2, "format": "prismpath.dist-answer/1",
+                               "pep": pep or pep_id(), "receipt": receipt})
     start = now - 10 if not_before is None else not_before
-    doc = {"artifact": kinds.ANSWER, "body_sha256": canon.sha256_hex(body), "body_size": len(body),
+    doc = {"artifact": "operator.answer", "body_sha256": canon.sha256_hex(body), "body_size": len(body),
            "encoding": "canon/2", "expires": start + lifetime, "format": env.FORMAT, "meta": {}, "not_before": start,
            "policy_sha256": floor or policy(floors_of()["one"]), "release": env.ZERO_HASH, "replaces": "", "seq": 1,
            "stream": stream, "targets": list(targets), "widens": False}
