@@ -359,7 +359,7 @@ def test_the_command_line_seals_serves_provisions_pulls_and_rekeys_a_host_pep(tm
         out = capsys.readouterr().out
         return code, (json.loads(out) if out.strip().startswith("{") else out)
 
-    keys = {name: _pem(tmp_path / f"{name}.pem", name) for name in ("A", "B", "C", "p1")}
+    keys = {name: _pem(tmp_path / f"{name}.pem", name) for name in ("A", "B", "C", "D", "p1")}
     pub = tmp_path / "p1.pub"
     pub.write_bytes(GEN.public_raw(GEN.test_key("p1")))
     authority = tmp_path / "A.pub"
@@ -424,6 +424,18 @@ def test_the_command_line_seals_serves_provisions_pulls_and_rekeys_a_host_pep(tm
     code, printed = run("fleet", "--dir", str(directory), "--key", keys["C"])
     assert [rollout["state"] for rollout in printed["rollouts"]] == ["committed", "committed"]
     assert printed["trust_seq"] == 2 and printed["peps"][0]["findings"] == {}
+
+    # case_292: W8. A rekey whose table allows more than the one it replaces is refused before the rotation is
+    # stored, unless --widens says the owner means it
+    wider = tmp_path / "policy3.ppt"
+    wider.write_bytes(_dist.image(3))
+    args = cli.build_parser().parse_args([
+        "dist", "rekey", "--dir", str(directory), "--key", keys["C"], "--old", keys["B"], "--new", keys["D"],
+        "--body", str(wider), "--qualification", str(qualification), "--group", "g", "--stream", STREAM,
+        "--seq", "3", "--target", "host", "--not-before", str(now - 60), "--expires", str(now + 86400),
+        "--timeout", "1"])
+    assert args.func(args) == 1 and "refused: dist:widening-unsigned" in capsys.readouterr().err
+    assert run("fleet", "--dir", str(directory), "--key", keys["C"])[1]["trust_seq"] == 2
 
 
 def test_the_pull_client_tries_again_only_what_time_or_the_trust_chain_may_change(tmp_path):

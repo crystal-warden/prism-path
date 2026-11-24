@@ -97,6 +97,16 @@ policy they have active (W2). Every other release needs a widening statement tha
 goes from no policy to one, so every PEP counts it as larger and refuses one whose `widens` is false, even with
 a statement (W6).
 
+For a host or a mesh table the sealing tool and the controller also run the table comparator (W8). It walks
+every node of the two tables over one register value of each class the atoms cut a register into, and says
+whether the new table steps anywhere the old one does not. `seal --held` prints its answer as `comparison`,
+with a witness register file when the table is larger, and marks the release `larger by rule` or `larger by
+comparison`. A table that allows nothing more is larger only by the PEP's byte rule, so `seal` signs its
+widening statement too and writes it beside the release as `<out>.widening.sealed` and `.body`. A table that
+allows more gets no statement from `seal`, and you sign one with `widen` when you mean it. `rekey` refuses such
+a table unless you pass `--widens`. The fleet view keeps the same mark and the comparator's answer with each
+rollout. No PEP runs the comparator, so each still checks bytes and the statement (W2).
+
 The reading domain an agent policy is compared over is the one the engineer who installs PrismPath defines: the
 values the classifier produces for each category, true and false, and each int's min to max. A policy whose
 rule names a value outside it, such as a tool the classifier does not produce, is refused when it is loaded and

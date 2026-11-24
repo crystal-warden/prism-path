@@ -12,7 +12,8 @@ answer that per artifact, `LARGER`, `NOT_LARGER` or `CANNOT_DECIDE`:
     gateway.routes   any change is larger
     agent.zones      larger when a protected name is gone, and a release that drops the artifact drops them all
     policy.ppt       any change is larger, since the table format gives its nodes no meaning and nothing in
-                     the image says which outcome is the more permissive one
+                     the image says which outcome is the more permissive one. That is the PEP's rule (W2). The
+                     sealing tool and the controller also run `table_compare` (W8), which never changes it
     cfs.table        ordered by the core image inside it, registered from `integrations/cfs/dist_kind.py`
     net.dests        larger when the edge it compiles to would allow an address the active one's does not,
                      registered from `prismpath-ebpf/net_dist.py`, which the `net.dests` check loads

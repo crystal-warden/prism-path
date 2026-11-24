@@ -269,6 +269,7 @@ prismpath/distribution/legacy.py
 prismpath/distribution/pep.py
 prismpath/distribution/state_record.py
 prismpath/distribution/statement.py
+prismpath/distribution/table_compare.py
 prismpath/distribution/trust.py
 prismpath/distribution/verify.py
 prismpath/distribution/widening.py
@@ -794,6 +795,7 @@ prismpath/tests/test_distribution_revocation.py
 prismpath/tests/test_distribution_rotation.py
 prismpath/tests/test_distribution_state_record.py
 prismpath/tests/test_distribution_statement.py
+prismpath/tests/test_distribution_table_compare.py
 prismpath/tests/test_distribution_trace.py
 prismpath/tests/test_distribution_verify.py
 prismpath/tests/test_distribution_widening.py

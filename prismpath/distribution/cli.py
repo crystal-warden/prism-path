@@ -151,6 +151,9 @@ def add_parser(subparsers) -> None:
     rekey.add_argument('--not-before', type=int, default=None)
     rekey.add_argument('--expires', type=int, required=True)
     rekey.add_argument('--timeout', type=float, default=600.0, help='seconds to wait for the commit')
+    rekey.add_argument('--widens', action='store_true',
+                       help='the release may allow more than the table it replaces; without it a table the comparator '
+                            'finds larger is refused, and one it finds not larger goes with a statement by rule (W8)')
     rekey.set_defaults(func=rekey_cmd)
 
     pep = commands.add_parser('pep', help='run a host enforcement point (provision, poll, status, rollback)')
@@ -312,15 +315,59 @@ def replaced(directory: Optional[str], artifact: str, stream: str, seq: int, pol
 
 
 def _replaced_in(controller, artifact: str, stream: str, seq: int, policy: Optional[str] = None):
-    below = [info for info in controller.stored.values()
-             if info["stream"] == stream and info["artifact"] == artifact and info["seq"] < seq
-             and (policy is None or info["policy"] == policy)]
+    below = _below(controller, artifact, stream, seq, policy)
     if not below and policy is not None:
         return policy, None
     if not below:
         return "", None
     latest = max(below, key=lambda info: info["seq"])
     return latest["policy"], controller.blob(latest["body_sha256"])
+
+
+def _below(controller, artifact: str, stream: str, seq: int, policy: Optional[str]) -> list:
+    return [dict(info, envelope_id=one) for one, info in controller.stored.items()
+            if info["stream"] == stream and info["artifact"] == artifact and info["seq"] < seq
+            and (policy is None or info["policy"] == policy)]
+
+
+def _replaced_fields(controller, stream: str, seq: int, policy: Optional[str]) -> Optional[dict]:
+    """The signed field dictionary of the `policy.ppt` envelope `_replaced_in` holds the new one to (W8)."""
+    from prismpath.distribution import table_compare
+    below = _below(controller, "policy.ppt", stream, seq, policy)
+    if not below:
+        return None
+    latest = max(below, key=lambda info: info["seq"])
+    return table_compare.table_fields(env.read(env.unseal(controller.sealed(latest["envelope_id"]))[0]))
+
+
+def table_comparison(controller, body: bytes, meta: Optional[dict], stream: str, seq: int, policy: Optional[str],
+                     previous: Optional[bytes]):
+    """W8 at the sealing tool: the table comparator's answer for a `policy.ppt` body against the table it
+    replaces, which `controller` holds, or None when it holds none."""
+    from prismpath.distribution import table_compare
+    if previous is None:
+        return None
+    fields = (meta or {}).get("fields")
+    return table_compare.compare_tables(previous, body, active_fields=_replaced_fields(controller, stream, seq, policy),
+                                        staged_fields=dict(fields) if isinstance(fields, dict) else None)
+
+
+def larger_mark(artifact: str, widens: bool, previous: Optional[bytes], body: bytes, comparison) -> str:
+    """F4 at the sealing tool, as the controller marks a rollout: `larger by comparison` for a release that
+    replaces nothing held, that a comparator with an order finds larger, or a table W8 finds larger or cannot
+    decide, `larger by rule` for a table W8 finds not larger or a changed route table, and empty otherwise."""
+    from prismpath.distribution import widening
+    from prismpath.distribution.controller import BY_RULE, LARGER_BY_COMPARISON, LARGER_BY_RULE
+    if not widens:
+        return ""
+    if previous is None:
+        return LARGER_BY_COMPARISON
+    if widening.compare_artifact(artifact, previous, body) == widening.NOT_LARGER:
+        return ""
+    if artifact == "policy.ppt":
+        return LARGER_BY_RULE if comparison is not None and comparison.answer == widening.NOT_LARGER \
+            else LARGER_BY_COMPARISON
+    return LARGER_BY_RULE if artifact in BY_RULE else LARGER_BY_COMPARISON
 
 
 def seal_cmd(args) -> int:
@@ -334,17 +381,36 @@ def seal_cmd(args) -> int:
     # a release that replaces nothing, or one the directory holds nothing for, widens
     widens = args.widens or args.artifact not in kinds.TRUST_ARTIFACTS and (
         previous is None or widening.compare_artifact(args.artifact, previous, body) != widening.NOT_LARGER)
+    comparison = None
+    if args.artifact == "policy.ppt" and args.held is not None and previous is not None:
+        comparison = table_comparison(_held(args.held), body, meta, args.stream, args.seq, args.replaces, previous)
+    mark = larger_mark(args.artifact, widens, previous, body, comparison)
     try:
         sealed = build_sealed(args.artifact, body, stream=args.stream, seq=args.seq, targets=args.target,
                               signers=_authority(args.key), not_before=args.not_before or int(time.time()),
                               expires=args.expires, meta=meta, release=args.release, policy=args.policy,
                               replaces=replaces, widens=widens, held=args.held)
+        statement = None
+        if mark == "larger by rule" and args.artifact == "policy.ppt" and not args.widens:
+            # W8: a table that allows nothing more is larger only by the PEP's byte rule, so the tool signs the
+            # statement W3 asks for with the release's own keys, covering the table it replaces and no other
+            statement = widening_sealed(sealed, [replaces], _authority(args.key))
     except Refused as refused:
         return _fail(refused.cause, str(refused))
     _write(args.out, sealed)
-    _print({"sealed": args.out, "envelope_id": env.envelope_id(env.unseal(sealed)[0]),
-            "body_sha256": canon.sha256_hex(body), "sealed_size": len(sealed), "replaces": replaces,
-            "widens": widens})
+    printed = {"sealed": args.out, "envelope_id": env.envelope_id(env.unseal(sealed)[0]),
+               "body_sha256": canon.sha256_hex(body), "sealed_size": len(sealed), "replaces": replaces,
+               "widens": widens, "larger": mark}
+    if comparison is not None:
+        printed["comparison"] = comparison.document()
+    if statement is not None:
+        stem = os.path.splitext(args.out)[0] + ".widening"
+        _write(stem + ".sealed", statement[0])
+        _write(stem + ".body", statement[1])
+        printed["statement"] = {"sealed": stem + ".sealed", "body": stem + ".body", "from": [replaces]}
+    elif mark == "larger by comparison":
+        printed["next"] = "this release allows more than the one it replaces; sign its widening statement with widen"
+    _print(printed)
     return 0
 
 
@@ -454,7 +520,9 @@ def rotate_cmd(args) -> int:
 def rekey_cmd(args) -> int:
     """Rotate to the new key retiring the old one, release under the new key, wait for the group to commit, then
     revoke the old key (R5's order of work). A release that is not the one it replaces goes with a widening
-    statement from that one (W3, W7). Each statement is stored in the controller directory, which the running
+    statement from that one (W3, W7). The statement is signed in passing only for a table the comparator finds
+    allows nothing more, and a table it finds larger is refused, before anything is stored, unless `--widens`
+    says the owner means it (W8). Each statement is stored in the controller directory, which the running
     `serve` offers."""
     from prismpath.distribution import widening
     from prismpath.hotswap import policy_pack
@@ -466,14 +534,21 @@ def rekey_cmd(args) -> int:
     now = int(time.time())
     try:
         with controller.locked():
-            rotation = rotation_body(new, old_id)
-            controller.put(build_sealed("trust.rotation", rotation, stream=env.TRUST_STREAM,
-                                        seq=controller.trust_seq() + 1, targets=targets, signers=[old, new],
-                                        not_before=now, expires=0), rotation)
             body = _read(args.body)
             meta = policy_meta(body, _json(args.qualification)) if args.qualification else {}
             replaces, previous = _replaced_in(controller, "policy.ppt", args.stream, args.seq)
             widens = previous is None or widening.compare_artifact("policy.ppt", previous, body) != widening.NOT_LARGER
+            comparison = table_comparison(controller, body, meta, args.stream, args.seq, None, previous)
+            if widens and not args.widens and larger_mark("policy.ppt", True, previous, body, comparison) \
+                    != "larger by rule":
+                # W8: a release that allows more is an act the owner takes on purpose, so it is never signed in passing
+                raise Refused(widening.UNSIGNED, "the table allows more than the one it replaces "
+                              f"({(comparison.document() if comparison else {'reason': 'no table before it'})}); "
+                              "pass --widens to release it with a widening statement")
+            rotation = rotation_body(new, old_id)
+            controller.put(build_sealed("trust.rotation", rotation, stream=env.TRUST_STREAM,
+                                        seq=controller.trust_seq() + 1, targets=targets, signers=[old, new],
+                                        not_before=now, expires=0), rotation)
             release = build_sealed("policy.ppt", body, stream=args.stream, seq=args.seq, targets=args.target,
                                    signers=[new], not_before=args.not_before or now, expires=args.expires,
                                    meta=meta, replaces=replaces, widens=widens)

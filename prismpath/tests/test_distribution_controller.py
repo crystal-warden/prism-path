@@ -691,6 +691,97 @@ def test_case_136_the_sealing_tool_and_the_controller_hold_widens_to_what_they_h
     assert fleet.controller.offer("fleet", STREAM, 3).seq == 3
 
 
+def _pem_of(tmp_path, name):
+    from prismpath.hotswap import policy_pack
+    _priv, _pub, ser, _invalid = policy_pack._ed25519()
+    pem = tmp_path / f"{name}.pem"
+    pem.write_bytes(GEN.test_key(name).private_bytes(ser.Encoding.PEM, ser.PrivateFormat.PKCS8, ser.NoEncryption()))
+    return pem
+
+
+def test_case_290_the_sealing_tool_compares_tables_and_signs_the_statement_only_for_one_that_allows_nothing_more(
+        tmp_path, capsys):
+    """case_290: W8, W2, W3, W7. Against a held mesh table, the tool seals a narrower one with `widens` true,
+    marked larger by rule with the comparator's answer, and writes the widening statement from the table it
+    replaces beside it. A mesh node stages and commits the pair, and refuses the same table said not to widen. A
+    wider table is marked larger by comparison with a witness reading and gets no statement, and a node refuses it
+    without one."""
+    from prismpath import cli
+    pem = _pem_of(tmp_path, "A")
+    fleet = Fleet(tmp_path, names=("n1",), kind="mesh")
+    fleet.put(OLD, 1)
+    fleet.controller.save()
+
+    def seal_with_tool(body, seq):
+        (tmp_path / "body").write_bytes(body)
+        (tmp_path / "meta.json").write_text(json.dumps(GEN.image_meta(body)))
+        args = cli.build_parser().parse_args([
+            "dist", "seal", "--artifact", "policy.ppt", "--body", str(tmp_path / "body"), "--stream", STREAM,
+            "--seq", str(seq), "--target", "mesh", "--key", str(pem), "--held", str(fleet.dir),
+            "--not-before", str(_dist.NOT_BEFORE), "--expires", str(_dist.EXPIRES), "--meta", str(tmp_path / "meta.json"),
+            "--out", str(tmp_path / f"r{seq}.sealed")])
+        assert args.func(args) == 0
+        return json.loads(capsys.readouterr().out)
+
+    printed = seal_with_tool(NEW, 2)
+    assert printed["widens"] and printed["larger"] == "larger by rule" and printed["replaces"] == H(OLD)
+    assert printed["comparison"] == {"answer": "not-larger", "reason": "narrower", "witness": None}
+    assert printed["statement"]["from"] == [H(OLD)] and "next" not in printed
+    statement = (tmp_path / "r2.widening.sealed").read_bytes()
+    assert env.read(env.unseal(statement)[0]).artifact == "trust.widening"
+
+    node = _dist.MeshPep(tmp_path / "node")
+    node.commit(OLD)
+    said_not = node.seal(NEW, seq=2, replaces=H(OLD))
+    assert state_record.read(node.pep.stage(said_not, NEW), node.key.public_raw).cause == "dist:widening-unsigned"
+    staged = node.pep.stage(statement, (tmp_path / "r2.widening.body").read_bytes())
+    assert state_record.read(staged, node.key.public_raw).event == "staged"
+    staged = node.pep.stage((tmp_path / "r2.sealed").read_bytes(), NEW)
+    assert state_record.read(staged, node.key.public_raw).event == "staged"
+    assert state_record.read(node.pep.commit(STREAM, 2, H(NEW)), node.key.public_raw).event == "committed"
+
+    wider = _dist.image(3)
+    printed = seal_with_tool(wider, 3)
+    assert printed["widens"] and printed["larger"] == "larger by comparison" and "statement" not in printed
+    assert printed["comparison"]["answer"] == "larger" and printed["comparison"]["reason"] == "step"
+    assert printed["comparison"]["witness"]["active"] is None and printed["next"]
+    assert not (tmp_path / "r3.widening.sealed").exists()
+    staged = node.pep.stage((tmp_path / "r3.sealed").read_bytes(), wider)
+    assert state_record.read(staged, node.key.public_raw).cause == "dist:widening-unsigned"
+
+
+def test_case_291_the_controller_marks_a_table_by_the_comparator_and_keeps_the_witness(tmp_path):
+    """case_291: W8, F4. A host table that allows nothing more than the one it replaces is a rollout larger by
+    rule, one that allows more is larger by comparison with the comparator's witness, and one whose signed field
+    dictionary differs is larger by comparison with the frame as its witness. The marks and the answers are in
+    the state the controller keeps, and the controller still refuses a narrower table said not to widen (W7)."""
+    from prismpath.distribution.controller import LARGER_BY_COMPARISON, LARGER_BY_RULE
+    fleet = Fleet(tmp_path, names=("p1",))
+    fleet.put(OLD, 1)
+    fleet.controller.offer("fleet", STREAM, 1)
+    fleet.put(NEW, 2, widen=True)
+    rollout = fleet.controller.offer("fleet", STREAM, 2)
+    assert rollout.widening == LARGER_BY_RULE and rollout.comparison["answer"] == "not-larger"
+    wider = _dist.image(3)
+    fleet.put(wider, 3, widen=True)
+    rollout = fleet.controller.offer("fleet", STREAM, 3)
+    assert rollout.widening == LARGER_BY_COMPARISON
+    assert rollout.comparison["reason"] == "step" and rollout.comparison["witness"]["staged"] == {"edge": 0, "target": 1}
+    fleet.put(OLD, 4, widen=True, meta=dict(GEN.image_meta(OLD), fields={}))
+    rollout = fleet.controller.offer("fleet", STREAM, 4)
+    assert rollout.widening == LARGER_BY_COMPARISON and rollout.comparison["witness"]["member"] == "meta.fields"
+    fleet.controller.save()
+    kept = Controller(str(fleet.dir), _dist.instance_key("C"), clock=fleet.clock)
+    rollouts = kept.fleet()["rollouts"]
+    assert [one["widening"] for one in rollouts] == [LARGER_BY_COMPARISON, LARGER_BY_RULE, LARGER_BY_COMPARISON,
+                                                     LARGER_BY_COMPARISON]
+    assert [one["comparison"] and one["comparison"]["answer"] for one in rollouts] == [None, "not-larger", "larger",
+                                                                                        "larger"]
+    fleet.put(NEWER, 5, widen=False)
+    with pytest.raises(Refused):
+        fleet.controller.offer("fleet", STREAM, 5)
+
+
 def test_a_rollout_that_widens_is_marked_larger_by_rule_or_by_comparison_in_the_fleet_view(tmp_path):
     """F4: a widening the owner pushed stands out. A mesh table that differs from the one it replaces is larger
     only because a mesh node counts any change of a table as larger, a policy.core a comparator finds larger is
