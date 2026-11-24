@@ -90,6 +90,13 @@
 #ifndef PP_TABLE_MAX
 #define PP_TABLE_MAX PP_MESH_TABLE_MAX
 #endif
+/* OP3: the open escalations a PEP holds, the oldest dropped first. Only a cfs PEP escalates, so a build without the cfs
+ * row keeps one slot that is never used, and a mesh node keeps its RAM. */
+#if PP_TABLE_MAX >= PP_CFS_TABLE_MAX
+#define PP_OPEN_ESCALATIONS 8
+#else
+#define PP_OPEN_ESCALATIONS 1
+#endif
 /* The members of a cfs.table body (PP_PolicyTable_t in integrations/cfs/prismpath_app/fsw/inc/prismpath_app_kernel.h,
  * which holds itself to these offsets at compile time). Little endian, no padding. */
 #define PP_CFS_OFF_LAYOUT 0
@@ -116,6 +123,8 @@
 #define PP_FLOOR_RULES 8      /* AF9: the rules of an action floor */
 #define PP_LAYOUT_FIELDS 32   /* AF10: the fields a layout labels */
 #define PP_LEGACY_STREAMS 4   /* L2: the streams the older forms are refused on, past which every stream is */
+#define PP_ANSWER_LIFE 600    /* OP2, OP3: an answer's lifetime and an escalation's, in seconds */
+#define PP_REQUEST_MAX 32     /* OP3: the bytes of the one request an escalation keeps for its answer */
 
 /* ------------------------------------------------------------------ the kinds (section 3) */
 typedef enum {
@@ -124,6 +133,7 @@ typedef enum {
     PP_ART_TRUST_WIDENING, PP_ART_TRUST_REVOCATION, PP_ART_TRUST_ROTATION,
     PP_ART_INSTALL_FLOOR, PP_ART_INSTALL_FALLBACK, PP_ART_INSTALL_CEILING, PP_ART_INSTALL_TRUST, /* section 21 */
     PP_ART_OPERATOR_ANSWER,                                                                    /* OP2 */
+    PP_ART_TRUST_CONTROLLER,                                                                   /* K7 */
     PP_ART_TRUST_CHANGE,                                                                       /* W10 */
     PP_ART_INSTALL_CHANGE,                                                                     /* IS14 */
     PP_ART_COUNT
@@ -171,6 +181,7 @@ typedef struct {
 
 #define PP_ROLE_AUTHORITY 0 /* K4: the role of every key of the trust store that counts */
 #define PP_ROLE_OTHER 1     /* a key in a role this version does not know is kept and never counts */
+#define PP_ROLE_CONTROLLER 2 /* K6: the controller key, which signs controller statements (H9) and never counts */
 
 typedef struct {
     uint8_t id[32];
@@ -202,6 +213,10 @@ typedef struct {
     uint8_t trust_id[32];
     int has_trust_id;
     long long time_floor;
+    long long key_seq;              /* K6, K7: the key sequence of the controller key, 0 when the anchor named it */
+    long long fresh;                /* H16, P4: the anchor's `fresh`, the longest lifetime in seconds of a fresh
+                                       statement, 0 for freshness off. Provisioning copies it from the anchor, and no
+                                       message changes it */
 } pp_trust;
 
 /* What a staged release shares (E7). */
@@ -484,8 +499,27 @@ uint8_t *pp_held_body(pp_release *release, size_t k);
 #define PP_PART_SET_FALLBACK 2048 /* the fallback policy held and the one staged */
 #define PP_PART_SET_CEILING 4096  /* the ceiling held and the one staged */
 #define PP_PART_COPIED (PP_PART_INSTALL | PP_PART_RATES | PP_PART_SET_FLOOR | PP_PART_SET_FALLBACK | PP_PART_SET_CEILING)
-#define PP_PART_COUNT 13
-#define PP_PARTS 8191
+#define PP_PART_FRESH 8192   /* H16: the latest fresh controller statement, where freshness is on */
+#define PP_PART_COUNT 14
+#define PP_PARTS 16383
+
+/* H9, H16: the controller statement, 102 bytes, or 126 with the freshness fields, signed by the controller key over
+ * the DSSE encoding of the bytes before the signature with the payload type application/vnd.prismpath.dist-epoch.
+ * It is the twin of prismpath/distribution/statement.py. */
+#define PP_STATEMENT_SIZE 102
+#define PP_FRESH_STATEMENT_SIZE 126
+typedef struct {
+    uint64_t key_seq;
+    uint8_t stream[16];            /* the first 16 bytes of SHA-256 of the stream name */
+    uint64_t epoch;
+    int fresh;
+    uint64_t trust_seq, stream_seq, expires; /* 0 when `fresh` is 0 */
+} pp_controller_statement;
+
+/* 0 and the statement when `data` reads and its signature verifies under `public_key` (32 raw bytes), else
+ * PP_CAUSE_BAD_FORMAT for bytes that are not a statement and PP_CAUSE_SIG_INVALID for a signature that does not
+ * verify. NULL `public_key` is a PEP with no controller key, which takes nothing (K6). */
+uint8_t pp_statement_verify(const uint8_t *data, size_t len, const uint8_t *public_key, pp_controller_statement *out);
 
 /* A statement of an install set as the PEP holds it: the sealed envelope and the body, a table, or for a policy
  * list its hashes, 32 bytes each, from which the canonical body is written again to check its hash (CL1). */
@@ -504,6 +538,29 @@ typedef struct {
     int has_change;                 /* IS15: a change statement is staged for this kind */
     pp_change change;
 } pp_install_set;
+
+/* OP3: an escalation the action floor made, by the hash of its receipt, under the floor of `policy_sha256`, at the
+ * PEP's time `at`, with the request it holds for an answer `allow` (the caller's bytes, at most PP_REQUEST_MAX). */
+typedef struct {
+    uint8_t receipt[32];
+    uint8_t policy_sha256[32];
+    long long at;
+    uint8_t answered;
+    uint8_t request_len;
+    uint8_t request[PP_REQUEST_MAX];
+} pp_escalation;
+
+/* OP2, OP3: an answer the last call applied: `allow` or not, the answer's envelope id, the receipt hash it answered,
+ * the floor's policy hash and the request of that escalation, for the caller's receipt with basis operator. */
+typedef struct {
+    int applied;
+    int allow;
+    uint8_t envelope_id[32];
+    uint8_t receipt[32];
+    uint8_t policy_sha256[32];
+    size_t request_len;
+    uint8_t request[PP_REQUEST_MAX];
+} pp_answer;
 typedef struct {
     int provisioned;            /* the anchor is confirmed (P2) */
     int setting_reads, expiry_hold; /* X10: the expiry response the PEP was provisioned with */
@@ -534,6 +591,14 @@ typedef struct {
     int rates_reads;
     long long rate_start[PP_FLOOR_RULES]; /* AF8: the window of each floor rule and the overrides counted in it */
     uint32_t rate_count[PP_FLOOR_RULES];
+    int has_kept;               /* H16: a fresh statement is kept, its bytes, its expires and the time it was kept */
+    uint8_t kept[PP_FRESH_STATEMENT_SIZE];
+    uint64_t kept_expires;
+    long long kept_at;
+    long long answer_start;     /* OP4: the window of the operator answers `allow` and the count in it */
+    uint32_t answer_count;
+    size_t n_open;              /* OP3: the open escalations, oldest first, kept with the rate counts */
+    pp_escalation open[PP_OPEN_ESCALATIONS];
     int set_reads[PP_SETS];
     pp_install_set sets[PP_SETS]; /* last, so a provisioning clears all before it and keeps these (IS6) */
 } pp_durable;
@@ -557,6 +622,9 @@ typedef struct {
     pp_runtime_fn runtime;
     void *context;
     uint8_t (*table_check)(void *context, const uint8_t *body, size_t len); /* V11, as in pp_pep, given `context` */
+    /* RC4: an install statement the PEP applied, a set or an install.trust, once it is durable and before its event,
+     * so a run can hold every statement it decided under in the order applied. NULL for none. */
+    void (*applied)(void *context, const uint8_t *sealed, size_t sealed_len, const uint8_t *body, size_t body_len);
 } pp_config;
 
 #define PP_OUTBOX 6
@@ -566,7 +634,8 @@ typedef struct {
     pp_durable d;
     uint8_t instance_secret[64], instance_public[32];
     int locked, held;
-    uint64_t epoch;
+    uint64_t epoch;           /* H9, H15: in memory only, 0 at every start, at provisioning and at a new key sequence */
+    int time_taken;           /* H16: a PEP with no clock took its time floor from a statement in this start */
     long long now; /* the clock reading of the call being made, Unix seconds */
     int commit_due; /* B8: a commit waiting for its delay */
     uint32_t commit_due_ms;
@@ -578,6 +647,9 @@ typedef struct {
     int stood_out;            /* an install set applied by the last call stood out (IS12) */
     int record_lost;          /* IS10: no copy of the install record reads */
     int set_lost[PP_SETS];    /* IS10: a set the record names that no copy holds */
+    pp_answer answer;         /* OP3: the answer the last call applied, `applied` 0 for none */
+    int escalating;           /* OP3: the last ask was a floor escalation, which pp_pep_escalated may open */
+    uint8_t escalating_policy[32];
     size_t n_out;
     size_t out_len[PP_OUTBOX];
     uint8_t out[PP_OUTBOX][PP_RECORD_MAX]; /* the records made by the last call, oldest first (H4) */
@@ -696,8 +768,16 @@ void pp_pep_record(pp_pep_machine *pep, uint8_t event, long long now);
  * after a power loss runs slow by the time without power and never fast. */
 void pp_pep_save_time(pp_pep_machine *pep, long long now);
 
-/* H9: keep the highest epoch id the controller sent. */
-void pp_pep_see_epoch(pp_pep_machine *pep, uint64_t epoch);
+/* H9, H16: one controller statement (a frame of type 6 carries one). The epoch id is taken from a statement that
+ * reads, names this PEP's stream, verifies under the controller key the trust store holds (not retired, not revoked,
+ * K6) and carries the key sequence the store holds for it, when the id is above the one held. Where freshness is on,
+ * such a statement may also give freshness, and on a PEP with no clock the first of a start that passes every other
+ * check raises the time floor to its `expires` less `fresh`. Anything else changes nothing. No call sends a record.
+ * Answers 1 when the epoch id was taken. */
+int pp_pep_take_statement(pp_pep_machine *pep, const uint8_t *data, size_t len, long long now);
+
+/* K6: the controller key a statement is verified under, or NULL. */
+const uint8_t *pp_pep_controller_key(const pp_pep_machine *pep);
 
 /* X3, X7: the cause every decision is refused with (0 while a release decides), and the hold mark. */
 uint8_t pp_pep_decide(pp_pep_machine *pep, int *held_mark, long long now);
@@ -720,6 +800,9 @@ typedef struct {
     int counted, rule;          /* AF8: a counted override, its rule (edge), the window start and the count after */
     long long window;
     uint32_t count;
+    int rate_escalated;         /* AF8: escalated past the rate, with `rule`, `window` and `count` the spent window */
+    int decided_rule;           /* the rule (edge) of the set that decided, -1 for none (a receipt's route target) */
+    int would_rule;             /* AF7: the rule of the set `would` names, -1 for none */
 } pp_decision;
 
 /* The decision of one request on a `mesh` PEP: `regs` the register file the table reads (a 4 byte prefix, then 8
@@ -730,6 +813,14 @@ typedef struct {
  * (FB1), or the refusal of X3. */
 void pp_pep_ask(pp_pep_machine *pep, const uint8_t *regs, size_t regs_len, const uint32_t *ages, long long now,
                 pp_decision *out);
+
+/* OP3: open the escalation the last pp_pep_ask made by the action floor, under the hash of the receipt the caller wrote
+ * for it and with the request an answer `allow` lets through (at most PP_REQUEST_MAX bytes), durably, the oldest of
+ * nine dropped. 0, or dist:not-staged when the last ask was no floor escalation. */
+uint8_t pp_pep_escalated(pp_pep_machine *pep, const uint8_t receipt_sha256[32], const uint8_t *request, size_t len);
+
+/* H1: the PEP id, the first 16 bytes of the SHA-256 of the instance public key. */
+void pp_pep_id(const pp_pep_machine *pep, uint8_t out[16]);
 
 /* AF9, AF10: whether the table `image` is a narrow action floor for `layout` with command register `command`: 0, or
  * dist:floor-broad. One pass over each edge's postfix program with a bounded stack (PP_FLOOR_WALK). */

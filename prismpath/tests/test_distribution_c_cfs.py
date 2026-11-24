@@ -123,8 +123,8 @@ def release_body(version: int = 1) -> bytes:
     return body(doc["rules"], version)
 
 
-def node(*, hold=False) -> list:
-    lines = [f"machine {int(hold)} 1 {base.INSTANCE_SEED} cfs", f"domain {base.DOMAIN}", f"layout {_layout_hash()}"]
+def node(*, hold=False, seed=None) -> list:
+    lines = [f"machine {int(hold)} 1 {seed or base.INSTANCE_SEED} cfs", f"domain {base.DOMAIN}", f"layout {_layout_hash()}"]
     return lines + [f"field {reg} {role} {low} {high} {stale}" for reg, role, low, high, stale in LAYOUT_FIELDS]
 
 
@@ -472,8 +472,9 @@ def test_case_194_a_cfs_floor_escalates_past_its_signed_rate_and_counts_each_rul
     asked = [ask(line) for line in out if line.startswith("ask")]
     assert [(one["outcome"], one["basis"], one["cause"], one["count"]) for one in asked[:5]] == [
         (ALLOW, "floor", "dist:floor-allowed", 1), (ALLOW, "floor", "dist:floor-allowed", 2),
-        (ALLOW, "floor", "dist:floor-allowed", 3), (ESCALATE, "floor", "dist:floor-rate", 0),
-        (ESCALATE, "floor", "dist:floor-rate", 0)]
+        (ALLOW, "floor", "dist:floor-allowed", 3), (ESCALATE, "floor", "dist:floor-rate", 3),
+        (ESCALATE, "floor", "dist:floor-rate", 3)]                       # the spent window, which the run's rates name
+    assert [(one["counted"], one["rate_escalated"]) for one in asked[3:5]] == [(False, True)] * 2
     assert (asked[5]["outcome"], asked[5]["rule"], asked[5]["count"], asked[5]["counted"]) == (ALLOW, 1, 1, True)
     assert all((one["outcome"], one["basis"], one["counted"], one["would"]) == (ALLOW, "floor", False, ALLOW)
                for one in asked[6:16])
@@ -642,6 +643,132 @@ def test_case_226_a_cfs_pep_reads_its_install_record_from_the_second_copy(hc):
     assert out[5] == "held - - -" and ask(out[6])["basis"] is None
 
 
+# ------------------------------------------------------------------ OP1 to OP4: the operator's answer on the core
+SEED2 = _dist.GEN.test_key("I2").private_bytes_raw().hex()
+OPERATOR_RATE = {"allows": 4, "window": 600}
+
+
+def pep_id(name: str = "I") -> str:
+    return hashlib.sha256(_dist.instance_key(name).public_raw).hexdigest()[:32]
+
+
+def answer(receipt: str, verdict: str = "allow", *, signer="O1", pep=None, now=N, not_before=None, lifetime=300,
+           floor=None, stream=S, targets=("cfs",), signed=True) -> str:
+    """A stage line of a sealed operator.answer (OP2) to the escalation whose receipt hash is `receipt`."""
+    body = canon.canon2_bytes({"answer": verdict, canon.ENCODING_KEY: canon.CANON2, "format": "prismpath.dist-answer/1",
+                               "pep": pep or pep_id(), "receipt": receipt})
+    start = now - 10 if not_before is None else not_before
+    doc = {"artifact": "operator.answer", "body_sha256": canon.sha256_hex(body), "body_size": len(body),
+           "encoding": "canon/2", "expires": start + lifetime, "format": env.FORMAT, "meta": {}, "not_before": start,
+           "policy_sha256": floor or policy(floors_of()["one"]), "release": env.ZERO_HASH, "replaces": "", "seq": 1,
+           "stream": stream, "targets": list(targets), "widens": False}
+    raw = canon.canon2_bytes(doc)                     # raw, so a lifetime the writer refuses can be sent
+    key = _dist.GEN.test_key(signer)
+    sealed = env.seal_entries(raw, [(_dist.key_id(signer), key.sign(env.signed_message(raw)))] if signed else [])
+    return f"stage {sealed.hex()} {body.hex()} {now}"
+
+
+def floors_of():
+    return floors()
+
+
+def escalating(*, threshold=2, keys=("J", "K"), seed=None, answer_rate=OPERATOR_RATE) -> list:
+    """A cfs PEP whose install threshold is `threshold`, with operator O1, whose floor allows command 3 once in 60
+    seconds past its release, which refuses it, so the asks after the first escalate with dist:floor-rate."""
+    meta = floor_meta(rate={"allows": 1, "window": 60}, **({"answer_rate": answer_rate} if answer_rate else {}))
+    floor = install("install.floor", floors()["one"], meta=meta, signers=keys[:max(threshold, 1)])
+    return [*node(seed=seed), *base._anchor(keys=keys, threshold=threshold, operators=("O1",), bring=[floor]),
+            f"provision {S} {N}", *release(refuses_three(), 1), f"ask {N} {regs(3)} -"]
+
+
+def escalate(receipt: str, now=N, request="0301") -> list:
+    return [f"ask {now} {regs(3)} -", f"escalated {receipt} {request}"]
+
+
+def _cause(line: str):
+    """The event, cause and subject of the last record of a step, read without its signature (any instance key)."""
+    raw = bytes.fromhex(line.split()[-1])
+    return base.EVENTS21[raw[5]], causes.name(raw[7]) if raw[7] else None, raw[148 + 21]
+
+
+H = [hashlib.sha256(b"escalation %d" % k).hexdigest() for k in range(8)]
+
+
+def test_case_220_an_answer_is_signed_by_an_operator_used_once_and_bound_to_one_escalation(hc):
+    """case_220: OP2, OP3, AF8, the cfs half on the C core. A cfs PEP with an install threshold of 2 escalates a floor
+    action with dist:floor-rate. An answer `allow` by the enrolled operator key is applied once, with `answered` and
+    subject 5 and the request of its escalation handed back for a receipt with basis operator, and the same answer
+    again, also after a restart, is dist:answer-unbound. Answers signed by an install key and by an authority key are
+    dist:unknown-key, one whose lifetime is 601 seconds dist:bad-format, one past `expires` dist:expired, one whose
+    `receipt` names no escalation and one for an escalation older than 600 seconds dist:answer-unbound, an unsigned
+    message that claims to be an answer applies nothing, and an answer `refuse` is applied with its own answer."""
+    good = answer(H[0])
+    out = run(hc, [*escalating(), *escalate(H[0]), good, "answer", good, f"restart {N}", good,
+                   *escalate(H[1]), answer(H[1], signer="J"), answer(H[1], signer="A"), answer(H[1], lifetime=601),
+                   answer(H[1], not_before=N - 400), answer("ab" * 32), answer(H[1], now=N + 601),
+                   f"ask {N + 601} {regs(3)} -", *escalate(H[2], N + 601), answer(H[2], now=N + 601, signed=False),
+                   "answer", answer(H[2], "refuse", now=N + 601), "answer"])
+    assert ask(out[5])["cause"] == "dist:floor-rate" and out[6] == "escalated 0"
+    applied = _last(out[7])
+    assert (applied["event"], applied["subject"], applied["cause"]) == ("answered", 5, None)
+    sealed = good.split()[1]
+    assert out[8] == f"answer 1 1 {base._envelope_id(sealed)} {H[0]} 0301"
+    assert _refused(out[9]) == ("dist:answer-unbound", 5)
+    assert _refused(out[11]) == ("dist:answer-unbound", 5)               # after a restart
+    assert out[13] == "escalated 0"
+    refusals = [_refused(line) for line in out[14:20]]
+    # an install key alone is below the install threshold, so nothing counts and the envelope is not read (subject 0)
+    assert refusals == [("dist:unknown-key", 0), ("dist:unknown-key", 5), ("dist:bad-format", 0),
+                        ("dist:expired", 5), ("dist:answer-unbound", 5), ("dist:answer-unbound", 5)]
+    assert ask(out[20])["outcome"] == ALLOW and out[22] == "escalated 0"     # a new window of the floor's rate
+    assert _refused(out[23])[0] == "dist:bad-format" and out[24] == "answer 0"   # no signature block: nothing applied
+    assert _last(out[25])["event"] == "answered" and out[26].startswith("answer 1 0 ")
+
+
+def test_case_225_an_answer_reaches_only_cfs_on_the_c_core_and_never_moves_the_time_floor(hc, host_check):
+    """case_225: V5, V13, OP1, OP2, the `mesh` and `cfs` halves. A `mesh` PEP with an install threshold of 2 and an
+    operator key refuses a well signed operator.answer with dist:target-mismatch, and a cfs PEP with an open floor
+    escalation applies a good answer whose `not_before` is above its time floor, which does not move."""
+    mesh = run(host_check, [*base._node(), *base._anchor(operators=("O1",)), f"provision {S} {N}",
+                            answer(H[0], targets=("mesh",))])
+    assert _refused(mesh[1]) == ("dist:target-mismatch", 5)
+    out = run(hc, [*escalating(), *escalate(H[0]), answer(H[0], not_before=N + 100), f"record 0 {N}"])
+    assert _last(out[7])["event"] == "answered"
+    assert _last(out[8])["time"] == N                                  # the time floor did not move to not_before
+
+
+def test_case_231_an_answer_binds_to_one_pep_and_one_escalation(hc):
+    """case_231: OP1, OP2, the cfs half on the C core. A cfs PEP whose install threshold is 1 refuses a well signed
+    answer with dist:target-mismatch, and one with a threshold of 2 an answer whose `pep` is another PEP's id with
+    dist:answer-unbound. Two cfs PEPs hold escalations under the same receipt hash, and an answer for the first is
+    applied there and is dist:answer-unbound on the second."""
+    lone = run(hc, [*escalating(threshold=1, keys=("J",)), answer(H[0])])
+    assert _refused(lone[-1]) == ("dist:target-mismatch", 5)
+    first = run(hc, [*escalating(), *escalate(H[0]), answer(H[0], pep=pep_id("I2")), answer(H[0])])
+    assert _refused(first[7]) == ("dist:answer-unbound", 5)
+    assert _last(first[8])["event"] == "answered"
+    second = run(hc, [*escalating(seed=SEED2), *escalate(H[0]), answer(H[0]), answer(H[0], pep=pep_id("I2"))])
+    assert _cause(second[7]) == ("refused", "dist:answer-unbound", 5)
+    assert _cause(second[8]) == ("answered", None, 5)               # its own id: the same receipt hash, its own escalation
+
+
+def test_case_232_operator_answers_are_counted_against_a_signed_rate(hc):
+    """case_232: OP4, H1, AF8, the cfs half on the C core. A cfs PEP whose floor has an answer_rate of 2 in 600 seconds
+    applies two good `allow` answers for three open escalations, each with a record with event `answered` and subject
+    5, a restart after the second changing nothing, refuses the third with dist:floor-rate with its escalation still
+    open, and applies a `refuse` for it. A cfs floor that can escalate past its rate and has no answer_rate is
+    dist:bad-format."""
+    out = run(hc, [*escalating(answer_rate={"allows": 2, "window": 600}), *escalate(H[0]), *escalate(H[1]),
+                   *escalate(H[2]), answer(H[0]), f"restart {N}", answer(H[1]), answer(H[2]), answer(H[2], "refuse")])
+    sent = [_last(out[k]) for k in (11, 13)]
+    assert [(one["event"], one["subject"]) for one in sent] == [("answered", 5)] * 2
+    assert _refused(out[14]) == ("dist:floor-rate", 5)
+    assert _last(out[15])["event"] == "answered"                      # the escalation stayed open for the refuse
+    no_rate = install("install.floor", floors()["one"], meta=floor_meta(rate={"allows": 1, "window": 60}))
+    out = run(hc, [*node(), *base._anchor(operators=("O1",)), f"provision {S} {N}", _stage(no_rate)])
+    assert _refused(out[1]) == ("dist:bad-format", 1)
+
+
 @pytest.fixture(scope="module")
 def host_check(tmp_path_factory):
     """host_check with the mesh bound, for the mesh halves."""
@@ -701,19 +828,21 @@ def app_table(rules=None, version: int = 1) -> bytes:
     return bytes(data)
 
 
-def app_anchor(*, install=(), threshold=2, stale=0) -> bytes:
+def app_anchor(*, install=(), threshold=2, stale=0, operators=()) -> bytes:
     """The /2 trust anchor the ground writes for the app: A the authority, C the controller, and install keys whose
     domain is the app's layout document as it was built with `stale` (CL4)."""
     from integrations.cfs.ground import provision
     return provision.anchor_document([_public("A")], controller_public=_public("C"), stream=S, target="cfs",
                                      install_publics=[_public(name) for name in install], threshold=threshold,
+                                     operator_publics=[_public(name) for name in operators],
                                      domain=provision.domain(stale))
 
 
-def app_head(*, install=(), stale=0, bring=()) -> list:
+def app_head(*, install=(), stale=0, bring=(), operators=(), threshold=2, seed=None) -> list:
     from integrations.cfs.ground import table
-    lines = [f"authority {_public('A').hex()}", f"instance {base.INSTANCE_SEED}",
-             f"anchor {app_anchor(install=install, stale=stale).hex()}", f"stale {stale}"]
+    lines = [f"authority {_public('A').hex()}", f"instance {seed or base.INSTANCE_SEED}",
+             f"anchor {app_anchor(install=install, stale=stale, operators=operators, threshold=threshold).hex()}",
+             f"stale {stale}"]
 
     return lines + [f"bring {table.statement_file(sealed, body).hex()}" for sealed, body in bring]
 
@@ -761,7 +890,7 @@ def steps(out: list) -> list:
 
 
 def decisions(out: list) -> list:
-    keys = ("kind", "cause", "rule", "basis", "held", "receipted", "receipt", "not_enacted", "record_error")
+    keys = ("kind", "cause", "rule", "basis", "held", "receipted", "receipt", "not_enacted", "record_error", "escalated")
     return [dict(zip(keys, map(int, line.split()[1:]))) for line in out if line.startswith("decision")]
 
 
@@ -1002,3 +1131,97 @@ def test_case_226_a_cfs_app_that_loses_the_file_of_its_install_record_uses_the_c
     assert ("refused", "dist:install-lost") in [(one["event"], one["cause"]) for records in restarts[-1:]
                                                  for one in records]
     assert all(one["cause"] != "dist:install-lost" for records in restarts[:-1] for one in records)
+
+
+# ------------------------------------------------------------------ OP1 to OP4 in the cFS app
+def _app_escalating(*, seed=None, threshold=2, keys=("J", "K")) -> list:
+    """A cFS app with install keys J and K, operator O1, a floor that allows command 3 once in 60 seconds past its
+    release, which refuses it, so the second proposal of command 3 escalates with dist:floor-rate."""
+    meta = floor_meta(rate={"allows": 1, "window": 60}, answer_rate={"allows": 2, "window": 600})
+    floor = install("install.floor", floors()["one"], meta=meta, signers=keys[:threshold])
+    brought = [(bytes.fromhex(floor[0]), bytes.fromhex(floor[1]))]
+    rules = [{"target": "refuse_104", "when": ["in", "cmd_class", [["num", 3]]]},
+             {"target": "allow", "when": ["in", "cmd_class", [["num", 1], ["num", 2]]]}]
+    return [*app_head(install=keys, threshold=threshold, operators=("O1",), bring=brought, stale=5, seed=seed),
+            f"start 0 0 1 {N}", *release_lines(app_table(rules), 1, 10),
+            f"propose {payload(3, slew=15, thrust=20)} 1 - {N}", f"propose {payload(3, slew=15, thrust=20)} 1 - {N}"]
+
+
+def _app_answer(receipt: str, verdict="allow", *, pep=None, transfer=40, now=N) -> list:
+    from integrations.cfs.ground import answer
+    sealed, body = answer.seal_answer(_private("O1"), pep=pep or pep_id(), receipt=receipt,
+                                      policy=policy(floors()["one"]), answer=verdict, now=now - 10, stream=S)
+    return offer(sealed, body, transfer, now)
+
+
+def _escalation_doc(n: int, time: int) -> bytes:
+    """The escalation document the app hashes (PP_Run_EscalationBytes), from the ground's reference reading."""
+    from integrations.cfs.ground import reference
+    from integrations.cfs.tests import run_scenario
+    raw = run_scenario.reading_payload(dict(cmd_class=3, ground_contact=0, slew_deg=15, thrust_pct=20))
+    reading = hashlib.sha256(reference.reading_bytes(raw)).hexdigest()
+    return canon.canon2_bytes({"case": "v1", "cause_code": 166, "decider": "cfs:prismpath_app",
+                               "format": "prismpath.cfs-escalation/1", "n": n,
+                               "policy_sha256": policy(floors()["one"]), "reading_sha256": reading, "time": time})
+
+
+def _answered(out: list) -> list:
+    return [line.split()[1:] for line in out if line.startswith("answered")]
+
+
+def test_case_220_a_cfs_app_opens_a_floor_escalation_and_applies_an_operator_answer_once(app, tmp_path):
+    """case_220: OP2, OP3, AF8, in the cFS app. The app's floor escalates a proposal past its rate with
+    dist:floor-rate, not enacted, and opens the escalation under the SHA-256 of its escalation document, which it
+    downlinks. The ground's answer `allow`, sealed by the operator key for that receipt hash and the app's PEP id and
+    offered in frames on the command topic, is applied with an `answered` record of subject 5, and the same answer
+    again, also after a processor reset, is dist:answer-unbound. The request is not republished: an operator receipt
+    has no case in a core run yet (RC4), so the answer is in housekeeping and the state record only."""
+    out = app_run(app, tmp_path / "a", [*_app_escalating()])
+    made = decisions(out)
+    assert [(one["basis"], one["not_enacted"], one["escalated"]) for one in made] == [(2, 1, 0), (2, 1, 1)]
+    receipt = [line.split()[1] for line in out if line.startswith("escalation")][0]
+    assert receipt == hashlib.sha256(_escalation_doc(2, N)).hexdigest()
+    out = app_run(app, tmp_path / "b", [*_app_escalating(), *_app_answer(receipt), *_app_answer(receipt, transfer=41),
+                                        "reset", f"start 0 0 1 {N + 1}", *_app_answer(receipt, transfer=42, now=N + 1)])
+    done = steps(out)
+    events = [(one["event"], one["cause"], one.get("subject")) for records, _flags in done for one in records]
+    assert events.count(("answered", None, 5)) == 1
+    assert events.count(("refused", "dist:answer-unbound", 5)) == 2
+    answered = _answered(out)
+    assert len(answered) == 1 and answered[0][1] == receipt
+    assert [flags[8:10] for _records, flags in done if flags[8]] == [[1, 1]]
+
+
+def test_case_231_a_cfs_app_takes_no_answer_at_a_threshold_of_one_nor_one_for_another_pep(app, tmp_path):
+    """case_231: OP1, OP2, in the cFS app. An app whose install threshold is 1 refuses a well signed answer with
+    dist:target-mismatch, and one whose threshold is 2 refuses an answer that names another PEP's id with
+    dist:answer-unbound and applies the one that names its own."""
+    lone = app_run(app, tmp_path / "lone", [*_app_escalating(threshold=1, keys=("J",)), *_app_answer("ab" * 32)])
+    assert ("refused", "dist:target-mismatch") in [(one["event"], one["cause"]) for records, _f in steps(lone)
+                                                   for one in records]
+    out = app_run(app, tmp_path / "two", [*_app_escalating()])
+    receipt = [line.split()[1] for line in out if line.startswith("escalation")][0]
+    out = app_run(app, tmp_path / "three", [*_app_escalating(), *_app_answer(receipt, pep=pep_id("I2")),
+                                            *_app_answer(receipt, transfer=41)])
+    events = [(one["event"], one["cause"]) for records, _flags in steps(out) for one in records]
+    assert events[-2:] == [("refused", "dist:answer-unbound"), ("answered", None)]
+
+
+def test_case_232_a_cfs_app_holds_operator_answers_to_the_signed_answer_rate(app, tmp_path):
+    """case_232: OP4, H1, AF8, in the cFS app. With an answer_rate of 2 in 600 seconds, three escalations get two
+    `allow` answers applied, a processor reset between them changing nothing, and the third is dist:floor-rate with
+    its escalation still open, so a `refuse` for it is applied."""
+    lines = [*_app_escalating(), f"propose {payload(3, slew=15, thrust=20)} 1 - {N}",
+             f"propose {payload(3, slew=15, thrust=20)} 1 - {N}"]
+    out = app_run(app, tmp_path / "first", lines)
+    receipts = [line.split()[1] for line in out if line.startswith("escalation")]
+    assert len(receipts) == 3 and len(set(receipts)) == 3
+    out = app_run(app, tmp_path / "second", [*lines, *_app_answer(receipts[0]), "reset", f"start 0 0 1 {N + 1}",
+                                             *_app_answer(receipts[1], transfer=41, now=N + 1),
+                                             *_app_answer(receipts[2], transfer=42, now=N + 1),
+                                             *_app_answer(receipts[2], "refuse", transfer=43, now=N + 1)])
+    events = [(one["event"], one["cause"], one.get("subject")) for records, _flags in steps(out) for one in records
+              if one["event"] in ("answered", "refused")]
+    assert events == [("answered", None, 5), ("answered", None, 5), ("refused", "dist:floor-rate", 5),
+                      ("answered", None, 5)]
+    assert [one[0] for one in _answered(out)] and len(_answered(out)) == 3

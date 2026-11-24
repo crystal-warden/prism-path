@@ -8,12 +8,18 @@
 //! in Rust as they read in Python.
 //!
 //! The controller's clock is pinned at one time, inside its first heartbeat interval, and that is a limit of
-//! what this shows. The Rust PEP holds no controller key, so every record it signs carries epoch 0 (H9, H15),
-//! and the controller on main takes epoch 0 only while its own epoch is 1. Past one interval it files each such
-//! record `fleet:state-replay`. H6 says epoch 0 is no replay from a PEP that holds no controller key, and the
-//! controller takes that in its own pull request. The Python half runs through `PRISMPATH_PYTHON`; see
-//! `common::python_for_cross_language` for when this skips (CI sets `PRISMPATH_REQUIRE_CROSS_LANGUAGE`, so
-//! it cannot skip there).
+//! what this shows. A Rust PEP provisioned from a `/1` anchor holds no controller key, so every record it signs
+//! carries epoch 0 (H9, H15), and the controller on main takes epoch 0 only while its own epoch is 1.
+//!
+//! The controller statement goes both ways too (H9): a statement the Python writer signs reads and verifies in
+//! Rust, byte for byte the one the Rust writer signs for the same fields, and one the Rust writer signs verifies in
+//! Python. A Rust PEP provisioned from a `/2` anchor naming the Python controller's instance key takes the epoch id
+//! of the controller's `offers` answer, its records are accepted, and after a restart they carry epoch 0 and are
+//! filed `fleet:state-replay` and still used until it takes the next statement (case 256). Those steps run in a
+//! Python tree that has the controller statement: a tree on `PYTHONPATH` comes before this repository's, so one can
+//! be named before it lands here. The Python half runs through `PRISMPATH_PYTHON`; see
+//! `common::python_for_cross_language` for when this skips (CI sets `PRISMPATH_REQUIRE_CROSS_LANGUAGE`, so it
+//! cannot skip there).
 
 #[path = "common/mod.rs"]
 mod common;
@@ -24,6 +30,7 @@ use dist::*;
 use prismpath_hotswap_rs::dist::envelope as env;
 use prismpath_hotswap_rs::dist::pep::{HostAdapter, Pep, REFUSE};
 use prismpath_hotswap_rs::dist::state_record;
+use prismpath_hotswap_rs::dist::statement;
 use prismpath_hotswap_rs::dist::{ArtifactKind, Hex64};
 use prismpath_hotswap_rs::host::PolicyHost;
 use serde_json::{json, Value};
@@ -133,6 +140,64 @@ elif step["op"] == "python_commits":
 print(json.dumps(out))
 "#;
 
+/// The controller statement's steps, `op` in `PP_IN`: the Python writer signs statements, reads statements Rust
+/// signed, and runs a controller with the instance key C that enrolls a Rust PEP, answers it and receives its records.
+const STATEMENTS: &str = r#"
+import hashlib, json, os, sys
+named = [path for path in os.environ.get("PYTHONPATH", "").split(os.pathsep) if path]
+sys.path.insert(1 + len(named), os.environ["PP_REPO"])
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from cryptography.hazmat.primitives import serialization as ser
+from prismpath.distribution import statement as statements, state_record
+from prismpath.distribution.controller import Controller
+from prismpath.hotswap import policy_pack as pp
+from prismpath.ledgers.root_statement import InstanceKey
+
+NOW = 1_800_000_000 + 3600
+QUALIFICATION = {"caps": dict(pp.DEFAULT_CAPS), "envelope_id": "dist-demo", "fields": {"x": "int"}}
+step = json.loads(open(os.environ["PP_IN"]).read())
+directory = step["dir"]
+
+def key(name):
+    return Ed25519PrivateKey.from_private_bytes(hashlib.sha256(f"prismpath.dist test key {name}".encode()).digest())
+
+def public(name):
+    return key(name).public_key().public_bytes(ser.Encoding.Raw, ser.PublicFormat.Raw)
+
+def fields(read):
+    return None if read is None else {"key_seq": read.key_seq, "stream": read.stream.hex(), "epoch": read.epoch,
+                                      "fresh": read.fresh, "trust_seq": read.trust_seq, "stream_seq": read.stream_seq,
+                                      "expires": read.expires}
+
+def controller():
+    return Controller(os.path.join(directory, "controller"), InstanceKey(key("C"), public("C")), clock=lambda: NOW)
+
+out = {}
+if step["op"] == "sign":
+    out["signed"] = []
+    for one in step["statements"]:
+        said = statements.Statement(key_seq=one["key_seq"], stream=bytes.fromhex(one["stream"]), epoch=one["epoch"],
+                                    fresh=one["fresh"], trust_seq=one["trust_seq"], stream_seq=one["stream_seq"],
+                                    expires=one["expires"])
+        out["signed"].append(statements.build(said, InstanceKey(key(one["key"]), public(one["key"]))).hex())
+elif step["op"] == "read":
+    out["read"] = [fields(statements.verify(bytes.fromhex(one), public(step["key"]))) for one in step["signed"]]
+elif step["op"] == "enroll":
+    control = controller()
+    control.add_anchor(bytes.fromhex(step["anchor"]), QUALIFICATION)
+    out["pep"] = control.enroll(bytes.fromhex(step["public"]), "host", step["stream"])
+    control.save()
+elif step["op"] == "receive":
+    control = controller()
+    out["findings_filed"] = [control.receive(bytes.fromhex(record)) for record in step["records"]]
+    member = control.members[step["pep"]]
+    out["unverified"] = member.last["unverified"] if member.last else None
+    out["epoch"] = control.answer(step["pep"])["epoch"]
+    out["controller_epoch"] = control.epoch_of(member.stream)
+    control.save()
+print(json.dumps(out))
+"#;
+
 struct Python {
     python: String,
     repo: String,
@@ -147,13 +212,17 @@ impl Python {
     }
 
     fn run(&self, step: Value) -> Value {
+        self.run_script(PYTHON, step)
+    }
+
+    fn run_script(&self, script: &str, step: Value) -> Value {
         let mut step = step;
         step["dir"] = json!(self.dir.to_str().unwrap());
         let input = self.dir.join("step.json");
         std::fs::write(&input, step.to_string()).unwrap();
         let out = std::process::Command::new(&self.python)
             .arg("-c")
-            .arg(PYTHON)
+            .arg(script)
             .env("PP_REPO", &self.repo)
             .env("PP_IN", &input)
             .output()
@@ -293,4 +362,97 @@ fn a_refused_and_a_lapsed_record_of_the_rust_host_reach_the_python_controller() 
     let findings = second["findings"][&pep_id].as_object().unwrap();
     assert!(!findings.contains_key("fleet:state-invalid") && !findings.contains_key("fleet:state-replay"), "{second}");
     println!("cross-language distribution: the Python controller accepted the Rust host PEP's refused and lapsed records");
+}
+
+/// The fields of a controller statement as the Python steps write them.
+fn fields_of(read: &statement::Statement) -> Value {
+    json!({"key_seq": read.key_seq, "stream": hex::encode(read.stream), "epoch": read.epoch, "fresh": read.fresh,
+           "trust_seq": read.trust_seq, "stream_seq": read.stream_seq, "expires": read.expires})
+}
+
+/// H9: a controller statement the Python writer signs reads and verifies in Rust and is byte for byte the one the Rust
+/// writer signs for the same fields, without and with the freshness fields, and one the Rust writer signs verifies
+/// in Python with the fields Rust gave it. A statement with a byte changed, or checked under another key, verifies
+/// in neither.
+#[test]
+fn a_controller_statement_signed_in_either_runtime_verifies_in_the_other() {
+    let Some(python) = Python::new("the controller statement between Python and Rust") else { return };
+    let saids = [
+        statement::Statement { key_seq: 0, stream: state_record::stream_prefix(STREAM), epoch: 1, ..statement::Statement::default() },
+        statement::Statement {
+            key_seq: 3,
+            stream: state_record::stream_prefix("mesh/a"),
+            epoch: u64::MAX,
+            fresh: true,
+            trust_seq: 7,
+            stream_seq: 9,
+            expires: (NOW + 3600) as u64,
+        },
+    ];
+    let specs: Vec<Value> = saids.iter().map(|said| json!({"key": "C", "key_seq": said.key_seq, "stream": hex::encode(said.stream),
+        "epoch": said.epoch, "fresh": said.fresh, "trust_seq": said.trust_seq, "stream_seq": said.stream_seq, "expires": said.expires})).collect();
+    let signed = python.run_script(STATEMENTS, json!({"op": "sign", "statements": specs}));
+    let controller = test_key("C");
+    for (said, one) in saids.iter().zip(signed["signed"].as_array().unwrap()) {
+        let bytes = hex::decode(one.as_str().unwrap()).unwrap();
+        assert_eq!(bytes.len(), if said.fresh { 126 } else { 102 });
+        assert_eq!(statement::verify(&bytes, Some(&public("C"))), Some(*said));
+        assert_eq!(bytes, statement::build(said, &controller), "the two writers sign the same bytes");
+        assert_eq!(statement::verify(&bytes, Some(&public("A"))), None);
+    }
+    let mut rust: Vec<Vec<u8>> = saids.iter().map(|said| statement::build(said, &controller)).collect();
+    let mut changed = rust[0].clone();
+    changed[30] ^= 1;
+    rust.push(changed);
+    let read = python.run_script(STATEMENTS, json!({"op": "read", "key": "C", "signed": hex_of(&rust)}));
+    assert_eq!(read["read"], json!([fields_of(&saids[0]), fields_of(&saids[1]), null]), "{read}");
+    let other = python.run_script(STATEMENTS, json!({"op": "read", "key": "A", "signed": hex_of(&rust[..1])}));
+    assert_eq!(other["read"], json!([null]));
+    println!("cross-language distribution: controller statements verify in both runtimes, byte for byte the same");
+}
+
+/// case_256: H15, H6, H9, the controller's half against the Rust host PEP. A Rust PEP provisioned from a `/2` anchor
+/// naming the Python controller's instance key takes the epoch id of the controller's `offers` answer, and its records
+/// are accepted. After a restart it reports epoch 0, and the controller files its record `fleet:state-replay` and still
+/// uses it, marked unverified for freshness. Once it takes the next statement its records are accepted again.
+#[test]
+fn case_256_the_python_controller_files_a_restarted_rust_pep_until_it_takes_a_statement() {
+    let Some(python) = Python::new("the Rust host PEP's epoch id against the Python controller") else { return };
+    let instance = test_key("R2");
+    let public_key = instance.verifying_key().to_bytes();
+    let anchor = anchor2_of(&["A"], "C", 0);
+    let enrolled = python.run_script(STATEMENTS, json!({"op": "enroll", "anchor": hex::encode(&anchor),
+                                                       "public": hex::encode(public_key), "stream": STREAM}));
+    let pep_id = enrolled["pep"].as_str().unwrap().to_string();
+    let state = python.dir.join("rust_host_256");
+    let now = Rc::new(Cell::new(NOW));
+    let open = || {
+        let host = PolicyHost::new(state.to_str().unwrap(), Vec::new(), qualification(), Vec::new()).unwrap();
+        Pep::new(state.to_str().unwrap(), HostAdapter::new(host), instance.clone(), clock_of(&now), REFUSE, true).unwrap()
+    };
+    let mut pep = open();
+    let fingerprint = pep.provision(&anchor).unwrap();
+    pep.confirm(&fingerprint).unwrap();
+    let receive = |records: Vec<Vec<u8>>| {
+        python.run_script(STATEMENTS, json!({"op": "receive", "records": hex_of(&records), "pep": pep_id}))
+    };
+    let first = receive(pep.drain());
+    assert_eq!(first["findings_filed"], json!([null]), "the provisioned record carries epoch 0 and is no replay: {first}");
+    assert!(pep.take_offered(first["epoch"].as_str().unwrap()).unwrap());
+    assert_eq!(pep.epoch(), first["controller_epoch"].as_u64().unwrap());
+    pep.record("beat", None).unwrap();
+    let taken = receive(pep.drain());
+    assert_eq!((taken["findings_filed"].clone(), taken["unverified"].clone()), (json!([null]), json!(false)), "{taken}");
+
+    drop(pep);
+    let mut pep = open();
+    let beat = state_record::read(&pep.record("beat", None).unwrap(), &public_key).unwrap();
+    assert_eq!(beat.epoch, 0);
+    let replayed = receive(pep.drain());
+    assert_eq!((replayed["findings_filed"].clone(), replayed["unverified"].clone()), (json!(["fleet:state-replay"]), json!(true)), "{replayed}");
+    assert!(pep.take_offered(replayed["epoch"].as_str().unwrap()).unwrap());
+    pep.record("beat", None).unwrap();
+    let again = receive(pep.drain());
+    assert_eq!((again["findings_filed"].clone(), again["unverified"].clone()), (json!([null]), json!(false)), "{again}");
+    println!("cross-language distribution: the Python controller filed the restarted Rust PEP until it took a statement");
 }

@@ -28,6 +28,7 @@ DIST = ROOT / "prismpath-hw" / "dist"
 MONOCYPHER = ROOT / "prismpath-hw" / "mesh" / "main"
 CORPUS = json.loads((ROOT / "prismpath" / "portable" / "conformance" / "distribution.json").read_text(encoding="utf-8"))
 C_KINDS = ("mesh", "cfs")
+ROLE_CODES = {"authority": 0, "controller": 2}  # PP_ROLE_AUTHORITY, PP_ROLE_CONTROLLER; any other role is 1
 C_CASES = [case for case in CORPUS["cases"] if "C" in case["runs_on"] and case["pep"]["kind"] in C_KINDS]
 CC = shutil.which("cc")
 FLAGS = ["-std=c11", "-O1", "-Wall", "-Wextra", "-Werror", "-fsanitize=address,undefined",
@@ -56,7 +57,7 @@ def _lines(case: dict) -> list:
         lines.append("trust 0 0 - 0")
     else:
         for kid, key in trust["keys"].items():
-            lines.append(f"key {kid} {key['public']} {0 if key['role'] == 'authority' else 1}")
+            lines.append(f"key {kid} {key['public']} {ROLE_CODES.get(key['role'], 1)}")
         for member, word in (("retired", "retired"), ("revoked_keys", "revoked_key"),
                              ("revoked_envelopes", "revoked_envelope"), ("revoked_policies", "revoked_policy")):
             lines += [f"{word} {item}" for item in trust[member]]
@@ -189,16 +190,17 @@ INSTANCE_SEED = _generator().test_key("I").private_bytes_raw().hex()
 EVENT_CODES = {name: code for code, name in enumerate(state_record.EVENTS)}
 
 
-def _python_steps(script: list, *, hold: bool, tmp_path) -> list:
+def _python_steps(script: list, *, hold: bool, tmp_path, controller=None, fresh=0, clock=True) -> list:
     """The Python machine (pep.Pep on a modelled mesh node) run through `script`, each step's output as the
-    harness prints it."""
+    harness prints it. `controller` names the test key of a `/2` anchor's controller key, with its `fresh` (H16), and
+    `clock` 0 is a node with no real time clock (T2)."""
     out, point = [], None
     for step in script:
         op, args = step[0], step[1:]
         if op == "provision":
-            clock = _dist.Clock(args[1])
-            point = _dist.MeshPep(tmp_path, clock=clock, expiry_response="hold" if hold else "refuse",
-                                  authorities=list(args[2]) if len(args) > 2 else ["A"])
+            point = _dist.MeshPep(tmp_path, clock=_dist.Clock(args[1]), expiry_response="hold" if hold else "refuse",
+                                  authorities=list(args[2]) if len(args) > 2 else ["A"], controller=controller,
+                                  fresh=fresh, has_clock=clock, stream=args[0])
         elif op == "lose":
             names = {"floor": "floor.json", "counter": "counter.json", "trust": "trust.json", "setting": "setting.json"}
             with open(point.pep.store.path(names[args[0]]), "wb") as handle:
@@ -233,6 +235,11 @@ def _python_steps(script: list, *, hold: bool, tmp_path) -> list:
                     continue
             elif op == "record":
                 pep.record(args[0])
+            elif op == "statement":
+                taken = pep.take_statement(bytes.fromhex(args[0]))
+                assert pep.drain() == []                                 # H9: a statement sends no record
+                out.append(f"statement {int(taken)} {pep.epoch}")
+                continue
             elif op == "decide":
                 answer = pep.decide(lambda: 0)
                 out.append(f"decide {causes.NAMES[answer['cause']] if answer['cause'] else 0} "
@@ -242,14 +249,16 @@ def _python_steps(script: list, *, hold: bool, tmp_path) -> list:
     return out
 
 
-def _c_lines(script: list, *, hold: bool) -> list:
+def _c_lines(script: list, *, hold: bool, controller=None, fresh=0, clock=True) -> list:
     first = script[0]
     authorities = first[3] if first[0] == "provision" and len(first) > 3 else ("A",)
     lines = []
-    for name in authorities:
+    for name, role in [*((name, 0) for name in authorities), *(((controller, 2),) if controller else ())]:
         public = _generator().public_raw(_generator().test_key(name))
-        lines.append(f"key {env.key_id(public)} {public.hex()} 0")
-    lines.append(f"machine {int(hold)} 1 {INSTANCE_SEED}")
+        lines.append(f"key {env.key_id(public)} {public.hex()} {role}")
+    lines.append(f"machine {int(hold)} {int(clock)} {INSTANCE_SEED}")
+    if fresh:
+        lines.append(f"fresh {fresh}")
     for step in script:
         op, args = step[0], step[1:]
         if op == "provision":
@@ -267,8 +276,8 @@ def _c_lines(script: list, *, hold: bool) -> list:
     return lines + ["done"]
 
 
-def _c_steps(host_check, script: list, *, hold: bool) -> list:
-    done = subprocess.run([str(host_check)], input="\n".join(_c_lines(script, hold=hold)) + "\n",
+def _c_steps(host_check, script: list, *, hold: bool, **anchor) -> list:
+    done = subprocess.run([str(host_check)], input="\n".join(_c_lines(script, hold=hold, **anchor)) + "\n",
                           capture_output=True, text=True, timeout=120)
     assert done.returncode == 0, done.stderr
     return done.stdout.splitlines()
@@ -310,14 +319,14 @@ def _with_statements(script: list) -> tuple:
     return out, quiet
 
 
-def _same(host_check, tmp_path, script, *, hold=False, statements=True) -> list:
+def _same(host_check, tmp_path, script, *, hold=False, statements=True, **anchor) -> list:
     """`script` run on the Python machine and on the C core, which must print the same lines, returned with the
     lines of the statements `_with_statements` staged left out. A statement staged for a release that is then
     refused for another reason leaves a staged release that holds only the statement, which displaces what was
     staged before, so a release meant to be refused before V12 is sealed with `widens` false and gets none."""
     script, quiet = _with_statements(script) if statements else (script, set())
-    python = _python_steps(script, hold=hold, tmp_path=tmp_path)
-    c = _c_steps(host_check, [step for step in script if step[0] not in ()], hold=hold)
+    python = _python_steps(script, hold=hold, tmp_path=tmp_path, **anchor)
+    c = _c_steps(host_check, [step for step in script if step[0] not in ()], hold=hold, **anchor)
     assert c == python
     return [line for index, line in enumerate(python) if index not in quiet]
 
@@ -963,7 +972,7 @@ FIELDS = [(0, COMMAND, -1000, 1000, 0), (1, PARAMETER, 0, 100, 0), (2, INDEPENDE
 EVENTS21 = [*state_record.EVENTS, "fallback", "install-applied", "install-widened", "answered"]
 SUBJECT = {"install.floor": 1, "install.fallback": 2, "install.ceiling": 3, "install.trust": 4}
 ALLOW, REFUSE = 1, 2
-BASIS = {0: None, 1: "release", 2: "floor", 3: "fallback"}
+BASIS = {0: None, 1: "release", 2: "floor", 3: "fallback", 4: "operator"}
 
 
 def _pub(name: str) -> bytes:
@@ -1154,7 +1163,8 @@ def _ask(line: str) -> dict:
             "basis": BASIS[int(words[3])], "held": words[4] == "1", "policy": None if words[5] == "-" else words[5],
             "would": int(words[6]), "would_cause": causes.name(int(words[7])) if int(words[7]) else None,
             "would_policy": None if words[8] == "-" else words[8], "override": words[9] == "1",
-            "counted": words[10] == "1", "rule": int(words[11]), "window": int(words[12]), "count": int(words[13])}
+            "counted": words[10] == "1", "rule": int(words[11]), "window": int(words[12]), "count": int(words[13]),
+            "rate_escalated": words[14] == "1", "decided_rule": int(words[15]), "would_rule": int(words[16])}
 
 
 def _stage(statement, now=N) -> str:
@@ -1880,7 +1890,7 @@ def test_case_189_190_the_action_floor_never_lapses_and_a_release_never_narrows_
         *_release_steps21(RELEASE, 2, widens=False, replaces=canon.sha256_hex(RELEASE)), ask.format(N),
         f"tick 0 {E}", ask.format(E), f"stage {revocation.hex()} {everything.hex()} {E}", ask.format(E),
         "lose floor", f"restart {E}", ask.format(E), f"abort {S} 2 {canon.sha256_hex(RELEASE)} {E}",
-        f"commit {S} 2 {canon.sha256_hex(RELEASE)} 0 0 {E}", "epoch 9", ask.format(E),
+        f"commit {S} 2 {canon.sha256_hex(RELEASE)} 0 0 {E}", f"statement 09 {E}", ask.format(E),
         _stage(_install("install.trust", _trust_body(("J", "L"), 2), seq=1, signers=("J", "L"), widens=False), E),
         ask.format(E), ask.format(NB + 10 * 365 * 86400)])
     assert _last(out[6])["event"] == "committed" and len(_recs(out[5])) == 1       # renewed with no statement
@@ -2082,3 +2092,283 @@ def test_case_298_a_change_statement_stands_only_for_a_set_it_can_carry(host_che
         _stage(_install("install.floor", NARROW_FLOOR, seq=3, meta=rate(3), widens=True, replaces=held))])
     assert _last(out[2])["event"] == "staged" and _refused(out[3]) == ("dist:widening-unsigned", 1)
     assert _last(out[4])["event"] == "staged" and _refused(out[5]) == ("dist:incomplete", 1)
+
+
+# ------------------------------------------------------------------ the controller key and statement (K6, K7, H9, H15, H16)
+
+from prismpath.distribution import statement as statements  # noqa: E402
+
+YEAR = 365 * 86400
+
+
+def _signed(key="C", *, key_seq=0, stream=S, epoch=1, fresh=False, trust_seq=0, stream_seq=0, expires=0) -> str:
+    """A controller statement signed by the test key `key`, as statement.py builds it."""
+    statement = statements.Statement(key_seq=key_seq, stream=state_record.stream_prefix(stream), epoch=epoch,
+                                     fresh=fresh, trust_seq=trust_seq, stream_seq=stream_seq, expires=expires)
+    return statements.build(statement, _dist.instance_key(key)).hex()
+
+
+def _fresh(epoch, expires, *, key="C", trust_seq=0, stream_seq=1, **args) -> str:
+    return _signed(key, epoch=epoch, fresh=True, trust_seq=trust_seq, stream_seq=stream_seq, expires=expires, **args)
+
+
+def _rekey(key: str, seq: int, now: int = N, signer: str = "A") -> tuple:
+    """Stage a `trust.controller` naming the test key `key` at trust sequence `seq`."""
+    body = _dist.controller_key(key)
+    sealed = _dist.trust_statement("trust.controller", body, seq=seq, signers=(signer,), targets=("mesh",))
+    return ("stage", sealed.hex(), body.hex(), now)
+
+
+def _taken(line: str) -> tuple:
+    words = line.split()
+    assert words[0] == "statement", line
+    return words[1] == "1", int(words[2])
+
+
+def _one(line: str):
+    records = _records(line)
+    assert len(records) == 1, line
+    return records[0]
+
+
+def test_the_core_reads_and_checks_a_controller_statement_byte_for_byte_as_statement_py(host_check, tmp_path):
+    """H9: a statement of 102 and of 126 bytes built by statement.py is taken by the C core, and one with any byte
+    of it changed is not, so both read and sign the same bytes."""
+    script = [("provision", S, N), ("statement", _signed(epoch=7), N),
+              ("statement", _fresh(8, N + 3600, stream_seq=0), N)]
+    good = _fresh(9, N + 3600, stream_seq=0)
+    for at in (0, 4, 5, 13, 29, 37, 38, 46, 54, 61, 62, 125):
+        changed = bytearray(bytes.fromhex(good))
+        changed[at] ^= 0x01
+        script.append(("statement", changed.hex(), N))
+    out = _same(host_check, tmp_path, script, controller="C", fresh=3600)
+    assert [_taken(line) for line in out[1:]] == [(True, 7), (True, 8)] + [(False, 8)] * 12
+
+
+def test_case_256_a_restarted_node_reports_epoch_0_until_it_takes_a_current_statement(host_check, tmp_path):
+    """case_256: H15, H6, H9, the `mesh` half (a `host` PEP is not of the C core). The node takes the controller's
+    epoch id, reports it, reports 0 after a restart and the new id once it takes the next statement, with the state
+    records pep.py signs byte for byte."""
+    out = _same(host_check, tmp_path, [("provision", S, N), ("statement", _signed(epoch=3), N), ("record", "beat", N),
+                                       ("restart", N + 1), ("record", "beat", N + 1),
+                                       ("statement", _signed(epoch=4), N + 1), ("record", "beat", N + 1)],
+                controller="C")
+    assert _taken(out[1]) == (True, 3) and _one(out[2]).epoch == 3
+    assert _one(out[4]).epoch == 0 and _taken(out[5]) == (True, 4) and _one(out[6]).epoch == 4
+
+
+def test_case_257_a_node_takes_no_epoch_from_anything_but_a_good_statement(host_check, tmp_path):
+    """case_257: H9, K6. An epoch id with no statement, a statement signed by an authority key, one by an unknown key,
+    one with a byte changed and one with another key sequence change nothing and send no record, and a node with no
+    controller key takes no good statement."""
+    good = _signed(epoch=5)
+    changed = good[:60] + ("0" if good[60] != "0" else "1") + good[61:]
+    out = _same(host_check, tmp_path / "held", [("provision", S, N), ("statement", (5).to_bytes(8, "little").hex(), N),
+                                                ("statement", _signed("A", epoch=5), N),
+                                                ("statement", _signed("U", epoch=5), N), ("statement", changed, N),
+                                                ("statement", _signed(key_seq=1, epoch=5), N),
+                                                ("record", "beat", N)], controller="C")
+    assert [_taken(line) for line in out[1:6]] == [(False, 0)] * 5 and _one(out[6]).epoch == 0
+    bare = _same(host_check, tmp_path / "bare", [("provision", S, N), ("statement", good, N)])
+    assert _taken(bare[1]) == (False, 0)
+
+
+def test_case_258_a_higher_epoch_is_taken_and_never_lowered(host_check, tmp_path):
+    """case_258: H9. A statement above the id held is taken, the same again and a lower one change nothing."""
+    out = _same(host_check, tmp_path, [("provision", S, N), ("statement", _signed(epoch=6), N),
+                                       ("statement", _signed(epoch=6), N), ("statement", _signed(epoch=2), N),
+                                       ("record", "beat", N)], controller="C")
+    assert [_taken(line) for line in out[1:4]] == [(True, 6), (False, 6), (False, 6)] and _one(out[4]).epoch == 6
+
+
+def test_case_259_a_trust_controller_names_a_new_key_and_starts_the_epoch_again(host_check, tmp_path):
+    """case_259: K7, H9, H15. The statement is applied with `trust-applied` and epoch 0. Then a statement by the old
+    key, one by the new key with the old key sequence, and one by the new key with the new key sequence and an epoch
+    id below the one held before: nothing, nothing, taken. The new key is durable across a restart."""
+    out = _same(host_check, tmp_path, [("provision", S, N), ("statement", _signed(epoch=9), N), _rekey("D", 1),
+                                       ("statement", _signed("C", key_seq=1, epoch=20), N),
+                                       ("statement", _signed("D", key_seq=0, epoch=20), N),
+                                       ("statement", _signed("D", key_seq=1, epoch=3), N), ("restart", N + 1),
+                                       ("statement", _signed("D", key_seq=1, epoch=4), N + 1)], controller="C")
+    applied = _one(out[2])
+    assert (applied.event, applied.epoch, applied.trust_seq) == ("trust-applied", 0, 1)
+    assert [_taken(line) for line in out[3:6]] == [(False, 0), (False, 0), (True, 3)] and _taken(out[7]) == (True, 4)
+
+
+def test_case_260_a_trust_controller_may_not_name_a_key_of_another_role(host_check, tmp_path):
+    """case_260: K6, K7, K4. A `trust.controller` whose key is an authority key, the node's instance key, a revoked
+    key, the controller key it replaced before and a retired key is `dist:rotation-invalid` each time, as pep.py
+    answers. One whose key is an install key or an operator key the node holds is too (section 21), and an anchor
+    whose controller key is also an authority key is refused at provisioning."""
+    out = _same(host_check, tmp_path, [("provision", S, N, ("A", "B")), _rekey("A", 1), _rekey("I", 1),
+                                       _revoke(1, N, keys=[_kid("R")]), _rekey("R", 2), _rekey("D", 2), _rekey("C", 3),
+                                       _rotate(3, N, "E", retire="B", signers=("A", "E")), _rekey("B", 4)],
+                controller="C")
+    refused = [_one(out[k]) for k in (1, 2, 4, 6, 8)]
+    assert [(one.event, one.cause) for one in refused] == [("refused", "dist:rotation-invalid")] * 5
+    assert _one(out[5]).event == "trust-applied" and _one(out[7]).event == "trust-applied"
+    assert _one(out[8]).trust_seq == 3
+    ckey = f"ckey {_kid('C')} {_pub('C').hex()}"
+    lines = [*_node(), *_anchor(("J", "K"), operators=("O",)), ckey, f"provision {S} {N}"]
+    for key in ("J", "O"):
+        body = _dist.controller_key(key)
+        lines.append(f"stage {_dist.trust_statement('trust.controller', body, seq=1, targets=('mesh',)).hex()} "
+                     f"{body.hex()} {N}")
+    lines += [*_anchor(None), f"ckey {_kid('A')} {_pub('A').hex()}", f"provision {S} {N}"]
+    got = _run21(host_check, lines)
+    assert [_refused(line)[0] for line in got[1:3]] == ["dist:rotation-invalid"] * 2
+    assert got[3] == f"provision-refused {causes.NAMES['dist:rotation-invalid']}"
+
+
+def test_case_261_the_controller_key_signs_no_envelope_and_no_rotation_adds_it(host_check, tmp_path):
+    """case_261: K6, K4, S3, O4, IS11. A release, a revocation and a rotation signed only by the controller key are
+    `dist:unknown-key`, as pep.py answers, and a rotation and an install.trust that add the controller key are
+    `dist:rotation-invalid`."""
+    release = _dist.seal("policy.ppt", BODIES[0], signer="C", targets=("mesh",))
+    out = _same(host_check, tmp_path, [("provision", S, N), ("stage", release.hex(), BODIES[0].hex(), N),
+                                       _revoke(1, N, signer="C"), _rotate(1, N, "B", signers=("C",)),
+                                       _rotate(1, N, "C", signers=("A", "C")), ("record", "beat", N)],
+                controller="C")
+    assert [_one(line).cause for line in out[1:5]] == ["dist:unknown-key"] * 3 + ["dist:rotation-invalid"]
+    assert _one(out[5]).trust_seq == 0 and _one(out[5]).state == "no-policy"
+    trust = _install("install.trust", _trust_body(("J", "K", "C"), 2), signers=("J", "K", "C"))
+    got = _run21(host_check, [*_node(), *_anchor(("J", "K")), f"ckey {_kid('C')} {_pub('C').hex()}",
+                              f"provision {S} {N}", _stage(trust)])
+    assert _refused(got[1]) == ("dist:rotation-invalid", SUBJECT["install.trust"])
+
+
+def test_case_269_a_node_cut_off_past_its_fresh_statement_lapses(host_check, tmp_path):
+    """case_269: H16, X1, X7, the `mesh` half (the `cfs` half waits for the cfs kind in the C core). With `fresh`
+    3600 the node takes a fresh statement and, cut off for 3901 seconds, lapses with dist:expired, as pep.py does.
+    A node built with HOLD is held instead, with bit 5 set."""
+    script = [("provision", S, N), ("stage", _sealed(0, 1), BODIES[0].hex(), N), ("commit", S, 1, H[0], N),
+              ("statement", _fresh(1, N + 3600), N), ("tick", N + 3900), ("tick", N + 3901)]
+    out = _same(host_check, tmp_path / "refuse", script, controller="C", fresh=3600)
+    assert _taken(out[3]) == (True, 1) and _records(out[4]) == []
+    lapsed = _one(out[5])
+    assert (lapsed.event, lapsed.cause, lapsed.state) == ("lapsed", "dist:expired", "no-policy")
+    held = _same(host_check, tmp_path / "hold", script, hold=True, controller="C", fresh=3600)
+    record = _one(held[5])
+    assert (record.event, record.state, record.held) == ("held", "active", True)
+
+
+def test_case_270_what_gives_freshness(host_check, tmp_path):
+    """case_270: H16, H9, T1. With `fresh` 3600, a statement for another stream changes nothing, one whose trust
+    sequence is below the node's, one whose stream seq is below its floor and one 3901 seconds ahead give no
+    freshness, one 3900 seconds ahead gives it and one with `fresh` 0 gives none: the node lapses 300 seconds after
+    the fifth's `expires` and not before. The epoch ids of all but the first are taken, and the time floor does not
+    move."""
+    good = {"trust_seq": 1, "stream_seq": 1}
+    script = [("provision", S, N), ("stage", _sealed(0, 1), BODIES[0].hex(), N), ("commit", S, 1, H[0], N),
+              _revoke(1, N),
+              ("statement", _fresh(1, N + 3600, stream="other/stream", **good), N),
+              ("statement", _fresh(2, N + 3600, **{**good, "trust_seq": 0}), N),
+              ("statement", _fresh(3, N + 3600, **{**good, "stream_seq": 0}), N),
+              ("statement", _fresh(4, N + 3901, **good), N), ("statement", _fresh(5, N + 3900, **good), N),
+              ("statement", _signed(epoch=6, expires=N + 7200), N), ("record", "beat", N),
+              ("tick", N + 4200), ("tick", N + 4201)]
+    out = _same(host_check, tmp_path, script, controller="C", fresh=3600)
+    assert [_taken(line) for line in out[4:10]] == [(False, 0), (True, 2), (True, 3), (True, 4), (True, 5), (True, 6)]
+    assert _one(out[10]).time == N and _records(out[11]) == []
+    assert (_one(out[12]).event, _one(out[12]).cause) == ("lapsed", "dist:expired")
+
+
+def test_case_271_freshness_off_decides_a_year_and_a_kept_statement_survives_a_restart(host_check, tmp_path):
+    """case_271: H16, P4. A node with `fresh` 0 cut off for a year with a release that expires in two decides under
+    it the whole year, and a node with `fresh` 3600 still holds its fresh statement after a restart: it lapses when
+    that statement runs out."""
+    long = _dist.seal("policy.ppt", BODIES[0], seq=1, targets=("mesh",), widens=True, expires=N + 2 * YEAR).hex()
+    off = _same(host_check, tmp_path / "off", [("provision", S, N), ("stage", long, BODIES[0].hex(), N),
+                                               ("commit", S, 1, H[0], N), ("tick", N + YEAR), ("decide", N + YEAR)],
+                controller="C")
+    assert _records(off[3]) == [] and off[4] == "decide 0 0"
+    on = _same(host_check, tmp_path / "on", [("provision", S, N), ("stage", long, BODIES[0].hex(), N),
+                                             ("commit", S, 1, H[0], N), ("statement", _fresh(1, N + 3600), N),
+                                             ("restart", N + 10), ("tick", N + 3900), ("tick", N + 3901)],
+                controller="C", fresh=3600)
+    assert _records(on[5]) == [] and (_one(on[6]).event, _one(on[6]).cause) == ("lapsed", "dist:expired")
+    assert all(record.epoch == 0 for record in _records(on[4]))
+
+
+def test_case_276_a_broadcast_starves_no_stream(host_check, tmp_path):
+    """case_276: H9. Statements for `mesh/a` and `mesh/b` in turn, each in a frame of type 6 that the C assembler
+    passes to the node as frames.py does, reach a node on each stream, which takes every statement of its own stream
+    and none of the other's."""
+    from prismpath.distribution import frames
+    sent = [(stream, _signed(stream=stream, epoch=turn)) for turn in (1, 2, 3) for stream in ("mesh/a", "mesh/b")]
+    encoded = [frames.encode(frames.Epoch(turn, bytes.fromhex(data))) for turn, (_s, data) in enumerate(sent)]
+    assert all(isinstance(frames.decode(frame), frames.Epoch) for frame in encoded)
+    lines = ["trust 1 0 - 0", f"pep mesh {S} 0 640 1", f"assembler 0 250 640",
+             *(f"frame {frame.hex()} 0" for frame in encoded), f"frame {bytes([6, 1, 0, 0]).hex()}{'00' * 8} 0", "done"]
+    done = subprocess.run([str(host_check)], input="\n".join(lines) + "\n", capture_output=True, text=True, timeout=60)
+    assert done.stdout.splitlines() == ["control 6"] * 6 + [f"dropped {causes.NAMES['dist:frame-invalid']}"]
+    for stream in ("mesh/a", "mesh/b"):
+        script = [("provision", stream, N), *(("statement", frame[4:].hex(), N) for frame in encoded)]
+        out = _same(host_check, tmp_path / stream.replace("/", "_"), script, controller="C")
+        assert [_taken(line)[0] for line in out[1:]] == [name == stream for name, _data in sent]
+
+
+def test_case_277_a_stolen_key_at_the_top_keeps_no_good_statement_from_freshness(host_check, tmp_path):
+    """case_277: H9, H16, H15. A statement by the stolen controller key with epoch id 2^64 - 1 is taken, a good fresh
+    statement still gives freshness, and after a restart the node takes the controller's next epoch id."""
+    out = _same(host_check, tmp_path, [("provision", S, N), ("stage", _sealed(0, 1), BODIES[0].hex(), N),
+                                       ("commit", S, 1, H[0], N), ("statement", _signed(epoch=2 ** 64 - 1), N),
+                                       ("statement", _fresh(1, N + 3600), N), ("restart", N + 5),
+                                       ("statement", _signed(epoch=2), N + 5), ("tick", N + 3901)],
+                controller="C", fresh=3600)
+    assert _taken(out[3]) == (True, 2 ** 64 - 1) and _taken(out[4]) == (False, 2 ** 64 - 1)
+    assert _taken(out[6]) == (True, 2) and _one(out[7]).cause == "dist:expired"
+
+
+def test_case_278_a_clockless_node_takes_time_once_a_start(host_check, tmp_path):
+    """case_278: H16, T1, T2. A `mesh` node with no clock and `fresh` 3600 that was off for 30 days starts and takes a
+    good fresh statement as a raise of its time floor to its `expires` less 3600, with freshness. One a year ahead in
+    the same start gives none and moves nothing. A node with a clock takes no time and no freshness from one a year
+    ahead (a `host` PEP is not of the C core, and a mesh node with a clock is the same rule)."""
+    true_time = N + 30 * 86400
+    long = _dist.seal("policy.ppt", BODIES[0], seq=1, targets=("mesh",), widens=True, expires=N + 2 * YEAR).hex()
+    out = _same(host_check, tmp_path / "clockless", [("provision", S, N), ("restart", N),
+                                                     ("statement", _fresh(1, true_time + 3600, stream_seq=0), N),
+                                                     ("record", "beat", N),
+                                                     ("statement", _fresh(2, true_time + YEAR, stream_seq=0), N),
+                                                     ("record", "beat", N), ("tick", true_time + 3900),
+                                                     ("record", "beat", true_time + 3901)],
+                controller="C", fresh=3600, clock=False)
+    assert _taken(out[2]) == (True, 1) and _one(out[3]).time == true_time
+    assert _taken(out[4]) == (True, 2) and _one(out[5]).time == true_time
+    clocked = _same(host_check, tmp_path / "clocked", [("provision", S, N), ("stage", long, BODIES[0].hex(), N),
+                                                       ("commit", S, 1, H[0], N),
+                                                       ("statement", _fresh(1, N + YEAR), N), ("record", "beat", N),
+                                                       ("tick", N + 3901)], controller="C", fresh=3600)
+    assert _taken(clocked[3]) == (True, 1) and _one(clocked[4]).time == N and _records(clocked[5]) == []
+
+
+def test_case_279_a_store_gains_a_controller_key_and_keeps_its_bound(host_check, tmp_path):
+    """case_279: K7, K5, H6. A node provisioned with no controller key gains the key a `trust.controller` names and
+    takes a statement under it. A store of 8 authority keys and no controller key refuses one with dist:too-large. A
+    `trust.controller` naming the key already held keeps it at the new key sequence, and a statement under the old
+    key sequence is not taken."""
+    bare = _same(host_check, tmp_path / "bare", [("provision", S, N), _rekey("C", 1),
+                                                 ("statement", _signed(key_seq=1, epoch=3), N)])
+    assert _one(bare[1]).event == "trust-applied" and _taken(bare[2]) == (True, 3)
+    full = _same(host_check, tmp_path / "full", [("provision", S, N, tuple("ABDEFGHJ")), _rekey("C", 1)])
+    assert _one(full[1]).cause == "dist:too-large"
+    held = _same(host_check, tmp_path / "held", [("provision", S, N), _rekey("C", 1),
+                                                 ("statement", _signed(key_seq=0, epoch=5), N),
+                                                 ("statement", _signed(key_seq=1, epoch=5), N), ("restart", N + 1),
+                                                 ("statement", _signed(key_seq=1, epoch=6), N + 1)], controller="C")
+    assert _one(held[1]).event == "trust-applied"
+    assert _taken(held[2]) == (False, 0) and _taken(held[3]) == (True, 5) and _taken(held[5]) == (True, 6)
+
+
+def test_case_280_an_anchor_whose_controller_key_is_of_another_role_is_refused(host_check):
+    """case_280: P2, K4, K6. Anchors whose controller key is an install key, an operator key or the node's instance
+    key are refused at provisioning, and the node is unchanged: its controller key and its epoch id stay."""
+    def anchor(controller):
+        return [*_anchor(("J", "K"), operators=("O",)), f"ckey {_kid(controller)} {_pub(controller).hex()}"]
+    got = _run21(host_check, [*_node(), *anchor("C"), f"provision {S} {N}", f"statement {_signed(epoch=5)} {N}",
+                              *anchor("J"), f"provision {S} {N}", *anchor("O"), f"provision {S} {N}",
+                              *anchor("I"), f"provision {S} {N}", f"statement {_signed(epoch=6)} {N}"])
+    assert _taken(got[1]) == (True, 5)
+    assert got[2:5] == [f"provision-refused {causes.NAMES['dist:rotation-invalid']}"] * 3
+    assert _taken(got[5]) == (True, 6)

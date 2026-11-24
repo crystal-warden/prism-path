@@ -11,9 +11,10 @@
 //! extra is refused by the type. `envelope` is the envelope and the sealed container, `trust` the trust
 //! store and the trust anchor, `verify` the one verifier, `pep` the enforcement point machine with the
 //! host adapter, `state_record` the signed record it reports every transition with, `install` the install
-//! statements, the install record and the ceiling of section 21, and `floor` the action floor of a table kind.
+//! statements, the install record and the ceiling of section 21, `floor` the action floor of a table kind, and
+//! `statement` the controller statement the controller key signs (H9).
 //!
-//! What a trust statement does to the trust store (R1 to R7, O1 to O4) is the trust store's, applied by
+//! What a trust statement does to the trust store (R1 to R7, O1 to O4, K7) is the trust store's, applied by
 //! the machine, not by this table.
 
 pub mod envelope;
@@ -21,6 +22,7 @@ pub mod floor;
 pub mod install;
 pub mod pep;
 pub mod state_record;
+pub mod statement;
 pub mod trust;
 pub mod verify;
 
@@ -396,6 +398,10 @@ fixed_string!(
     ChangeBasis = "prismpath.table-compare/1"
 );
 fixed_string!(
+    /// K7: the body of a `trust.controller`.
+    ControllerFormat = "prismpath.dist-controller/1"
+);
+fixed_string!(
     /// P2, P4: a trust anchor of the first version, which holds authority keys only.
     AnchorFormat = "prismpath.dist-trust/1"
 );
@@ -436,6 +442,10 @@ fixed_string!(StagedFormat = "prismpath.dist-staged/1");
 fixed_string!(PendingFormat = "prismpath.dist-pending/1");
 fixed_string!(CounterFormat = "prismpath.dist-counter/1");
 fixed_string!(SettingFormat = "prismpath.dist-setting/1");
+fixed_string!(
+    /// H16: the latest fresh controller statement a PEP keeps.
+    FreshFormat = "prismpath.dist-fresh/1"
+);
 
 /// A closed list of names (E8), each variant written as its name and ordered by it.
 macro_rules! kind_names {
@@ -511,6 +521,7 @@ kind_names!(
         TrustChange = "trust.change",
         TrustRevocation = "trust.revocation",
         TrustRotation = "trust.rotation",
+        TrustController = "trust.controller",
         InstallFloor = "install.floor",
         InstallFallback = "install.fallback",
         InstallCeiling = "install.ceiling",
@@ -567,6 +578,7 @@ impl ArtifactKind {
             TrustChange => Artifact { check: Some(check_change), ..PLAIN },
             TrustRevocation => Artifact { check: Some(|_, body, _| read_revocation(body).err().map(cause_of)), ..PLAIN },
             TrustRotation => Artifact { check: Some(|_, body, _| read_rotation(body).err().map(cause_of)), ..PLAIN },
+            TrustController => Artifact { check: Some(|_, body, _| read_controller(body).err().map(cause_of)), ..PLAIN },
             InstallFloor => Artifact { meta: |doc| install::read_meta(doc, true), role: INSTALL, ..PLAIN },
             InstallFallback | InstallCeiling => Artifact { meta: |doc| install::read_meta(doc, false), role: INSTALL, ..PLAIN },
             InstallTrust => Artifact {
@@ -603,11 +615,16 @@ impl ArtifactKind {
         !(self.is_trust() || self.is_install() || matches!(self, ArtifactKind::Grant | ArtifactKind::OperatorAnswer))
     }
 
-    /// One of the trust kinds, whose `expires` is 0 (E5) and which a target admits when its machine applies it (V5).
+    /// One of the trust kinds, whose `expires` is 0 (E5, X4) and which a target admits when its machine applies it
+    /// (V5).
     pub fn is_trust(self) -> bool {
         matches!(
             self,
-            ArtifactKind::TrustWidening | ArtifactKind::TrustChange | ArtifactKind::TrustRevocation | ArtifactKind::TrustRotation
+            ArtifactKind::TrustWidening
+                | ArtifactKind::TrustChange
+                | ArtifactKind::TrustRevocation
+                | ArtifactKind::TrustRotation
+                | ArtifactKind::TrustController
         )
     }
 
@@ -616,9 +633,9 @@ impl ArtifactKind {
         matches!(self, ArtifactKind::TrustWidening | ArtifactKind::TrustChange)
     }
 
-    /// A kind that travels on `@trust` in the one trust sequence (R1, O1).
+    /// A kind that travels on `@trust` in the one trust sequence (R1, O1, K7).
     pub fn on_trust_stream(self) -> bool {
-        matches!(self, ArtifactKind::TrustRevocation | ArtifactKind::TrustRotation)
+        matches!(self, ArtifactKind::TrustRevocation | ArtifactKind::TrustRotation | ArtifactKind::TrustController)
     }
 }
 
@@ -676,6 +693,7 @@ impl TargetKind {
                     ArtifactKind::TrustChange,
                     ArtifactKind::TrustRevocation,
                     ArtifactKind::TrustRotation,
+                    ArtifactKind::TrustController,
                 ],
                 body_bound: envelope::MAX_BODY,
                 trust_bound: TRUST_BOUND,
@@ -866,6 +884,15 @@ pub struct Rotation {
     pub retire: MaybeHex64,
 }
 
+/// K7: a controller key statement, the controller's public key in `key`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ControllerKey {
+    pub encoding: Canon2Tag,
+    pub format: ControllerFormat,
+    pub key: Hex64,
+}
+
 /// W4: a widening statement, the sorted policy hashes it may replace in `from`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -912,6 +939,11 @@ pub fn read_revocation(body: &[u8]) -> Result<Revocation, Refused> {
 
 pub fn read_rotation(body: &[u8]) -> Result<Rotation, Refused> {
     load(body, "rotation body")
+}
+
+/// K7: a controller key statement, its key 64 lower case hex digits.
+pub fn read_controller(body: &[u8]) -> Result<ControllerKey, Refused> {
+    load(body, "controller key statement")
 }
 
 /// W4: a widening statement lists at most 64 policy hashes in `from`.
@@ -1005,6 +1037,12 @@ mod tests {
         let rotation = format!("{{\"add\":\"{hash}\",\"encoding\":\"canon/2\",\"format\":\"prismpath.dist-rotation/1\",\"retire\":\"\"}}");
         assert_eq!(read_rotation(&body(&rotation)).unwrap().retire, MaybeHex64(None));
         assert_eq!(read_rotation(&body(&rotation.replace("rotation/1", "rotation/2"))).unwrap_err().cause, BAD_FORMAT);
+
+        let controller = format!("{{\"encoding\":\"canon/2\",\"format\":\"prismpath.dist-controller/1\",\"key\":\"{hash}\"}}");
+        assert_eq!(read_controller(&body(&controller)).unwrap().key.as_str(), hash);
+        assert_eq!(codec::to_bytes(&read_controller(&body(&controller)).unwrap()).unwrap(), body(&controller));
+        assert_eq!(read_controller(&body(&controller.replace(&hash, &hash.to_uppercase()))).unwrap_err().cause, BAD_FORMAT);
+        assert_eq!(read_controller(&body(&controller.replace("controller/1", "controller/2"))).unwrap_err().cause, BAD_FORMAT);
 
         let widening = "{\"encoding\":\"canon/2\",\"format\":\"prismpath.dist-widening/1\",\"from\":[]}".to_string();
         assert!(read_widening(&body(&widening)).unwrap().from.is_empty());

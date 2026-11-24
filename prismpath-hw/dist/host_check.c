@@ -7,7 +7,7 @@
  *   host_check < cases      each case is lines of "<word> <values>" ending with "end"
  *
  *   case <name>
- *   key <key id hex> <public hex> <role 0 authority | 1 another>
+ *   key <key id hex> <public hex> <role 0 authority | 1 another | 2 controller>
  *   retired | revoked_key | revoked_envelope | revoked_policy <hex>
  *   raised <stream> <seq>
  *   trust <readable 0|1> <trust_seq> <trust_id hex or -> <time_floor>
@@ -33,10 +33,11 @@
  *   tick <now ms> <now>
  *   rollback <now>
  *   record <event code> <now>
- *   epoch <epoch id>
+ *   statement <hex> <now>   one controller statement (H9, H16), which prints "statement <taken 0|1> <epoch id>"
  *   decide <now>
  *   restart <now>
- *   lose anchor | setting | counter | trust | floor | active | previous | staged | pending   (that part's bytes do not read)
+ *   lose anchor | setting | counter | trust | floor | active | previous | staged | pending | fresh   (that part's bytes
+ *                 do not read)
  *   stop <n>  after n more part writes nothing reaches the store, as a power loss; a restart restores the power
  *   state     the durable state as read back: active, previous and staged, each its seq or "-"
  *   written   the bytes the durable writes took since the last "written": total, writes, the largest
@@ -136,7 +137,7 @@ static const pp_durable *reread(void) {
 static int part_index(const char *name) {
     static const char *const names[N_PARTS] = {"anchor", "counter", "trust", "floor", "active", "previous", "staged",
                                                "pending", "install", "rates", "set_floor", "set_fallback",
-                                               "set_ceiling"};
+                                               "set_ceiling", "fresh"};
     for (int k = 0; k < N_PARTS; k++)
         if (strcmp(names[k], name) == 0) return k;
     return -1;
@@ -164,13 +165,16 @@ static void print_decision(const pp_decision *d) {
     print_hex16(d->has_policy ? d->policy_sha256 : NULL);
     printf(" %u %u ", d->would, d->would_cause);
     print_hex16(d->has_would_policy ? d->would_policy : NULL);
-    printf(" %d %d %d %lld %u\n", d->override, d->counted, d->rule, d->window, d->count);
+    printf(" %d %d %d %lld %u %d %d %d\n", d->override, d->counted, d->rule, d->window, d->count, d->rate_escalated,
+           d->decided_rule, d->would_rule);
 }
 
 /* One machine script, read from stdin up to its "done". Beyond the steps above:
  *
  *   akey <key id hex> <public hex>      a key of the next anchor (anchor_clear empties it, the install part and the
  *   anchor_clear                        statements brought)
+ *   ckey <key id hex> <public hex>      the controller key of the next anchor (K6), and
+ *   fresh <seconds>                     its `fresh` (H16)
  *   ikey | iop <public hex>             an install or operator key of the next anchor's install member
  *   install <threshold> <seq> <domain hex> <fingerprint hex>   the next anchor has an install member
  *   bring <sealed hex> <body hex>       a statement the next provisioning or install provisioning brings
@@ -184,6 +188,10 @@ static void print_decision(const pp_decision *d) {
  *   lose2 <part> | corrupt <part>       the second copy does not read | one byte of the first copy changed
  *   installid
  *   held                                the envelope id of the held floor, fallback policy and ceiling, or "-" each
+ *   escalated <receipt hex> <request hex or ->   OP3: open the escalation the last ask made, under that receipt hash
+ *   answer                              OP3: the answer the last step applied: "answer <applied> <allow> <envelope
+ *                                       id> <receipt> <request hex>", or "answer 0"
+ *   pepid                               H1: "pepid <hex>"
  *
  * print "provision-refused <cause>", "ask ...", "legacy <cause>", "installid <hex>", "anchor <cause> <stream>
  * <target> <fingerprint>" and "check <cause>". */
@@ -237,6 +245,16 @@ static int machine(const char *args, pp_trust *anchor) {
             hash32(b, anchor->keys[anchor->n_keys].public_key);
             anchor->keys[anchor->n_keys++].role = PP_ROLE_AUTHORITY;
             anchor->readable = 1;
+            continue;
+        } else if (strcmp(word, "ckey") == 0 && anchor->n_keys < PP_MAX_HELD_KEYS) {
+            if (sscanf(rest, "%s %s", a, b) != 2) return 2;
+            hash32(a, anchor->keys[anchor->n_keys].id);
+            hash32(b, anchor->keys[anchor->n_keys].public_key);
+            anchor->keys[anchor->n_keys++].role = PP_ROLE_CONTROLLER;
+            anchor->readable = 1;
+            continue;
+        } else if (strcmp(word, "fresh") == 0) {
+            anchor->fresh = strtoll(rest, NULL, 10);
             continue;
         } else if (strcmp(word, "anchor_clear") == 0) {
             memset(anchor, 0, sizeof *anchor);
@@ -324,6 +342,31 @@ static int machine(const char *args, pp_trust *anchor) {
             pp_decision d;
             pp_pep_ask(&pep, regs, n, given, now, &d);
             print_decision(&d);
+        } else if (strcmp(word, "escalated") == 0) {
+            static uint8_t request[PP_REQUEST_MAX + 1];
+            uint8_t receipt[32];
+            if (sscanf(rest, "%s %s", a, b) != 2) return 2;
+            hash32(a, receipt);
+            size_t n = unhex(b, request, sizeof request);
+            printf("escalated %u\n", pp_pep_escalated(&pep, receipt, request, n));
+        } else if (strcmp(word, "answer") == 0) {
+            if (!pep.answer.applied) printf("answer 0\n");
+            else {
+                printf("answer 1 %d ", pep.answer.allow);
+                for (int k = 0; k < 32; k++) printf("%02x", pep.answer.envelope_id[k]);
+                printf(" ");
+                for (int k = 0; k < 32; k++) printf("%02x", pep.answer.receipt[k]);
+                printf(" ");
+                if (pep.answer.request_len == 0) printf("-");
+                for (size_t k = 0; k < pep.answer.request_len; k++) printf("%02x", pep.answer.request[k]);
+                printf("\n");
+            }
+        } else if (strcmp(word, "pepid") == 0) {
+            uint8_t id[16];
+            pp_pep_id(&pep, id);
+            printf("pepid ");
+            for (int k = 0; k < 16; k++) printf("%02x", id[k]);
+            printf("\n");
         } else if (strcmp(word, "legacy") == 0) {
             printf("legacy %u\n", pp_pep_legacy(&pep, rest));
         } else if (strcmp(word, "held") == 0) { /* P2 step 4, IS8: the envelope id of each install set held */
@@ -379,9 +422,11 @@ static int machine(const char *args, pp_trust *anchor) {
             if (sscanf(rest, "%u %lld", &event, &now) != 2) return 2;
             pp_pep_record(&pep, (uint8_t)event, now);
             print_records(&pep);
-        } else if (strcmp(word, "epoch") == 0) {
-            pp_pep_see_epoch(&pep, strtoull(rest, NULL, 10));
-            printf("records\n");
+        } else if (strcmp(word, "statement") == 0) {
+            if (sscanf(rest, "%s %lld", a, &now) != 2) return 2;
+            size_t n = unhex(a, sealed_bytes, sizeof sealed_bytes);
+            int taken = pp_pep_take_statement(&pep, sealed_bytes, n, now);
+            printf("statement %d %llu\n", taken, (unsigned long long)pep.epoch);
         } else if (strcmp(word, "decide") == 0) {
             int mark = 0;
             uint8_t cause = pp_pep_decide(&pep, &mark, strtoll(rest, NULL, 10));

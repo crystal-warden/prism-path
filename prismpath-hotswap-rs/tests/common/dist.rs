@@ -10,7 +10,8 @@ use ed25519_dalek::SigningKey;
 use prismpath_hotswap_rs::dist::envelope::{self as env, EnvelopeDoc};
 use prismpath_hotswap_rs::dist::pep::{HostAdapter, Pep, PepError, REFUSE};
 use prismpath_hotswap_rs::dist::state_record::{self, StateRecord};
-use prismpath_hotswap_rs::dist::trust::{anchor_bytes, Role};
+use prismpath_hotswap_rs::dist::statement::{self as statements, Statement};
+use prismpath_hotswap_rs::dist::trust::{anchor2_bytes, anchor_bytes, Role};
 use prismpath_hotswap_rs::dist::{ArtifactKind, Canon2Tag, DistFormat, Hex64, MaybeHex64, Stream, TargetKind};
 use prismpath_hotswap_rs::host::PolicyHost;
 use prismpath_rs::canon2;
@@ -135,7 +136,7 @@ pub fn renewal(seq: i64, active: &[u8]) -> Args {
 
 /// The envelope bytes for `body`.
 pub fn envelope(artifact: ArtifactKind, body: &[u8], args: &Args) -> Vec<u8> {
-    let trust_stream = matches!(artifact, ArtifactKind::TrustRevocation | ArtifactKind::TrustRotation);
+    let trust_stream = artifact.on_trust_stream();
     let meta = args.meta.clone().unwrap_or_else(|| if artifact == ArtifactKind::PolicyPpt { image_meta() } else { json!({}) });
     let doc = EnvelopeDoc {
         artifact,
@@ -191,6 +192,49 @@ pub fn rotation(add: &str, retire: Option<&str>) -> Vec<u8> {
     canon2::write_json(&json!({"encoding": "canon/2", "format": "prismpath.dist-rotation/1",
                                "add": hex::encode(public(add)), "retire": retire}))
     .unwrap()
+}
+
+/// The canon/2 body of a controller key statement (K7) naming the test key `key`.
+pub fn controller_key(key: &str) -> Vec<u8> {
+    canon2::write_json(&json!({"encoding": "canon/2", "format": "prismpath.dist-controller/1", "key": hex::encode(public(key))}))
+        .unwrap()
+}
+
+/// What a controller statement says, by default epoch 1 on `STREAM` at key sequence 0 with no freshness (H9).
+#[derive(Clone, Copy)]
+pub struct Said<'a> {
+    pub key_seq: u64,
+    pub stream: &'a str,
+    pub epoch: u64,
+    pub fresh: bool,
+    pub trust_seq: u64,
+    pub stream_seq: u64,
+    pub expires: u64,
+}
+
+impl Default for Said<'_> {
+    fn default() -> Self {
+        Said { key_seq: 0, stream: STREAM, epoch: 1, fresh: false, trust_seq: 0, stream_seq: 0, expires: 0 }
+    }
+}
+
+/// A controller statement saying `said`, signed by the test key `key`.
+pub fn signed_by(key: &str, said: Said) -> Vec<u8> {
+    let statement = Statement {
+        key_seq: said.key_seq,
+        stream: state_record::stream_prefix(said.stream),
+        epoch: said.epoch,
+        fresh: said.fresh,
+        trust_seq: said.trust_seq,
+        stream_seq: said.stream_seq,
+        expires: said.expires,
+    };
+    statements::build(&statement, &test_key(key))
+}
+
+/// A controller statement by the test key C with epoch id `epoch` and nothing else.
+pub fn said(epoch: u64) -> Vec<u8> {
+    signed_by("C", Said { epoch, ..Said::default() })
 }
 
 /// The canon/2 body of a widening statement (W4).
@@ -271,6 +315,8 @@ pub struct Point {
     pub key: SigningKey,
     pub authorities: Vec<&'static str>,
     pub expiry: &'static str,
+    pub has_clock: bool,
+    pub anchor: Vec<u8>,
     pub pep: Pep<HostAdapter>,
 }
 
@@ -280,10 +326,27 @@ impl Point {
     }
 
     pub fn with(tag: &str, key: SigningKey, authorities: &[&'static str], expiry: &'static str) -> Result<Point, PepError> {
+        Point::anchored(tag, key, authorities, anchor_of(authorities), expiry, true)
+    }
+
+    /// A host PEP provisioned from a `/2` anchor whose controller key is the test key `controller`, with `fresh`
+    /// (P4, K6, H16), and with a clock or none (T2).
+    pub fn controlled(tag: &str, controller: &str, fresh: i64, has_clock: bool) -> Point {
+        Point::anchored(tag, test_key("I"), &["A"], anchor2_of(&["A"], controller, fresh), REFUSE, has_clock).unwrap()
+    }
+
+    pub fn anchored(
+        tag: &str,
+        key: SigningKey,
+        authorities: &[&'static str],
+        anchor: Vec<u8>,
+        expiry: &'static str,
+        has_clock: bool,
+    ) -> Result<Point, PepError> {
         let scratch = Scratch::new(&format!("dist_pep_{tag}"));
         let now = Rc::new(Cell::new(NOW));
-        let pep = open_pep(&scratch.join("host"), &now, &key, authorities, expiry, true)?;
-        Ok(Point { scratch, now, key, authorities: authorities.to_vec(), expiry, pep })
+        let pep = open_anchored(&scratch.join("host"), &now, &key, Some(&anchor), expiry, has_clock)?;
+        Ok(Point { scratch, now, key, authorities: authorities.to_vec(), expiry, has_clock, anchor, pep })
     }
 
     pub fn state_dir(&self) -> PathBuf {
@@ -292,7 +355,7 @@ impl Point {
 
     /// A fresh PEP over the state directory, as after a restart.
     pub fn open(&self) -> Result<Pep<HostAdapter>, PepError> {
-        open_pep(&self.state_dir(), &self.now, &self.key, &self.authorities, self.expiry, true)
+        open_anchored(&self.state_dir(), &self.now, &self.key, Some(&self.anchor), self.expiry, self.has_clock)
     }
 
     pub fn reopen(&mut self) {
@@ -300,7 +363,26 @@ impl Point {
     }
 
     pub fn anchor(&self) -> Vec<u8> {
-        anchor_of(&self.authorities)
+        self.anchor.clone()
+    }
+
+    /// Stage a `trust.controller` naming the test key `key` at trust sequence `seq`, signed by `signer` (K7).
+    pub fn rekey(&mut self, key: &str, seq: i64, signer: &'static str) -> StateRecord {
+        let body = controller_key(key);
+        let sealed = trust_statement(ArtifactKind::TrustController, &body, seq, &[signer], &[TargetKind::Host]);
+        self.stage(&sealed, &body)
+    }
+
+    /// Take a controller statement; whether its epoch id was taken.
+    pub fn take(&mut self, statement: &[u8]) -> bool {
+        self.pep.take_statement(statement).unwrap()
+    }
+
+    /// The epoch id a `beat` record carries now.
+    pub fn epoch(&mut self) -> u64 {
+        let signed = self.pep.record("beat", None).unwrap();
+        self.pep.drain();
+        self.read(&signed).epoch
     }
 
     pub fn read(&self, signed: &[u8]) -> StateRecord {
@@ -354,6 +436,16 @@ pub fn anchor_of(authorities: &[&str]) -> Vec<u8> {
     anchor_bytes(&keys, TargetKind::Host, &Stream::try_from(STREAM).unwrap(), &Role::authority()).unwrap()
 }
 
+/// A `/2` anchor trusting `authorities` with the test key `controller` as its controller key and `fresh` (P4).
+pub fn anchor2_of(authorities: &[&str], controller: &str, fresh: i64) -> Vec<u8> {
+    anchor2_on(authorities, controller, fresh, STREAM)
+}
+
+pub fn anchor2_on(authorities: &[&str], controller: &str, fresh: i64, stream: &str) -> Vec<u8> {
+    let keys: Vec<[u8; 32]> = authorities.iter().map(|name| public(name)).collect();
+    anchor2_bytes(&keys, TargetKind::Host, &Stream::try_from(stream).unwrap(), &public(controller), fresh, None).unwrap()
+}
+
 pub fn host_at(dir: &std::path::Path) -> PolicyHost {
     PolicyHost::new(dir.to_str().unwrap(), Vec::new(), qualification(), Vec::new()).unwrap()
 }
@@ -372,10 +464,23 @@ pub fn open_pep(
     expiry: &str,
     provision: bool,
 ) -> Result<Pep<HostAdapter>, PepError> {
+    let anchor = provision.then(|| anchor_of(authorities));
+    open_anchored(dir, now, key, anchor.as_deref(), expiry, true)
+}
+
+/// A host PEP over `dir`, provisioned with `anchor` on its first open when one is given.
+pub fn open_anchored(
+    dir: &std::path::Path,
+    now: &Rc<Cell<i64>>,
+    key: &SigningKey,
+    anchor: Option<&[u8]>,
+    expiry: &str,
+    has_clock: bool,
+) -> Result<Pep<HostAdapter>, PepError> {
     let adapter = HostAdapter::new(host_at(dir));
-    let mut pep = Pep::new(dir.to_str().unwrap(), adapter, key.clone(), clock_of(now), expiry, true)?;
-    if provision && !pep.is_provisioned() {
-        let fingerprint = pep.provision(&anchor_of(authorities))?;
+    let mut pep = Pep::new(dir.to_str().unwrap(), adapter, key.clone(), clock_of(now), expiry, has_clock)?;
+    if let Some(anchor) = anchor.filter(|_| !pep.is_provisioned()) {
+        let fingerprint = pep.provision(anchor)?;
         pep.confirm(&fingerprint)?;
     }
     Ok(pep)

@@ -50,6 +50,7 @@ prismpath-hotswap-rs/src/dist/install.rs
 prismpath-hotswap-rs/src/dist/mod.rs
 prismpath-hotswap-rs/src/dist/pep.rs
 prismpath-hotswap-rs/src/dist/state_record.rs
+prismpath-hotswap-rs/src/dist/statement.rs
 prismpath-hotswap-rs/src/dist/trust.rs
 prismpath-hotswap-rs/src/dist/verify.rs
 prismpath-hotswap-rs/src/flow_authority.rs
@@ -71,6 +72,7 @@ prismpath-hotswap-rs/tests/test_distribution_cross_language.rs
 prismpath-hotswap-rs/tests/test_distribution_install.rs
 prismpath-hotswap-rs/tests/test_distribution_pep.rs
 prismpath-hotswap-rs/tests/test_distribution_reconciling.rs
+prismpath-hotswap-rs/tests/test_distribution_statement.rs
 prismpath-hotswap-rs/tests/test_host_corners.rs
 prismpath-hotswap-rs/tests/test_host_crash.rs
 prismpath-hotswap-rs/tests/test_host_cross_language.rs
@@ -797,8 +799,8 @@ prismpath/tests/test_distribution_frames.py
 prismpath/tests/test_distribution_gateway.py
 prismpath/tests/test_distribution_hatches.py
 prismpath/tests/test_distribution_heartbeat.py
-prismpath/tests/test_distribution_identity.py
 prismpath/tests/test_distribution_http.py
+prismpath/tests/test_distribution_identity.py
 prismpath/tests/test_distribution_install.py
 prismpath/tests/test_distribution_install_controller.py
 prismpath/tests/test_distribution_legacy.py
@@ -825,6 +827,7 @@ prismpath/tests/test_facet.py
 prismpath/tests/test_fanout_engine.py
 prismpath/tests/test_fanout_tree.py
 prismpath/tests/test_field_definitions.py
+prismpath/tests/test_fleet_harness.py
 prismpath/tests/test_flow_authority.py
 prismpath/tests/test_flow_authority_callers.py
 prismpath/tests/test_flow_authority_console.py
@@ -862,6 +865,7 @@ prismpath/tests/test_lsp.py
 prismpath/tests/test_merkle_consistency.py
 prismpath/tests/test_merkle_rfc6962.py
 prismpath/tests/test_merkle_stream.py
+prismpath/tests/test_mesh_firmware.py
 prismpath/tests/test_mission_control.py
 prismpath/tests/test_mission_control_audit.py
 prismpath/tests/test_mission_control_auditing.py
