@@ -1926,7 +1926,7 @@ def test_case_219_a_set_spreads_by_itself_and_the_install_ids_show_the_mix(host_
 
 
 def test_the_action_floor_is_narrow_and_tests_only_what_the_proposer_cannot_write(host_check):
-    """AF9, AF10 on a mesh node (case 213 and case 216 wait for their cfs halves). A floor whose edge tests no command,
+    """case_213: AF9, AF10, the mesh half (the cfs half is in test_distribution_c_cfs.py). A floor whose edge tests no command,
     tests the command only inside an or, leaves a parameter unbounded or bounded by its whole domain, has a second
     decision node or nine rules, names a register the layout does not label as its command, or tests the proposer's
     reading is dist:floor-broad; one whose layout is another layout's hash, or reaches a PEP built with no layout, is
@@ -1970,7 +1970,7 @@ def test_the_action_floor_is_narrow_and_tests_only_what_the_proposer_cannot_writ
 
 
 def test_the_signed_rate_counts_overrides_durably_on_a_mesh_node(host_check):
-    """AF8, H10 on a mesh node (case 194 waits for its cfs half). With a rate of 3 in 60 seconds, five overrides in one
+    """case_194: AF8, H10, the mesh half (the cfs half is in test_distribution_c_cfs.py). With a rate of 3 in 60 seconds, five overrides in one
     window are allowed three times and then left to the release, a restart after the second changing nothing; a
     request the release allows is never counted; the next window allows again; the counts of H10 rise only with
     floor answers."""

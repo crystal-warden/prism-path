@@ -6,6 +6,12 @@
     prismpath gateway        --upstream URL --listen ADDR ...    serve (the default action)
     prismpath gateway verify [--home DIR]                        seal and verify every run, every receipt replayed
     prismpath gateway rules  [--home DIR]                        the rules with their hit counts, from the receipts
+    prismpath gateway identity-bundle --domain TD=PEM ... --out FILE    the body of an identity.bundle
+    prismpath gateway identity-map --map FILE --out FILE                the body of an identity.map
+
+The two identity bodies are sealed like any artifact, `prismpath dist seal --artifact identity.bundle --body FILE
+--target gateway ...`, where the authority key is (spec-policy-distribution.md, section 13.1). A home that holds
+its own policy takes them at `serve` with `--identity-bundle` and `--identity-map`.
 
 The home holds what `prismpath agent init` makes (`authority` and `instance` keys, `policy.core.json`, its
 attestation under the authority key, `runs/`), under `<config>/prismpath/gateway` unless `--home` names another.
@@ -36,8 +42,10 @@ def add_parser(subparsers) -> None:
     gateway = subparsers.add_parser(
         'gateway', help='Protect a resource: an HTTP reverse proxy that has the core decide every request under an '
                         'attested policy and receipts the decision, whoever the client is (serve, init, verify, rules, grant, revoke)')
-    gateway.add_argument('action', nargs='?', choices=('serve', 'init', 'verify', 'rules', 'grant', 'revoke'),
-                         default='serve', help='serve (the default), init, verify, rules, grant or revoke')
+    gateway.add_argument('action', nargs='?', choices=('serve', 'init', 'verify', 'rules', 'grant', 'revoke',
+                                                       'identity-bundle', 'identity-map'),
+                         default='serve', help='serve (the default), init, verify, rules, grant, revoke, identity-bundle '
+                                               'or identity-map')
     gateway.add_argument('--home', default=None, help='the gateway home (default <config>/prismpath/gateway)')
     gateway.add_argument('--upstream', default=None, metavar='URL', help='serve: the one service, http://HOST[:PORT]')
     gateway.add_argument('--listen', default='127.0.0.1:8080', metavar='ADDR', help='serve: HOST:PORT (default 127.0.0.1:8080)')
@@ -61,6 +69,21 @@ def add_parser(subparsers) -> None:
     gateway.add_argument('--stream', default=None, metavar='NAME',
                          help='grant: the stream of the gateway the grant is for (default this home\'s own)')
     gateway.add_argument('--grant-id', default=None, metavar='ID', help='revoke: the id of the grant to revoke')
+    gateway.add_argument('--client-cert-header', default=None, metavar='NAME',
+                         help='serve: the header the front proxy passes the client certificate chain in, percent '
+                              'encoded PEM, leaf first (read only under a policy that reads workload)')
+    gateway.add_argument('--front-proxy', action='append', default=[], metavar='ADDR',
+                         help='serve: an IP address of the front proxy, the only peer the certificate header is read '
+                              'from (repeatable)')
+    gateway.add_argument('--identity-bundle', default=None, metavar='FILE',
+                         help='serve: the identity.bundle body, in a home that holds its own policy')
+    gateway.add_argument('--identity-map', default=None, metavar='FILE',
+                         help='serve: the identity.map body, in a home that holds its own policy')
+    gateway.add_argument('--domain', action='append', default=[], metavar='TD=PEM',
+                         help='identity-bundle: a trust domain and a PEM file of its CA certificates (repeatable)')
+    gateway.add_argument('--map', default=None, metavar='FILE',
+                         help='identity-map: a JSON file {"entries": [{"match": "spiffe://td/path/*", "class": NAME}]}')
+    gateway.add_argument('--out', default=None, metavar='FILE', help='identity-bundle, identity-map: where the body goes')
     gateway.add_argument('--json', action='store_true', help='machine readable output')
     gateway.set_defaults(func=gateway_cmd)
 
@@ -101,8 +124,9 @@ def init(home: Path, policy: Optional[str], out=None) -> int:
     image = image[:-1] if image.endswith(b"\n") else image
     from prismpath.gateway import reading
     checked = Policy(image)
-    if sorted(checked.fields) != sorted(reading.FIELDS):
-        raise commands.AgentError(f"{path} defines the fields {checked.fields}, not the gateway reading's {sorted(reading.FIELDS)}")
+    if not reading.fields_ok(checked.fields):
+        raise commands.AgentError(f"{path} defines the fields {checked.fields}, not the gateway reading's "
+                                  f"{sorted(reading.FIELDS)}, with or without {reading.WORKLOAD}")
     commands._make_dir(home)
     keys = {role: commands._ensure_key(home, role) for role in commands.KEY_ROLES}
     for name, data in ((commands.POLICY_FILE, image), (commands.ATTESTATION_FILE,
@@ -135,8 +159,21 @@ def serve(args) -> int:
                          f"and a policy that allows `other` would allow all of them (the demo table is {DEMO_ROUTES})")
     else:
         routes = Routes.load(Path(args.routes))
+    from prismpath.gateway import identity
+    if _distributed(home) and (args.identity_bundle or args.identity_map):
+        raise SystemExit("prismpath gateway: this home follows a stream, so its identity bundle and map are the "
+                         "committed identity.bundle and identity.map; --identity-bundle and --identity-map are refused here")
+    if bool(args.identity_bundle) != bool(args.identity_map):
+        raise SystemExit("prismpath gateway: --identity-bundle and --identity-map are given together")
+    bodies = ((Path(args.identity_bundle).read_bytes(), Path(args.identity_map).read_bytes())
+              if args.identity_bundle else None)
+    try:
+        setting = identity.Setting.of(args.client_cert_header, args.front_proxy)
+    except identity.IdentityError as exc:
+        raise SystemExit(f"prismpath gateway: {exc}")
     gateway = Gateway(args.upstream, routes, home, args.session, args.forward_header, args.timeout,
-                      args.deadline, args.upstream_timeout, args.max_response, args.max_connections)
+                      args.deadline, args.upstream_timeout, args.max_response, args.max_connections,
+                      identity_setting=setting, identity_bodies=bodies)
     if gateway.failure:
         sys.stderr.write(f"prismpath gateway: every request will be refused: {gateway.failure}\n")
     server = make_server(gateway, host or "127.0.0.1", int(port))
@@ -247,6 +284,59 @@ def revoke(home: Path, grant_id: Optional[str], out=None) -> int:
     return 0
 
 
+def identity_bundle(domains, out_path: Optional[str], out=None) -> int:
+    """Write the `identity.bundle` body of these `TD=PEM` pairs, each PEM file holding CA certificates."""
+    from cryptography import x509
+    from cryptography.hazmat.primitives import serialization
+    from prismpath.agent import commands
+    from prismpath.gateway import identity
+    out = out or sys.stdout
+    if not domains or not out_path:
+        raise commands.AgentError("name each trust domain with --domain TD=PEM and the body with --out FILE")
+    pairs: Dict[str, list] = {}
+    for item in domains:
+        domain, mark, pem = item.partition("=")
+        if not mark or not pem:
+            raise commands.AgentError(f"{item!r} is not TD=PEM")
+        try:
+            certs = x509.load_pem_x509_certificates(Path(pem).read_bytes())
+        except (OSError, ValueError) as exc:
+            raise commands.AgentError(f"{pem} holds no PEM certificates ({exc})")
+        pairs.setdefault(domain, []).extend(cert.public_bytes(serialization.Encoding.DER) for cert in certs)
+    try:
+        body = identity.bundle_body(pairs)
+    except identity.IdentityError as exc:
+        raise commands.AgentError(str(exc))
+    return _write_body(out_path, body, "identity.bundle", out)
+
+
+def identity_map(map_path: Optional[str], out_path: Optional[str], out=None) -> int:
+    """Write the `identity.map` body of the entries in a JSON file, in their order."""
+    from prismpath.agent import commands
+    from prismpath.gateway import identity
+    out = out or sys.stdout
+    if not map_path or not out_path:
+        raise commands.AgentError("name the entries with --map FILE and the body with --out FILE")
+    try:
+        doc = json.loads(Path(map_path).read_text(encoding="utf-8"))
+        rows = doc["entries"] if isinstance(doc, dict) and set(doc) == {"entries"} else None
+        if not isinstance(rows, list) or not all(isinstance(row, dict) and set(row) == {"match", "class"}
+                                                 for row in rows):
+            raise ValueError('the map file is {"entries": [{"match": ..., "class": ...}, ...]}')
+        body = identity.map_body(rows)
+    except (OSError, ValueError) as exc:
+        raise commands.AgentError(f"{map_path}: {exc}")
+    return _write_body(out_path, body, "identity.map", out)
+
+
+def _write_body(path: str, body: bytes, artifact: str, out) -> int:
+    import hashlib
+    Path(path).write_bytes(body)
+    print(f"{artifact} body {path}: sha256 {hashlib.sha256(body).hexdigest()}; seal it with prismpath dist seal "
+          f"--artifact {artifact} --body {path} --target gateway", file=out)
+    return 0
+
+
 def gateway_cmd(args) -> int:
     from prismpath.agent import commands
     try:
@@ -260,6 +350,10 @@ def gateway_cmd(args) -> int:
             return grant(_home(args), args.path_class, args.method_class, args.ttl, args.json, stream=args.stream)
         if args.action == 'revoke':
             return revoke(_home(args), args.grant_id)
+        if args.action == 'identity-bundle':
+            return identity_bundle(args.domain, args.out)
+        if args.action == 'identity-map':
+            return identity_map(args.map, args.out)
         return serve(args)
     except commands.AgentError as exc:
         print(f"prismpath gateway: {exc}", file=sys.stderr)

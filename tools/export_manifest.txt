@@ -342,6 +342,7 @@ prismpath/gates.py
 prismpath/gateway/__init__.py
 prismpath/gateway/cli.py
 prismpath/gateway/grants.py
+prismpath/gateway/identity.py
 prismpath/gateway/policy/demo.core.json
 prismpath/gateway/policy/demo.routes.json
 prismpath/gateway/policy/demo.rules.md
@@ -781,6 +782,7 @@ prismpath/tests/test_crypto_registry.py
 prismpath/tests/test_deferral.py
 prismpath/tests/test_distribution_agent_home.py
 prismpath/tests/test_distribution_c.py
+prismpath/tests/test_distribution_c_cfs.py
 prismpath/tests/test_distribution_controller.py
 prismpath/tests/test_distribution_corpus.py
 prismpath/tests/test_distribution_crash.py
@@ -790,6 +792,7 @@ prismpath/tests/test_distribution_frames.py
 prismpath/tests/test_distribution_gateway.py
 prismpath/tests/test_distribution_hatches.py
 prismpath/tests/test_distribution_heartbeat.py
+prismpath/tests/test_distribution_identity.py
 prismpath/tests/test_distribution_http.py
 prismpath/tests/test_distribution_install.py
 prismpath/tests/test_distribution_install_controller.py

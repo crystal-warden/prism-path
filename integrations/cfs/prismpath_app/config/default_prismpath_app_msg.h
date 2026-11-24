@@ -24,6 +24,7 @@ typedef PRISMPATH_APP_NoArgsCmd_t PRISMPATH_APP_ResetCountersCmd_t;
 typedef PRISMPATH_APP_NoArgsCmd_t PRISMPATH_APP_SendHkCmd_t;
 typedef PRISMPATH_APP_NoArgsCmd_t PRISMPATH_APP_SealCmd_t;
 
+
 /**
  * A proposed command, and the allowed command republished on the vehicle message id: the same payload. The
  * payload bytes are the reading, laid out as prismpath_app_layout.h says (little endian).
@@ -39,6 +40,34 @@ typedef struct
     uint8                   Pad;
     uint16                  Spare;
 } PRISMPATH_APP_ProposedCmd_t;
+
+/** The largest frame of the frame binding a command carries (docs/design/spec-policy-distribution.md section 8.3,
+ *  the limit of the link, which is also ESP-NOW's). */
+#define PRISMPATH_APP_FRAME_MAX 250
+
+/**
+ * One frame of policy distribution on the command topic: an offer or a chunk (PRISMPATH_APP_OFFER_CC,
+ * PRISMPATH_APP_CHUNK_CC), FrameLen bytes of Frame in use. The ground sends a table's sealed envelope and its body,
+ * the table's bytes before ImageSig, as integrations/cfs/ground/table.py frames them.
+ */
+typedef struct
+{
+    CFE_MSG_CommandHeader_t CommandHeader;
+    uint16                  FrameLen;
+    uint16                  Spare;
+    uint8                   Frame[PRISMPATH_APP_FRAME_MAX];
+} PRISMPATH_APP_FrameCmd_t;
+
+/** A commit or an abort frame (PRISMPATH_APP_CONTROL_CC), a commit with the table's image attestation: the ImageSig the
+ *  table carries for the core run's images.jsonl, which the body before it does not hold. */
+typedef struct
+{
+    CFE_MSG_CommandHeader_t CommandHeader;
+    uint16                  FrameLen;
+    uint16                  Spare;
+    uint8                   Frame[PRISMPATH_APP_FRAME_MAX];
+    uint8                   ImageSig[64];
+} PRISMPATH_APP_ControlCmd_t;
 
 /**
  * The runtime monitor's verdict, published by the monitor once a second on PRISMPATH_APP_MONITOR_VERDICT_MID. Ok is
@@ -73,9 +102,16 @@ typedef struct
     uint32 ReceiptCount;       /**< receipts in the run: the Merkle tree's leaf count, continued across resets */
     uint32 Unreceipted;        /**< decisions with no image active, refused and not receipted (no image to bind) */
     uint32 RecordErrors;       /**< decisions that could not be receipted (an allowed one was withheld) */
-    uint32 PolicyVersion;      /**< the version floor: the highest image version accepted */
+    uint32 PolicyVersion;      /**< the image version of the active table, 0 for none */
     uint32 Seals;              /**< root statements signed onboard */
     uint8  Root[16];           /**< the first 16 bytes of the current Merkle root (the full root is in the run's files) */
+    uint32 NotEnacted;         /**< decisions of the action floor or the fallback policy, refused and not receipted */
+    uint32 FramesDropped;      /**< distribution frames dropped (dist:frame-invalid, dist:too-large, a refused envelope) */
+    uint16 StateRecordLen;     /**< bytes of StateRecord in use */
+    uint16 Spare16;
+    /** A state record of policy distribution (H1), signed by the instance key: the latest the app made, or a beat at
+     *  this housekeeping request. Bit 5 of its status byte is set while the app is held past its release's expiry. */
+    uint8  StateRecord[244];
 } PRISMPATH_APP_HkTlm_Payload_t;
 
 typedef struct

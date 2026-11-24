@@ -13,6 +13,9 @@ PEP of a kind with no row cannot be described to the verifier. Each artifact's o
 `check(envelope, body, pep)`, which answers None or the cause. A target row may hold its own check of an
 artifact in `checks`, as a mesh node reads a `policy.ppt` with its own table parser and ignores `meta`.
 
+A `gateway` release carries `identity.bundle` and `identity.map` when its policy reads `workload` and only then
+(ID3), which the gateway adapter holds at commit.
+
 A target row also says which trust kinds its machine applies (`applies`). V5 refuses any other trust kind
 with `dist:target-mismatch`, so a statement is never verified and then left unapplied.
 """
@@ -385,6 +388,30 @@ def read_grant(body: bytes) -> dict:
     return doc
 
 
+def read_identity_bundle(body: bytes) -> dict:
+    """`identity.bundle` (section 13.1, ID1): a canon/2 object with `domains`, `encoding` and `format`
+    `prismpath.dist-identity-bundle/1`, each trust domain to the standard base64 DER of its X.509 CA certificates,
+    sorted, without repeats, each a CA with keyCertSign. `Refused` with `dist:bad-format` otherwise."""
+    from prismpath.gateway import identity
+    doc = load_canonical(body, "identity.bundle")
+    try:
+        return identity.bundle_doc(doc)
+    except identity.IdentityError as error:
+        raise Refused(BAD_FORMAT, f"identity.bundle is not a trust bundle ({error})") from None
+
+
+def read_identity_map(body: bytes) -> tuple:
+    """`identity.map` (section 13.1, ID2): a canon/2 object with `encoding`, `entries` and `format`
+    `prismpath.dist-identity-map/1`, its entries SPIFFE ID patterns to classes, in order. `Refused` with
+    `dist:bad-format` otherwise."""
+    from prismpath.gateway import identity
+    doc = load_canonical(body, "identity.map")
+    try:
+        return identity.map_doc(doc)
+    except identity.IdentityError as error:
+        raise Refused(BAD_FORMAT, f"identity.map is not an identity map ({error})") from None
+
+
 EDGE_DIR = Path(__file__).resolve().parents[2] / "prismpath-ebpf"
 
 
@@ -437,6 +464,8 @@ ARTIFACTS: Dict[str, Artifact] = {
     "egress.hosts": Artifact(check=_reads(read_hosts)),
     "agent.zones": Artifact(check=_reads(read_zones)),
     "gateway.routes": Artifact(check=_reads(read_routes)),
+    "identity.bundle": Artifact(check=_reads(read_identity_bundle)),
+    "identity.map": Artifact(check=_reads(read_identity_map)),
     "net.dests": Artifact(check=_reads(read_dests)),
     "net.edge": Artifact(frozenset({"flow_sha256", "names_sha256", "qualification"}), check=check_net_edge),
     "cfs.table": Artifact(),
@@ -533,7 +562,8 @@ TARGETS: Dict[str, Target] = {
                    compares=frozenset({"policy.ppt"})),
     "agent": Target(needs=frozenset({"policy.core", "egress.hosts"}), decides=True,
                     when_declared=frozenset({"agent.zones", "sandbox.profile"})),
-    "gateway": Target(needs=frozenset({"policy.core", "gateway.routes"}), decides=True),
+    "gateway": Target(needs=frozenset({"policy.core", "gateway.routes"}), decides=True,
+                      when_declared=frozenset({"identity.bundle", "identity.map"})),
     "xdp": Target(needs=frozenset({"policy.core", "net.dests", "net.edge"}), decides=True),
     "mesh": Target(needs=frozenset({"policy.ppt"}), decides=False, expiry_hold=True, body_bound=MESH_TABLE_MAX,
                    checks={"policy.ppt": check_mesh_table}, reads_meta=False, compares=frozenset({"policy.ppt"})),

@@ -29,10 +29,19 @@ kind are five more parts, each written to two media by `persist` and read back f
 record before the set it names (IS10). `pp_pep_ask` decides one request: the action floor first, which on this kind
 only allows and is held narrow by one bounded postfix pass at staging (AF9), then the active release, the fallback
 policy or the refusal of X3, with the basis and the policy hash of the set that decided (RC1). The ceiling is a list
-of body hashes. The layout and the reading domain the PEP was built with are in its `pp_config`. The `cfs` kind, and
-with it the operator's answer, is not built yet.
+of body hashes. The layout and the reading domain the PEP was built with are in its `pp_config`.
 
-`prismpath/tests/test_distribution_c.py` builds `host_check.c` with the host `cc` and
+The `cfs` kind takes a `cfs.table`, the `PP_PolicyTable_t` bytes before `ImageSig` (4,692 bytes). Every release and
+install slot is sized by `PP_TABLE_MAX`, which is the mesh node's 640 bytes unless a build sets it, so the firmware
+keeps its RAM. The cFS app and the host check of the cfs kind build with `-DPP_TABLE_MAX=4692`, and a build whose
+bound is below a kind's table has no row for that kind. A cfs PEP takes a table with another core image on the
+signers' word (W2, IS12), asks a table floor whose rules allow or escalate, past its signed rate escalates with
+`dist:floor-rate`, and holds each floor rule to AF9 on the table's own PPT image and rules. `pp_pep_commit_check`
+answers what a commit would without changing anything, so the cFS app switches its table service first and commits
+after (section 9.5). `pp_read_anchor` reads a `/1` or `/2` trust anchor. The operator's answer (OP2 to OP4) is not
+built yet: an answer is still `dist:target-mismatch` on every kind, and a floor escalation on cfs stays unanswered.
+
+`prismpath/tests/test_distribution_c.py` and `test_distribution_c_cfs.py` build `host_check.c` with the host `cc` and
 `-Wall -Wextra -Werror -fsanitize=address,undefined`. It replays every corpus case on the `mesh` kind,
 runs the machine step for step beside the Python one (`prismpath/distribution/pep.py` on a modelled mesh
 node) and requires the same signed state records byte for byte, and runs the frame reassembly frame for

@@ -65,9 +65,17 @@ def test_every_rule_names_a_registered_cause():
 
 # ----------------------------------------------------------------- the reading layout the C code assumes
 def _layout_rows():
-    text = LAYOUT_H.read_text()
-    rows = re.findall(r'X\(\s*(\d+),\s*"(\w+)",\s*(INT|BOOL|MONITOR),\s*(\d+),\s*(\d+),\s*(-?\d+),\s*(-?\d+)\s*\)', text)
-    return [(int(reg), name, kind, int(off), int(width), int(lo), int(hi)) for reg, name, kind, off, width, lo, hi in rows]
+    return [row[:7] for row in gen_image.layout_rows(LAYOUT_H.read_text())]
+
+
+def test_the_layout_labels_one_command_its_parameters_the_monitor_and_the_proposers_reading():
+    """AF9, AF10: the labels an action floor is held to. The command class is the one command, the slew and the
+    thrust are its parameters, the monitor's verdict is the reading the app takes itself, and ground contact is the
+    proposer's, and the labels are in the layout hash a table is built for."""
+    roles = {name: role for _reg, name, _kind, _off, _width, _lo, _hi, role in gen_image.layout_rows()}
+    assert roles == {"cmd_class": "COMMAND", "ground_contact": "PROPOSER", "monitor_ok": "INDEPENDENT",
+                     "slew_deg": "PARAMETER", "thrust_pct": "PARAMETER"}
+    assert "monitor_ok:bool:independent;" in gen_image.layout_signature(gen_image.field_defs(Policy(_core()).doc))
 
 
 def test_the_layout_lists_the_policys_fields_in_register_order_with_their_bounds():
@@ -130,6 +138,27 @@ def test_the_layout_hash_the_c_computes_is_the_one_the_table_carries(tmp_path):
     assert int(out, 16) == gen_image.build(_core())["layout_hash"]
 
 
+def test_the_layout_document_the_c_writes_is_the_one_the_ground_seals_floors_for(tmp_path):
+    """AF10, CL4: the app's layout document, from which its floors' `layout` and its anchor's domain are hashed, is the
+    one ground/table.py writes, with the monitor's verdict independent under a staleness bound and the proposer's in a
+    mission with no monitor, which then gives no floor a reading of the world that is never stale."""
+    cc = shutil.which("cc") or shutil.which("gcc") or shutil.which("clang")
+    if cc is None:
+        pytest.skip("no C compiler")
+    from integrations.cfs.ground import provision, table
+    probe = tmp_path / "probe.c"
+    probe.write_text('#include <stdio.h>\n#include "prismpath_app_kernel.c"\n'
+                     'int main(void) { static char out[1024]; unsigned s[] = {0, 3, 5}; int k;\n'
+                     '  for (k = 0; k < 3; k++) { size_t n = PP_Kernel_LayoutDocument(s[k], out, sizeof out);\n'
+                     '    fwrite(out, 1, n, stdout); printf("\\n"); } return 0; }\n')
+    exe = tmp_path / "probe"
+    subprocess.run([cc, "-std=c11", "-I", str(REPO / "prismpath-hw"), "-I", str(APP / "fsw" / "inc"),
+                    "-I", str(APP / "fsw" / "src"), "-o", str(exe), str(probe)], check=True)
+    lines = subprocess.run([str(exe)], capture_output=True, check=True).stdout.splitlines()
+    assert lines == [table.layout_document(provision.app_layout(stale)) for stale in (0, 3, 5)]
+    assert b'"reg":2,"role":"proposer","stale":0' in lines[0] and b'"reg":2,"role":"independent","stale":5' in lines[2]
+
+
 # ----------------------------------------------------------------- the kernel against the reference
 def _vectors():
     policy = Policy(_core())
@@ -183,6 +212,9 @@ def _staged_cfs():
 
 
 def test_the_scripted_sequence_gives_the_expected_events_in_a_native_cfs_run():
+    """D9, the done test: a native cFS build boots with the app, a table offered on the software bus loads through the
+    table service and decides, a processor reset keeps the run and the floor so an older seq is refused, a ground
+    table load from a file is refused, and the downlinked run verifies (run_scenario.py)."""
     exe = _staged_cfs()
     import socket
     for port in (1234, 2234):

@@ -205,3 +205,23 @@ def test_an_older_tampered_or_unsigned_table_is_refused_with_its_cause(run_check
         (tmp_path / f"{name}.bin").write_bytes(bytes(data))
         extra += ["--refuse", str(tmp_path / f"{name}.bin"), str(cause)]
     _run(run_check, tmp_path, keys, "refusals", _payloads()[:3], extra)
+
+
+def test_a_hold_opens_a_case_of_its_own_and_the_run_still_verifies(run_check, tmp_path, keys):
+    """X7 in a core run: the receipts made while held are in a case of their own whose line says so, a case opens again
+    when the hold ends, every receipt keeps its format and the run verifies with both keys pinned as before."""
+    payloads = _payloads()[:12]
+    out, _stdout = _run(run_check, tmp_path, keys, "held", payloads, ["--hold", "4", "9"])
+    cases = [core_evidence.canon2.loads(line) for line in core_evidence._lines(out / "cases.jsonl")]
+    assert [len(case["readings"]) for case in cases] == [4, 5, 3]
+    version = gen_image.VERSION
+    assert [(case["case"], case.get("hold")) for case in cases] == [(f"v{version}", None), (f"v{version}.2", True),
+                                                                   (f"v{version}.3", None)]
+    assert reference.held_receipts(out) == list(range(4, 9))
+    policy = Policy(_core())
+    for idx, (line, payload) in enumerate(zip(core_evidence._lines(out / "receipts.jsonl"), payloads)):
+        case_id, case_reading = ((f"v{version}", idx) if idx < 4 else (f"v{version}.2", idx - 4) if idx < 9
+                                 else (f"v{version}.3", idx - 9))
+        assert line == reference.receipt_line(policy, idx, case_id, case_reading, payload)
+    summary = downlink.verify(out, keys)
+    assert summary["cases"] == 3 and summary["disagree"] == 0 and summary["receipts"] == len(payloads)
