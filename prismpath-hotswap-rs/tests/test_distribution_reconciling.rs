@@ -107,11 +107,16 @@ struct Rig {
 
 impl Rig {
     fn new(tag: &str) -> Rig {
+        Rig::anchored(tag, &anchor_of(&["A"]))
+    }
+
+    /// A rig provisioned from `anchor`.
+    fn anchored(tag: &str, anchor: &[u8]) -> Rig {
         let scratch = common::Scratch::new(&format!("dist_reconciling_{tag}"));
         let now = Rc::new(Cell::new(NOW));
         let switches = Switches::default();
         let mut pep = Rig::pep_over(&scratch, &now, &switches).unwrap();
-        let fingerprint = pep.provision(&anchor_of(&["A"])).unwrap();
+        let fingerprint = pep.provision(anchor).unwrap();
         pep.confirm(&fingerprint).unwrap();
         Rig { scratch, now, switches, pep }
     }
@@ -337,13 +342,15 @@ fn case_242_a_reconciling_pep_refuses_a_commit_and_a_rollback_and_keeps_the_stag
     assert_eq!(rig.switches.tries(), tries, "no call but a tick tries the runtime");
 }
 
-/// case_243: C8, C9, G2, A1, R3, the half this crate builds. A reconciling PEP stages a new release with a stage
-/// ack that names it, replaces it with a higher one, aborts, applies a revocation and takes an anchor to confirm,
-/// and none of these tries the runtime. The controller statement is pending, since this crate does not build the
-/// controller key (K6, K7).
+/// case_243: C8, C9, G2, A1, R3. A reconciling PEP stages a new release with a stage ack that names it, replaces it
+/// with a higher one, aborts, applies a revocation, takes an anchor to confirm and takes the epoch id of a controller
+/// statement, and none of these tries the runtime. The PEP gained its controller key by a `trust.controller` (K7).
 #[test]
-fn case_243_a_reconciling_pep_stages_aborts_and_applies_trust_statements_without_a_try() {
+fn case_243_a_reconciling_pep_stages_aborts_applies_trust_takes_an_anchor_and_a_statement_without_a_try() {
     let mut rig = Rig::new("243");
+    let named = controller_key("C");
+    let sealed = trust_statement(ArtifactKind::TrustController, &named, 1, &["A"], &[TargetKind::Host]);
+    assert_eq!(rig.stage(&sealed, &named).event, "trust-applied");
     rig.commit_at(&old(), 1);
     rig.stage(&ppt(&new(), &at(2)), &new());
     rig.switches.set(true, true);
@@ -354,12 +361,66 @@ fn case_243_a_reconciling_pep_stages_aborts_and_applies_trust_statements_without
     let higher = rig.stage(&ppt(&old(), &at(4)), &old());
     assert_eq!((higher.event, higher.staged_seq), ("staged", 4));
     assert_eq!(read(&rig.pep.abort(STREAM, 4, &h(&old())).unwrap()).event, "aborted");
-    let applied = rig.revoke(1, &revocation(&[], &[], &[h(&newer())], &[]));
-    assert_eq!((applied.event, applied.state, applied.trust_seq), ("trust-applied", "reconciling", 1));
+    let applied = rig.revoke(2, &revocation(&[], &[], &[h(&newer())], &[]));
+    assert_eq!((applied.event, applied.state, applied.trust_seq), ("trust-applied", "reconciling", 2));
     rig.pep.provision(&anchor_of(&["A"])).unwrap();
     assert!(rig.path("anchor.pending").exists());
+    rig.pep.drain();
+    assert!(rig.pep.take_statement(&signed_by("C", Said { key_seq: 1, epoch: 4, ..Said::default() })).unwrap());
+    assert!(rig.pep.drain().is_empty(), "a statement sends no record");
+    let beat = read(&rig.pep.record("beat", None).unwrap());
+    assert_eq!((beat.epoch, beat.state), (4, "reconciling"));
     assert_eq!(rig.switches.tries(), tries);
     assert!(rig.pep.is_reconciling());
+}
+
+/// C10, H16: a reconciling PEP holds its held release, and its running release while the withdrawal fails, to
+/// freshness as to expiry. Past the kept fresh statement's `expires` plus SKEW the held release falls unrun as a
+/// lapse with dist:expired, and a running release that falls is named with that cause.
+#[test]
+fn a_held_and_a_running_release_fall_when_freshness_lapses() {
+    let fresh = |rig: &mut Rig| {
+        let statement = signed_by("C", Said { fresh: true, stream_seq: 1, expires: (NOW + 3600) as u64, ..Said::default() });
+        assert!(rig.pep.take_statement(&statement).unwrap());
+        assert_eq!(rig.pep.kept().unwrap().expires, NOW + 3600);
+    };
+    let mut rig = Rig::anchored("fresh_held", &anchor2_of(&["A"], "C", 3600));
+    rig.commit_at(&old(), 1);
+    fresh(&mut rig);
+    rig.stage(&ppt(&new(), &at(2)), &new());
+    rig.switches.set(true, false);
+    assert_eq!(read(&rig.pep.commit(STREAM, 2, &h(&new()), 0).unwrap()).state, "reconciling");
+    rig.switches.set(false, false);
+    rig.now.set(NOW + 3900);
+    rig.pep.drain();
+    assert!(rig.pep.tick().unwrap().is_some_and(|record| read(&record).event == "committed"), "fresh until expires plus SKEW");
+    let mut rig = Rig::anchored("fresh_held_lapse", &anchor2_of(&["A"], "C", 3600));
+    rig.commit_at(&old(), 1);
+    fresh(&mut rig);
+    rig.stage(&ppt(&new(), &at(2)), &new());
+    rig.switches.set(true, false);
+    rig.pep.commit(STREAM, 2, &h(&new()), 0).unwrap();
+    rig.switches.set(false, false);
+    let before = rig.switches.tries().0;
+    rig.now.set(NOW + 3901);
+    let left = read(&rig.pep.tick().unwrap().unwrap());
+    assert_eq!((left.event, left.cause.as_deref(), left.state), ("lapsed", Some("dist:expired"), "no-policy"));
+    assert_eq!(rig.switches.tries().0, before, "the held release that fell is never installed");
+    assert_eq!(rig.host_active(), json!(null));
+
+    let mut rig = Rig::anchored("fresh_running", &anchor2_of(&["A"], "C", 3600));
+    rig.commit_at(&old(), 1);
+    fresh(&mut rig);
+    rig.stage(&ppt(&new(), &at(2)), &new());
+    rig.switches.set(true, true);
+    rig.pep.commit(STREAM, 2, &h(&new()), 0).unwrap();
+    rig.now.set(NOW + 3901);
+    rig.pep.drain();
+    assert!(rig.pep.tick().unwrap().is_none(), "the withdrawal fails again and nothing is owed yet");
+    let beat = read(&rig.pep.record("beat", None).unwrap());
+    let named = entry(&beat).unwrap();
+    assert_eq!((beat.state, beat.active_seq), ("reconciling", 0));
+    assert_eq!((named.owed, named.cause.as_deref(), running(&named)), ("lapsed", Some("dist:expired"), Some((prefix(&old()), 1))));
 }
 
 fn prefix_of_release(body: &[u8]) -> [u8; 16] {

@@ -8,9 +8,11 @@
 //!
 //! `counting` is S3 to S5, which entries of a sealed envelope count and the one cause when too few do.
 //! A store that cannot be read refuses every envelope with `dist:unknown-key` (K1). The store changes
-//! only by provisioning, a rotation and a revocation (K3). `apply_revocation` is the store after a verified
-//! revocation (R1 to R6) and `apply_rotation` the store after a verified rotation (O1, O3, K5). `Anchor` is
-//! the trust anchor a PEP is provisioned with (P2, P3).
+//! only by provisioning, a rotation, a revocation and a controller key statement (K3). `apply_revocation` is the
+//! store after a verified revocation (R1 to R6), `apply_rotation` the store after a verified rotation (O1, O3, K5)
+//! and `apply_controller` the store after a verified `trust.controller` (K7). The store holds at most one
+//! controller key, the key controller statements are verified under (K6, H9), with the key sequence it was named at.
+//! `Anchor` is the trust anchor a PEP is provisioned with (P2, P3).
 
 use super::envelope::{Entry, Envelope};
 use super::install::{self, AnchorPart, Record};
@@ -19,6 +21,7 @@ use super::{
     TrustStoreFormat, Verdict, AUTHORITY, BAD_FORMAT, CONTROLLER, MAX_SEQ, ROTATION_INVALID, SIG_INVALID, SIG_REVOKED_KEY,
     TOO_LARGE, TRUST_REPLAY, UNKNOWN_KEY,
 };
+use std::collections::BTreeSet;
 use crate::host::HostError;
 use prismpath_rs::canon2::codec;
 use serde::{Deserialize, Serialize};
@@ -35,6 +38,10 @@ pub struct Role(String);
 impl Role {
     pub fn authority() -> Role {
         Role(AUTHORITY.to_string())
+    }
+
+    pub fn controller() -> Role {
+        Role(CONTROLLER.to_string())
     }
 
     pub fn as_str(&self) -> &str {
@@ -80,13 +87,17 @@ pub struct Key {
 /// its key. The `revoked_*` sets are the latest revocation list, which holds every key id an earlier one
 /// held (R6), and `floors` the floor revocation raised for the PEP's stream. `retired` is the retired key
 /// ids, oldest first, at most 16, and `keys` holds at most 8 keys that are not retired (K5). A store whose
-/// file could not be read has `readable` false and counts nothing.
+/// file could not be read has `readable` false and counts nothing. `key_seq` is the key sequence of the controller
+/// key (K6, K7), written only by a store that has held one, so a store that never did keeps the bytes it had before
+/// the controller key was built, as the Python store does.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct TrustStore {
     pub encoding: Canon2Tag,
     pub floors: BTreeMap<Stream, i64>,
     pub format: TrustStoreFormat,
+    #[serde(default, deserialize_with = "super::present", skip_serializing_if = "Option::is_none")]
+    pub key_seq: Option<i64>,
     pub keys: BTreeMap<Hex64, Key>,
     pub retired: Vec<Hex64>,
     pub revoked_envelopes: SortedSet<Hex64>,
@@ -110,6 +121,7 @@ impl Default for TrustStore {
             encoding: Canon2Tag,
             floors: BTreeMap::new(),
             format: TrustStoreFormat,
+            key_seq: None,
             keys: BTreeMap::new(),
             retired: Vec::new(),
             revoked_envelopes: SortedSet::default(),
@@ -172,6 +184,10 @@ impl TrustStore {
             "trust store retired",
         )?;
         require(store.keys.keys().filter(|kid| !retired.contains(kid)).count() <= MAX_KEYS, "trust store keys beyond the bound")?;
+        require(store.key_seq.is_none_or(|seq| (0..=MAX_SEQ).contains(&seq)), "trust store key_seq")?;
+        let controllers =
+            store.keys.iter().filter(|(kid, key)| key.role.as_str() == CONTROLLER && !retired.contains(kid)).count();
+        require(controllers <= 1, "a trust store with more than one controller key (K6)")?;
         Ok(store)
     }
 
@@ -279,6 +295,93 @@ impl TrustStore {
 }
 
 impl TrustStore {
+    /// K6: the key id and key of the one controller key the store holds and has not retired, or None.
+    pub fn controller(&self) -> Option<(&Hex64, &Key)> {
+        if !self.readable {
+            return None;
+        }
+        self.keys.iter().find(|(kid, key)| key.role.as_str() == CONTROLLER && !self.retired.contains(kid))
+    }
+
+    /// The controller key a statement is verified under (H9): the held one, unless it is revoked (K6).
+    pub fn controller_public(&self) -> Option<[u8; 32]> {
+        let (kid, key) = self.controller()?;
+        (!self.revoked_keys.contains(kid)).then(|| key.public.raw())
+    }
+
+    /// K6, K7: the key sequence of the controller key, 0 when the anchor named it or the store holds none.
+    pub fn key_sequence(&self) -> i64 {
+        self.key_seq.unwrap_or(0)
+    }
+
+    /// K7, K4, K5 for a `trust.controller` whose body already reads (V11): `key` is never an authority key the store
+    /// holds, the PEP's own instance key, an install or operator key the PEP holds or retired (`others`), a revoked key
+    /// or a retired one, the controller key a statement replaced before included (`dist:rotation-invalid`), and a
+    /// store with no controller key that would then hold a ninth key is `dist:too-large`. Naming the held controller
+    /// key is not a replacement and passes.
+    pub fn check_controller(&self, body: &[u8], instance_key_id: Option<&Hex64>, others: &BTreeSet<Hex64>) -> Option<&'static str> {
+        let Ok(doc) = super::read_controller(body) else { return None };
+        let added_id = Hex64::of(&doc.key.raw());
+        let held = self.controller().map(|(kid, _)| kid.clone());
+        if held.as_ref() == Some(&added_id) {
+            return None;
+        }
+        let elsewhere = self.keys.get(&added_id).is_some_and(|key| key.role.as_str() != CONTROLLER);
+        if instance_key_id == Some(&added_id)
+            || self.revoked_keys.contains(&added_id)
+            || self.retired.contains(&added_id)
+            || others.contains(&added_id)
+            || elsewhere
+        {
+            return Some(ROTATION_INVALID);
+        }
+        let mut live: BTreeSet<&Hex64> = self.keys.keys().filter(|kid| !self.retired.contains(kid)).collect();
+        live.insert(&added_id);
+        if let Some(held) = &held {
+            live.remove(held);
+        }
+        if live.len() > MAX_KEYS {
+            return Some(TOO_LARGE); // K5: a ninth key
+        }
+        None
+    }
+
+    /// The store after a verified `trust.controller` at the next trust sequence (K7): the key named is the controller
+    /// key, the one it replaces is retired, and the envelope's `seq` is the key sequence. A key that is already the
+    /// controller key stays and takes the new key sequence. A seventeenth retired id forgets the oldest, and its key
+    /// with it (K5). The caller starts its epoch id again at 0 (H15).
+    pub fn apply_controller(&self, envelope: &Envelope, body: &[u8]) -> Result<TrustStore, Refused> {
+        require(
+            envelope.artifact == ArtifactKind::TrustController && envelope.seq == self.trust_seq + 1,
+            "only a verified controller key statement at the next trust sequence is applied (K7)",
+        )?;
+        let added = super::read_controller(body)?.key;
+        let added_id = Hex64::of(&added.raw());
+        let mut keys = self.keys.clone();
+        let mut retired = self.retired.clone();
+        let held = self.controller().map(|(kid, _)| kid.clone());
+        if held.as_ref() != Some(&added_id) {
+            if let Some(held) = held {
+                if !retired.contains(&held) {
+                    retired.push(held);
+                }
+            }
+            keys.insert(added_id, Key { public: added, role: Role::controller() });
+            while retired.len() > MAX_RETIRED {
+                let forgotten = retired.remove(0);
+                keys.remove(&forgotten);
+            }
+        }
+        Ok(TrustStore {
+            keys,
+            retired,
+            key_seq: Some(envelope.seq),
+            trust_seq: envelope.seq,
+            trust_id: MaybeHex64(Some(envelope.envelope_id())),
+            ..self.clone()
+        })
+    }
+
     /// R6 for a revocation list that already reads (V11): it holds every key id the current list holds, since a
     /// key once revoked stays revoked. None, or `dist:trust-replay`.
     pub fn check_revocation(&self, body: &[u8]) -> Option<&'static str> {
@@ -422,9 +525,11 @@ impl Anchor {
     pub fn store(&self) -> TrustStore {
         let mut keys = self.keys.clone();
         if let Some(controller) = &self.controller {
-            keys.insert(Hex64::of(&controller.raw()), Key { public: controller.clone(), role: Role(CONTROLLER.to_string()) });
+            keys.insert(Hex64::of(&controller.raw()), Key { public: controller.clone(), role: Role::controller() });
         }
-        TrustStore { keys, threshold: self.threshold, ..TrustStore::default() }
+        // K6: the key sequence of the anchor's controller key is 0, and a store with none writes none
+        let key_seq = self.controller.as_ref().map(|_| 0);
+        TrustStore { keys, key_seq, threshold: self.threshold, ..TrustStore::default() }
     }
 
     /// The id of the controller key the anchor names.

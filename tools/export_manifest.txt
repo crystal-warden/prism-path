@@ -50,6 +50,7 @@ prismpath-hotswap-rs/src/dist/install.rs
 prismpath-hotswap-rs/src/dist/mod.rs
 prismpath-hotswap-rs/src/dist/pep.rs
 prismpath-hotswap-rs/src/dist/state_record.rs
+prismpath-hotswap-rs/src/dist/statement.rs
 prismpath-hotswap-rs/src/dist/trust.rs
 prismpath-hotswap-rs/src/dist/verify.rs
 prismpath-hotswap-rs/src/flow_authority.rs
@@ -71,6 +72,7 @@ prismpath-hotswap-rs/tests/test_distribution_cross_language.rs
 prismpath-hotswap-rs/tests/test_distribution_install.rs
 prismpath-hotswap-rs/tests/test_distribution_pep.rs
 prismpath-hotswap-rs/tests/test_distribution_reconciling.rs
+prismpath-hotswap-rs/tests/test_distribution_statement.rs
 prismpath-hotswap-rs/tests/test_host_corners.rs
 prismpath-hotswap-rs/tests/test_host_crash.rs
 prismpath-hotswap-rs/tests/test_host_cross_language.rs
