@@ -11,7 +11,7 @@
 pub const CAUSE_NONE: u8 = 0;
 
 /// `registry_sha256()` of the Python registry when this file was generated.
-pub const REGISTRY_SHA256: &str = "db8bffeb055c77435cecbad64858ab2b5c720c3429dd24d17d06a09b111f15bb";
+pub const REGISTRY_SHA256: &str = "bd4e4964001bb5f3db786a1f0178e86b07c8c36d42679f23fc23cbffc0c63a56";
 
 /// The cause class, the semantic axis of the registry.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -313,6 +313,8 @@ pub const DIST_FLOOR_RATE: u8 = 166;
 pub const DIST_FLOOR_BROAD: u8 = 167;
 /// `dist:answer-unbound`
 pub const DIST_ANSWER_UNBOUND: u8 = 168;
+/// `dist:reconciling`
+pub const DIST_RECONCILING: u8 = 169;
 
 /// Every registered cause, in registry order.
 pub const REGISTRY: &[Cause] = &[
@@ -450,6 +452,7 @@ pub const REGISTRY: &[Cause] = &[
     Cause { code: 166, name: "dist:floor-rate", class: CauseClass::Routing, description: "a request the action floor would have allowed, escalated because the signed rate of floor allows is spent, or an operator's answer refused past its signed answer rate" },
     Cause { code: 167, name: "dist:floor-broad", class: CauseClass::Envelope, description: "an action floor with a default or catch all, a rule that names no one action or lacks a required test, a test of a field that is not independent, or more rules or entries than its bound" },
     Cause { code: 168, name: "dist:answer-unbound", class: CauseClass::Authority, description: "an operator's signed answer that names no open escalation of this enforcement point, or one already answered" },
+    Cause { code: 169, name: "dist:reconciling", class: CauseClass::State, description: "a decision the action floor and the fallback policy leave, a commit or a rollback asked of an enforcement point whose runtime may not run what it holds, after the runtime step of a commit, a rollback, a lapse, an install set or a start failed; marked in every state record while it lasts and filed by the controller" },
 ];
 
 /// The engine's stop vocabulary mapped onto the registry; `terminal` and `waiting` are clean and have no cause.

@@ -35,7 +35,7 @@ execute it are not carried.
 
 | Item | Value | Where it is checked |
 |---|---|---|
-| Cause registry | sha256 `db8bffeb055c77435cecbad64858ab2b5c720c3429dd24d17d06a09b111f15bb` over the registry, every identifier and meaning frozen | `prismpath/tests/test_causes.py` |
+| Cause registry | sha256 `bd4e4964001bb5f3db786a1f0178e86b07c8c36d42679f23fc23cbffc0c63a56` over the registry, every identifier and meaning frozen | `prismpath/tests/test_causes.py` |
 | Pack format | `ppt-pack/1` | `prismpath/tests/test_policy_pack.py` |
 | Signing suites | the crypto agility registry | `prismpath/tests/test_crypto_registry.py`, `test_crypto_agility.py` |
 | Wire framing | Facet/1 packed records, epochs, receipts | `prismpath/telemetry/tests` and `prismpath-telemetry-rs/tests` |
@@ -65,7 +65,7 @@ Adopted byte for byte. Each crate carries the files its tests read as byte ident
 | `prismpath/portable/conformance/reach.json` | `98f00afc250f68dc8b552905236fdca221e0e4ee31bc306644c290cd017ff9d6` |
 | `prismpath/portable/conformance/safety.json` | `c1a5c7e5bbe3ada30a275d9c803572497bf9c8f2a0f240a0e8aea208ef6febe1` |
 | `prismpath/portable/conformance/canon2.json` | `d7586e08b0553c6c43c96ce4ceb28f848220b5847c11514b914c5c19347120f9` |
-| `prismpath/portable/conformance/causes.json` | `8208b789ece89b2b76c83ca27f297a843bea7d8ce4fce954fb108192e71645e5` |
+| `prismpath/portable/conformance/causes.json` | `61aea0827ed6a244a740651784cffb584a3a633af835e367c4ac28a706fe9a2c` |
 | `prismpath/portable/conformance/contract.json` | `4870c09d492e8b284c295f711b069b336b524e9397e7cb8a97609a25a3aabf7c` |
 | `prismpath/portable/conformance/host_trace.json` | `b8b2e544933b8686b82208ae4055463b01a9870c17512595d6b99a6d00d07923` |
 | `prismpath/portable/conformance/parse_limits.json` | `d8ab4b07445cb0feb0babdfdaf3ad76fefd4873f8a4e2d09b5aeeee51ac16bf2` |
@@ -79,7 +79,7 @@ Adopted byte for byte. Each crate carries the files its tests read as byte ident
 | `prismpath/telemetry/conformance/spiral.json` | `050b031bf5c55cbf0fbd88a562ad80a58446b1466a10d1126fc974bb9a0dc444` |
 | `prismpath/telemetry/conformance/refresh.json` | `354097ed1289233787789718baeb2f03367f56e303d6fac213621571dd9f0194` |
 | `prismpath/telemetry/conformance/replay.json` | `8cc5617e2e08c36fcdaf8c577360384d0f6eb1fc73e2877f59b434cf94890bdd` |
-| `prismpath/telemetry/conformance/receipt_stream.json` | `fe8db1380d0ecd5258fab7ddb4ea3f152963d76bece20d64368030bc18dd1a55` |
+| `prismpath/telemetry/conformance/receipt_stream.json` | `d364917638b5be1f56f65d40d07033c03d8d7a64e8d1c35100b749ed12e85c3e` |
 | `prismpath/telemetry/conformance/concentrator.json` | `3e8730d0ec208c7ccba34df20b597105bffade447f73249d8cb50c956885f706` |
 
 `prismpath/portable/conformance/flows.json` and `locked_flows.json` are regenerated, in research as well: every `expect` carries `cause`, the registry code `RunResult.cause` holds when the run stops (0 for `terminal` and `waiting`, 37 `route:contract-violation`, 36 `route:stuck`, 35 `route:max-steps`, 34 `route:needs-human`, 33 `route:below-human-floor`), and `prismpath-rs`'s conformance binary compares it. `flows.json` also holds 80 cases after the 27 frozen ones (107 in all; the product's earlier 45 were extended with the error kinds, the guard records and the refusal of a negative `max_transcript`) (`prismpath/portable/engine_surface_fixtures.py`) for the engine options the frozen cases leave out: each has `opts` (`type_gate`, `max_transcript`) and expects the `contract_violation` stop with its `violations`, and the persisted `transcript` and `state_dropped` after a `@state_bound`; a malformed `@state_bound` expects the error. A kernel that does not implement the options skips a case that has `opts`, and the 27 frozen cases and their order are unchanged. Their adopted hashes above are research's.

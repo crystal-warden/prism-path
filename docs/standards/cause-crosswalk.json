@@ -2762,6 +2762,23 @@
     ],
     "rationale": "Nearest entry. The signature is good, and the answer is refused because what it signs is not an open escalation of this enforcement point."
    }
+  },
+  "169": {
+   "name": "dist:reconciling",
+   "class": "state",
+   "kind": "internal",
+   "owasp_asi": {
+    "ids": [],
+    "none": "An enforcement point whose runtime did not take a switch of policy, which withdraws its runtime, refuses what its action floor and fallback policy leave, and reports what the runtime may still run until the two agree. It records a condition, not a weakness or an attack."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "An enforcement point whose runtime did not take a switch of policy, which withdraws its runtime, refuses what its action floor and fallback policy leave, and reports what the runtime may still run until the two agree. It records a condition, not a weakness or an attack."
+   },
+   "cwe": {
+    "ids": [],
+    "none": "An enforcement point whose runtime did not take a switch of policy, which withdraws its runtime, refuses what its action floor and fallback policy leave, and reports what the runtime may still run until the two agree. It records a condition, not a weakness or an attack."
+   }
   }
  }
 }
