@@ -50,7 +50,7 @@ pub fn release_id(artifacts: &[(ArtifactKind, Hex64)]) -> Result<Hex64, Refused>
     let mut pairs: Vec<(&str, &str)> = artifacts.iter().map(|(artifact, body)| (artifact.name(), body.as_str())).collect();
     pairs.sort_unstable();
     require(!pairs.is_empty() && pairs.windows(2).all(|pair| pair[0].0 != pair[1].0), "a release names each artifact once")?;
-    require(artifacts.iter().all(|(artifact, _)| !artifact.is_trust()), "a release id names no trust kind")?;
+    require(artifacts.iter().all(|(artifact, _)| artifact.may_be_installed()), "a release id names no trust kind")?;
     let bytes = codec::to_bytes(&pairs).map_err(|error| Refused::new(BAD_FORMAT, error.to_string()))?;
     Ok(Hex64::of(&bytes))
 }
@@ -90,8 +90,8 @@ impl EnvelopeDoc {
             !trust_stream || (self.policy_sha256 == Hex64::zero() && self.release == Hex64::zero()),
             "a @trust envelope's policy_sha256 and release are 64 zeros",
         )?;
-        if self.artifact.is_trust() {
-            require(self.expires == 0, "a trust kind's expires is 0")?; // E5, X4
+        if self.artifact.is_trust() || self.artifact.is_install() {
+            require(self.expires == 0, "a trust or an install kind's expires is 0")?; // E5, X4, IS1
         } else {
             require(self.expires > self.not_before, "expires is not above not_before")?; // E5
         }
@@ -160,7 +160,11 @@ pub fn read(envelope_bytes: &[u8]) -> Result<Envelope, Refused> {
     let doc: EnvelopeDoc = load(envelope_bytes, "envelope")?;
     doc.check()?;
     let meta = doc.read_meta()?;
-    Ok(Envelope { doc, meta, raw: envelope_bytes.to_vec() })
+    let envelope = Envelope { doc, meta, raw: envelope_bytes.to_vec() };
+    if envelope.artifact.is_install() || envelope.artifact == ArtifactKind::OperatorAnswer {
+        super::install::check_envelope(&envelope)?; // IS1, IS11, OP2
+    }
+    Ok(envelope)
 }
 
 /// S1: what every signature covers, the DSSE pre-authentication encoding of the envelope bytes with the

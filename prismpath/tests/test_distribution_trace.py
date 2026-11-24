@@ -46,7 +46,7 @@ C_KINDS = frozenset({"mesh", "cfs"})
 # 243: the Rust PEP stages, aborts and applies trust statements while reconciling, and taking a controller statement
 # waits for the controller key in Rust. 246: the Rust PEP lapses a held release that expires or is revoked while
 # reconciling, and the ceiling and fallback runs wait for section 21 in Rust.
-PARTIAL = {"P": frozenset(), "R": frozenset({243, 246}), "C": frozenset({220})}
+PARTIAL = {"P": frozenset(), "R": frozenset({243}), "C": frozenset({220})}
 # 193, 194: Python's action floor writes `would` and counts overrides, and the `xdp` halves (a floor allow counted with
 # no `would`, a floor with a `rate` refused) wait for the `xdp` kind (PR 11); 193's `cfs` lines wait for the core run
 # writer of section 21 (RC4).
@@ -58,7 +58,7 @@ PARTIAL["P"] = PARTIAL["P"] | frozenset({193, 194})
 PARTIAL["P"] = PARTIAL["P"] | frozenset({187, 223, 225})
 PENDING = {
     "P": "104-105 164 187 191 193-194 206 223 225 266 272-273",
-    "R": "137-138 161-163 165-166 169-172 174-178 182-183 186 188-190 193 195 197 199 201-202 204-205 207 213 215 218 221 223-227 230 233-236 243 246 256-262 265-266 269-272 276-280 281",
+    "R": "137-138 243 256-260 262 269-272 276-279 281",
     "C": "97 104-105 122 193 202 220 230 235 256-261 269-271 276-280 281",
 }
 

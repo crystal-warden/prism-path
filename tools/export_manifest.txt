@@ -45,6 +45,8 @@ docs/standards/taxonomies/owasp_agentic_top10.json
 prismpath-hotswap-rs/Cargo.toml
 prismpath-hotswap-rs/README.md
 prismpath-hotswap-rs/src/dist/envelope.rs
+prismpath-hotswap-rs/src/dist/floor.rs
+prismpath-hotswap-rs/src/dist/install.rs
 prismpath-hotswap-rs/src/dist/mod.rs
 prismpath-hotswap-rs/src/dist/pep.rs
 prismpath-hotswap-rs/src/dist/state_record.rs
@@ -57,6 +59,7 @@ prismpath-hotswap-rs/src/merkle.rs
 prismpath-hotswap-rs/src/pyval.rs
 prismpath-hotswap-rs/src/root_statement.rs
 prismpath-hotswap-rs/tests/common/dist.rs
+prismpath-hotswap-rs/tests/common/install.rs
 prismpath-hotswap-rs/tests/common/mod.rs
 prismpath-hotswap-rs/tests/fixtures/distribution.json
 prismpath-hotswap-rs/tests/fixtures/host_trace.json
@@ -65,6 +68,7 @@ prismpath-hotswap-rs/tests/fixtures/receipts.json
 prismpath-hotswap-rs/tests/test_cause_names.rs
 prismpath-hotswap-rs/tests/test_distribution_conformance.rs
 prismpath-hotswap-rs/tests/test_distribution_cross_language.rs
+prismpath-hotswap-rs/tests/test_distribution_install.rs
 prismpath-hotswap-rs/tests/test_distribution_pep.rs
 prismpath-hotswap-rs/tests/test_distribution_reconciling.rs
 prismpath-hotswap-rs/tests/test_host_corners.rs

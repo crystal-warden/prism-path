@@ -158,6 +158,13 @@ A runtime step that fails after its record is durable leaves the machine `reconc
 spec): it withdraws the runtime, refuses every decision, commit and rollback with `dist:reconciling`, and
 tries again only at a tick or a start. `tests/test_distribution_reconciling.rs` runs that state case by case.
 
+The bounds an engineer installs (section 21 of the spec) are `dist::install` and `dist::floor`. Install
+statements signed by install keys, held in an install record apart from the trust store, give the host an
+action floor it asks first on every request (`Pep::decide_request`), a fallback policy the host runs whenever
+no release decides, and a ceiling list every release and install set must be inside. A `/2` anchor brings the
+install keys and the first statements. `HostAdapter::with_layout` names the layout document an action floor is
+held narrow to. `tests/test_distribution_install.rs` runs section 21 case by case.
+
 `tests/test_distribution_pep.rs` runs the machine case by case, a commit killed at each of its steps and
 at each step of the host's install among them, and `tests/test_distribution_cross_language.rs` has a
 release Python sealed committed by the Rust host and accepted by the Python controller, and the reverse.
