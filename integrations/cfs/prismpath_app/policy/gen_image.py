@@ -25,6 +25,7 @@ What the C table carries beside the image (prismpath_app_policy_image.inc):
 """
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 from typing import Dict, List, Tuple
@@ -66,9 +67,28 @@ def field_defs(doc: dict) -> List[Tuple[str, str, int, int]]:
     return out
 
 
-def layout_signature(defs: List[Tuple[str, str, int, int]]) -> str:
-    """The text the C layout hashes: `name:int:min:max;` or `name:bool;` per field, in register order."""
-    return "".join(f"{n}:int:{lo}:{hi};" if k == "int" else f"{n}:bool;" for n, k, lo, hi in defs)
+LAYOUT_H = HERE.parent / "fsw" / "inc" / "prismpath_app_layout.h"
+_ROW = re.compile(r'X\(\s*(\d+),\s*"(\w+)",\s*(INT|BOOL|MONITOR),\s*(\d+),\s*(\d+),\s*(-?\d+),\s*(-?\d+),\s*'
+                  r'(COMMAND|PARAMETER|INDEPENDENT|PROPOSER)\s*\)')
+
+
+def layout_rows(text: str = None) -> List[Tuple[int, str, str, int, int, int, int, str]]:
+    """(register, name, KIND, offset, width, min, max, ROLE) per row of the C layout header, in register order."""
+    text = LAYOUT_H.read_text() if text is None else text
+    return [(int(reg), name, kind, int(off), int(width), int(lo), int(hi), role)
+            for reg, name, kind, off, width, lo, hi, role in _ROW.findall(text)]
+
+
+def layout_roles() -> Dict[str, str]:
+    """The AF9 and AF10 label of each field the layout header holds, lower case."""
+    return {name: role.lower() for _reg, name, _kind, _off, _width, _lo, _hi, role in layout_rows()}
+
+
+def layout_signature(defs: List[Tuple[str, str, int, int]], roles: Dict[str, str] = None) -> str:
+    """The text the C layout hashes: `name:int:min:max:role;` or `name:bool:role;` per field, in register order. The
+    labels are the layout header's, so a table is built for them."""
+    roles = layout_roles() if roles is None else roles
+    return "".join(f"{n}:int:{lo}:{hi}:{roles[n]};" if k == "int" else f"{n}:bool:{roles[n]};" for n, k, lo, hi in defs)
 
 
 def fnv1a32(text: str) -> int:

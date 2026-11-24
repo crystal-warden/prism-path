@@ -780,6 +780,7 @@ prismpath/tests/test_crypto_registry.py
 prismpath/tests/test_deferral.py
 prismpath/tests/test_distribution_agent_home.py
 prismpath/tests/test_distribution_c.py
+prismpath/tests/test_distribution_c_cfs.py
 prismpath/tests/test_distribution_controller.py
 prismpath/tests/test_distribution_corpus.py
 prismpath/tests/test_distribution_crash.py
