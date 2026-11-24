@@ -48,6 +48,7 @@ pub const HATCH_REFUSED: &str = "dist:hatch-refused";
 pub const NOT_STAGED: &str = "dist:not-staged";
 pub const POLICY_LAPSED: &str = "dist:policy-lapsed";
 pub const FLOOR_LOST: &str = "dist:floor-lost";
+pub const RECONCILING: &str = "dist:reconciling";
 pub const HELD: &str = "dist:held";
 pub const WIDENING_UNSIGNED: &str = "dist:widening-unsigned";
 pub const LEGACY_REFUSED: &str = "dist:legacy-refused";
@@ -57,11 +58,11 @@ pub const SIDECAR_MISMATCH: &str = "spiral:sidecar-hash-mismatch";
 /// D2: a dev build is the cargo feature `dev-hatches`, off by default, and no environment or setting makes one.
 pub const DEV_BUILD: bool = cfg!(feature = "dev-hatches");
 /// Every cause this module reports itself, each a registered name (`tests` checks the registry).
-pub const CAUSES: [&str; 25] = [
+pub const CAUSES: [&str; 26] = [
     BAD_FORMAT, NOT_CANONICAL, UNKNOWN_KEY, TARGET_MISMATCH, BODY_MISMATCH, SEQ_REPLAY, NOT_YET_VALID,
     EXPIRED, REVOKED, TRUST_REPLAY, TOO_LARGE, INCOMPLETE, SIG_INVALID, SIG_REVOKED_KEY, ROTATION_INVALID,
     HATCH_REFUSED, NOT_STAGED, POLICY_LAPSED, FLOOR_LOST, HELD, WIDENING_UNSIGNED, LEGACY_REFUSED, STATE_INVALID,
-    SIDECAR_MISSING, SIDECAR_MISMATCH,
+    SIDECAR_MISSING, SIDECAR_MISMATCH, RECONCILING,
 ];
 
 /// E1 `seq`, and every integer the format carries: canon/2's exact range.
@@ -381,14 +382,6 @@ fixed_string!(StagedFormat = "prismpath.dist-staged/1");
 fixed_string!(PendingFormat = "prismpath.dist-pending/1");
 fixed_string!(CounterFormat = "prismpath.dist-counter/1");
 fixed_string!(SettingFormat = "prismpath.dist-setting/1");
-fixed_string!(
-    /// A lapse made durable whose report is owed (`pep`), a file of the Rust machine only.
-    OwedFormat = "prismpath.dist-owed/1"
-);
-fixed_string!(
-    /// The highest epoch id a PEP saw (`pep`), a file of the Rust machine only.
-    EpochFormat = "prismpath.dist-epoch/1"
-);
 
 /// A closed list of names (E8), each variant written as its name and ordered by it.
 macro_rules! kind_names {

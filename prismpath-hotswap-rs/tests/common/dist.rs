@@ -94,6 +94,7 @@ pub struct Args {
     pub meta: Option<Value>,
     pub stream: String,
     pub targets: Vec<TargetKind>,
+    pub widens: bool,
 }
 
 impl Default for Args {
@@ -108,6 +109,7 @@ impl Default for Args {
             meta: None,
             stream: STREAM.to_string(),
             targets: vec![TargetKind::Host],
+            widens: false,
         }
     }
 }
@@ -143,7 +145,7 @@ pub fn envelope(artifact: ArtifactKind, body: &[u8], args: &Args) -> Vec<u8> {
         seq: args.seq,
         stream: if trust_stream { env::TRUST_STREAM.to_string() } else { args.stream.clone() },
         targets: args.targets.iter().copied().collect(),
-        widens: false,
+        widens: args.widens,
     };
     env::build(doc, body).unwrap()
 }

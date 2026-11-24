@@ -16,11 +16,14 @@ use sha2::{Digest, Sha256};
 pub const MAGIC: &[u8; 4] = b"PPSR";
 pub const VERSION: u8 = 1;
 pub const PAYLOAD_TYPE: &str = "application/vnd.prismpath.dist-state";
-/// H1 `event`, by its code.
-pub const EVENTS: [&str; 10] =
-    ["beat", "staged", "refused", "committed", "aborted", "trust-applied", "lapsed", "rolled-back", "provisioned", "held"];
+/// H1 `event`, by its code. Events 10 to 13 belong to section 21, which this crate does not build yet; they
+/// are named so a record carrying one reads.
+pub const EVENTS: [&str; 15] = [
+    "beat", "staged", "refused", "committed", "aborted", "trust-applied", "lapsed", "rolled-back", "provisioned", "held",
+    "fallback", "install-applied", "install-widened", "answered", "reconciling",
+];
 /// H1 `status`, its low bits.
-pub const STATES: [&str; 3] = ["no-policy", "active", "locked"];
+pub const STATES: [&str; 4] = ["no-policy", "active", "locked", "reconciling"];
 pub const STAGED_BIT: u8 = 0x80;
 pub const DEV_BUILD_BIT: u8 = 0x40;
 pub const HELD_BIT: u8 = 0x20;
@@ -29,6 +32,102 @@ pub const MAX_EXTENSIONS: usize = 512;
 pub const SIGNATURE_SIZE: usize = 64;
 /// Bytes 0 to 143, the fixed part.
 pub const HEAD_SIZE: usize = 144;
+/// H10, H14: the extension type of the reconciling entry and its length.
+pub const RECONCILING_TYPE: u8 = 4;
+pub const RECONCILING_SIZE: usize = 58;
+
+/// H14: the reconciling entry, the one extension a reconciling PEP's record carries. `owed` is an event of H1
+/// or `beat` for none, and the hashes are the 16 byte prefixes H1 carries.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReconcilingEntry {
+    pub owed: &'static str,
+    pub cause: Option<String>,
+    pub running_policy: [u8; 16],
+    pub running_release: [u8; 16],
+    pub running_seq: u64,
+    pub floor: [u8; 16],
+}
+
+/// H14: the events a transition can owe, by their code.
+const OWED: [u8; 7] = [0, 3, 6, 7, 10, 11, 12];
+
+impl ReconcilingEntry {
+    /// The 58 bytes of H14.
+    pub fn bytes(&self) -> Result<Vec<u8>, String> {
+        let owed = EVENTS.iter().position(|name| *name == self.owed).map(|code| code as u8).filter(|code| OWED.contains(code));
+        let owed = owed.ok_or_else(|| format!("{:?} is not an event a transition owes", self.owed))?;
+        let cause = match &self.cause {
+            None => 0,
+            Some(cause) => causes::code(cause).ok_or_else(|| format!("{cause:?} is not a registered cause"))?,
+        };
+        let mut out = Vec::with_capacity(RECONCILING_SIZE);
+        out.extend_from_slice(&[owed, cause]);
+        out.extend_from_slice(&self.running_policy);
+        out.extend_from_slice(&self.running_release);
+        out.extend_from_slice(&self.running_seq.to_le_bytes());
+        out.extend_from_slice(&self.floor);
+        debug_assert_eq!(out.len(), RECONCILING_SIZE);
+        Ok(out)
+    }
+
+    /// The entry as one extension of H10: its type, its two byte length and its bytes.
+    pub fn extension(&self) -> Vec<u8> {
+        let bytes = self.bytes().expect("a PEP names only events and causes that are registered");
+        let mut out = vec![RECONCILING_TYPE];
+        out.extend_from_slice(&(RECONCILING_SIZE as u16).to_le_bytes());
+        out.extend_from_slice(&bytes);
+        out
+    }
+
+    fn read(data: &[u8]) -> Result<ReconcilingEntry, Refused> {
+        if data.len() != RECONCILING_SIZE || !OWED.contains(&data[0]) {
+            return Err(invalid("a reconciling entry that does not read"));
+        }
+        let cause = match data[1] {
+            0 => None,
+            code => Some(causes::name(code).ok_or_else(|| invalid("an unregistered cause"))?.to_string()),
+        };
+        Ok(ReconcilingEntry {
+            owed: EVENTS[usize::from(data[0])],
+            cause,
+            running_policy: sixteen_at(data, 2),
+            running_release: sixteen_at(data, 18),
+            running_seq: u64_at(data, 34),
+            floor: sixteen_at(data, 42),
+        })
+    }
+}
+
+/// H10: the extensions of a record as (type, bytes), or `fleet:state-invalid` when they do not read.
+pub fn extensions(area: &[u8]) -> Result<Vec<(u8, &[u8])>, Refused> {
+    let mut out = Vec::new();
+    let mut rest = area;
+    while !rest.is_empty() {
+        if rest.len() < 3 {
+            return Err(invalid("an extension that does not read"));
+        }
+        let size = u16_at(rest, 1);
+        if rest.len() < 3 + size {
+            return Err(invalid("an extension that does not read"));
+        }
+        out.push((rest[0], &rest[3..3 + size]));
+        rest = &rest[3 + size..];
+    }
+    Ok(out)
+}
+
+/// H14: the reconciling entry of a record that reads, None when it carries none. Status 3 with no entry or with
+/// more than one, an entry under status 0 or 1, and an entry that does not read are `fleet:state-invalid`.
+pub fn reconciling_entry(record: &StateRecord) -> Result<Option<ReconcilingEntry>, Refused> {
+    let entries: Vec<&[u8]> =
+        extensions(&record.extensions)?.into_iter().filter(|(kind, _)| *kind == RECONCILING_TYPE).map(|(_, bytes)| bytes).collect();
+    match (record.state, entries.as_slice()) {
+        ("reconciling", [entry]) | ("locked", [entry]) => ReconcilingEntry::read(entry).map(Some),
+        ("reconciling", _) => Err(invalid("status 3 carries exactly one reconciling entry")),
+        (_, []) => Ok(None),
+        _ => Err(invalid("a reconciling entry under a status that has none")),
+    }
+}
 
 /// The first 16 bytes of a SHA-256 given in hex, or zeros for none.
 pub fn prefix(hex64: Option<&str>) -> [u8; 16] {
@@ -234,6 +333,7 @@ fn parse(data: &[u8]) -> Result<(StateRecord, &[u8], &[u8]), Refused> {
         body: data[HEAD_SIZE + 2..HEAD_SIZE + 2 + m].to_vec(),
         extensions: data[HEAD_SIZE + 4 + m..end].to_vec(),
     };
+    reconciling_entry(&record)?;
     Ok((record, &data[..end], &data[end..]))
 }
 

@@ -71,15 +71,20 @@ if step["op"] == "python_seals":
     header = pp.read_ppt_header(body)
     meta = {"counts": {name: header[name] for name in ("atoms", "nodes", "edges", "prog_words", "max_steps", "max_stack")},
             "fields": {"x": "int"}, "qualification": "dist-demo", "wcet_cycles": pp.wcet_cycles(body)}
-    envelope_bytes = env.build("policy.ppt", body, stream=STREAM, seq=1, targets=["host"], not_before=NOT_BEFORE,
-                               expires=EXPIRES, meta=meta, policy_sha256=canon.sha256_hex(body),
-                               release=env.release_id([("policy.ppt", canon.sha256_hex(body))]))
-    sealed = env.seal(envelope_bytes, [key("A")])
+    # a first install is larger than no policy, so it says it widens and carries the owner's statement (W3, W6)
+    policy, release = canon.sha256_hex(body), env.release_id([("policy.ppt", canon.sha256_hex(body))])
+    statement = canon.canon2_bytes({canon.ENCODING_KEY: canon.CANON2, "format": "prismpath.dist-widening/1", "from": []})
+    common = dict(stream=STREAM, seq=1, targets=["host"], not_before=NOT_BEFORE, policy_sha256=policy, release=release,
+                  widens=True)
+    statement_sealed = env.seal(env.build("trust.widening", statement, expires=0, **common), [key("A")])
+    sealed = env.seal(env.build("policy.ppt", body, meta=meta, expires=EXPIRES, **common), [key("A")])
+    control.put(statement_sealed, statement)
     control.put(sealed, body)
     pep = control.enroll(bytes.fromhex(step["rust_public"]), "host", STREAM)
     control.offer("default", STREAM, 1)
     control.save()
-    out = {"anchor": anchor.hex(), "sealed": sealed.hex(), "body": body.hex(), "pep": pep,
+    out = {"anchor": anchor.hex(), "sealed": sealed.hex(), "body": body.hex(), "statement_sealed": statement_sealed.hex(),
+           "statement": statement.hex(), "pep": pep,
            "epoch": control.answer(pep)["epoch"], "qualification": QUALIFICATION}
 elif step["op"] in ("receive", "receive_and_commit"):
     control = controller()
@@ -96,8 +101,10 @@ elif step["op"] in ("receive", "receive_and_commit"):
     control.save()
 elif step["op"] == "python_commits":
     sealed, body = bytes.fromhex(step["sealed"]), bytes.fromhex(step["body"])
+    statement_sealed, statement = bytes.fromhex(step["statement_sealed"]), bytes.fromhex(step["statement"])
     control = controller()
     control.add_anchor(bytes.fromhex(step["anchor"]), QUALIFICATION)
+    control.put(statement_sealed, statement)
     stored = control.put(sealed, body)
     point = instance("P")
     pep_id = control.enroll(point.public_raw, "host", STREAM)
@@ -106,6 +113,7 @@ elif step["op"] == "python_commits":
     host = PolicyHost(state, [], dict(QUALIFICATION), instance_key=point)
     pep = Pep(state, HostAdapter(host), point, lambda: NOW)
     pep.confirm(pep.provision(bytes.fromhex(step["anchor"])))
+    pep.stage(statement_sealed, statement)
     pep.stage(sealed, body)
     receives = [control.receive(record) for record in pep.drain()]
     control.commit("default")
@@ -167,6 +175,7 @@ fn rust_commits_what_python_sealed(python: &Python) -> Committed {
     assert_eq!(pep_id, hex::encode(state_record::pep_id(&instance.verifying_key().to_bytes())));
     let decode = |name: &str| hex::decode(offered[name].as_str().unwrap()).unwrap();
     let (anchor, sealed, body) = (decode("anchor"), decode("sealed"), decode("body"));
+    let (statement_sealed, statement) = (decode("statement_sealed"), decode("statement"));
     assert_eq!(body, image(5), "Python compiles the image the corpus carries");
 
     let state = python.dir.join("rust_host");
@@ -176,12 +185,13 @@ fn rust_commits_what_python_sealed(python: &Python) -> Committed {
     let fingerprint = pep.provision(&anchor).unwrap();
     assert_eq!(fingerprint, h(&anchor));
     pep.confirm(&fingerprint).unwrap();
-    pep.see_epoch(offered["epoch"].as_u64().unwrap()).unwrap();
-    let staged = state_record::read(&pep.stage(&sealed, &body).unwrap(), &instance.verifying_key().to_bytes()).unwrap();
-    assert_eq!(staged.event, "staged");
+    for (sealed, body) in [(&statement_sealed, &statement), (&sealed, &body)] {
+        let staged = state_record::read(&pep.stage(sealed, body).unwrap(), &instance.verifying_key().to_bytes()).unwrap();
+        assert_eq!(staged.event, "staged");
+    }
 
     let first = python.run(json!({"op": "receive_and_commit", "records": hex_of(&pep.drain()), "pep": pep_id}));
-    assert_eq!(first["findings_filed"], json!([null, null]), "{first}");
+    assert_eq!(first["findings_filed"], json!([null, null, null]), "{first}");
     assert_eq!(first["member_state"], json!("committing"));
     let commit = &first["commit"][0];
     assert_eq!((commit["stream"].clone(), commit["seq"].clone()), (json!(STREAM), json!(1)));
@@ -218,10 +228,16 @@ fn a_release_python_sealed_is_committed_by_the_rust_host_and_its_records_are_acc
 fn a_release_rust_sealed_is_committed_by_the_python_host_and_its_records_read_in_rust() {
     let Some(python) = Python::new("the Python host PEP against the Rust writer") else { return };
     let body = image(7);
-    let sealed = ppt(&body, &at(1));
+    // a first install is larger than no policy, so it says it widens and carries the owner's statement (W3, W6)
+    let release = release_of(&body);
+    let sealed = ppt(&body, &Args { release: Some(release.clone()), widens: true, ..at(1) });
+    let statement = widening(&[]);
+    let statement_args = Args { release: Some(release), policy: Some(h(&body)), widens: true, ..at(1) };
+    let statement_sealed = seal(ArtifactKind::TrustWidening, &statement, &statement_args);
     let anchor = anchor_of(&["A"]);
     let done = python.run(json!({"op": "python_commits", "anchor": hex::encode(&anchor), "sealed": hex::encode(&sealed),
-                                 "body": hex::encode(&body)}));
+                                 "body": hex::encode(&body), "statement_sealed": hex::encode(&statement_sealed),
+                                 "statement": hex::encode(&statement)}));
     assert_eq!(done["envelope_id"], json!(env::envelope_id(env::unseal(&sealed).unwrap().0).as_str()));
     assert!(done["findings_filed"].as_array().unwrap().iter().all(Value::is_null), "{done}");
     assert_eq!(done["rollout"], json!("committed"));

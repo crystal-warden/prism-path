@@ -151,8 +151,12 @@ let mut pep = Pep::new("state", HostAdapter::new(host), instance_key, Box::new(n
 let fingerprint = pep.provision(&anchor)?;    // the operator compares it, then
 pep.confirm(&fingerprint)?;
 let ack = pep.stage(&sealed, &body)?;         // a signed state record, event staged or refused
-let done = pep.commit("host/demo", 1, &policy_sha256)?;
+let done = pep.commit("host/demo", 1, &policy_sha256, 0)?;
 ```
+
+A runtime step that fails after its record is durable leaves the machine `reconciling` (section 9.5 of the
+spec): it withdraws the runtime, refuses every decision, commit and rollback with `dist:reconciling`, and
+tries again only at a tick or a start. `tests/test_distribution_reconciling.rs` runs that state case by case.
 
 `tests/test_distribution_pep.rs` runs the machine case by case, a commit killed at each of its steps and
 at each step of the host's install among them, and `tests/test_distribution_cross_language.rs` has a

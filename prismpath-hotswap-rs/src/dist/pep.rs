@@ -8,8 +8,7 @@
 //!
 //! Its durable store is `<state>/dist/`, under the file names the Python machine uses, each canon/2 and written
 //! whole (the old one or the new one). The two machines are not held to open each other's directory: the audit
-//! log here is the host's unsigned one, and DIVERGENCES.md lists what else differs. The last two files below
-//! are this machine's only:
+//! log here is the host's unsigned one, and DIVERGENCES.md lists what else differs.
 //!
 //! ```text
 //! anchor.json    the confirmed trust anchor (P2), which names the target kind and the stream
@@ -19,19 +18,17 @@
 //! counter.json   the state record counter (H3)
 //! setting.json   the expiry response the PEP was provisioned with (X10)
 //! staged.json    the staged release
-//! pending.json   the intent record of a commit or a rollback
+//! pending.json   the intent record of a commit, a rollback or a lapse (C4, C7)
 //! active.json    the active release and the one it replaced (RB1)
 //! blobs/         sealed envelopes and bodies under their SHA-256
 //! audit.log      the audit log
-//! owed.json      a lapse made durable whose runtime step or report is not done yet
-//! epoch.json     the highest epoch id the controller sent (H9)
 //! ```
 //!
 //! A commit is durable in the order of C4: the intent, the floor, the audit event, the artifacts under
-//! content addressed names (staging already wrote them, each synced), the active record, the runtime switch,
-//! the clean up. A restart reads only what the active record names, and finishes or reports an interrupted
-//! commit. [`Pep::set_commit_hook`] runs before each of those steps, and an error stands for a process that
-//! died there.
+//! content addressed names (staging already wrote them, each synced), the active record, the runtime step,
+//! the state record, the clean up. A lapse is durable in the order of C7. A restart reads only what the active
+//! record names, and finishes or reports an interrupted transition. [`Pep::set_commit_hook`] runs before each
+//! of those steps, and an error stands for a process that died there.
 //!
 //! A store that cannot be read is answered by failing closed: an unreadable trust store refuses every
 //! envelope and decides nothing (K1, X3), and an unreadable floor, anchor or setting locks the PEP (Q5) until
@@ -41,16 +38,17 @@
 //! provisioning end a lock. The Python machine does the same, and the two change together if P3 is to hold
 //! for the counter.
 //!
-//! A flip or a lapse that fails after its record is durable leaves the runtime perhaps holding another release
-//! than the PEP: the PEP is reconciling. It decides nothing, and a commit, a rollback and a lapse wait, but it
-//! verifies and stages, applies trust statements, aborts, provisions and goes on sending state records. Those
-//! say `no-policy`, with the release the runtime may still hold as the active one and, after a flip, the
-//! release the PEP made active as the staged one. Only a tick, or a start, tries the runtime again, and first
-//! holds the PEP's active release to expiry and revocation. A release that fell then was never run: what ran is
-//! withdrawn, the commit is reported `refused` with the cause it fell for, and the PEP lapses with it. Otherwise
-//! the runtime is made to match and the owed `committed`, `rolled-back` or `lapsed` record goes. What is owed
-//! leaves `pending.json` or `owed.json` only after its record is made, so a restart sends it too, and the
-//! lapsed audit event is written once across one. A confirm withdraws the runtime first and ends the state.
+//! A runtime step that fails after the record it switches to is durable makes the PEP `reconciling` (section
+//! 9.5). It withdraws the runtime at once (C10), refuses every decision, commit and rollback with
+//! `dist:reconciling` (C8) and goes on verifying, staging, aborting and applying trust statements. Only a tick
+//! and a start try the runtime again (C9), each try holding the held release, and the running release while
+//! the withdrawal has not worked, to revocation and expiry first (C10). Every record it sends has status 3
+//! and the entry of H14. A switch between two releases whose bodies are the same, as a renewal's are, never
+//! enters the state (C10). Provisioning withdraws the runtime first and is refused when it does not (P5).
+//!
+//! This crate reads `prismpath.dist-trust/1` anchors only and does not build the `trust.controller` kind, so
+//! a PEP here holds no controller key (P4, K6). It takes no epoch id from anything (H9) and every record
+//! carries epoch 0, which is the id H15 starts at.
 //! A home holding the private half of a trusted authority key is refused at start (K2).
 
 use super::envelope::{self as env, Envelope};
@@ -58,10 +56,10 @@ use super::state_record::{self, StateRecord};
 use super::trust::{read_anchor, TrustStore};
 use super::verify::{self, Floor, PepKind, PepView, Staged, SKEW};
 use super::{
-    load, ActiveFormat, ArtifactKind, EpochFormat, OwedFormat, Canon2Tag, CounterFormat, FloorFormat, Hex64, MaybeHex64, Meta, PendingFormat,
+    load, ActiveFormat, ArtifactKind, Canon2Tag, CounterFormat, FloorFormat, Hex64, MaybeHex64, Meta, PendingFormat,
     Refused, SettingFormat, SortedSet, StagedFormat, Stream, Target, TargetKind, AUTHORITY, EXPIRED, FLOOR_LOST, HELD,
     INCOMPLETE, MAX_SEQ, NOT_STAGED, NOT_YET_VALID, POLICY_LAPSED, REVOKED, SEQ_REPLAY, SIDECAR_MISMATCH,
-    SIDECAR_MISSING, UNKNOWN_KEY, WIDENING_UNSIGNED,
+    SIDECAR_MISSING, UNKNOWN_KEY, WIDENING_UNSIGNED, RECONCILING,
 };
 use crate::host::{abspath, atomic_write_bytes, fsync_dir, AuditLog, Fields, HostError, PolicyHost};
 use ed25519_dalek::SigningKey;
@@ -246,11 +244,20 @@ struct StagedDoc {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+/// The intent record of a commit, a rollback or a lapse (C7): the transition, the release it makes active or
+/// none, the cause of a lapse, the release the runtime ran when it started, in full, and whether the runtime
+/// was withdrawn since (C10). The last three are read as none and false when absent, as in the Python form.
 struct PendingDoc {
+    #[serde(default)]
+    cause: Option<String>,
     encoding: Canon2Tag,
     format: PendingFormat,
     op: String,
     release: Option<ReleaseDoc>,
+    #[serde(default)]
+    running: Option<ReleaseDoc>,
+    #[serde(default)]
+    withdrawn: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -287,6 +294,22 @@ impl Release {
             release: envelope.release.clone(),
             replaces: envelope.replaces.clone(),
             widens: envelope.widens,
+            held: BTreeMap::new(),
+            envelopes: BTreeMap::new(),
+            bodies: BTreeMap::new(),
+            paths: BTreeMap::new(),
+        }
+    }
+
+    /// A release with the names of `doc` and nothing read yet.
+    fn named(doc: &ReleaseDoc) -> Release {
+        Release {
+            stream: doc.stream.clone(),
+            seq: doc.seq,
+            policy_sha256: doc.policy_sha256.clone(),
+            release: doc.release.clone(),
+            replaces: doc.replaces.clone(),
+            widens: doc.widens,
             held: BTreeMap::new(),
             envelopes: BTreeMap::new(),
             bodies: BTreeMap::new(),
@@ -402,42 +425,81 @@ const PKCS8_ED25519: [u8; 16] = [0x30, 0x2e, 0x02, 0x01, 0x00, 0x30, 0x05, 0x06,
 
 /// The public halves of the Ed25519 private keys in the file at `path`: each `PRIVATE KEY` block of a PEM file
 /// that holds one anywhere, as the Python tools write a key, or a raw 32 byte seed, as this crate's `keygen`
-/// writes one. A file over 16,384 bytes holds none.
+/// writes one. Only a regular file is opened, its type checked first, so a FIFO or a device in the home never
+/// stops the scan, and a file over 16,384 bytes holds none. The file is read as bytes, so a byte that is not
+/// UTF-8 anywhere in it hides no block.
 fn private_keys_in(path: &std::path::Path) -> Vec<[u8; 32]> {
-    let Some(data) = std::fs::metadata(path).ok().filter(|meta| meta.len() <= 16_384).and_then(|_| std::fs::read(path).ok()) else {
+    use std::io::Read;
+    const BOUND: u64 = 16_384;
+    let regular = std::fs::metadata(path).is_ok_and(|meta| meta.is_file() && meta.len() <= BOUND);
+    let Some(file) = regular.then(|| std::fs::File::open(path).ok()).flatten() else { return Vec::new() };
+    if !file.metadata().is_ok_and(|meta| meta.is_file()) {
         return Vec::new();
-    };
+    }
+    let mut data = Vec::new();
+    if file.take(BOUND + 1).read_to_end(&mut data).is_err() || data.len() as u64 > BOUND {
+        return Vec::new();
+    }
     let seeds: Vec<[u8; 32]> = if data.len() == 32 {
         data.as_slice().try_into().ok().into_iter().collect()
-    } else if data.windows(10).any(|window| window == b"-----BEGIN") && data.windows(11).any(|window| window == b"PRIVATE KEY") {
-        std::str::from_utf8(&data).map_or_else(|_| Vec::new(), |text| pem_private_blocks(text).iter().filter_map(|der| pkcs8_seed(der)).collect())
+    } else if find(&data, b"-----BEGIN").is_some() && find(&data, b"PRIVATE KEY").is_some() {
+        pem_private_blocks(&data).iter().filter_map(|der| pkcs8_seed(der)).collect()
     } else {
         Vec::new()
     };
     seeds.iter().map(|seed| SigningKey::from_bytes(seed).verifying_key().to_bytes()).collect()
 }
 
+/// Where `needle` first starts in `haystack`.
+fn find(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    haystack.windows(needle.len()).position(|window| window == needle)
+}
+
 /// The DER of each `PRIVATE KEY` block of a PEM text, each block read on its own, so a private key block
-/// beside a public one is still found. Whitespace inside a block, a carriage return among it, is skipped.
-fn pem_private_blocks(text: &str) -> Vec<Vec<u8>> {
+/// beside a public one is still found. A `-----BEGIN` with no label line or no matching end line is passed
+/// over and the scan goes on after it, so it hides no block that follows. The header lines of RFC 1421 a
+/// block may open with, up to the blank line after them, are skipped, and whitespace in the base64 is too.
+fn pem_private_blocks(text: &[u8]) -> Vec<Vec<u8>> {
+    const BEGIN: &[u8] = b"-----BEGIN ";
+    const DASHES: &[u8] = b"-----";
     let mut out = Vec::new();
     let mut rest = text;
-    while let Some(start) = rest.find("-----BEGIN ") {
-        let after = &rest[start + 11..];
-        let Some(label_end) = after.find("-----") else { break };
+    while let Some(start) = find(rest, BEGIN) {
+        let after = &rest[start + BEGIN.len()..];
+        let next = &rest[start + 1..]; // where the scan goes on when this is no block
+        let Some(label_end) = find(after, DASHES).filter(|end| !after[..*end].contains(&b'\n')) else {
+            rest = next;
+            continue;
+        };
         let label = &after[..label_end];
-        let body = &after[label_end + 5..];
-        let end_marker = format!("-----END {label}-----");
-        let Some(end) = body.find(&end_marker) else { break };
-        if label.ends_with("PRIVATE KEY") {
-            let base64: String = body[..end].chars().filter(|c| !c.is_whitespace()).collect();
-            if let Some(der) = base64_decode(&base64) {
+        let body = &after[label_end + DASHES.len()..];
+        let end_marker = [b"-----END ".as_slice(), label, DASHES].concat();
+        let Some(end) = find(body, &end_marker) else {
+            rest = next;
+            continue;
+        };
+        if label.ends_with(b"PRIVATE KEY") {
+            if let Some(der) = base64_decode(&pem_base64(&body[..end])) {
                 out.push(der);
             }
         }
         rest = &body[end + end_marker.len()..];
     }
     out
+}
+
+/// The base64 of a PEM block's body: its RFC 1421 header lines, when its first line is one, are dropped up to
+/// and with the blank line that ends them, and every whitespace byte is dropped.
+fn pem_base64(body: &[u8]) -> Vec<u8> {
+    let lines: Vec<&[u8]> = body.split(|byte| *byte == b'\n').map(|line| line.strip_suffix(b"\r").unwrap_or(line)).collect();
+    let first = lines.iter().position(|line| !line.iter().all(u8::is_ascii_whitespace)).unwrap_or(lines.len());
+    let headed = lines.get(first).is_some_and(|line| line.contains(&b':'));
+    let from = if headed {
+        lines[first..].iter().position(|line| line.iter().all(u8::is_ascii_whitespace)).map_or(lines.len(), |blank| first + blank + 1)
+    } else {
+        first
+    };
+    lines[from.min(lines.len())..].concat().into_iter().filter(|byte| !byte.is_ascii_whitespace()).collect()
 }
 
 /// The seed of a PKCS8 Ed25519 private key (RFC 8410), version 1, or version 2 with its public key after it.
@@ -458,7 +520,7 @@ fn pkcs8_seed(der: &[u8]) -> Option<[u8; 32]> {
 }
 
 /// Standard base64 with padding, or None.
-fn base64_decode(text: &str) -> Option<Vec<u8>> {
+fn base64_decode(bytes: &[u8]) -> Option<Vec<u8>> {
     let value = |byte: u8| match byte {
         b'A'..=b'Z' => Some(byte - b'A'),
         b'a'..=b'z' => Some(byte - b'a' + 26),
@@ -467,7 +529,6 @@ fn base64_decode(text: &str) -> Option<Vec<u8>> {
         b'/' => Some(63),
         _ => None,
     };
-    let bytes = text.as_bytes();
     if bytes.len() % 4 != 0 {
         return None;
     }
@@ -489,7 +550,7 @@ fn base64_decode(text: &str) -> Option<Vec<u8>> {
 }
 
 /// What `decide` answers: the decision made under the active release, or the cause every decision is
-/// refused with (X3), and the hold mark a receipt carries (X7).
+/// refused with (X3, C8), and the hold mark a receipt carries (X7).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Decision<T> {
     pub decision: Option<T>,
@@ -511,7 +572,6 @@ pub struct Pep<A: Adapter> {
     expiry_response: String,
     has_clock: bool,
     store: Store,
-    epoch: u64,
     held: bool,
     outbox: Vec<Vec<u8>>,
     hook: Option<PepHook>,
@@ -525,50 +585,55 @@ pub struct Pep<A: Adapter> {
     previous: Option<Release>,
     staged: Option<Release>,
     pending: Option<PendingDoc>,
-    /// The runtime may not hold what the PEP holds: a flip or a lapse failed after its record was durable. The
-    /// PEP decides nothing and reports nothing until `match_runtime` succeeds again.
-    unreconciled: bool,
-    /// The transition whose record and audit event wait for the runtime to match (C5, X1, H4).
-    owed: Option<Owed>,
-    /// While reconciling, the release the runtime may still hold, which the records report as active.
-    may_hold: Option<Release>,
+    /// Section 9.5 while it lasts.
+    reconciling: Option<Reconciling>,
+    /// C10: the runtime step of a switch between two releases with the same bodies failed. The PEP stays
+    /// active and each tick tries the step again.
+    retry_runtime: bool,
 }
 
-/// A transition already durable whose record is not sent yet: a flip whose runtime step failed, which
-/// `pending.json` holds across a restart, or a lapse whose runtime step failed, which `owed.json` holds.
+/// The record a transition owes once its runtime step works (C9, H14).
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Owed {
-    Flip { event: &'static str },
-    Lapse { cause: String, seq: Option<i64> },
+    Nothing,
+    Committed,
+    RolledBack,
+    Lapsed(String),
 }
 
-/// `owed.json`: a lapse made durable whose runtime step and report are not done yet, naming the release that
-/// lapsed by its seq and envelope ids.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct OwedDoc {
-    cause: String,
-    encoding: Canon2Tag,
-    envelopes: SortedSet<Hex64>,
-    format: OwedFormat,
-    seq: Option<i64>,
+impl Owed {
+    fn event(&self) -> &'static str {
+        match self {
+            Owed::Nothing => "beat",
+            Owed::Committed => "committed",
+            Owed::RolledBack => "rolled-back",
+            Owed::Lapsed(_) => "lapsed",
+        }
+    }
+
+    fn cause(&self) -> Option<&str> {
+        match self {
+            Owed::Lapsed(cause) => Some(cause),
+            _ => None,
+        }
+    }
 }
 
-/// `epoch.json`: the highest epoch id the controller sent (H9), so a restart never reports a lower one.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct EpochDoc {
-    encoding: Canon2Tag,
-    epoch: i64,
-    format: EpochFormat,
+/// The state of section 9.5. The held release is the active one. `running` is the release the runtime may
+/// still run, kept only while the withdrawal has not worked (C10).
+#[derive(Debug, Clone)]
+struct Reconciling {
+    owed: Owed,
+    running: Option<Release>,
+    withdrawn: bool,
+    /// The cause the running release fell for, named in every record until the withdrawal works (C10).
+    running_fell: Option<&'static str>,
 }
-
-/// What a call answers while the runtime may hold another release than the PEP.
-const RECONCILING: &str = "the runtime does not hold the PEP's release yet; the next tick tries again";
 
 impl<A: Adapter> Pep<A> {
-    /// The PEP over `<state_dir>/dist/`: its durable state read, its setting and key separation checked,
-    /// an interrupted commit finished or reported, and the runtime made to match what it holds.
+    /// The PEP over `<state_dir>/dist/`: its durable state read, its setting and key separation checked, an
+    /// interrupted transition finished or reported, and the runtime step of a start made (C6). A start whose
+    /// runtime step fails still starts, `reconciling`.
     pub fn new(
         state_dir: &str,
         adapter: A,
@@ -598,7 +663,6 @@ impl<A: Adapter> Pep<A> {
             expiry_response: expiry_response.to_string(),
             has_clock,
             store,
-            epoch: 0,
             held: false,
             outbox: Vec::new(),
             hook: None,
@@ -612,9 +676,8 @@ impl<A: Adapter> Pep<A> {
             previous: None,
             staged: None,
             pending: None,
-            unreconciled: false,
-            owed: None,
-            may_hold: None,
+            reconciling: None,
+            retry_runtime: false,
         };
         pep.load()?;
         pep.check_setting()?;
@@ -646,9 +709,6 @@ impl<A: Adapter> Pep<A> {
             return Ok(()); // P1: nothing to believe yet
         }
         self.trust = TrustStore::load(&self.trust_path());
-        if let Ok(doc) = self.store.read::<EpochDoc>("epoch.json") {
-            self.epoch = u64::try_from(doc.epoch).unwrap_or(0); // H9: what a restart reports is never lower
-        }
         // H3: the counter is kept apart from the floor. One that cannot be read must still never repeat: the PEP
         // locks, and its records count on from its time in microseconds, above any counter it can have sent one
         // record at a time.
@@ -703,10 +763,13 @@ impl<A: Adapter> Pep<A> {
         }
         if self.store.exists("pending.json") {
             self.pending = Some(self.store.read::<PendingDoc>("pending.json").unwrap_or(PendingDoc {
+                cause: None,
                 encoding: Canon2Tag,
                 format: PendingFormat,
                 op: "unknown".to_string(),
                 release: None,
+                running: None,
+                withdrawn: false,
             }));
         }
         Ok(())
@@ -735,18 +798,7 @@ impl<A: Adapter> Pep<A> {
     /// name's. Nothing the record does not name is ever read (C4).
     fn release_of(&self, doc: Option<&ReleaseDoc>) -> Result<Option<Release>, Refused> {
         let Some(doc) = doc else { return Ok(None) };
-        let mut release = Release {
-            stream: doc.stream.clone(),
-            seq: doc.seq,
-            policy_sha256: doc.policy_sha256.clone(),
-            release: doc.release.clone(),
-            replaces: doc.replaces.clone(),
-            widens: doc.widens,
-            held: BTreeMap::new(),
-            envelopes: BTreeMap::new(),
-            bodies: BTreeMap::new(),
-            paths: BTreeMap::new(),
-        };
+        let mut release = Release::named(doc);
         for (artifact, held) in &doc.held {
             let (Some(sealed), Some(body)) = (self.store.get(&held.sealed), self.store.get(&held.body)) else {
                 return Err(Refused::new(super::BAD_FORMAT, format!("a blob of {artifact} is missing or not its name's")));
@@ -763,9 +815,16 @@ impl<A: Adapter> Pep<A> {
         Ok(Some(release))
     }
 
-    /// K2: the instance key is never a trusted key, and the home holds no private half of one. The scan of the
-    /// home is bounded as the Python machine bounds it: not the PEP's own store, not the `runs` a home keeps, no
-    /// deeper than two levels, no file over 16,384 bytes and at most 4,096 files.
+    /// The running release an intent record names (C7). C11 keeps its blobs, so it reads whole; one that does
+    /// not is still named in the records, and its envelopes, which the tests of C10 read, are missing.
+    fn running_of(&self, doc: &ReleaseDoc) -> Release {
+        self.release_of(Some(doc)).ok().flatten().unwrap_or_else(|| Release { held: doc.held.clone(), ..Release::named(doc) })
+    }
+
+    /// K2: the instance key is never a trusted key, and the home holds no private half of one. The scan has the
+    /// bounds of the Python machine's `_check_separation`: not the PEP's own store, not the `runs` a home keeps,
+    /// no deeper than two levels, no file over 16,384 bytes and at most 4,096 files. What it reads in a file is
+    /// wider than Python's, as DIVERGENCES.md says.
     fn check_separation(&self, trust: &TrustStore) -> Result<(), PepError> {
         if trust.keys.contains_key(&self.instance_key_id) {
             return Err(refused("the instance key is also a trusted authority key (K2)"));
@@ -802,44 +861,39 @@ impl<A: Adapter> Pep<A> {
         Ok(())
     }
 
-    /// Finish or report an interrupted commit or rollback (C4), hold the staged and the active release to the
-    /// revocation test again (R5) and check expiry (X1), all before the runtime is made to match what the PEP
-    /// holds, so a release that fell while the PEP was down never runs again.
+    /// A start: finish or report an interrupted transition (C4, C7), hold the staged and the active release to
+    /// the revocation test again (R5) and check expiry (X1), then make the runtime run what the active record
+    /// names. A transition the intent record shows durable is owed its record, which goes once the runtime step
+    /// works, and the intent record with it (C12). A held release that fell while the PEP was down is never
+    /// installed (C10).
     fn recover(&mut self) -> Result<(), PepError> {
-        if let Some(pending) = self.pending.take() {
-            let finished = match (&self.active, &pending.release) {
-                (Some(active), Some(target)) => active.document() == *target,
+        let mut owed = Owed::Nothing;
+        let mut running = self.active.clone(); // C7: with no intent record the held release may be running
+        let mut withdrawn = false;
+        if let Some(intent) = self.pending.take().filter(|_| !self.locked) {
+            // a locked PEP read no active record, so its intent record waits for provisioning, which removes it
+            let flipped = match intent.op.as_str() {
+                "commit" | "rollback" => {
+                    matches!((&self.active, &intent.release), (Some(active), Some(target)) if active.document() == *target)
+                }
+                "lapse" => self.active.is_none() && intent.release.is_none(),
                 _ => false,
             };
-            if finished {
-                // the flip happened: its record goes once the runtime matches, and its clean up with it. Before a
-                // commit's flip the runtime held the release it replaced, which a commit keeps as the previous one
-                let rollback = pending.op == "rollback";
-                self.owed = Some(Owed::Flip { event: if rollback { "rolled-back" } else { "committed" } });
-                self.may_hold = if rollback { None } else { self.previous.clone() };
-                self.unreconciled = true;
+            if flipped {
+                owed = match intent.op.as_str() {
+                    "commit" => Owed::Committed,
+                    "rollback" => Owed::RolledBack,
+                    _ => Owed::Lapsed(intent.cause.clone().unwrap_or_else(|| POLICY_LAPSED.to_string())),
+                };
+                withdrawn = intent.withdrawn;
+                running = if withdrawn { None } else { intent.running.as_ref().map(|doc| self.running_of(doc)) };
             } else {
                 self.audit.append(
                     "distribution",
                     "commit_incomplete",
-                    vec![("op", json!(pending.op)), ("result", json!("incomplete"))],
+                    vec![("op", json!(intent.op)), ("result", json!("incomplete"))],
                 )?;
                 self.store.remove("pending.json")?;
-            }
-        }
-        if self.store.exists("owed.json") && !self.locked {
-            // owed only when the active record no longer names a release and the lapsed one is at or below the
-            // floor; otherwise the lapse never reached its active record, or the file is another's, and it goes.
-            // A locked PEP read no active record, so the file waits for provisioning, which removes it
-            let owed = self.store.read::<OwedDoc>("owed.json").ok().filter(|doc| {
-                self.active.is_none() && doc.seq.is_none_or(|seq| (0..=self.floor.seq).contains(&seq))
-            });
-            match owed {
-                Some(doc) => {
-                    self.owed = Some(Owed::Lapse { cause: doc.cause, seq: doc.seq });
-                    self.unreconciled = true;
-                }
-                None => self.store.remove("owed.json")?,
             }
         }
         // a flip that died before its clean up leaves the release it made active also staged: it is done
@@ -851,27 +905,30 @@ impl<A: Adapter> Pep<A> {
             self.drop_staged()?;
         }
         self.drop_fallen_staged()?;
-        if self.unreconciled {
-            // a runtime that still fails leaves the PEP refusing until a tick reconciles it
-            return self.reconcile().map(|_| ()).or(Ok(()));
+        if owed == Owed::Nothing {
+            if self.check_active()?.is_some() {
+                return Ok(()); // a lapse made its own runtime step
+            }
+        } else {
+            // C10's tests come before the step, as in every try
+            self.reconciling = Some(Reconciling { owed, running, withdrawn, running_fell: None });
+            self.run_tests(false)?;
+            let state = self.reconciling.take().expect("set above");
+            (owed, running) = (state.owed, state.running);
         }
-        self.check_active()?;
-        self.match_runtime()
+        let stepped = self.step(&owed);
+        match stepped {
+            Ok(()) if owed == Owed::Nothing => Ok(()),
+            Ok(()) => self.settle(owed).map(|_| ()),
+            Err(error) => self.enter_reconciling(owed, running, &error.to_string()).map(|_| ()), // C6: it still starts
+        }
     }
 
-    fn match_runtime(&self) -> Result<(), PepError> {
+    /// The runtime step: run the held release, or nothing when none is held or the PEP is locked (X3, C13).
+    fn step(&self, owed: &Owed) -> Result<(), PepError> {
         match (self.own_refusal(), &self.active) {
-            (None, Some(active)) => self.adapter.activate(active),
-            (Some(cause), _) => self.adapter.deactivate(self.owed_cause().unwrap_or(cause)),
-            (None, None) => self.adapter.deactivate(POLICY_LAPSED),
-        }
-    }
-
-    /// The cause of a lapse whose report is owed, which the runtime is told when it is made to refuse.
-    fn owed_cause(&self) -> Option<&str> {
-        match &self.owed {
-            Some(Owed::Lapse { cause, .. }) => Some(cause),
-            _ => None,
+            (None, Some(held)) => self.adapter.activate(held),
+            (refusal, _) => self.adapter.deactivate(owed.cause().or(refusal).unwrap_or(POLICY_LAPSED)),
         }
     }
 
@@ -879,8 +936,8 @@ impl<A: Adapter> Pep<A> {
     pub fn state(&self) -> &'static str {
         if self.locked {
             "locked"
-        } else if self.unreconciled {
-            "no-policy" // every decision is refused, whatever the runtime may still hold
+        } else if self.reconciling.is_some() {
+            "reconciling"
         } else if self.active.is_some() && self.trust.is_readable() {
             "active"
         } else {
@@ -888,22 +945,25 @@ impl<A: Adapter> Pep<A> {
         }
     }
 
-    /// True while the runtime may hold another release than the PEP: a flip or a lapse failed past its active
-    /// record, and a tick has not made the runtime match yet.
+    /// C6: true while the runtime may not run what the PEP holds.
     pub fn is_reconciling(&self) -> bool {
-        self.unreconciled
+        self.reconciling.is_some()
     }
 
-    /// X3: None while a release is active, else the cause every decision is refused with.
+    /// C10: the release the runtime may still run while the withdrawal has not worked, else None.
+    pub fn running(&self) -> Option<&Release> {
+        self.reconciling.as_ref().filter(|state| !state.withdrawn).and_then(|state| state.running.as_ref())
+    }
+
+    /// X3, C8: None while a release decides, else the cause every decision is refused with.
     pub fn refusal(&self) -> Option<&'static str> {
-        if self.unreconciled {
-            Some(POLICY_LAPSED)
-        } else {
-            self.own_refusal()
+        match (self.locked, &self.reconciling) {
+            (false, Some(_)) => Some(RECONCILING),
+            _ => self.own_refusal(),
         }
     }
 
-    /// The refusal of what the PEP holds, whatever its runtime holds: what `match_runtime` makes the runtime do.
+    /// The refusal of what the PEP holds, whatever its runtime runs: what the runtime step makes it do.
     fn own_refusal(&self) -> Option<&'static str> {
         if self.locked {
             Some(FLOOR_LOST)
@@ -997,7 +1057,8 @@ impl<A: Adapter> Pep<A> {
         std::mem::take(&mut self.outbox)
     }
 
-    /// Make one record, its counter durable first (H3), and put it in the outbox.
+    /// Make one record, its counter durable first (H3), and put it in the outbox. The active fields name the
+    /// held release in every state, and a reconciling PEP's record carries the entry of H14.
     fn make_record(&mut self, event: &'static str, cause: Option<&str>) -> Result<Vec<u8>, PepError> {
         self.counter += 1;
         if self.provisioned {
@@ -1005,19 +1066,13 @@ impl<A: Adapter> Pep<A> {
         }
         let unsigned = |value: i64| u64::try_from(value).unwrap_or(0);
         let prefix = |hash: Option<&Hex64>| state_record::prefix(hash.map(Hex64::as_str));
-        // While reconciling the record says what the runtime may hold, as the active release, and the release the
-        // PEP made active and the runtime may not run yet, as the staged one; its state is no-policy (DIVERGENCES)
-        let (active, staged) = match (&self.owed, self.unreconciled) {
-            (Some(Owed::Flip { .. }), true) => (self.may_hold.as_ref(), self.active.as_ref()),
-            (_, true) => (self.may_hold.as_ref(), self.staged.as_ref()),
-            _ => (self.active.as_ref(), self.staged.as_ref()),
-        };
+        let (active, staged) = (self.active.as_ref(), self.staged.as_ref());
         let record = StateRecord {
             cause: cause.map(str::to_string),
             pep_id: state_record::pep_id(&self.instance_public()),
             counter: unsigned(self.counter),
             time: unsigned(self.time()),
-            epoch: self.epoch,
+            epoch: 0, // H9, H15: this crate's PEP holds no controller key, so it never takes an epoch id
             stream: state_record::stream_prefix(self.stream.as_ref().map_or("", Stream::as_str)),
             active_policy: prefix(active.map(|release| &release.policy_sha256)),
             active_release: prefix(active.map(|release| &release.release)),
@@ -1029,11 +1084,29 @@ impl<A: Adapter> Pep<A> {
             staged: staged.is_some(),
             dev_build: super::DEV_BUILD,
             held: self.held,
+            extensions: self.reconciling_entry().map_or_else(Vec::new, |entry| entry.extension()),
             ..StateRecord::new(event, self.state())
         };
         let signed = state_record::build(&record, &self.instance_key).map_err(PepError::Refused)?;
         self.outbox.push(signed.clone());
         Ok(signed)
+    }
+
+    /// H14: the reconciling entry, or None outside the state. A locked PEP names the cause `dist:floor-lost` and
+    /// no running release (C13). This crate holds no action floor, so the floor field is zeros.
+    fn reconciling_entry(&self) -> Option<state_record::ReconcilingEntry> {
+        let state = self.reconciling.as_ref()?;
+        let running = self.running();
+        let prefix = |hash: Option<&Hex64>| state_record::prefix(hash.map(Hex64::as_str));
+        let cause = if self.locked { Some(FLOOR_LOST) } else { state.owed.cause().or(state.running_fell) };
+        Some(state_record::ReconcilingEntry {
+            owed: state.owed.event(),
+            cause: cause.map(str::to_string),
+            running_policy: prefix(running.map(|release| &release.policy_sha256)),
+            running_release: prefix(running.map(|release| &release.release)),
+            running_seq: u64::try_from(running.map_or(0, |release| release.seq)).unwrap_or(0),
+            floor: [0; 16],
+        })
     }
 
     /// H1, R4: the floor V8 holds, the larger of the committed floor and the one a revocation raised.
@@ -1043,18 +1116,6 @@ impl<A: Adapter> Pep<A> {
             _ => 0,
         };
         self.floor.seq.max(raised)
-    }
-
-    /// H9: keep the highest epoch id the controller sent. It changes nothing else.
-    pub fn see_epoch(&mut self, epoch: u64) -> Result<(), PepError> {
-        if epoch > self.epoch {
-            self.epoch = epoch;
-            if self.provisioned {
-                let epoch = i64::try_from(epoch).unwrap_or(MAX_SEQ).min(MAX_SEQ);
-                self.store.write("epoch.json", &EpochDoc { encoding: Canon2Tag, epoch, format: EpochFormat })?;
-            }
-        }
-        Ok(())
     }
 
     /// X5, B5: which of the offered blobs this PEP does not hold. An offer is a hint and changes nothing.
@@ -1082,7 +1143,8 @@ impl<A: Adapter> Pep<A> {
         self.refuse(cause, vec![("blob", json!(name.as_str()))])
     }
 
-    /// Verify one sealed envelope and its body and hold it (G1). Returns the stage-ack state record.
+    /// Verify one sealed envelope and its body and hold it (G1). Returns the stage-ack state record. A
+    /// reconciling PEP stages as in any other state, and the widening rule compares with the held release (C8).
     pub fn stage(&mut self, sealed: &[u8], body: &[u8]) -> Result<Vec<u8>, PepError> {
         self.check_active()?;
         if self.locked {
@@ -1130,7 +1192,7 @@ impl<A: Adapter> Pep<A> {
         staged.envelopes.insert(envelope.artifact, envelope.clone());
         self.store.write("staged.json", &StagedDoc { encoding: Canon2Tag, format: StagedFormat, release: staged.document() })?;
         self.staged = Some(staged);
-        self.keep_blobs(); // a replaced release's blobs go (G2)
+        self.keep_blobs(); // a replaced release's blobs go (G2), never the running release's (C11)
         self.audit.append(
             "distribution",
             "staged",
@@ -1165,6 +1227,7 @@ impl<A: Adapter> Pep<A> {
 
     /// Apply a verified revocation at once, then drop the staged release and lapse the active one when the
     /// revocation removed the ground they stand on (R5). A held PEP lapses the same way, which ends the hold (X8).
+    /// A reconciling PEP holds both its releases to the test (C10) and tries no runtime.
     fn apply_revocation(&mut self, envelope: &Envelope, body: &[u8]) -> Result<Vec<u8>, PepError> {
         let store = self.trust.apply_revocation(envelope, body, self.stream.as_ref()).map_err(|refusal| refused(refusal.to_string()))?;
         self.adopt(envelope, store)?;
@@ -1179,6 +1242,7 @@ impl<A: Adapter> Pep<A> {
         let store = self.trust.apply_rotation(envelope, body).map_err(|refusal| refused(refusal.to_string()))?;
         self.adopt(envelope, store)?;
         self.drop_fallen_staged()?;
+        self.check_active()?;
         self.make_record("trust-applied", None)
     }
 
@@ -1226,8 +1290,11 @@ impl<A: Adapter> Pep<A> {
         Ok(())
     }
 
+    /// The blobs of the active, the kept and the staged release, and of the running release until the
+    /// withdrawal works (C11), stay. Every other blob goes.
     fn keep_blobs(&self) {
-        let keep: BTreeSet<Hex64> = [&self.active, &self.previous, &self.staged]
+        let running = self.running().cloned();
+        let keep: BTreeSet<Hex64> = [&self.active, &self.previous, &self.staged, &running]
             .into_iter()
             .flatten()
             .flat_map(|release| release.held.values().flat_map(|held| [held.sealed.clone(), held.body.clone()]))
@@ -1263,19 +1330,20 @@ impl<A: Adapter> Pep<A> {
 
     /// Make the staged release named by `stream`, `seq` and `policy_sha256` active (C1 to C5). A delay in
     /// milliseconds (B8) belongs to the frame binding, which this crate does not build, so any delay but 0 is
-    /// refused and nothing changes.
+    /// refused and nothing changes. A reconciling PEP answers `refused` with `dist:reconciling` and keeps the
+    /// staged release (C8).
     pub fn commit(&mut self, stream: &str, seq: i64, policy_sha256: &Hex64, delay_ms: u16) -> Result<Vec<u8>, PepError> {
         if delay_ms != 0 {
             return Err(refused(format!(
                 "a commit delay of {delay_ms} ms (B8) is the frame binding's, which this crate does not build; commit with no delay"
             )));
         }
-        if self.unreconciled {
-            return Err(refused(RECONCILING)); // a commit changes the runtime, which must match first
-        }
         self.check_active()?;
         if self.locked {
             return self.refuse(FLOOR_LOST, Vec::new());
+        }
+        if self.reconciling.is_some() {
+            return self.refuse(RECONCILING, vec![("seq", json!(seq))]);
         }
         if !self.trust.is_readable() {
             return self.refuse(UNKNOWN_KEY, Vec::new()); // K1: decides nothing, commits nothing
@@ -1301,14 +1369,38 @@ impl<A: Adapter> Pep<A> {
         self.flip("commit", staged, previous, floor)
     }
 
-    /// C4, one step after another, each synced: intent, floor (a commit only), evidence, the artifacts (already
-    /// blobs), the active record, the runtime, the clean up.
-    fn flip(&mut self, op: &str, release: Release, previous: Option<Release>, floor: Floor) -> Result<Vec<u8>, PepError> {
-        self.fault(PepStep::Intent)?;
+    /// C7: the intent record of a transition.
+    fn write_intent(&self, op: &str, release: Option<&Release>, cause: Option<&str>, running: Option<&Release>, withdrawn: bool) -> Result<(), PepError> {
+        let doc = PendingDoc {
+            cause: cause.map(str::to_string),
+            encoding: Canon2Tag,
+            format: PendingFormat,
+            op: op.to_string(),
+            release: release.map(Release::document),
+            running: running.map(Release::document),
+            withdrawn,
+        };
+        Ok(self.store.write("pending.json", &doc)?)
+    }
+
+    fn write_active(&self, release: Option<&Release>, previous: Option<&Release>) -> Result<(), HostError> {
         self.store.write(
-            "pending.json",
-            &PendingDoc { encoding: Canon2Tag, format: PendingFormat, op: op.to_string(), release: Some(release.document()) },
-        )?;
+            "active.json",
+            &ActiveDoc {
+                encoding: Canon2Tag,
+                format: ActiveFormat,
+                previous: previous.map(Release::document),
+                release: release.map(Release::document),
+            },
+        )
+    }
+
+    /// C4, one step after another, each synced: intent, floor (a commit only), evidence, the artifacts (already
+    /// blobs), the active record, the runtime step, the state record, the clean up.
+    fn flip(&mut self, op: &str, release: Release, previous: Option<Release>, floor: Floor) -> Result<Vec<u8>, PepError> {
+        let running = self.active.clone(); // the runtime runs the held release, since the PEP is not reconciling
+        self.fault(PepStep::Intent)?;
+        self.write_intent(op, Some(&release), None, running.as_ref(), false)?;
         let committing = op == "commit";
         if committing {
             self.fault(PepStep::Floor)?;
@@ -1334,122 +1426,51 @@ impl<A: Adapter> Pep<A> {
             ],
         )?;
         self.fault(PepStep::ActiveRecord)?;
-        self.store.write(
-            "active.json",
-            &ActiveDoc {
-                encoding: Canon2Tag,
-                format: ActiveFormat,
-                previous: previous.as_ref().map(Release::document),
-                release: Some(release.document()),
-            },
-        )?;
+        self.write_active(Some(&release), previous.as_ref())?;
+        self.previous = previous;
         if self.staged.as_ref().is_some_and(|staged| staged.seq <= release.seq) {
             self.staged = None;
         }
-        let ran = self.active.replace(release);
-        self.previous = previous;
+        self.active = Some(release);
         self.held = false;
-        self.owed = Some(Owed::Flip { event });
-        self.may_hold = ran;
-        let matched = self.fault(PepStep::Runtime).and_then(|()| self.match_runtime()); // X3
-        if let Err(error) = matched {
-            // the active record names the new release and the runtime may still hold the old one: no decision is
-            // made until a tick makes the runtime match, and the record is sent then
-            self.unreconciled = true;
-            return Err(error);
-        }
-        self.settle()
+        self.retry_runtime = false;
+        self.fault(PepStep::Runtime)?;
+        self.runtime_step(if committing { Owed::Committed } else { Owed::RolledBack }, running)
     }
 
-    /// C4's end once the runtime matches: the owed record, durable, then what it owes goes (the intent record,
-    /// `owed.json`) and the clean up runs. A record that cannot be made leaves the PEP reconciling, so the next
-    /// tick sends it.
-    fn settle(&mut self) -> Result<Vec<u8>, PepError> {
-        let owed = self.owed.clone().expect("a transition to settle");
-        self.unreconciled = false;
-        let made = match &owed {
-            Owed::Flip { event } => self.make_record(event, None),
-            Owed::Lapse { cause, seq } => self.report_lapse(cause, *seq),
+    /// The runtime step of a transition whose record is durable. When it works the state record goes, then the
+    /// clean up. When it fails between two releases whose bodies are the same the PEP stays as it is and each tick
+    /// tries again, and otherwise it is reconciling (C6, C10).
+    fn runtime_step(&mut self, owed: Owed, running: Option<Release>) -> Result<Vec<u8>, PepError> {
+        let Err(error) = self.step(&owed) else { return self.settle(owed) };
+        if self.same_bodies(running.as_ref()) {
+            self.audit.append(
+                "distribution",
+                "runtime_failed",
+                vec![("error", json!(error.to_string())), ("result", json!("tried again at the next tick"))],
+            )?;
+            self.retry_runtime = true;
+            return self.settle(owed);
+        }
+        self.enter_reconciling(owed, running, &error.to_string())
+    }
+
+    /// C10: the held release and `running` have the same bodies, so a switch between them changes nothing the
+    /// runtime decides with. The trust kinds are not run, so they are left out.
+    fn same_bodies(&self, running: Option<&Release>) -> bool {
+        let (Some(held), Some(running)) = (self.active.as_ref(), running) else { return false };
+        let run = |release: &Release| -> BTreeMap<ArtifactKind, Vec<u8>> {
+            release.bodies.iter().filter(|(artifact, _)| !artifact.is_trust()).map(|(artifact, body)| (*artifact, body.clone())).collect()
         };
-        let record = match made {
-            Ok(record) => record,
-            Err(error) => {
-                self.unreconciled = true;
-                return Err(error);
-            }
-        };
-        self.owed = None;
-        self.may_hold = None;
+        !held.bodies.is_empty() && run(held) == run(running)
+    }
+
+    /// The state record a transition owes, then the clean up, which takes the intent record (C12).
+    fn settle(&mut self, owed: Owed) -> Result<Vec<u8>, PepError> {
+        let record = self.make_record(owed.event(), owed.cause())?;
         self.fault(PepStep::Cleanup)?;
-        match owed {
-            Owed::Flip { .. } => self.cleanup()?,
-            Owed::Lapse { .. } => {
-                self.keep_blobs();
-                self.store.remove("owed.json")?;
-            }
-        }
+        self.cleanup()?;
         Ok(record)
-    }
-
-    /// The lapsed audit event, once across a crash before `owed.json` goes, and the lapsed record.
-    fn report_lapse(&mut self, cause: &str, seq: Option<i64>) -> Result<Vec<u8>, PepError> {
-        let written = self.audit.last_event().is_some_and(|event| {
-            event["action"] == "lapsed" && event["data"]["seq"] == json!(seq) && event["data"]["cause"] == json!(cause)
-        });
-        if !written {
-            self.audit.append("distribution", "lapsed", vec![("seq", json!(seq)), ("cause", json!(cause)), ("result", json!("lapsed"))])?;
-        }
-        self.make_record("lapsed", Some(cause))
-    }
-
-    /// Make the runtime hold what the PEP holds again after a flip or a lapse failed past its record, then send
-    /// what the transition owed. One try: the caller is a tick or a start. The PEP's active release is held to
-    /// expiry and revocation first, as at a start, so a release that fell meanwhile is never installed: the
-    /// runtime withdraws what it ran, the commit is reported refused with the cause it fell for, and the PEP
-    /// lapses with that cause. The record of the last transition reported, if any.
-    fn reconcile(&mut self) -> Result<Option<Vec<u8>>, PepError> {
-        if !self.unreconciled {
-            return Ok(None);
-        }
-        let fallen = match (&self.active, self.locked || !self.trust.is_readable()) {
-            (Some(active), false) if !self.stands(active, true) => Some(REVOKED),
-            (Some(active), false)
-                if self.expiry_response == REFUSE && self.still_valid(active, false).as_deref() == Some(EXPIRED) =>
-            {
-                Some(EXPIRED)
-            }
-            _ => None,
-        };
-        let (Some(cause), Some(Owed::Flip { .. })) = (fallen, &self.owed) else {
-            self.match_runtime()?;
-            if self.owed.is_none() {
-                self.unreconciled = false;
-                return Ok(None);
-            }
-            return self.settle().map(Some);
-        };
-        // the release that fell never ran: what ran is withdrawn, then the PEP's lapse is made durable
-        self.adapter.deactivate(cause)?;
-        let fell = self.active.clone().expect("a fallen release");
-        let seq = Some(fell.seq);
-        self.store.write(
-            "owed.json",
-            &OwedDoc { cause: cause.to_string(), encoding: Canon2Tag, envelopes: fell.envelope_ids().into_iter().collect(), format: OwedFormat, seq },
-        )?;
-        self.store.write(
-            "active.json",
-            &ActiveDoc { encoding: Canon2Tag, format: ActiveFormat, previous: self.previous.as_ref().map(Release::document), release: None },
-        )?;
-        self.active = None;
-        self.owed = Some(Owed::Lapse { cause: cause.to_string(), seq });
-        self.may_hold = None;
-        self.store.remove("pending.json")?;
-        self.unreconciled = false;
-        if let Err(error) = self.refuse(cause, vec![("seq", json!(fell.seq))]) {
-            self.unreconciled = true;
-            return Err(error);
-        }
-        self.settle().map(Some)
     }
 
     fn cleanup(&mut self) -> Result<(), PepError> {
@@ -1459,6 +1480,154 @@ impl<A: Adapter> Pep<A> {
         self.keep_blobs();
         self.store.remove("pending.json")?;
         Ok(())
+    }
+
+    // ------------------------------------------------------------------ section 9.5: reconciling
+    /// What the runtime is told when it is withdrawn.
+    fn withdraw_cause(&self) -> String {
+        match &self.reconciling {
+            _ if self.locked => FLOOR_LOST.to_string(),
+            Some(Reconciling { owed: Owed::Lapsed(cause), .. }) => cause.clone(),
+            _ => RECONCILING.to_string(),
+        }
+    }
+
+    /// C6, C10, C12: the runtime step failed. The PEP withdraws the runtime at once, unless the step that failed
+    /// was the withdrawal itself, writes `reconciling` with the runtime's error and sends a record with that
+    /// event. When the withdrawal works the intent record notes it and only the held release is tracked.
+    fn enter_reconciling(&mut self, owed: Owed, running: Option<Release>, error: &str) -> Result<Vec<u8>, PepError> {
+        let stepped_withdrawal = self.locked || self.active.is_none() || !self.trust.is_readable();
+        self.reconciling = Some(Reconciling { owed, running, withdrawn: false, running_fell: None });
+        if !stepped_withdrawal && self.adapter.deactivate(&self.withdraw_cause()).is_ok() {
+            self.note_withdrawn()?;
+        }
+        let withdrawn = self.reconciling.as_ref().is_some_and(|state| state.withdrawn);
+        self.audit.append(
+            "distribution",
+            "reconciling",
+            vec![("error", json!(error)), ("withdrawn", json!(withdrawn)), ("result", json!("reconciling"))],
+        )?;
+        self.run_tests(true)?;
+        self.make_record("reconciling", None)
+    }
+
+    /// C10: the withdrawal worked. The runtime runs no release, and the intent record says so.
+    fn note_withdrawn(&mut self) -> Result<(), PepError> {
+        if let Some(state) = self.reconciling.as_mut() {
+            state.withdrawn = true;
+            state.running = None;
+            state.running_fell = None;
+        }
+        if let Ok(mut intent) = self.store.read::<PendingDoc>("pending.json") {
+            intent.running = None;
+            intent.withdrawn = true;
+            self.store.write("pending.json", &intent)?;
+        }
+        Ok(())
+    }
+
+    /// Whether `release` fell, and for what: the test of R5, then expiry (X1). HOLD is for `mesh` and `cfs`,
+    /// which never reconcile, so expiry always fells a release here (C10).
+    fn fell(&self, release: &Release) -> Option<&'static str> {
+        if release.envelopes.len() != release.held.len() {
+            return None; // a running release whose blobs do not read: it is still named, and its tests wait
+        }
+        if !self.stands(release, true) {
+            Some(REVOKED)
+        } else if self.still_valid(release, false).as_deref() == Some(EXPIRED) {
+            Some(EXPIRED)
+        } else {
+            None
+        }
+    }
+
+    /// C10: hold the held release, and the running one while the withdrawal has not worked, to the tests. A
+    /// held release that falls becomes a lapse with the cause it fell for, never installed. A PEP whose trust
+    /// store does not read treats the held release as none and runs no test. No runtime is tried here.
+    fn run_tests(&mut self, reconciling: bool) -> Result<(), PepError> {
+        if self.reconciling.is_none() || self.locked || !self.trust.is_readable() {
+            return Ok(());
+        }
+        let running_fell = self.running().and_then(|running| self.fell(running));
+        if let Some(state) = self.reconciling.as_mut() {
+            state.running_fell = state.running_fell.or(running_fell);
+        }
+        if let Some(cause) = self.active.as_ref().and_then(|held| self.fell(held)) {
+            self.held_falls(cause, reconciling)?;
+        }
+        Ok(())
+    }
+
+    /// C10: a held release that falls was never run. Its transition becomes a lapse: the intent record is written
+    /// again, the `lapsed` audit event, then an active record that names no release. The PEP owes `lapsed` with
+    /// that cause and no longer the record of the commit or the rollback, and the floor stays where it was (Q4).
+    fn held_falls(&mut self, cause: &'static str, never_ran: bool) -> Result<(), PepError> {
+        let Some(fell) = self.active.clone() else { return Ok(()) };
+        let state = self.reconciling.clone().expect("only a reconciling PEP");
+        self.write_intent("lapse", None, Some(cause), state.running.as_ref(), state.withdrawn)?;
+        let mut fields: Fields = vec![("seq", json!(fell.seq)), ("cause", json!(cause))];
+        if never_ran {
+            fields.push(("ran", json!(false)));
+        }
+        fields.push(("result", json!("lapsed")));
+        self.audit.append("distribution", "lapsed", fields)?;
+        self.write_active(None, self.previous.as_ref())?;
+        self.active = None;
+        self.held = false;
+        if let Some(state) = self.reconciling.as_mut() {
+            state.owed = Owed::Lapsed(cause.to_string());
+        }
+        self.keep_blobs();
+        Ok(())
+    }
+
+    /// C9: one try. The tests of C10, the withdrawal again when it has not worked, then the held release run
+    /// with nothing more when none is held. When the switch works the state ends and the record the transition
+    /// owed goes, a `beat` when nothing was. When it fails nothing more changes and the next tick tries again.
+    fn try_runtime(&mut self) -> Result<Option<Vec<u8>>, PepError> {
+        self.run_tests(true)?;
+        let Some(state) = self.reconciling.clone() else { return Ok(None) };
+        if !state.withdrawn {
+            if self.adapter.deactivate(&self.withdraw_cause()).is_err() {
+                return Ok(None);
+            }
+            self.note_withdrawn()?;
+        }
+        if let (None, Some(held)) = (self.own_refusal(), self.active.clone()) {
+            if self.adapter.activate(&held).is_err() {
+                return Ok(None);
+            }
+        }
+        self.leave().map(Some)
+    }
+
+    /// C9, C10: with the runtime withdrawn and no release held the switch is done, so the state ends at once,
+    /// with no runtime call.
+    fn end_if_switched(&mut self) -> Result<Option<Vec<u8>>, PepError> {
+        match &self.reconciling {
+            Some(state) if state.withdrawn && !self.locked && self.active.is_none() => self.leave().map(Some),
+            _ => Ok(None),
+        }
+    }
+
+    /// C9, C12: the state ends. The owed record, then `reconciled`, then the clean up, which takes the intent
+    /// record.
+    fn leave(&mut self) -> Result<Vec<u8>, PepError> {
+        let state = self.reconciling.take().expect("only a reconciling PEP leaves the state");
+        let record = match self.make_record(state.owed.event(), state.owed.cause()) {
+            Ok(record) => record,
+            Err(error) => {
+                self.reconciling = Some(state);
+                return Err(error);
+            }
+        };
+        self.audit.append("distribution", "reconciled", vec![("result", json!("reconciled"))])?;
+        if !self.locked {
+            // a locked PEP read no active record, so what it names and the intent record wait for provisioning
+            self.fault(PepStep::Cleanup)?;
+            self.cleanup()?;
+        }
+        Ok(record)
     }
 
     // ------------------------------------------------------------------ A1: abort
@@ -1479,22 +1648,30 @@ impl<A: Adapter> Pep<A> {
 
     // ------------------------------------------------------------------ X1 to X9: expiry and hold
     /// X1: check the active release's expiry, at least once a minute. It lapses to `no-policy`, or under HOLD is
-    /// held (X7). The state record of a transition, None when nothing changed.
-    /// A tick is also the one call that tries again to make a runtime that failed match the PEP (C4).
+    /// held (X7). The state record of a transition, None when nothing changed. A tick is one of the two calls
+    /// that try the runtime again (C9), and the one that tries again the failed step of a renewal (C10).
     pub fn tick(&mut self) -> Result<Option<Vec<u8>>, PepError> {
-        if self.unreconciled {
-            if let Some(record) = self.reconcile()? {
-                return Ok(Some(record));
-            }
+        if self.reconciling.is_some() {
+            return self.try_runtime();
         }
-        self.check_active()
+        let record = self.check_active()?;
+        if self.retry_runtime && self.reconciling.is_none() {
+            let retried = match &self.active {
+                Some(held) => self.adapter.activate(held),
+                None => Ok(()),
+            };
+            self.retry_runtime = retried.is_err();
+        }
+        Ok(record)
     }
 
     /// What every entry point and the periodic tick run first: an active release that no longer stands lapses
-    /// with `dist:revoked` (R5), and an expired one lapses or is held (X1, X7).
+    /// with `dist:revoked` (R5), and an expired one lapses or is held (X1, X7). A reconciling PEP runs the tests
+    /// of C10 instead, which try no runtime.
     fn check_active(&mut self) -> Result<Option<Vec<u8>>, PepError> {
-        if self.unreconciled {
-            return Ok(None); // the next tick holds the active release to expiry and revocation before it installs
+        if self.reconciling.is_some() {
+            self.run_tests(true)?;
+            return self.end_if_switched();
         }
         if self.locked || !self.trust.is_readable() {
             return Ok(None);
@@ -1521,41 +1698,38 @@ impl<A: Adapter> Pep<A> {
         self.lapse_now(EXPIRED).map(Some)
     }
 
-    /// X1, R5: go to `no-policy` with `cause`, durably, and make the runtime refuse. Refused while the runtime
-    /// may hold another release than the PEP.
+    /// X1, R5: go to `no-policy` with `cause`, durably, and make the runtime run nothing. A reconciling PEP
+    /// lapses its held release as C10 does one that fell.
     pub fn lapse(&mut self, cause: &str) -> Result<Vec<u8>, PepError> {
-        if self.unreconciled {
-            return Err(refused(RECONCILING));
+        if self.reconciling.is_none() {
+            return self.lapse_now(cause);
         }
-        self.lapse_now(cause)
+        let cause = super::CAUSES.into_iter().find(|known| *known == cause).ok_or_else(|| refused(format!("{cause} is not a cause")))?;
+        if !self.locked {
+            self.held_falls(cause, true)?;
+        }
+        match self.end_if_switched()? {
+            Some(record) => Ok(record),
+            None => self.make_record("beat", None),
+        }
     }
 
+    /// C7: the intent record, the audit event, the active record that names no release, the runtime step, the
+    /// state record, then the clean up.
     fn lapse_now(&mut self, cause: &str) -> Result<Vec<u8>, PepError> {
-        let lapsed = self.active.clone();
-        let seq = lapsed.as_ref().map(|release| release.seq);
-        let envelopes = lapsed.as_ref().map(Release::envelope_ids).unwrap_or_default().into_iter().collect();
-        // what is owed first, then the record: a write that fails leaves the release active, and the next
-        // check lapses it again
-        self.store.write("owed.json", &OwedDoc { cause: cause.to_string(), encoding: Canon2Tag, envelopes, format: OwedFormat, seq })?;
-        let written = self.store.write(
-            "active.json",
-            &ActiveDoc { encoding: Canon2Tag, format: ActiveFormat, previous: self.previous.as_ref().map(Release::document), release: None },
-        );
-        if let Err(error) = written {
-            let _ = self.store.remove("owed.json");
-            return Err(error.into());
-        }
+        let running = self.active.clone();
+        let seq = running.as_ref().map(|release| release.seq);
+        self.fault(PepStep::Intent)?;
+        self.write_intent("lapse", None, Some(cause), running.as_ref(), false)?;
+        self.fault(PepStep::Evidence)?;
+        self.audit.append("distribution", "lapsed", vec![("seq", json!(seq)), ("cause", json!(cause)), ("result", json!("lapsed"))])?;
+        self.fault(PepStep::ActiveRecord)?;
+        self.write_active(None, self.previous.as_ref())?;
         self.active = None;
         self.held = false;
-        self.owed = Some(Owed::Lapse { cause: cause.to_string(), seq });
-        self.may_hold = lapsed;
-        if let Err(error) = self.adapter.deactivate(cause) {
-            // the host may still run the release that fell: no decision is made until a tick withdraws it, and the
-            // lapse is reported then
-            self.unreconciled = true;
-            return Err(error);
-        }
-        self.settle()
+        self.retry_runtime = false;
+        self.fault(PepStep::Runtime)?;
+        self.runtime_step(Owed::Lapsed(cause.to_string()), running)
     }
 
     /// X7: `held` on every receipt written while the PEP holds an expired release, else None.
@@ -1563,12 +1737,9 @@ impl<A: Adapter> Pep<A> {
         self.held.then_some("held")
     }
 
-    /// One decision through the PEP, after the expiry check (X1). With no active release, or locked, it is
-    /// refused with the cause of X3 and `under_release` is not called.
+    /// One decision through the PEP, after the expiry check (X1). With no active release, locked or reconciling,
+    /// it is refused with the cause of X3 or C8 and `under_release` is not called. No decision tries the runtime.
     pub fn decide<T>(&mut self, under_release: impl FnOnce() -> T) -> Result<Decision<T>, PepError> {
-        if self.unreconciled {
-            return Ok(Decision { decision: None, cause: self.refusal(), mark: None }); // no retry here (tick)
-        }
         self.check_active()?;
         Ok(match self.refusal() {
             Some(cause) => Decision { decision: None, cause: Some(cause), mark: None },
@@ -1578,18 +1749,19 @@ impl<A: Adapter> Pep<A> {
 
     // ------------------------------------------------------------------ RB1, RB2, X9: rollback
     /// Return to the release the active one replaced (RB1), never lowering the floor. Refused while held (X9),
-    /// with the cause of the check a commit would fail (RB2), below a floor a revocation raised, and when the
-    /// kept release may allow more than the active one without a widening statement that covers it (RB3).
+    /// while reconciling (C8), with the cause of the check a commit would fail (RB2), below a floor a revocation
+    /// raised, and when the kept release may allow more than the active one without a widening statement that
+    /// covers it (RB3).
     pub fn rollback(&mut self) -> Result<Vec<u8>, PepError> {
-        if self.unreconciled {
-            return Err(refused(RECONCILING)); // a rollback changes the runtime, which must match first
-        }
         self.check_active()?;
         if self.held {
             return self.refuse(HELD, Vec::new());
         }
         if self.locked {
             return self.refuse(FLOOR_LOST, Vec::new());
+        }
+        if self.reconciling.is_some() {
+            return self.refuse(RECONCILING, Vec::new());
         }
         if !self.trust.is_readable() {
             return self.refuse(UNKNOWN_KEY, Vec::new());
@@ -1623,7 +1795,7 @@ impl<A: Adapter> Pep<A> {
         widening.from.is_empty() || active.is_some_and(|active| widening.from.contains(&active.policy_sha256))
     }
 
-    // ------------------------------------------------------------------ P2, P3: provisioning
+    // ------------------------------------------------------------------ P2, P3, P5: provisioning
     /// P2 step 3: receive a trust anchor and return its fingerprint for the operator to compare. The PEP follows
     /// no stream until `confirm` is given that fingerprint (P2 step 4).
     pub fn provision(&mut self, anchor: &[u8]) -> Result<Hex64, PepError> {
@@ -1640,9 +1812,10 @@ impl<A: Adapter> Pep<A> {
         Ok(read.fingerprint)
     }
 
-    /// P2 step 4, P3: the operator confirmed `fingerprint`. The trust store, the floor and the time floor start
-    /// again from the anchor, whatever was held before, and a locked PEP is unlocked. The runtime is withdrawn
-    /// first, so a PEP reconciling a runtime that failed leaves that state here too.
+    /// P2 step 4, P3, P5: the operator confirmed `fingerprint`. The runtime is withdrawn first, and when it does
+    /// not withdraw provisioning is refused and nothing changes. Then the trust store, the floor and the time
+    /// floor start again from the anchor, whatever was held before, a locked PEP is unlocked, and a reconciling
+    /// one leaves the state with its intent record gone and the record it owed not sent.
     pub fn confirm(&mut self, fingerprint: &Hex64) -> Result<Vec<u8>, PepError> {
         let raw = std::fs::read(self.store.path("anchor.pending")).map_err(|_| refused("no anchor is waiting to be confirmed"))?;
         let read = read_anchor(&raw).map_err(|refusal| refused(refusal.to_string()))?;
@@ -1651,15 +1824,13 @@ impl<A: Adapter> Pep<A> {
         }
         let store = read.store();
         self.check_separation(&store)?;
-        // only now, with the new store known to be one, does anything held go
-        self.adapter.deactivate(POLICY_LAPSED)?;
-        self.active = None;
-        self.previous = None;
-        self.staged = None;
-        self.unreconciled = false;
-        self.owed = None;
-        self.may_hold = None;
-        for name in ["active.json", "staged.json", "pending.json", "owed.json"] {
+        // only now, with the new store known to be one and the runtime withdrawn, does anything held go (P5)
+        self.adapter
+            .deactivate(POLICY_LAPSED)
+            .map_err(|error| refused(format!("the runtime does not withdraw, so the PEP is not provisioned over it (P5): {error}")))?;
+        self.reconciling = None;
+        self.retry_runtime = false;
+        for name in ["active.json", "staged.json", "pending.json"] {
             self.store.remove(name)?;
         }
         store.save(&self.trust_path())?;
@@ -1669,8 +1840,6 @@ impl<A: Adapter> Pep<A> {
             &FloorDoc { encoding: Canon2Tag, format: FloorFormat, ids: SortedSet::default(), seq: 0, stream: read.stream.clone() },
         )?;
         self.store.write("counter.json", &CounterDoc { counter: self.counter, encoding: Canon2Tag, format: CounterFormat })?;
-        let epoch = i64::try_from(self.epoch).unwrap_or(MAX_SEQ).min(MAX_SEQ); // H9: kept across provisioning
-        self.store.write("epoch.json", &EpochDoc { encoding: Canon2Tag, epoch, format: EpochFormat })?;
         self.store.write("setting.json", &SettingDoc { encoding: Canon2Tag, expiry: self.expiry_response.clone(), format: SettingFormat })?;
         self.store.write_bytes("anchor.json", &raw)?;
         self.store.remove("anchor.pending")?;

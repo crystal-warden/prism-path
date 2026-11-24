@@ -66,6 +66,7 @@ prismpath-hotswap-rs/tests/test_cause_names.rs
 prismpath-hotswap-rs/tests/test_distribution_conformance.rs
 prismpath-hotswap-rs/tests/test_distribution_cross_language.rs
 prismpath-hotswap-rs/tests/test_distribution_pep.rs
+prismpath-hotswap-rs/tests/test_distribution_reconciling.rs
 prismpath-hotswap-rs/tests/test_host_corners.rs
 prismpath-hotswap-rs/tests/test_host_crash.rs
 prismpath-hotswap-rs/tests/test_host_cross_language.rs

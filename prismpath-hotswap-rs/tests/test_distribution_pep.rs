@@ -234,7 +234,7 @@ fn one_policy(point: &mut Point, seq: i64) {
 
 /// case_051: C4. Killed before the active record flips, the old release is active after a restart and the commit
 /// can be made again. Killed after, the new release is active, and the host's own record follows the PEP's,
-/// whatever step of its own install died.
+/// whatever step of its own install failed.
 #[test]
 fn case_051_a_commit_killed_at_each_step_leaves_one_policy() {
     let deaths = PepStep::ALL.iter().map(|step| Death::Pep(*step)).chain(CommitStep::ALL.iter().map(|step| Death::Host(*step)));
@@ -250,7 +250,12 @@ fn case_051_a_commit_killed_at_each_step_leaves_one_policy() {
                 .host
                 .set_commit_hook(Some(Box::new(move |at| if at == step { Err("died".into()) } else { Ok(()) }))),
         }
-        assert!(point.pep.commit(STREAM, 2, &h(&new()), 0).is_err(), "{death:?}");
+        let answer = point.pep.commit(STREAM, 2, &h(&new()), 0);
+        match death {
+            Death::Pep(_) => assert!(answer.is_err(), "{death:?}"),
+            // a host step that fails is a runtime step that fails, which leaves the PEP reconciling (C6)
+            Death::Host(_) => assert_eq!(point.read(&answer.unwrap()).event, "reconciling", "{death:?}"),
+        }
         let before_flip = matches!(death, Death::Pep(step) if BEFORE_FLIP.contains(&step));
         one_policy(&mut point, if before_flip { 1 } else { 2 });
         let incomplete = point.actions().iter().filter(|action| *action == "commit_incomplete").count();
@@ -644,19 +649,17 @@ fn case_134_a_trust_statement_reaches_a_host_pep_whatever_its_targets() {
     assert!(point.pep.trust().keys.contains_key(&key_id("B")));
 }
 
-/// H3, H9 and the outbox: the counter rises with every record and across a restart, the epoch only rises, and a
-/// record is in the outbox once.
+/// H3, H15 and the outbox: the counter rises with every record and across a restart, the epoch id is 0 in every
+/// record since this PEP holds no controller key, and a record is in the outbox once.
 #[test]
 fn every_record_counts_on_and_is_sent_once() {
     let mut point = Point::new("counter");
     point.pep.drain();
-    point.pep.see_epoch(5).unwrap();
-    point.pep.see_epoch(3).unwrap();
     let first = rec!(point, point.pep.record("beat", None));
     point.reopen();
     let second = rec!(point, point.pep.record("beat", None));
     assert!(second.counter > first.counter);
-    assert_eq!((first.epoch, second.epoch), (5, 5), "H9: a restart never reports a lower epoch");
+    assert_eq!((first.epoch, second.epoch), (0, 0));
     assert_eq!(point.pep.drain().len(), 1);
     assert!(point.pep.drain().is_empty());
     let unknown = point.pep.needs(&[h(&old()), h(b"nothing")]);
@@ -703,48 +706,6 @@ fn a_lapse_whose_record_cannot_be_written_lapses_at_the_next_check() {
     assert_eq!(event_cause(&second), ("lapsed", Some("dist:expired")));
     assert_eq!(point.host_active(), json!(null));
     assert!(!std::fs::read_to_string(dist.join("active.json")).unwrap().contains("policy.ppt"));
-}
-
-/// Kill the host's install at `step` on every try until `hook` is cleared.
-fn host_dies_at(point: &mut Point, step: CommitStep) {
-    point.pep.adapter.host.set_commit_hook(Some(Box::new(move |at| if at == step { Err("died".into()) } else { Ok(()) })));
-}
-
-/// C4, X3: when the runtime fails inside a commit, after the active record names the new release, the PEP decides
-/// nothing and sends no record until the runtime holds what it holds. Each check tries again, and once the host
-/// takes the release the PEP reports it, the intent record gone.
-#[test]
-fn a_runtime_that_fails_inside_a_commit_is_reconciled_before_anything_is_decided_or_reported() {
-    for death in ["pep_runtime", "host_evidence", "host_record"] {
-        let mut point = Point::new("reconcile");
-        point.commit_at(&old(), 1);
-        point.stage(&ppt(&new(), &at(2)), &new());
-        match death {
-            "pep_runtime" => point.pep.set_commit_hook(Some(Box::new(|at| if at == PepStep::Runtime { Err("died".into()) } else { Ok(()) }))),
-            "host_evidence" => host_dies_at(&mut point, CommitStep::Evidence),
-            _ => host_dies_at(&mut point, CommitStep::ActiveRecord),
-        }
-        assert!(point.pep.commit(STREAM, 2, &h(&new()), 0).is_err(), "{death}");
-        point.pep.set_commit_hook(None);
-        if death != "pep_runtime" {
-            // the host still fails: every decision is refused, and a beat says no-policy with the old release as
-            // what the runtime may hold and the new one as not yet running
-            assert_eq!(point.host_active(), json!(h(&old()).as_str()), "{death}");
-            let decided = point.pep.decide(|| "allowed by the old image").unwrap();
-            assert_eq!((decided.decision, decided.cause), (None, Some("dist:policy-lapsed")), "{death}");
-            assert_eq!(point.pep.refusal(), Some("dist:policy-lapsed"));
-            let beat = rec!(point, point.pep.record("beat", None));
-            assert_eq!((beat.state, beat.active_seq, beat.staged, beat.staged_seq), ("no-policy", 1, true, 2), "{death}");
-            assert_eq!(beat.active_policy, prefix(&h(&old())), "{death}");
-            point.pep.adapter.host.set_commit_hook(None);
-        }
-        point.pep.tick().unwrap();
-        let beat = rec!(point, point.pep.record("beat", None));
-        assert_eq!((beat.state, beat.active_seq, beat.active_policy), ("active", 2, prefix(&h(&new()))), "{death}");
-        assert_eq!(point.host_active(), json!(h(&new()).as_str()), "{death}");
-        assert_eq!(point.pep.decide(|| "allowed").unwrap().decision, Some("allowed"), "{death}");
-        assert!(!point.state_dir().join("dist/pending.json").exists(), "{death}");
-    }
 }
 
 /// A trust anchor of `count` test keys, written by hand past the writer, which refuses more than eight.
@@ -856,156 +817,8 @@ fn a_commit_with_a_delay_is_refused() {
 
 // ------------------------------------------------------------------ what a reconcile reports
 
-/// The event, cause and active seq of each record in `records`.
-fn summary(point: &Point, records: &[Vec<u8>]) -> Vec<(&'static str, Option<String>, u64)> {
-    records.iter().map(|data| point.read(data)).map(|record| (record.event, record.cause, record.active_seq)).collect()
-}
-
-/// What the PEP sent since the last drain, as `summary` gives it.
-fn drained(point: &mut Point) -> Vec<(&'static str, Option<String>, u64)> {
-    let records = point.pep.drain();
-    summary(point, &records)
-}
-
-fn runtime_dies(point: &mut Point) {
-    point.pep.set_commit_hook(Some(Box::new(|at| if at == PepStep::Runtime { Err("died".into()) } else { Ok(()) })));
-}
-
-fn count(point: &Point, action: &str) -> usize {
-    point.actions().iter().filter(|name| *name == action).count()
-}
-
 fn host_events(point: &Point, action: &str) -> Vec<serde_json::Value> {
     point.pep.adapter.host.history().into_iter().filter(|event| event["action"] == action).map(|event| event["data"].clone()).collect()
-}
-
-/// C5, H4: a flip whose runtime step failed sends its `committed` record once a tick makes the runtime match, in
-/// the same process and after a restart. After the restart the release it made active is no longer staged, so
-/// committing its seq again is refused and the release kept for a rollback stays the one it replaced.
-#[test]
-fn a_reconciled_flip_sends_its_record_then_and_after_a_restart() {
-    let mut point = Point::new("owed_flip");
-    point.commit_at(&old(), 1);
-    point.stage(&ppt(&new(), &at(2)), &new());
-    point.pep.drain();
-    runtime_dies(&mut point);
-    assert!(point.pep.commit(STREAM, 2, &h(&new()), 0).is_err());
-    point.pep.set_commit_hook(None);
-    assert!(point.pep.drain().is_empty());
-    let ticked = rec!(point, point.pep.tick().unwrap());
-    assert_eq!((ticked.event, ticked.active_seq), ("committed", 2));
-    assert_eq!(drained(&mut point), vec![("committed", None, 2)]);
-    assert_eq!(count(&point, "committed"), 2, "one for each commit, the audit event of this one written once");
-
-    let mut point = Point::new("owed_flip_restart");
-    point.commit_at(&old(), 1);
-    point.stage(&ppt(&new(), &at(2)), &new());
-    runtime_dies(&mut point);
-    assert!(point.pep.commit(STREAM, 2, &h(&new()), 0).is_err());
-    point.reopen();
-    assert_eq!(drained(&mut point), vec![("committed", None, 2)]);
-    assert!(point.pep.staged().is_none() && !point.state_dir().join("dist/staged.json").exists());
-    assert_eq!(rec!(point, point.pep.commit(STREAM, 2, &h(&new()), 0)).cause.as_deref(), Some("dist:not-staged"));
-    assert_eq!((point.pep.active().unwrap().seq, point.pep.previous().unwrap().seq), (2, 1));
-}
-
-/// X1, X3, H4: a lapse whose host withdraw fails leaves the PEP refusing every decision and sending no record,
-/// and a pub lapse refused too, while the host still holds the expired release. A beat in that time says
-/// no-policy with the expired release as what the runtime may hold, and provisioning may start. A tick once the
-/// host can let go withdraws it, and the `lapsed` record and audit event go then with `dist:expired`, the host
-/// told that cause. A restart in between reports the lapse the same way.
-#[test]
-fn a_lapse_whose_withdraw_fails_is_reported_with_its_cause_once_the_host_lets_go() {
-    for restart in [false, true] {
-        let mut point = Point::new("owed_lapse");
-        point.commit_at(&old(), 1);
-        point.pep.drain();
-        point.now.set(EXPIRES);
-        let home = point.state_dir();
-        set_mode(&home, 0o555);
-        assert!(point.pep.tick().is_err());
-        assert!(point.pep.is_reconciling());
-        assert_eq!(point.pep.state(), "no-policy");
-        assert_eq!(point.pep.decide(|| "ran").unwrap().decision, None);
-        let beat = rec!(point, point.pep.record("beat", None));
-        assert_eq!((beat.event, beat.state, beat.active_seq), ("beat", "no-policy", 1));
-        assert!(point.pep.lapse("dist:revoked").is_err());
-        assert!(point.pep.provision(&point.anchor()).is_ok());
-        assert!(point.pep.tick().is_err());
-        assert_eq!(point.host_active(), json!(h(&old()).as_str()));
-        point.pep.drain();
-        set_mode(&home, 0o755);
-        if restart {
-            point.reopen();
-        } else {
-            assert_eq!(event_cause(&rec!(point, point.pep.tick().unwrap())), ("lapsed", Some("dist:expired")));
-        }
-        assert_eq!(drained(&mut point), vec![("lapsed", Some("dist:expired".to_string()), 0)], "restart {restart}");
-        assert_eq!(point.host_active(), json!(null));
-        assert_eq!(count(&point, "lapsed"), 1);
-        let withdrawn = host_events(&point, "withdraw");
-        assert_eq!(withdrawn.len(), 1, "a withdraw tried again writes its evidence once");
-        assert_eq!(withdrawn[0]["cause"], json!("dist:expired"));
-        assert!(!point.state_dir().join("dist/owed.json").exists());
-    }
-}
-
-/// C4: while the runtime fails, a decision or a record does not try the install again, and a tick tries it once,
-/// its evidence written once in the host's log.
-#[test]
-fn while_reconciling_only_a_tick_tries_the_install_and_its_evidence_is_written_once() {
-    use std::sync::atomic::{AtomicUsize, Ordering};
-    use std::sync::Arc;
-    let mut point = Point::new("reconcile_once");
-    point.commit_at(&old(), 1);
-    point.stage(&ppt(&new(), &at(2)), &new());
-    let tries = Arc::new(AtomicUsize::new(0));
-    let counted = tries.clone();
-    point.pep.adapter.host.set_commit_hook(Some(Box::new(move |at| {
-        if at == CommitStep::Intent {
-            counted.fetch_add(1, Ordering::SeqCst);
-        }
-        if at == CommitStep::ActiveRecord { Err("died".into()) } else { Ok(()) }
-    })));
-    assert!(point.pep.commit(STREAM, 2, &h(&new()), 0).is_err());
-    let before = point.pep.adapter.host.history().len();
-    for _ in 0..20 {
-        assert_eq!(point.pep.decide(|| 1).unwrap().decision, None);
-        assert_eq!(rec!(point, point.pep.record("beat", None)).state, "no-policy");
-    }
-    assert_eq!((tries.load(Ordering::SeqCst), point.pep.adapter.host.history().len()), (1, before));
-    for _ in 0..3 {
-        assert!(point.pep.tick().is_err());
-    }
-    assert_eq!(tries.load(Ordering::SeqCst), 4, "one install for the commit and one for each tick");
-    let installs = host_events(&point, "swap").iter().filter(|data| data["to_hash"] == json!(h(&new()).as_str())).count();
-    assert_eq!(installs, 1);
-}
-
-/// X1, C3: a release that expires while its install fails is never installed. The tick after reports the commit
-/// refused with the cause it fell for, never `committed`, then the lapse, and the host withdraws the release it held
-/// all along.
-#[test]
-fn a_release_that_expires_while_reconciling_is_never_installed() {
-    let mut point = Point::new("reconcile_expired");
-    point.commit_at(&old(), 1);
-    point.stage(&ppt(&new(), &at(2)), &new());
-    host_dies_at(&mut point, CommitStep::ActiveRecord);
-    assert!(point.pep.commit(STREAM, 2, &h(&new()), 0).is_err());
-    point.pep.drain();
-    assert!(point.pep.is_reconciling());
-    assert_eq!((point.pep.state(), point.pep.refusal()), ("no-policy", Some("dist:policy-lapsed")));
-    point.now.set(EXPIRES + 10);
-    point.pep.adapter.host.set_commit_hook(None);
-    assert_eq!(event_cause(&rec!(point, point.pep.tick().unwrap())), ("lapsed", Some("dist:expired")));
-    assert_eq!(
-        drained(&mut point),
-        vec![("refused", Some("dist:expired".to_string()), 0), ("lapsed", Some("dist:expired".to_string()), 0)]
-    );
-    let withdrawn = host_events(&point, "withdraw");
-    assert_eq!(withdrawn.len(), 1);
-    assert_eq!(withdrawn[0]["from_hash"], json!(h(&old()).as_str()), "the host never held the new release");
-    assert_eq!(point.host_active(), json!(null));
 }
 
 /// K2: a PEM file is read block by block, so a private key block followed by a public key block is found, and so
@@ -1051,60 +864,11 @@ fn the_k2_scan_looks_at_no_more_than_4096_files() {
     assert!(point.open().is_ok(), "not found past 4,096 files");
 }
 
-// ------------------------------------------------------------------ while reconciling, and what is owed
+// ------------------------------------------------------------------ the host's own record
 
-fn owed_doc(seq: i64) -> Vec<u8> {
-    canon2::write_json(&json!({"cause": "dist:expired", "encoding": "canon/2", "envelopes": [], "format": "prismpath.dist-owed/1",
-                               "seq": seq}))
-    .unwrap()
-}
-
-fn events_of(point: &mut Point) -> Vec<&'static str> {
-    drained(point).into_iter().map(|(event, _, _)| event).collect()
-}
-
-/// R5, B2: a revocation staged while the runtime fails is applied, and the release it revokes is never installed:
-/// the next tick reports that commit refused with dist:revoked, then the lapse, and nothing is decided under it.
-#[test]
-fn a_revocation_staged_while_reconciling_is_applied_and_its_release_never_installed() {
-    let mut point = Point::new("revoke_reconciling");
-    point.commit_at(&old(), 1);
-    point.stage(&ppt(&new(), &at(2)), &new());
-    host_dies_at(&mut point, CommitStep::ActiveRecord);
-    assert!(point.pep.commit(STREAM, 2, &h(&new()), 0).is_err());
-    point.pep.drain();
-    let applied = point.revoke(1, &revocation(&[], &[], &[h(&new())], &[]));
-    assert_eq!((applied.event, applied.trust_seq, applied.state, applied.active_seq), ("trust-applied", 1, "no-policy", 1));
-    point.pep.drain();
-    point.pep.adapter.host.set_commit_hook(None);
-    point.pep.tick().unwrap();
-    assert_eq!(
-        drained(&mut point),
-        vec![("refused", Some("dist:revoked".to_string()), 0), ("lapsed", Some("dist:revoked".to_string()), 0)]
-    );
-    assert_eq!(host_events(&point, "withdraw")[0]["from_hash"], json!(h(&old()).as_str()));
-    assert_eq!(point.host_active(), json!(null));
-    assert_eq!(point.pep.decide(|| "ran").unwrap().decision, None);
-}
-
-/// P3, H4: a PEP whose install keeps failing still beats, and provisioning ends the state, since confirming
-/// withdraws the runtime first. Abort and staging work meanwhile, a commit and a rollback wait.
-#[test]
-fn provisioning_ends_a_reconcile_that_cannot_finish_and_records_go_on_meanwhile() {
-    let mut point = Point::new("stuck");
-    point.commit_at(&old(), 1);
-    point.stage(&ppt(&new(), &at(2)), &new());
-    host_dies_at(&mut point, CommitStep::ActiveRecord);
-    assert!(point.pep.commit(STREAM, 2, &h(&new()), 0).is_err());
-    assert!(point.pep.rollback().is_err() && point.pep.commit(STREAM, 2, &h(&new()), 0).is_err());
-    assert_eq!(rec!(point, point.pep.record("beat", None)).state, "no-policy");
-    assert_eq!(point.stage(&ppt(&newer(), &at(3)), &newer()).event, "staged");
-    assert_eq!(rec!(point, point.pep.abort(STREAM, 3, &h(&newer()))).event, "aborted");
-    let fingerprint = point.pep.provision(&point.anchor()).unwrap();
-    let provisioned = rec!(point, point.pep.confirm(&fingerprint));
-    assert_eq!((provisioned.event, provisioned.state, provisioned.active_seq), ("provisioned", "no-policy", 0));
-    assert!(!point.pep.is_reconciling());
-    assert_eq!(point.host_active(), json!(null));
+/// Kill the host's install at `step` on every try until `hook` is cleared.
+fn host_dies_at(point: &mut Point, step: CommitStep) {
+    point.pep.adapter.host.set_commit_hook(Some(Box::new(move |at| if at == step { Err("died".into()) } else { Ok(()) })));
 }
 
 /// C4: a host install that died is not taken for another envelope of the same image and version, which writes its
@@ -1114,7 +878,7 @@ fn the_host_writes_the_evidence_of_another_envelope_of_the_same_image() {
     let mut point = Point::new("dedupe_envelope");
     point.stage(&ppt(&old(), &at(1)), &old());
     host_dies_at(&mut point, CommitStep::ActiveRecord);
-    assert!(point.pep.commit(STREAM, 1, &h(&old()), 0).is_err());
+    assert_eq!(rec!(point, point.pep.commit(STREAM, 1, &h(&old()), 0)).event, "reconciling");
     point.pep.adapter.host.set_commit_hook(None);
     point.now.set(EXPIRES + 10);
     point.pep.tick().unwrap();
@@ -1131,101 +895,16 @@ fn the_host_writes_the_evidence_of_another_envelope_of_the_same_image() {
     assert_eq!(swaps[1]["distribution"]["envelope_id"], json!(installed.as_str()));
 }
 
-/// X1, H4: a lapse whose audit event cannot be written stays owed, so the next tick sends it, and the lapsed audit
-/// event is written once even when a restart finds the lapse owed again after it was written.
+/// X1, C7: a lapse whose active record cannot be written leaves the release active and the PEP not reconciling.
 #[test]
-fn a_lapse_whose_report_fails_is_sent_later_and_audited_once() {
-    let mut point = Point::new("lapse_audit");
-    point.commit_at(&old(), 1);
-    point.pep.drain();
-    point.now.set(EXPIRES);
-    let log = point.state_dir().join("dist/audit.log");
-    set_mode(&log, 0o444);
-    assert!(point.pep.tick().is_err());
-    set_mode(&log, 0o644);
-    assert!(point.pep.is_reconciling());
-    let owed = std::fs::read(point.pep.store_path("owed.json")).unwrap();
-    assert_eq!(event_cause(&rec!(point, point.pep.tick().unwrap())), ("lapsed", Some("dist:expired")));
-    assert!(!point.state_dir().join("dist/owed.json").exists());
-    assert_eq!(count(&point, "lapsed"), 1);
-    // a crash after the audit event and before owed.json went
-    std::fs::write(point.pep.store_path("owed.json"), &owed).unwrap();
-    point.reopen();
-    assert_eq!(drained(&mut point), vec![("lapsed", Some("dist:expired".to_string()), 0)]);
-    assert_eq!(count(&point, "lapsed"), 1);
-}
-
-/// H9: the records a restart sends, an owed one first, carry the highest epoch the controller sent before it.
-#[test]
-fn a_restart_reports_the_epoch_it_had_seen() {
-    let mut point = Point::new("epoch_restart");
-    point.commit_at(&old(), 1);
-    point.pep.see_epoch(41).unwrap();
-    point.stage(&ppt(&new(), &at(2)), &new());
-    runtime_dies(&mut point);
-    assert!(point.pep.commit(STREAM, 2, &h(&new()), 0).is_err());
-    point.reopen();
-    let records = point.pep.drain();
-    assert!(!records.is_empty());
-    assert!(records.iter().all(|data| point.read(data).epoch == 41));
-    assert_eq!(point.read(records.last().unwrap()).event, "committed");
-}
-
-/// owed.json is believed only where the lapse reached its active record: not with a release active, not above the
-/// floor, and not on a locked start, where it waits for provisioning.
-#[test]
-fn an_owed_lapse_is_believed_only_where_it_happened() {
-    let mut point = Point::new("owed_stale");
-    point.commit_at(&old(), 1);
-    std::fs::write(point.pep.store_path("owed.json"), owed_doc(1)).unwrap();
-    point.reopen();
-    assert_eq!((point.pep.state(), events_of(&mut point)), ("active", vec![]), "with a release active");
-    assert!(!point.state_dir().join("dist/owed.json").exists());
-
-    point.now.set(EXPIRES);
-    point.pep.tick().unwrap();
-    std::fs::write(point.pep.store_path("owed.json"), owed_doc(99)).unwrap();
-    point.reopen();
-    assert!(events_of(&mut point).is_empty(), "above the floor");
-    assert!(!point.state_dir().join("dist/owed.json").exists());
-
-    std::fs::write(point.pep.store_path("owed.json"), owed_doc(1)).unwrap();
-    std::fs::write(point.pep.store_path("floor.json"), b"{").unwrap();
-    point.reopen();
-    assert_eq!((point.pep.state(), events_of(&mut point)), ("locked", vec![]), "on a locked start");
-    assert!(point.state_dir().join("dist/owed.json").exists());
-    let fingerprint = point.pep.provision(&point.anchor()).unwrap();
-    point.pep.confirm(&fingerprint).unwrap();
-    assert!(!point.state_dir().join("dist/owed.json").exists());
-}
-
-/// P3: a confirm drops a lapse still owed, so no restart after it reports that lapse.
-#[test]
-fn a_confirm_drops_an_owed_lapse() {
-    let mut point = Point::new("confirm_owed");
-    point.commit_at(&old(), 1);
-    point.now.set(EXPIRES);
-    let home = point.state_dir();
-    set_mode(&home, 0o555);
-    assert!(point.pep.tick().is_err());
-    set_mode(&home, 0o755);
-    let fingerprint = point.pep.provision(&point.anchor()).unwrap();
-    point.pep.confirm(&fingerprint).unwrap();
-    point.reopen();
-    assert!(!events_of(&mut point).contains(&"lapsed"));
-}
-
-/// X1: a lapse whose active record cannot be written leaves no owed.json behind.
-#[test]
-fn a_lapse_that_cannot_write_its_record_leaves_nothing_owed() {
-    let mut point = Point::new("owed_cleared");
+fn a_lapse_whose_active_record_cannot_be_written_leaves_the_release_active() {
+    let mut point = Point::new("lapse_active_record");
     point.commit_at(&old(), 1);
     point.now.set(EXPIRES);
     let blocker = point.state_dir().join("dist/active.json.tmp");
     std::fs::create_dir_all(&blocker).unwrap();
     assert!(point.pep.tick().is_err());
     std::fs::remove_dir_all(&blocker).unwrap();
-    assert!(!point.state_dir().join("dist/owed.json").exists());
     assert!(point.pep.active().is_some() && !point.pep.is_reconciling());
 }
 
@@ -1241,4 +920,66 @@ fn the_k2_scan_finds_a_trusted_key_in_any_block() {
         std::fs::write(&path, &data).unwrap();
         assert!(matches!(point.open(), Err(PepError::Refused(text)) if text.contains("(K2)")), "{name}");
     }
+}
+
+/// The PEM of the test key `name` with an RFC 1421 header line and the blank line after it.
+fn pem_with_header(name: &str) -> Vec<u8> {
+    let pem = String::from_utf8(pem_of(name)).unwrap();
+    pem.replacen("-----BEGIN PRIVATE KEY-----\n", "-----BEGIN PRIVATE KEY-----\nComment: written by hand\n\n", 1).into_bytes()
+}
+
+/// K2: a `-----BEGIN` with no end line hides no key block after it, a block whose base64 follows RFC 1421 header
+/// lines is read, and a byte that is not UTF-8 anywhere in the file stops nothing.
+#[test]
+fn the_k2_scan_reads_past_an_unterminated_block_header_lines_and_bytes_that_are_not_utf8() {
+    let point = Point::new("k2_bytes");
+    let path = point.state_dir().join("keys/keys.pem");
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    let unterminated = [b"-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAA\n".to_vec(), pem_of("A")].concat();
+    let not_utf8 = [b"\xff\xfe not text\n".to_vec(), pem_of("A")].concat();
+    for (name, data) in [("unterminated", unterminated), ("header lines", pem_with_header("A")), ("not UTF-8", not_utf8)] {
+        std::fs::write(&path, &data).unwrap();
+        assert!(matches!(point.open(), Err(PepError::Refused(text)) if text.contains("(K2)")), "{name}");
+    }
+    std::fs::write(&path, pem_with_header("U")).unwrap();
+    assert!(point.open().is_ok(), "an untrusted key with header lines is not refused");
+}
+
+/// K2: the scan opens only regular files, so a FIFO in the home, which no process writes, does not stop the start,
+/// and a key after it is still found.
+#[test]
+fn the_k2_scan_opens_only_regular_files() {
+    let point = Point::new("k2_fifo");
+    let home = point.state_dir();
+    let fifo = home.join("a_fifo");
+    assert!(std::process::Command::new("mkfifo").arg(&fifo).status().unwrap().success());
+    let open_in_thread = |home: std::path::PathBuf| {
+        let (sender, receiver) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let now = Rc::new(Cell::new(NOW));
+            let opened = open_pep(&home, &now, &test_key("I"), &["A"], REFUSE, false);
+            let _ = sender.send(opened.map(|_| ()).map_err(|error| error.to_string()));
+        });
+        receiver.recv_timeout(std::time::Duration::from_secs(20)).expect("the start returns with a FIFO in the home")
+    };
+    assert!(open_in_thread(home.clone()).is_ok());
+    std::fs::write(home.join("b_key.pem"), pem_of("A")).unwrap();
+    assert!(open_in_thread(home.clone()).is_err_and(|text| text.contains("(K2)")));
+    std::fs::remove_file(&fifo).unwrap();
+}
+
+/// C4: a restart after a flip died past its active record drops the copy of the release it made active from the
+/// staged release, so committing its seq again is dist:not-staged and the release kept for a rollback is still the
+/// one it replaced.
+#[test]
+fn a_restart_after_a_flip_past_its_active_record_drops_the_staged_copy() {
+    let mut point = Point::new("flip_restart");
+    point.commit_at(&old(), 1);
+    point.stage(&ppt(&new(), &at(2)), &new());
+    point.pep.set_commit_hook(Some(Box::new(|at| if at == PepStep::Runtime { Err("died".into()) } else { Ok(()) })));
+    assert!(point.pep.commit(STREAM, 2, &h(&new()), 0).is_err());
+    point.reopen();
+    assert!(point.pep.staged().is_none() && !point.state_dir().join("dist/staged.json").exists());
+    assert_eq!(rec!(point, point.pep.commit(STREAM, 2, &h(&new()), 0)).cause.as_deref(), Some("dist:not-staged"));
+    assert_eq!((point.pep.active().unwrap().seq, point.pep.previous().unwrap().seq), (2, 1));
 }
