@@ -38,8 +38,13 @@ bound is below a kind's table has no row for that kind. A cfs PEP takes a table 
 signers' word (W2, IS12), asks a table floor whose rules allow or escalate, past its signed rate escalates with
 `dist:floor-rate`, and holds each floor rule to AF9 on the table's own PPT image and rules. `pp_pep_commit_check`
 answers what a commit would without changing anything, so the cFS app switches its table service first and commits
-after (section 9.5). `pp_read_anchor` reads a `/1` or `/2` trust anchor. The operator's answer (OP2 to OP4) is not
-built yet: an answer is still `dist:target-mismatch` on every kind, and a floor escalation on cfs stays unanswered.
+after (section 9.5). `pp_read_anchor` reads a `/1` or `/2` trust anchor. On cfs an escalation of the action floor is
+opened with `pp_pep_escalated` under the hash of the receipt the caller wrote for it, at most eight at a time, each for
+600 seconds and kept with the rate counts in both copies. An `operator.answer` signed by one operator key of the install
+record, on a PEP whose install threshold is 2 or more, is applied once when it names the PEP's id, an open escalation
+and the floor that made it, inside the floor's signed `answer_rate`, durably before the `answered` record (OP1 to OP4).
+The answer and the request of its escalation are then the caller's in `pep->answer`. An answer never raises the time
+floor, and on `mesh` it is `dist:target-mismatch`.
 
 `prismpath/tests/test_distribution_c.py` and `test_distribution_c_cfs.py` build `host_check.c` with the host `cc` and
 `-Wall -Wextra -Werror -fsanitize=address,undefined`. It replays every corpus case on the `mesh` kind,

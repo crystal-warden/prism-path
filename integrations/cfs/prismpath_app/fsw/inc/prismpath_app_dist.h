@@ -76,7 +76,8 @@ enum
     PP_APP_COPY_PARTS
 };
 #define PP_APP_SET_BYTES  (12 + 2 * (8 + PP_MAX_SEALED + PP_INSTALL_BODY_MAX)) /* a set, held and staged */
-#define PP_APP_COPY_BYTES (1024 + 128 + 3 * PP_APP_SET_BYTES)
+#define PP_APP_RATES_BYTES 1536 /* the rate counts of AF8 and OP4 and the eight open escalations of OP3 */
+#define PP_APP_COPY_BYTES (1024 + PP_APP_RATES_BYTES + 3 * PP_APP_SET_BYTES)
 
 /** The Critical Data Store record: the run, and the core's parts the store Q5 can lose. Plain data. */
 typedef struct
@@ -156,6 +157,10 @@ typedef struct
     uint8_t TableCause;            /**< the table service refused a switch with this cause (0 for none) */
     int     TableBusy;             /**< the table service refused a switch for its own reason */
     uint8_t Dropped;               /**< a transfer the frames dropped, with this cause */
+    int     Answered;              /**< OP3: an operator's answer was applied in this step, durably first */
+    int     AnswerAllow;           /**< the answer was `allow` */
+    uint8_t AnswerId[32];          /**< its envelope id */
+    uint8_t AnswerReceipt[32];     /**< the receipt hash of the escalation it answered */
 } PP_AppStep_t;
 
 /** One decision of a proposal. */
@@ -171,6 +176,8 @@ typedef struct
     uint64_t Receipt;
     int      NotEnacted;   /**< the action floor or the fallback policy decided, which a core run cannot carry yet */
     int      RecordError;  /**< the decision could not be receipted, so an allow is not carried out */
+    int      Escalated;    /**< OP3: an escalation of the action floor is open, under EscalationReceipt */
+    uint8_t  EscalationReceipt[32]; /**< the SHA-256 of the escalation's document (PP_Run_EscalationBytes) */
 } PP_AppDecision_t;
 
 /** The app's enforcement point. One per app, in static storage. */
@@ -218,7 +225,10 @@ typedef struct
 int PP_AppDist_Start(PP_AppDist_t *D, const PP_AppDistConfig_t *Cfg, int Record, int Copy, uint32_t NowMs,
                      long long Now);
 
-/** One frame of an offer or a chunk from the command topic, at the app's monotonic time and its time. */
+/** One frame of an offer or a chunk from the command topic, at the app's monotonic time and its time. An operator's
+ *  answer travels in these frames as any sealed envelope does (OP2): the core applies it, and Step says so. The answer
+ *  is not enacted: an operator receipt has no case in a core run yet (RC4), so the request it answers is not
+ *  republished, and the answer shows in the state record of housekeeping and in an event. */
 void PP_AppDist_Frame(PP_AppDist_t *D, const uint8_t *Frame, size_t Len, uint32_t NowMs, long long Now);
 
 /** A commit or an abort frame, the commit with the table's image attestation. */
@@ -244,7 +254,9 @@ int PP_AppDist_ValidateTable(PP_AppDist_t *D, const PP_PolicyTable_t *Table);
  * fallback policy (AF1, FB1), and the kernel decides a release decision, which is receipted (with the hold mark of
  * X7 in its case) before it is acted on. MonitorAge is the age in seconds of the monitor's last verdict, or
  * PP_AGE_NONE. A decision of the action floor or of the fallback policy is refused and not enacted, since its case
- * would be attested by an install statement, which the core run's verifier does not read yet (RC4).
+ * would be attested by an install statement, which the core run's verifier does not read yet (RC4). An escalation by
+ * the action floor is still opened in the core (OP3), under the SHA-256 of its escalation document, which the app
+ * downlinks so the ground can seal an operator's answer to it; the request is kept with it.
  */
 void PP_AppDist_Propose(PP_AppDist_t *D, const PP_RunIo_t *Io, const uint8_t *Payload, size_t PayloadLen,
                         uint32_t MonitorAge, long long Now, PP_AppDecision_t *Out);
