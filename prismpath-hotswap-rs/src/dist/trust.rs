@@ -8,12 +8,15 @@
 //!
 //! `counting` is S3 to S5, which entries of a sealed envelope count and the one cause when too few do.
 //! A store that cannot be read refuses every envelope with `dist:unknown-key` (K1). The store changes
-//! only by provisioning, a rotation and a revocation (K3), applied by the code that owns them.
+//! only by provisioning, a rotation and a revocation (K3). `apply_revocation` is the store after a verified
+//! revocation (R1 to R6) and `apply_rotation` the store after a verified rotation (O1, O3, K5). `Anchor` is
+//! the trust anchor a PEP is provisioned with (P2, P3).
 
-use super::envelope::Entry;
+use super::envelope::{Entry, Envelope};
 use super::{
-    load, require, Canon2Tag, Hex64, MaybeHex64, Refused, SortedSet, Stream, TrustStoreFormat, Verdict, AUTHORITY,
-    MAX_SEQ, ROTATION_INVALID, SIG_INVALID, SIG_REVOKED_KEY, TOO_LARGE, UNKNOWN_KEY,
+    load, require, AnchorFormat, ArtifactKind, Canon2Tag, Hex64, MaybeHex64, Refused, SortedSet, Stream, TargetKind,
+    TrustStoreFormat, Verdict, AUTHORITY, BAD_FORMAT, MAX_SEQ, ROTATION_INVALID, SIG_INVALID, SIG_REVOKED_KEY,
+    TOO_LARGE, TRUST_REPLAY, UNKNOWN_KEY,
 };
 use crate::host::HostError;
 use prismpath_rs::canon2::codec;
@@ -256,6 +259,155 @@ impl TrustStore {
             _ => Some(ROTATION_INVALID),
         }
     }
+}
+
+impl TrustStore {
+    /// R6 for a revocation list that already reads (V11): it holds every key id the current list holds, since a
+    /// key once revoked stays revoked. None, or `dist:trust-replay`.
+    pub fn check_revocation(&self, body: &[u8]) -> Option<&'static str> {
+        let listed = super::read_revocation(body).ok()?;
+        if self.revoked_keys.iter().all(|kid| listed.keys.contains(kid)) {
+            None
+        } else {
+            Some(TRUST_REPLAY)
+        }
+    }
+
+    /// The store after a verified `trust.revocation` (`envelope`, already through V2 to V11, so its `seq` is the
+    /// trust sequence plus one, R1, and it drops no key, R6). The PEP holds this list and no other (R2, R6). A
+    /// floor it raises is kept for `stream`, the PEP's own, and only rises (R4). The caller makes the result
+    /// durable before it reports it (R3).
+    pub fn apply_revocation(&self, envelope: &Envelope, body: &[u8], stream: Option<&Stream>) -> Result<TrustStore, Refused> {
+        require(
+            envelope.artifact == ArtifactKind::TrustRevocation && envelope.seq == self.trust_seq + 1,
+            "only a verified revocation at the next trust sequence is applied (R1)",
+        )?;
+        require(self.check_revocation(body).is_none(), "a revocation list that drops a revoked key is never applied (R6)")?;
+        let listed = super::read_revocation(body)?;
+        let ours = |name: &Stream| stream.is_none_or(|own| own == name);
+        let mut floors: BTreeMap<Stream, i64> =
+            self.floors.iter().filter(|(name, _)| ours(name)).map(|(name, seq)| (name.clone(), *seq)).collect();
+        for (name, seq) in listed.floors.iter().filter(|(name, _)| ours(name)) {
+            let raised = floors.get(name).copied().unwrap_or(0).max(*seq);
+            floors.insert(name.clone(), raised);
+        }
+        Ok(TrustStore {
+            revoked_keys: listed.keys,
+            revoked_envelopes: listed.envelopes,
+            revoked_policies: listed.policies,
+            floors,
+            trust_seq: envelope.seq,
+            trust_id: MaybeHex64(Some(envelope.envelope_id())),
+            ..self.clone()
+        })
+    }
+
+    /// The store after a verified `trust.rotation` at the next trust sequence (O1): the new key is held in the
+    /// authority role and the retired one no longer counts (O3), though a release already active under it stays.
+    /// A seventeenth retired id forgets the oldest, and its key with it (K5).
+    pub fn apply_rotation(&self, envelope: &Envelope, body: &[u8]) -> Result<TrustStore, Refused> {
+        require(
+            envelope.artifact == ArtifactKind::TrustRotation && envelope.seq == self.trust_seq + 1,
+            "only a verified rotation at the next trust sequence is applied (O1)",
+        )?;
+        let rotation = super::read_rotation(body)?;
+        let added = rotation.add.raw();
+        let mut keys = self.keys.clone();
+        keys.insert(Hex64::of(&added), Key { public: rotation.add.clone(), role: Role::authority() });
+        let mut retired = self.retired.clone();
+        if let Some(retire) = rotation.retire.0 {
+            if !retired.contains(&retire) {
+                retired.push(retire);
+            }
+        }
+        while retired.len() > MAX_RETIRED {
+            // K5: the oldest retired id is forgotten, and its signature then reads as an unknown key's
+            let forgotten = retired.remove(0);
+            keys.remove(&forgotten);
+        }
+        Ok(TrustStore {
+            keys,
+            retired,
+            trust_seq: envelope.seq,
+            trust_id: MaybeHex64(Some(envelope.envelope_id())),
+            ..self.clone()
+        })
+    }
+
+    /// R5, O3: an entry by a key the store holds in `role`, not revoked, verifies. A retired key still holds up
+    /// a release already active under it, where it no longer counts for a new envelope (S5).
+    pub fn holds_up(&self, entries: &[Entry], message: &[u8], role: &str) -> bool {
+        entries.iter().any(|entry| {
+            let kid = entry.key_id_hex();
+            self.keys.get(&kid).is_some_and(|key| {
+                key.role.as_str() == role
+                    && !self.revoked_keys.contains(&kid)
+                    && crate::verify_ed25519(&key.public.raw(), message, &entry.signature)
+            })
+        })
+    }
+
+    /// Make the store unreadable, as a store whose file could not be read is (K1).
+    pub fn into_unreadable(self) -> TrustStore {
+        TrustStore { readable: false, ..self }
+    }
+}
+
+// ------------------------------------------------------------------ the trust anchor (P2, P3)
+
+/// The canon/2 document of a trust anchor, its members exactly these.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AnchorDoc {
+    encoding: Canon2Tag,
+    format: AnchorFormat,
+    keys: BTreeMap<Hex64, Key>,
+    stream: Stream,
+    target: TargetKind,
+    threshold: i64,
+}
+
+/// A trust anchor (P2 step 3): the keys with their roles, the threshold, the PEP's target kind and its stream.
+/// `fingerprint` is the SHA-256 of its bytes, which the operator compares (P2 step 4).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Anchor {
+    pub keys: BTreeMap<Hex64, Key>,
+    pub threshold: i64,
+    pub target: TargetKind,
+    pub stream: Stream,
+    pub fingerprint: Hex64,
+}
+
+impl Anchor {
+    /// P3: the trust store an anchor provisions, with the trust sequence and the time floor at their start.
+    pub fn store(&self) -> TrustStore {
+        TrustStore { keys: self.keys.clone(), threshold: self.threshold, ..TrustStore::default() }
+    }
+}
+
+/// The canon/2 bytes of an anchor trusting `public_keys` (32 raw bytes each) in `role`. The owner's tool.
+pub fn anchor_bytes(public_keys: &[[u8; 32]], target: TargetKind, stream: &Stream, role: &Role) -> Result<Vec<u8>, Refused> {
+    let doc = AnchorDoc {
+        encoding: Canon2Tag,
+        format: AnchorFormat,
+        keys: TrustStore::with_keys(public_keys, role).keys,
+        stream: stream.clone(),
+        target,
+        threshold: THRESHOLD,
+    };
+    let raw = prismpath_rs::canon2::codec::to_bytes(&doc).map_err(|error| Refused::new(BAD_FORMAT, error.to_string()))?;
+    read_anchor(&raw)?;
+    Ok(raw)
+}
+
+/// The anchor in `raw`, or `Refused` (`dist:bad-format`, `document:not-canonical`).
+pub fn read_anchor(raw: &[u8]) -> Result<Anchor, Refused> {
+    let doc: AnchorDoc = load(raw, "trust anchor")?;
+    require(doc.threshold == THRESHOLD, "a trust anchor's threshold")?;
+    require(!doc.keys.is_empty(), "a trust anchor with no key")?;
+    require(doc.keys.len() <= MAX_KEYS, "a trust anchor with more keys than a trust store holds (K5)")?;
+    require(doc.keys.iter().all(|(kid, key)| Hex64::of(&key.public.raw()) == *kid), "a trust anchor key id that is not its key's")?;
+    Ok(Anchor { keys: doc.keys, threshold: doc.threshold, target: doc.target, stream: doc.stream, fingerprint: Hex64::of(raw) })
 }
 
 #[cfg(test)]
