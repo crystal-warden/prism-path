@@ -722,6 +722,49 @@ def test_a_mesh_pep_compares_its_fallback_tables_byte_for_byte(tmp_path):
     assert point.send(_fallback(point, image(9), 2, widens=False, replaces=H(image(9))))[-1].event == "install-applied"
 
 
+def _older_pack(tmp_path, name: str) -> str:
+    """A valid `ppt-pack/1` of a newer version than anything the host ran, signed by a key of its own."""
+    from prismpath.hotswap import policy_pack as pp
+    keys = pp.keygen(str(tmp_path / f"{name}-keys"))
+    ppt = tmp_path / f"{name}.ppt"
+    ppt.write_bytes(image(7))
+    pp.build_pack(str(ppt), {"x": "int"}, 99, "dist-demo", keys["private"], keys["public"])
+    return str(ppt), keys["public"]
+
+
+def _swap_older(point, pack) -> dict:
+    from prismpath.hotswap.policy_host import PolicyHost
+    path, key = pack
+    return PolicyHost(str(point.state_dir), [key], dict(GEN.QUALIFICATION), instance_key=point.key).swap(path)
+
+
+def test_case_182_234_the_older_forms_stay_refused(tmp_path):
+    """case_182: IS9, L2. A host PEP that holds an install statement and committed nothing refuses a `ppt-pack/1`,
+    again after a second provisioning and after its install record is made unreadable. case_234: L2, P3. A host PEP
+    that never held one refuses it on the stream it committed on, also after it is provisioned again, while one that
+    was provisioned and committed nothing still takes it."""
+    refused = {"ok": False, "reasons": ["dist:legacy-refused"]}
+    point = _host(tmp_path)
+    point.send(_fallback(point, image(9)))
+    pack = _older_pack(tmp_path, "pack")
+    assert point.pep.floor.seq == 0 and _swap_older(point, pack) == refused
+    point.pep.confirm(point.pep.provision(point.anchor()))
+    assert _swap_older(point, pack) == refused
+    for path in point.pep.installed._paths():
+        Path(path).write_bytes(b"not a record")
+    point.pep = point.open()
+    assert point.pep.installed.record_lost and _swap_older(point, pack) == refused
+
+    plain = _dist.HostPep(tmp_path / "plain")
+    plain.commit(image(5))
+    assert _swap_older(plain, pack) == refused
+    plain.pep.confirm(plain.pep.provision(plain.anchor()))
+    assert plain.pep.floor.seq == 0 and _swap_older(plain, pack) == refused
+    fresh = _dist.HostPep(tmp_path / "fresh")
+    fresh.pep.confirm(fresh.pep.provision(fresh.anchor()))
+    assert _swap_older(fresh, pack)["ok"]
+
+
 def test_the_state_record_carries_the_install_entry_and_the_fallback_bit(tmp_path):
     """H10, FB2: a PEP that holds install keys sends the install entry in every record, its install id changing with
     every set it applies, and bit 4 while its fallback policy decides, with zeros for the active fields."""
@@ -807,6 +850,12 @@ def test_the_engineer_s_tool_writes_the_anchor_s_install_part_sets_and_install_t
     assert run("install", "--kind", "fallback", "--set", f"policy.ppt={tmp_path / 't9.ppt'}", "--seq", "2",
                "--follows", str(tmp_path / "fallback"), *common, "--out", str(tmp_path / "renewal")) == 0
     assert point.send(install_pairs(tmp_path / "renewal"))[-1].event == "install-applied"
+    assert run("install", "--kind", "ceiling", "--empty", "--seq", "2", "--follows", str(tmp_path / "ceiling"),
+               "--widens", *common, "--out", str(tmp_path / "withdrawn")) == 0
+    assert point.send(install_pairs(tmp_path / "withdrawn"))[-1].event == "install-widened"
+    assert run("install", "--kind", "ceiling", "--list", str(tmp_path / "t9.ppt"), "--seq", "3", "--follows",
+               str(tmp_path / "withdrawn"), *common, "--out", str(tmp_path / "again")) == 0
+    assert point.send(install_pairs(tmp_path / "again"))[-1].event == "install-applied"   # IS6: it replaces nothing
     (tmp_path / "meta.json").write_text(__import__("json").dumps(GEN.image_meta(image(6))))
     assert run("seal", "--artifact", "policy.ppt", "--body", str(tmp_path / "t6.ppt"), "--stream", STREAM, "--seq", "1",
                "--target", "mesh", "--key", str(keys["A"]), "--meta", str(tmp_path / "meta.json"),

@@ -1163,6 +1163,7 @@ class Pep:
         running = self.active                     # the runtime runs the held release, since the PEP is not reconciling
         self._intent(op, release, None, running, False)
         if op == "commit":
+            self.installed.mark_stream(self.stream)                 # L2: before the floor, so no provisioning reopens
             self.store.write("floor.json", _FLOOR, {"stream": self.stream, "seq": floor.seq, "ids": sorted(floor.ids)})
             self.floor = floor
         event = "committed" if op == "commit" else "rolled-back"
@@ -1597,6 +1598,8 @@ class Pep:
         except Exception as error:  # noqa: BLE001 - P5: never provisioned over a runtime that still runs a release
             raise PepRefused(f"the runtime does not withdraw, so the PEP is not provisioned over it (P5): {error}") from None
         self.reconciling, self.retry_runtime, self.due = None, False, None
+        if self.stream and self.floor.seq > 0:
+            self.installed.mark_stream(self.stream)                 # L2: a stream committed on before the mark was kept
         for name in ("active.json", "staged.json", "pending.json", "fresh.json"):
             self.store.remove(name)
         self.trust = store.save(self.store.path("trust.json"))

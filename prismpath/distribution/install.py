@@ -29,7 +29,8 @@ Files, under the PEP's `dist/` directory and its second medium (`copy`), each wr
                           `<copy>/blobs/`
     install/staged.json   the staged install sets, at most one per install kind (IS4)
     install/zones.json    the protected names of the last committed `agent` release (FB9), and at `<copy>/zones.json`
-    marks.json            the marks of the anchor part: an install statement was held (IS9) and a ceiling was (IS10)
+    marks.json            the marks of the anchor part: an install statement was held (IS9), a ceiling was (IS10),
+                          and the streams a release was committed on (L2)
 """
 from __future__ import annotations
 
@@ -525,19 +526,12 @@ class Installed:
         self.ceiling_lost = False
         self.staged: Dict[str, Staged] = {}
         self.marks = {"ceiling": False, "install": False}
+        self.streams: FrozenSet[str] = frozenset()
         self.zones: Optional[List[str]] = None
 
     # ------------------------------------------------------------------ the marks of the anchor part
     def _read_marks(self) -> None:
-        try:
-            with open(os.path.join(self.dist, "marks.json"), "rb") as handle:
-                doc = kinds.load_canonical(handle.read(), "marks")
-            if isinstance(doc, dict) and doc.get("format") == MARKS_FORMAT:
-                self.marks = {"ceiling": doc.get("ceiling") is True, "install": doc.get("install") is True}
-        except (OSError, Refused):
-            # IS9, IS10: a mark that does not read is taken as set, so a lost file never reopens anything
-            if os.path.exists(os.path.join(self.dist, "marks.json")):
-                self.marks = {"ceiling": True, "install": True}
+        self.marks, self.streams, _readable = read_marks(self.dist)
 
     def mark(self, **marks: bool) -> None:
         """Set marks of the anchor part. A mark is never cleared (IS9)."""
@@ -545,8 +539,20 @@ class Installed:
         if all(self.marks[name] == changed[name] for name in changed):
             return
         self.marks.update(changed)
+        self._write_marks()
+
+    def mark_stream(self, stream: str) -> None:
+        """L2: a release was committed on `stream`, so the older forms stay refused on it whatever provisioning
+        follows. Set before the commit's floor is written, and never cleared."""
+        if stream in self.streams:
+            return
+        self.streams = self.streams | {stream}
+        self._write_marks()
+
+    def _write_marks(self) -> None:
         _write(os.path.join(self.dist, "marks.json"),
-               canon.canon2_bytes({canon.ENCODING_KEY: canon.CANON2, "format": MARKS_FORMAT, **self.marks}))
+               canon.canon2_bytes({canon.ENCODING_KEY: canon.CANON2, "format": MARKS_FORMAT, **self.marks,
+                                   "streams": sorted(self.streams)}))
 
     # ------------------------------------------------------------------ load
     def _paths(self) -> Tuple[str, str]:
@@ -746,6 +752,33 @@ class Installed:
         if self.record is None:
             return []
         return sorted(one for held in self.record.sets.values() if held is not None for one in held.envelope_ids)
+
+
+def read_marks(dist_dir: str) -> Tuple[Dict[str, bool], FrozenSet[str], bool]:
+    """The marks of the anchor part under `dist_dir`: ({ceiling, install}, the streams committed on, readable). A
+    file that does not read is taken as every mark set, so a lost file never reopens anything (IS9, IS10, L2)."""
+    path = os.path.join(dist_dir, "marks.json")
+    try:
+        with open(path, "rb") as handle:
+            doc = kinds.load_canonical(handle.read(), "marks")
+    except OSError:
+        if os.path.exists(path):
+            return {"ceiling": True, "install": True}, frozenset(), False
+        return {"ceiling": False, "install": False}, frozenset(), True
+    except Refused:
+        return {"ceiling": True, "install": True}, frozenset(), False
+    streams = doc.get("streams", []) if isinstance(doc, dict) else None
+    if not (isinstance(doc, dict) and doc.get("format") == MARKS_FORMAT and isinstance(streams, list)
+            and all(isinstance(one, str) for one in streams)):
+        return {"ceiling": True, "install": True}, frozenset(), False
+    return {"ceiling": doc.get("ceiling") is True, "install": doc.get("install") is True}, frozenset(streams), True
+
+
+def older_forms_refused(dist_dir: str, stream: Optional[str]) -> bool:
+    """L2, IS9: the PEP under `dist_dir` refuses the older signed forms on `stream`, the stream it follows, because it
+    has held an install statement or committed a release on that stream, or because its marks do not read."""
+    marks, streams, readable = read_marks(dist_dir)
+    return not readable or marks["install"] or (stream is not None and stream in streams)
 
 
 def read_zones_file(paths: Sequence[str]) -> Optional[List[str]]:
