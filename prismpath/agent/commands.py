@@ -10,7 +10,11 @@ Where things live. Everything the commands keep is in one directory of the user'
   instance.key, instance.pub     the instance key, which signs the root statement over a run (mode 0600)
   policy.core.json               the policy image every hook call decides under: the starter `init --policy`
                                  chose (`strict`, `default`, `review` or `session`), `default` (agent_default) unless told
-  policy.attestation.json        its `prismpath.core-image/1` attestation, signed with the authority key
+  policy.attestation.json        its sealed `policy.core` distribution envelope on the stream `local`, signed
+                                 with the authority key (L1 of spec-policy-distribution.md). A home recorded
+                                 before 0.3.0 holds the older `prismpath.core-image/1` attestation here, which
+                                 is still read, with a `legacy_form` event in audit.log, until `init` runs again
+  audit.log                      the home's own audit log (`legacy_form` events, signed by the instance key)
   runs/<session>                 one run per Claude Code session (`prismpath.agent.run`)
 
 `init` makes the keys (never replacing one), records the policy with its attestation, and writes the hook
@@ -138,14 +142,56 @@ def _ensure_key(home: Path, role: str) -> str:
     return "created"
 
 
+LOCAL_KINDS = ("agent", "gateway")     # the target kinds a home that holds its own authority key seals its policy for
+
+
 def _attestation(home: Path, image: bytes, case: str = POLICY_CASE) -> bytes:
+    """The record of the home's policy (L1): a sealed `policy.core` envelope over `image`, on the stream `local`,
+    for the `gateway` kind when `case` is `gateway` and for `agent` otherwise, signed with the authority key. The
+    starter's name is not sealed; `starter_of` reads it from the image."""
+    from prismpath.distribution import legacy
     from prismpath.hotswap import policy_pack
-    from prismpath.kernel import canon2
-    from prismpath.ledgers import core_evidence
     signer = policy_pack._load_private(str(_key_paths(home, "authority")[0]))
-    return canon2.dumps({"format": core_evidence.IMAGE_FORMAT, "case": case,
-                         "image_sha256": _sha256_hex(image), "key_id": _key_id(home, "authority"),
-                         "sig": signer.sign(core_evidence.IMAGE_DOMAIN + image).hex()}) + b"\n"
+    kind = "gateway" if case == "gateway" else "agent"
+    return legacy.local_seal("policy.core", image, [signer], seq=1, targets=(kind,))
+
+
+def _is_sealed(record: bytes) -> bool:
+    from prismpath.distribution import envelope as env
+    return record[:len(env.MAGIC)] == env.MAGIC
+
+
+def _check_sealed(sealed: bytes, image: bytes, authority) -> None:
+    """The home's sealed `policy.core` envelope checked as the verifier's V2 to V9 check it, for a home that holds
+    its own authority key: the container and the envelope read, a `policy.core` for one agent or gateway kind, a
+    signature by the authority key, in force now (V6), and the image its body and its policy hash. V11, the image
+    read as the core reads it, is the `Policy` the caller builds from it. AgentError with the cause otherwise.
+    Nothing here reads a floor or a trust store, since a home that holds its key has neither."""
+    from prismpath.distribution import envelope as env
+    from prismpath.distribution.kinds import Refused
+    try:
+        envelope_bytes, entries = env.unseal(sealed)
+        envelope = env.read(envelope_bytes)
+    except Refused as refused:
+        raise AgentError(f"the recorded policy's attestation envelope does not read ({refused.cause})") from None
+    kinds = [kind for kind in envelope.targets if kind in LOCAL_KINDS]
+    if envelope.artifact != "policy.core" or len(kinds) != 1:
+        raise AgentError("the recorded policy's attestation envelope is not a policy.core for an agent or gateway home")
+    message, signed = env.signed_message(envelope_bytes), False
+    for _key_id, signature in entries:
+        try:
+            authority.verify(signature, message)
+            signed = True
+            break
+        except Exception:  # noqa: BLE001 - another key's entry, or a signature that does not verify
+            continue
+    now, digest = int(time.time()), _sha256_hex(image)      # V6 with the SKEW of section 7, 300 seconds
+    cause = ("sig:invalid" if not signed else "dist:not-yet-valid" if envelope.not_before - now > 300
+             else "dist:expired" if now >= envelope.expires
+             else "image:sha256-mismatch" if (len(image), digest, digest)
+             != (envelope.body_size, envelope.body_sha256, envelope.policy_sha256) else None)
+    if cause is not None:
+        raise AgentError(f"the recorded policy's attestation envelope does not verify under the authority key ({cause})")
 
 
 def load_distributed(home: Path, *, until: Optional[list] = None, kind: str = "agent"):
@@ -181,7 +227,9 @@ class Committed:
     AgentError, and loads again only when a file of the PEP's store changed (a commit, a rollback, a lapse, a
     revocation, a lock) or the release's earliest expiry has come, so a decision costs a few `stat` calls and a
     release that no longer stands stops deciding at the next one (section 9, X3, R5)."""
-    WATCHED = ("anchor.json", "setting.json", "counter.json", "floor.json", "trust.json", "active.json")
+    # the install record too, so a fallback set applied while no release decides reaches it (FB1, FB8)
+    WATCHED = ("anchor.json", "setting.json", "counter.json", "floor.json", "trust.json", "active.json",
+               "install/record.json")
 
     def __init__(self, home: Path, kind: str = "agent"):
         self.home, self.kind = Path(home), kind
@@ -248,7 +296,12 @@ def load_checked(home: Path):
     if not policy_path.is_file() or not attestation_path.is_file():
         raise AgentError(f"no recorded policy in {home}; run `prismpath agent init`")
     image = policy_path.read_bytes()
-    statement = canon2.loads(attestation_path.read_bytes().rstrip(b"\n"))
+    record = attestation_path.read_bytes()
+    if _is_sealed(record):
+        _check_sealed(record, image, authority)
+        return Policy(image), RunStore(home / RUNS_DIR)
+    # the older form (L3): a `prismpath.core-image/1` attestation, read with a `legacy_form` event each time
+    statement = canon2.loads(record.rstrip(b"\n"))
     if (not isinstance(statement, dict) or statement.get("format") != core_evidence.IMAGE_FORMAT
             or statement.get("key_id") != authority_id or statement.get("image_sha256") != _sha256_hex(image)):
         raise AgentError("the recorded policy's attestation does not name this policy and authority key")
@@ -256,6 +309,9 @@ def load_checked(home: Path):
         authority.verify(bytes.fromhex(statement["sig"]), core_evidence.IMAGE_DOMAIN + image)
     except Exception as exc:
         raise AgentError("the recorded policy's attestation signature does not verify") from exc
+    from prismpath.distribution import legacy
+    legacy.record_at(str(home / legacy.AUDIT_FILE), legacy.CORE_IMAGE, reader="agent.load_checked",
+                     sha256=_sha256_hex(image), key_id=authority_id, instance_key=instance)
     return Policy(image), RunStore(home / RUNS_DIR)
 
 
@@ -405,7 +461,9 @@ def init(project: Path, yes: bool, as_json: bool, confirm=None, out=None, policy
         policy_state = "recorded"
     else:
         policy_state = "kept" if recorded == image else "updated"
-    if policy_state != "kept":
+    # a home recorded before 0.3.0 keeps its policy and has its older attestation sealed again as an envelope (L1)
+    older = (home / ATTESTATION_FILE).is_file() and not _is_sealed((home / ATTESTATION_FILE).read_bytes())
+    if policy_state != "kept" or older:
         for name, data in ((POLICY_FILE, image), (ATTESTATION_FILE, _attestation(home, image, STARTERS[starter]))):
             tmp = home / (name + ".tmp")
             fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
@@ -516,6 +574,122 @@ def outcome_answer(data: Dict[str, Any], event: str, store) -> Dict[str, Any]:
     return {}
 
 
+FLOOR_RUN = "floor-"                               # RC4: the floor's decisions are a run of their own, under its image
+
+
+def floor_session(session: str) -> str:
+    return FLOOR_RUN + session
+
+
+def floor_run(home: Path, session: str, runs: Optional[Path] = None):
+    """The run of the action floor's decisions in `session`, under the floor's own image, so each receipt replays
+    under the set that made it (RC1, RC4): one session is decided by one policy."""
+    from prismpath.agent.run import RunStore
+    from prismpath.distribution.adapters import agent_home
+    image = agent_home.floor_image(home)
+    if image is None:
+        raise AgentError("the home holds no action floor")
+    return RunStore(Path(runs) if runs is not None else Path(home) / RUNS_DIR).open(floor_session(session), image)
+
+
+def floor_decide(home: Path, call: Any, workspace, *, env: Optional[Mapping[str, str]] = None,
+                 policy_image: Optional[bytes] = None, hook_input: Any = None):
+    """AF1: the action floor's decision on one call in a home that follows a stream, asked before the release, or None
+    when the home holds no floor or the floor is silent. The call is read as the release reads it, with the zone point
+    of the policy in force (`policy_image`, or none when no release or fallback decides, which reads `unknown`), and
+    `zone_name` beside `zone_reach` (`classifier.zone_of`). Returns (decision, reading bytes, the floor's answer)."""
+    from prismpath.agent import claude_code, classifier, zones as zone_module
+    from prismpath.agent.policy import Decision, Policy
+    from prismpath.distribution.adapters import agent_home
+    from prismpath.kernel import causes
+    image = agent_home.floor_image(home)
+    if image is None:
+        return None
+    if policy_image is None:
+        try:
+            policy_image = load_distributed(Path(home))[0].image
+        except AgentError:
+            policy_image = None
+    point = zone_module.information_point(Path(home), policy_image, Path(workspace), env) if policy_image is not None \
+        else zone_module.unusable("no release or fallback policy decides, so no zone can be read")
+    config = classifier.Config.for_workspace(str(workspace), zones=point)
+    if hook_input is not None:
+        hc = claude_code.hook_call(hook_input, env)
+        call, reading = hc.call, claude_code.hook_reading(hook_input, hc, config)
+    else:
+        reading = classifier.classify(call, config)
+    reach, name = classifier.zone_of(call, reading, config)
+    request = {"reading": {**reading, "zone_reach": reach, "zone_name": name}}
+    answered = agent_home.ask_floor(Path(home), request)
+    if answered is None:
+        return None
+    floor = Policy(image)
+    raw = floor.reading_bytes(request["reading"])
+    decision = floor.decide(raw)
+    if decision.kind != answered["decision"]:
+        # past the signed rate the floor escalates with dist:floor-rate (AF8); its receipt is the floor's own
+        code = causes.code(answered["cause"])
+        decision = Decision("escalate", answered["cause"], code,
+                            {"verdict": "refuse", "cause": answered["cause"], "code": code})
+    return decision, raw, answered
+
+
+def _floor_hook(data: Dict[str, Any], env, home: Path, session: str, nested) -> Optional[Dict[str, Any]]:
+    """AF1: the hook of a home that follows a stream asks its action floor first, in every state. When the floor
+    answers, its decision is the answer, written as a receipt of the floor's own run, and an allowed shell command
+    runs under the profile of the policy in force and the floor together. None when the floor is silent."""
+    from prismpath.agent import claude_code, sandbox_hook
+    from prismpath.distribution.adapters import agent_home
+    try:
+        in_force = load_distributed(home)[0].image
+    except AgentError:
+        in_force = None
+    floored = floor_decide(home, None, claude_code.hook_call(data, env).workspace, env=env, policy_image=in_force,
+                           hook_input=data)
+    if floored is None:
+        return None
+    decision, raw, answered = floored
+    run = floor_run(home, session)
+    profile = None
+    has_command = isinstance(data.get("tool_input"), dict) and isinstance(data["tool_input"].get("command"), str)
+    if (decision.kind == "allow" or (decision.kind == "escalate" and has_command)) \
+            and data.get("tool_name") == "Bash" and sandbox_hook.supported():
+        try:
+            profile = sandbox_hook.sandbox_profile_for_call(data, home, in_force or agent_home.floor_image(home), nested,
+                                                            floor=agent_home.floor_image(home))
+        except sandbox_hook.SandboxRefused as exc:
+            return deny_answer(_detail(exc), SANDBOX_ERROR)
+    hc = claude_code.hook_call(data, env)
+    if answered["cause"] == "dist:floor-rate":
+        # past the signed rate (AF8): its receipt is the floor's own, which an operator's answer names (OP2), and the
+        # floor run's image would not decide it so, so it is not a line of that run
+        updated = sandbox_hook.sandbox_input(data, hc.workspace, profile, backend=nested.backend if nested else "bwrap",
+                                             python=nested.python if nested else None,
+                                             runner=nested.runner if nested else None) if profile is not None else None
+        return claude_code.fill_receipt(claude_code.hook_answer(decision, updated),
+                                        f"floor receipt {answered['receipt_sha256']}")
+    from prismpath.agent import run as run_module
+    index = run.append(raw, decision.verdict, extras=run_module.Extras(
+        sandbox_profile=profile.hash() if profile is not None else None,
+        sandbox_backend=(nested.backend if nested else "bwrap") if profile is not None else None,
+        tool_use_id=data.get("tool_use_id")))
+    answer = claude_code.hook_answer(decision)
+    if profile is not None:
+        from prismpath.ledgers import core_evidence
+        observe = {"session": floor_session(session), "receipt": index, "profile_sha256": profile.hash(),
+                   "image_sha256": core_evidence.sha256_hex(agent_home.floor_image(home))}
+        if nested is None:
+            observe["run_dir"] = str(run.dir)
+        else:
+            observe["socket"] = nested.socket
+        updated = sandbox_hook.sandbox_input(data, hc.workspace, profile, observe=observe,
+                                             python=nested.python if nested else None,
+                                             runner=nested.runner if nested else None,
+                                             backend=nested.backend if nested else "bwrap")
+        answer = claude_code.hook_answer(decision, updated)
+    return claude_code.fill_receipt(answer, receipt_id(floor_session(session), index))
+
+
 def hook(raw: bytes, env: Optional[Mapping[str, str]] = None, nested=None,
          launch: Optional[List[str]] = None) -> Dict[str, Any]:
     """The answer to one hook input. Never raises; whatever fails is a deny with cause 126.
@@ -539,6 +713,12 @@ def hook(raw: bytes, env: Optional[Mapping[str, str]] = None, nested=None,
         if not isinstance(session, str) or not session:
             raise AgentError("the hook input names no session_id")
         home = config_dir(env)
+        if event == "PreToolUse":
+            from prismpath.distribution.adapters import agent_home
+            if agent_home.floor_image(home) is not None:
+                floored = _floor_hook(data, env, home, session, nested)       # AF1: asked first, in every state
+                if floored is not None:
+                    return floored
         policy, store = load_checked(home)
         if event == "SessionEnd":
             if (store.root / _run_dir(session)).exists():
@@ -585,7 +765,9 @@ def hook(raw: bytes, env: Optional[Mapping[str, str]] = None, nested=None,
                 # an allowed shell call, or a question the person approves, runs only inside the sandbox the same policy compiles to (sandbox_hook.py);
                 # on a platform without the sandbox the call is decided and not confined, as before
                 try:
-                    profile = sandbox_hook.sandbox_profile_for_call(data, home, policy.image, nested)
+                    from prismpath.distribution.adapters import agent_home
+                    profile = sandbox_hook.sandbox_profile_for_call(data, home, policy.image, nested,
+                                                                    floor=agent_home.floor_image(home))
                 except sandbox_hook.SandboxRefused as exc:
                     return deny_answer(_detail(exc), SANDBOX_ERROR)
             run = store.open(session, policy.image)

@@ -7,8 +7,8 @@ A test covers a case when its name or docstring carries `case_NNN`, or when it i
 of the corpus and the corpus holds the case for that implementation. The C core has only the `mesh` and
 `cfs` kinds (I1), so a corpus case counts for C only when its PEP is one of those. Python's tests are
 prismpath/tests/test_distribution_*.py, integrations/cfs/tests/test_cfs_dist.py (the `cfs` kind's halves) and
-tools/tests/test_export.py, the C core's is
-prismpath/tests/test_distribution_c.py and Rust's are prismpath-hotswap-rs/tests/test_distribution_*.rs.
+tools/tests/test_export.py, the C core's are
+prismpath/tests/test_distribution_c.py and test_distribution_c_cfs.py (its `cfs` kind and the cFS app) and Rust's are prismpath-hotswap-rs/tests/test_distribution_*.rs.
 
 `PENDING` lists, per implementation, the cases whose pull request has not landed. Each pull request
 shortens it, and a case still listed that has a test fails here, so the list never hides a landed case.
@@ -26,10 +26,11 @@ CASE = re.compile(r"\bcase_(\d{3})\b")
 SOURCES = {
     "P": [*sorted((REPO / "tests").glob("test_distribution_*.py")), ROOT / "integrations" / "cfs" / "tests" / "test_cfs_dist.py",
           ROOT / "tools" / "tests" / "test_export.py"],
-    "C": [REPO / "tests" / "test_distribution_c.py"],
+    "C": [REPO / "tests" / "test_distribution_c.py", REPO / "tests" / "test_distribution_c_cfs.py"],
     "R": sorted((ROOT / "prismpath-hotswap-rs" / "tests").glob("test_distribution_*.rs")),
 }
-EXCLUDED = {REPO / "tests" / "test_distribution_trace.py", REPO / "tests" / "test_distribution_c.py"}
+EXCLUDED = {REPO / "tests" / "test_distribution_trace.py", REPO / "tests" / "test_distribution_c.py",
+            REPO / "tests" / "test_distribution_c_cfs.py"}
 REPLAYERS = {"P": REPO / "tests" / "test_distribution_corpus.py",
              "R": ROOT / "prismpath-hotswap-rs" / "tests" / "test_distribution_conformance.rs",
              "C": REPO / "tests" / "test_distribution_c.py"}
@@ -42,11 +43,23 @@ C_KINDS = frozenset({"mesh", "cfs"})
 # has its test. 60: the C core
 # runs the mesh half, and the cfs half, a table taken on the signer's word, waits for the cfs kind in the C core.
 # 100: Python's grant writer emits an envelope, and the other older forms' writers wait for PRs 11 and 12.
-PARTIAL = {"P": frozenset({100}), "R": frozenset(), "C": frozenset({60})}
+# 243: the Rust PEP stages, aborts and applies trust statements while reconciling, and taking a controller statement
+# waits for the controller key in Rust. 246: the Rust PEP lapses a held release that expires or is revoked while
+# reconciling, and the ceiling and fallback runs wait for section 21 in Rust.
+PARTIAL = {"P": frozenset(), "R": frozenset(), "C": frozenset({220})}
+# 193, 194: Python's action floor writes `would` and counts overrides, and the `xdp` halves (a floor allow counted with
+# no `would`, a floor with a `rate` refused) wait for the `xdp` kind (PR 11); 193's `cfs` lines wait for the core run
+# writer of section 21 (RC4).
+PARTIAL["P"] = PARTIAL["P"] | frozenset({193, 194})
+# 225: a `host`, a `mesh` and a `cfs` PEP take or refuse an operator's answer, and the `xdp` third waits for its kind.
+# 187: the `agent` home's hook, proxies and sandbox profile and the `gateway` ask the floor first, and the `xdp` part
+# waits for its kind (PR 11).
+# 223: the `host` and `mesh` floors' `meta` is read as their `policy.ppt`'s, and the `xdp` part waits for its kind.
+PARTIAL["P"] = PARTIAL["P"] | frozenset({187, 223, 225})
 PENDING = {
-    "P": "100 102 104-105 161-280",
-    "R": "137-138 272",
-    "C": "25 60 97 104-105 122 161-163 165-167 169-172 174-178 180 182-184 186 188-195 197-205 207-208 210 213 215-216 218-221 223-227 230-236 256-261 269-271 276-280",
+    "P": "104-105 164 187 191 193-194 206 223 225 266 272-273",
+    "R": "137-138 272 281",
+    "C": "97 104-105 122 193 202 220 230 235 256-261 269-271 276-280 281",
 }
 
 
@@ -88,9 +101,9 @@ def _covered(impl: str) -> set:
     return covered - PARTIAL[impl]
 
 
-def test_the_spec_has_263_numbered_cases_each_naming_rules_and_implementations():
+def test_the_spec_has_271_numbered_cases_each_naming_rules_and_implementations():
     # 144 to 160 are left to the pull requests in flight that number their cases from 144; section 21 starts after them
-    assert sorted(SPEC) == [*range(1, 144), *range(161, 281)]
+    assert sorted(SPEC) == [*range(1, 144), *range(161, 289)]
     assert all(case["rules"].strip() and case["runs_on"] for case in SPEC.values())
 
 

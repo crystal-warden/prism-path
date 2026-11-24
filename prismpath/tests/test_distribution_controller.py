@@ -42,12 +42,14 @@ class Tampering(LocalTransport):
 class Fleet:
     """A controller and host PEPs under one clock, each PEP pulling through `LocalTransport`."""
 
-    def __init__(self, tmp_path, names=("p1", "p2", "p3"), rule="each", group="fleet", kind="host"):
+    def __init__(self, tmp_path, names=("p1", "p2", "p3"), rule="each", group="fleet", kind="host", controller="C",
+                 fresh=0):
         self.clock = _dist.Clock()
         self.dir = tmp_path / "controller"
         self.controller = Controller(str(self.dir), _dist.instance_key("C"), clock=self.clock)
         maker = _dist.MeshPep if kind == "mesh" else _dist.HostPep
-        self.points = {name: maker(tmp_path / name, clock=self.clock, key=_dist.instance_key(name)) for name in names}
+        self.points = {name: maker(tmp_path / name, clock=self.clock, key=_dist.instance_key(name),
+                                   controller=controller, fresh=fresh) for name in names}
         first = next(iter(self.points.values()))
         self.controller.add_anchor(first.anchor(), dict(GEN.QUALIFICATION) if kind == "host" else None)
         self.ids = {name: self.controller.enroll(point.key.public_raw, kind, STREAM, group, rule)
@@ -78,7 +80,7 @@ class Fleet:
     def record(self, name, event="beat", **changes):
         """A record made and signed by the PEP `name` now, with `changes` to its fields, re-signed."""
         point = self.points[name]
-        point.pep.see_epoch(self.controller.epoch)
+        point.pep.take_statement(self.controller.statement(STREAM))
         signed = point.pep.record(event)
         point.pep.drain()
         if not changes:
@@ -260,13 +262,17 @@ def test_case_124_epochs_the_current_and_the_one_before_are_accepted_and_an_olde
     controller, pep = fleet.controller, fleet.points["p1"].pep
     fleet.clock.now += 3 * controller.interval
     controller.tick()
-    epoch = controller.epoch
+    epoch = controller.epoch_of(STREAM)
     assert epoch == 4
     assert controller.receive(fleet.record("p1", epoch=epoch)) is None
     assert controller.receive(fleet.record("p1", epoch=epoch - 1)) is None
     assert controller.receive(fleet.record("p1", epoch=epoch - 3)) == "fleet:state-replay"
-    pep.see_epoch(epoch)
-    pep.see_epoch(epoch - 2)
+    current = controller.statement(STREAM)
+    assert pep.epoch == epoch
+    fleet.clock.now -= 2 * controller.interval
+    older = Controller(str(tmp_path / "other"), _dist.instance_key("C"), clock=fleet.clock)
+    older.add_anchor(fleet.first.anchor(), dict(GEN.QUALIFICATION))
+    assert not pep.take_statement(older.statement(STREAM)) and not pep.take_statement(current)
     assert pep.epoch == epoch and state_record.read(pep.record("beat"), fleet.points["p1"].key.public_raw).epoch == epoch
 
 
@@ -421,7 +427,7 @@ def test_the_frame_driver_carries_a_rollout_to_mesh_nodes_and_their_records_back
             if isinstance(event, frames.Assembled):
                 pep.stage(event.sealed, event.body)
             elif isinstance(event, frames.Epoch):
-                pep.see_epoch(event.epoch)
+                pep.take_statement(event.statement)
             elif isinstance(event, frames.Commit) and pep.staged is not None:
                 staged = pep.staged
                 if event.names(staged.stream, staged.seq, staged.policy_sha256):
@@ -616,7 +622,7 @@ def test_a_member_is_staged_only_once_every_envelope_of_the_release_is(tmp_path)
                          sidecar)
     rollout = fleet.controller.offer("fleet", STREAM, 1)
     pep = fleet.points["p1"].pep
-    pep.see_epoch(fleet.controller.epoch)
+    pep.take_statement(fleet.controller.statement(STREAM))
     first = rollout.envelopes[0]
     info = fleet.controller.stored[first]
     pep.stage(fleet.controller.sealed(first), fleet.controller.blob(info["body_sha256"]))

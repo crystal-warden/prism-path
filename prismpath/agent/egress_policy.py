@@ -90,7 +90,22 @@ class PolicyGate:
                 self.hosts_sha256 = hosts_digest(hosts)
         return None
 
+    def _floor(self, authority: str) -> bool:
+        """AF1: the action floor's `egress.hosts` of a home that follows a stream is asked first, in every state, and a
+        host it lists is reached whatever the release says. Its receipt is the floor's (`agent_home.ask_floor`)."""
+        if self.home is None:
+            return False
+        from prismpath.distribution.adapters import agent_home
+        host, _port = split_authority(authority)
+        answered = agent_home.ask_floor(self.home, {"host": host.lower()})
+        return answered is not None and answered["decision"] == "allow"
+
     def __call__(self, authority: str) -> Tuple[bool, str]:
+        try:
+            if self._floor(authority):
+                return True, "floor-allow"
+        except Exception:  # noqa: BLE001 - a floor that cannot be asked is silent; the release decides
+            pass
         try:
             if self.follow is not None:
                 refused = self._follow()

@@ -69,6 +69,10 @@ typedef struct
     uint64_t              StreamLen;
     uint64_t              ImagesLen;
     uint64_t              Seals;        /**< root statements signed */
+    uint32_t              CaseHold;     /**< 1 when the open case holds decisions made while held (X7) */
+    uint32_t              CaseNumber;   /**< 0, or the open case's number when its id is v<version>.<number> */
+    uint32_t              CaseMaxVersion; /**< the highest version a case of this run had */
+    uint32_t              Spare;
     struct ppt_merkle_acc Acc;          /**< the receipts' peaks and count */
 } PP_RunState_t;
 
@@ -141,16 +145,27 @@ int PP_Run_StateValid(const PP_RunState_t *State);
 void PP_Run_SetInstanceSeed(PP_RunKeys_t *Keys, uint8_t Seed[32]);
 
 /**
- * The checks of a table beyond the kernel's: the core image and the flow are within the table and the causes the
- * core refuses with are ones a receipt can name (69 otherwise), the authority key is provisioned (sig:missing 1
- * otherwise), the table signature and the image attestation verify under it (sig:invalid 2), and the version is
- * not below the floor, nor equal to it with another table (image:version-replay 9). Returns 0 or that cause, and
- * the table's digest (the SHA-256 the table signature covers) in Digest.
+ * The checks of a table the cFS app admits by its distribution envelope (docs/design/spec-policy-distribution.md,
+ * section 3), beyond the kernel's and the envelope's own, which the C core of distribution makes: the core image and
+ * the flow are within the table and the causes the core refuses with are ones a receipt can name (69 otherwise), the
+ * table's bytes before ImageSig are the body the envelope signed, whose SHA-256 is BodySha256 (dist:body-mismatch 138),
+ * and the image attestation verifies under the run's authority key (sig:missing 1, sig:invalid 2), so the run's
+ * images.jsonl stays verifiable. ImageSig is the core run's attestation and no longer what admits a table. Returns 0
+ * or that cause, and the table's digest (the body's SHA-256) in Digest.
  */
-int PP_Run_CheckTable(const PP_RunState_t *State, const PP_RunKeys_t *Keys, const PP_PolicyTable_t *Table,
+int PP_Run_CheckTable(const PP_RunKeys_t *Keys, const PP_PolicyTable_t *Table, const uint8_t BodySha256[32],
                       uint8_t Digest[32]);
 
-/** Raise the floor to an accepted table's version and digest. */
+/**
+ * The checks of a table admitted by the authority's two signatures alone, as a framework with no distribution envelope
+ * admits one (integrations/fprime): the bounds above, the authority key provisioned (sig:missing 1), the table
+ * signature and the image attestation (sig:invalid 2), and the version not below the floor, nor equal to it with
+ * another table (image:version-replay 9). Returns 0 or that cause, and the digest the table signature covers.
+ */
+int PP_Run_CheckSignedTable(const PP_RunState_t *State, const PP_RunKeys_t *Keys, const PP_PolicyTable_t *Table,
+                            uint8_t Digest[32]);
+
+/** Raise the floor of PP_Run_CheckSignedTable to an accepted table's version and digest. */
 void PP_Run_Accept(PP_RunState_t *State, uint32_t Version, const uint8_t Digest[32]);
 
 /** Begin the floor of a new run whose store held a state that did not read (call after PP_Run_Init). Under
@@ -161,13 +176,15 @@ void PP_Run_LoseFloor(PP_RunState_t *State, int Response, uint32_t MinVersion);
 
 /**
  * Record one decision under the active table: open its case when it is not the open one (closing the one before),
- * append the reading to the case and the receipt to receipts.jsonl, and add the receipt's leaf. Returns 0, or -1
- * when a file could not be written, in which case the state is unchanged and the caller must not act on the
- * decision. On success Index is the receipt's index.
+ * append the reading to the case and the receipt to receipts.jsonl, and add the receipt's leaf. Hold is 1 for a
+ * decision made while the app is held past its release's expiry (X7): a hold opens a new case, and its end another,
+ * and such a case's line carries "hold":true, so each receipt keeps its format and its case says it was held.
+ * Returns 0, or -1 when a file could not be written, in which case the state is unchanged and the caller must not
+ * act on the decision. On success Index is the receipt's index.
  */
 int PP_Run_Record(PP_RunState_t *State, const PP_RunIo_t *Io, const PP_RunKeys_t *Keys, const PP_PolicyTable_t *Active,
                   const uint8_t ActiveDigest[32], const uint8_t *Payload, size_t PayloadLen, const PP_Verdict_t *Verdict,
-                  uint64_t *Index);
+                  int Hold, uint64_t *Index);
 
 /**
  * Seal the run: write cases.jsonl (the stream, its open case closed), run.json, receipts.roots.jsonl with one
@@ -199,8 +216,16 @@ size_t PP_Run_ReadingBytes(const uint8_t *Payload, size_t PayloadLen, char *Out,
 
 /** The receipt line for one decision (no line feed). Returns the length, or 0 when Cap is too small or the
  *  verdict names a cause the receipt cannot spell. */
-size_t PP_Run_ReceiptBytes(uint64_t Index, uint32_t CaseVersion, uint32_t Reading, const uint8_t ImageSha[32],
+size_t PP_Run_ReceiptBytes(uint64_t Index, uint32_t CaseVersion, uint32_t CaseNumber, uint32_t Reading,
+                           const uint8_t ImageSha[32],
                            const uint8_t ReadingSha[32], const PP_Verdict_t *Verdict, const PP_PolicyTable_t *Active,
                            char *Out, size_t Cap);
+
+/** OP3: the escalation document of a request the action floor escalated, whose SHA-256 an operator's answer names,
+ *  since a decision of the action floor has no receipt in a core run yet (RC4): {"case":"v<floor version>",
+ *  "cause_code":..,"decider":..,"format":"prismpath.cfs-escalation/1","n":<floor answers>,"policy_sha256":..,
+ *  "reading_sha256":..,"time":<PEP time>}. Returns the length, or 0 when Cap is too small. */
+size_t PP_Run_EscalationBytes(uint32_t FloorVersion, uint16_t Cause, uint32_t FloorAnswers, const uint8_t Policy[32],
+                              const uint8_t ReadingSha[32], uint64_t Time, char *Out, size_t Cap);
 
 #endif

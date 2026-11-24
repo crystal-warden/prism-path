@@ -38,15 +38,50 @@
  */
 #define PRISMPATH_APP_PLATFORM_LOST_FLOOR                     PRISMPATH_APP_PLATFORM_CFGVAL(LOST_FLOOR)
 #define DEFAULT_PRISMPATH_APP_PLATFORM_LOST_FLOOR             PP_LOST_FLOOR_LOCK
-#define PRISMPATH_APP_PLATFORM_LOST_FLOOR_MIN_VERSION         PRISMPATH_APP_PLATFORM_CFGVAL(LOST_FLOOR_MIN_VERSION)
-#define DEFAULT_PRISMPATH_APP_PLATFORM_LOST_FLOOR_MIN_VERSION 1u
+/** Under PP_LOST_FLOOR_MINIMUM, the lowest distribution `seq` the new floor admits (Q5): the floor is one below it. */
+#define PRISMPATH_APP_PLATFORM_LOST_FLOOR_MIN_SEQ             PRISMPATH_APP_PLATFORM_CFGVAL(LOST_FLOOR_MIN_SEQ)
+#define DEFAULT_PRISMPATH_APP_PLATFORM_LOST_FLOOR_MIN_SEQ     1
+
+/**
+ * What the app does when its release expires (docs/design/spec-policy-distribution.md X6), beside the lost floor
+ * response. PP_EXPIRY_REFUSE, the default, lets the release lapse: the app has no policy, every proposal is refused
+ * and the state record says lapsed with dist:expired. PP_EXPIRY_HOLD keeps the expired release deciding until a
+ * release that passes every rule replaces it or a revocation ends the hold (X7, X8): the app sets bit 5 in every state
+ * record, sends an event when the hold begins and when it ends, and marks its receipts by opening a new case of the
+ * core run at each, whose case line says "hold":true. The PEP is provisioned with the setting and refuses to start
+ * under the other one (X10).
+ */
+#define PRISMPATH_APP_PLATFORM_EXPIRY_RESPONSE         PRISMPATH_APP_PLATFORM_CFGVAL(EXPIRY_RESPONSE)
+#define DEFAULT_PRISMPATH_APP_PLATFORM_EXPIRY_RESPONSE PP_EXPIRY_REFUSE
+
+/** The trust anchor (`prismpath.dist-trust/2`) the ground's provisioning writes, and where the app keeps what it holds
+ *  of policy distribution: the releases and the first copy of the install record and its sets (IS10). */
+#define PRISMPATH_APP_PLATFORM_ANCHOR_FILE         PRISMPATH_APP_PLATFORM_CFGVAL(ANCHOR_FILE)
+#define DEFAULT_PRISMPATH_APP_PLATFORM_ANCHOR_FILE "/cf/pp_trust.anchor"
+#define PRISMPATH_APP_PLATFORM_DIST_DIR            PRISMPATH_APP_PLATFORM_CFGVAL(DIST_DIR)
+#define DEFAULT_PRISMPATH_APP_PLATFORM_DIST_DIR    "/cf/ppdist"
+/** The statements provisioning brings (P2 step 3), /cf/pp_bring0.pps and up, and the boot release, /cf/pp_boot0.pps
+ *  and up, which the app stages and commits as if offered when it starts with no release active. */
+#define PRISMPATH_APP_PLATFORM_BRING_FILE          PRISMPATH_APP_PLATFORM_CFGVAL(BRING_FILE)
+#define DEFAULT_PRISMPATH_APP_PLATFORM_BRING_FILE  "/cf/pp_bring%u.pps"
+#define PRISMPATH_APP_PLATFORM_BOOT_FILE           PRISMPATH_APP_PLATFORM_CFGVAL(BOOT_FILE)
+#define DEFAULT_PRISMPATH_APP_PLATFORM_BOOT_FILE   "/cf/pp_boot%u.pps"
+/** The Critical Data Store area of the second copy of the install record and its sets (IS10). */
+#define PRISMPATH_APP_PLATFORM_COPY_CDS_NAME         PRISMPATH_APP_PLATFORM_CFGVAL(COPY_CDS_NAME)
+#define DEFAULT_PRISMPATH_APP_PLATFORM_COPY_CDS_NAME "PPInstall"
+/** Seconds from the Unix epoch to the mission's time epoch (cFE's 1980-001 by default), so the app's time, which
+ *  distribution envelopes are held to, is Unix seconds. */
+#define PRISMPATH_APP_PLATFORM_EPOCH_UNIX         PRISMPATH_APP_PLATFORM_CFGVAL(EPOCH_UNIX)
+#define DEFAULT_PRISMPATH_APP_PLATFORM_EPOCH_UNIX 315532800LL
 
 /**
  * The runtime monitor's staleness bound in seconds of mission elapsed time, or 0 when this mission has no monitor.
  * With a bound, the monitor_ok field of the reading is true only while the latest verdict on
  * PRISMPATH_APP_MONITOR_VERDICT_MID is ok and was received within the bound: no verdict yet, a violation and an
- * old verdict all read as not ok. With 0, the field is always true. The build takes the bound from the environment
- * variable PP_MONITOR_STALE_SECS (CMakeLists.txt), so a mission turns the monitor on at build time.
+ * old verdict all read as not ok. With 0, the field is always true for a release's rules, and an action floor can
+ * never test it: the layout then labels it the proposer's, so a floor rule that tests it is dist:floor-broad (AF10).
+ * The build takes the bound from the environment variable PP_MONITOR_STALE_SECS (CMakeLists.txt), so a mission turns
+ * the monitor on at build time.
  */
 #ifndef PRISMPATH_APP_MONITOR_STALE_SECS
 #define PRISMPATH_APP_MONITOR_STALE_SECS 0

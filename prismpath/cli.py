@@ -502,6 +502,9 @@ def _add_assessor_commands(subparsers) -> None:
     evidence_parser.add_argument('--pin-instance', dest='pin_instance', default=None, metavar='PUB',
                                  help="your own copy of the instance public key (raw 32 bytes, as `ledger keygen` "
                                       "writes it)")
+    evidence_parser.add_argument('--pin-install', dest='pin_install', default=None, metavar='JSON',
+                                 help="for a cFS run with an action floor or a fallback policy, your own copy of the "
+                                      "install key set its PEP started from, the `install` part of its anchor (RC4)")
     evidence_parser.add_argument('--json', action='store_true', help='machine readable output')
     evidence_parser.set_defaults(func=evidence_cmd)
 
@@ -1596,10 +1599,12 @@ def swap_cmd(args):
                 print('pack needs --ppt --priv --pub', file=sys.stderr)
                 return 2
             flow_text = _read_text(args.flow) if args.flow else None
-            manifest = policy_pack.build_pack(args.ppt, _parse_fields(args.fields), args.version,
-                                              args.envelope_id, args.priv, args.pub[0], overlay_of=args.overlay_of,
-                                              flow_text=flow_text)
-            print(_json.dumps(manifest, indent=1))
+            # L1: the pack is a sealed `policy.ppt` envelope, `<ppt>.sealed`, on the stream `local` with a lifetime of
+            # ten years; the flags mean what they meant for the older manifest
+            manifest = policy_pack.seal_pack(args.ppt, _parse_fields(args.fields), args.version,
+                                             args.envelope_id, args.priv, args.pub[0], overlay_of=args.overlay_of,
+                                             flow_text=flow_text)
+            print(_json.dumps({**manifest, "sealed": args.ppt + policy_pack.SEALED}, indent=1))
             return 0
         if action == 'verify':
             if not (args.ppt and args.pub):
@@ -1839,12 +1844,14 @@ def evidence_cmd(args) -> int:
     from prismpath.ledgers import core_evidence
     if not os.path.isdir(args.run):
         raise CliError(f"{args.run} is not a directory (a core run is a directory)")
-    for pin in (args.pin_authority, args.pin_instance):
+    pin_install = getattr(args, "pin_install", None)
+    for pin in (args.pin_authority, args.pin_instance, pin_install):
         if pin is not None:
             _require_file(pin)
     try:
         summary = core_evidence.verify(args.run, sample=args.sample, seed=args.seed,
-                                       pin_authority=args.pin_authority, pin_instance=args.pin_instance)
+                                       pin_authority=args.pin_authority, pin_instance=args.pin_instance,
+                                       pin_install=pin_install)
     except core_evidence.Bad as bad:
         if args.json:
             print(json.dumps({"ok": False, "run": args.run, "refused": str(bad)}, indent=1))

@@ -293,3 +293,51 @@ def test_a_home_that_holds_its_authority_key_still_needs_its_route_table(tmp_pat
         proxy.Gateway("http://127.0.0.1:9", None, home)
     with pytest.raises(SystemExit, match="--routes FILE"):
         gcli.serve(SimpleNamespace(upstream="http://127.0.0.1:9", listen="127.0.0.1:0", routes=None, home=str(home)))
+
+
+def test_a_gateway_floor_allows_one_exact_route_and_method_and_is_silent_beside_it(tmp_path, monkeypatch):
+    """case_187: AF1, AF9 on `gateway`, the `gateway` part: a floor that allows `read` on the class of one exact route allows a read of that path
+    with basis `floor` whatever the release says, is silent for a write of it and for a path beside it, and a floor
+    route that ends in `*` or a rule with no `method_class` test is `dist:floor-broad`."""
+    from prismpath.distribution import floor
+    monkeypatch.setattr(agent_home, "clock", lambda: NOW)
+    point = GatewayHome(tmp_path / "gateway", install_keys=["N1", "N2"], install_threshold=2)
+    assert point.release(DEMO, 1)[-1].event == "committed"
+    fields = canon2.loads(DEMO)["fields"]
+
+    def core(*rules):
+        return canon2.dumps({"fields": fields, "format": "prismpath.core/1", "rules": list(rules)})
+    allow = {"target": "allow", "when": ["and", ["cmp", "path_class", "==", ["str", "ledger"]],
+                                         ["cmp", "method_class", "==", ["str", "read"]]]}
+    routes = rd.Routes.from_doc({"routes": [{"match": "/ledger/today", "class": "ledger"}]}).canonical()
+    wide = rd.Routes.from_doc({"routes": [{"match": "/ledger/*", "class": "ledger"}]}).canonical()
+    loose = {"target": "allow", "when": ["cmp", "path_class", "==", ["str", "ledger"]]}
+    for seq, (policy, table) in enumerate(((core(allow), wide), (core(loose), routes)), 1):
+        sent = point.send(point.install_set("install.floor", {"policy.core": policy, "gateway.routes": table}, seq,
+                                            widens=True, check=False))
+        assert floor.BROAD in [one.cause for one in sent]
+    sent = point.send(point.install_set("install.floor", {"policy.core": core(allow), "gateway.routes": routes}, 3,
+                                        widens=True))
+    assert sent[-1].event == "install-widened"
+    reading = {"http_reading_version": 1, "method_class": "read", "body_class": "none", "content_class": "none",
+               "query": "none", "grant": "none"}
+
+    def ask(path, method="read"):
+        return point.pep.decide(lambda: "release", request={"path": path, "reading": {**reading, "method_class": method}})
+    assert ask("/ledger/today")["basis"] == "floor"
+    assert ask("/ledger/today", "write")["basis"] == "release"
+    assert ask("/ledger/tomorrow")["basis"] == "release"
+
+
+def test_case_203_a_gateway_route_table_is_held_inside_the_ceiling(tmp_path, monkeypatch):
+    """case_203: CL1, CL2, the `gateway` part. A gateway PEP with a ceiling refuses a route table that gives one path
+    another class than the ceiling's with `dist:above-ceiling`, and stages one that names fewer routes."""
+    monkeypatch.setattr(agent_home, "clock", lambda: NOW)
+    point = GatewayHome(tmp_path / "gateway", install_keys=["N1", "N2"], install_threshold=2)
+    assert point.release(DEMO, 1)[-1].event == "committed"
+    ceiling = point.install_set("install.ceiling", {"policy.core": DEMO, "gateway.routes": ROUTES}, 1, widens=False)
+    assert point.send(ceiling)[-1].event == "install-applied"
+    assert point.stage_routes(DEMO, 2, OPEN, widens=True).cause == "dist:above-ceiling"
+    fewer = rd.Routes.from_doc({"routes": [{"match": "/api/orders/*", "class": "orders"}]}).canonical()
+    acks = point.release(DEMO, 3, routes=fewer, froms=[H(DEMO)])
+    assert [one.event for one in acks] == ["staged", "staged", "staged", "committed"]

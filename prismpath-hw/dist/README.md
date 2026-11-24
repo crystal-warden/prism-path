@@ -24,7 +24,29 @@ and a pending intent named by release id and seq), and the caller's `persist` is
 writes each whole, so a state record writes its 12 byte counter and no more, and it reports every
 transition in a state record signed by the instance key.
 
-`prismpath/tests/test_distribution_c.py` builds `host_check.c` with the host `cc` and
+Section 21 is built for `mesh`. The install record, the rate counts and the held and staged statement of each install
+kind are five more parts, each written to two media by `persist` and read back from the first copy that reads, the
+record before the set it names (IS10). `pp_pep_ask` decides one request: the action floor first, which on this kind
+only allows and is held narrow by one bounded postfix pass at staging (AF9), then the active release, the fallback
+policy or the refusal of X3, with the basis and the policy hash of the set that decided (RC1). The ceiling is a list
+of body hashes. The layout and the reading domain the PEP was built with are in its `pp_config`.
+
+The `cfs` kind takes a `cfs.table`, the `PP_PolicyTable_t` bytes before `ImageSig` (4,692 bytes). Every release and
+install slot is sized by `PP_TABLE_MAX`, which is the mesh node's 640 bytes unless a build sets it, so the firmware
+keeps its RAM. The cFS app and the host check of the cfs kind build with `-DPP_TABLE_MAX=4692`, and a build whose
+bound is below a kind's table has no row for that kind. A cfs PEP takes a table with another core image on the
+signers' word (W2, IS12), asks a table floor whose rules allow or escalate, past its signed rate escalates with
+`dist:floor-rate`, and holds each floor rule to AF9 on the table's own PPT image and rules. `pp_pep_commit_check`
+answers what a commit would without changing anything, so the cFS app switches its table service first and commits
+after (section 9.5). `pp_read_anchor` reads a `/1` or `/2` trust anchor. On cfs an escalation of the action floor is
+opened with `pp_pep_escalated` under the hash of the receipt the caller wrote for it, at most eight at a time, each for
+600 seconds and kept with the rate counts in both copies. An `operator.answer` signed by one operator key of the install
+record, on a PEP whose install threshold is 2 or more, is applied once when it names the PEP's id, an open escalation
+and the floor that made it, inside the floor's signed `answer_rate`, durably before the `answered` record (OP1 to OP4).
+The answer and the request of its escalation are then the caller's in `pep->answer`. An answer never raises the time
+floor, and on `mesh` it is `dist:target-mismatch`.
+
+`prismpath/tests/test_distribution_c.py` and `test_distribution_c_cfs.py` build `host_check.c` with the host `cc` and
 `-Wall -Wextra -Werror -fsanitize=address,undefined`. It replays every corpus case on the `mesh` kind,
 runs the machine step for step beside the Python one (`prismpath/distribution/pep.py` on a modelled mesh
 node) and requires the same signed state records byte for byte, and runs the frame reassembly frame for

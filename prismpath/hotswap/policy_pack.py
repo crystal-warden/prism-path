@@ -3,7 +3,11 @@
 """Signed policy packs — the Authorized + Envelope-bounded half of the secure hot-swap.
 
 A pack is the byte-identical `.ppt` image plus a detached, signed manifest
-(`docs/design/spec-secure-hotswap.md` §3.1). Nothing here modifies the image or the compiler:
+(`docs/design/spec-secure-hotswap.md` §3.1). From 0.3.0 the writer, `seal_pack`, emits only a distribution
+envelope (L1 of `docs/design/spec-policy-distribution.md`): `<ppt>.sealed`, a `policy.ppt` envelope for the
+`host` kind whose `meta` carries what the manifest carried. `verify_pack` reads it, and still reads the older
+`ppt-pack/1` manifest beside an image that has no `.sealed` (L3); the manifest it returns says which by its
+`format`. `build_pack` writes the older form and is kept for the conformance fixtures and the tests' helpers. Nothing here modifies the image or the compiler:
 this module is a read-only consumer of the `.ppt` format (SPEC §7 / TABLE_FORMAT.md), so every
 certified image hash stays exactly what the FPGA/eBPF evidence rows cite.
 
@@ -55,6 +59,7 @@ FLAG_STATEFUL = 0x0008         # flags bit3: the policy DECLARES the resident-FS
                                # base. The evaluator is identical either way — one option, one oracle.
 
 PACK_FORMAT = "ppt-pack/1"
+SEALED = ".sealed"                # the `policy.ppt` envelope beside an image (L1)
 
 # Default envelope caps = the eBPF loader's MAX_* constants (ppt_common.h) — the first place
 # these bounds are enforced at build/load time rather than assumed.
@@ -290,7 +295,7 @@ def field_dictionary_of(flow_text: str) -> Dict[str, str]:
 def build_pack(ppt_path: str, fields: Dict[str, str], version: int, envelope_id: str,
                priv_path: str, pub_path: str, packing: Optional[dict] = None,
                overlay_of: Optional[str] = None, flow_text: Optional[str] = None) -> dict:
-    """Sign a `.ppt` into a pack: writes `<ppt>.manifest.json` + `<ppt>.manifest.sig`
+    """The older form (L3): sign a `.ppt` into a `ppt-pack/1` pack, writing `<ppt>.manifest.json` + `<ppt>.manifest.sig`
     beside the (untouched) image. Returns the manifest.
 
     `overlay_of` (optional) names the policy of record this pack temporarily overrides (an
@@ -339,14 +344,173 @@ def build_pack(ppt_path: str, fields: Dict[str, str], version: int, envelope_id:
     return manifest
 
 
+def seal_pack(ppt_path: str, fields: Dict[str, str], version: int, envelope_id: str,
+              priv_path: str, pub_path: str, packing: Optional[dict] = None,
+              overlay_of: Optional[str] = None, flow_text: Optional[str] = None, *,
+              stream: Optional[str] = None, not_before: Optional[int] = None,
+              expires: Optional[int] = None) -> dict:
+    """Seal a `.ppt` as a `policy.ppt` distribution envelope for the `host` kind (L1): writes `<ppt>.sealed` beside
+    the untouched image and removes an older manifest and signature beside it. The arguments are `build_pack`'s and
+    mean what they meant there: `version` is the envelope's `seq`, `envelope_id` the qualification envelope the
+    pack is for (`meta.qualification`), and `fields`, the counts, `wcet_cycles`, `packing`, `overlay_of` and
+    `flow_sha256` go in `meta`. The stream is `local` and the lifetime ten years unless `stream`, `not_before` and
+    `expires` say otherwise. Returns what the envelope says, in the members of a manifest, with `format`
+    `prismpath.dist/1`."""
+    from prismpath.distribution import envelope as env
+    from prismpath.distribution import legacy
+    from prismpath.distribution.kinds import Refused
+    flow_sha256 = None
+    if flow_text is not None:
+        derived = field_dictionary_of(flow_text)
+        if fields and dict(fields) != derived:
+            raise ValueError(f"the field dictionary {dict(fields)} differs from the flow's own definitions {derived}")
+        fields = derived
+        flow_sha256 = sha256_hex(flow_text.encode("utf-8"))
+    with open(ppt_path, "rb") as handle:
+        image = handle.read()
+    ok, reasons = validate_image(image)
+    if not ok:
+        raise ValueError("refusing to sign an invalid image: " + ",".join(reasons))
+    _pub, key_id = load_public(pub_path)
+    priv = _load_private(priv_path)
+    _Priv, _Pub, ser, _Inv = _ed25519()
+    if sha256_hex(priv.public_key().public_bytes(ser.Encoding.Raw, ser.PublicFormat.Raw)) != key_id:
+        raise ValueError(f"{priv_path} is not the private half of {pub_path}")
+    header = read_ppt_header(image)
+    meta = {"fields": dict(fields or {}), "qualification": envelope_id, "wcet_cycles": wcet_cycles(image),
+            "counts": {name: header[name] for name in ("atoms", "nodes", "edges", "prog_words", "max_steps",
+                                                       "max_stack")}}
+    if packing is not None:
+        if packing.get("profile") != "spiral" or not packing.get("sidecar_sha256"):
+            raise ValueError("packing: only {'profile': 'spiral', 'sidecar_sha256': ...} is defined")
+        meta["packing"] = {"profile": "spiral", "sidecar_sha256": packing["sidecar_sha256"]}
+    if overlay_of:
+        meta["overlay_of"] = str(overlay_of)
+    if flow_sha256 is not None:
+        meta["flow_sha256"] = flow_sha256
+    try:
+        sealed = legacy.local_seal("policy.ppt", image, [priv], seq=int(version), targets=("host",), meta=meta,
+                                   not_before=not_before, expires=expires, stream=stream or legacy.LOCAL_STREAM)
+    except Refused as refused:
+        raise ValueError(f"the pack would not be a well formed envelope ({refused.cause}: {refused})") from None
+    canon.atomic_write_bytes(ppt_path + SEALED, sealed)
+    for older in (ppt_path + ".manifest.json", ppt_path + ".manifest.sig"):
+        if os.path.exists(older):
+            os.remove(older)
+    return _sealed_manifest(env.read(env.unseal(sealed)[0]), key_id)
+
+
+def _sealed_manifest(envelope, key_id: str) -> dict:
+    """A `policy.ppt` envelope in the members of a manifest, so every reader of `verify_pack` reads either form."""
+    meta = envelope.meta
+    out = {"format": "prismpath.dist/1", "artifact": envelope.artifact,
+           "image_sha256": envelope.body_sha256, "fields": dict(meta["fields"]), "counts": dict(meta["counts"]),
+           "wcet_cycles": meta["wcet_cycles"], "version": envelope.seq, "envelope_id": meta["qualification"],
+           "key_id": key_id, "stream": envelope.stream, "not_before": envelope.not_before,
+           "expires": envelope.expires, "dist_envelope_id": envelope.envelope_id}
+    for name in ("packing", "overlay_of", "flow_sha256"):
+        if name in meta:
+            out[name] = meta[name]
+    return out
+
+
+def _verify_sealed(ppt_path: str, pubkey_paths: List[str],
+                   revoked: frozenset) -> Tuple[bool, List[str], Optional[dict]]:
+    """`verify_pack` for `<ppt>.sealed`: a `policy.ppt` envelope for `host`, signed by a known key that is not
+    revoked, in force now (V6), over this image, with its signed counts and packing as a manifest's."""
+    import time
+    from prismpath.distribution import envelope as env
+    from prismpath.distribution.kinds import Refused
+    from prismpath.distribution.verify import SKEW
+    _Priv, _Pub, _ser, InvalidSignature = _ed25519()
+    try:
+        with open(ppt_path + SEALED, "rb") as handle:
+            envelope_bytes, entries = env.unseal(handle.read())
+        envelope = env.read(envelope_bytes)
+    except Refused as refused:
+        return False, [refused.cause], None
+    if envelope.artifact != "policy.ppt" or "host" not in envelope.targets:
+        return False, ["dist:target-mismatch"], None
+    message, signer_id = env.signed_message(envelope_bytes), None
+    keys = dict((key_id, pub) for pub, key_id in (load_public(path) for path in pubkey_paths))
+    for key_id, signature in entries:
+        if key_id not in keys:
+            continue
+        try:
+            keys[key_id].verify(signature, message)
+            signer_id = key_id
+            break
+        except InvalidSignature:
+            continue
+    if signer_id is None:
+        return False, ["sig:invalid"], None
+    manifest = _sealed_manifest(envelope, signer_id)
+    if signer_id in revoked:
+        return False, ["sig:revoked-key"], manifest
+    now = int(time.time())
+    if envelope.not_before - now > SKEW:
+        return False, ["dist:not-yet-valid"], manifest
+    if now >= envelope.expires:
+        return False, ["dist:expired"], manifest
+    with open(ppt_path, "rb") as handle:
+        image = handle.read()
+    if len(image) != envelope.body_size or sha256_hex(image) != envelope.body_sha256:
+        return False, ["image:sha256-mismatch"], manifest
+    reasons = check_counts(envelope.meta, image)
+    if reasons:
+        return False, reasons, manifest
+    return _check_packing(ppt_path, manifest)
+
+
+def _check_packing(ppt_path: str, manifest: dict) -> Tuple[bool, List[str], Optional[dict]]:
+    if "packing" in manifest:
+        pk = manifest["packing"]
+        if pk.get("profile") != "spiral":
+            return False, ["packing:unknown-profile"], manifest
+        side_path = ppt_path + ".spiral"
+        if not os.path.exists(side_path):
+            return False, ["spiral:sidecar-missing"], manifest
+        with open(side_path, "rb") as handle:
+            if sha256_hex(handle.read()) != pk.get("sidecar_sha256"):
+                return False, ["spiral:sidecar-hash-mismatch"], manifest
+    return True, [], manifest
+
+
+def read_sealed_manifest(ppt_path: str) -> Optional[dict]:
+    """What `<ppt>.sealed` says, in the members of a manifest, read without checking its signature (for a view
+    that shows an unchecked pack), or None when there is none or it does not read."""
+    from prismpath.distribution import envelope as env
+    from prismpath.distribution.kinds import Refused
+    try:
+        with open(ppt_path + SEALED, "rb") as handle:
+            envelope_bytes, entries = env.unseal(handle.read(env.MAX_SEALED + 1))
+        envelope = env.read(envelope_bytes)
+    except (OSError, Refused):
+        return None
+    if envelope.artifact != "policy.ppt":
+        return None
+    return _sealed_manifest(envelope, entries[0][0])
+
+
+def is_older(manifest: Optional[dict]) -> bool:
+    """True for a manifest `verify_pack` read in the older `ppt-pack/1` form (L3)."""
+    return isinstance(manifest, dict) and manifest.get("format") == PACK_FORMAT
+
+
 def verify_pack(ppt_path: str, pubkey_paths: List[str],
                 revoked: frozenset = frozenset()) -> Tuple[bool, List[str], Optional[dict]]:
     """The Authorized gate. Verifies: signature over the canonical manifest by a known,
     non-revoked key; manifest key_id matches the verifying key; image hash and header counts
     match the manifest. Returns (ok, stable-reasons, manifest-or-None): a manifest that cannot be parsed
     (not JSON, not UTF-8, NaN, Infinity or a number beyond the double range, or not an object) is
-    `manifest:bad-format` with no manifest."""
+    `manifest:bad-format` with no manifest.
+
+    An image with `<ppt>.sealed` beside it is read in that form alone (`_verify_sealed`), and the manifest returned
+    has `format` `prismpath.dist/1`. Otherwise the older manifest is read, and a reader with an audit log writes
+    the `legacy_form` event for it (`is_older`)."""
     _Priv, _Pub, _ser, InvalidSignature = _ed25519()
+    if os.path.exists(ppt_path + SEALED):
+        return _verify_sealed(ppt_path, pubkey_paths, revoked)
     man_path, sig_path = ppt_path + ".manifest.json", ppt_path + ".manifest.sig"
     if not os.path.exists(man_path) or not os.path.exists(sig_path):
         return False, ["sig:missing"], None
@@ -398,17 +562,7 @@ def verify_pack(ppt_path: str, pubkey_paths: List[str],
     reasons = check_counts(manifest, image)
     if reasons:
         return False, reasons, manifest
-    if "packing" in manifest:
-        pk = manifest["packing"]
-        if pk.get("profile") != "spiral":
-            return False, ["packing:unknown-profile"], manifest
-        side_path = ppt_path + ".spiral"
-        if not os.path.exists(side_path):
-            return False, ["spiral:sidecar-missing"], manifest
-        with open(side_path, "rb") as handle:
-            if sha256_hex(handle.read()) != pk.get("sidecar_sha256"):
-                return False, ["spiral:sidecar-hash-mismatch"], manifest
-    return True, [], manifest
+    return _check_packing(ppt_path, manifest)
 
 
 def check_counts(signed: dict, image: bytes) -> List[str]:
