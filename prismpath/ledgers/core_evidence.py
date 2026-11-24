@@ -37,9 +37,17 @@ install statement, named by its envelope id. `verify` then pins the install key 
 (`pin_install`, the `install` part of an anchor), refuses a run that holds a `floor` or `fallback` case without it,
 applies each `install.trust` from the pinned set by IS11, requires each install set to be signed at the threshold
 under the key set in force when it was applied, holds each such case's image to the policy hash its statement signs,
-requires a not enacted line of the release for every reading the floor decided, and checks that the counts of AF8
-rise by one within a window and never pass the signed `allows`. Every case, `would` lines included, is then replayed
-under its own image. The receipt lines keep their format.
+requires a not enacted line of the release, or of the fallback policy when that decided, for every reading the floor
+decided with a set to ask (a floor case with `asked` false had none, so its `would` is none), and checks that the
+counts of AF8 rise by one within a window and never pass the signed `allows`. Every case, `would` lines included, is
+then replayed under its own image. The receipt lines keep their format.
+
+An `operator` case (OP2, OP3) holds one request an operator answered: its image is the floor's, `install` names the
+floor's statement and `answer` the operator's `operator.answer`, which `install.jsonl` holds in the order applied,
+signed by one operator key of the install record then in force. The answer's `receipt` is the SHA-256 of a line of
+`escalations.jsonl`, the escalation document the PEP opened (`prismpath.cfs-escalation/1`), under the same floor and
+for the same reading, and each answer answers once. Its receipt is the answer's: a route to `allow`, or the
+escalation's own refusal. It is checked against the answer, never replayed.
 
 A run whose root statement is `prismpath.core-run-root/1` was written over the retired Merkle tree (no domain
 prefixes, the last node of an odd layer duplicated, so [a, b, c] and [a, b, c, c] shared a root); it is refused
@@ -78,7 +86,8 @@ LOG_CORE_RUN = "core-run"
 FILES = ("run.json", "cases.jsonl", "images.jsonl", "receipts.jsonl", "receipts.roots.jsonl",
          "authority.pub", "instance.pub")
 INSTALL_FILES = ("install.jsonl", "rates.jsonl")   # RC4: in a run whose run.json names them
-BASES = ("release", "floor", "fallback")           # RC1, RC4: a case's basis; `release` when none is named
+BASES = ("release", "floor", "fallback", "operator")   # RC1, RC4: a case's basis; `release` when none is named
+ESCALATION_FORMAT = "prismpath.cfs-escalation/1"   # OP3: what an operator's answer names on cfs
 INSTALL_OF = {"floor": "install.floor", "fallback": "install.fallback"}
 REFERENCE = "the reference kernel"   # what `replay_through_reference` holds a receipt to, in its messages
 
@@ -113,7 +122,7 @@ def read_cases(path: Path):
                       "flow_why": None if row["flow"] is not None else core_render.flow_of(image)[1],
                       "readings": [bytes.fromhex(raw) for raw in row["readings"]],
                       "basis": row.get("basis", "release"), "enacted": row.get("enacted", True),
-                      "install": row.get("install")})
+                      "install": row.get("install"), "asked": row.get("asked", True), "answer": row.get("answer")})
     return cases
 
 
@@ -126,7 +135,8 @@ def write_cases(cases, out: Path) -> None:
             flow, _why = core_render.flow_of(case["image"])
             row = {"case": case["id"], "image": case["image"].hex(), "flow": flow,
                    "readings": [raw.hex() for raw in case["readings"]]}
-            for key, default in (("basis", "release"), ("enacted", True), ("install", None)):
+            for key, default in (("basis", "release"), ("enacted", True), ("install", None), ("asked", True),
+                                 ("answer", None)):
                 if case.get(key, default) != default:
                     row[key] = case[key]               # RC4: only a cFS run with install statements names these
             handle.write(canon2.dumps(row) + b"\n")
@@ -228,10 +238,12 @@ def ensure_keys(keys: Path):
 
 
 def produce(cases_path: Path, out: Path, keys: Path, decider: str = "python", time_us: int = None, *,
-            install=None, rates=None) -> dict:
+            install=None, rates=None, escalations=None, operator=None) -> dict:
     """Decide every case of a cases file with the Python reference and write the run to `out`. For a cFS run with
-    install statements (RC4), `install` is every (sealed, body) the PEP decided under or applied, in order, and
-    `rates` the counted overrides, each {rule, window, count, case, reading} naming its receipt."""
+    install statements (RC4), `install` is every (sealed, body) the PEP decided under or applied, in order, operator
+    answers included, and `rates` the counted overrides, each {rule, window, count, case, reading} naming its receipt.
+    `escalations` is the escalation documents the PEP opened (bytes each), and `operator` the decision members of
+    each `operator` case's receipt by case id, the answer's (OP3)."""
     from prismpath.hotswap import policy_pack
     cases_path, out = Path(cases_path), Path(out)
     authority_key, authority_pub, instance_key, instance_pub = ensure_keys(keys)
@@ -245,15 +257,21 @@ def produce(cases_path: Path, out: Path, keys: Path, decider: str = "python", ti
         problem = flow_problem(case)
         if problem is not None:
             raise RuntimeError(f"{problem}; write the cases with `write_cases`")
-    decisions = python_decisions(cases)
+    decisions = python_decisions([case for case in cases if case["basis"] != "operator"])
+    for case in cases:
+        if case["basis"] == "operator":
+            decisions[case["id"]] = [dict(operator[case["id"]]) for _raw in case["readings"]]
 
     signer = policy_pack._load_private(str(authority_key))
     authority_id = sha256_hex(authority_pub.read_bytes())
     images = bytearray()
     for case in cases:
         if case["basis"] != "release":            # RC4: attested by the signature block of its install statement
-            images += canon2.dumps({"format": IMAGE_FORMAT, "case": case["id"], "image_sha256": sha256_hex(case["image"]),
-                                    "install": case["install"]}) + b"\n"
+            line = {"format": IMAGE_FORMAT, "case": case["id"], "image_sha256": sha256_hex(case["image"]),
+                    "install": case["install"]}
+            if case["basis"] == "operator":
+                line["answer"] = case["answer"]
+            images += canon2.dumps(line) + b"\n"
             continue
         images += canon2.dumps({"format": IMAGE_FORMAT, "case": case["id"], "image_sha256": sha256_hex(case["image"]),
                                 "key_id": authority_id, "sig": signer.sign(IMAGE_DOMAIN + case["image"]).hex()}) + b"\n"
@@ -290,6 +308,10 @@ def produce(cases_path: Path, out: Path, keys: Path, decider: str = "python", ti
                   if env.read(env.unseal(sealed)[0]).artifact == "install.trust"]
         extra = {"install_sha256": sha256_hex(lines), "rates_sha256": sha256_hex(rate_lines),
                  "install_trust_seq": max(trusts) if trusts else None}
+        if escalations is not None:
+            escalation_lines = b"".join(bytes(doc) + b"\n" for doc in escalations)
+            (out / "escalations.jsonl").write_bytes(escalation_lines)
+            extra["escalations_sha256"] = sha256_hex(escalation_lines)
 
     instance = root_statement.InstanceKey.load(str(instance_key))
     manifest = {"format": RUN_FORMAT, "decider": decider, "cases": len(cases), "receipts": len(leaves),
@@ -405,7 +427,8 @@ def verify(run: Path, *, sample=200, seed=0, pin_authority=None, pin_instance=No
         summary, receipts = _check(Path(run), pin_authority, pin_instance, pin_install)
     except (KeyError, TypeError, ValueError, AttributeError, IndexError) as error:   # a malformed part of the run
         raise Bad(f"the run does not read as a core run ({type(error).__name__}: {error})") from None
-    # every decision, or a sample, decided again
+    # every decision, or a sample, decided again; an operator's answer was checked against the answer itself (OP3)
+    receipts = [one for one in receipts if one[0]["basis"] != "operator"]
     rng = random.Random(seed)
     chosen = receipts if sample is None or sample >= len(receipts) else rng.sample(receipts, sample)
     counts = (replay or replay_through_reference)(chosen)
@@ -540,8 +563,12 @@ def _install_chain(run: Path, manifest: dict, cases, pin_install):
     for case in cases:
         if case["basis"] not in BASES or not isinstance(case["enacted"], bool) or (
                 case["basis"] != "release") != (case["install"] is not None) or (
-                not case["enacted"] and case["basis"] != "release"):
-            raise Bad(f"case {case['id']}: a basis of release, floor or fallback, and only a release line not enacted")
+                not case["enacted"] and case["basis"] not in ("release", "fallback")) or (
+                case["asked"] is not True and (case["asked"] is not False or case["basis"] != "floor")) or (
+                case["basis"] == "operator") != (case["answer"] is not None) or (
+                case["basis"] == "operator" and len(case["readings"]) != 1):
+            raise Bad(f"case {case['id']}: a basis of release, floor, fallback or operator, only a release or fallback "
+                      f"line not enacted, `asked` only on a floor case and one answered reading per operator case")
     installed = any(case["basis"] != "release" for case in cases) or "install_sha256" in manifest
     if not installed:
         return None
@@ -561,7 +588,7 @@ def _install_chain(run: Path, manifest: dict, cases, pin_install):
         record = install.read_anchor_part(json.loads(Path(pin_install).read_bytes().decode("utf-8")))
     except (Refused, ValueError, UnicodeDecodeError) as error:
         raise Bad(f"the pinned install key set does not read ({error})") from None
-    sets, start = {}, record.trust_seq
+    sets, answers, start = {}, {}, record.trust_seq
     for number, line in enumerate(_lines(run / "install.jsonl")):
         row = canon2.loads(line)
         sealed, body = bytes.fromhex(row["sealed"]), bytes.fromhex(row["body"])
@@ -573,6 +600,13 @@ def _install_chain(run: Path, manifest: dict, cases, pin_install):
         if envelope.body_sha256 != sha256_hex(body) or envelope.body_size != len(body):
             raise Bad(f"install statement {number}: its body is not the one it signs")
         message = env.signed_message(envelope_bytes)
+        if envelope.artifact == kinds_answer():
+            answered = record.answering(entries, message)
+            if not answered.ok:
+                raise Bad(f"install statement {number}: an operator answer not signed by an operator key in force when "
+                          f"it was applied ({answered.cause})")
+            answers[envelope.envelope_id] = (envelope, body)
+            continue
         counted = record.counting(entries, message)
         if not counted.ok:
             raise Bad(f"install statement {number} is not signed at the threshold under the install keys in force "
@@ -593,7 +627,16 @@ def _install_chain(run: Path, manifest: dict, cases, pin_install):
     if record.trust_seq != (start if manifest.get("install_trust_seq") is None else manifest["install_trust_seq"]):
         raise Bad(f"run.json names install trust sequence {manifest.get('install_trust_seq')} and install.jsonl ends "
                   f"at {record.trust_seq}, so an install.trust is left out")
+    sets[ANSWERS] = answers
     return sets
+
+
+ANSWERS = "answers"   # the key of `_install_chain`'s answers, {envelope id: (envelope, body)}, beside the sets
+
+
+def kinds_answer() -> str:
+    from prismpath.distribution import kinds
+    return kinds.ANSWER
 
 
 def _check_install_image(case, attestation, line: bytes, sets) -> None:
@@ -601,13 +644,16 @@ def _check_install_image(case, attestation, line: bytes, sets) -> None:
     signed policy hash is the case's image."""
     if sets is None:
         raise Bad(f"case {case['id']}: a {case['basis']} case in a run with no install statements")
-    if canon2.dumps(attestation) != line or set(attestation) != {"format", "case", "image_sha256", "install"} \
+    members = {"format", "case", "image_sha256", "install"} | ({"answer"} if case["basis"] == "operator" else set())
+    if canon2.dumps(attestation) != line or set(attestation) != members \
             or attestation["format"] != IMAGE_FORMAT or attestation["case"] != case["id"] \
-            or attestation["image_sha256"] != sha256_hex(case["image"]) or attestation["install"] != case["install"]:
+            or attestation["image_sha256"] != sha256_hex(case["image"]) or attestation["install"] != case["install"] \
+            or attestation.get("answer") != case["answer"]:
         raise Bad(f"case {case['id']}: the image attestation does not name the case's install statement")
+    kind = INSTALL_OF["floor" if case["basis"] == "operator" else case["basis"]]
     envelope = sets.get(case["install"])
-    if envelope is None or envelope.artifact != INSTALL_OF[case["basis"]]:
-        raise Bad(f"case {case['id']}: no {INSTALL_OF[case['basis']]} statement of the run attests its image")
+    if envelope is None or envelope.artifact != kind:
+        raise Bad(f"case {case['id']}: no {kind} statement of the run attests its image")
     if envelope.policy_sha256 != sha256_hex(case["image"]):
         raise Bad(f"case {case['id']}: its image is not the policy its install statement signs")
 
@@ -617,11 +663,11 @@ def _check_install_receipts(run: Path, cases, receipts, sets) -> None:
     names a floor receipt, rises by one within a window of its rule and never passes the signed `allows`."""
     wanted = {}
     for case in cases:
-        if case["basis"] == "floor":
+        if case["basis"] == "floor" and case["asked"]:
             for raw in case["readings"]:
                 wanted[sha256_hex(raw)] = wanted.get(sha256_hex(raw), 0) + 1
     for case in cases:
-        if case["basis"] == "release" and not case["enacted"]:
+        if not case["enacted"]:
             for raw in case["readings"]:
                 if wanted.get(sha256_hex(raw)):
                     wanted[sha256_hex(raw)] -= 1
@@ -653,6 +699,54 @@ def _check_install_receipts(run: Path, cases, receipts, sets) -> None:
         if row["count"] > rate["allows"]:
             raise Bad(f"rates line {number}: {row['count']} overrides in a window that allows {rate['allows']} (AF8)")
         last[key] = (row["window"], row["count"])
+    _check_operator_receipts(run, cases, receipts, sets)
+
+
+def _check_operator_receipts(run: Path, cases, receipts, sets) -> None:
+    """OP2, OP3: each `operator` case's one reading was escalated under the floor its case names, by an escalation
+    document of the run, and answered once by the answer its case names, whose policy is that floor's; its receipt is
+    the answer's decision, a route to `allow` or the escalation's own refusal."""
+    if not any(case["basis"] == "operator" for case in cases):
+        return
+    from prismpath.distribution import kinds
+    if not (run / "escalations.jsonl").exists() or \
+            sha256_hex((run / "escalations.jsonl").read_bytes()) != _manifest(run).get("escalations_sha256"):
+        raise Bad("escalations.jsonl is not the file run.json names")
+    escalations = {}
+    for line in _lines(run / "escalations.jsonl"):
+        doc = canon2.loads(line)
+        if canon2.dumps(doc) != line or not isinstance(doc, dict) or doc.get("format") != ESCALATION_FORMAT:
+            raise Bad("an escalations.jsonl line is not an escalation document")
+        escalations[sha256_hex(line)] = doc
+    used = set()
+    # OP2: an answer is bound to the PEP it answers, by the PEP id of H1 (the first 16 bytes of the SHA-256 of the
+    # instance public key). A cFS run's receipts are signed by that same instance key, so the run names its PEP.
+    pep = hashlib.sha256((run / "instance.pub").read_bytes()).digest()[:16].hex()
+    for case, index, receipt in receipts:
+        if case["basis"] != "operator":
+            continue
+        found = sets[ANSWERS].get(case["answer"])
+        if found is None or case["answer"] in used:
+            raise Bad(f"case {case['id']}: no operator answer of the run, or one that answers twice (OP3)")
+        used.add(case["answer"])
+        envelope, body = found
+        answer = kinds.read_answer(body)
+        if answer["pep"] != pep:
+            raise Bad(f"case {case['id']}: the operator answer is bound to another PEP (OP2)")
+        doc = escalations.get(answer["receipt"])
+        floor = sets[case["install"]]
+        if doc is None or doc["policy_sha256"] != floor.policy_sha256 or envelope.policy_sha256 != floor.policy_sha256 \
+                or doc["reading_sha256"] != sha256_hex(case["readings"][index]):
+            raise Bad(f"case {case['id']}: the answer names no escalation of this floor for this reading (OP3)")
+        want = {"decision": "route", "target": "allow"} if answer["answer"] == "allow" else {
+            "decision": "refuse", "cause": causes.name(doc["cause_code"]), "cause_code": doc["cause_code"]}
+        if {key: receipt.get(key) for key in ("decision", "target", "cause", "cause_code")} != {
+                key: want.get(key) for key in ("decision", "target", "cause", "cause_code")}:
+            raise Bad(f"case {case['id']}: the receipt is not the operator's answer (OP3)")
+
+
+def _manifest(run: Path) -> dict:
+    return canon2.loads((run / "run.json").read_bytes().rstrip(b"\n"))
 
 
 def replay_through_reference(chosen) -> dict:
