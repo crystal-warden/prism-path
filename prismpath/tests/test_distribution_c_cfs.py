@@ -1297,9 +1297,10 @@ def test_a_cfs_app_run_with_no_install_statements_verifies_exactly_as_before(app
 
 
 # ------------------------------------------------------------------ OP1 to OP4 in the cFS app
-def _app_escalating(*, seed=None, threshold=2, keys=("J", "K")) -> list:
+def _app_escalating(*, seed=None, threshold=2, keys=("J", "K"), code=None) -> list:
     """A cFS app with install keys J and K, operator O1, a floor that allows command 3 once in 60 seconds past its
-    release, which refuses it, so the second proposal of command 3 escalates with dist:floor-rate."""
+    release, which refuses it, so the second proposal of command 3 escalates with dist:floor-rate. Each is proposed
+    with function code `code`, or the harness's 0 when None."""
     meta = floor_meta(rate={"allows": 1, "window": 60}, answer_rate={"allows": 2, "window": 600})
     floor = install("install.floor", floors()["one"], meta=meta, signers=keys[:threshold])
     brought = [(bytes.fromhex(floor[0]), bytes.fromhex(floor[1]))]
@@ -1307,7 +1308,7 @@ def _app_escalating(*, seed=None, threshold=2, keys=("J", "K")) -> list:
              {"target": "allow", "when": ["in", "cmd_class", [["num", 1], ["num", 2]]]}]
     return [*app_head(install=keys, threshold=threshold, operators=("O1",), bring=brought, stale=5, seed=seed),
             f"start 0 0 1 {N}", *release_lines(app_table(rules), 1, 10),
-            f"propose {payload(3, slew=15, thrust=20)} 1 - {N}", f"propose {payload(3, slew=15, thrust=20)} 1 - {N}"]
+            *[f"propose {payload(3, slew=15, thrust=20)} 1 - {N}" + ("" if code is None else f" {code}")] * 2]
 
 
 def _app_answer(receipt: str, verdict="allow", *, pep=None, transfer=40, now=N, floor=None) -> list:
@@ -1397,6 +1398,37 @@ def test_case_220_a_cfs_app_opens_a_floor_escalation_and_enacts_an_operator_answ
         "operator.v1.3", "refuse", "dist:floor-rate", causes.code("dist:floor-rate"))
     summary = downlink.verify(downlink.fetch(run, tmp_path / "ground-refuse"), keys)
     assert (summary["receipts"], summary["disagree"]) == (3, 0)
+
+
+def test_case_220_an_answer_allow_sends_the_command_with_the_function_code_it_was_proposed_with(app, tmp_path):
+    """case_220: OP3. The escalation keeps the command a proposal was asked as, its message id, function code and
+    size, with its request in the core's record, so an answer `allow` sends that command: a proposal with function
+    code 5 is carried out with code 5, after a processor reset as well, and never with code 0, which on a vehicle is
+    another command."""
+    request = bytes.fromhex(payload(3, slew=15, thrust=20))
+    receipt = hashlib.sha256(_escalation_doc(2, N)).hexdigest()
+    for name, lines in (("now", []), ("reset", ["reset", f"start 0 0 1 {N}"])):
+        out = app_run(app, tmp_path / name, [*_app_escalating(code=5), *lines, *_app_answer(receipt)])
+        assert [line.split()[1] for line in out if line.startswith("escalation")] == [receipt]
+        answered = _answered(out)
+        assert len(answered) == 1 and answered[0][2:6] == ["1", "0", "2", request.hex()]
+        assert answered[0][6:] == ["1", "0", "00001882", "5", str(8 + len(request))], name
+
+
+def test_case_220_an_escalation_an_older_build_kept_with_no_command_is_not_carried_out(app, tmp_path):
+    """case_220: OP3. An escalation kept by a build before the command was kept reads from the older layout of the
+    rates part with no command, so its answer `allow` is applied and receipted as the operator's, and the request is
+    not carried out (not enacted), since no function code is guessed. An answer to an escalation opened afterwards is
+    carried out as it was asked."""
+    request = bytes.fromhex(payload(3, slew=15, thrust=20))
+    receipt = hashlib.sha256(_escalation_doc(2, N)).hexdigest()
+    out = app_run(app, tmp_path / "a", [*_app_escalating(code=5), "older", "reset", f"start 0 0 1 {N}",
+                                        *_app_answer(receipt)])
+    events = [(one["event"], one["cause"], one.get("subject")) for records, _flags in steps(out) for one in records]
+    assert events.count(("answered", None, 5)) == 1
+    answered = _answered(out)
+    assert len(answered) == 1 and answered[0][1] == receipt
+    assert answered[0][2:6] == ["1", "0", "2", request.hex()] and answered[0][6:] == ["0", "1", "-", "-", "-"]
 
 
 def test_case_220_a_cfs_app_receipts_a_floor_rule_escalation_and_each_answer_to_it(app, tmp_path):

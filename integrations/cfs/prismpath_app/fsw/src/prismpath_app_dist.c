@@ -739,6 +739,23 @@ static void Answer(PP_AppDist_t *D)
     D->Step.AnswerReceipted = 1;
     D->Step.AnswerRequestLen = a->request_len;
     memcpy(D->Step.AnswerRequest, a->request, a->request_len);
+    if (a->allow)
+    {
+        /* OP3: carried out only as the command it was asked as. An escalation that kept none this app reads, as one
+         * an older build kept, is not carried out: its function code is never guessed */
+        if (a->command_len == PP_APP_COMMAND_BYTES && a->command[0] == PP_APP_COMMAND_FORMAT)
+        {
+            D->Step.AnswerCommand.MsgId = (uint32_t)a->command[1] | (uint32_t)a->command[2] << 8 |
+                                          (uint32_t)a->command[3] << 16 | (uint32_t)a->command[4] << 24;
+            D->Step.AnswerCommand.FcnCode = a->command[5];
+            D->Step.AnswerCommand.Size    = (uint16_t)(a->command[6] | a->command[7] << 8);
+            D->Step.AnswerEnact           = 1;
+        }
+        else
+        {
+            D->Step.AnswerNotEnacted = 1;
+        }
+    }
     (void)PP_AppDist_SaveRun(D);
 }
 
@@ -919,9 +936,10 @@ void PP_AppDist_Beat(PP_AppDist_t *D, long long Now)
  * PEP, OP2). It is a line of escalations.jsonl before the escalation is open, so every escalation an answer can name
  * is in the run. */
 static void Escalate(PP_AppDist_t *D, const PP_RunIo_t *Io, const pp_decision *Asked, const uint8_t *Payload,
-                     size_t PayloadLen, PP_AppDecision_t *Out)
+                     size_t PayloadLen, const PP_AppCommand_t *Command, PP_AppDecision_t *Out)
 {
     static char    doc[512];
+    uint8_t        command[PP_APP_COMMAND_BYTES];
     char           reading[256];
     uint8_t        reading_sha[32];
     const uint8_t *floor = NULL;
@@ -953,7 +971,19 @@ static void Escalate(PP_AppDist_t *D, const PP_RunIo_t *Io, const pp_decision *A
     {
         return; /* not in the run, so not opened: no answer can name it */
     }
-    if (pp_pep_escalated(&D->Pep, Out->EscalationReceipt, Payload, PayloadLen) != 0)
+    if (Command != NULL)
+    {
+        command[0] = PP_APP_COMMAND_FORMAT; /* OP3: the command the request was asked as, which an answer sends */
+        command[1] = (uint8_t)Command->MsgId;
+        command[2] = (uint8_t)(Command->MsgId >> 8);
+        command[3] = (uint8_t)(Command->MsgId >> 16);
+        command[4] = (uint8_t)(Command->MsgId >> 24);
+        command[5] = Command->FcnCode;
+        command[6] = (uint8_t)Command->Size;
+        command[7] = (uint8_t)(Command->Size >> 8);
+    }
+    if (pp_pep_escalated(&D->Pep, Out->EscalationReceipt, Payload, PayloadLen, Command != NULL ? command : NULL,
+                         Command != NULL ? sizeof(command) : 0u) != 0)
     {
         (void)PP_Run_Recover(&D->Record.Run, Io); /* the line goes again with the escalation that did not open */
         return;
@@ -1008,7 +1038,7 @@ static int SetVerdict(const PP_PolicyTable_t *Table, int Rule, uint8_t Outcome, 
 }
 
 void PP_AppDist_Propose(PP_AppDist_t *D, const PP_RunIo_t *Io, const uint8_t *Payload, size_t PayloadLen,
-                        uint32_t MonitorAge, long long Now, PP_AppDecision_t *Out)
+                        const PP_AppCommand_t *Command, uint32_t MonitorAge, long long Now, PP_AppDecision_t *Out)
 {
     static uint8_t      regs[4 + 8 * PRISMPATH_APP_FIELD_COUNT];
     uint32_t            ages[PRISMPATH_APP_FIELD_COUNT];
@@ -1091,7 +1121,7 @@ void PP_AppDist_Propose(PP_AppDist_t *D, const PP_RunIo_t *Io, const uint8_t *Pa
             verdict.Field   = -1;
             verdict.Reason  = PP_REASON_NONE;
             Out->NotEnacted = 1;
-            Escalate(D, Io, &asked, Payload, PayloadLen, Out);
+            Escalate(D, Io, &asked, Payload, PayloadLen, Command, Out);
         }
         else if (asked.basis == PP_BASIS_FLOOR || asked.basis == PP_BASIS_FALLBACK)
         {
@@ -1192,7 +1222,7 @@ void PP_AppDist_Propose(PP_AppDist_t *D, const PP_RunIo_t *Io, const uint8_t *Pa
             (void)PP_AppDist_SaveRun(D);
             if (escalate)
             {
-                Escalate(D, Io, &asked, Payload, PayloadLen, Out); /* OP3: answerable once it is receipted */
+                Escalate(D, Io, &asked, Payload, PayloadLen, Command, Out); /* OP3: answerable once it is receipted */
             }
         }
         else

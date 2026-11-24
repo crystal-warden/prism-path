@@ -335,7 +335,7 @@ static int machine(const char *args, pp_trust *anchor) {
             if (sscanf(rest, "%s %s", a, b) != 2) return 2;
             hash32(a, receipt);
             size_t n = unhex(b, request, sizeof request);
-            printf("escalated %u\n", pp_pep_escalated(&pep, receipt, request, n));
+            printf("escalated %u\n", pp_pep_escalated(&pep, receipt, request, n, NULL, 0));
         } else if (strcmp(word, "answer") == 0) {
             if (!pep.answer.applied) printf("answer 0\n");
             else {

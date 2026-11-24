@@ -328,16 +328,32 @@ static void PRISMPATH_APP_SendRecord(const uint8 *Record, size_t Len)
 
 static void PRISMPATH_APP_Forward(PRISMPATH_APP_ProposedCmd_t *Proposed, uint32 Seq);
 
-/* OP3: an answer `allow` whose operator case is written carries out the request it answers, the payload the escalation
- * kept, on the vehicle message id as an allowed proposal is. The proposal's function code is not kept with it, so the
- * command goes with code 0 and the same payload. */
+/* OP3: an answer `allow` whose operator case is written carries out the request it answers as it was asked: the
+ * payload the escalation kept, with the function code and size its command was proposed with, on the vehicle message
+ * id as an allowed proposal is. A kept command this app cannot send as it was asked, proposed on another message id
+ * or with a size the command does not hold, is not carried out. */
+static void PRISMPATH_APP_NotEnacted(const char *Why)
+{
+    PRISMPATH_APP_Data.HkTlm.Payload.NotEnacted++;
+    CFE_EVS_SendEvent(PRISMPATH_APP_NOT_ENACTED_EID, CFE_EVS_EventType_ERROR,
+                      "PRISMPATH_APP NOT ENACTED basis=operator: %s, so the answer allow is not carried out", Why);
+}
+
 static void PRISMPATH_APP_Enact(const PP_AppStep_t *Step)
 {
     PRISMPATH_APP_ProposedCmd_t Request;
-    size_t                      Room = sizeof(Request) - sizeof(CFE_MSG_CommandHeader_t);
+    const PP_AppCommand_t      *Command = &Step->AnswerCommand;
+    size_t                      Room    = sizeof(Request) - sizeof(CFE_MSG_CommandHeader_t);
 
+    if (!CFE_SB_MsgId_Equal(CFE_SB_ValueToMsgId((CFE_SB_MsgId_Atom_t)Command->MsgId), PRISMPATH_APP_Data.ProposedMid) ||
+        Command->Size < sizeof(CFE_MSG_CommandHeader_t) || Command->Size > sizeof(Request))
+    {
+        PRISMPATH_APP_NotEnacted("the command its escalation kept is not one this app was proposed");
+        return;
+    }
     memset(&Request, 0, sizeof(Request));
-    CFE_MSG_Init(CFE_MSG_PTR(Request.CommandHeader), PRISMPATH_APP_Data.VehicleMid, sizeof(Request));
+    CFE_MSG_Init(CFE_MSG_PTR(Request.CommandHeader), PRISMPATH_APP_Data.ProposedMid, Command->Size);
+    (void)CFE_MSG_SetFcnCode(CFE_MSG_PTR(Request.CommandHeader), Command->FcnCode);
     memcpy(&((uint8 *)&Request)[sizeof(CFE_MSG_CommandHeader_t)], Step->AnswerRequest,
            Step->AnswerRequestLen < Room ? Step->AnswerRequestLen : Room);
     PRISMPATH_APP_Data.HkTlm.Payload.Allowed++;
@@ -427,9 +443,14 @@ static void PRISMPATH_APP_Report(void)
                           "PRISMPATH_APP ANSWERED %s receipt=%s operator receipt=%u%s",
                           Step->AnswerAllow ? "allow" : "refuse", hex, (unsigned int)Step->AnswerIndex,
                           Step->AnswerReceipted ? "" : ": not receipted, so the request is not carried out");
-        if (Step->AnswerAllow && Step->AnswerReceipted)
+        if (Step->AnswerEnact)
         {
             PRISMPATH_APP_Enact(Step);
+        }
+        else if (Step->AnswerNotEnacted)
+        {
+            PRISMPATH_APP_NotEnacted("its escalation kept no command to carry it out as it was asked, as one kept by "
+                                     "an older build, and no function code is guessed");
         }
     }
     if (Step->RunError && DIST->Started)
@@ -711,8 +732,17 @@ static void PRISMPATH_APP_Proposal(const CFE_SB_Buffer_t *SBBufPtr)
     size_t                      PayloadLen;
     uint32                      Seq;
     char                        Rcpt[24];
+    PP_AppCommand_t             Command;
+    CFE_SB_MsgId_t              MsgId = CFE_SB_INVALID_MSG_ID;
+    CFE_MSG_FcnCode_t           Fc    = 0;
 
     (void)CFE_MSG_GetSize(&SBBufPtr->Msg, &Size);
+    (void)CFE_MSG_GetMsgId(&SBBufPtr->Msg, &MsgId);
+    (void)CFE_MSG_GetFcnCode(&SBBufPtr->Msg, &Fc);
+    /* OP3: how it was asked, kept with an escalation so an answer `allow` sends this command and no other */
+    Command.MsgId   = (uint32_t)CFE_SB_MsgIdToValue(MsgId);
+    Command.FcnCode = (uint8_t)Fc;
+    Command.Size    = (uint16_t)(Size > 0xFFFFu ? 0xFFFFu : Size);
     PayloadLen = (Size > sizeof(CFE_MSG_CommandHeader_t)) ? (Size - sizeof(CFE_MSG_CommandHeader_t)) : 0;
     memset(&Proposed, 0, sizeof(Proposed));
     memcpy(&Proposed, SBBufPtr, (Size < sizeof(Proposed)) ? Size : sizeof(Proposed));
@@ -728,7 +758,7 @@ static void PRISMPATH_APP_Proposal(const CFE_SB_Buffer_t *SBBufPtr)
         PayloadLen = PRISMPATH_APP_PAYLOAD_LEN;
     }
     CFE_ES_PerfLogEntry(PRISMPATH_APP_DECIDE_PERF_ID);
-    PP_AppDist_Propose(DIST, &PP_Io, Payload, PayloadLen, PRISMPATH_APP_MonitorAge(), PP_Now(), &Decision);
+    PP_AppDist_Propose(DIST, &PP_Io, Payload, PayloadLen, &Command, PRISMPATH_APP_MonitorAge(), PP_Now(), &Decision);
     CFE_ES_PerfLogExit(PRISMPATH_APP_DECIDE_PERF_ID);
     PRISMPATH_APP_Report();
 

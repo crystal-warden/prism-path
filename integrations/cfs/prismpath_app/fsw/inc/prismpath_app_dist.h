@@ -142,6 +142,20 @@ typedef struct
     size_t            NBoot;
 } PP_AppDistConfig_t;
 
+/** OP3: how a proposal was asked beside its payload, kept with its escalation in the core's record (pp_escalation
+ *  command), so an answer `allow` sends the command that was asked and no other: its message id, its function code
+ *  and its size, the header's. The checksum is not kept, since the app generates it again for the vehicle message id
+ *  as it does for an allowed proposal. */
+typedef struct
+{
+    uint32_t MsgId;   /**< the proposal's message id, as CFE_SB_MsgIdToValue gives it */
+    uint8_t  FcnCode; /**< its function code */
+    uint16_t Size;    /**< the size its header gave */
+} PP_AppCommand_t;
+#define PP_APP_COMMAND_FORMAT 1 /**< the first byte of a kept command: a format byte, then the id, code and size */
+#define PP_APP_COMMAND_BYTES  8 /**< format 1, message id 4, function code 1, size 2, little endian */
+_Static_assert(PP_APP_COMMAND_BYTES <= PP_COMMAND_MAX, "a kept command fits the core's escalation");
+
 /** One step's outcome, for the app's events. */
 #define PP_APP_OUTBOX 16
 typedef struct
@@ -168,6 +182,12 @@ typedef struct
     uint64_t AnswerIndex;
     size_t  AnswerRequestLen;      /**< the escalated request, the payload the escalation kept */
     uint8_t AnswerRequest[PP_REQUEST_MAX];
+    int     AnswerEnact;           /**< an answer `allow` whose case is written and whose escalation kept the command
+                                        it was asked as, AnswerCommand: the app sends that command with AnswerRequest */
+    int     AnswerNotEnacted;      /**< an answer `allow` whose case is written but whose escalation kept no command
+                                        this app reads, as one kept by an older build: the request is not carried out,
+                                        since no function code is guessed */
+    PP_AppCommand_t AnswerCommand;
     int     RunError;              /**< the run's files could not be begun, or an install statement the core applied
                                         could not be written to install.jsonl, so the run will not verify (RC4) */
 } PP_AppStep_t;
@@ -286,10 +306,11 @@ int PP_AppDist_ValidateTable(PP_AppDist_t *D, const PP_PolicyTable_t *Table);
  * in a case of the fallback policy, and a floor decision with no release and no fallback policy to ask is in a floor
  * case marked `asked` false. An escalation past the floor's rate (dist:floor-rate) has no line in a core run, since
  * the floor's table allows the request: it is refused unreceipted and counted NotEnacted, and its escalation is opened
- * and answered as any other.
+ * and answered as any other. `Command` is how the proposal was asked, kept with an escalation so an answer `allow`
+ * carries out that command; NULL keeps none, and such an escalation is never carried out.
  */
 void PP_AppDist_Propose(PP_AppDist_t *D, const PP_RunIo_t *Io, const uint8_t *Payload, size_t PayloadLen,
-                        uint32_t MonitorAge, long long Now, PP_AppDecision_t *Out);
+                        const PP_AppCommand_t *Command, uint32_t MonitorAge, long long Now, PP_AppDecision_t *Out);
 
 /** Load the table that decides now through the table service, after a start, so it shows what the kernel holds. */
 int PP_AppDist_LoadActive(PP_AppDist_t *D);
