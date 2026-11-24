@@ -62,7 +62,7 @@ envelope**, and its format tag is `prismpath.dist/1`.
 |---|---|
 | Authority key | An Ed25519 key that says which policy may run. Its key id is the SHA-256 of its 32 raw public bytes, in lower case hex. |
 | Instance key | An Ed25519 key one PEP makes for itself. It signs what that PEP reports and never authorizes anything. |
-| Trust store | What a PEP holds about authority keys. The trusted keys, the retired keys, the revocation list, the trust sequence and the threshold. |
+| Trust store | What a PEP holds about authority keys. The trusted keys, the retired keys, the revocation list, the trust sequence and the threshold. Install and operator keys are never in it (K3). |
 | Stream | A named line of policy that one group of PEPs follows, for example `agent/default` or `mesh/demo`. A name is 1 to 64 characters of `a-z 0-9 . _ / -`. The reserved stream `@trust` carries revocations and rotations. |
 | Policy hash | The SHA-256 of the policy document every artifact of a release derives from. It is the `prismpath.core/1` image bytes when the policy has one, and the `.ppt` image bytes otherwise. |
 | Distribution envelope | The canon/2 document of section 4 that names one artifact body by hash. |
@@ -71,6 +71,7 @@ envelope**, and its format tag is `prismpath.dist/1`.
 | Release | Every sealed envelope that shares one stream, one `seq` and one policy hash. A PEP commits a release whole. |
 | Floor | The highest `seq` a PEP has committed on a stream, with the envelope ids committed at it. |
 | Install key | An Ed25519 key of the engineer who installs PrismPath on a resource. It signs the bounds the resource runs within and nothing else. |
+| Operator key | An Ed25519 key the engineer enrolls to answer the action floor's escalations, one at a time (OP1). It signs nothing else. |
 | Install statement | A sealed envelope, signed by install keys, that carries one artifact of an action floor, of a fallback policy or of a ceiling, or an install trust statement (section 21). |
 | Install set | Every install statement that shares one install kind, one stream, one `seq` and one release id. A PEP applies it whole. |
 | Action floor | The install set whose allows hold in every state of a PEP. It is never called the floor. |
@@ -254,13 +255,14 @@ offset     size  field
 Any other length, magic or version is `dist:bad-format`. Entries are sorted by key id and no key id
 repeats.
 
-**S3.** An entry counts when its key id names a key the trust store holds in the role the artifact needs
-(K4), that key is neither revoked nor retired, and the signature verifies. A key id is a hint for finding
+**S3.** An entry counts when its key id names a key the PEP holds in the role the artifact needs (K4),
+in the trust store or in the install record, that key is neither revoked nor retired, and the signature
+verifies. A key id is a hint for finding
 the key and decides nothing by itself. An entry that does not count is skipped, as DSSE skips it.
 
 **S4.** An envelope is signed when the number of counting entries is at least the trust store's
 threshold. The threshold is 1 in this version for the role `authority`. The role `install` has its own
-(IS2).
+(IS2), and one operator signature is enough for an answer (OP1).
 
 **S5.** An envelope that is not signed is refused with one cause, the first of these that applies.
 `sig:revoked-key` when an entry verifies under a revoked or retired key. `sig:invalid` when an entry
@@ -293,7 +295,9 @@ apart from it in the install record, with their own bounds (IS10, IS11, OP1). Th
 apart. No key is held in two roles, and none is the PEP's instance key. The PEP checks every two roles
 against each other and each against the instance key at the anchor (P2, P4) and at every statement that
 adds a key, which is a `trust.rotation` (O4) and an `install.trust` (IS11). A key retired in one role is
-never added again in any role. A key in a role this version does not know is kept and never counts.
+never added again in any role while the PEP remembers its id (K5, IS10). A PEP forgets the oldest ids
+past those bounds and then cannot tell, so the sealing tool and the controller, which keep every retired
+id, refuse to seal or store a statement that adds one. A key in a role this version does not know is kept and never counts.
 The role an artifact needs is a column of the kind table. Because the artifact kind is inside the
 envelope and V3 runs before the envelope is read, a version with more than one role works in two steps.
 V3 finds every role under which the envelope is signed (S4) and fails only when there is none. V5 then
@@ -745,14 +749,19 @@ a first key.
 3. The owner installs the trust anchor on the PEP by a channel the owner already trusts. On a host that is
    a file copied by the operator, on a `mesh` node it is compiled into the firmware that is flashed, and
    on `cfs` it is the key file the ground provisioning writes. The anchor is a canon/2 document
-   (`prismpath.dist-trust/1`) with the trusted public keys, the threshold, the PEP's target kind and its
-   stream.
+   (`prismpath.dist-trust/1`, or `/2` by P4) with the trusted public keys, the threshold, the PEP's
+   target kind and its stream. Every entry of `keys` is an authority key. At this step the PEP checks
+   the anchor's keys pairwise. No key is in two of `keys`, the install keys and the operator keys, none
+   is the PEP's instance key, and none is a key the PEP holds in another role or has retired in any role
+   (K4). Any of these refuses the anchor and leaves the PEP as it was.
 4. The PEP prints the fingerprint of the anchor and the operator compares it with the one the owner's
    tool printed. A host PEP does not start following a stream until the operator confirms.
 5. The owner enrolls the PEP's instance public key, target kind and stream at the controller.
 
 **P3.** Provisioning sets the trust sequence, the floor and the time floor to their starting values and is
-the only step that clears `locked`. It is written to the audit log as its own event.
+the only step that clears `locked`. It is written to the audit log as its own event. It never reopens the
+older forms of section 17. A stream on which the PEP refused them stays refused after any provisioning,
+whether or not the PEP ever held an install statement (L2, IS9).
 
 **P4.** An anchor that holds install keys has format `prismpath.dist-trust/2`. It holds what a
 `prismpath.dist-trust/1` anchor holds and the member `install`, which holds `keys`, `threshold` and
@@ -760,7 +769,13 @@ the only step that clears `locked`. It is written to the audit log as its own ev
 at, and `domain`, the SHA-256 of the reading domain the PEP was built with (CL4). Those keys go to the
 install record and never to the trust store (K3, K4). A PEP of this version reads both formats, and a
 `/1` anchor holds no install part. A reader of `/1` alone refuses a `/2` anchor, so a PEP is never
-given install keys it would not keep. A PEP refuses an anchor whose `domain` is not the hash of the
+given install keys it would not keep. In both formats `keys` holds authority keys only, and an entry
+that names another role is `dist:bad-format` and refuses the anchor. An older PEP whose trust store holds
+a key in a role it does not know keeps it and never counts it (K4), which is why the sealing tool never
+writes one there. A `/1` anchor, or a `/2` anchor with no `install` member, that reaches a PEP holding an
+install record replaces the trust store only. The install record, its keys, its sets and its sequences
+stay as they are, and the anchor's keys are still checked pairwise against the held and the retired
+install and operator keys (P2 step 3). A PEP refuses an anchor whose `domain` is not the hash of the
 domain it was built with. The engineer may put install statements on the PEP in step 3 with the anchor,
 and section 21 gives their rules. P3 resets nothing of an install statement. A provisioning never lowers
 an install `seq` or the install trust sequence, starts them again only with a disjoint install key set
@@ -779,7 +794,7 @@ offset  size  field
 4       1     version, 1
 5       1     event     0 beat, 1 staged, 2 refused, 3 committed, 4 aborted,
                         5 trust-applied, 6 lapsed, 7 rolled-back, 8 provisioned, 9 held,
-                        10 fallback, 11 install-applied, 12 install-widened
+                        10 fallback, 11 install-applied, 12 install-widened, 13 answered
 6       1     status    0 no-policy, 1 active, 2 locked. Bit 7 set when a release is staged.
                         Bit 6 set when this is a dev build (D3). Bit 5 set while the PEP is
                         on hold past expiry (X7). Bit 4 set while the installed fallback
@@ -839,9 +854,14 @@ A PEP on the wrong policy is found by comparing hashes, never by a decode that h
 | 5 | The body decodes under the expected policy | `wire:codebook-mismatch` |
 
 A `provisioned` record whose PEP id is not yet enrolled is not filed at step 1. The controller keeps it,
-at most one for each PEP id and 64 in all, the oldest dropped first, and checks it when the PEP is
-enrolled (P2 step 5). So a first install set that arrives at provisioning is never `fleet:state-invalid`
-before the enrollment that acknowledges it (H13).
+at most four for each PEP id and 64 in all, the oldest dropped first, and checks them when the PEP is
+enrolled (P2 step 5). Only a record that verifies under the enrolled instance key is used, so a forged
+record cannot stand for the real one. A flood of forged ids can push the real record out. That loses the
+event and nothing else, since the enrollment of the install id is the acknowledgement (H13) and the
+PEP's next record carries its install id. So a first install set that arrives at provisioning is never
+`fleet:state-invalid` before the enrollment that acknowledges it. The controller keeps the last counter
+it accepted for a PEP id across a new enrollment of that id, so a record from before it is still a
+replay at step 2.
 
 **H9.** A controller names the present with an epoch id, a number that rises at least once per heartbeat
 interval. It rides in the `offers` answer as `epoch` and in a frame of type 6 (bytes 4 to 11). A PEP puts
@@ -861,7 +881,7 @@ PEP that holds an install statement or install keys, and it is 27 bytes.
         then the install trust sequence and the install trust id (IS10). A set id and the
         install trust id are 32 raw bytes, a number is 8 bytes, and a set not held is zeros
 16  2   the low 16 bits of the install trust sequence
-18  1   subject. On a record with event staged, refused, install-applied or install-widened it says what
+18  1   subject. On a record with event staged, refused, answered, install-applied or install-widened it says what
                 the event is about. 0 not an install kind, 1 action floor, 2 fallback policy, 3 ceiling,
         4 install trust statement, 5 operator answer
 19  4   floor answers, every request the action floor allowed or escalated since provisioning
@@ -998,7 +1018,9 @@ bytes as before, so an image, a table or a core image keeps its hash.
 
 **L2.** A PEP that has committed any distribution envelope on a stream refuses the older forms for that
 stream from then on with `dist:legacy-refused`. This holds whatever the package version is, so the older
-forms are never a way around a floor, an expiry or a revocation.
+forms are never a way around a floor, an expiry or a revocation. The PEP keeps this as a mark in its
+anchor part, apart from the trust store, so no provisioning clears it (P3), whether or not the PEP ever
+held an install statement.
 
 **L3.** A reader accepts the older forms on a PEP that L2 does not cover through the 0.3 series, and
 writes a `legacy_form` audit event each time. From 0.4.0 the older forms are refused everywhere with
@@ -1028,8 +1050,8 @@ written. If another change lands first the numbers move up together and the name
 | 141 | `dist:expired` | authority | The PEP's time is at or past `expires` |
 | 142 | `dist:revoked` | authority | The envelope id or the policy hash is on the revocation list, or the active release's seq is below a raised floor |
 | 143 | `dist:widening-unsigned` | authority | A release that is larger, or cannot be shown not to be, without a covering widening statement |
-| 144 | `dist:trust-replay` | authority | A revocation or rotation whose `seq` is not the trust sequence plus one, or a revocation list that would restore trust by dropping a key, or by dropping an entry no floor has passed (R6, R8) |
-| 145 | `dist:rotation-invalid` | authority | A rotation without the new key's signature, or that names a key it may not |
+| 144 | `dist:trust-replay` | authority | A revocation or rotation whose `seq` is not the trust sequence plus one, or a revocation list that would restore trust by dropping a key, or by dropping an entry no floor has passed (R6, R8). Also an `install.trust` that is not the install trust sequence plus one, and a provisioning whose install trust sequence is below the PEP's (IS6, IS11) |
+| 145 | `dist:rotation-invalid` | authority | A rotation without the new key's signature, or that names a key it may not. Also an `install.trust` that adds a key without its signature or adds a key of another role (IS11) |
 | 146 | `dist:legacy-refused` | authority | An older signed form where a distribution envelope is required |
 | 147 | `dist:hatch-refused` | authority | An escape hatch asked for in a production build |
 | 148 | `dist:too-large` | envelope | An envelope, a body or a list beyond the PEP's bound |
@@ -1050,7 +1072,7 @@ written. If another change lands first the numbers move up together and the name
 | 163 | `dist:install-lost` | state | An install set or an install record that no longer reads at start, so the PEP runs without it |
 | 164 | `dist:install-widened` | state | An install set applied or handed over that allows more than the one before it, or is the first of its kind |
 | 165 | `dist:above-ceiling` | envelope | A release or an install set that allows what the installed ceiling does not, or a ceiling the held sets are above |
-| 166 | `dist:floor-rate` | routing | A request the action floor would have allowed, escalated because the signed rate of floor allows is spent |
+| 166 | `dist:floor-rate` | routing | A request the action floor would have allowed, escalated because the signed rate of floor allows is spent, or an operator's answer past its signed rate (OP3) |
 | 167 | `dist:floor-broad` | envelope | An action floor with a default or catch all, a rule that names no one action or lacks a required test, a test of a field that is not independent, or more rules or entries than its bound |
 | 168 | `dist:answer-unbound` | authority | An operator's answer that names no open escalation of this PEP, or one already answered |
 
@@ -1291,17 +1313,26 @@ reports exactly the cause given, or none, and its state after is the one given.
 | 217 | An `agent` set arrives without its `agent.zones` while the signed release id covers one, and a set whose signed release id covers none arrives with a stray `agent.zones` statement of another release id | not applied until the zones statement arrives and the computed release id is the signed one, and the second is applied without the stray statement, which is `dist:incomplete` | IS4 | P |
 | 218 | A PEP is sent an `install.trust` that adds a key with `widens` false, one that lowers the threshold with `widens` true, and a floor at a higher `seq` with the same policy and a looser `rate` and `widens` false | `dist:widening-unsigned`, applied with event `install-widened`, `dist:widening-unsigned` | IS11, IS12, AF8 | P R C |
 | 219 | A PEP is provisioned with a first action floor and its `provisioned` record reaches the controller before the PEP is enrolled, then it is enrolled, and three `mesh` PEPs of one group are sent a new floor that one of them refuses | the record is kept and not filed, then at the enrollment it carries `dist:install-widened` and the enrollment clears it, then two PEPs apply and one does not, with no abort and three install ids that show the mix | H13, H6, IS4 | P C |
-| 220 | A `cfs` PEP escalates a floor action with `dist:floor-rate`. It is then sent an answer `allow` signed by an enrolled operator key, the same answer again, and the same again after a restart. Other escalations are sent an answer signed by an install key, one signed by an authority key, one whose lifetime is 601 seconds, one that arrives after `expires`, one whose `receipt` names no escalation, one for an escalation older than 600 seconds, an unsigned message that claims to be an answer, and an answer `refuse` | the request passes once and leaves a receipt with basis `operator`, the answer's envelope id and the escalation's hash, then `dist:answer-unbound` twice, then `dist:unknown-key` twice, `dist:bad-format`, `dist:expired`, `dist:answer-unbound` twice, nothing for the unsigned one, and the last request stays refused with its own `operator` receipt | OP2, OP3, AF8 | P C |
+| 220 | A `cfs` PEP with an install threshold of 2 escalates a floor action with `dist:floor-rate`. It is then sent an answer `allow` signed by an enrolled operator key, the same answer again, and the same again after a restart. Other escalations are sent an answer signed by an install key, one signed by an authority key, one whose lifetime is 601 seconds, one that arrives after `expires`, one whose `receipt` names no escalation, one for an escalation older than 600 seconds, an unsigned message that claims to be an answer, and an answer `refuse` | the request passes once and leaves a receipt with basis `operator`, the answer's envelope id and the escalation's hash, then `dist:answer-unbound` twice, then `dist:unknown-key` twice, `dist:bad-format`, `dist:expired`, `dist:answer-unbound` twice, nothing for the unsigned one, and the last request stays refused with its own `operator` receipt | OP2, OP3, AF8 | P C |
 | 221 | An anchor enrolls one operator key, an `install.trust` adds a second with `widens` false and then with `widens` true, one tries to add a key that is an install key, and an operator key signs an install statement and a release | enrolled, `dist:widening-unsigned`, applied with event `install-widened` and held at the controller for its acknowledgement, `dist:rotation-invalid`, and `dist:unknown-key` twice | OP1, IS11, H13 | P R C |
 | 222 | An `agent` PEP whose release protects `keys` lapses, once with a ceiling whose `agent.zones` protects `ledger`, once with a ceiling that has no `agent.zones`, and once with a restart after the lapse. Each time it is asked to write `keys` and `ledger` | with the ceiling's zones `ledger` is protected, with none the release's `keys` stays protected, and the restart changes nothing | FB9 | P |
 | 223 | A `host` PEP is sent a floor whose `meta` carries `counts` that differ from the table, one with no `qualification`, and one whose members are those of its `policy.ppt`. An `xdp` PEP is sent a floor whose `net.edge` statement lacks `names_sha256`, and a `mesh` PEP a floor whose `meta` holds `counts` as a string | `manifest:count-mismatch`, `dist:bad-format`, applied, `dist:bad-format`, and applied on `mesh`, which skips it | IS1, IS5 | P R C |
 | 224 | An anchor whose operator key is an authority key, one whose operator key is an install key, a `trust.rotation` whose `add` is an operator key and one whose `add` is a retired operator key, an `install.trust` that puts one key in `keys` and in `operators`, one that adds to `operators` a key the PEP retired as an install key, and one that drops an operator key and then one that adds it again | refused at provisioning twice, then `dist:rotation-invalid` four times, applied with the operator key retired, and `dist:rotation-invalid` | K4, O4, IS11 | P R C |
-| 225 | A `host`, a `mesh` and an `xdp` PEP are each sent a well signed `operator.answer`, and a `cfs` PEP with an open floor escalation is sent a good answer whose `not_before` is above its time floor | `dist:target-mismatch` three times, then the answer is applied and the time floor does not move | V5, V13, OP1, OP2 | P R C |
+| 225 | A `host`, a `mesh` and an `xdp` PEP are each sent a well signed `operator.answer`, and a `cfs` PEP with an install threshold of 2 and an open floor escalation is sent a good answer whose `not_before` is above its time floor | `dist:target-mismatch` three times, then the answer is applied and the time floor does not move | V5, V13, OP1, OP2 | P R C |
 | 226 | A `cfs` PEP whose second copy of its install record is in a Critical Data Store area loses the file that holds the first, and a `host` PEP with one file system loses both copies on it | the `cfs` PEP uses the second copy and holds its sets, and the `host` PEP holds no set, reports `dist:install-lost`, keeps deciding under its release, and takes no install statement by message and no release until it is provisioned | IS10 | P R C |
 | 227 | A PEP with an install threshold of 1, a floor of section 6 at 7, a time floor a day ahead of its clock and an action floor at `seq` 2 is given an install provisioning with an action floor at 3, then the same again, then one with a floor at 2. It is then offered a release at `seq` 6, and a `locked` PEP is given an install provisioning | the floor at 3 is applied with event `install-applied` and the floor of section 6, the trust sequence and the time floor are unchanged, then unchanged, then `dist:seq-replay`, the release is `dist:seq-replay`, and the `locked` PEP takes the floor and stays `locked` | IS13, IS6, P3 | P R C |
 | 228 | A `host` PEP with a release and an action floor decides two requests by its release and one by its floor and sends a record, then lapses to its fallback policy, decides a request and sends a record. A controller is then given a record with bit 4 set and a body that is not empty | the first body has two frames under the release's preamble, the second has length 0, and the third is `fleet:policy-mismatch` at step 4 | H5, H6, H11 | P |
 | 229 | An `agent` PEP is sent a floor whose rule tests `zone_name` as not equal to `keys`, and one whose rule names a zone name the zone point cannot read. A release whose rule allows `write_file` where `zone_name` is `keys` is then offered over one that allows it where `zone_name` is `ledger`, with `widens` false | `policy:out-of-domain` twice, then `dist:widening-unsigned`, since the walk finds `keys` allowed where it was not | AF1, W1, W6 | P |
 | 230 | A PEP is given a `/1` anchor that holds an `install` member, a `/2` anchor whose `domain` is not the hash of the domain the PEP was built with, and a good `/2` anchor, and is then sent a release signed by one of its install keys | refused at provisioning twice, then provisioned with the install keys in the install record and none in the trust store, and the release is `dist:unknown-key` | P4, CL4, K3, K4 | P R C |
+| 231 | A `cfs` PEP with an install threshold of 1 is sent a well signed answer, and one with a threshold of 2 is sent an answer whose `pep` is another PEP's id. Two `cfs` PEPs then write receipts of the same bytes for one escalation each, and an answer for the first is sent to both | `dist:target-mismatch`, `dist:answer-unbound`, then applied on the first and `dist:answer-unbound` on the second | OP1, OP2 | P C |
+| 232 | A `cfs` PEP whose floor has an `answer_rate` of 2 in 600 seconds gets three good `allow` answers for three open escalations and a restart after the second, then a `refuse`. An `agent` PEP is sent a floor that can escalate and has no `answer_rate` | applied twice, each with a record with event `answered` and subject 5 that the fleet view shows, the restart changes nothing, the third is `dist:floor-rate` and its escalation stays open, the `refuse` is applied, and `dist:bad-format` | OP4, H1, AF8 | P C |
+| 233 | A PEP with an install threshold of 1 and two operator keys is given an install provisioning that carries an `install.trust` which drops one of them, then that key signs an answer | applied with the key retired, its trust state and floor unchanged, and the answer is `dist:target-mismatch` as the threshold is 1 | IS13, IS11 | P R C |
+| 234 | A PEP that never held an install statement refuses an older signed form on a stream, is provisioned again, and is then sent that form on the same stream | `dist:legacy-refused` both times | L2, P3 | P R C |
+| 235 | A PEP is given an anchor whose `keys` holds an entry in the role `install`. A PEP that holds an install record is given a `/1` anchor, then a `/2` anchor with no `install` member, then a `/1` anchor whose authority key is a held install key, then one whose authority key is an operator key it retired | `dist:bad-format`, then provisioned twice with the install record, its sets and its sequences unchanged, then refused twice | P4, P2, K4 | P R C |
+| 236 | A PEP is given an anchor whose operator key is its instance key, one whose install key is also an operator key, and one whose install key is the instance key | refused at provisioning three times and the PEP is unchanged | P2, K4 | P R C |
+| 237 | An `agent` PEP stages a fallback set whose release id covers an `agent.zones` that has not arrived, is then given a ceiling the staged set is above, and the zones statement arrives | the ceiling is applied, then the set is dropped with `dist:above-ceiling` at apply and the held fallback policy still decides | IS4, CL3 | P |
+| 238 | A controller holds a PEP's last counter at 40 and the PEP is enrolled again. It is then given that PEP's record at counter 39, and, before another PEP is enrolled, four forged `provisioned` records for its id and the real one, and later 64 forged ids that push the real record out | `fleet:state-replay`, then the real record is the one used at enrollment, and after the flood the enrollment still acknowledges the install id and the next record shows it | H6, H3, H13 | P |
+| 239 | Seventeen authority keys and nine install keys are retired, then the sealing tool and a controller are given a rotation and an `install.trust` that add back the first of each | the PEP no longer holds those ids, and the tool and the controller refuse both | K4, K5, IS11 | P |
 
 ## 21. The action floor, the fallback policy and the ceiling
 
@@ -1348,7 +1379,7 @@ the set, sorted, as raw bytes. It covers `meta`, which the release id does not, 
 record and an acknowledgement use for a set (H10, H13). The `meta` of an install kind also carries the members section 3 gives the artifact that `as` names,
 such as `fields`, `counts`, `wcet_cycles`, `qualification` and `packing` for a `policy.ppt` and
 `flow_sha256`, `names_sha256` and `qualification` for a `net.edge`, because the check of that artifact
-reads them. Every reader reads `as`, `layout`, `command` and `rate` of an install kind, the `mesh` and
+reads them. Every reader reads `as`, `layout`, `command`, `rate` and `answer_rate` of an install kind, the `mesh` and
 `cfs` readers too, and those two skip the rest as E9 says.
 
 **IS2.** An install statement is signed by install keys, which are the keys a PEP holds in the role
@@ -1382,7 +1413,9 @@ G1 stages an envelope, durably, with `stage-ack` and event `staged`, whose subje
 kind (H10). Bit 7 of `status` stays for a release. A set at a higher `seq` of the same install kind
 replaces the staged one as G2 says, and one at a lower `seq` is `dist:seq-replay`. A staged statement
 survives a restart, as a staged envelope does. A set is whole when the release id the PEP
-computes by E10 over the statements it holds is the signed `release`. That is what settles an artifact
+computes by E10 over the statements it holds is the signed `release`. At apply the PEP holds the set to
+the ceiling it holds at that moment (CL3), as C3 holds a release at commit, since a ceiling may arrive
+while the set is staged. A set that is not inside it is dropped with `dist:above-ceiling`. That is what settles an artifact
 the kind needs only sometimes, such as an `agent.zones`. A PEP applies a set on its own. There is no
 group commit for install sets (F3), so a fleet can be mixed while a set spreads, and the install ids show
 it. The set is durable before the PEP reports its event (IS12), and a
@@ -1522,7 +1555,9 @@ replaces an action floor, a fallback policy or a ceiling on a PEP whose install 
 channel of P2 step 3. Each statement is held to IS5 and IS6 as any install statement is, and the set is
 reported with the event IS12 gives it. P3 does not apply. The trust store, the trust sequence, the floor
 of section 6, the time floor, the epoch id and the PEP's state stay as they were, and a `locked` PEP stays
-`locked`. It is written to the audit log as a provisioning.
+`locked`. It may carry an `install.trust`, held to IS11, that removes an operator key, which is how the
+engineer takes one back on a PEP whose install threshold is 1. It is written to the audit log as a
+provisioning.
 
 ### 21.2 The action floor
 
@@ -1742,7 +1777,8 @@ same check before a release is sealed or offered, on every kind.
 is not inside the held ceiling is refused with `dist:above-ceiling` (IS5), and so is a ceiling that the
 held action floor or fallback policy would be above. The engineer narrows those first. A ceiling that the
 active release is above is applied, and the release then lapses with `dist:above-ceiling` as it would
-under R5. A staged or a kept release is left for CL2. The fallback policy is bounded by the ceiling
+under R5. A staged or a kept release is left for CL2, and a staged install set is held to the ceiling
+again when it is applied (IS4). The fallback policy is bounded by the ceiling
 and not by the release, because it has to stand when there is no release, and because a process owner's
 release is not what bounds the engineer.
 
@@ -1763,21 +1799,26 @@ them in the install record, at provisioning or in `operators` of an `install.tru
 one is a widening (H13). No key is held in two roles (K4). An operator key signs answers and nothing
 else, one signature is enough, and no other key signs an answer. Only a kind with escalation uses
 operator keys, which is `agent`, `gateway` and `cfs` (AF2). A `host`, `mesh` or `xdp` PEP keeps the
-`operators` it is given and never uses them, and the C core reads an answer only on `cfs`.
+`operators` it is given and never uses them, and the C core reads an answer only on `cfs`. Answers work
+only on a PEP whose install threshold is 2 or more, so an operator key stands beside an install chain
+that no single stolen key controls. On a PEP whose install threshold is 1 an `operator.answer` is
+`dist:target-mismatch`.
 
 **OP2.** An answer is a sealed envelope with artifact `operator.answer` and this canon/2 body.
 
 ```json
-{"answer":"allow","encoding":"canon/2","format":"prismpath.dist-answer/1","receipt":"<sha256>"}
+{"answer":"allow","encoding":"canon/2","format":"prismpath.dist-answer/1","pep":"<32 hex digits>",
+ "receipt":"<sha256>"}
 ```
 
-`answer` is `allow` or `refuse` and `receipt` is the SHA-256 of the receipt of the escalation it
-answers. `stream` is the PEP's stream, `targets` names its kind, `policy_sha256` is the policy hash of
+`answer` is `allow` or `refuse`, `pep` is the PEP id of H1 in lower case hex, and `receipt` is the
+SHA-256 of the receipt of the escalation it answers. So an answer binds to one PEP and one escalation,
+even when two PEPs wrote receipts with the same bytes. `stream` is the PEP's stream, `targets` names its kind, `policy_sha256` is the policy hash of
 the action floor that escalated, `seq` is 1, `release` is 64 zeros, `replaces` is empty and `widens` is
 `false`. Its lifetime, `expires` less `not_before`, is at most 600 seconds. It travels as a `stage` of
-its kind over either binding and is applied when it verifies, on any install threshold. It never
-raises the time floor (V13). B1 still holds,
-since nothing unsigned answers an escalation. The PEP checks V2 to V6 and V9, then that `receipt` names
+its kind over either binding and is applied when it verifies, on an install threshold of 2 or more
+(OP1). It never raises the time floor (V13). B1 still holds,
+since nothing unsigned answers an escalation. The PEP checks V2 to V6 and V9, then that `pep` is its own PEP id and that `receipt` names
 an escalation it made on basis `floor`, under the action floor it still holds, that is still open. An
 answer that fails that last check is `dist:answer-unbound`. An escalation by a release or by the
 fallback policy keeps the path its kind already has.
@@ -1788,6 +1829,14 @@ escalation as answered, durably, so the same answer after a restart is `dist:ans
 lets the one request of that escalation through once, uncounted by AF8. The answer leaves a receipt of
 its own, with basis `operator`, the envelope id of the answer and the receipt hash it answered. A
 refused answer reports `refused` with subject 5 (H10).
+
+**OP4.** An operator's answers are visible and bounded. Every answer the PEP applies sends a record with
+event `answered` and subject 5, and the controller shows each one in the fleet view beside the PEP. An
+action floor that can escalate, on `agent`, `gateway` or `cfs`, carries `answer_rate` in the `meta` of
+every statement of its set, signed with it as `rate` is (AF8). It is `allows` answers `allow` in each
+`window` of seconds for the whole PEP, counted and saved before the PEP acts as AF8 counts. A floor that
+can escalate and has no `answer_rate` is `dist:bad-format`. An `allow` past the rate is refused with
+`dist:floor-rate` and the escalation stays open until it closes. A `refuse` is never limited.
 
 ### 21.6 Receipts
 
@@ -1840,6 +1889,7 @@ install keys as the threshold can do there, what a controller can do with none, 
 | | Replace the install key set and lock the engineer out, or enroll an operator key and answer the floor's escalations | Make a PEP originate an action. A wider floor answers only what is proposed to the PEP (FB4) |
 | | Sign a ceiling that lapses every release, an empty list for one, and a fallback policy inside it that then decides everything | Change what a PEP holds unseen. Every change gives a new install id in every record (H10) |
 | | On `cfs`, sign a wider table with `widens` `false`. The PEP takes their word, and only a controller or a sealing tool that compares catches it (H13) | Sign a wrong `widens` past any PEP but a `cfs` one (IS12), or a broad floor past any PEP (AF9) |
+| An operator key in the wrong hands | Answer `allow` to escalations the action floor made, on PEPs of a stream whose install threshold is 2 or more, up to the signed answer rate, each shown by an `answered` record (OP4) | Answer what the floor did not escalate, answer for another PEP or twice (OP2, OP3), sign any other kind (OP1), or act where the install threshold is 1 |
 | A controller, with no key | Withhold an install set for as long as it likes. No expiry bounds this | Make or change an install statement (IS8) |
 | | Offer a superseded set the engineer signed, at a `seq` above the PEP's | Offer one at or below the `seq` the PEP holds (IS6), or one the PEP's ceiling does not hold (CL3) |
 | | Fork a stream by giving two PEPs different `install.trust` statements that were both signed | Hide it. The install trust id is in every install id (IS10, H12) |

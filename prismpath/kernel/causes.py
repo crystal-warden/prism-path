@@ -211,7 +211,7 @@ _REGISTRY: Tuple[Tuple[int, str, str, str], ...] = (
     (163, "dist:install-lost",           "state",     "an install set or an install record that no longer reads at start, so the enforcement point runs without that action floor, fallback policy or ceiling"),
     (164, "dist:install-widened",        "state",     "an install set applied or handed over that allows more than the one before it, or is the first of its kind; filed until it is acknowledged at the controller, which is detection only"),
     (165, "dist:above-ceiling",          "envelope",  "a release or an install set that allows what the installed ceiling does not, or a ceiling the held sets are above"),
-    (166, "dist:floor-rate",             "routing",   "a request the action floor would have allowed, escalated because the signed rate of floor allows is spent"),
+    (166, "dist:floor-rate",             "routing",   "a request the action floor would have allowed, escalated because the signed rate of floor allows is spent, or an operator's answer refused past its signed answer rate"),
     (167, "dist:floor-broad",            "envelope",  "an action floor with a default or catch all, a rule that names no one action or lacks a required test, a test of a field that is not independent, or more rules or entries than its bound"),
     (168, "dist:answer-unbound",         "authority", "an operator's signed answer that names no open escalation of this enforcement point, or one already answered"),
 )

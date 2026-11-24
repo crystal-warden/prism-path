@@ -447,7 +447,7 @@ pub const REGISTRY: &[Cause] = &[
     Cause { code: 163, name: "dist:install-lost", class: CauseClass::State, description: "an install set or an install record that no longer reads at start, so the enforcement point runs without that action floor, fallback policy or ceiling" },
     Cause { code: 164, name: "dist:install-widened", class: CauseClass::State, description: "an install set applied or handed over that allows more than the one before it, or is the first of its kind; filed until it is acknowledged at the controller, which is detection only" },
     Cause { code: 165, name: "dist:above-ceiling", class: CauseClass::Envelope, description: "a release or an install set that allows what the installed ceiling does not, or a ceiling the held sets are above" },
-    Cause { code: 166, name: "dist:floor-rate", class: CauseClass::Routing, description: "a request the action floor would have allowed, escalated because the signed rate of floor allows is spent" },
+    Cause { code: 166, name: "dist:floor-rate", class: CauseClass::Routing, description: "a request the action floor would have allowed, escalated because the signed rate of floor allows is spent, or an operator's answer refused past its signed answer rate" },
     Cause { code: 167, name: "dist:floor-broad", class: CauseClass::Envelope, description: "an action floor with a default or catch all, a rule that names no one action or lacks a required test, a test of a field that is not independent, or more rules or entries than its bound" },
     Cause { code: 168, name: "dist:answer-unbound", class: CauseClass::Authority, description: "an operator's signed answer that names no open escalation of this enforcement point, or one already answered" },
 ];

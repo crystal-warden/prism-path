@@ -793,7 +793,7 @@
    "code": 166,
    "name": "dist:floor-rate",
    "class": "routing",
-   "description": "a request the action floor would have allowed, escalated because the signed rate of floor allows is spent"
+   "description": "a request the action floor would have allowed, escalated because the signed rate of floor allows is spent, or an operator's answer refused past its signed answer rate"
   },
   {
    "code": 167,
