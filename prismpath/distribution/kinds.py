@@ -120,9 +120,10 @@ class Target:
         return (self.checks or {}).get(artifact) or ARTIFACTS[artifact].check
 
 
-ROLES = frozenset({"authority", "controller", "install"})   # K4: the key roles this version builds
+ROLES = frozenset({"authority", "controller", "install", "operator"})   # K4: the key roles this version builds
 AUTHORITY, CONTROLLER = "authority", "controller"   # K6: the controller key signs controller statements only
 INSTALL = "install"                                 # IS2: install keys sign the install kinds and nothing else
+OPERATOR = "operator"                               # OP1: operator keys sign answers and nothing else
 
 
 # ------------------------------------------------------------------ the forms of the meta members (E11)
@@ -516,13 +517,28 @@ def read_install_trust(body: bytes) -> dict:
     return doc
 
 
+ANSWER, ANSWER_FORMAT, ANSWER_LIFE = "operator.answer", "prismpath.dist-answer/1", 600     # OP2
+
+
+def read_answer(body: bytes) -> dict:
+    """OP2: an operator's answer, `answer` `allow` or `refuse`, `pep` the PEP id of H1 in lower case hex and
+    `receipt` the SHA-256 of the receipt of the escalation it answers. `Refused` with `dist:bad-format` otherwise."""
+    doc = _trust_body(body, ANSWER_FORMAT, frozenset({"answer", "encoding", "format", "pep", "receipt"}))
+    pep = doc["pep"]
+    if not (doc["answer"] in ("allow", "refuse") and isinstance(pep, str) and len(pep) == 32
+            and all(char in "0123456789abcdef" for char in pep) and is_hex64(doc["receipt"])):
+        raise Refused(BAD_FORMAT, "an operator answer whose answer, pep or receipt does not read")
+    return doc
+
+
+ARTIFACTS[ANSWER] = Artifact(check=_reads(read_answer), role=OPERATOR)
 ARTIFACTS["install.floor"] = Artifact(role=INSTALL)
 ARTIFACTS["install.fallback"] = Artifact(role=INSTALL)
 ARTIFACTS["install.ceiling"] = Artifact(role=INSTALL)
 ARTIFACTS["install.trust"] = Artifact(check=_reads(read_install_trust), role=INSTALL)
 # E11: what `as` may name, an artifact a release holds, never a trust kind, a grant or an install kind
 INSTALL_AS = frozenset(name for name in ARTIFACTS
-                       if name not in TRUST_ARTIFACTS | INSTALL_ARTIFACTS and name != "grant")
+                       if name not in TRUST_ARTIFACTS | INSTALL_ARTIFACTS and name not in ("grant", ANSWER))
 
 
 def install_meta(artifact: str, meta: Any) -> Tuple[FrozenSet[str], FrozenSet[str]]:

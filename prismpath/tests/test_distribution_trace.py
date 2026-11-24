@@ -48,8 +48,15 @@ C_KINDS = frozenset({"mesh", "cfs"})
 # reconciling, and the ceiling and fallback runs wait for section 21 in Rust.
 PARTIAL = {"P": frozenset(), "R": frozenset({243, 246}), "C": frozenset()}
 PARTIAL["P"] = PARTIAL["P"] | frozenset({246, 260, 261, 280})
+# 193, 194: Python's action floor writes `would` and counts overrides, and the `xdp` halves (a floor allow counted with
+# no `would`, a floor with a `rate` refused) wait for the `xdp` kind (PR 11); 193's `cfs` lines wait for the core run
+# writer of section 21 (RC4).
+PARTIAL["P"] = PARTIAL["P"] | frozenset({193, 194})
+# 225: a `host`, a `mesh` and a `cfs` PEP take or refuse an operator's answer, and the `xdp` third waits for its kind.
+# 232: the answers and their `answered` records are built, and the fleet view that shows them is the controller's part.
+PARTIAL["P"] = PARTIAL["P"] | frozenset({225, 232})
 PENDING = {
-    "P": "104-105 161 164 166-167 169-170 172-174 177-181 183-195 197 203 205-216 218-221 223-225 227-229 231-233 235-236 238-239 246 260-261 265-266 272-273 280",
+    "P": "104-105 161 164 167 170 172-173 179 181 183-185 187 190-191 193-195 203 206 209-211 215 219 221 223 225 228 232 238-239 246 260-261 266 272-273 280",
     "R": "137-138 161-163 165-166 169-172 174-178 182-183 186 188-190 193 195 197 199 201-202 204-205 207 213 215 218 221 223-227 230 233-236 243 246 256-262 265-266 269-272 276-280 281",
     "C": "97 104-105 122 193 202 220 225 230-232 235 256-261 269-271 276-280 281",
 }

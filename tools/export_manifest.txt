@@ -261,6 +261,7 @@ prismpath/distribution/cli.py
 prismpath/distribution/controller.py
 prismpath/distribution/devbuild.py
 prismpath/distribution/envelope.py
+prismpath/distribution/floor.py
 prismpath/distribution/frames.py
 prismpath/distribution/heartbeat.py
 prismpath/distribution/http.py
@@ -785,6 +786,7 @@ prismpath/tests/test_distribution_controller.py
 prismpath/tests/test_distribution_corpus.py
 prismpath/tests/test_distribution_crash.py
 prismpath/tests/test_distribution_envelope.py
+prismpath/tests/test_distribution_floor.py
 prismpath/tests/test_distribution_frames.py
 prismpath/tests/test_distribution_gateway.py
 prismpath/tests/test_distribution_hatches.py
