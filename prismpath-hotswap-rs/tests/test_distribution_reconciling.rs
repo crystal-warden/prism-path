@@ -12,12 +12,15 @@ mod common;
 mod dist;
 
 use dist::*;
-use prismpath_hotswap_rs::dist::pep::{Adapter, Comparison, HostAdapter, Pep, PepError, PepStep, Release, REFUSE};
+use prismpath_hotswap_rs::dist::pep::{Adapter, HostAdapter, Pep, PepError, PepStep, Release, REFUSE};
 use prismpath_hotswap_rs::dist::state_record::{self, ReconcilingEntry, StateRecord};
 use prismpath_hotswap_rs::dist::{ArtifactKind, TargetKind};
 use serde_json::{json, Value};
+use prismpath_hotswap_rs::host::CommitStep;
 use std::cell::Cell;
 use std::rc::Rc;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 
 /// What the test does to the runtime: whether its install and its withdrawal fail, and how often each was tried.
 #[derive(Clone, Default)]
@@ -60,10 +63,6 @@ impl Adapter for Flaky {
 
     fn check(&self, artifact: ArtifactKind, body: &[u8], staged: &Release) -> Option<String> {
         self.host.check(artifact, body, staged)
-    }
-
-    fn compare(&self, active: &Release, staged: &Release) -> Comparison {
-        self.host.compare(active, staged)
     }
 
     fn activate(&self, release: &Release) -> Result<(), PepError> {
@@ -117,7 +116,11 @@ impl Rig {
         self.scratch.join("host").join("dist").join(name)
     }
 
+    /// Stage `sealed`, after the owner's widening statement when it is a release that says it widens (W3).
     fn stage(&mut self, sealed: &[u8], body: &[u8]) -> StateRecord {
+        if let Some((statement_sealed, statement)) = covering_statement(sealed) {
+            self.pep.stage(&statement_sealed, &statement).unwrap();
+        }
         let signed = self.pep.stage(sealed, body).unwrap();
         read(&signed)
     }
@@ -130,11 +133,8 @@ impl Rig {
 
     /// Stage `body` at `seq` with a widening statement whose `from` is empty, so a rollback to it is covered (RB3).
     fn stage_covered(&mut self, body: &[u8], seq: i64) {
-        let release = release_of(body);
-        self.stage(&ppt(body, &Args { release: Some(release.clone()), ..at(seq) }), body);
-        let statement = widening(&[]);
-        let args = Args { release: Some(release), policy: Some(h(body)), ..at(seq) };
-        assert_eq!(self.stage(&seal(ArtifactKind::TrustWidening, &statement, &args), &statement).event, "staged");
+        assert_eq!(self.stage(&ppt(body, &at(seq)), body).event, "staged");
+        assert!(self.pep.staged().unwrap().held.contains_key(&ArtifactKind::TrustWidening));
     }
 
     fn records(&mut self) -> Vec<StateRecord> {
@@ -198,6 +198,7 @@ fn case_240_a_failed_commit_withdraws_refuses_and_reports_committed_when_a_try_w
     let mut rig = Rig::new("240");
     rig.commit_at(&old(), 1);
     rig.stage(&ppt(&new(), &at(2)), &new());
+    assert!(rig.pep.staged().unwrap().held.contains_key(&ArtifactKind::TrustWidening), "another table is a widening (W2, W3)");
     rig.pep.drain();
     rig.switches.set(true, false);
     let entered = read(&rig.pep.commit(STREAM, 2, &h(&new()), 0).unwrap());
@@ -446,8 +447,9 @@ fn case_248_the_running_release_keeps_its_blobs_until_the_withdrawal_works() {
     rig.pep.commit(STREAM, 2, &h(&new()), 0).unwrap();
     rig.switches.set(true, true);
     rig.pep.rollback().unwrap();
-    let blobs: Vec<_> = rig.pep.running().unwrap().held.values().flat_map(|held| [held.sealed.clone(), held.body.clone()]).collect();
-    assert_eq!(blobs.len(), 2);
+    // the table's envelope and body: the widening statement's body is the same bytes in every release here
+    let table = &rig.pep.running().unwrap().held[&ArtifactKind::PolicyPpt];
+    let blobs = [table.sealed.clone(), table.body.clone()];
     rig.stage(&leaving, &new());
     rig.pep.abort(STREAM, 2, &h(&new())).unwrap();
     rig.stage(&ppt(&newer(), &at(3)), &newer());
@@ -544,7 +546,8 @@ fn case_251_provisioning_withdraws_first_and_is_refused_over_a_stuck_runtime() {
 fn case_274_a_renewal_whose_runtime_step_fails_stays_active() {
     let mut rig = Rig::new("274");
     rig.commit_at(&old(), 1);
-    rig.stage(&ppt(&old(), &Args { expires: EXPIRES + 86400, ..at(2) }), &old());
+    rig.stage(&ppt(&old(), &Args { expires: EXPIRES + 86400, ..renewal(2, &old()) }), &old());
+    assert!(!rig.pep.staged().unwrap().held.contains_key(&ArtifactKind::TrustWidening), "a renewal needs no statement");
     rig.pep.drain();
     rig.switches.set(true, false);
     let withdrawals = rig.switches.tries().1;
@@ -595,4 +598,211 @@ fn only_a_tick_and_a_start_try_the_runtime() {
     let started = rig.records();
     assert_eq!(started.last().map(|record| record.event), Some("reconciling"), "a start that finds the state reports it again");
     assert_eq!(rig.actions("reconciling"), 2);
+}
+
+/// The host's own commit hook, failing at `step` the first `times` times it is reached.
+fn host_fails_at(rig: &Rig, step: CommitStep, times: usize) -> Arc<AtomicUsize> {
+    let left = Arc::new(AtomicUsize::new(times));
+    let counter = left.clone();
+    rig.pep.adapter.host.host.set_commit_hook(Some(Box::new(move |at| {
+        if at == step && counter.load(Ordering::SeqCst) > 0 {
+            counter.fetch_sub(1, Ordering::SeqCst);
+            return Err("io".into());
+        }
+        Ok(())
+    })));
+    left
+}
+
+/// A commit reconciling with its runtime withdrawn, the runtime switches then set to obey.
+fn withdrawn_commit(tag: &str) -> Rig {
+    let mut rig = Rig::new(tag);
+    rig.commit_at(&old(), 1);
+    rig.stage(&ppt(&new(), &at(2)), &new());
+    rig.switches.set(true, false);
+    rig.pep.commit(STREAM, 2, &h(&new()), 0).unwrap();
+    assert_eq!((rig.pep.state(), rig.host_active()), ("reconciling", json!(null)));
+    rig.pep.drain();
+    rig
+}
+
+/// C9, C10, H14, X3, review finding 1. A try whose install fails after the host flipped its record may leave the
+/// host running the held release. The PEP withdraws again at once, and when that fails too it names the held
+/// release as running in every record and its intent record, so a revocation of it keeps the PEP reconciling
+/// until a withdrawal works instead of reporting `no-policy` over a host that runs the revoked release.
+#[test]
+fn a_try_whose_install_fails_part_way_withdraws_again_or_names_the_held_release() {
+    // the withdrawal after it works: the host runs nothing, and nothing is named
+    let mut rig = withdrawn_commit("try_install_once");
+    rig.switches.set(false, false);
+    host_fails_at(&rig, CommitStep::Clear, 1);
+    assert_eq!(rig.pep.tick().unwrap(), None, "the try failed");
+    assert_eq!(rig.host_active(), json!(null), "withdrawn again at once");
+    let beat = read(&rig.pep.record("beat", None).unwrap());
+    assert_eq!(running(&entry(&beat).unwrap()), None);
+
+    // the withdrawal after it fails too: the held release is named until one works
+    let mut rig = withdrawn_commit("try_install_stuck");
+    rig.switches.set(false, false);
+    let left = host_fails_at(&rig, CommitStep::Clear, usize::MAX);
+    assert_eq!(rig.pep.tick().unwrap(), None);
+    assert_eq!(rig.pep.running().map(|release| release.seq), Some(2));
+    let beat = read(&rig.pep.record("beat", None).unwrap());
+    assert_eq!(running(&entry(&beat).unwrap()), Some((prefix(&new()), 2)), "the runtime may run the held release");
+    let intent = std::fs::read_to_string(rig.path("pending.json")).unwrap();
+    assert!(intent.contains("\"withdrawn\":false") && intent.contains(h(&new()).as_str()), "{intent}");
+    rig.pep.drain();
+    let applied = rig.revoke(1, &revocation(&[], &[], &[h(&new())], &[]));
+    assert_eq!((applied.event, applied.state, applied.active_seq), ("trust-applied", "reconciling", 0));
+    let fell = entry(&applied).unwrap();
+    assert_eq!((fell.owed, fell.cause.as_deref(), running(&fell)), ("lapsed", Some("dist:revoked"), Some((prefix(&new()), 2))));
+    assert!(rig.pep.is_reconciling(), "never no-policy while the revoked release may run");
+    left.store(0, Ordering::SeqCst);
+    let left_state = read(&rig.pep.tick().unwrap().unwrap());
+    assert_eq!((left_state.event, left_state.cause.as_deref(), left_state.state), ("lapsed", Some("dist:revoked"), "no-policy"));
+    assert_eq!(rig.host_active(), json!(null));
+    let lapsed = rig.pep.audit.events().into_iter().filter(|event| event["action"] == "lapsed").collect::<Vec<_>>();
+    assert_eq!(lapsed.len(), 1);
+    assert_eq!(lapsed[0]["data"].get("ran"), None, "it may have run, so the log does not say it never did");
+}
+
+/// C7, C10, C12, review finding 2. A held release that falls while the runtime will not withdraw, killed after the
+/// lapse's intent record and before its active record (after its audit event, and before it), is lapsed again at
+/// the restart with the running release the intent record names, never the held one, and is audited `lapsed` once,
+/// saying it never ran.
+#[test]
+fn a_restart_inside_a_held_release_lapse_reads_the_running_release_from_the_intent_record() {
+    for step in [PepStep::Evidence, PepStep::ActiveRecord] {
+        let mut rig = Rig::new(&format!("held_falls_{}", step.name()));
+        rig.commit_at(&old(), 1);
+        rig.stage(&ppt(&new(), &at(2)), &new());
+        rig.switches.set(true, true);
+        rig.pep.commit(STREAM, 2, &h(&new()), 0).unwrap();
+        rig.pep.set_commit_hook(Some(Box::new(move |at| if at == step { Err("died".into()) } else { Ok(()) })));
+        let body = revocation(&[], &[], &[h(&new())], &[]);
+        let sealed = trust_statement(ArtifactKind::TrustRevocation, &body, 1, &["A"], &[TargetKind::Host]);
+        assert!(rig.pep.stage(&sealed, &body).is_err(), "{step:?}");
+        assert!(std::fs::read_to_string(rig.path("active.json")).unwrap().contains("policy.ppt"), "{step:?}");
+        rig.pep.drain();
+        rig.reopen();
+        let records = rig.records();
+        let last = records.last().unwrap();
+        assert_eq!(said(last), ("reconciling", "reconciling", 0), "{step:?}");
+        let named = entry(last).unwrap();
+        assert_eq!((named.owed, named.cause.as_deref()), ("lapsed", Some("dist:revoked")), "{step:?}");
+        assert_eq!(running(&named), Some((prefix(&old()), 1)), "{step:?}: the release the intent record names");
+        assert_eq!(rig.pep.running().map(|release| release.seq), Some(1), "{step:?}");
+        let lapsed = rig.pep.audit.events().into_iter().filter(|event| event["action"] == "lapsed").collect::<Vec<_>>();
+        assert_eq!(lapsed.len(), 1, "{step:?}: audited once");
+        assert_eq!(lapsed[0]["data"]["ran"], json!(false), "{step:?}");
+        rig.switches.set(false, false);
+        let done = read(&rig.pep.tick().unwrap().unwrap());
+        assert_eq!((done.event, done.cause.as_deref(), done.state), ("lapsed", Some("dist:revoked"), "no-policy"), "{step:?}");
+        assert_eq!((rig.host_active(), rig.actions("lapsed")), (json!(null), 1), "{step:?}");
+    }
+}
+
+/// C6, C10, review finding 5. A renewal killed before its runtime step is restarted over a runtime whose step
+/// fails: the start applies the renewal rule too, so the PEP stays `active`, sends `committed`, never withdraws
+/// and tries the step again at each tick.
+#[test]
+fn a_renewal_restarted_over_a_failing_step_stays_active() {
+    let mut rig = Rig::new("renewal_restart");
+    rig.commit_at(&old(), 1);
+    rig.stage(&ppt(&old(), &Args { expires: EXPIRES + 86400, ..renewal(2, &old()) }), &old());
+    rig.pep.set_commit_hook(Some(Box::new(|at| if at == PepStep::Runtime { Err("died".into()) } else { Ok(()) })));
+    assert!(rig.pep.commit(STREAM, 2, &h(&old()), 0).is_err());
+    rig.pep.drain();
+    rig.switches.set(true, false);
+    let withdrawals = rig.switches.tries().1;
+    rig.reopen();
+    let records = rig.records();
+    assert_eq!(records.iter().map(said).collect::<Vec<_>>(), [("committed", "active", 2)]);
+    assert!(entry(&records[0]).is_none());
+    assert_eq!(rig.switches.tries().1, withdrawals, "never withdrawn");
+    assert_eq!((rig.host_active(), rig.actions("runtime_failed")), (json!(h(&old()).as_str()), 1));
+    let activations = rig.switches.tries().0;
+    rig.switches.set(false, false);
+    assert_eq!(rig.pep.tick().unwrap(), None);
+    assert_eq!(rig.switches.tries(), (activations + 1, withdrawals), "the tick tries the step again");
+    assert_eq!(rig.pep.state(), "active");
+}
+
+/// C10, C7. A withdrawal that worked is noted in the intent record, so a restart whose step and withdrawal both
+/// fail names no running release: the runtime was already withdrawn.
+#[test]
+fn a_withdrawal_that_worked_is_in_the_intent_record_a_restart_reads() {
+    let mut rig = withdrawn_commit("noted_withdrawn");
+    rig.switches.set(true, true);
+    rig.reopen();
+    let records = rig.records();
+    let last = records.last().unwrap();
+    assert_eq!(said(last), ("reconciling", "reconciling", 2));
+    assert_eq!(running(&entry(last).unwrap()), None, "withdrawn before the restart");
+    assert_eq!(rig.pep.running(), None);
+}
+
+/// C10, X1. A start holds the held release to the tests before its runtime step: a release that expired while the
+/// PEP was down is lapsed, never installed, and the commit's record is not sent.
+#[test]
+fn a_start_tests_the_held_release_before_it_installs_it() {
+    let mut rig = withdrawn_commit("start_tests");
+    let activations = rig.switches.tries().0;
+    rig.switches.set(false, false);
+    rig.now.set(EXPIRES);
+    rig.reopen();
+    let records = rig.records();
+    assert_eq!(records.iter().map(|record| (record.event, record.cause.clone())).collect::<Vec<_>>(), [("lapsed", Some("dist:expired".into()))]);
+    assert_eq!(rig.switches.tries().0, activations, "never installed");
+    assert_eq!((rig.pep.state(), rig.host_active()), ("no-policy", json!(null)));
+}
+
+/// C6, C10. Entering the state holds the held release to the tests: a commit whose clock passes the release's
+/// expiry while it runs enters `reconciling` owing `lapsed` with dist:expired, not `committed`.
+#[test]
+fn entering_the_state_tests_the_held_release() {
+    let mut rig = Rig::new("enter_tests");
+    rig.commit_at(&old(), 1);
+    rig.stage(&ppt(&new(), &Args { expires: EXPIRES + 86400, ..at(2) }), &new());
+    rig.switches.set(true, false);
+    let now = rig.now.clone();
+    rig.pep.set_commit_hook(Some(Box::new(move |at| {
+        if at == PepStep::Runtime {
+            now.set(EXPIRES + 86400); // the clock passes the release's expiry as the commit runs
+        }
+        Ok(())
+    })));
+    let entered = read(&rig.pep.commit(STREAM, 2, &h(&new()), 0).unwrap());
+    assert_eq!(said(&entered), ("reconciling", "reconciling", 0));
+    let owed = entry(&entered).unwrap();
+    assert_eq!((owed.owed, owed.cause.as_deref()), ("lapsed", Some("dist:expired")));
+}
+
+/// C10, R5, X1. The public lapse of a reconciling PEP lapses its held release as one that fell: never installed,
+/// audited as never run, and with the runtime withdrawn the state ends with `lapsed` at once.
+#[test]
+fn a_lapse_of_a_reconciling_pep_lapses_its_held_release() {
+    let mut rig = withdrawn_commit("public_lapse");
+    let activations = rig.switches.tries().0;
+    let lapsed = read(&rig.pep.lapse("dist:revoked").unwrap());
+    assert_eq!((lapsed.event, lapsed.cause.as_deref(), lapsed.state), ("lapsed", Some("dist:revoked"), "no-policy"));
+    assert_eq!((rig.switches.tries().0, rig.host_active()), (activations, json!(null)));
+    let audited = rig.pep.audit.events().into_iter().filter(|event| event["action"] == "lapsed").collect::<Vec<_>>();
+    assert_eq!((audited.len(), audited[0]["data"]["ran"].clone()), (1, json!(false)));
+    assert!(!rig.path("pending.json").exists());
+}
+
+/// C10, R5, H14. The running release is held to the revocation test as well as to expiry: one whose policy is
+/// revoked while it will not withdraw is named with dist:revoked.
+#[test]
+fn a_running_release_that_is_revoked_is_named_with_dist_revoked() {
+    let mut rig = Rig::new("running_revoked");
+    rig.commit_at(&old(), 1);
+    rig.stage(&ppt(&new(), &at(2)), &new());
+    rig.switches.set(true, true);
+    rig.pep.commit(STREAM, 2, &h(&new()), 0).unwrap();
+    let applied = rig.revoke(1, &revocation(&[], &[], &[h(&old())], &[]));
+    assert_eq!((applied.event, applied.state, applied.active_seq), ("trust-applied", "reconciling", 2));
+    let named = entry(&applied).unwrap();
+    assert_eq!((named.owed, named.cause.as_deref(), running(&named)), ("committed", Some("dist:revoked"), Some((prefix(&old()), 1))));
 }

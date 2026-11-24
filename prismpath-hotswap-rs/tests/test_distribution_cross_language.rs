@@ -5,7 +5,13 @@
 //! Rust host PEP, and every state record it sends is accepted by that controller, which then expects the new
 //! release of it. The reverse: a release sealed by the Rust writer under a Rust written anchor is stored by
 //! the Python controller, committed by the Python host PEP, and the state records the Python PEP signed read
-//! in Rust as they read in Python. The Python half runs through `PRISMPATH_PYTHON`; see
+//! in Rust as they read in Python.
+//!
+//! The controller's clock is pinned at one time, inside its first heartbeat interval, and that is a limit of
+//! what this shows. The Rust PEP holds no controller key, so every record it signs carries epoch 0 (H9, H15),
+//! and the controller on main takes epoch 0 only while its own epoch is 1. Past one interval it files each such
+//! record `fleet:state-replay`. H6 says epoch 0 is no replay from a PEP that holds no controller key, and the
+//! controller takes that in its own pull request. The Python half runs through `PRISMPATH_PYTHON`; see
 //! `common::python_for_cross_language` for when this skips (CI sets `PRISMPATH_REQUIRE_CROSS_LANGUAGE`, so
 //! it cannot skip there).
 
@@ -57,6 +63,7 @@ def instance(name):
     return InstanceKey(key(name), public(name))
 
 def controller():
+    # pinned inside the first heartbeat interval, where epoch 0 is the epoch before the controller's (see the note)
     return Controller(os.path.join(directory, "controller"), instance("C"), clock=lambda: NOW)
 
 def findings(control):

@@ -80,11 +80,8 @@ fn case_017_an_instance_key_that_is_a_trusted_key_is_refused_at_start() {
 #[test]
 fn case_023_a_rollback_and_an_abort_leave_the_floor_where_it_was() {
     let mut point = Point::new("023");
-    let release = release_of(&old());
-    point.stage(&ppt(&old(), &Args { release: Some(release.clone()), ..at(1) }), &old());
-    let statement = widening(&[]);
-    let args = Args { release: Some(release), policy: Some(h(&old())), ..at(1) };
-    assert_eq!(point.stage(&seal(ArtifactKind::TrustWidening, &statement, &args), &statement).event, "staged");
+    point.stage(&ppt(&old(), &at(1)), &old());
+    assert!(point.pep.staged().unwrap().held.contains_key(&ArtifactKind::TrustWidening));
     point.pep.commit(STREAM, 1, &h(&old()), 0).unwrap();
     point.commit_at(&new(), 2);
     let record = rec!(point, point.pep.rollback());
@@ -157,13 +154,14 @@ fn case_046_staged_and_refused_are_acked_and_in_the_audit_log() {
     let mut point = Point::new("046");
     let record = point.stage(&ppt(&old(), &at(1)), &old());
     assert_eq!((record.event, record.staged, record.staged_seq, record.cause.as_deref()), ("staged", true, 1, None));
-    let refused = point.stage(&ppt(&new(), &by(2, "U")), &new());
-    assert_eq!(event_cause(&refused), ("refused", Some("dist:unknown-key")));
+    let signed = point.pep.stage(&ppt(&new(), &by(2, "U")), &new()).unwrap();
+    assert_eq!(event_cause(&point.read(&signed)), ("refused", Some("dist:unknown-key")));
     let events: Vec<(String, Option<String>)> = point
         .pep
         .audit
         .events()
         .iter()
+        .filter(|event| event["data"]["artifact"] != "trust.widening")
         .filter(|event| event["action"] == "staged" || event["action"] == "refused")
         .map(|event| (event["action"].as_str().unwrap().to_string(), event["data"]["cause"].as_str().map(str::to_string)))
         .collect();
@@ -788,17 +786,17 @@ fn a_host_pep_with_an_authority_private_key_in_its_home_refuses_to_start() {
 #[test]
 fn a_stage_whose_write_fails_keeps_the_staged_release() {
     let mut point = Point::new("stage_write");
-    let release = release_of(&old());
-    point.stage(&ppt(&old(), &Args { release: Some(release.clone()), ..at(1) }), &old());
-    let statement = widening(&[]);
-    let args = Args { release: Some(release), policy: Some(h(&old())), ..at(1) };
+    let sealed = ppt(&old(), &at(1));
+    let (statement_sealed, statement) = covering_statement(&sealed).unwrap();
+    point.pep.stage(&statement_sealed, &statement).unwrap();
     let blobs = point.state_dir().join("dist/blobs");
     set_mode(&blobs, 0o555);
-    let failed = point.pep.stage(&seal(ArtifactKind::TrustWidening, &statement, &args), &statement);
+    let failed = point.pep.stage(&sealed, &old());
     set_mode(&blobs, 0o755);
     assert!(failed.is_err());
     let staged = point.pep.staged().expect("the staged release is still held");
-    assert_eq!((staged.seq, staged.held.len()), (1, 1));
+    assert_eq!((staged.seq, staged.held.keys().copied().collect::<Vec<_>>()), (1, vec![ArtifactKind::TrustWidening]));
+    point.pep.stage(&sealed, &old()).unwrap();
     assert_eq!(rec!(point, point.pep.commit(STREAM, 1, &h(&old()), 0)).event, "committed");
 }
 
@@ -982,4 +980,153 @@ fn a_restart_after_a_flip_past_its_active_record_drops_the_staged_copy() {
     assert!(point.pep.staged().is_none() && !point.state_dir().join("dist/staged.json").exists());
     assert_eq!(rec!(point, point.pep.commit(STREAM, 2, &h(&new()), 0)).cause.as_deref(), Some("dist:not-staged"));
     assert_eq!((point.pep.active().unwrap().seq, point.pep.previous().unwrap().seq), (2, 1));
+}
+
+// ------------------------------------------------------------------ V12: the widening rule (W1 to W7, RB3, C3)
+
+/// The stage ack of `sealed` staged with nothing before it.
+fn stage_alone(point: &mut Point, sealed: &[u8], body: &[u8]) -> StateRecord {
+    let signed = point.pep.stage(sealed, body).unwrap();
+    point.read(&signed)
+}
+
+/// case_062: W4, W5. On a host PEP running `old`, another table that says it widens commits with a statement whose
+/// `from` holds the active hash and with one whose `from` is empty, and is refused with one whose `from` holds only
+/// another hash.
+#[test]
+fn case_062_a_statement_covers_when_from_holds_the_active_hash_or_is_empty() {
+    let mut point = Point::new("062");
+    point.commit_at(&old(), 1);
+    for (seq, body, from, committed) in [(2, new(), vec![h(&old())], true), (3, newer(), vec![], true), (4, old(), vec![h(b"another")], false)] {
+        let active = point.pep.active().unwrap().policy_sha256.clone();
+        let sealed = ppt(&body, &Args { replaces: Some(active), ..at(seq) });
+        let (statement_sealed, statement) = statement_of(&sealed, &from);
+        assert_eq!(stage_alone(&mut point, &statement_sealed, &statement).event, "staged");
+        let staged = stage_alone(&mut point, &sealed, &body);
+        if committed {
+            assert_eq!(staged.event, "staged", "{seq}");
+            assert_eq!(event_cause(&rec!(point, point.pep.commit(STREAM, seq, &h(&body), 0))), ("committed", None), "{seq}");
+        } else {
+            assert_eq!(event_cause(&staged), ("refused", Some("dist:widening-unsigned")), "{seq}");
+        }
+    }
+    assert_eq!(point.pep.active().unwrap().seq, 3);
+}
+
+/// case_063: W2, W3. A first install is larger than no policy: with no statement it is refused and nothing is
+/// staged, and with the owner's statement it commits.
+#[test]
+fn case_063_a_first_install_needs_a_widening_statement() {
+    let mut point = Point::new("063");
+    let sealed = ppt(&old(), &at(1));
+    assert_eq!(event_cause(&stage_alone(&mut point, &sealed, &old())), ("refused", Some("dist:widening-unsigned")));
+    assert!(point.pep.staged().is_none());
+    let (statement_sealed, statement) = statement_of(&sealed, &[]);
+    stage_alone(&mut point, &statement_sealed, &statement);
+    assert_eq!(stage_alone(&mut point, &sealed, &old()).event, "staged");
+    assert_eq!(event_cause(&rec!(point, point.pep.commit(STREAM, 1, &h(&old()), 0))), ("committed", None));
+}
+
+/// case_139: W2, W6. A first install that says it does not widen is refused even with a statement whose `from` is
+/// empty, and no release is active.
+#[test]
+fn case_139_a_first_install_that_says_it_does_not_widen_is_refused_with_a_statement() {
+    let mut point = Point::new("139");
+    let sealed = ppt(&old(), &Args { widens: false, ..at(1) });
+    let (statement_sealed, statement) = statement_of(&sealed, &[]);
+    assert_eq!(stage_alone(&mut point, &statement_sealed, &statement).event, "staged");
+    assert_eq!(event_cause(&stage_alone(&mut point, &sealed, &old())), ("refused", Some("dist:widening-unsigned")));
+    // only the statement is staged, so the release cannot commit (C2)
+    assert_eq!(event_cause(&rec!(point, point.pep.commit(STREAM, 1, &h(&old()), 0))), ("refused", Some("dist:incomplete")));
+    assert!(point.pep.active().is_none());
+}
+
+/// case_140: RB3, W2, W6. A host PEP that rolls back from another table to a kept renewal that says it does not
+/// widen and holds a widening statement whose `from` is empty is refused, and the active release stays.
+#[test]
+fn case_140_a_rollback_to_a_kept_renewal_that_says_it_does_not_widen_is_refused() {
+    let mut point = Point::new("140");
+    point.commit_at(&old(), 1);
+    let kept = ppt(&old(), &renewal(2, &old()));
+    let (statement_sealed, statement) = statement_of(&kept, &[]);
+    stage_alone(&mut point, &statement_sealed, &statement);
+    assert_eq!(stage_alone(&mut point, &kept, &old()).event, "staged", "a renewal goes in, its statement unneeded");
+    point.pep.commit(STREAM, 2, &h(&old()), 0).unwrap();
+    point.commit(&new(), &Args { replaces: Some(h(&old())), ..at(3) });
+    let refused = rec!(point, point.pep.rollback());
+    assert_eq!(event_cause(&refused), ("refused", Some("dist:widening-unsigned")));
+    assert_eq!((point.pep.active().unwrap().seq, point.host_active()), (3, json!(h(&new()).as_str())));
+}
+
+/// RB3, W2: the rollback shares the commit's rule. A kept table that says it widens and holds a statement from
+/// the active hash rolls back, and the same rollback is refused once a statement from another hash is all it has.
+#[test]
+fn a_rollback_is_held_to_the_rule_a_commit_is() {
+    for (from, rolled) in [(vec![], true), (vec![h(b"another")], false)] {
+        let mut point = Point::new(&format!("rollback_rule_{}", from.len()));
+        let first = ppt(&old(), &at(1));
+        let (statement_sealed, statement) = statement_of(&first, &from);
+        stage_alone(&mut point, &statement_sealed, &statement);
+        // a first install has no active hash, so only a `from` that is empty covers it
+        let staged = stage_alone(&mut point, &first, &old());
+        if !rolled {
+            assert_eq!(event_cause(&staged), ("refused", Some("dist:widening-unsigned")));
+            continue;
+        }
+        point.pep.commit(STREAM, 1, &h(&old()), 0).unwrap();
+        point.commit(&new(), &Args { replaces: Some(h(&old())), ..at(2) });
+        assert_eq!(rec!(point, point.pep.rollback()).event, "rolled-back");
+    }
+}
+
+/// W2, W6: on a host another table is larger whatever the signer says, so one that says it does not widen and
+/// replaces the active hash is refused even with a statement whose `from` is empty, and the active table again
+/// at a higher seq goes in on its signature alone.
+#[test]
+fn another_table_that_says_it_does_not_widen_is_refused_even_with_a_statement() {
+    let mut point = Point::new("w6_table");
+    point.commit_at(&old(), 1);
+    let other = ppt(&new(), &renewal(2, &old()));
+    let (statement_sealed, statement) = statement_of(&other, &[]);
+    stage_alone(&mut point, &statement_sealed, &statement);
+    assert_eq!(event_cause(&stage_alone(&mut point, &other, &new())), ("refused", Some("dist:widening-unsigned")));
+    let same = ppt(&old(), &renewal(3, &old()));
+    assert_eq!(stage_alone(&mut point, &same, &old()).event, "staged");
+    let says_it_widens = ppt(&old(), &Args { replaces: Some(h(&old())), ..at(4) });
+    assert_eq!(event_cause(&stage_alone(&mut point, &says_it_widens, &old())), ("refused", Some("dist:widening-unsigned")),
+               "a release that says it widens needs a statement, whatever it compares as (W2)");
+}
+
+/// case_143: C3, V12, W2. A renewal staged with `widens` false and no statement, whose active release expires before
+/// the commit, goes from no policy to one at commit, so it is refused with dist:widening-unsigned, stays staged and
+/// nothing is active.
+#[test]
+fn case_143_a_renewal_whose_active_release_lapsed_before_its_commit_is_refused() {
+    let mut point = Point::new("143");
+    point.commit_at(&old(), 1);
+    let staged = stage_alone(&mut point, &ppt(&old(), &Args { expires: EXPIRES + 86400, ..renewal(2, &old()) }), &old());
+    assert_eq!(staged.event, "staged");
+    point.now.set(EXPIRES);
+    let refused = rec!(point, point.pep.commit(STREAM, 2, &h(&old()), 0));
+    assert_eq!(event_cause(&refused), ("refused", Some("dist:widening-unsigned")));
+    assert_eq!((refused.state, refused.staged_seq), ("no-policy", 2));
+    assert!(point.pep.active().is_none() && point.pep.staged().is_some());
+    assert_eq!(point.host_active(), json!(null));
+}
+
+/// P3, P5, X3, review note 8. A confirm whose write fails after the runtime withdrew holds nothing either, so it
+/// never reports `active` over a withdrawn runtime.
+#[test]
+fn a_confirm_whose_write_fails_after_the_withdrawal_holds_nothing() {
+    let mut point = Point::new("confirm_write");
+    point.commit_at(&old(), 1);
+    let fingerprint = point.pep.provision(&point.anchor()).unwrap();
+    let trust = point.pep.store_path("trust.json");
+    std::fs::remove_file(&trust).unwrap();
+    std::fs::create_dir(&trust).unwrap(); // the trust store cannot be written over
+    assert!(point.pep.confirm(&fingerprint).is_err());
+    assert_eq!(point.host_active(), json!(null));
+    assert!(point.pep.active().is_none() && point.pep.previous().is_none() && point.pep.staged().is_none());
+    assert_ne!(point.pep.state(), "active");
+    assert_eq!(point.pep.decide(|| "ran").unwrap().decision, None);
 }

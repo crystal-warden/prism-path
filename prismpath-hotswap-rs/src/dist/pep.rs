@@ -3,8 +3,9 @@
 //! The enforcement point machine of policy distribution (spec-policy-distribution.md, section 9),
 //! `prismpath/distribution/pep.py` in Rust, one per stream. What a target does with a committed release is
 //! its adapter's; this crate has the `host` adapter, over `PolicyHost`. The machine verifies, keeps the floor,
-//! the time floor and the trust store, stages, commits, aborts, rolls back, lapses at expiry or holds, and
-//! signs a state record for every transition.
+//! the time floor and the trust store, holds every release to the widening rule (V12) at staging, at commit
+//! and at a rollback, stages, commits, aborts, rolls back, lapses at expiry or holds, and signs a state record
+//! for every transition.
 //!
 //! Its durable store is `<state>/dist/`, under the file names the Python machine uses, each canon/2 and written
 //! whole (the old one or the new one). The two machines are not held to open each other's directory: the audit
@@ -148,10 +149,93 @@ pub enum Comparison {
     CannotDecide,
 }
 
+// ------------------------------------------------------------------ V12: the widening rule
+// `prismpath/distribution/widening.py` in Rust, for the artifacts a Rust row uses. A kind that can decide would
+// compare with these (W1) and a kind that cannot compares what its row's `compares` names (W2). Whether a release
+// is larger is never an adapter's.
+
+/// W1 for one artifact. `policy.ppt` and `gateway.routes` have no order, so any change is larger (section 9.4).
+/// `policy.spiral`, `sandbox.profile` and `net.edge` follow the policy of their release and are held to it
+/// elsewhere (C2, `dist:derived-mismatch`), so they are not larger. Any other artifact compares only as unchanged
+/// bytes here, so a change of one cannot be decided, which counts as larger.
+pub fn compare_artifact(artifact: ArtifactKind, active: Option<&[u8]>, staged: Option<&[u8]>) -> Comparison {
+    if matches!(artifact, ArtifactKind::PolicySpiral | ArtifactKind::SandboxProfile | ArtifactKind::NetEdge) {
+        return Comparison::NotLarger;
+    }
+    let (Some(active), Some(staged)) = (active, staged) else {
+        return if staged.is_some() { Comparison::Larger } else { Comparison::NotLarger };
+    };
+    match (active == staged, artifact) {
+        (true, _) => Comparison::NotLarger,
+        (false, ArtifactKind::PolicyPpt | ArtifactKind::GatewayRoutes) => Comparison::Larger,
+        (false, _) => Comparison::CannotDecide,
+    }
+}
+
+/// W1 for a whole release, trust kinds left out. None for `active` is no policy, and any release is larger than
+/// that. Larger when one artifact is, and not decided when one is not and none is larger.
+pub fn compare_release(active: Option<&BTreeMap<ArtifactKind, Vec<u8>>>, staged: &BTreeMap<ArtifactKind, Vec<u8>>) -> Comparison {
+    let Some(active) = active else { return Comparison::Larger };
+    let run = |bodies: &BTreeMap<ArtifactKind, Vec<u8>>| -> BTreeMap<ArtifactKind, Vec<u8>> {
+        bodies.iter().filter(|(artifact, _)| !artifact.is_trust()).map(|(artifact, body)| (*artifact, body.clone())).collect()
+    };
+    let (active, staged) = (run(active), run(staged));
+    if active == staged {
+        return Comparison::NotLarger;
+    }
+    let mut answer = Comparison::NotLarger;
+    for (artifact, body) in &staged {
+        match compare_artifact(*artifact, active.get(artifact).map(Vec::as_slice), Some(body)) {
+            Comparison::Larger => return Comparison::Larger,
+            Comparison::CannotDecide => answer = Comparison::CannotDecide,
+            Comparison::NotLarger => {}
+        }
+    }
+    answer
+}
+
+/// W4: a widening statement covers a PEP when its `from` is empty or holds the PEP's active policy hash.
+pub fn covers(statement: Option<&[u8]>, active_policy: Option<&Hex64>) -> bool {
+    let Some(widening) = statement.and_then(|body| super::read_widening(body).ok()) else { return false };
+    widening.from.is_empty() || active_policy.is_some_and(|policy| widening.from.contains(policy))
+}
+
+/// V12 for a release with these `widens` and `replaces` on a PEP of `target` whose active policy hash is
+/// `active_policy`. `answer` is the PEP's own comparison: of the release when it can decide (W1), and on a kind
+/// that cannot, of the artifacts its row compares, a table any change of which is larger (W2). `statement` is the
+/// body of the `trust.widening` envelope staged for the same release. None when the release may be staged or
+/// committed, else `dist:widening-unsigned`. Going from no policy to any is larger on every kind, so a first
+/// install whose `widens` is false is refused with a statement or without, as is a larger release that says it
+/// does not widen (W6). Otherwise a larger release needs a statement that covers the PEP (W3, W4).
+pub fn widening_check(
+    target: &super::Target,
+    widens: bool,
+    replaces: &MaybeHex64,
+    active_policy: Option<&Hex64>,
+    answer: Option<Comparison>,
+    statement: Option<&[u8]>,
+) -> Option<&'static str> {
+    let answer = if active_policy.is_none() { Some(Comparison::Larger) } else { answer };
+    let larger = if target.decides {
+        answer != Some(Comparison::NotLarger)
+    } else {
+        // W2: on the signature alone only a renewal of the active policy, and what it compares as larger is larger
+        widens || replaces.0.as_ref() != active_policy || answer == Some(Comparison::Larger)
+    };
+    if !larger {
+        return None;
+    }
+    if !widens && (target.decides || answer == Some(Comparison::Larger)) {
+        return Some(WIDENING_UNSIGNED); // W6: the signer said it does not widen, and it does
+    }
+    (!covers(statement, active_policy)).then_some(WIDENING_UNSIGNED)
+}
+
 /// The interface between the machine and the runtime a target kind protects. `check` is the target's own
 /// part of V11, run at commit over the whole staged release, since one artifact may name another (C2).
-/// `compare` answers W1. `activate` makes the runtime use a committed release and `deactivate` makes it
-/// refuse. An adapter never verifies a signature, reads a clock or touches a floor. Those are the machine's.
+/// `activate` makes the runtime use a committed release and `deactivate` makes it refuse. An adapter never
+/// verifies a signature, reads a clock, touches a floor or says whether a release is larger (W1). Those are the
+/// machine's.
 pub trait Adapter {
     fn kind(&self) -> TargetKind;
 
@@ -172,10 +256,6 @@ pub trait Adapter {
 
     fn check(&self, _artifact: ArtifactKind, _body: &[u8], _staged: &Release) -> Option<String> {
         None
-    }
-
-    fn compare(&self, _active: &Release, _staged: &Release) -> Comparison {
-        Comparison::CannotDecide
     }
 
     fn activate(&self, release: &Release) -> Result<(), PepError>;
@@ -590,6 +670,9 @@ pub struct Pep<A: Adapter> {
     /// C10: the runtime step of a switch between two releases with the same bodies failed. The PEP stays
     /// active and each tick tries the step again.
     retry_runtime: bool,
+    /// C12: the seq and cause of a lapse whose audit event a start found written before the death that cut it
+    /// short, so the lapse the start's checks make again is not audited twice. Only a start sets it.
+    lapse_audited: Option<(Option<i64>, String)>,
 }
 
 /// The record a transition owes once its runtime step works (C9, H14).
@@ -678,6 +761,7 @@ impl<A: Adapter> Pep<A> {
             pending: None,
             reconciling: None,
             retry_runtime: false,
+            lapse_audited: None,
         };
         pep.load()?;
         pep.check_setting()?;
@@ -864,9 +948,13 @@ impl<A: Adapter> Pep<A> {
     /// A start: finish or report an interrupted transition (C4, C7), hold the staged and the active release to
     /// the revocation test again (R5) and check expiry (X1), then make the runtime run what the active record
     /// names. A transition the intent record shows durable is owed its record, which goes once the runtime step
-    /// works, and the intent record with it (C12). A held release that fell while the PEP was down is never
-    /// installed (C10).
+    /// works, and the intent record with it (C12). The runtime runs what the intent record says it ran, whether the
+    /// transition flipped or not (C7), and with no intent record the held release. When that is not the held
+    /// release the start holds both to the tests of C10, so a held release that fell while the PEP was down is
+    /// never installed. A step that fails between two releases with the same bodies, as a renewal's, keeps the
+    /// PEP active (C10), and any other makes it reconciling (C6).
     fn recover(&mut self) -> Result<(), PepError> {
+        let before = self.audit.last_event(); // what the log held before this start wrote to it
         let mut owed = Owed::Nothing;
         let mut running = self.active.clone(); // C7: with no intent record the held release may be running
         let mut withdrawn = false;
@@ -879,15 +967,23 @@ impl<A: Adapter> Pep<A> {
                 "lapse" => self.active.is_none() && intent.release.is_none(),
                 _ => false,
             };
+            if matches!(intent.op.as_str(), "commit" | "rollback" | "lapse") {
+                withdrawn = intent.withdrawn;
+                running = if withdrawn { None } else { intent.running.as_ref().map(|doc| self.running_of(doc)) };
+            }
             if flipped {
                 owed = match intent.op.as_str() {
                     "commit" => Owed::Committed,
                     "rollback" => Owed::RolledBack,
                     _ => Owed::Lapsed(intent.cause.clone().unwrap_or_else(|| POLICY_LAPSED.to_string())),
                 };
-                withdrawn = intent.withdrawn;
-                running = if withdrawn { None } else { intent.running.as_ref().map(|doc| self.running_of(doc)) };
             } else {
+                // C12: a lapse that died after its audit event and before its active record is not audited again
+                // when the checks of this start lapse the release again
+                let audited = before.as_ref().filter(|event| {
+                    intent.op == "lapse" && event["action"] == "lapsed" && event["data"]["cause"] == json!(intent.cause)
+                });
+                self.lapse_audited = audited.map(|event| event["data"]["seq"].as_i64()).zip(intent.cause.clone());
                 self.audit.append(
                     "distribution",
                     "commit_incomplete",
@@ -905,21 +1001,28 @@ impl<A: Adapter> Pep<A> {
             self.drop_staged()?;
         }
         self.drop_fallen_staged()?;
-        if owed == Owed::Nothing {
-            if self.check_active()?.is_some() {
+        let runs_held = !withdrawn && running.as_ref().map(Release::document) == self.active.as_ref().map(Release::document);
+        if owed == Owed::Nothing && runs_held {
+            let lapsed = self.check_active()?;
+            self.lapse_audited = None;
+            if lapsed.is_some() {
                 return Ok(()); // a lapse made its own runtime step
             }
         } else {
-            // C10's tests come before the step, as in every try
-            self.reconciling = Some(Reconciling { owed, running, withdrawn, running_fell: None });
-            self.run_tests(false)?;
+            // C10's tests come before the step, as in every try. A transition the intent record shows flipped
+            // may have run its release part way, and one that did not flip never ran the held release.
+            self.reconciling = Some(Reconciling { owed: owed.clone(), running, withdrawn, running_fell: None });
+            let tested = self.run_tests(owed == Owed::Nothing);
+            self.lapse_audited = None;
             let state = self.reconciling.take().expect("set above");
+            tested?;
             (owed, running) = (state.owed, state.running);
         }
         let stepped = self.step(&owed);
         match stepped {
             Ok(()) if owed == Owed::Nothing => Ok(()),
             Ok(()) => self.settle(owed).map(|_| ()),
+            Err(error) if owed != Owed::Nothing && self.same_bodies(running.as_ref()) => self.renewal_failed(owed, &error).map(|_| ()),
             Err(error) => self.enter_reconciling(owed, running, &error.to_string()).map(|_| ()), // C6: it still starts
         }
     }
@@ -1143,8 +1246,10 @@ impl<A: Adapter> Pep<A> {
         self.refuse(cause, vec![("blob", json!(name.as_str()))])
     }
 
-    /// Verify one sealed envelope and its body and hold it (G1). Returns the stage-ack state record. A
-    /// reconciling PEP stages as in any other state, and the widening rule compares with the held release (C8).
+    /// Verify one sealed envelope and its body and hold it (G1). Returns the stage-ack state record. An envelope
+    /// that is not a widening statement is held to the widening rule against the active release (V12), with the
+    /// statement already staged for its release, so a statement is staged before the release it covers (W3). A
+    /// reconciling PEP stages as in any other state, and the rule compares with the held release (C8).
     pub fn stage(&mut self, sealed: &[u8], body: &[u8]) -> Result<Vec<u8>, PepError> {
         self.check_active()?;
         if self.locked {
@@ -1179,6 +1284,14 @@ impl<A: Adapter> Pep<A> {
                 return self.refuse(SEQ_REPLAY, vec![("envelope_id", envelope_id)]); // G2
             }
         }
+        if envelope.artifact != ArtifactKind::TrustWidening {
+            let same = self.staged.as_ref().filter(|staged| staged.stream == envelope.stream && staged.seq == envelope.seq);
+            let statement = same.and_then(|staged| staged.bodies.get(&ArtifactKind::TrustWidening)).cloned();
+            let artifacts = BTreeMap::from([(envelope.artifact, body.to_vec())]);
+            if let Some(cause) = self.widening(envelope.widens, &envelope.replaces, &artifacts, statement.as_deref(), false) {
+                return self.refuse(cause, vec![("envelope_id", envelope_id)]); // V12
+            }
+        }
         // built beside the staged release and held only once every write is durable, so a write that fails
         // leaves the staged release as it was
         let mut staged = match &self.staged {
@@ -1205,6 +1318,40 @@ impl<A: Adapter> Pep<A> {
             ],
         )?;
         self.make_record("staged", None)
+    }
+
+    /// V12 against the held release (C8). `artifacts` are the bodies judged and `statement` the widening statement
+    /// staged for the same release. A kind that cannot decide compares what its row compares (W2), so on `host` a
+    /// table that is not byte for byte the active one is larger. One that can decide compares one artifact at
+    /// staging and the whole release at commit (`whole`), which also sees an artifact the release drops.
+    fn widening(
+        &self,
+        widens: bool,
+        replaces: &MaybeHex64,
+        artifacts: &BTreeMap<ArtifactKind, Vec<u8>>,
+        statement: Option<&[u8]>,
+        whole: bool,
+    ) -> Option<&'static str> {
+        let active = self.active.as_ref();
+        let mut answer = None;
+        if let (false, Some(active)) = (self.target.decides, active) {
+            for (artifact, body) in artifacts.iter().filter(|(artifact, _)| self.target.compares.contains(artifact)) {
+                let held = active.bodies.get(artifact);
+                if held.is_some() && compare_artifact(*artifact, held.map(Vec::as_slice), Some(body)) != Comparison::NotLarger {
+                    answer = Some(Comparison::Larger);
+                }
+            }
+        }
+        if self.target.decides {
+            answer = Some(match (whole, active, artifacts.iter().next()) {
+                (true, _, _) => compare_release(active.map(|active| &active.bodies), artifacts),
+                (false, Some(active), Some((artifact, body))) => {
+                    compare_artifact(*artifact, active.bodies.get(artifact).map(Vec::as_slice), Some(body))
+                }
+                _ => Comparison::Larger,
+            });
+        }
+        widening_check(&self.target, widens, replaces, active.map(|active| &active.policy_sha256), answer, statement)
     }
 
     // ------------------------------------------------------------------ B2: the trust statements
@@ -1364,6 +1511,12 @@ impl<A: Adapter> Pep<A> {
             self.drop_staged()?;
             return self.refuse(&cause, vec![("seq", json!(seq))]);
         }
+        // C3: V12 again against what is active now, since a lapse, a rollback or another commit may have changed it.
+        // A refused release stays staged.
+        let statement = staged.bodies.get(&ArtifactKind::TrustWidening).map(Vec::as_slice);
+        if let Some(cause) = self.widening(staged.widens, &staged.replaces, &staged.bodies, statement, true) {
+            return self.refuse(cause, vec![("seq", json!(seq))]);
+        }
         let floor = Floor { seq: staged.seq, ids: staged.envelope_ids() };
         let previous = self.active.clone();
         self.flip("commit", staged, previous, floor)
@@ -1444,15 +1597,22 @@ impl<A: Adapter> Pep<A> {
     fn runtime_step(&mut self, owed: Owed, running: Option<Release>) -> Result<Vec<u8>, PepError> {
         let Err(error) = self.step(&owed) else { return self.settle(owed) };
         if self.same_bodies(running.as_ref()) {
-            self.audit.append(
-                "distribution",
-                "runtime_failed",
-                vec![("error", json!(error.to_string())), ("result", json!("tried again at the next tick"))],
-            )?;
-            self.retry_runtime = true;
-            return self.settle(owed);
+            return self.renewal_failed(owed, &error);
         }
         self.enter_reconciling(owed, running, &error.to_string())
+    }
+
+    /// C10: the runtime step of a switch between two releases with the same bodies failed. The PEP stays as it is
+    /// with the runtime running, writes the failure to its audit log, sends the record the transition owes and
+    /// tries the step again at each tick.
+    fn renewal_failed(&mut self, owed: Owed, error: &PepError) -> Result<Vec<u8>, PepError> {
+        self.audit.append(
+            "distribution",
+            "runtime_failed",
+            vec![("error", json!(error.to_string())), ("result", json!("tried again at the next tick"))],
+        )?;
+        self.retry_runtime = true;
+        self.settle(owed)
     }
 
     /// C10: the held release and `running` have the same bodies, so a switch between them changes nothing the
@@ -1526,6 +1686,22 @@ impl<A: Adapter> Pep<A> {
         Ok(())
     }
 
+    /// C10, H14: the runtime may run `release`, which the PEP names until a withdrawal works, and the intent
+    /// record says so (C7).
+    fn note_running(&mut self, release: &Release) -> Result<(), PepError> {
+        if let Some(state) = self.reconciling.as_mut() {
+            state.withdrawn = false;
+            state.running = Some(release.clone());
+            state.running_fell = None;
+        }
+        if let Ok(mut intent) = self.store.read::<PendingDoc>("pending.json") {
+            intent.running = Some(release.document());
+            intent.withdrawn = false;
+            self.store.write("pending.json", &intent)?;
+        }
+        Ok(())
+    }
+
     /// Whether `release` fell, and for what: the test of R5, then expiry (X1). HOLD is for `mesh` and `cfs`,
     /// which never reconcile, so expiry always fells a release here (C10).
     fn fell(&self, release: &Release) -> Option<&'static str> {
@@ -1544,7 +1720,7 @@ impl<A: Adapter> Pep<A> {
     /// C10: hold the held release, and the running one while the withdrawal has not worked, to the tests. A
     /// held release that falls becomes a lapse with the cause it fell for, never installed. A PEP whose trust
     /// store does not read treats the held release as none and runs no test. No runtime is tried here.
-    fn run_tests(&mut self, reconciling: bool) -> Result<(), PepError> {
+    fn run_tests(&mut self, untried: bool) -> Result<(), PepError> {
         if self.reconciling.is_none() || self.locked || !self.trust.is_readable() {
             return Ok(());
         }
@@ -1553,7 +1729,7 @@ impl<A: Adapter> Pep<A> {
             state.running_fell = state.running_fell.or(running_fell);
         }
         if let Some(cause) = self.active.as_ref().and_then(|held| self.fell(held)) {
-            self.held_falls(cause, reconciling)?;
+            self.held_falls(cause, untried)?;
         }
         Ok(())
     }
@@ -1561,16 +1737,21 @@ impl<A: Adapter> Pep<A> {
     /// C10: a held release that falls was never run. Its transition becomes a lapse: the intent record is written
     /// again, the `lapsed` audit event, then an active record that names no release. The PEP owes `lapsed` with
     /// that cause and no longer the record of the commit or the rollback, and the floor stays where it was (Q4).
-    fn held_falls(&mut self, cause: &'static str, never_ran: bool) -> Result<(), PepError> {
+    ///
+    /// `untried` is true when no runtime step of the held release can have begun since it was last withdrawn, which
+    /// a restart of a transition that flipped cannot say. The audit event says the release never ran when that is
+    /// so and the runtime is not named as running it. The commit hook sees the intent record, the audit event and
+    /// the active record, as in a lapse (C7).
+    fn held_falls(&mut self, cause: &'static str, untried: bool) -> Result<(), PepError> {
         let Some(fell) = self.active.clone() else { return Ok(()) };
         let state = self.reconciling.clone().expect("only a reconciling PEP");
-        self.write_intent("lapse", None, Some(cause), state.running.as_ref(), state.withdrawn)?;
-        let mut fields: Fields = vec![("seq", json!(fell.seq)), ("cause", json!(cause))];
-        if never_ran {
-            fields.push(("ran", json!(false)));
-        }
-        fields.push(("result", json!("lapsed")));
-        self.audit.append("distribution", "lapsed", fields)?;
+        let running = if state.withdrawn { None } else { state.running.as_ref() };
+        let never_ran = untried && running.is_none_or(|running| running.document() != fell.document());
+        self.fault(PepStep::Intent)?;
+        self.write_intent("lapse", None, Some(cause), running, state.withdrawn)?;
+        self.fault(PepStep::Evidence)?;
+        self.audit_lapse(Some(fell.seq), cause, never_ran)?;
+        self.fault(PepStep::ActiveRecord)?;
         self.write_active(None, self.previous.as_ref())?;
         self.active = None;
         self.held = false;
@@ -1581,9 +1762,28 @@ impl<A: Adapter> Pep<A> {
         Ok(())
     }
 
+    /// The `lapsed` audit event, written once for a transition (C12): not when a start found it already written.
+    fn audit_lapse(&mut self, seq: Option<i64>, cause: &str, never_ran: bool) -> Result<(), PepError> {
+        if self.lapse_audited.take().is_some_and(|(audited, audited_cause)| audited == seq && audited_cause == cause) {
+            return Ok(());
+        }
+        let mut fields: Fields = vec![("seq", json!(seq)), ("cause", json!(cause))];
+        if never_ran {
+            fields.push(("ran", json!(false)));
+        }
+        fields.push(("result", json!("lapsed")));
+        self.audit.append("distribution", "lapsed", fields)?;
+        Ok(())
+    }
+
     /// C9: one try. The tests of C10, the withdrawal again when it has not worked, then the held release run
     /// with nothing more when none is held. When the switch works the state ends and the record the transition
-    /// owed goes, a `beat` when nothing was. When it fails nothing more changes and the next tick tries again.
+    /// owed goes, a `beat` when nothing was. When it fails the next tick tries again.
+    ///
+    /// An install that fails may have switched the runtime part way, as a host whose record flipped before its
+    /// clean up failed has, so from the moment it starts the runtime may run the held release (C10, H14, X3). The
+    /// intent record says so before the install, and a failed install is followed at once by the withdrawal. Only
+    /// when that fails too does the PEP go on naming the held release as the one the runtime may run.
     fn try_runtime(&mut self) -> Result<Option<Vec<u8>>, PepError> {
         self.run_tests(true)?;
         let Some(state) = self.reconciling.clone() else { return Ok(None) };
@@ -1594,7 +1794,11 @@ impl<A: Adapter> Pep<A> {
             self.note_withdrawn()?;
         }
         if let (None, Some(held)) = (self.own_refusal(), self.active.clone()) {
+            self.note_running(&held)?;
             if self.adapter.activate(&held).is_err() {
+                if self.adapter.deactivate(&self.withdraw_cause()).is_ok() {
+                    self.note_withdrawn()?;
+                }
                 return Ok(None);
             }
         }
@@ -1722,7 +1926,7 @@ impl<A: Adapter> Pep<A> {
         self.fault(PepStep::Intent)?;
         self.write_intent("lapse", None, Some(cause), running.as_ref(), false)?;
         self.fault(PepStep::Evidence)?;
-        self.audit.append("distribution", "lapsed", vec![("seq", json!(seq)), ("cause", json!(cause)), ("result", json!("lapsed"))])?;
+        self.audit_lapse(seq, cause, false)?;
         self.fault(PepStep::ActiveRecord)?;
         self.write_active(None, self.previous.as_ref())?;
         self.active = None;
@@ -1783,16 +1987,16 @@ impl<A: Adapter> Pep<A> {
         self.flip("rollback", kept, None, floor)
     }
 
-    /// RB3: a rollback to `kept` does not widen silently. It is not larger by the adapter's comparison, or
-    /// `kept` holds a widening statement whose `from` is empty or holds the active policy hash (W4).
+    /// RB3: a rollback to `kept` falls under W1 to W7 as a release staged against the active one would, by the
+    /// rule a commit uses. A release identical to the active one is never larger. On `host` a kept table that is
+    /// not the active one is larger (W2), a larger `kept` whose `widens` is false is refused even with a statement
+    /// (W6), and otherwise it needs a widening statement that covers the PEP (W4).
     fn covers(&self, kept: &Release) -> bool {
-        let active = self.active.as_ref();
-        if active.is_some_and(|active| self.adapter.compare(active, kept) == Comparison::NotLarger) {
+        if self.active.as_ref().is_some_and(|active| active.release == kept.release) {
             return true;
         }
-        let Some(statement) = kept.bodies.get(&ArtifactKind::TrustWidening) else { return false };
-        let Ok(widening) = super::read_widening(statement) else { return false };
-        widening.from.is_empty() || active.is_some_and(|active| widening.from.contains(&active.policy_sha256))
+        let statement = kept.bodies.get(&ArtifactKind::TrustWidening).map(Vec::as_slice);
+        self.widening(kept.widens, &kept.replaces, &kept.bodies, statement, true).is_none()
     }
 
     // ------------------------------------------------------------------ P2, P3, P5: provisioning
@@ -1828,8 +2032,13 @@ impl<A: Adapter> Pep<A> {
         self.adapter
             .deactivate(POLICY_LAPSED)
             .map_err(|error| refused(format!("the runtime does not withdraw, so the PEP is not provisioned over it (P5): {error}")))?;
+        // the runtime runs nothing from here, so the PEP holds nothing either, even when a write below fails (X3)
         self.reconciling = None;
         self.retry_runtime = false;
+        self.held = false;
+        self.active = None;
+        self.previous = None;
+        self.staged = None;
         for name in ["active.json", "staged.json", "pending.json"] {
             self.store.remove(name)?;
         }
@@ -1847,10 +2056,6 @@ impl<A: Adapter> Pep<A> {
         self.floor = Floor::default();
         self.locked = false;
         self.provisioned = true;
-        self.held = false;
-        self.active = None;
-        self.previous = None;
-        self.staged = None;
         self.keep_blobs();
         self.audit.append(
             "distribution",

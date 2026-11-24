@@ -528,11 +528,13 @@ fn cause_of(refused: Refused) -> String {
 /// artifact of the release asks for them (`policy.spiral`, when the `policy.ppt` declares packing),
 /// whether it can decide larger (W1), the trust kinds its machine applies, its bound on the body of an
 /// artifact it uses and its bound on a trust body, 16,384 bytes for every kind (E6), and whether a
-/// deployment may choose HOLD at expiry (X6).
+/// deployment may choose HOLD at expiry (X6). `compares` is what a kind that cannot decide still compares
+/// with the active release (W2): a `policy.ppt` table, any change of which is larger.
 #[derive(Debug, Clone, Copy)]
 pub struct Target {
     pub needs: &'static [ArtifactKind],
     pub decides: bool,
+    pub compares: &'static [ArtifactKind],
     pub when_declared: &'static [ArtifactKind],
     pub applies: &'static [ArtifactKind],
     pub body_bound: i64,
@@ -565,6 +567,7 @@ impl TargetKind {
             TargetKind::Host => Some(Target {
                 needs: &[ArtifactKind::PolicyPpt],
                 decides: false,
+                compares: &[ArtifactKind::PolicyPpt],
                 when_declared: &[ArtifactKind::PolicySpiral],
                 applies: &[ArtifactKind::TrustWidening, ArtifactKind::TrustRevocation, ArtifactKind::TrustRotation],
                 body_bound: envelope::MAX_BODY,

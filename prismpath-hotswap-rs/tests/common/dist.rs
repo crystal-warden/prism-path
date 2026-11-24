@@ -82,7 +82,10 @@ pub fn release_of(body: &[u8]) -> Hex64 {
     env::release_id(&[(ArtifactKind::PolicyPpt, h(body))]).unwrap()
 }
 
-/// What `seal` writes besides the body, each defaulting to a one artifact `policy.ppt` release at seq 1.
+/// What `seal` writes besides the body, each defaulting to a one artifact `policy.ppt` release at seq 1 that
+/// replaces nothing and says it widens, which every release but a renewal of the active table does on `host`
+/// (W2, W6). `Point::stage` and the reconciling rig stage the owner's widening statement before such a release
+/// (W3), and `renewal` is the release that goes in on its signature alone.
 #[derive(Clone)]
 pub struct Args {
     pub seq: i64,
@@ -95,6 +98,7 @@ pub struct Args {
     pub stream: String,
     pub targets: Vec<TargetKind>,
     pub widens: bool,
+    pub replaces: Option<Hex64>,
 }
 
 impl Default for Args {
@@ -109,7 +113,8 @@ impl Default for Args {
             meta: None,
             stream: STREAM.to_string(),
             targets: vec![TargetKind::Host],
-            widens: false,
+            widens: true,
+            replaces: None,
         }
     }
 }
@@ -120,6 +125,12 @@ pub fn at(seq: i64) -> Args {
 
 pub fn by(seq: i64, signer: &'static str) -> Args {
     Args { seq, signers: vec![signer], ..Args::default() }
+}
+
+/// A renewal at `seq` of the active release whose policy hash is `active`: `widens` false and `replaces` that
+/// hash, so with the active table byte for byte it goes in on its signature alone (W2).
+pub fn renewal(seq: i64, active: &[u8]) -> Args {
+    Args { seq, widens: false, replaces: Some(h(active)), ..Args::default() }
 }
 
 /// The envelope bytes for `body`.
@@ -141,11 +152,11 @@ pub fn envelope(artifact: ArtifactKind, body: &[u8], args: &Args) -> Vec<u8> {
         } else {
             args.release.clone().unwrap_or_else(|| env::release_id(&[(artifact, h(body))]).unwrap())
         },
-        replaces: MaybeHex64::default(),
+        replaces: if trust_stream { MaybeHex64::default() } else { MaybeHex64(args.replaces.clone()) },
         seq: args.seq,
         stream: if trust_stream { env::TRUST_STREAM.to_string() } else { args.stream.clone() },
         targets: args.targets.iter().copied().collect(),
-        widens: args.widens,
+        widens: !trust_stream && args.widens,
     };
     env::build(doc, body).unwrap()
 }
@@ -186,6 +197,39 @@ pub fn rotation(add: &str, retire: Option<&str>) -> Vec<u8> {
 pub fn widening(from: &[Hex64]) -> Vec<u8> {
     let from: Vec<String> = from.iter().map(|hash| hash.to_string()).collect();
     canon2::write_json(&json!({"encoding": "canon/2", "format": "prismpath.dist-widening/1", "from": from})).unwrap()
+}
+
+/// The names of the test keys a test signs with.
+const SIGNERS: [&str; 7] = ["A", "B", "R", "Q", "U", "X", "C"];
+
+/// The owner's widening statement (W4) from the policy hashes `from` for the `policy.ppt` release `sealed`,
+/// signed by the key that signed it and sharing its stream, seq, hashes, `replaces` and `widens` (E7).
+pub fn statement_of(sealed: &[u8], from: &[Hex64]) -> (Vec<u8>, Vec<u8>) {
+    let (envelope_bytes, entries) = env::unseal(sealed).unwrap();
+    let envelope = env::read(envelope_bytes).unwrap();
+    let first = entries.first().unwrap().key_id;
+    let signer = SIGNERS.iter().find(|name| key_id(name).raw() == first).copied().unwrap_or("A");
+    let statement = widening(from);
+    let args = Args {
+        seq: envelope.seq,
+        signers: vec![signer],
+        release: Some(envelope.release.clone()),
+        policy: Some(envelope.policy_sha256.clone()),
+        not_before: envelope.not_before,
+        stream: envelope.stream.clone(),
+        targets: envelope.targets.iter().copied().collect(),
+        widens: envelope.widens,
+        replaces: envelope.replaces.0.clone(),
+        ..Args::default()
+    };
+    (seal(ArtifactKind::TrustWidening, &statement, &args), statement)
+}
+
+/// The owner's widening statement covering any PEP for `sealed`, or None when `sealed` is not a `policy.ppt`
+/// release that says it widens.
+pub fn covering_statement(sealed: &[u8]) -> Option<(Vec<u8>, Vec<u8>)> {
+    let envelope = env::read(env::unseal(sealed).ok()?.0).ok()?;
+    (envelope.artifact == ArtifactKind::PolicyPpt && envelope.widens).then(|| statement_of(sealed, &[]))
 }
 
 /// A sealed trust statement on `@trust`, signed by every test key in `signers` (O2 asks for two).
@@ -237,7 +281,11 @@ impl Point {
         state_record::read(signed, &self.key.verifying_key().to_bytes()).unwrap()
     }
 
+    /// Stage `sealed`, after the owner's widening statement when it is a release that says it widens (W3).
     pub fn stage(&mut self, sealed: &[u8], body: &[u8]) -> StateRecord {
+        if let Some((statement_sealed, statement)) = covering_statement(sealed) {
+            self.pep.stage(&statement_sealed, &statement).unwrap();
+        }
         let signed = self.pep.stage(sealed, body).unwrap();
         self.read(&signed)
     }
