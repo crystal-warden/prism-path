@@ -97,6 +97,7 @@ typedef enum {
     PP_ART_TRUST_WIDENING, PP_ART_TRUST_REVOCATION, PP_ART_TRUST_ROTATION,
     PP_ART_INSTALL_FLOOR, PP_ART_INSTALL_FALLBACK, PP_ART_INSTALL_CEILING, PP_ART_INSTALL_TRUST, /* section 21 */
     PP_ART_OPERATOR_ANSWER,                                                                    /* OP2 */
+    PP_ART_TRUST_CHANGE,                                                                       /* W10 */
     PP_ART_COUNT
 } pp_artifact;
 
@@ -404,9 +405,9 @@ typedef struct {
     int has_replaces;
     int widens;
     size_t n;
-    pp_artifact_held held[2]; /* a mesh release holds a policy.ppt and may hold a trust.widening */
+    pp_artifact_held held[2]; /* a mesh release holds a policy.ppt and one statement, a trust.widening or a trust.change */
     uint8_t artifact_body[PP_RELEASE_BODY_MAX]; /* the body of the artifact, within the kind's bound */
-    uint8_t trust_body[PP_WIDENING_MAX];        /* the widening statement it holds, at most 64 hashes (W4) */
+    uint8_t trust_body[PP_WIDENING_MAX];        /* the statement it holds, a widening one of at most 64 hashes (W4) */
 } pp_release;
 
 /* The body of the release's k-th artifact, in the buffer for its kind. */

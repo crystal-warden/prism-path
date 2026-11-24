@@ -407,7 +407,7 @@ def test_the_command_line_seals_serves_provisions_pulls_and_rekeys_a_host_pep(tm
             "rekey", "--dir", str(directory), "--key", keys["C"], "--old", keys["A"], "--new", keys["B"],
             "--body", str(new_body), "--qualification", str(qualification), "--group", "g", "--stream", STREAM,
             "--seq", "2", "--target", "host", "--not-before", str(now - 60), "--expires", str(now + 86400),
-            "--timeout", "60")[0]))
+            "--timeout", "60", "--yes")[0]))
         rekey.start()
         deadline = clock.monotonic() + 60
         while rekey.is_alive() and clock.monotonic() < deadline:
@@ -425,8 +425,8 @@ def test_the_command_line_seals_serves_provisions_pulls_and_rekeys_a_host_pep(tm
     assert [rollout["state"] for rollout in printed["rollouts"]] == ["committed", "committed"]
     assert printed["trust_seq"] == 2 and printed["peps"][0]["findings"] == {}
 
-    # case_292: W8. A rekey whose table allows more than the one it replaces is refused before the rotation is
-    # stored, unless --widens says the owner means it
+    # case_292: W9. A rekey whose table allows more than the one it replaces is refused before the rotation is
+    # stored, unless --widens says the owner means it. The rekey above went with a change statement (W11)
     wider = tmp_path / "policy3.ppt"
     wider.write_bytes(_dist.image(3))
     args = cli.build_parser().parse_args([

@@ -88,24 +88,30 @@ controller offers a release's widening statement before the release itself.
 
 `seal --held ctl` fills in `replaces`, the policy hash of the release stored on the stream just below the new
 `seq`, and sets `widens` unless it holds that release and finds the new body allows no more. A `policy.ppt`
-image has no order, so for a host or a mesh table `widens` is false only on a renewal of the same table. The
+image has no order for a PEP, so for a host or a mesh table `widens` is false only on a renewal of the same
+table or with a change statement (below). The
 controller holds a release to the same test before it offers it to a target that cannot decide (W7). A PEP that can decide whether a policy allows more walks every reading of
 the policy's finite domain and compares the verdicts, so it does not trust `widens` (W1), and it refuses a
 release it finds larger whose `widens` is false even with a statement (W6). A host, a mesh node and the cFS app
 cannot decide. They take a release on its signature alone only when `widens` is false and `replaces` is the
-policy they have active (W2). Every other release needs a widening statement that covers them. A first install
+policy they have active (W2). A host and a mesh node also take a changed table on a change statement (W11).
+Every other release needs a widening statement that covers them. A first install
 goes from no policy to one, so every PEP counts it as larger and refuses one whose `widens` is false, even with
 a statement (W6).
 
 For a host or a mesh table the sealing tool and the controller also run the table comparator (W8). It walks
 every node of the two tables over one register value of each class the atoms cut a register into, and says
-whether the new table steps anywhere the old one does not. `seal --held` prints its answer as `comparison`,
-with a witness register file when the table is larger, and marks the release `larger by rule` or `larger by
-comparison`. A table that allows nothing more is larger only by the PEP's byte rule, so `seal` signs its
-widening statement too and writes it beside the release as `<out>.widening.sealed` and `.body`. A table that
-allows more gets no statement from `seal`, and you sign one with `widen` when you mean it. `rekey` refuses such
-a table unless you pass `--widens`. The fleet view keeps the same mark and the comparator's answer with each
-rollout. No PEP runs the comparator, so each still checks bytes and the statement (W2).
+whether the new table steps anywhere the old one does not. `seal --held` shows its answer as `comparison`, with
+a witness register file when the table is larger, and its `scope`, `widening` or `change, not larger`.
+
+A widening means the table allows more. For one that does not, `seal` asks you to confirm what the comparator
+found, or takes `--yes` in a script, then seals the release with `widens` false and writes a change statement
+beside it as `<out>.change.sealed` and `.body` (W10). A host or a mesh node takes the table on that statement
+(W11). Without a yes it writes nothing. A table that allows more gets no statement from `seal`, and you sign its
+widening statement with `widen` when you mean it. `rekey` refuses such a table unless you pass `--widens`, and
+takes `--yes` for a change statement. The fleet view shows each rollout as a widening or a change, not larger,
+and only a widening waits for an acknowledgement. No PEP runs the comparator, so each still checks bytes and
+the statement it is given (W2).
 
 The reading domain an agent policy is compared over is the one the engineer who installs PrismPath defines: the
 values the classifier produces for each category, true and false, and each int's min to max. A policy whose
@@ -123,7 +129,7 @@ that is not the signed `release`, because a transport left out an `agent.zones`,
 
 A rollback is held to the same rule (RB3). A rollback to a release identical to the active one is never a
 widening. On a host or a mesh node a local rollback to an older table works only when the kept release says it
-widens and holds a widening statement that covers the newer policy. When the owner signed the older release,
+widens and holds a widening statement that covers the newer policy, or holds a change statement from it. When the owner signed the older release,
 the newer policy's hash was not known, so in practice that is a statement with an empty `from`. A kept renewal
 says it does not widen, so it is never a rollback target from another table. Without one the owner releases
 the older policy again at a higher `seq`.
@@ -214,6 +220,7 @@ of the zones are the home's own setting in `zones.local.json`.
 
 A host, a mesh node and the cFS app send a state record with no Facet body, since their releases carry no
 flow text to build one from (H5). A rollback with `prismpath dist pep rollback` follows RB1 to RB3, so on a
-host, which cannot decide whether a policy allows more, it needs a widening statement that covers it. The
+host, which cannot decide whether a policy allows more, it needs a widening statement that covers it or a
+change statement from the active policy. The
 mesh and the cFS app use the frame binding of section 8.3, which the controller drives as a broadcast to
 the whole group.

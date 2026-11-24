@@ -180,6 +180,14 @@ def covers(statement: Optional[bytes], active_policy: Optional[str]) -> bool:
     return not froms or (active_policy is not None and active_policy in froms)
 
 
+def changes(change: Optional[bytes], active_policy: Optional[str]) -> bool:
+    """W11: a change statement stands for a release on a PEP whose active policy hash is its `from`. A PEP with no
+    policy has none, so no change statement stands for a first install."""
+    if change is None or active_policy is None:
+        return False
+    return kinds.read_change(change)["from"] == active_policy
+
+
 def larger(target: kinds.Target, *, widens: bool, replaces: str, active_policy: Optional[str],
            answer: Optional[str]) -> bool:
     """Whether the PEP treats a release as larger. `answer` is its own comparison when it can decide (W1), and
@@ -191,18 +199,24 @@ def larger(target: kinds.Target, *, widens: bool, replaces: str, active_policy: 
 
 
 def check(target: kinds.Target, *, widens: bool, replaces: str, active_policy: Optional[str],
-          answer: Optional[str], statement: Optional[bytes]) -> Optional[str]:
+          answer: Optional[str], statement: Optional[bytes], change: Optional[bytes] = None) -> Optional[str]:
     """V12 for a release with these `widens` and `replaces`, on a PEP whose active policy hash is
     `active_policy`. `answer` is the PEP's own comparison: of the whole release when it can decide, and on a kind
     that cannot of the artifacts in its row's `compares`, a table any change of which is larger, which no
     statement saves when `widens` is false (W6). `statement` is the body of the `trust.widening` envelope staged
     for the same release, or None. None when the release may be staged or committed, else
     `dist:widening-unsigned`. Going from no policy to any is a comparison every PEP makes, so a first install
-    whose `widens` is false is refused on every kind, with a statement or without (W6)."""
+    whose `widens` is false is refused on every kind, with a statement or without (W6). `change` is the body of a
+    `trust.change` envelope staged for the same release, or None. On a kind that cannot decide it stands in place of
+    a widening statement for a release whose `widens` is false and whose `replaces` is the active policy hash, when
+    its `from` is that hash (W11). The PEP still compares nothing more than W2 does."""
     if active_policy is None:
         answer = LARGER
     if not larger(target, widens=widens, replaces=replaces, active_policy=active_policy, answer=answer):
         return None
+    if (not target.decides and not widens and replaces == active_policy
+            and "trust.change" in target.applies and changes(change, active_policy)):
+        return None                                    # W11: the authority signed that the table allows nothing more
     if not widens and (target.decides or answer == LARGER):
         return UNSIGNED                                # W6: the signer said it does not widen, and it does
     return None if covers(statement, active_policy) else UNSIGNED

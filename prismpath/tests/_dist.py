@@ -79,6 +79,12 @@ def widening(froms=()) -> bytes:
                                "from": sorted(froms)})
 
 
+def change(source: str) -> bytes:
+    """A change statement (W10) from the policy hash `source`, resting on the table comparator."""
+    return canon.canon2_bytes({"basis": "prismpath.table-compare/1", canon.ENCODING_KEY: canon.CANON2,
+                               "format": "prismpath.dist-change/1", "from": source})
+
+
 def rotation(add: str, retire: str = "") -> bytes:
     """The canon/2 body of a rotation (section 11) adding the test key `add` and retiring the test key `retire`."""
     return canon.canon2_bytes({canon.ENCODING_KEY: canon.CANON2, "format": "prismpath.dist-rotation/1",
@@ -238,6 +244,17 @@ def release_with_statement(point: "Point", body: bytes, seq: int, *, widen: bool
                            signer=seal_args.get("signer", "A")), statement))
     pairs.append((point.seal(body, seq=seq, replaces=replaces, **seal_args), body))
     return pairs
+
+
+def change_of(point: "Point", body: bytes, seq: int, *, replaces: str, signer: str = "A", widens: bool = False,
+              not_before: int = NOT_BEFORE) -> tuple:
+    """The (sealed, body) of the change statement (W10, W11) for the release of `body` at `seq` on `point`'s kind,
+    from `replaces`. It shares the release's stream, seq, policy hash, release id, `replaces` and `widens` (E7)."""
+    statement = change(replaces)
+    release = env.release_id([(point.artifact, canon.sha256_hex(body))])
+    return seal("trust.change", statement, seq=seq, release=release, policy_sha256=point.policy_of(body),
+                targets=(point.kind,), replaces=replaces, widens=widens, signer=signer,
+                not_before=not_before), statement
 
 
 HOSTS = canon.canon2_bytes(["api.example.com"])

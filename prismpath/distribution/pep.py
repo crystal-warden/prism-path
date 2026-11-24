@@ -745,7 +745,13 @@ class Pep:
         staged = self.staged
         if staged is not None and staged.stream == envelope.stream and envelope.seq < staged.seq:
             return self._refuse("dist:seq-replay", envelope_id=envelope_id)   # G2
-        if envelope.artifact != "trust.widening":
+        if envelope.artifact in kinds.STATEMENTS and staged is not None and staged.stream == envelope.stream \
+                and staged.seq == envelope.seq and (kinds.STATEMENTS - {envelope.artifact}) & set(staged.bodies):
+            return self._refuse(kinds.BAD_FORMAT, envelope_id=envelope_id)      # W11: one statement a release
+        if envelope.artifact == "trust.change" and not widening.changes(bytes(body), self.active and
+                                                                        self.active.policy_sha256):
+            return self._refuse(widening.UNSIGNED, envelope_id=envelope_id)    # W11: a first install widens
+        if envelope.artifact not in kinds.STATEMENTS:
             same = staged is not None and staged.stream == envelope.stream and staged.seq == envelope.seq
             cause = self._widening(envelope.widens, envelope.replaces,
                                    {envelope.artifact: bytes(body)}, staged.bodies if same else {}, whole=False)
@@ -788,7 +794,7 @@ class Pep:
                 answer = widening.compare_artifact(name, active.bodies.get(name), body)
         return widening.check(self.target, widens=widens, replaces=replaces,
                               active_policy=active.policy_sha256 if active else None, answer=answer,
-                              statement=staged.get("trust.widening"))
+                              statement=staged.get("trust.widening"), change=staged.get("trust.change"))
 
     # ------------------------------------------------------------------ B2: the trust statements
     def _adopt(self, envelope, store: TrustStore) -> None:

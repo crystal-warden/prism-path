@@ -885,8 +885,11 @@ def test_case_137_138_every_commit_case_of_the_corpus_answers_on_the_c_core_as_r
     """case_137, case_138: C2, E10. Each commit case of the corpus on a mesh node: a table whose signed release id
     also names a `policy.spiral` the transport withheld is dist:incomplete at commit, on a first install with
     nothing active after and on an update with the old release still active, and the same update without the
-    spiral in its id commits. The C core answers as the Python machine and as the corpus records."""
-    assert {entry["case"] for entry in COMMITS} == {137, 138} and all(e["kind"] == "mesh" for e in COMMITS)
+    spiral in its id commits. case_294, case_295: W10, W11. A table carried by a change statement from the active
+    hash commits and the same table alone does not, and a change statement that says it widens, sits on a first
+    install, names another hash or follows a widening statement of its release is refused. The C core answers as
+    the Python machine and as the corpus records."""
+    assert {entry["case"] for entry in COMMITS} == {137, 138, 294, 295} and all(e["kind"] == "mesh" for e in COMMITS)
     for entry in COMMITS:
         script = [("provision", S, entry["now"])]
         for step in entry["steps"]:

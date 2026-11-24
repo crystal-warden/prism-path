@@ -71,7 +71,7 @@ void pp_sha256(const uint8_t *data, size_t len, uint8_t out[32]) {
 static const char *const pp_artifact_names[PP_ART_COUNT] = {
     "policy.core", "policy.ppt", "policy.spiral", "sandbox.profile", "egress.hosts", "agent.zones", "gateway.routes",
     "net.dests", "net.edge", "cfs.table", "grant", "trust.widening", "trust.revocation", "trust.rotation",
-    "install.floor", "install.fallback", "install.ceiling", "install.trust", "operator.answer"};
+    "install.floor", "install.fallback", "install.ceiling", "install.trust", "operator.answer", "trust.change"};
 static const char *const pp_target_names[PP_TGT_COUNT] = {"agent", "cfs", "gateway", "host", "mesh", "xdp"};
 
 const char *pp_artifact_name(pp_artifact artifact) {
@@ -110,7 +110,8 @@ typedef struct {
 } pp_row;
 
 static int pp_is_trust(pp_artifact artifact) {
-    return artifact == PP_ART_TRUST_WIDENING || artifact == PP_ART_TRUST_REVOCATION || artifact == PP_ART_TRUST_ROTATION;
+    return artifact == PP_ART_TRUST_WIDENING || artifact == PP_ART_TRUST_REVOCATION || artifact == PP_ART_TRUST_ROTATION ||
+           artifact == PP_ART_TRUST_CHANGE;
 }
 
 /* Section 21: the install kinds, and the set kind of each of the three that make a set. */
@@ -152,7 +153,8 @@ static uint8_t pp_mesh_check(const struct pp_check_args *a) {
 
 static const pp_row *pp_row_of(pp_target kind) {
     static const pp_row mesh = {PP_BIT(PP_ART_POLICY_PPT),
-                                PP_BIT(PP_ART_TRUST_WIDENING) | PP_BIT(PP_ART_TRUST_REVOCATION) | PP_BIT(PP_ART_TRUST_ROTATION),
+                                PP_BIT(PP_ART_TRUST_WIDENING) | PP_BIT(PP_ART_TRUST_REVOCATION) | PP_BIT(PP_ART_TRUST_ROTATION) |
+                                    PP_BIT(PP_ART_TRUST_CHANGE),
                                 PP_MESH_TABLE_MAX, PP_TRUST_BOUND, pp_mesh_check};
     return kind == PP_TGT_MESH ? &mesh : NULL;
 }
@@ -412,6 +414,29 @@ uint8_t pp_read_envelope(const uint8_t *bytes, size_t len, pp_envelope *out) {
         return PP_CAUSE_BAD_FORMAT;
     pp_sha256(bytes, len, out->envelope_id);
     return PP_CAUSE_NONE;
+}
+
+/* W10: a change statement, `from` the one policy hash its release replaces and `basis` the table comparator, as
+ * canonical canon/2. `from` is written to `from` when it reads. */
+static uint8_t pp_read_change(const uint8_t *body, size_t len, uint8_t from[32]) {
+    int form = pp_c2_check(body, len);
+    if (form == PP_C2_NOT_CANONICAL) return PP_CAUSE_NOT_CANONICAL;
+    if (form != PP_C2_OK) return PP_CAUSE_BAD_FORMAT;
+    pp_c2 c = {body, len, 0, 1};
+    if (!pp_c2_lit(&c, "{\"basis\":\"prismpath.table-compare/1\",\"encoding\":\"canon/2\","
+                       "\"format\":\"prismpath.dist-change/1\",\"from\":") ||
+        !pp_scan_hash(&c, from) || !pp_c2_lit(&c, "}") || c.i != c.n)
+        return PP_CAUSE_BAD_FORMAT;
+    return PP_CAUSE_NONE;
+}
+
+/* `trust.change` (V11, W10): the body reads, its `from` is the envelope's `replaces`, and the envelope does not
+ * widen. One that says it widens, or replaces nothing, is dist:bad-format, since a first install widens. */
+static uint8_t pp_check_change(const pp_envelope *e, const uint8_t *body, size_t len) {
+    uint8_t from[32];
+    uint8_t cause = pp_read_change(body, len, from);
+    if (cause) return cause;
+    return e->widens || !e->has_replaces || memcmp(from, e->replaces, 32) != 0 ? PP_CAUSE_BAD_FORMAT : PP_CAUSE_NONE;
 }
 
 /* W4: a widening statement, `from` a sorted list of at most 64 hashes without repeats, as canonical canon/2. */
@@ -1223,7 +1248,7 @@ void pp_verify(const uint8_t *sealed, size_t sealed_len, const uint8_t *body, si
     }
     /* V11: the artifact's own check on this kind */
     struct pp_check_args args = {e->artifact, body, body_len, trust, pep, entries, n_entries, message, message_len};
-    out->cause = row->check(&args);
+    out->cause = e->artifact == PP_ART_TRUST_CHANGE ? pp_check_change(e, body, body_len) : row->check(&args);
     /* CL2: the table of a release is on the held ceiling's list */
     if (!out->cause && e->artifact == PP_ART_POLICY_PPT && !pp_inside(pep->install, e->body_sha256))
         out->cause = PP_CAUSE_ABOVE_CEILING;
@@ -2093,6 +2118,18 @@ static int pp_covers(const pp_pep_machine *pep, const pp_release *kept) {
     return 0;
 }
 
+/* W11: `with` holds a change statement whose `from` is the active policy hash, so none stands for a first install. */
+static int pp_changes(const pp_pep_machine *pep, const pp_release *with) {
+    if (!pep->d.has_active) return 0;
+    for (size_t k = 0; k < with->n; k++) {
+        if (with->held[k].envelope.artifact != PP_ART_TRUST_CHANGE) continue;
+        uint8_t from[32];
+        if (pp_read_change(pp_held_body((pp_release *)with, k), with->held[k].body_len, from)) return 0;
+        return memcmp(from, pep->d.active.policy_sha256, 32) == 0;
+    }
+    return 0;
+}
+
 /* The active release's table, or NULL when there is none. */
 static const uint8_t *pp_active_table(const pp_pep_machine *pep, size_t *len) {
     const pp_durable *d = &pep->d;
@@ -2121,6 +2158,11 @@ static uint8_t pp_widening(const pp_pep_machine *pep, int widens, const uint8_t 
                   (table != NULL && active != NULL && (table_len != active_len || memcmp(table, active, table_len) != 0));
     int larger = changed || widens || !has_replaces || memcmp(replaces, d->active.policy_sha256, 32) != 0;
     if (!larger) return PP_CAUSE_NONE;
+    /* W11: a change statement the authority signed stands in place of a widening statement for a release that says
+     * it does not widen and replaces the active policy. The node compares nothing more than W2 does. */
+    if (!widens && d->has_active && has_replaces && memcmp(replaces, d->active.policy_sha256, 32) == 0 && with != NULL &&
+        pp_changes(pep, with))
+        return PP_CAUSE_NONE;
     if (changed && !widens) return PP_CAUSE_WIDENING_UNSIGNED; /* W6 */
     return with != NULL && pp_covers(pep, with) ? PP_CAUSE_NONE : PP_CAUSE_WIDENING_UNSIGNED;
 }
@@ -2424,7 +2466,24 @@ static uint8_t pp_stage_one(pp_pep_machine *pep, const uint8_t *sealed, size_t s
         pp_refuse(pep, PP_CAUSE_SEQ_REPLAY); /* G2 */
         return PP_CAUSE_SEQ_REPLAY;
     }
-    if (e->artifact != PP_ART_TRUST_WIDENING) {
+    if (e->artifact == PP_ART_TRUST_WIDENING || e->artifact == PP_ART_TRUST_CHANGE) {
+        /* W11: a release carries one statement, a widening statement or a change statement, never both */
+        pp_artifact other = e->artifact == PP_ART_TRUST_CHANGE ? PP_ART_TRUST_WIDENING : PP_ART_TRUST_CHANGE;
+        if (d->has_staged && strcmp(d->staged.stream, e->stream) == 0 && d->staged.seq == e->seq)
+            for (size_t k = 0; k < d->staged.n; k++)
+                if (d->staged.held[k].envelope.artifact == other) {
+                    pp_refuse(pep, PP_CAUSE_BAD_FORMAT);
+                    return PP_CAUSE_BAD_FORMAT;
+                }
+    }
+    if (e->artifact == PP_ART_TRUST_CHANGE) { /* W11: a change statement never stands for a first install */
+        uint8_t from[32];
+        if (!d->has_active || pp_read_change(body, body_len, from) || memcmp(from, d->active.policy_sha256, 32) != 0) {
+            pp_refuse(pep, PP_CAUSE_WIDENING_UNSIGNED);
+            return PP_CAUSE_WIDENING_UNSIGNED;
+        }
+    }
+    if (e->artifact != PP_ART_TRUST_WIDENING && e->artifact != PP_ART_TRUST_CHANGE) {
         int same = d->has_staged && strcmp(d->staged.stream, e->stream) == 0 && d->staged.seq == e->seq;
         int table = e->artifact == PP_ART_POLICY_PPT;
         uint8_t cause = pp_widening(pep, e->widens, e->replaces, e->has_replaces, same ? &d->staged : NULL,

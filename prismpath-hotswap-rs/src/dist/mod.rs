@@ -370,6 +370,14 @@ fixed_string!(RevocationFormat = "prismpath.dist-revocation/1");
 fixed_string!(RotationFormat = "prismpath.dist-rotation/1");
 fixed_string!(WideningFormat = "prismpath.dist-widening/1");
 fixed_string!(
+    /// W10: a change statement.
+    ChangeFormat = "prismpath.dist-change/1"
+);
+fixed_string!(
+    /// W10: the comparison a change statement rests on, the table comparator of W8.
+    ChangeBasis = "prismpath.table-compare/1"
+);
+fixed_string!(
     /// P2: a trust anchor.
     AnchorFormat = "prismpath.dist-trust/1"
 );
@@ -454,6 +462,7 @@ kind_names!(
         CfsTable = "cfs.table",
         Grant = "grant",
         TrustWidening = "trust.widening",
+        TrustChange = "trust.change",
         TrustRevocation = "trust.revocation",
         TrustRotation = "trust.rotation",
     }
@@ -503,15 +512,24 @@ impl ArtifactKind {
             SandboxProfile => Artifact { meta: |doc| codec::from_doc(doc).map(Meta::SandboxProfile), ..PLAIN },
             NetEdge => Artifact { meta: |doc| codec::from_doc(doc).map(Meta::NetEdge), ..PLAIN },
             TrustWidening => Artifact { check: Some(|_, body, _| read_widening(body).err().map(cause_of)), ..PLAIN },
+            TrustChange => Artifact { check: Some(check_change), ..PLAIN },
             TrustRevocation => Artifact { check: Some(|_, body, _| read_revocation(body).err().map(cause_of)), ..PLAIN },
             TrustRotation => Artifact { check: Some(|_, body, _| read_rotation(body).err().map(cause_of)), ..PLAIN },
             PolicyCore | EgressHosts | GatewayRoutes | NetDests | CfsTable | Grant => PLAIN,
         }
     }
 
-    /// One of the three trust kinds, whose `expires` is 0 (E5) and which a target admits when its machine applies it (V5).
+    /// One of the trust kinds, whose `expires` is 0 (E5) and which a target admits when its machine applies it (V5).
     pub fn is_trust(self) -> bool {
-        matches!(self, ArtifactKind::TrustWidening | ArtifactKind::TrustRevocation | ArtifactKind::TrustRotation)
+        matches!(
+            self,
+            ArtifactKind::TrustWidening | ArtifactKind::TrustChange | ArtifactKind::TrustRevocation | ArtifactKind::TrustRotation
+        )
+    }
+
+    /// W3, W11: a statement that travels with a release, staged before it, the widening and the change statement.
+    pub fn is_statement(self) -> bool {
+        matches!(self, ArtifactKind::TrustWidening | ArtifactKind::TrustChange)
     }
 
     /// A kind that travels on `@trust` in the one trust sequence (R1, O1).
@@ -569,7 +587,12 @@ impl TargetKind {
                 decides: false,
                 compares: &[ArtifactKind::PolicyPpt],
                 when_declared: &[ArtifactKind::PolicySpiral],
-                applies: &[ArtifactKind::TrustWidening, ArtifactKind::TrustRevocation, ArtifactKind::TrustRotation],
+                applies: &[
+                    ArtifactKind::TrustWidening,
+                    ArtifactKind::TrustChange,
+                    ArtifactKind::TrustRevocation,
+                    ArtifactKind::TrustRotation,
+                ],
                 body_bound: envelope::MAX_BODY,
                 trust_bound: TRUST_BOUND,
                 expiry_hold: false,
@@ -754,6 +777,30 @@ pub struct Widening {
     pub encoding: Canon2Tag,
     pub format: WideningFormat,
     pub from: SortedSet<Hex64>,
+}
+
+/// W10: a change statement, the one policy hash the release replaces in `from` and the comparison it rests on.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Change {
+    pub basis: ChangeBasis,
+    pub encoding: Canon2Tag,
+    pub format: ChangeFormat,
+    pub from: Hex64,
+}
+
+pub fn read_change(body: &[u8]) -> Result<Change, Refused> {
+    load(body, "change body")
+}
+
+/// `trust.change` (V11, W10): the body reads, its `from` is the envelope's `replaces`, and the envelope does not
+/// widen. One that says it widens, or that replaces nothing, is `dist:bad-format`, since a first install widens.
+fn check_change(envelope: &Envelope, body: &[u8], _pep: &PepView) -> Option<String> {
+    match read_change(body) {
+        Err(refused) => Some(cause_of(refused)),
+        Ok(change) if envelope.widens || envelope.replaces.0.as_ref() != Some(&change.from) => Some(BAD_FORMAT.to_string()),
+        Ok(_) => None,
+    }
 }
 
 pub fn read_revocation(body: &[u8]) -> Result<Revocation, Refused> {

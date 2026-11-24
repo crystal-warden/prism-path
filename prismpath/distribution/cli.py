@@ -59,6 +59,9 @@ def add_parser(subparsers) -> None:
     seal.add_argument('--widens', action='store_true',
                       help='say the release allows more than the one it replaces; set as well unless the release is '
                            'compared with the one --held holds for replaces and is not larger (W7)')
+    seal.add_argument('--yes', action='store_true',
+                      help='sign the change statement for a table the comparator finds allows nothing more, without '
+                           'asking (W9, W11)')
     seal.add_argument('--meta', default=None, metavar='FILE', help='the meta object, JSON')
     seal.add_argument('--qualification', default=None, metavar='FILE',
                       help='for policy.ppt, fill meta from the image and this qualification envelope')
@@ -153,7 +156,9 @@ def add_parser(subparsers) -> None:
     rekey.add_argument('--timeout', type=float, default=600.0, help='seconds to wait for the commit')
     rekey.add_argument('--widens', action='store_true',
                        help='the release may allow more than the table it replaces; without it a table the comparator '
-                            'finds larger is refused, and one it finds not larger goes with a statement by rule (W8)')
+                            'finds larger is refused (W9)')
+    rekey.add_argument('--yes', action='store_true',
+                       help='sign the change statement for a table the comparator finds allows nothing more (W11)')
     rekey.set_defaults(func=rekey_cmd)
 
     pep = commands.add_parser('pep', help='run a host enforcement point (provision, poll, status, rollback)')
@@ -352,26 +357,65 @@ def table_comparison(controller, body: bytes, meta: Optional[dict], stream: str,
                                         staged_fields=dict(fields) if isinstance(fields, dict) else None)
 
 
-def larger_mark(artifact: str, widens: bool, previous: Optional[bytes], body: bytes, comparison) -> str:
-    """F4 at the sealing tool, as the controller marks a rollout: `larger by comparison` for a release that
-    replaces nothing held, that a comparator with an order finds larger, or a table W8 finds larger or cannot
-    decide, `larger by rule` for a table W8 finds not larger or a changed route table, and empty otherwise."""
+def scope_mark(artifact: str, previous: Optional[bytes], body: bytes, comparison) -> str:
+    """F4 at the sealing tool, as the controller marks a rollout: a widening for a release that replaces nothing
+    held, that a comparator with an order finds larger, or a table W8 finds larger or cannot decide, a change, not
+    larger, for one that differs and allows nothing more, and empty for a renewal."""
     from prismpath.distribution import widening
-    from prismpath.distribution.controller import BY_RULE, LARGER_BY_COMPARISON, LARGER_BY_RULE
-    if not widens:
-        return ""
+    from prismpath.distribution.controller import CHANGE_NOT_LARGER, WIDENING
     if previous is None:
-        return LARGER_BY_COMPARISON
-    if widening.compare_artifact(artifact, previous, body) == widening.NOT_LARGER:
+        return WIDENING
+    if bytes(previous) == bytes(body):
         return ""
-    if artifact == "policy.ppt":
-        return LARGER_BY_RULE if comparison is not None and comparison.answer == widening.NOT_LARGER \
-            else LARGER_BY_COMPARISON
-    return LARGER_BY_RULE if artifact in BY_RULE else LARGER_BY_COMPARISON
+    if widening.compare_artifact(artifact, previous, body) == widening.NOT_LARGER:
+        return CHANGE_NOT_LARGER
+    if artifact == "policy.ppt" and comparison is not None and comparison.answer == widening.NOT_LARGER:
+        return CHANGE_NOT_LARGER
+    return WIDENING
+
+
+def _confirmed(args, comparison, replaces: str) -> bool:
+    """W9: the owner is shown what W8 found before a change statement is signed, and says yes, at the terminal
+    or with `--yes` for a script."""
+    shown = {"comparison": comparison.document(), "replaces": replaces,
+             "change": "this table allows nothing more than the one it replaces, by the table comparator (W8)"}
+    print(json.dumps(shown, indent=2, sort_keys=True), file=sys.stderr)
+    if getattr(args, "yes", False):
+        return True
+    if not sys.stdin.isatty():
+        return False
+    try:
+        answer = input("sign a change statement that says so, with the release's keys? [y/N] ")
+    except EOFError:
+        return False
+    return answer.strip().lower() in ("y", "yes")
+
+
+def change_sealed(release_sealed: bytes, signers: list) -> tuple:
+    """The sealed change statement for the release in `release_sealed` and its body (W10): the same stream, seq,
+    policy hash, release id, targets, `replaces` and `widens` (E7), `from` the policy hash it replaces and `basis`
+    the table comparator its claim rests on."""
+    release = env.read(env.unseal(release_sealed)[0])
+    if release.artifact in kinds.TRUST_ARTIFACTS or release.widens or not release.replaces:
+        raise Refused(kinds.BAD_FORMAT, "a change statement is for a release that replaces one and does not widen")
+    body = canon.canon2_bytes({"basis": kinds.CHANGE_BASIS, canon.ENCODING_KEY: canon.CANON2,
+                               "format": kinds.CHANGE_FORMAT, "from": release.replaces})
+    kinds.read_change(body)
+    envelope_bytes = env.build("trust.change", body, stream=release.stream, seq=release.seq,
+                               targets=list(release.targets), not_before=release.not_before, expires=0,
+                               policy_sha256=release.policy_sha256, release=release.release,
+                               replaces=release.replaces, widens=False)
+    return env.seal(envelope_bytes, signers), body
+
+
+NOT_CONFIRMED = ("the table allows nothing more than the one it replaces, and a change statement is signed only when "
+                 "the owner says yes; run again at a terminal or with --yes, or with --widens to release it as a "
+                 "widening")
 
 
 def seal_cmd(args) -> int:
     from prismpath.distribution import widening
+    from prismpath.distribution.controller import WIDENING
     body = _read(args.body)
     meta = _json(args.meta)
     if meta is None and args.artifact == "policy.ppt" and args.qualification:
@@ -384,39 +428,45 @@ def seal_cmd(args) -> int:
     comparison = None
     if args.artifact == "policy.ppt" and args.held is not None and previous is not None:
         comparison = table_comparison(_held(args.held), body, meta, args.stream, args.seq, args.replaces, previous)
-    mark = larger_mark(args.artifact, widens, previous, body, comparison)
+    mark = scope_mark(args.artifact, previous, body, comparison) if args.artifact not in kinds.TRUST_ARTIFACTS else ""
+    change = (widens and not args.widens and comparison is not None and comparison.answer == widening.NOT_LARGER
+              and replaces != "")
+    if change:
+        if not _confirmed(args, comparison, replaces):
+            return _fail(widening.UNSIGNED, NOT_CONFIRMED)
+        widens = False                                   # W11: it allows nothing more, so it does not widen
     try:
         sealed = build_sealed(args.artifact, body, stream=args.stream, seq=args.seq, targets=args.target,
                               signers=_authority(args.key), not_before=args.not_before or int(time.time()),
                               expires=args.expires, meta=meta, release=args.release, policy=args.policy,
                               replaces=replaces, widens=widens, held=args.held)
-        statement = None
-        if mark == "larger by rule" and args.artifact == "policy.ppt" and not args.widens:
-            # W8: a table that allows nothing more is larger only by the PEP's byte rule, so the tool signs the
-            # statement W3 asks for with the release's own keys, covering the table it replaces and no other
-            statement = widening_sealed(sealed, [replaces], _authority(args.key))
+        statement = change_sealed(sealed, _authority(args.key)) if change else None
     except Refused as refused:
         return _fail(refused.cause, str(refused))
     _write(args.out, sealed)
     printed = {"sealed": args.out, "envelope_id": env.envelope_id(env.unseal(sealed)[0]),
                "body_sha256": canon.sha256_hex(body), "sealed_size": len(sealed), "replaces": replaces,
-               "widens": widens, "larger": mark}
+               "widens": widens, "scope": mark}
     if comparison is not None:
         printed["comparison"] = comparison.document()
     if statement is not None:
-        stem = os.path.splitext(args.out)[0] + ".widening"
+        stem = os.path.splitext(args.out)[0] + ".change"
         _write(stem + ".sealed", statement[0])
         _write(stem + ".body", statement[1])
-        printed["statement"] = {"sealed": stem + ".sealed", "body": stem + ".body", "from": [replaces]}
-    elif mark == "larger by comparison":
+        printed["change"] = {"sealed": stem + ".sealed", "body": stem + ".body", "from": replaces,
+                             "basis": kinds.CHANGE_BASIS}
+    elif widens and mark == WIDENING:
         printed["next"] = "this release allows more than the one it replaces; sign its widening statement with widen"
+    elif widens:
+        printed["next"] = "this release says it widens; sign its widening statement with widen"
     _print(printed)
     return 0
 
 
 def widening_sealed(release_sealed: bytes, froms: List[str], signers: list) -> tuple:
     """The sealed widening statement for the release in `release_sealed` and its body: the same stream, seq,
-    policy hash, release id, targets, `replaces` and `widens` (W4, E7), and `from` sorted."""
+    policy hash, release id, targets, `replaces` and `widens` (W4, E7), and `from` sorted. Only `widen` and a
+    `rekey` the owner passes `--widens` sign one, never the tool on its own (W9)."""
     release = env.read(env.unseal(release_sealed)[0])
     if release.artifact in kinds.TRUST_ARTIFACTS:
         raise Refused(kinds.BAD_FORMAT, "a widening statement is for a release, not a trust statement")
@@ -520,9 +570,9 @@ def rotate_cmd(args) -> int:
 def rekey_cmd(args) -> int:
     """Rotate to the new key retiring the old one, release under the new key, wait for the group to commit, then
     revoke the old key (R5's order of work). A release that is not the one it replaces goes with a widening
-    statement from that one (W3, W7). The statement is signed in passing only for a table the comparator finds
-    allows nothing more, and a table it finds larger is refused, before anything is stored, unless `--widens`
-    says the owner means it (W8). Each statement is stored in the controller directory, which the running
+    statement from that one when the owner passes `--widens` (W3, W7), and with a change statement when the table
+    comparator finds it allows nothing more and the owner says yes, at the terminal or with `--yes` (W9, W11).
+    Otherwise it is refused before anything is stored. Each statement is stored in the controller directory, which the running
     `serve` offers."""
     from prismpath.distribution import widening
     from prismpath.hotswap import policy_pack
@@ -539,12 +589,16 @@ def rekey_cmd(args) -> int:
             replaces, previous = _replaced_in(controller, "policy.ppt", args.stream, args.seq)
             widens = previous is None or widening.compare_artifact("policy.ppt", previous, body) != widening.NOT_LARGER
             comparison = table_comparison(controller, body, meta, args.stream, args.seq, None, previous)
-            if widens and not args.widens and larger_mark("policy.ppt", True, previous, body, comparison) \
-                    != "larger by rule":
-                # W8: a release that allows more is an act the owner takes on purpose, so it is never signed in passing
+            change = (widens and not args.widens and comparison is not None
+                      and comparison.answer == widening.NOT_LARGER and replaces != "")
+            if widens and not args.widens and not change:
+                # W9: a release that allows more is an act the owner takes on purpose, never signed in passing
                 raise Refused(widening.UNSIGNED, "the table allows more than the one it replaces "
                               f"({(comparison.document() if comparison else {'reason': 'no table before it'})}); "
                               "pass --widens to release it with a widening statement")
+            if change and not _confirmed(args, comparison, replaces):
+                raise Refused(widening.UNSIGNED, NOT_CONFIRMED)
+            widens = widens and not change
             rotation = rotation_body(new, old_id)
             controller.put(build_sealed("trust.rotation", rotation, stream=env.TRUST_STREAM,
                                         seq=controller.trust_seq() + 1, targets=targets, signers=[old, new],
@@ -552,7 +606,10 @@ def rekey_cmd(args) -> int:
             release = build_sealed("policy.ppt", body, stream=args.stream, seq=args.seq, targets=args.target,
                                    signers=[new], not_before=args.not_before or now, expires=args.expires,
                                    meta=meta, replaces=replaces, widens=widens)
-            if widens:                                   # W3: it covers the release it replaces and no other
+            if change:                                   # W11: the owner said yes to what W8 found
+                statement, statement_body = change_sealed(release, [new])
+                controller.put(statement, statement_body)
+            elif widens:                                 # W3: the owner's --widens, from the release it replaces alone
                 statement, statement_body = widening_sealed(release, [replaces] if replaces else [], [new])
                 controller.put(statement, statement_body)
             controller.put(release, body)

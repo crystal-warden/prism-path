@@ -1013,6 +1013,82 @@ fn case_062_a_statement_covers_when_from_holds_the_active_hash_or_is_empty() {
     assert_eq!(point.pep.active().unwrap().seq, 3);
 }
 
+/// case_294: W10, W11, W2, the host half. A table carried by a change statement from the active hash, with `widens`
+/// false and `replaces` that hash, commits on the authority's signatures, and the same table alone is refused with
+/// the held table still active. The mesh half runs on the C core from the corpus.
+#[test]
+fn case_294_a_table_carried_by_a_change_statement_commits_without_a_widening_statement() {
+    let mut point = Point::new("294");
+    point.commit_at(&old(), 1);
+    let sealed = ppt(&new(), &Args { widens: false, replaces: Some(h(&old())), ..at(2) });
+    assert_eq!(event_cause(&stage_alone(&mut point, &sealed, &new())), ("refused", Some("dist:widening-unsigned")));
+    let (change_sealed, change) = change_of(&sealed, &h(&old()), false);
+    assert_eq!(stage_alone(&mut point, &change_sealed, &change).event, "staged");
+    assert_eq!(stage_alone(&mut point, &sealed, &new()).event, "staged");
+    assert_eq!(event_cause(&rec!(point, point.pep.commit(STREAM, 2, &h(&new()), 0))), ("committed", None));
+    assert_eq!(point.pep.active().unwrap().seq, 2);
+}
+
+/// case_295: W10, W11, the host half. A change statement whose `widens` is true is dist:bad-format, one on a first
+/// install and one from another hash are dist:widening-unsigned, and one after a widening statement of the same
+/// release is dist:bad-format, each with the held table still active.
+#[test]
+fn case_295_a_change_statement_never_stands_for_a_widening() {
+    let mut first = Point::new("295a");
+    let sealed = ppt(&old(), &Args { widens: false, replaces: Some(h(b"another")), ..at(1) });
+    let (change_sealed, change) = change_of(&sealed, &h(b"another"), false);
+    assert_eq!(event_cause(&stage_alone(&mut first, &change_sealed, &change)), ("refused", Some("dist:widening-unsigned")));
+    assert!(first.pep.active().is_none());
+
+    let mut point = Point::new("295b");
+    point.commit_at(&old(), 1);
+    let says_widens = ppt(&new(), &Args { widens: true, replaces: Some(h(&old())), ..at(2) });
+    let (change_sealed, change) = change_of(&says_widens, &h(&old()), true);
+    assert_eq!(event_cause(&stage_alone(&mut point, &change_sealed, &change)), ("refused", Some("dist:bad-format")));
+    let other = ppt(&new(), &Args { widens: false, replaces: Some(h(b"another")), ..at(2) });
+    let (change_sealed, change) = change_of(&other, &h(b"another"), false);
+    assert_eq!(event_cause(&stage_alone(&mut point, &change_sealed, &change)), ("refused", Some("dist:widening-unsigned")));
+    let sealed = ppt(&new(), &Args { widens: false, replaces: Some(h(&old())), ..at(2) });
+    let (statement_sealed, statement) = statement_of(&sealed, &[h(&old())]);
+    assert_eq!(stage_alone(&mut point, &statement_sealed, &statement).event, "staged");
+    let (change_sealed, change) = change_of(&sealed, &h(&old()), false);
+    assert_eq!(event_cause(&stage_alone(&mut point, &change_sealed, &change)), ("refused", Some("dist:bad-format")));
+    assert_eq!(point.pep.active().unwrap().seq, 1);
+}
+
+/// case_294, case_295: W10, W11, the corpus half. Each commit case of the corpus for the change statement on a host,
+/// sealed by the Python reference, answers on the Rust PEP as Python records it.
+#[test]
+fn case_294_295_the_corpus_change_statements_answer_on_the_rust_host_as_recorded() {
+    let entries: Vec<&serde_json::Value> = corpus()["commits"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|entry| [294, 295].contains(&entry["case"].as_i64().unwrap()) && entry["kind"] == "host")
+        .collect();
+    assert_eq!(entries.len(), 6);
+    for entry in entries {
+        let name = entry["name"].as_str().unwrap();
+        let mut point = Point::new(&format!("corpus_{name}"));
+        point.now.set(entry["now"].as_i64().unwrap());
+        let mut last = None;
+        for step in entry["steps"].as_array().unwrap() {
+            let signed = if step["op"] == "stage" {
+                let bytes = |key: &str| hex::decode(step[key].as_str().unwrap()).unwrap();
+                point.pep.stage(&bytes("sealed"), &bytes("body")).unwrap()
+            } else {
+                let policy = Hex64::try_from(step["policy_sha256"].as_str().unwrap().to_string()).unwrap();
+                point.pep.commit(STREAM, step["seq"].as_i64().unwrap(), &policy, 0).unwrap()
+            };
+            last = Some(point.read(&signed));
+        }
+        let record = last.unwrap();
+        let expect = &entry["expect"];
+        assert_eq!(record.cause.as_deref(), expect["cause"].as_str(), "{name}");
+        assert_eq!(point.pep.active().map_or(0, |active| active.seq), expect["active_seq"].as_i64().unwrap(), "{name}");
+    }
+}
+
 /// case_063: W2, W3. A first install is larger than no policy: with no statement it is refused and nothing is
 /// staged, and with the owner's statement it commits.
 #[test]

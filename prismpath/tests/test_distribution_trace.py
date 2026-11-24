@@ -92,10 +92,11 @@ def _covered(impl: str) -> set:
     return covered - PARTIAL[impl]
 
 
-def test_the_spec_has_268_numbered_cases_each_naming_rules_and_implementations():
+def test_the_spec_has_270_numbered_cases_each_naming_rules_and_implementations():
     # 144 to 160 are left to the pull requests in flight that number their cases from 144; section 21 starts after them.
-    # 281 to 288 are left to the SPIFFE pull request in flight, and 289 to 293 are the table comparator's (W8)
-    assert sorted(SPEC) == [*range(1, 144), *range(161, 281), *range(289, 294)]
+    # 281 to 288 are left to the SPIFFE pull request in flight, and 289 to 295 are the table comparator's and the
+    # change statement's (W8 to W11)
+    assert sorted(SPEC) == [*range(1, 144), *range(161, 281), *range(289, 296)]
     assert all(case["rules"].strip() and case["runs_on"] for case in SPEC.values())
 
 

@@ -311,6 +311,32 @@ def read_widening(body: bytes) -> dict:
     return doc
 
 
+CHANGE_FORMAT = "prismpath.dist-change/1"           # W10: a change statement
+CHANGE_BASIS = "prismpath.table-compare/1"          # W10: the comparator a change statement rests on (W8)
+
+
+def read_change(body: bytes) -> dict:
+    """W10: a change statement, the one policy hash the release replaces in `from` and the comparison it rests on
+    in `basis`, which is W8's table comparator in this version."""
+    doc = _trust_body(body, CHANGE_FORMAT, frozenset({"basis", "encoding", "format", "from"}))
+    if doc["basis"] != CHANGE_BASIS or not is_hex64(doc["from"]):
+        raise Refused(BAD_FORMAT, "a change statement whose basis is not the table comparator or whose from is not a hash")
+    return doc
+
+
+def check_change(envelope, body: bytes, _pep) -> Optional[str]:
+    """`trust.change` (V11, W10): the body reads, its `from` is the envelope's `replaces`, and the envelope says it
+    does not widen. A change statement that says it widens, or that replaces nothing, is `dist:bad-format`: a
+    first install is a widening and a change statement never stands for one."""
+    try:
+        doc = read_change(body)
+    except Refused as refused:
+        return refused.cause
+    if envelope.widens or not envelope.replaces or doc["from"] != envelope.replaces:
+        return BAD_FORMAT
+    return None
+
+
 def read_profile(body: bytes) -> dict:
     """`sandbox.profile`: a sandbox profile in canon/2 bytes (`Profile.canonical`). Whether it is the one the policy
     compiles to is the agent home's check at commit (`dist:derived-mismatch`)."""
@@ -429,11 +455,16 @@ ARTIFACTS: Dict[str, Artifact] = {
     "cfs.table": Artifact(),
     "grant": Artifact(check=_reads(read_grant)),
     "trust.widening": Artifact(check=_reads(read_widening)),
+    "trust.change": Artifact(check=check_change),
     "trust.revocation": Artifact(check=_reads(read_revocation)),
     "trust.rotation": Artifact(check=_reads(read_rotation)),
     "trust.controller": Artifact(check=_reads(read_controller)),
 }
-TRUST_ARTIFACTS = frozenset({"trust.widening", "trust.revocation", "trust.rotation", "trust.controller"})
+TRUST_ARTIFACTS = frozenset({"trust.widening", "trust.change", "trust.revocation", "trust.rotation",
+                             "trust.controller"})
+STATEMENTS = frozenset({"trust.widening", "trust.change"})   # W3, W11: travel with a release and staged before it
+APPLIES_WITH_CHANGE = frozenset(  # host, mesh: the trust kinds and a change statement (W11)
+    {"trust.widening", "trust.revocation", "trust.rotation", "trust.controller", "trust.change"})
 # R1, O1, K7: they travel on `@trust` and share the one trust sequence
 ON_TRUST_STREAM = frozenset({"trust.revocation", "trust.rotation", "trust.controller"})
 
@@ -442,13 +473,14 @@ MESH_TABLE_MAX = 640                               # E6: TBL_MAX in prismpath-hw
 
 TARGETS: Dict[str, Target] = {
     "host": Target(needs=frozenset({"policy.ppt"}), decides=False, when_declared=frozenset({"policy.spiral"}),
-                   compares=frozenset({"policy.ppt"})),
+                   compares=frozenset({"policy.ppt"}), applies=APPLIES_WITH_CHANGE),
     "agent": Target(needs=frozenset({"policy.core", "egress.hosts"}), decides=True,
                     when_declared=frozenset({"agent.zones", "sandbox.profile"})),
     "gateway": Target(needs=frozenset({"policy.core", "gateway.routes"}), decides=True),
     "xdp": Target(needs=frozenset({"policy.core", "net.dests", "net.edge"}), decides=True),
     "mesh": Target(needs=frozenset({"policy.ppt"}), decides=False, expiry_hold=True, body_bound=MESH_TABLE_MAX,
-                   checks={"policy.ppt": check_mesh_table}, reads_meta=False, compares=frozenset({"policy.ppt"})),
+                   checks={"policy.ppt": check_mesh_table}, reads_meta=False, compares=frozenset({"policy.ppt"}),
+                   applies=APPLIES_WITH_CHANGE),
 }
 
 
