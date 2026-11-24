@@ -36,7 +36,13 @@ Bounds. A request line or header over 64 KiB, more than 100 headers, a body over
 seconds, more than `--max-connections` at once, an upstream that does not answer within `--upstream-timeout`
 seconds and an upstream answer over `--max-response` bytes are all cut off. A connection serves one request.
 
-What it does not do. It does not terminate TLS (put it behind one), pass websockets or streaming bodies (the whole
+A policy that reads `workload` (spec-policy-distribution.md, section 13.1) is decided with the SPIFFE ID of the
+client's certificate, which the front proxy that terminates TLS passes in the header `--client-cert-header` names.
+The header is read only from a peer address `--front-proxy` lists, and never passed to the service. A home that
+follows a stream takes the bundle and the map from its committed release, and another home from `--identity-bundle`
+and `--identity-map`. Without them, or without the header and the front proxy, every request is refused (131).
+
+What it does not do. It does not terminate TLS (put it behind one, which passes the client certificate as above), pass websockets or streaming bodies (the whole
 body and the whole answer are held), follow redirects, or check the route table against the service's own routing:
 a service that reads a path differently from reading.py's plain path grammar is protected only by the grammar's
 refusal of every path it could read two ways.
@@ -79,7 +85,8 @@ class Gateway:
 
     def __init__(self, upstream: str, routes: Optional[rd.Routes], home: Path, session: Optional[str] = None,
                  forward_headers: Sequence[str] = (), timeout: float = 10.0, deadline: float = 30.0,
-                 upstream_timeout: float = 10.0, max_response: int = 8 * 1024 * 1024, max_connections: int = 64):
+                 upstream_timeout: float = 10.0, max_response: int = 8 * 1024 * 1024, max_connections: int = 64,
+                 identity_setting=None, identity_bodies: Optional[Tuple[bytes, bytes]] = None):
         parts = urlsplit(upstream)
         if parts.scheme not in ("http", "https") or not parts.hostname or parts.path not in ("", "/") \
                 or parts.query or parts.fragment or parts.username:
@@ -92,10 +99,15 @@ class Gateway:
         self.timeout, self.deadline, self.upstream_timeout = timeout, deadline, upstream_timeout
         self.max_response, self.max_connections = max_response, max_connections
         self.lock = threading.Lock()
-        self.policy = self.run = self.grants = self.follow = None
+        self.policy = self.run = self.grants = self.follow = self.identity = None
         self.failure: Optional[str] = None
         from prismpath.distribution.adapters import agent_home
         distributed = agent_home.is_distributed(self.home)
+        if identity_setting is not None and identity_setting.header in self.forward_headers:
+            raise ValueError(f"the client certificate header {identity_setting.header} is read here and never passed on")
+        if distributed and identity_bodies is not None:
+            raise ValueError("this gateway home follows a stream, so its identity bundle and map are the committed "
+                             "identity.bundle and identity.map and none is given here")
         if distributed and routes is not None:
             raise ValueError("this gateway home follows a stream, so its route table is the committed gateway.routes "
                              "and none is given here")
@@ -107,39 +119,41 @@ class Gateway:
             if distributed:
                 from prismpath.distribution.adapters.gateway import Following
                 from prismpath.agent.run import RunStore
-                self.follow = Following(self.home)
+                self.follow = Following(self.home, identity_setting)
                 state = self.follow.current()
                 policy, store = state.policy, RunStore(self.home / commands.RUNS_DIR)
-                self.routes, self.grants = state.routes, state.grants
+                self.routes, self.grants, self.identity = state.routes, state.grants, state.identity
             else:
                 policy, store = commands.load_checked(self.home)
                 self.grants = grants.Verifier(commands._key_paths(self.home, "authority")[1].read_bytes(),
                                               commands._sha256_hex(policy.image), self.home / grants.REVOKED_FILE)
-            if sorted(policy.fields) != sorted(rd.FIELDS):
+                self.identity = _local_identity(policy, identity_setting, identity_bodies)
+            if not rd.fields_ok(policy.fields):
                 raise commands.AgentError(f"the recorded policy's fields {policy.fields} are not the gateway reading's "
-                                          f"{sorted(rd.FIELDS)}")
+                                          f"{sorted(rd.FIELDS)}, with or without {rd.WORKLOAD}")
             self.policy = policy
             self.run = store.open(self.session, policy.image)
         except Exception as exc:   # noqa: BLE001 - nothing can be decided, so everything is refused
             self.failure = f"the policy could not be loaded or the run opened ({type(exc).__name__}: {exc})"
 
     # ------------------------------------------------------------------ decide
-    def current(self) -> Tuple[Optional[str], Optional[rd.Routes], Any]:
-        """(failure, routes, grant verifier) the next request is read and decided under. A home that follows a
-        stream reads its committed release again here, so the answer follows a commit, a revocation or an expiry."""
+    def current(self) -> Tuple[Optional[str], Optional[rd.Routes], Any, Any]:
+        """(failure, routes, grant verifier, workload reader) the next request is read and decided under; the reader
+        is None under a policy that does not read `workload`. A home that follows a stream reads its committed
+        release again here, so the answer follows a commit, a revocation or an expiry."""
         if self.failure:
-            return self.failure, None, None
+            return self.failure, None, None, None
         if self.follow is None:
-            return None, self.routes, self.grants
+            return None, self.routes, self.grants, self.identity
         from prismpath.agent import commands
         try:
             state = self.follow.current()
         except commands.AgentError as exc:
-            return f"the home's release no longer decides ({exc})", None, None
+            return f"the home's release no longer decides ({exc})", None, None, None
         if state.policy.image != self.policy.image:
             return ("the home committed another policy since this run began, and one run is decided by one policy",
-                    None, None)
-        return None, state.routes, state.grants
+                    None, None, None)
+        return None, state.routes, state.grants, state.identity
 
     def decide(self, reading: Dict[str, Any], grant: Optional[Dict[str, str]] = None,
                routes: Optional[rd.Routes] = None) -> Outcome:
@@ -147,7 +161,7 @@ class Gateway:
         if self.failure:
             return Outcome("refuse", failure=self.failure)
         if routes is None:
-            failure, routes, _grants = self.current()
+            failure, routes, _grants, _identity = self.current()
             if failure:
                 return Outcome("refuse", failure=failure)
         if self.follow is not None:
@@ -208,6 +222,24 @@ class Gateway:
                 self.run.seal(self.home)
             except Exception:   # noqa: BLE001 - the receipts are durable; verify seals them later
                 pass
+
+
+def _local_identity(policy, setting, bodies: Optional[Tuple[bytes, bytes]]):
+    """The workload reader of a home that holds its own policy: built from the bundle and map given at start when
+    the policy reads `workload`, None when it does not. AgentError when they are missing or given for nothing."""
+    from prismpath.agent import commands
+    from . import identity
+    if identity.FIELD not in policy.fields:
+        if bodies is not None:
+            raise commands.AgentError("an identity bundle and map are given and the policy reads no workload")
+        return None
+    if bodies is None or setting is None:
+        raise commands.AgentError("the policy reads workload, so the gateway needs --identity-bundle, --identity-map, "
+                                  "--client-cert-header and --front-proxy")
+    try:
+        return identity.Identity.from_bodies(bodies[0], bodies[1], setting, clock=time.time)
+    except identity.IdentityError as exc:
+        raise commands.AgentError(f"the identity bundle and map do not read ({exc})") from None
 
 
 class _Server(ThreadingHTTPServer):
@@ -313,7 +345,8 @@ class _Handler(BaseHTTPRequestHandler):
         if self._in_request or self._answered:
             return
         gateway = self.server.gateway
-        status, doc = gateway.refusal(gateway.decide(dict(rd.UNREADABLE)))
+        fields = gateway.policy.fields if gateway.policy is not None else rd.FIELDS
+        status, doc = gateway.refusal(gateway.decide(rd.unreadable(fields)))
         self._json(status, doc)
 
     # -------------------------------------------------------------- the request
@@ -353,15 +386,16 @@ class _Handler(BaseHTTPRequestHandler):
                 held = None
             else:
                 body = taken
-        failure, routes, verifier = gateway.current()
+        failure, routes, verifier, reader = gateway.current()
         if failure:
             status, doc = gateway.refusal(Outcome("refuse", failure=failure))
             self._json(status, doc, head)
             return
         try:
-            reading, grant = rd.read(self.command, self.path, headers, routes, held, verifier)
+            workload = reader.read(headers, self.client_address[0]) if reader is not None else None
+            reading, grant = rd.read(self.command, self.path, headers, routes, held, verifier, workload)
         except Exception:   # noqa: BLE001 - a request that cannot be read is unknown, never forwarded
-            reading, grant = dict(rd.UNREADABLE), None
+            reading, grant = rd.unreadable(gateway.policy.fields), None
         outcome = gateway.decide(reading, grant, routes)
         if outcome.kind == "allow" and (held is None or length is None or length > rd.MAX_BODY):
             outcome = Outcome("refuse", failure="its body could not be taken whole")     # belt and braces: the policy refused these

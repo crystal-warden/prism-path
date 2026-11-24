@@ -331,6 +331,7 @@ prismpath/gates.py
 prismpath/gateway/__init__.py
 prismpath/gateway/cli.py
 prismpath/gateway/grants.py
+prismpath/gateway/identity.py
 prismpath/gateway/policy/demo.core.json
 prismpath/gateway/policy/demo.routes.json
 prismpath/gateway/policy/demo.rules.md
@@ -778,6 +779,7 @@ prismpath/tests/test_distribution_frames.py
 prismpath/tests/test_distribution_gateway.py
 prismpath/tests/test_distribution_hatches.py
 prismpath/tests/test_distribution_heartbeat.py
+prismpath/tests/test_distribution_identity.py
 prismpath/tests/test_distribution_http.py
 prismpath/tests/test_distribution_pep.py
 prismpath/tests/test_distribution_revocation.py

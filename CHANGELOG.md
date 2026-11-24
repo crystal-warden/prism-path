@@ -8,6 +8,14 @@ spec stable.
 
 ## [Unreleased]
 
+### Added: the gateway reads a SPIFFE ID from the client certificate as a workload class
+
+- **Two artifact kinds, `identity.bundle` and `identity.map`, travel in ordinary envelopes.** A bundle is each trust domain's X.509 CA certificates and a map is SPIFFE ID patterns to classes, read in order as the route table is. A gateway release carries both when its policy reads `workload` and neither when it does not, and a map that names a trust domain its bundle does not hold is `dist:incomplete`.
+- **A policy may add the field `workload` to the gateway's reading.** It is `none` without a certificate, `invalid` for one that fails the check, `other` for a valid SPIFFE ID the map does not name, and otherwise the class of the first entry that matches. The policy decides what each is worth.
+- **The gateway takes the client certificate from the front proxy that terminates TLS.** `--client-cert-header` names the header that carries the percent encoded PEM chain and `--front-proxy` the addresses it is read from. The header is never passed to the service. The leaf must have one URI SAN with a SPIFFE ID, `cA` false and digitalSignature without keyCertSign or cRLSign, and its chain is validated by RFC 5280 against its own trust domain's CAs at the gateway's time.
+- **A changed bundle or map is a widening unless it only removes entries.** A map entry taken out whose IDs a later entry would take counts as a widening.
+- **`prismpath gateway identity-bundle` and `identity-map` write the bodies** that `prismpath dist seal` seals, and a home that holds its own policy takes them at `serve` with `--identity-bundle` and `--identity-map`. Spec section 13.1 holds rules ID1 to ID8 and cases 281 to 288.
+
 ### Changed: the XDP edge takes its table and destination table from one release, through the same gate as every other enforcement point (2026-11-23)
 
 - **The `xdp` row joins the kind table.** An edge release needs `policy.core`, `net.dests` and `net.edge`. A destination table must be one the edge can use in its canonical spelling, and at commit the edge compiles its table again from the staged policy and destination table for its own governed sources and refuses any other table, or a flow or names hash in the `net.edge` envelope that is not the compiled one's, with `dist:derived-mismatch`.
