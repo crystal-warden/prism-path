@@ -16,7 +16,7 @@ HOST_STEPS = ("host_intent", "host_evidence", "host_image", "host_record")
 BEFORE_FLIP = {"intent", "floor", "evidence", "active_record"}
 
 
-class Died(Exception):
+class Died(BaseException):                                  # a death, which no step catches
     pass
 
 

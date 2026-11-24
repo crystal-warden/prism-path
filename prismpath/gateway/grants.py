@@ -33,7 +33,8 @@ request. A revocation list that cannot be read makes every grant read invalid.
 
 The older form `prismpath.grant/1` (`<canon/2 document>.<signature>`, the signature Ed25519 over GRANT_DOMAIN and
 the document) is still read for L3, in a home that holds its own authority key, as one branch on the first bytes
-of the value. A home that follows a stream refuses it (L2).
+of the value, and every grant of that form read as valid writes a `legacy_form` event to the log the verifier is
+given (`legacy_log`, the home's `audit.log`). A home that follows a stream refuses it (L2).
 """
 from __future__ import annotations
 
@@ -178,7 +179,8 @@ class Verifier:
     one its PEP keeps, revocation is that store's alone (GR3) and the older form is refused (L2)."""
 
     def __init__(self, authority_pub: Optional[bytes], policy_sha256: str, revoked_path: Optional[Path] = None,
-                 clock=time.time, *, trust=None, stream: str = LOCAL_STREAM):
+                 clock=time.time, *, trust=None, stream: str = LOCAL_STREAM, legacy_log: Optional[Path] = None,
+                 instance_key=None):
         from prismpath.hotswap import policy_pack
         _Priv, Pub, _ser, self._invalid = policy_pack._ed25519()
         if (authority_pub is None) == (trust is None):
@@ -192,6 +194,8 @@ class Verifier:
         self.revoked_path = Path(revoked_path) if revoked_path and self.legacy else None
         self.clock = clock
         self._trust = trust
+        self.legacy_log = Path(legacy_log) if legacy_log is not None and self.legacy else None
+        self._instance_key = instance_key
         self._lock = threading.Lock()
         self._revoked_stamp: Optional[tuple] = None
         self._revoked: Optional[frozenset] = frozenset()
@@ -331,6 +335,10 @@ class Verifier:
             return "invalid", record
         if now >= doc["expires"]:
             return "expired", record
+        if self.legacy_log is not None:
+            from prismpath.distribution import legacy
+            legacy.record_at(str(self.legacy_log), legacy.GRANT, reader="gateway.grants", sha256=record["grant_sha256"],
+                             key_id=self.key_id, instance_key=self._instance_key)
         return "valid", record
 
 

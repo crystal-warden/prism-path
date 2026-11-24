@@ -22,14 +22,104 @@ VERSION = 1
 PAYLOAD_TYPE = "application/vnd.prismpath.dist-state"
 INVALID = "fleet:state-invalid"
 EVENTS = ("beat", "staged", "refused", "committed", "aborted", "trust-applied", "lapsed", "rolled-back",
-          "provisioned", "held")
-STATES = ("no-policy", "active", "locked")
-STAGED_BIT, DEV_BUILD_BIT, HELD_BIT = 0x80, 0x40, 0x20
+          "provisioned", "held", "fallback", "install-applied", "install-widened", "answered", "reconciling")
+STATES = ("no-policy", "active", "locked", "reconciling")
+RECONCILING_ENTRY = 4                              # H10, H14: the extension type of the reconciling entry
+ENTRY_SIZE = 58
+OWED = {"beat": 0, "committed": 3, "lapsed": 6, "rolled-back": 7, "fallback": 10, "install-applied": 11,
+        "install-widened": 12}                     # H14: what a transition owes, 0 for none
+STAGED_BIT, DEV_BUILD_BIT, HELD_BIT, FALLBACK_BIT = 0x80, 0x40, 0x20, 0x10
+INSTALL_ENTRY, INSTALL_SIZE = 3, 27                # H10: the install record of a PEP that holds install keys
+SUBJECTS = ("none", "install.floor", "install.fallback", "install.ceiling", "install.trust", "operator.answer")
 MAX_BODY, MAX_EXTENSIONS = 1024, 512
 SIGNATURE_SIZE = 64
 _HEAD = struct.Struct("<4sBBBB16sQQQ16s16s16sQQ16sQQ")    # bytes 0 to 143
 _ZERO16 = b"\x00" * 16
 assert _HEAD.size == 144
+
+
+_ENTRY = struct.Struct("<BB16s16sQ16s")
+assert _ENTRY.size == ENTRY_SIZE
+_INSTALL = struct.Struct("<16sHBII")
+assert _INSTALL.size == INSTALL_SIZE
+
+
+@dataclass(frozen=True)
+class InstallEntry:
+    """H10, type 3: the install id, the low 16 bits of the install trust sequence, the subject of the event (0 none,
+    1 action floor, 2 fallback policy, 3 ceiling, 4 install trust statement, 5 operator answer) and the cumulative
+    counts of floor answers and floor overrides, each stopping at 2^32 - 1."""
+    install_id: bytes = b"\x00" * 16
+    trust_seq: int = 0
+    subject: str = "none"
+    answers: int = 0
+    overrides: int = 0
+
+    def extension(self) -> bytes:
+        top = 2 ** 32 - 1
+        return struct.pack("<BH", INSTALL_ENTRY, INSTALL_SIZE) + _INSTALL.pack(
+            bytes(self.install_id), self.trust_seq & 0xFFFF, SUBJECTS.index(self.subject), min(self.answers, top),
+            min(self.overrides, top))
+
+    @classmethod
+    def from_bytes(cls, raw: bytes) -> "InstallEntry":
+        if len(raw) != INSTALL_SIZE:
+            raise Refused(INVALID, f"an install entry of {len(raw)} bytes")
+        install_id, trust_seq, subject, answers, overrides = _INSTALL.unpack(bytes(raw))
+        if subject >= len(SUBJECTS):
+            raise Refused(INVALID, "an install entry whose subject does not read")
+        return cls(install_id, trust_seq, SUBJECTS[subject], answers, overrides)
+
+
+@dataclass(frozen=True)
+class ReconcilingEntry:
+    """H14: the reconciling entry. `owed` is the event the transition owes (`beat` for none), `cause` the cause of
+    the lapse owed or the one the running release fell for, then the running release's 16 byte prefixes and `seq`,
+    and the set id prefix of the action floor the runtime holds, zeros for none."""
+    owed: str = "beat"
+    cause: Optional[str] = None
+    running_policy: bytes = b"\x00" * 16
+    running_release: bytes = b"\x00" * 16
+    running_seq: int = 0
+    floor: bytes = b"\x00" * 16
+
+    def to_bytes(self) -> bytes:
+        code = causes.code(self.cause) if self.cause else 0
+        if code is None:
+            raise ValueError(f"{self.cause!r} is not a registered cause")
+        return _ENTRY.pack(OWED[self.owed], code, bytes(self.running_policy), bytes(self.running_release),
+                           self.running_seq, bytes(self.floor))
+
+    def extension(self) -> bytes:
+        """The entry as one extension: its type, its length and its bytes (H10)."""
+        return struct.pack("<BH", RECONCILING_ENTRY, ENTRY_SIZE) + self.to_bytes()
+
+    @classmethod
+    def from_bytes(cls, raw: bytes) -> "ReconcilingEntry":
+        if len(raw) != ENTRY_SIZE:
+            raise Refused(INVALID, f"a reconciling entry of {len(raw)} bytes")
+        owed, code, policy, release, seq, floor = _ENTRY.unpack(bytes(raw))
+        names = {value: name for name, value in OWED.items()}
+        cause = causes.name(code) if code else None
+        if owed not in names or (code and cause is None):
+            raise Refused(INVALID, "a reconciling entry whose owed event or cause does not read")
+        return cls(names[owed], cause, policy, release, seq, floor)
+
+
+def extension_entries(run: bytes):
+    """H10: the (type, bytes) of each entry of an extension area, or `Refused` with `fleet:state-invalid` when the
+    run is cut short."""
+    run, at, out = bytes(run), 0, []
+    while at < len(run):
+        if at + 3 > len(run):
+            raise Refused(INVALID, "an extension entry cut short")
+        kind, size = run[at], struct.unpack_from("<H", run, at + 1)[0]
+        value = run[at + 3:at + 3 + size]
+        if len(value) != size:
+            raise Refused(INVALID, "an extension longer than the area")
+        out.append((kind, value))
+        at += 3 + size
+    return out
 
 
 def prefix(hex_or_bytes) -> bytes:
@@ -70,13 +160,30 @@ class StateRecord:
     staged: bool = False
     dev_build: bool = False
     held: bool = False
+    fallback: bool = False
     body: bytes = b""
     extensions: bytes = b""
 
     @property
+    def install(self) -> Optional[InstallEntry]:
+        """H10: the install entry the record carries, or None."""
+        for kind, value in extension_entries(self.extensions):
+            if kind == INSTALL_ENTRY:
+                return InstallEntry.from_bytes(value)
+        return None
+
+    @property
+    def reconciling(self) -> Optional[ReconcilingEntry]:
+        """H14: the reconciling entry the record carries, or None."""
+        for kind, value in extension_entries(self.extensions):
+            if kind == RECONCILING_ENTRY:
+                return ReconcilingEntry.from_bytes(value)
+        return None
+
+    @property
     def status(self) -> int:
         return (STATES.index(self.state) | (STAGED_BIT if self.staged else 0) | (DEV_BUILD_BIT if self.dev_build else 0)
-                | (HELD_BIT if self.held else 0))
+                | (HELD_BIT if self.held else 0) | (FALLBACK_BIT if self.fallback else 0))
 
     def unsigned_bytes(self) -> bytes:
         """Bytes 0 to 148+m+x, the part the signature covers."""
@@ -111,9 +218,9 @@ def _parse(data: bytes) -> Tuple[StateRecord, bytes, bytes]:
         raise Refused(INVALID, "shorter than a state record")
     (magic, version, event, status, code, pep, counter, time, epoch, stream, active_policy, active_release,
      active_seq, floor, staged_release, staged_seq, trust_seq) = _HEAD.unpack_from(data)
-    if magic != MAGIC or version != VERSION or event >= len(EVENTS) or (status & 0x1F) >= len(STATES):
+    if magic != MAGIC or version != VERSION or event >= len(EVENTS) or (status & 0x03) >= len(STATES):
         raise Refused(INVALID, "magic, version, event or state")
-    if status & 0x1C:
+    if status & 0x0C:
         raise Refused(INVALID, "a status bit this version does not define")
     cause = causes.name(code) if code else None
     if code and cause is None:
@@ -126,11 +233,13 @@ def _parse(data: bytes) -> Tuple[StateRecord, bytes, bytes]:
     end = _HEAD.size + 4 + m + x
     if x > MAX_EXTENSIONS or len(data) != end + SIGNATURE_SIZE:
         raise Refused(INVALID, "an extension length or a record length")
-    record = StateRecord(event=EVENTS[event], state=STATES[status & 0x03], cause=cause, pep_id=pep, counter=counter,
+    state = status & 0x03
+    record = StateRecord(event=EVENTS[event], state=STATES[state], cause=cause, pep_id=pep, counter=counter,
                          time=time, stream=stream, active_policy=active_policy, active_release=active_release,
                          active_seq=active_seq, floor=floor, staged_release=staged_release, staged_seq=staged_seq,
                          trust_seq=trust_seq, epoch=epoch, staged=bool(status & STAGED_BIT),
-                         dev_build=bool(status & DEV_BUILD_BIT), held=bool(status & HELD_BIT), body=body,
+                         dev_build=bool(status & DEV_BUILD_BIT), held=bool(status & HELD_BIT),
+                         fallback=bool(status & FALLBACK_BIT), body=body,
                          extensions=data[_HEAD.size + 4 + m:end])
     return record, data[:end], data[end:]
 
@@ -153,4 +262,22 @@ def read(data: bytes, instance_public: bytes) -> StateRecord:
         Public.from_public_bytes(bytes(instance_public)).verify(signature, signed_message(unsigned))
     except (InvalidSignature, ValueError):
         raise Refused(INVALID, "the signature does not verify under the instance key") from None
+    check_reconciling(record)
+    installs = [value for kind, value in extension_entries(record.extensions) if kind == INSTALL_ENTRY]
+    if len(installs) > 1:
+        raise Refused(INVALID, "more than one install entry")
+    for value in installs:
+        InstallEntry.from_bytes(value)
     return record
+
+
+def check_reconciling(record: StateRecord) -> None:
+    """H14: status 3 carries exactly one reconciling entry, status 0 and 1 carry none, no record carries two, and
+    the entry reads. `Refused` with `fleet:state-invalid` otherwise (H6 step 1)."""
+    entries = [value for kind, value in extension_entries(record.extensions) if kind == RECONCILING_ENTRY]
+    if record.state == "reconciling" and len(entries) != 1:
+        raise Refused(INVALID, "a reconciling record without exactly one reconciling entry")
+    if record.state in ("no-policy", "active") and entries or len(entries) > 1:
+        raise Refused(INVALID, "a reconciling entry under status no-policy or active, or more than one")
+    for value in entries:
+        ReconcilingEntry.from_bytes(value)

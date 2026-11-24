@@ -10,12 +10,17 @@ per PEP, the enrolled instance key, the kind, the stream, the group, the expecte
 accepted record and the open findings (F2). Per group and release it runs the machine of F3 under the rule
 `each` or `all`. It checks each state record in the order of H6 and files the first finding, files a PEP
 silent after three intervals (H7) and held while its records carry the hold bit (H8), and names the present
-with a rising epoch id (H9). Every offer, ack, commit, abort, finding and trust statement goes to its own
+on each stream with an epoch id it counts apart per stream, keeps durably and never lowers, sent in a controller
+statement signed by its instance key (H9), with the freshness fields where the stream's anchor sets `fresh`
+(H16). A record of a PEP that holds a controller key and carries another epoch id is filed `fleet:state-replay`
+and still used, marked unverified for freshness (H6). A reconciling record (H14) never counts as committed, and
+`dist:reconciling` is filed against it as H14 says. Every offer, ack, commit, abort, finding and trust statement goes to its own
 audit log, signed with the controller's instance key (F5).
 
 Its directory:
 
-    controller.json  members, groups, rollouts, the trust chain, the epoch, as JSON written whole
+    controller.json  members, groups, rollouts, the trust chain, the epoch id of each stream, as JSON written
+                     whole, and written before a new epoch id is signed
     anchors/         each trust anchor it serves, under its fingerprint, with a host stream's qualification
     blobs/           sealed envelopes under `<envelope id>.sealed`, bodies under their SHA-256
     audit.log        the controller's audit log
@@ -27,11 +32,11 @@ hashes matched, so a PEP on another policy is filed from the hashes and never fr
 """
 from __future__ import annotations
 
+import base64
 import fcntl
 import hashlib
 import json
 import os
-import struct
 import time as _time
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -39,7 +44,7 @@ from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 
 from prismpath import canon
 from prismpath.distribution import envelope as env
-from prismpath.distribution import frames, heartbeat, kinds, state_record, widening
+from prismpath.distribution import frames, heartbeat, kinds, state_record, statement as statements, widening
 from prismpath.distribution.kinds import Refused
 from prismpath.distribution.trust import TrustStore, check_drops, read_anchor
 from prismpath.distribution.verify import PepView, verify
@@ -55,8 +60,9 @@ MESH_STAGE_WINDOW = 0.5
 COMMIT_WINDOW = 120.0
 MESH_COMMIT_SLACK = 2.0                            # F3: on the mesh the commit window is the delay plus 2 seconds
 SILENT_AFTER = 3                                   # H7: intervals with no accepted record
-STATE_INVALID, STATE_REPLAY, POLICY_MISMATCH, SILENT, HELD = (
-    "fleet:state-invalid", "fleet:state-replay", "fleet:policy-mismatch", "fleet:silent", "dist:held")
+STATE_INVALID, STATE_REPLAY, POLICY_MISMATCH, SILENT, HELD, RECONCILING = (
+    "fleet:state-invalid", "fleet:state-replay", "fleet:policy-mismatch", "fleet:silent", "dist:held",
+    "dist:reconciling")
 MAX_UNKNOWN = 64                                   # the senders of records from no enrolled PEP that are kept
 EAT = 1                                            # H10: the extension type of an Entity Attestation Token
 _ZERO = "0" * 32
@@ -153,16 +159,8 @@ def check_extensions(record: state_record.StateRecord, unsigned: bytes) -> None:
     """H10: the extensions are a run of type, two byte length and bytes. A type 1 token is read and its
     `eat_nonce` must be the SHA-256 of bytes 0 to 146+m of the record; another type is skipped. No extension
     is ever taken for a signature on the record. `Refused` with `fleet:state-invalid` otherwise."""
-    run, at = record.extensions, 0
     bound = hashlib.sha256(unsigned[:state_record._HEAD.size + 2 + len(record.body)]).digest()
-    while at < len(run):
-        if at + 3 > len(run):
-            raise Refused(STATE_INVALID, "an extension entry cut short")
-        kind, size = run[at], struct.unpack_from("<H", run, at + 1)[0]
-        value = run[at + 3:at + 3 + size]
-        if len(value) != size:
-            raise Refused(STATE_INVALID, "an extension longer than the area")
-        at += 3 + size
+    for kind, value in state_record.extension_entries(record.extensions):
         if kind != EAT:
             continue
         try:
@@ -188,17 +186,18 @@ class Member:
     last: Optional[dict] = None
     seen: float = 0.0
     findings: Dict[str, str] = field(default_factory=dict)
+    reconciling_since: Optional[float] = None                     # H14: since when its records carry the entry
 
     def document(self) -> dict:
         return {"pep": self.pep, "public": self.public, "kind": self.kind, "stream": self.stream, "group": self.group,
                 "expected": list(self.expected), "counter": self.counter, "last": self.last, "seen": self.seen,
-                "findings": dict(self.findings)}
+                "findings": dict(self.findings), "reconciling_since": self.reconciling_since}
 
     @classmethod
     def from_document(cls, doc: dict) -> "Member":
         return cls(pep=doc["pep"], public=doc["public"], kind=doc["kind"], stream=doc["stream"], group=doc["group"],
                    expected=tuple(doc["expected"]), counter=doc["counter"], last=doc["last"], seen=doc["seen"],
-                   findings=dict(doc["findings"]))
+                   findings=dict(doc["findings"]), reconciling_since=doc.get("reconciling_since"))
 
 
 LARGER_BY_RULE, LARGER_BY_COMPARISON = "larger by rule", "larger by comparison"
@@ -282,7 +281,8 @@ class Controller:
         self.chain: List[str] = []                   # the trust statements stored, by envelope id, in trust order
         self.stored: Dict[str, dict] = {}            # envelope id -> {artifact, stream, seq, policy, release, ...}
         self.unknown: List[dict] = []                # findings for records that name no enrolled PEP
-        self.epoch, self.epoch_at = 1, self.clock()
+        self.epochs: Dict[str, int] = {}            # H9: the epoch id of each stream, counted apart
+        self.epoch_at = self.clock()
         self.anchors: Dict[str, dict] = {}           # fingerprint -> {target, stream, qualification}
         if not os.path.exists(self._state_path):
             return
@@ -294,13 +294,13 @@ class Controller:
         self.groups = dict(doc["groups"])
         self.rollouts = [Rollout.from_document(one) for one in doc["rollouts"]]
         self.chain, self.stored, self.unknown = list(doc["chain"]), dict(doc["stored"]), list(doc["unknown"])
-        self.epoch, self.epoch_at, self.anchors = doc["epoch"], doc["epoch_at"], dict(doc["anchors"])
+        self.epochs, self.epoch_at, self.anchors = dict(doc.get("epochs", {})), doc["epoch_at"], dict(doc["anchors"])
 
     def save(self) -> None:
         doc = {"format": FORMAT,
                "members": {pep: member.document() for pep, member in self.members.items()},
                "groups": self.groups, "rollouts": [one.document() for one in self.rollouts], "chain": self.chain,
-               "stored": self.stored, "unknown": self.unknown[-MAX_UNKNOWN:], "epoch": self.epoch, "epoch_at": self.epoch_at,
+               "stored": self.stored, "unknown": self.unknown[-MAX_UNKNOWN:], "epochs": self.epochs, "epoch_at": self.epoch_at,
                "anchors": self.anchors}
         canon.atomic_write_bytes(self._state_path, json.dumps(_plain(doc), sort_keys=True).encode("utf-8"))
         canon.fsync_dir(self.dir)
@@ -342,8 +342,11 @@ class Controller:
         with open(os.path.join(self.dir, "anchors", anchor.fingerprint), "wb") as handle:
             handle.write(bytes(raw))
         self.anchors[anchor.fingerprint] = {"target": anchor.target, "stream": anchor.stream,
-                                            "qualification": qualification}
-        self._log("anchor", fingerprint=anchor.fingerprint, target=anchor.target, stream=anchor.stream)
+                                            "qualification": qualification, "fresh": anchor.fresh,
+                                            "controller": anchor.controller.hex() if anchor.controller else None}
+        self.epochs.setdefault(anchor.stream, 1)
+        self._log("anchor", fingerprint=anchor.fingerprint, target=anchor.target, stream=anchor.stream,
+                  controller=anchor.controller_id, fresh=anchor.fresh)
         return anchor.fingerprint
 
     def _anchor_store(self, fingerprint: str) -> TrustStore:
@@ -353,8 +356,12 @@ class Controller:
         for envelope_id in self.chain:                               # V5, R1: every statement, whatever its targets
             sealed, body = self.sealed(envelope_id), self.blob(self.stored[envelope_id]["body_sha256"])
             envelope = env.read(env.unseal(sealed)[0])
-            store = (store.apply_revocation(envelope, body) if envelope.artifact == "trust.revocation"
-                     else store.apply_rotation(envelope, body))
+            if envelope.artifact == "trust.revocation":
+                store = store.apply_revocation(envelope, body)
+            elif envelope.artifact == "trust.controller":
+                store = store.apply_controller(envelope, body)
+            else:
+                store = store.apply_rotation(envelope, body)
         return store
 
     def _view(self, fingerprint: str) -> PepView:
@@ -642,8 +649,17 @@ class Controller:
     def tick(self) -> None:
         """The windows of F3, the silence of H7 and the epoch of H9, at the controller's clock."""
         now = self.clock()
-        while now - self.epoch_at >= self.interval:
-            self.epoch, self.epoch_at = self.epoch + 1, self.epoch_at + self.interval
+        streams = {anchor["stream"] for anchor in self.anchors.values()}
+        advanced = any(stream not in self.epochs for stream in streams)
+        for stream in streams:
+            self.epochs.setdefault(stream, 1)
+        if now - self.epoch_at >= self.interval:
+            steps = int((now - self.epoch_at) // self.interval)
+            self.epochs = {stream: epoch + steps for stream, epoch in self.epochs.items()}
+            self.epoch_at += steps * self.interval
+            advanced = True
+        if advanced and self.instance_key is not None:
+            self.save()                           # H9: the next epoch id is durable before it is signed
         for rollout in self.rollouts:
             self._advance(rollout)
         for member in self.members.values():
@@ -657,10 +673,11 @@ class Controller:
         of its group's open rollout for its kind, and its `commit` and `abort` entries. An unknown PEP is given
         the epoch and nothing else."""
         self.tick()
-        out: dict = {"epoch": self.epoch, "offers": [], "commit": [], "abort": []}
+        out: dict = {"epoch": "", "offers": [], "commit": [], "abort": []}
         member = self.members.get(pep)
         if member is None:
-            return out
+            return out                            # an unknown PEP names no stream, so no statement is its
+        out["epoch"] = base64.urlsafe_b64encode(self.statement(member.stream)).rstrip(b"=").decode("ascii")
         lacking = self.chain[self._trust_seq_of(member):]
         if lacking:
             out["offers"] = [self._offer(envelope_id) for envelope_id in lacking]
@@ -678,6 +695,54 @@ class Controller:
             elif state == "aborting":
                 out["abort"].append(entry)
         return out
+
+    # ------------------------------------------------------------------ H9, H16: the controller statement
+    def epoch_of(self, stream: str) -> int:
+        """H9: the epoch id the controller names the present with on `stream`, 0 for a stream it does not serve."""
+        return self.epochs.get(stream, 0)
+
+    def key_seq(self) -> int:
+        """H9, K7: the key sequence the controller signs with, the `seq` of the latest `trust.controller` of its
+        chain, or 0 when the anchor named its key."""
+        return max((self.stored[one]["seq"] for one in self.chain if self.stored[one]["artifact"] == "trust.controller"),
+                   default=0)
+
+    def statement(self, stream: str) -> bytes:
+        """H9, H16: the controller statement of `stream` now, signed by the controller's instance key. Where an
+        anchor of the stream sets `fresh`, it carries the end of the trust chain, the highest `seq` the controller
+        holds on the stream and an `expires` that many seconds ahead."""
+        self.tick()
+        fresh = max((anchor.get("fresh", 0) for anchor in self.anchors.values() if anchor["stream"] == stream),
+                    default=0)
+        held = [info["seq"] for info in self.stored.values() if info["stream"] == stream]
+        read = statements.Statement(
+            key_seq=self.key_seq(), stream=state_record.stream_prefix(stream), epoch=self.epoch_of(stream),
+            fresh=bool(fresh), trust_seq=len(self.chain) if fresh else 0, stream_seq=max(held, default=0) if fresh else 0,
+            expires=int(self.clock()) + fresh if fresh else 0)
+        return statements.build(read, self.instance_key)
+
+    def _no_controller_key(self, member: Member, record: state_record.StateRecord) -> bool:
+        """H6, P4: the PEP holds no controller key. Its anchor named none, and its record does not show a
+        `trust.controller` of the chain applied."""
+        anchor = next((one for one in self.anchors.values()
+                       if (one["target"], one["stream"]) == (member.kind, member.stream)), None)
+        if anchor is None or anchor.get("controller"):
+            return False
+        return not any(self.stored[one]["artifact"] == "trust.controller" and self.stored[one]["seq"] <= record.trust_seq
+                       for one in self.chain)
+
+    def _fresh_epoch(self, member: Member, record: state_record.StateRecord) -> bool:
+        """H6 step 2: the record's epoch id is the stream's current one or the one before, or it is epoch 0 on a
+        `provisioned` record, on the `trust-applied` record of a `trust.controller` the controller holds, or on any
+        record of a PEP that holds no controller key (P4)."""
+        current = self.epoch_of(member.stream)
+        if record.epoch:
+            return record.epoch in (current, current - 1)
+        if record.event == "provisioned" or self._no_controller_key(member, record):
+            return True
+        return record.event == "trust-applied" and any(
+            self.stored[one]["artifact"] == "trust.controller" and self.stored[one]["seq"] == record.trust_seq
+            for one in self.chain)
 
     @staticmethod
     def _trust_seq_of(member: Member) -> int:
@@ -710,17 +775,23 @@ class Controller:
         self.tick()
         if record.counter <= member.counter:                              # step 2, H3
             return self._file(member, STATE_REPLAY, f"counter {record.counter} is not above {member.counter}")
-        if record.epoch not in (self.epoch, self.epoch - 1):              # H9
-            return self._file(member, STATE_REPLAY, f"epoch {record.epoch} is not {self.epoch} or the one before")
+        first: Optional[str] = None
+        unverified = not self._fresh_epoch(member, record)
+        if unverified:                                                    # H6: filed, and still used
+            first = self._file(member, STATE_REPLAY, f"epoch {record.epoch} is not "
+                                                     f"{self.epoch_of(member.stream)} or the one before")
         member.counter, member.seen = record.counter, self.clock()
         member.last = {"event": record.event, "state": record.state, "cause": record.cause, "counter": record.counter,
                        "time": record.time, "epoch": record.epoch, "policy": _hex(record.active_policy),
                        "release": _hex(record.active_release), "seq": record.active_seq, "floor": record.floor,
                        "staged_release": _hex(record.staged_release), "staged_seq": record.staged_seq,
-                       "trust_seq": record.trust_seq, "held": record.held, "dev_build": record.dev_build}
-        self._log("ack", pep=pep, event=record.event, cause=record.cause, counter=record.counter, seq=record.active_seq)
-        for cleared in (STATE_INVALID, STATE_REPLAY, SILENT):
+                       "trust_seq": record.trust_seq, "held": record.held, "dev_build": record.dev_build,
+                       "unverified": unverified, "no_controller_key": self._no_controller_key(member, record)}
+        self._log("ack", pep=pep, event=record.event, cause=record.cause, counter=record.counter, seq=record.active_seq,
+                  **({"unverified": True} if unverified else {}))
+        for cleared in (STATE_INVALID, SILENT) if unverified else (STATE_INVALID, STATE_REPLAY, SILENT):
             self._clear(member, cleared)
+        self._reconciling(member, record)
         if record.held:                                                   # H8
             self._file(member, HELD, "deciding under an expired release on hold")
         else:
@@ -728,19 +799,47 @@ class Controller:
         self._progress(member, record)
         reported = (_hex(record.active_policy), _hex(record.active_release), record.active_seq)
         if reported not in self._allowed(member):                         # step 3
-            return self._file(member, POLICY_MISMATCH, f"reports seq {record.active_seq} policy {reported[0]}, "
-                                                       f"expected seq {member.expected[2]} policy {_prefix(member.expected[0])}")
+            found = self._file(member, POLICY_MISMATCH, f"reports seq {record.active_seq} policy {reported[0]}, "
+                                                        f"expected seq {member.expected[2]} policy {_prefix(member.expected[0])}")
+            return first or found
         member.last["decisions"] = 0                                      # an empty body carries no decision
         if record.body:                                                   # steps 4 and 5 (H5)
             cause = heartbeat.check(self._image(reported[0]), record.body)
             if cause == POLICY_MISMATCH:
-                return self._file(member, cause, "the Facet body's preamble names another policy or layout")
+                return first or self._file(member, cause, "the Facet body's preamble names another policy or layout")
             if cause is not None:
-                return self._file(member, cause, "the Facet body does not decode under the policy it names")
+                return first or self._file(member, cause, "the Facet body does not decode under the policy it names")
             member.last["decisions"] = len(heartbeat.decode(self._image(reported[0]), record.body))
         self._clear(member, POLICY_MISMATCH)
         self._clear(member, heartbeat.CODEBOOK_MISMATCH)
-        return None
+        return first
+
+    def _reconciling(self, member: Member, record: state_record.StateRecord) -> None:
+        """H14: a record with the reconciling entry is filed `dist:reconciling` at once when the entry names a
+        running release, when the floor the runtime holds is not the held one (this controller holds no action
+        floor, so the held one is none), or when the PEP is locked, and in any case once its records have carried
+        the entry for three intervals. The finding stays open until a record without the entry, and the running
+        release is shown beside the reported one while the entry is sent."""
+        entry = record.reconciling
+        if entry is None:
+            member.reconciling_since = None
+            member.last["running"] = None
+            self._clear(member, RECONCILING)
+            return
+        now = self.clock()
+        if member.reconciling_since is None:
+            member.reconciling_since = now
+        running = entry.running_release != bytes(16)
+        member.last["running"] = {"policy": _hex(entry.running_policy), "release": _hex(entry.running_release),
+                                  "seq": entry.running_seq, "floor": _hex(entry.floor), "owed": entry.owed,
+                                  "cause": entry.cause}
+        if running or entry.floor != bytes(16) or record.state == "locked":
+            reason = ("the runtime may still run another release" if running else
+                      "the runtime holds another action floor" if entry.floor != bytes(16) else
+                      "a locked PEP whose runtime has not withdrawn")
+            self._file(member, RECONCILING, reason)
+        elif now - member.reconciling_since >= SILENT_AFTER * self.interval:
+            self._file(member, RECONCILING, f"reconciling for {SILENT_AFTER} intervals")
 
     def _image(self, policy_prefix: str) -> Optional[bytes]:
         """The stored `policy.core` image whose policy hash starts with `policy_prefix`, or None."""
@@ -787,7 +886,8 @@ class Controller:
                     if record.cause not in kinds.RETRYABLE:          # else the PEP tries it again, still offered
                         rollout.members[member.pep] = "refused"
                     self._file(member, record.cause, f"refused seq {rollout.seq} of {rollout.stream}")
-            elif state == "committing" and record.active_release == release and record.active_seq == rollout.seq:
+            elif (state == "committing" and record.state == "active" and record.active_release == release
+                  and record.active_seq == rollout.seq):                 # H14: never from a reconciling record
                 rollout.members[member.pep] = "committed"
                 for cause in [code for code in member.findings if not code.startswith("fleet:") and code != HELD]:
                     self._clear(member, cause)
@@ -845,8 +945,11 @@ class Controller:
                                       "seq": member.expected[2]},
                          "reported": {key: last.get(key) for key in ("policy", "release", "seq", "floor", "trust_seq",
                                                                      "state", "event", "counter", "epoch")},
+                         "unverified": bool(last.get("unverified")),                   # H6: not shown fresh
+                         "no_controller_key": bool(last.get("no_controller_key")),
+                         "running": last.get("running"),                             # H14
                          "findings": dict(sorted(member.findings.items()))})
-        return {"epoch": self.epoch, "trust_seq": self.trust_seq(), "peps": peps,
+        return {"epochs": dict(self.epochs), "trust_seq": self.trust_seq(), "peps": peps,
                 "rollouts": [one.document() for one in self.rollouts], "unknown": list(self.unknown)}
 
 
@@ -878,7 +981,8 @@ class FrameDriver:
                                         for entry in answer["commit"]) if one not in commits]
             aborts += [one for one in ((entry["stream"], entry["seq"], entry["policy"])
                                        for entry in answer["abort"]) if one not in aborts]
-        out = [frames.encode(frames.Epoch(self._next(), controller.epoch), self.limit)]
+        streams = sorted({member.stream for member in controller.members.values() if member.group == self.group})
+        out = [frames.encode(frames.Epoch(self._next(), controller.statement(stream)), self.limit) for stream in streams]
         for envelope_id in owed:
             body = controller.blob(controller.stored[envelope_id]["body_sha256"])
             out += list(frames.frames_for(self._next(), controller.sealed(envelope_id), body, self.limit))

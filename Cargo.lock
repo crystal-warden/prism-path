@@ -213,6 +213,7 @@ dependencies = [
  "base64",
  "ed25519-dalek",
  "hex",
+ "prismpath-hotswap-rs",
  "prismpath-rs",
  "rand",
  "serde",

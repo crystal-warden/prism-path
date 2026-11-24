@@ -30,6 +30,9 @@ _LISTS = ("revoked_envelopes", "revoked_keys", "revoked_policies")
 MAX_KEYS, MAX_RETIRED = 8, 16                       # K5: the same bounds in every implementation
 _MEMBERS = frozenset({"encoding", "floors", "format", "keys", "retired", "threshold", "time_floor", "trust_id",
                       "trust_seq", *_LISTS})
+# K6, K7: the key sequence of the controller key, written only by a store that has held one, so a store that never
+# did keeps the bytes it had before the controller key was built
+_OPTIONAL = frozenset({"key_seq"})
 
 
 @dataclass(frozen=True)
@@ -79,6 +82,7 @@ class TrustStore:
     trust_id: str = ""
     threshold: int = THRESHOLD
     time_floor: int = 0
+    key_seq: int = 0
     readable: bool = True
     path: Optional[str] = None
 
@@ -88,12 +92,77 @@ class TrustStore:
 
     # ------------------------------------------------------------------ the durable file
     def document(self) -> dict:
-        return {canon.ENCODING_KEY: canon.CANON2, "format": FORMAT, "floors": dict(self.floors),
-                "keys": _keys_document(self.keys),
-                "retired": list(self.retired), "revoked_envelopes": sorted(self.revoked_envelopes),
-                "revoked_keys": sorted(self.revoked_keys), "revoked_policies": sorted(self.revoked_policies),
-                "threshold": self.threshold, "time_floor": self.time_floor, "trust_id": self.trust_id,
-                "trust_seq": self.trust_seq}
+        doc = {canon.ENCODING_KEY: canon.CANON2, "format": FORMAT, "floors": dict(self.floors),
+               "keys": _keys_document(self.keys),
+               "retired": list(self.retired), "revoked_envelopes": sorted(self.revoked_envelopes),
+               "revoked_keys": sorted(self.revoked_keys), "revoked_policies": sorted(self.revoked_policies),
+               "threshold": self.threshold, "time_floor": self.time_floor, "trust_id": self.trust_id,
+               "trust_seq": self.trust_seq}
+        if self.key_seq or any(key.role == kinds.CONTROLLER for key in self.keys.values()):
+            doc["key_seq"] = self.key_seq
+        return doc
+
+    # ------------------------------------------------------------------ K6: the controller key
+    @property
+    def controller(self) -> Optional[Tuple[str, Key]]:
+        """K6: the (key id, key) of the one controller key the store holds and has not retired, or None."""
+        for kid, key in self.keys.items():
+            if key.role == kinds.CONTROLLER and kid not in self.retired:
+                return kid, key
+        return None
+
+    def controller_public(self) -> Optional[bytes]:
+        """The controller key a statement is verified under (H9): the held one, unless it is revoked (K6)."""
+        held = self.controller
+        if held is None or held[0] in self.revoked_keys:
+            return None
+        return held[1].public
+
+    def _held_elsewhere(self, kid: str, role: str) -> bool:
+        """K4: the key id is held in a role other than `role`, or retired in any role."""
+        key = self.keys.get(kid)
+        return kid in self.retired or (key is not None and key.role != role)
+
+    def check_controller(self, body: bytes, instance_key_id: Optional[str] = None,
+                         others: FrozenSet[str] = frozenset()) -> Optional[str]:
+        """K7 for a `trust.controller` whose body already reads (V11): `key` is never an authority key the store
+        holds, the PEP's own instance key, a revoked key or a retired one, the controller key a statement replaced
+        before included (`dist:rotation-invalid`), and a store with no controller key that would then hold a ninth
+        key is `dist:too-large` (K5). Naming the held controller key is not a replacement and passes."""
+        doc = kinds.read_controller(body)
+        added_id = canon.sha256_hex(bytes.fromhex(doc["key"]))
+        held = self.controller
+        if held is not None and held[0] == added_id:
+            return None
+        if (added_id == instance_key_id or added_id in self.revoked_keys or added_id in others
+                or self._held_elsewhere(added_id, kinds.CONTROLLER)):
+            return ROTATION_INVALID
+        live = {kid for kid in self.keys if kid not in self.retired} | {added_id}
+        if held is not None:
+            live.discard(held[0])
+        if len(live) > MAX_KEYS:
+            return "dist:too-large"
+        return None
+
+    def apply_controller(self, envelope, body: bytes) -> "TrustStore":
+        """The store after a verified `trust.controller` at the next trust sequence (K7): the key named is the
+        controller key, the one it replaces is retired, and the envelope's `seq` is the key sequence. A key that is
+        already the controller key stays and takes the new key sequence. The caller starts its epoch id again at 0
+        (H15)."""
+        if envelope.artifact != "trust.controller" or envelope.seq != self.trust_seq + 1:
+            raise ValueError("only a verified controller key statement at the next trust sequence is applied (K7)")
+        added = bytes.fromhex(kinds.read_controller(body)["key"])
+        added_id = canon.sha256_hex(added)
+        keys, retired = dict(self.keys), list(self.retired)
+        held = self.controller
+        if held is None or held[0] != added_id:
+            if held is not None and held[0] not in retired:
+                retired.append(held[0])
+            keys[added_id] = Key(added, kinds.CONTROLLER)
+            while len(retired) > MAX_RETIRED:                        # K5: the oldest retired id is forgotten
+                keys.pop(retired.pop(0), None)
+        return replace(self, keys=keys, retired=tuple(retired), key_seq=envelope.seq, trust_seq=envelope.seq,
+                       trust_id=envelope.envelope_id)
 
     def to_bytes(self) -> bytes:
         return canon.canon2_bytes(self.document())
@@ -107,7 +176,9 @@ class TrustStore:
             if not condition:
                 raise Refused(kinds.BAD_FORMAT, f"trust store {detail}")
 
-        require(isinstance(doc, dict) and set(doc) == _MEMBERS, "members")
+        require(isinstance(doc, dict) and _MEMBERS <= set(doc) <= _MEMBERS | _OPTIONAL, "members")
+        key_seq = doc.get("key_seq", 0)
+        require(is_int(key_seq, 0, MAX_SEQ), "key_seq")
         require(doc["format"] == FORMAT and doc["encoding"] == canon.CANON2, "format")
         require(doc["threshold"] == THRESHOLD, "threshold")
         require(all(is_int(doc[name], 0, MAX_SEQ) for name in ("time_floor", "trust_seq")), "an integer")
@@ -120,11 +191,14 @@ class TrustStore:
         require(isinstance(retired, list) and all(is_hex64(item) for item in retired) and len(set(retired)) == len(retired)
                 and len(retired) <= MAX_RETIRED and set(retired) <= set(doc["keys"]), "retired")
         require(len(set(doc["keys"]) - set(retired)) <= MAX_KEYS, "keys beyond the bound")
+        live_controllers = [kid for kid, held in doc["keys"].items() if isinstance(held, dict)
+                            and held.get("role") == kinds.CONTROLLER and kid not in retired]
+        require(len(live_controllers) <= 1, "more than one controller key")                     # K6
         return cls(keys=_read_keys(doc["keys"], "trust store"), retired=tuple(retired), revoked_keys=frozenset(doc["revoked_keys"]),
                    revoked_envelopes=frozenset(doc["revoked_envelopes"]),
                    revoked_policies=frozenset(doc["revoked_policies"]), floors=dict(doc["floors"]),
                    trust_seq=doc["trust_seq"], trust_id=doc["trust_id"], threshold=doc["threshold"],
-                   time_floor=doc["time_floor"], path=path)
+                   time_floor=doc["time_floor"], key_seq=key_seq, path=path)
 
     @classmethod
     def load(cls, path: str) -> "TrustStore":
@@ -195,7 +269,7 @@ class TrustStore:
 
     # ------------------------------------------------------------------ O1 to O4: rotation
     def check_rotation(self, body: bytes, entries: Sequence[Tuple[str, bytes]], message: bytes,
-                       instance_key_id: Optional[str] = None) -> Optional[str]:
+                       instance_key_id: Optional[str] = None, others: FrozenSet[str] = frozenset()) -> Optional[str]:
         """O2 to O4 for a rotation whose envelope already counts under this store (V3) and reads (V11): the key in
         `add` signs it too, so it is signed under the store it leaves as well, `add` is neither the PEP's own
         instance key, a revoked key nor a key the store retired, since a retired key does not come back, and
@@ -205,8 +279,10 @@ class TrustStore:
         doc = kinds.read_rotation(body)
         added = bytes.fromhex(doc["add"])
         added_id = canon.sha256_hex(added)
-        if added_id == instance_key_id or added_id in self.revoked_keys or added_id in self.retired:
-            return ROTATION_INVALID                                  # O4
+        if (added_id == instance_key_id or added_id in self.revoked_keys or added_id in others
+                or self._held_elsewhere(added_id, kinds.AUTHORITY)):
+            return ROTATION_INVALID                                  # O4, K4: never a key held in another role,
+                                                                     # the install and operator keys included (IS7)
         if doc["retire"] and doc["retire"] not in self.keys:
             return ROTATION_INVALID                                  # O3
         live = {kid for kid in self.keys if kid not in self.retired} | {added_id}
@@ -306,43 +382,96 @@ def check_drops(body: bytes, earlier: Sequence[bytes], held: Iterable[Any]) -> N
             raise Refused("dist:trust-replay", f"the list drops the policy {policy}, which no floor has passed (R8)")
 
 
-ANCHOR_FORMAT = "prismpath.dist-trust/1"
+ANCHOR_FORMAT, ANCHOR_FORMAT_1 = "prismpath.dist-trust/2", "prismpath.dist-trust/1"     # P4: both are read
 _ANCHOR_MEMBERS = frozenset({"encoding", "format", "keys", "stream", "target", "threshold"})
+_ANCHOR_MEMBERS_2 = _ANCHOR_MEMBERS | {"controller", "fresh"}
 
 
 @dataclass(frozen=True)
 class Anchor:
-    """A trust anchor (P2 step 3): the keys with their roles, the threshold, the PEP's target kind and its
-    stream. `fingerprint` is the SHA-256 of its bytes, which the operator compares (P2 step 4)."""
+    """A trust anchor (P2 step 3, P4): the authority keys, the threshold, the PEP's target kind and its stream,
+    and from `/2` the first controller key (K6, 32 raw bytes) and `fresh`, the longest lifetime in seconds of a
+    fresh statement, 0 for freshness off (H16). A `/1` anchor names no controller key and has `fresh` 0.
+    `fingerprint` is the SHA-256 of its bytes, which the operator compares (P2 step 4)."""
     keys: Mapping[str, Key]
     threshold: int
     target: str
     stream: str
     fingerprint: str
+    controller: Optional[bytes] = None
+    fresh: int = 0
+    format: str = ANCHOR_FORMAT
+    install: Any = None                            # P4: the install record the `install` member brings, or None
 
     def store(self) -> TrustStore:
-        """P3: the trust store an anchor provisions, with the trust sequence and time floor at their start."""
-        return TrustStore(keys=dict(self.keys), threshold=self.threshold)
+        """P3: the trust store an anchor provisions, with the trust sequence, the time floor and the key sequence
+        at their start. The controller key is held in its own role (K4, K6)."""
+        keys = dict(self.keys)
+        if self.controller is not None:
+            keys[canon.sha256_hex(self.controller)] = Key(self.controller, kinds.CONTROLLER)
+        return TrustStore(keys=keys, threshold=self.threshold)
+
+    @property
+    def controller_id(self) -> Optional[str]:
+        return canon.sha256_hex(self.controller) if self.controller is not None else None
 
 
-def anchor_bytes(public_keys: Sequence[bytes], *, target: str, stream: str, role: str = kinds.AUTHORITY) -> bytes:
-    """The canon/2 bytes of an anchor trusting `public_keys` (32 raw bytes each) in `role`. The owner's tool."""
-    keys = {canon.sha256_hex(bytes(raw)): Key(bytes(raw), role) for raw in public_keys}
-    raw = canon.canon2_bytes({canon.ENCODING_KEY: canon.CANON2, "format": ANCHOR_FORMAT, "keys": _keys_document(keys),
-                              "stream": stream, "target": target, "threshold": THRESHOLD})
+def anchor_bytes(public_keys: Sequence[bytes], *, target: str, stream: str, controller: Optional[bytes] = None,
+                 fresh: int = 0, version: Optional[int] = None, install: Optional[dict] = None) -> bytes:
+    """The canon/2 bytes of an anchor trusting the authority keys `public_keys` (32 raw bytes each). The owner's
+    tool. It writes `prismpath.dist-trust/2` with the controller key and `fresh` when a controller key is given,
+    and `/1` otherwise unless `version` asks for 2, so a PEP that reads `/1` alone is never handed a `/2` it
+    refuses (P4)."""
+    keys = {canon.sha256_hex(bytes(raw)): Key(bytes(raw), kinds.AUTHORITY) for raw in public_keys}
+    version = version or (2 if controller is not None or fresh or install is not None else 1)
+    doc = {canon.ENCODING_KEY: canon.CANON2, "format": ANCHOR_FORMAT if version == 2 else ANCHOR_FORMAT_1,
+           "keys": _keys_document(keys), "stream": stream, "target": target, "threshold": THRESHOLD}
+    if version == 2:
+        if controller is None:
+            raise ValueError("a prismpath.dist-trust/2 anchor names the first controller key (P4, K6)")
+        doc.update(controller=bytes(controller).hex(), fresh=fresh)
+    if install is not None:
+        doc["install"] = install                   # P4: `install.anchor_part`, on a `/2` anchor only
+    raw = canon.canon2_bytes(doc)
     read_anchor(raw)
     return raw
 
 
 def read_anchor(raw: bytes) -> Anchor:
-    """The anchor in `raw`, or `Refused` (`dist:bad-format`, `document:not-canonical`)."""
+    """The anchor in `raw`, `/2` or `/1` (P4), or `Refused` (`dist:bad-format`, `document:not-canonical`). Every
+    entry of `keys` is an authority key in both formats, and the controller key is none of them (P2 step 3, K4).
+    A `/2` anchor may hold the `install` member, whose keys go to the install record (`install.read_anchor_part`),
+    and no key is in two roles. A `/1` anchor that holds one is not an anchor."""
     doc = kinds.load_canonical(raw, "trust anchor")
-    if not (isinstance(doc, dict) and set(doc) == _ANCHOR_MEMBERS and doc["format"] == ANCHOR_FORMAT
-            and doc["encoding"] == canon.CANON2 and doc["threshold"] == THRESHOLD
+    version = {ANCHOR_FORMAT: 2, ANCHOR_FORMAT_1: 1}.get(doc.get("format")) if isinstance(doc, dict) else None
+    members = _ANCHOR_MEMBERS_2 if version == 2 else _ANCHOR_MEMBERS
+    optional = {"install"} if version == 2 else set()
+    if not (version and members <= set(doc) <= members | optional and doc["encoding"] == canon.CANON2 and doc["threshold"] == THRESHOLD
             and doc["target"] in kinds.TARGET_KINDS and is_stream(doc["stream"])):
         raise Refused(kinds.BAD_FORMAT, "not a trust anchor")
     keys = _read_keys(doc["keys"], "trust anchor")
     if not keys:
         raise Refused(kinds.BAD_FORMAT, "a trust anchor with no key")
+    if any(key.role != kinds.AUTHORITY for key in keys.values()):
+        raise Refused(kinds.BAD_FORMAT, "a trust anchor whose keys name another role than authority (P4)")
+    if len(keys) > MAX_KEYS:
+        raise Refused(kinds.BAD_FORMAT, "a trust anchor with more keys than a store holds (K5)")
+    controller, fresh = None, 0
+    if version == 2:
+        if not is_hex64(doc["controller"]) or not is_int(doc["fresh"], 0, MAX_SEQ):
+            raise Refused(kinds.BAD_FORMAT, "the anchor's controller key or fresh")
+        controller, fresh = bytes.fromhex(doc["controller"]), doc["fresh"]
+        if canon.sha256_hex(controller) in keys:
+            raise Refused(kinds.BAD_FORMAT, "the anchor's controller key is also an authority key (K4, K6)")
+        if len(keys) + 1 > MAX_KEYS:
+            raise Refused(kinds.BAD_FORMAT, "a trust anchor with more keys than a store holds (K5)")
+    part = None
+    if "install" in doc:                           # P4: the install keys go to the install record, never the store
+        from prismpath.distribution import install
+        part = install.read_anchor_part(doc["install"])
+        others = set(keys) | ({canon.sha256_hex(controller)} if controller is not None else set())
+        if others & (set(part.keys) | set(part.operators)):
+            raise Refused(kinds.BAD_FORMAT, "an anchor that holds one key in two roles (P2 step 3, K4)")
     return Anchor(keys=keys, threshold=doc["threshold"], target=doc["target"], stream=doc["stream"],
-                  fingerprint=canon.sha256_hex(bytes(raw)))
+                  fingerprint=canon.sha256_hex(bytes(raw)), controller=controller, fresh=fresh,
+                  format=doc["format"], install=part)

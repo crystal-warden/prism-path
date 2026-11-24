@@ -10,7 +10,11 @@ Where things live. Everything the commands keep is in one directory of the user'
   instance.key, instance.pub     the instance key, which signs the root statement over a run (mode 0600)
   policy.core.json               the policy image every hook call decides under: the starter `init --policy`
                                  chose (`strict`, `default`, `review` or `session`), `default` (agent_default) unless told
-  policy.attestation.json        its `prismpath.core-image/1` attestation, signed with the authority key
+  policy.attestation.json        its sealed `policy.core` distribution envelope on the stream `local`, signed
+                                 with the authority key (L1 of spec-policy-distribution.md). A home recorded
+                                 before 0.3.0 holds the older `prismpath.core-image/1` attestation here, which
+                                 is still read, with a `legacy_form` event in audit.log, until `init` runs again
+  audit.log                      the home's own audit log (`legacy_form` events, signed by the instance key)
   runs/<session>                 one run per Claude Code session (`prismpath.agent.run`)
 
 `init` makes the keys (never replacing one), records the policy with its attestation, and writes the hook
@@ -138,14 +142,56 @@ def _ensure_key(home: Path, role: str) -> str:
     return "created"
 
 
+LOCAL_KINDS = ("agent", "gateway")     # the target kinds a home that holds its own authority key seals its policy for
+
+
 def _attestation(home: Path, image: bytes, case: str = POLICY_CASE) -> bytes:
+    """The record of the home's policy (L1): a sealed `policy.core` envelope over `image`, on the stream `local`,
+    for the `gateway` kind when `case` is `gateway` and for `agent` otherwise, signed with the authority key. The
+    starter's name is not sealed; `starter_of` reads it from the image."""
+    from prismpath.distribution import legacy
     from prismpath.hotswap import policy_pack
-    from prismpath.kernel import canon2
-    from prismpath.ledgers import core_evidence
     signer = policy_pack._load_private(str(_key_paths(home, "authority")[0]))
-    return canon2.dumps({"format": core_evidence.IMAGE_FORMAT, "case": case,
-                         "image_sha256": _sha256_hex(image), "key_id": _key_id(home, "authority"),
-                         "sig": signer.sign(core_evidence.IMAGE_DOMAIN + image).hex()}) + b"\n"
+    kind = "gateway" if case == "gateway" else "agent"
+    return legacy.local_seal("policy.core", image, [signer], seq=1, targets=(kind,))
+
+
+def _is_sealed(record: bytes) -> bool:
+    from prismpath.distribution import envelope as env
+    return record[:len(env.MAGIC)] == env.MAGIC
+
+
+def _check_sealed(sealed: bytes, image: bytes, authority) -> None:
+    """The home's sealed `policy.core` envelope checked as the verifier's V2 to V9 check it, for a home that holds
+    its own authority key: the container and the envelope read, a `policy.core` for one agent or gateway kind, a
+    signature by the authority key, in force now (V6), and the image its body and its policy hash. V11, the image
+    read as the core reads it, is the `Policy` the caller builds from it. AgentError with the cause otherwise.
+    Nothing here reads a floor or a trust store, since a home that holds its key has neither."""
+    from prismpath.distribution import envelope as env
+    from prismpath.distribution.kinds import Refused
+    try:
+        envelope_bytes, entries = env.unseal(sealed)
+        envelope = env.read(envelope_bytes)
+    except Refused as refused:
+        raise AgentError(f"the recorded policy's attestation envelope does not read ({refused.cause})") from None
+    kinds = [kind for kind in envelope.targets if kind in LOCAL_KINDS]
+    if envelope.artifact != "policy.core" or len(kinds) != 1:
+        raise AgentError("the recorded policy's attestation envelope is not a policy.core for an agent or gateway home")
+    message, signed = env.signed_message(envelope_bytes), False
+    for _key_id, signature in entries:
+        try:
+            authority.verify(signature, message)
+            signed = True
+            break
+        except Exception:  # noqa: BLE001 - another key's entry, or a signature that does not verify
+            continue
+    now, digest = int(time.time()), _sha256_hex(image)      # V6 with the SKEW of section 7, 300 seconds
+    cause = ("sig:invalid" if not signed else "dist:not-yet-valid" if envelope.not_before - now > 300
+             else "dist:expired" if now >= envelope.expires
+             else "image:sha256-mismatch" if (len(image), digest, digest)
+             != (envelope.body_size, envelope.body_sha256, envelope.policy_sha256) else None)
+    if cause is not None:
+        raise AgentError(f"the recorded policy's attestation envelope does not verify under the authority key ({cause})")
 
 
 def load_distributed(home: Path, *, until: Optional[list] = None, kind: str = "agent"):
@@ -181,7 +227,9 @@ class Committed:
     AgentError, and loads again only when a file of the PEP's store changed (a commit, a rollback, a lapse, a
     revocation, a lock) or the release's earliest expiry has come, so a decision costs a few `stat` calls and a
     release that no longer stands stops deciding at the next one (section 9, X3, R5)."""
-    WATCHED = ("anchor.json", "setting.json", "counter.json", "floor.json", "trust.json", "active.json")
+    # the install record too, so a fallback set applied while no release decides reaches it (FB1, FB8)
+    WATCHED = ("anchor.json", "setting.json", "counter.json", "floor.json", "trust.json", "active.json",
+               "install/record.json")
 
     def __init__(self, home: Path, kind: str = "agent"):
         self.home, self.kind = Path(home), kind
@@ -248,7 +296,12 @@ def load_checked(home: Path):
     if not policy_path.is_file() or not attestation_path.is_file():
         raise AgentError(f"no recorded policy in {home}; run `prismpath agent init`")
     image = policy_path.read_bytes()
-    statement = canon2.loads(attestation_path.read_bytes().rstrip(b"\n"))
+    record = attestation_path.read_bytes()
+    if _is_sealed(record):
+        _check_sealed(record, image, authority)
+        return Policy(image), RunStore(home / RUNS_DIR)
+    # the older form (L3): a `prismpath.core-image/1` attestation, read with a `legacy_form` event each time
+    statement = canon2.loads(record.rstrip(b"\n"))
     if (not isinstance(statement, dict) or statement.get("format") != core_evidence.IMAGE_FORMAT
             or statement.get("key_id") != authority_id or statement.get("image_sha256") != _sha256_hex(image)):
         raise AgentError("the recorded policy's attestation does not name this policy and authority key")
@@ -256,6 +309,9 @@ def load_checked(home: Path):
         authority.verify(bytes.fromhex(statement["sig"]), core_evidence.IMAGE_DOMAIN + image)
     except Exception as exc:
         raise AgentError("the recorded policy's attestation signature does not verify") from exc
+    from prismpath.distribution import legacy
+    legacy.record_at(str(home / legacy.AUDIT_FILE), legacy.CORE_IMAGE, reader="agent.load_checked",
+                     sha256=_sha256_hex(image), key_id=authority_id, instance_key=instance)
     return Policy(image), RunStore(home / RUNS_DIR)
 
 
@@ -405,7 +461,9 @@ def init(project: Path, yes: bool, as_json: bool, confirm=None, out=None, policy
         policy_state = "recorded"
     else:
         policy_state = "kept" if recorded == image else "updated"
-    if policy_state != "kept":
+    # a home recorded before 0.3.0 keeps its policy and has its older attestation sealed again as an envelope (L1)
+    older = (home / ATTESTATION_FILE).is_file() and not _is_sealed((home / ATTESTATION_FILE).read_bytes())
+    if policy_state != "kept" or older:
         for name, data in ((POLICY_FILE, image), (ATTESTATION_FILE, _attestation(home, image, STARTERS[starter]))):
             tmp = home / (name + ".tmp")
             fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
