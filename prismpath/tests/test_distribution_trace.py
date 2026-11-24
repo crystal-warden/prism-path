@@ -7,8 +7,8 @@ A test covers a case when its name or docstring carries `case_NNN`, or when it i
 of the corpus and the corpus holds the case for that implementation. The C core has only the `mesh` and
 `cfs` kinds (I1), so a corpus case counts for C only when its PEP is one of those. Python's tests are
 prismpath/tests/test_distribution_*.py, integrations/cfs/tests/test_cfs_dist.py (the `cfs` kind's halves) and
-tools/tests/test_export.py, the C core's is
-prismpath/tests/test_distribution_c.py and Rust's are prismpath-hotswap-rs/tests/test_distribution_*.rs.
+tools/tests/test_export.py, the C core's are
+prismpath/tests/test_distribution_c.py and test_distribution_c_cfs.py (its `cfs` kind and the cFS app) and Rust's are prismpath-hotswap-rs/tests/test_distribution_*.rs.
 
 `PENDING` lists, per implementation, the cases whose pull request has not landed. Each pull request
 shortens it, and a case still listed that has a test fails here, so the list never hides a landed case.
@@ -26,10 +26,11 @@ CASE = re.compile(r"\bcase_(\d{3})\b")
 SOURCES = {
     "P": [*sorted((REPO / "tests").glob("test_distribution_*.py")), ROOT / "integrations" / "cfs" / "tests" / "test_cfs_dist.py",
           ROOT / "tools" / "tests" / "test_export.py"],
-    "C": [REPO / "tests" / "test_distribution_c.py"],
+    "C": [REPO / "tests" / "test_distribution_c.py", REPO / "tests" / "test_distribution_c_cfs.py"],
     "R": sorted((ROOT / "prismpath-hotswap-rs" / "tests").glob("test_distribution_*.rs")),
 }
-EXCLUDED = {REPO / "tests" / "test_distribution_trace.py", REPO / "tests" / "test_distribution_c.py"}
+EXCLUDED = {REPO / "tests" / "test_distribution_trace.py", REPO / "tests" / "test_distribution_c.py",
+            REPO / "tests" / "test_distribution_c_cfs.py"}
 REPLAYERS = {"P": REPO / "tests" / "test_distribution_corpus.py",
              "R": ROOT / "prismpath-hotswap-rs" / "tests" / "test_distribution_conformance.rs",
              "C": REPO / "tests" / "test_distribution_c.py"}
@@ -40,14 +41,13 @@ C_KINDS = frozenset({"mesh", "cfs"})
 # Cases one half of which an implementation runs, by its replay of the corpus or by a test that names the case,
 # while another half waits for a later pull request. Neither claims them, and they stay in PENDING until that half
 # has its test. 16: the Rust PEP allows nothing; 66, 70, 72, 73, 79, 123, 130, 134: the Rust verifier decides them,
-# and applying the trust statement, a commit or a release staying active is the Rust PEP's (PR 14). 60: the C core
-# runs the mesh half, and the cfs half, a table taken on the signer's word, waits for the cfs kind in the C core.
+# and applying the trust statement, a commit or a release staying active is the Rust PEP's (PR 14).
 # 100: Python's grant writer emits an envelope, and the other older forms' writers wait for PRs 11 and 12.
-PARTIAL = {"P": frozenset({100}), "R": frozenset({16, 66, 70, 72, 73, 79, 123, 130, 134}), "C": frozenset({60})}
+PARTIAL = {"P": frozenset({100}), "R": frozenset({16, 66, 70, 72, 73, 79, 123, 130, 134}), "C": frozenset()}
 PENDING = {
     "P": "45 100 102 104-105 161-280",
     "R": "16-17 23-24 26 31 43 46-48 50-53 62-63 66 69-70 72-73 77 79 82 84-85 101 104 111 123 126 130 134 137-140 143 161-163 165-166 169-172 174-178 182-183 186 188-190 193 195 197 199 201-202 204-205 207 213 215 218 221 223-227 230 233-236 240-251 256-262 265-266 269-272 274 276-280",
-    "C": "25 60 97 104-105 122 161 184 186 188 192-194 200 202-203 213 216 220 225-226 230-232 235 256-261 269-271 276-280",
+    "C": "25 97 104-105 122 193 202 220 225 230-232 235 256-261 269-271 276-280",
 }
 
 

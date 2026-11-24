@@ -53,6 +53,30 @@ SIZE = OFF["TableSig"] + 64
 HEADERS = 64 + 52          # the cFE file header and the table header
 
 
+# AF9, AF10: what each field of a layout is, by the labels of fsw/inc/prismpath_app_layout.h
+ROLES = ("command", "parameter", "independent", "proposer")
+COMMAND, PARAMETER, INDEPENDENT, PROPOSER = range(4)
+
+
+def layout_document(fields) -> bytes:
+    """The layout document of AF10: a canon/2 list of each field's register, role, bounds and staleness bound, from
+    (register, role, min, max, stale) rows. Its SHA-256 is `layout` in the `meta` of a table floor. An independent
+    field has a staleness bound of at least one second and no other field has one, so a layout that would read a
+    reading of the world as never stale is refused here, before any floor is sealed for it."""
+    from prismpath.kernel import canon2
+    rows = []
+    for reg, role, low, high, stale in sorted(fields):
+        if role not in range(len(ROLES)) or not low <= high:
+            raise ValueError(f"register {reg}: role {role} with bounds {low} to {high} is not a layout field")
+        if (role == INDEPENDENT) != (stale > 0) or stale < 0:
+            raise ValueError(f"register {reg}: an independent field takes a staleness bound of 1 second or more, and "
+                             f"no other field takes one (AF10), not {stale}")
+        rows.append({"max": high, "min": low, "reg": reg, "role": ROLES[role], "stale": stale})
+    if [row["reg"] for row in rows] != list(range(len(rows))) or sum(row["role"] == "command" for row in rows) > 1:
+        raise ValueError("a layout labels each register once, in order, and at most one command field")
+    return canon2.dumps(rows)
+
+
 def pack(built: dict) -> bytearray:
     """The unsigned struct bytes of a table from `gen_image.build`'s result: what the C initializer in
     fsw/tables/prismpath_app_policy_tbl.c holds, byte for byte."""

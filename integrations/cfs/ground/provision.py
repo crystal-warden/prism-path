@@ -40,6 +40,34 @@ def instance_seed(instance_key: Path) -> bytes:
     return private.private_bytes(ser.Encoding.Raw, ser.PrivateFormat.Raw, ser.NoEncryption())
 
 
+ANCHOR_FORMAT = "prismpath.dist-trust/2"
+
+
+def anchor_document(authority_publics, *, controller_public: bytes, stream: str, target: str = "cfs",
+                    install_publics=(), threshold: int = 2, operator_publics=(), seq: int = 0,
+                    domain: str = "") -> bytes:
+    """The trust anchor of P4, `prismpath.dist-trust/2`, in canon/2: the authority keys (every entry in the role
+    `authority`), the threshold of S6, the controller key (K6), `fresh` 0, the PEP's target kind and stream, and,
+    when install keys are given, the `install` member with those keys, their threshold, the operator keys, the
+    install trust sequence and the hash of the reading domain the PEP was built with (CL4)."""
+    from prismpath import canon
+    keys = {canon.sha256_hex(bytes(raw)): {"public": bytes(raw).hex(), "role": "authority"} for raw in authority_publics}
+    doc = {"controller": bytes(controller_public).hex(), "encoding": "canon/2", "format": ANCHOR_FORMAT, "fresh": 0,
+           "keys": keys, "stream": stream, "target": target, "threshold": 1}
+    if install_publics:
+        if not 1 <= threshold <= len(install_publics) <= 4 or len(operator_publics) > 4 or len(domain) != 64:
+            raise ValueError("an install member holds 1 to 4 install keys at a threshold from 1 to their number, at "
+                             "most 4 operator keys and the SHA-256 of the domain (P4, IS11)")
+        doc["install"] = {"domain": domain, "keys": sorted(bytes(raw).hex() for raw in install_publics),
+                          "operators": sorted(bytes(raw).hex() for raw in operator_publics), "seq": seq,
+                          "threshold": threshold}
+    roles = [canon.sha256_hex(bytes(raw)) for raw in (*authority_publics, controller_public, *install_publics,
+                                                       *operator_publics)]
+    if len(set(roles)) != len(roles):
+        raise ValueError("no key is held in two roles (K4)")
+    return canon.canon2_bytes(doc)
+
+
 def provision(exe_dir: Path, keys: Path) -> dict:
     authority_key, authority_pub, instance_key, _instance_pub = core_evidence.ensure_keys(Path(keys))
     cf = Path(exe_dir) / "cf"
