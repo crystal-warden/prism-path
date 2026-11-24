@@ -123,8 +123,8 @@ def release_body(version: int = 1) -> bytes:
     return body(doc["rules"], version)
 
 
-def node(*, hold=False) -> list:
-    lines = [f"machine {int(hold)} 1 {base.INSTANCE_SEED} cfs", f"domain {base.DOMAIN}", f"layout {_layout_hash()}"]
+def node(*, hold=False, seed=None) -> list:
+    lines = [f"machine {int(hold)} 1 {seed or base.INSTANCE_SEED} cfs", f"domain {base.DOMAIN}", f"layout {_layout_hash()}"]
     return lines + [f"field {reg} {role} {low} {high} {stale}" for reg, role, low, high, stale in LAYOUT_FIELDS]
 
 
@@ -472,8 +472,9 @@ def test_case_194_a_cfs_floor_escalates_past_its_signed_rate_and_counts_each_rul
     asked = [ask(line) for line in out if line.startswith("ask")]
     assert [(one["outcome"], one["basis"], one["cause"], one["count"]) for one in asked[:5]] == [
         (ALLOW, "floor", "dist:floor-allowed", 1), (ALLOW, "floor", "dist:floor-allowed", 2),
-        (ALLOW, "floor", "dist:floor-allowed", 3), (ESCALATE, "floor", "dist:floor-rate", 0),
-        (ESCALATE, "floor", "dist:floor-rate", 0)]
+        (ALLOW, "floor", "dist:floor-allowed", 3), (ESCALATE, "floor", "dist:floor-rate", 3),
+        (ESCALATE, "floor", "dist:floor-rate", 3)]                       # the spent window, which the run's rates name
+    assert [(one["counted"], one["rate_escalated"]) for one in asked[3:5]] == [(False, True)] * 2
     assert (asked[5]["outcome"], asked[5]["rule"], asked[5]["count"], asked[5]["counted"]) == (ALLOW, 1, 1, True)
     assert all((one["outcome"], one["basis"], one["counted"], one["would"]) == (ALLOW, "floor", False, ALLOW)
                for one in asked[6:16])
@@ -640,6 +641,132 @@ def test_case_226_a_cfs_pep_reads_its_install_record_from_the_second_copy(hc):
     assert ask(out[3])["basis"] == "floor"
     assert [(one["event"], one["cause"]) for one in _recs(out[4])] == [("refused", "dist:install-lost")]
     assert out[5] == "held - - -" and ask(out[6])["basis"] is None
+
+
+# ------------------------------------------------------------------ OP1 to OP4: the operator's answer on the core
+SEED2 = _dist.GEN.test_key("I2").private_bytes_raw().hex()
+OPERATOR_RATE = {"allows": 4, "window": 600}
+
+
+def pep_id(name: str = "I") -> str:
+    return hashlib.sha256(_dist.instance_key(name).public_raw).hexdigest()[:32]
+
+
+def answer(receipt: str, verdict: str = "allow", *, signer="O1", pep=None, now=N, not_before=None, lifetime=300,
+           floor=None, stream=S, targets=("cfs",), signed=True) -> str:
+    """A stage line of a sealed operator.answer (OP2) to the escalation whose receipt hash is `receipt`."""
+    from prismpath.distribution import floor as floors, kinds
+    body = floors.answer_body(verdict, pep or pep_id(), receipt)
+    start = now - 10 if not_before is None else not_before
+    doc = {"artifact": kinds.ANSWER, "body_sha256": canon.sha256_hex(body), "body_size": len(body),
+           "encoding": "canon/2", "expires": start + lifetime, "format": env.FORMAT, "meta": {}, "not_before": start,
+           "policy_sha256": floor or policy(floors_of()["one"]), "release": env.ZERO_HASH, "replaces": "", "seq": 1,
+           "stream": stream, "targets": list(targets), "widens": False}
+    raw = canon.canon2_bytes(doc)                     # raw, so a lifetime the writer refuses can be sent
+    key = _dist.GEN.test_key(signer)
+    sealed = env.seal_entries(raw, [(_dist.key_id(signer), key.sign(env.signed_message(raw)))] if signed else [])
+    return f"stage {sealed.hex()} {body.hex()} {now}"
+
+
+def floors_of():
+    return floors()
+
+
+def escalating(*, threshold=2, keys=("J", "K"), seed=None, answer_rate=OPERATOR_RATE) -> list:
+    """A cfs PEP whose install threshold is `threshold`, with operator O1, whose floor allows command 3 once in 60
+    seconds past its release, which refuses it, so the asks after the first escalate with dist:floor-rate."""
+    meta = floor_meta(rate={"allows": 1, "window": 60}, **({"answer_rate": answer_rate} if answer_rate else {}))
+    floor = install("install.floor", floors()["one"], meta=meta, signers=keys[:max(threshold, 1)])
+    return [*node(seed=seed), *base._anchor(keys=keys, threshold=threshold, operators=("O1",), bring=[floor]),
+            f"provision {S} {N}", *release(refuses_three(), 1), f"ask {N} {regs(3)} -"]
+
+
+def escalate(receipt: str, now=N, request="0301") -> list:
+    return [f"ask {now} {regs(3)} -", f"escalated {receipt} {request}"]
+
+
+def _cause(line: str):
+    """The event, cause and subject of the last record of a step, read without its signature (any instance key)."""
+    raw = bytes.fromhex(line.split()[-1])
+    return base.EVENTS21[raw[5]], causes.name(raw[7]) if raw[7] else None, raw[148 + 21]
+
+
+H = [hashlib.sha256(b"escalation %d" % k).hexdigest() for k in range(8)]
+
+
+def test_case_220_an_answer_is_signed_by_an_operator_used_once_and_bound_to_one_escalation(hc):
+    """case_220: OP2, OP3, AF8, the cfs half on the C core. A cfs PEP with an install threshold of 2 escalates a floor
+    action with dist:floor-rate. An answer `allow` by the enrolled operator key is applied once, with `answered` and
+    subject 5 and the request of its escalation handed back for a receipt with basis operator, and the same answer
+    again, also after a restart, is dist:answer-unbound. Answers signed by an install key and by an authority key are
+    dist:unknown-key, one whose lifetime is 601 seconds dist:bad-format, one past `expires` dist:expired, one whose
+    `receipt` names no escalation and one for an escalation older than 600 seconds dist:answer-unbound, an unsigned
+    message that claims to be an answer applies nothing, and an answer `refuse` is applied with its own answer."""
+    good = answer(H[0])
+    out = run(hc, [*escalating(), *escalate(H[0]), good, "answer", good, f"restart {N}", good,
+                   *escalate(H[1]), answer(H[1], signer="J"), answer(H[1], signer="A"), answer(H[1], lifetime=601),
+                   answer(H[1], not_before=N - 400), answer("ab" * 32), answer(H[1], now=N + 601),
+                   f"ask {N + 601} {regs(3)} -", *escalate(H[2], N + 601), answer(H[2], now=N + 601, signed=False),
+                   "answer", answer(H[2], "refuse", now=N + 601), "answer"])
+    assert ask(out[5])["cause"] == "dist:floor-rate" and out[6] == "escalated 0"
+    applied = _last(out[7])
+    assert (applied["event"], applied["subject"], applied["cause"]) == ("answered", 5, None)
+    sealed = good.split()[1]
+    assert out[8] == f"answer 1 1 {base._envelope_id(sealed)} {H[0]} 0301"
+    assert _refused(out[9]) == ("dist:answer-unbound", 5)
+    assert _refused(out[11]) == ("dist:answer-unbound", 5)               # after a restart
+    assert out[13] == "escalated 0"
+    refusals = [_refused(line) for line in out[14:20]]
+    # an install key alone is below the install threshold, so nothing counts and the envelope is not read (subject 0)
+    assert refusals == [("dist:unknown-key", 0), ("dist:unknown-key", 5), ("dist:bad-format", 0),
+                        ("dist:expired", 5), ("dist:answer-unbound", 5), ("dist:answer-unbound", 5)]
+    assert ask(out[20])["outcome"] == ALLOW and out[22] == "escalated 0"     # a new window of the floor's rate
+    assert _refused(out[23])[0] == "dist:bad-format" and out[24] == "answer 0"   # no signature block: nothing applied
+    assert _last(out[25])["event"] == "answered" and out[26].startswith("answer 1 0 ")
+
+
+def test_case_225_an_answer_reaches_only_cfs_on_the_c_core_and_never_moves_the_time_floor(hc, host_check):
+    """case_225: V5, V13, OP1, OP2, the `mesh` and `cfs` halves. A `mesh` PEP with an install threshold of 2 and an
+    operator key refuses a well signed operator.answer with dist:target-mismatch, and a cfs PEP with an open floor
+    escalation applies a good answer whose `not_before` is above its time floor, which does not move."""
+    mesh = run(host_check, [*base._node(), *base._anchor(operators=("O1",)), f"provision {S} {N}",
+                            answer(H[0], targets=("mesh",))])
+    assert _refused(mesh[1]) == ("dist:target-mismatch", 5)
+    out = run(hc, [*escalating(), *escalate(H[0]), answer(H[0], not_before=N + 100), f"record 0 {N}"])
+    assert _last(out[7])["event"] == "answered"
+    assert _last(out[8])["time"] == N                                  # the time floor did not move to not_before
+
+
+def test_case_231_an_answer_binds_to_one_pep_and_one_escalation(hc):
+    """case_231: OP1, OP2, the cfs half on the C core. A cfs PEP whose install threshold is 1 refuses a well signed
+    answer with dist:target-mismatch, and one with a threshold of 2 an answer whose `pep` is another PEP's id with
+    dist:answer-unbound. Two cfs PEPs hold escalations under the same receipt hash, and an answer for the first is
+    applied there and is dist:answer-unbound on the second."""
+    lone = run(hc, [*escalating(threshold=1, keys=("J",)), answer(H[0])])
+    assert _refused(lone[-1]) == ("dist:target-mismatch", 5)
+    first = run(hc, [*escalating(), *escalate(H[0]), answer(H[0], pep=pep_id("I2")), answer(H[0])])
+    assert _refused(first[7]) == ("dist:answer-unbound", 5)
+    assert _last(first[8])["event"] == "answered"
+    second = run(hc, [*escalating(seed=SEED2), *escalate(H[0]), answer(H[0]), answer(H[0], pep=pep_id("I2"))])
+    assert _cause(second[7]) == ("refused", "dist:answer-unbound", 5)
+    assert _cause(second[8]) == ("answered", None, 5)               # its own id: the same receipt hash, its own escalation
+
+
+def test_case_232_operator_answers_are_counted_against_a_signed_rate(hc):
+    """case_232: OP4, H1, AF8, the cfs half on the C core. A cfs PEP whose floor has an answer_rate of 2 in 600 seconds
+    applies two good `allow` answers for three open escalations, each with a record with event `answered` and subject
+    5, a restart after the second changing nothing, refuses the third with dist:floor-rate with its escalation still
+    open, and applies a `refuse` for it. A cfs floor that can escalate past its rate and has no answer_rate is
+    dist:bad-format."""
+    out = run(hc, [*escalating(answer_rate={"allows": 2, "window": 600}), *escalate(H[0]), *escalate(H[1]),
+                   *escalate(H[2]), answer(H[0]), f"restart {N}", answer(H[1]), answer(H[2]), answer(H[2], "refuse")])
+    sent = [_last(out[k]) for k in (11, 13)]
+    assert [(one["event"], one["subject"]) for one in sent] == [("answered", 5)] * 2
+    assert _refused(out[14]) == ("dist:floor-rate", 5)
+    assert _last(out[15])["event"] == "answered"                      # the escalation stayed open for the refuse
+    no_rate = install("install.floor", floors()["one"], meta=floor_meta(rate={"allows": 1, "window": 60}))
+    out = run(hc, [*node(), *base._anchor(operators=("O1",)), f"provision {S} {N}", _stage(no_rate)])
+    assert _refused(out[1]) == ("dist:bad-format", 1)
 
 
 @pytest.fixture(scope="module")

@@ -1148,6 +1148,32 @@ static int pp_floor_fresh(const uint8_t *image, size_t len, int k, const pp_layo
     return 1;
 }
 
+/* OP2: an operator's answer, `answer` `allow` or `refuse`, `pep` the PEP id of H1 in 32 lower case hex digits and
+ * `receipt` the SHA-256 of the receipt of the escalation it answers (kinds.read_answer). */
+static uint8_t pp_read_answer(const uint8_t *body, size_t len, int *allow, uint8_t pep[16], uint8_t receipt[32]) {
+    int form = pp_c2_check(body, len);
+    if (form == PP_C2_NOT_CANONICAL) return PP_CAUSE_NOT_CANONICAL;
+    if (form != PP_C2_OK) return PP_CAUSE_BAD_FORMAT;
+    pp_c2 c = {body, len, 0, 1};
+    const uint8_t *s;
+    size_t n;
+    if (!pp_c2_lit(&c, "{\"answer\":\"")) return PP_CAUSE_BAD_FORMAT;
+    if (pp_c2_lit(&c, "allow\"")) *allow = 1;
+    else if (pp_c2_lit(&c, "refuse\"")) *allow = 0;
+    else return PP_CAUSE_BAD_FORMAT;
+    if (!pp_c2_lit(&c, ",\"encoding\":\"canon/2\",\"format\":\"prismpath.dist-answer/1\",\"pep\":") ||
+        !pp_c2_plain_string(&c, &s, &n) || n != 32)
+        return PP_CAUSE_BAD_FORMAT;
+    for (size_t k = 0; k < 16; k++) {
+        int hi = pp_hex_nibble(s[2 * k]), lo = pp_hex_nibble(s[2 * k + 1]);
+        if (hi < 0 || lo < 0) return PP_CAUSE_BAD_FORMAT;
+        pep[k] = (uint8_t)(hi << 4 | lo);
+    }
+    if (!pp_c2_lit(&c, ",\"receipt\":") || !pp_scan_hash(&c, receipt) || !pp_c2_lit(&c, "}") || c.i != c.n)
+        return PP_CAUSE_BAD_FORMAT;
+    return PP_CAUSE_NONE;
+}
+
 /* ------------------------------------------------------------------ the verifier (V2 to V11) */
 
 static long long pp_raised(const pp_trust *trust, const char *stream) {
@@ -1283,6 +1309,7 @@ static void pp_verify_install(const pp_envelope *e, const pp_entry *entries, siz
                 uint16_t rule_cause;
                 escalates |= pp_cfs_rule(body, k, &rule_cause) == 2;
             }
+            escalates |= e->has_rate; /* AF8: past its rate the floor escalates an override */
             if (escalates && !e->has_answer_rate) { out->cause = PP_CAUSE_BAD_FORMAT; return; } /* OP4 */
             if ((out->cause = pp_floor_narrow_in(image, image_len, view->layout, command, body))) return;
         } else if ((out->cause = pp_floor_narrow(body, body_len, view->layout, command))) {
@@ -1291,6 +1318,36 @@ static void pp_verify_install(const pp_envelope *e, const pp_entry *entries, siz
     }
     if (!pp_inside(view, e->body_sha256)) out->cause = PP_CAUSE_ABOVE_CEILING;
     (void)now;
+}
+
+/* OP2 (verify._verify_answer): an operator.answer through V2 to V6 and V9, once V3 counted one operator key (OP1). V5
+ * takes it on the PEP's own stream for its own kind, only on cfs, the one kind with escalation this core builds, and
+ * an install threshold of 2 or more. V6 holds it to its own time and never raises the time floor (V13). V11 reads
+ * its body. Whether it names this PEP and an open escalation is the machine's (dist:answer-unbound). */
+static void pp_verify_answer(const pp_envelope *e, const uint8_t *body, size_t body_len, const pp_trust *trust,
+                             const pp_pep *pep, long long now, uint8_t answering, pp_verdict *out) {
+    const pp_install *r = pep->install ? pep->install->record : NULL;
+    const pp_row *row = pp_row_of(pep->kind);
+    if (answering) { out->cause = answering; return; }
+    if (pep->kind != PP_TGT_CFS || r == NULL || r->threshold < 2 || strcmp(e->stream, pep->stream) != 0 ||
+        e->targets != PP_BIT(pep->kind)) {
+        out->cause = PP_CAUSE_TARGET_MISMATCH;
+        return;
+    }
+    out->trust_bounded = 1;
+    if (e->body_size > row->trust_bound) { out->cause = PP_CAUSE_TOO_LARGE; return; }
+    long long time = trust->readable && trust->time_floor > now ? trust->time_floor : now;
+    if (pep->has_clock && e->not_before - time > PP_SKEW) { out->cause = PP_CAUSE_NOT_YET_VALID; return; }
+    if (time >= e->expires) { out->cause = PP_CAUSE_EXPIRED; return; }
+    uint8_t hash[32];
+    pp_sha256(body, body_len, hash);
+    if ((long long)body_len != e->body_size || memcmp(hash, e->body_sha256, 32) != 0) {
+        out->cause = PP_CAUSE_BODY_MISMATCH;
+        return;
+    }
+    int allow;
+    uint8_t id[16], receipt[32];
+    out->cause = pp_read_answer(body, body_len, &allow, id, receipt);
 }
 
 void pp_verify(const uint8_t *sealed, size_t sealed_len, const uint8_t *body, size_t body_len,
@@ -1319,9 +1376,11 @@ void pp_verify(const uint8_t *sealed, size_t sealed_len, const uint8_t *body, si
     uint8_t answering = pp_role_counting(record, 1, entries, n_entries, message, message_len);
     pp_envelope *e = &out->envelope;
     if (authority && installed && answering) {
-        /* OP1: an answer on a kind with no escalation is dist:target-mismatch whatever its signatures. Read only to
-         * name that cause, and nothing read is trusted (verify._answer_out_of_place) */
-        if (pp_read_envelope(envelope, envelope_len, e) == PP_CAUSE_NONE && e->artifact == PP_ART_OPERATOR_ANSWER) {
+        /* OP1: an answer on a kind with no escalation, or where the install threshold is 1, is dist:target-mismatch
+         * whatever its signatures. Read only to name that cause, and nothing read is trusted
+         * (verify._answer_out_of_place) */
+        if (pp_read_envelope(envelope, envelope_len, e) == PP_CAUSE_NONE && e->artifact == PP_ART_OPERATOR_ANSWER &&
+            (pep->kind != PP_TGT_CFS || record == NULL || record->threshold < 2)) {
             memset(e, 0, sizeof *e);
             out->cause = PP_CAUSE_TARGET_MISMATCH;
             return;
@@ -1340,7 +1399,10 @@ void pp_verify(const uint8_t *sealed, size_t sealed_len, const uint8_t *body, si
         pp_verify_install(e, entries, n_entries, message, message_len, body, body_len, trust, pep, now, installed, out);
         return;
     }
-    if (e->artifact == PP_ART_OPERATOR_ANSWER) { out->cause = answering ? answering : PP_CAUSE_TARGET_MISMATCH; return; }
+    if (e->artifact == PP_ART_OPERATOR_ANSWER) {
+        pp_verify_answer(e, body, body_len, trust, pep, now, answering, out);
+        return;
+    }
     if ((out->cause = authority)) return;
     /* V5: for this kind, an artifact it uses or a trust kind it applies, on its stream or `@trust`. A revocation or
      * a rotation is for every PEP whatever `targets` says, since one trust sequence counts the same for all (R1) */
@@ -1796,6 +1858,7 @@ static void pp_check_expiry(pp_pep_machine *pep) {
 static void pp_begin(pp_pep_machine *pep, long long now) {
     pep->now = now;
     pep->n_out = 0;
+    pep->answer.applied = 0;
     pp_check_expiry(pep);
 }
 
@@ -2456,6 +2519,11 @@ static uint8_t pp_apply_set(pp_pep_machine *pep, int kind) {
     set->has_staged = 0;
     pp_persist(pep, pp_set_part(kind));
     pep->set_lost[kind] = 0;
+    if (pep->config.applied) { /* RC4: durable, and before its event */
+        size_t body_len = 0;
+        const uint8_t *body = pp_statement_body(st, &body_len);
+        pep->config.applied(pep->config.context, st->sealed, st->sealed_len, body, body_len);
+    }
     if (kind == PP_SET_CEILING && d->ceiling_mark != !empty) { /* IS10: the mark of a ceiling held */
         d->ceiling_mark = !empty;
         pp_persist(pep, PP_PART_ANCHOR);
@@ -2471,8 +2539,8 @@ static uint8_t pp_apply_set(pp_pep_machine *pep, int kind) {
 /* IS11: apply a verified install.trust at once, durably before its event. Its keys, operators and threshold replace
  * the held ones, every key it leaves out is retired, oldest first and the ninth forgetting the oldest, and its seq
  * and envelope id are the install trust sequence and id. */
-static void pp_apply_install_trust(pp_pep_machine *pep, const pp_envelope *e, const uint8_t *body, size_t len,
-                                   int widened) {
+static void pp_apply_install_trust(pp_pep_machine *pep, const pp_envelope *e, const uint8_t *sealed,
+                                   size_t sealed_len, const uint8_t *body, size_t len, int widened) {
     static pp_install_trust_body b;
     pp_install *r = &pep->d.install;
     pp_read_install_trust(body, len, &b); /* V11 read it */
@@ -2520,6 +2588,7 @@ static void pp_apply_install_trust(pp_pep_machine *pep, const pp_envelope *e, co
         pp_persist(pep, PP_PART_ANCHOR);
     }
     pp_persist(pep, PP_PART_INSTALL);
+    if (pep->config.applied) pep->config.applied(pep->config.context, sealed, sealed_len, body, len); /* RC4 */
     widened |= e->widens;
     pep->stood_out |= widened;
     pp_emit_about(pep, widened ? PP_EV_INSTALL_WIDENED : PP_EV_INSTALL_APPLIED, widened ? PP_CAUSE_INSTALL_WIDENED : 0,
@@ -2533,7 +2602,7 @@ static uint8_t pp_stage_install(pp_pep_machine *pep, const pp_verdict *v, const 
                                 const uint8_t *body, size_t body_len) {
     const pp_envelope *e = &v->envelope;
     if (e->artifact == PP_ART_INSTALL_TRUST) {
-        pp_apply_install_trust(pep, e, body, body_len, v->install_widens);
+        pp_apply_install_trust(pep, e, sealed, sealed_len, body, body_len, v->install_widens);
         return PP_CAUSE_NONE;
     }
     int kind = pp_set_of(e->artifact);
@@ -2565,6 +2634,89 @@ static uint8_t pp_subject_of(const pp_envelope *e) {
     return pp_set_of(e->artifact) >= 0 ? (uint8_t)(pp_set_of(e->artifact) + 1) : 0;
 }
 
+void pp_pep_id(const pp_pep_machine *pep, uint8_t out[16]) {
+    uint8_t digest[32];
+    pp_sha256(pep->instance_public, 32, digest);
+    memcpy(out, digest, 16);
+}
+
+/* A fixed window of the PEP's own time (AF8, OP4): a new one starts once `window` seconds passed since its start. */
+static void pp_window(long long *start, uint32_t *count, long long window, long long time) {
+    if (*count == 0 || time >= *start + window || time < *start) {
+        *start = time;
+        *count = 0;
+    }
+}
+
+/* OP2 to OP4 (pep._apply_answer): an answer that verified names this PEP's id and an open escalation the action floor
+ * made under the floor it still holds, no older than 600 seconds and not answered, dist:answer-unbound otherwise. An
+ * `allow` past the signed answer_rate is dist:floor-rate and the escalation stays open. Otherwise the count and the
+ * escalation, written as answered, are durable before the PEP acts, the answer is the caller's in pep->answer, and
+ * the PEP sends `answered` with subject 5. */
+static uint8_t pp_apply_answer(pp_pep_machine *pep, const pp_envelope *e, const uint8_t *body, size_t len) {
+    pp_durable *d = &pep->d;
+    int allow = 0;
+    uint8_t id[16], own[16], receipt[32];
+    (void)pp_read_answer(body, len, &allow, id, receipt); /* V11 read it */
+    pp_pep_id(pep, own);
+    const pp_statement *floor = pp_held_set(pep, PP_SET_FLOOR);
+    long long time = pp_time(pep);
+    pp_escalation *one = NULL;
+    if (memcmp(id, own, 16) == 0 && floor && memcmp(floor->envelope.policy_sha256, e->policy_sha256, 32) == 0)
+        for (size_t k = 0; k < d->n_open && one == NULL; k++) {
+            pp_escalation *open = &d->open[k];
+            if (!open->answered && memcmp(open->receipt, receipt, 32) == 0 &&
+                memcmp(open->policy_sha256, floor->envelope.policy_sha256, 32) == 0 && time >= open->at &&
+                time - open->at <= PP_ANSWER_LIFE)
+                one = open;
+        }
+    if (one == NULL) {
+        pp_emit_about(pep, PP_EV_REFUSED, PP_CAUSE_ANSWER_UNBOUND, PP_SUBJECT_ANSWER);
+        return PP_CAUSE_ANSWER_UNBOUND;
+    }
+    if (allow) {
+        const pp_envelope *fe = &floor->envelope;
+        if (fe->has_answer_rate) pp_window(&d->answer_start, &d->answer_count, fe->answer_window, time);
+        if (!fe->has_answer_rate || d->answer_count >= (uint32_t)fe->answer_allows) {
+            pp_emit_about(pep, PP_EV_REFUSED, PP_CAUSE_FLOOR_RATE, PP_SUBJECT_ANSWER); /* OP4: it stays open */
+            return PP_CAUSE_FLOOR_RATE;
+        }
+        d->answer_count++;
+    }
+    one->answered = 1;
+    pp_persist(pep, PP_PART_RATES); /* OP3: before the PEP acts on it */
+    pep->answer.applied = 1;
+    pep->answer.allow = allow;
+    memcpy(pep->answer.envelope_id, e->envelope_id, 32);
+    memcpy(pep->answer.receipt, receipt, 32);
+    memcpy(pep->answer.policy_sha256, one->policy_sha256, 32);
+    pep->answer.request_len = one->request_len;
+    memcpy(pep->answer.request, one->request, one->request_len);
+    pp_emit_about(pep, PP_EV_ANSWERED, 0, PP_SUBJECT_ANSWER);
+    return PP_CAUSE_NONE;
+}
+
+uint8_t pp_pep_escalated(pp_pep_machine *pep, const uint8_t receipt_sha256[32], const uint8_t *request, size_t len) {
+    pp_durable *d = &pep->d;
+    if (!pep->escalating || len > PP_REQUEST_MAX) return PP_CAUSE_NOT_STAGED;
+    pep->escalating = 0;
+    size_t kept = 0;
+    for (size_t k = 0; k < d->n_open; k++) /* the answered ones go, and the oldest past eight */
+        if (!d->open[k].answered) d->open[kept++] = d->open[k];
+    size_t from = kept > PP_OPEN_ESCALATIONS - 1 ? kept - (PP_OPEN_ESCALATIONS - 1) : 0;
+    memmove(d->open, d->open + from, (kept - from) * sizeof d->open[0]);
+    d->n_open = kept - from;
+    pp_escalation *one = &d->open[d->n_open++];
+    memset(one, 0, sizeof *one);
+    memcpy(one->receipt, receipt_sha256, 32);
+    memcpy(one->policy_sha256, pep->escalating_policy, 32);
+    one->at = pp_time(pep);
+    one->request_len = (uint8_t)len;
+    memcpy(one->request, request, len);
+    pp_persist(pep, PP_PART_RATES);
+    return PP_CAUSE_NONE;
+}
+
 /* G1, G2 and section 21: one sealed envelope and its body verified and held, and the cause it was refused with. */
 static uint8_t pp_stage_one(pp_pep_machine *pep, const uint8_t *sealed, size_t sealed_len, const uint8_t *body,
                             size_t body_len) {
@@ -2580,9 +2732,11 @@ static uint8_t pp_stage_one(pp_pep_machine *pep, const uint8_t *sealed, size_t s
     pp_verify(sealed, sealed_len, body, body_len, &d->trust, &view, pep->now, &verdict);
     const pp_envelope *e = verdict.has_envelope ? &verdict.envelope : NULL;
     int installing = e && pp_is_install(e->artifact);
+    int answer = e && e->artifact == PP_ART_OPERATOR_ANSWER;
     uint8_t subject = e ? pp_subject_of(e) : 0, cause = verdict.cause;
     if (pep->record_lost && (e == NULL || !pp_on_trust_stream(e->artifact))) cause = PP_CAUSE_INSTALL_LOST; /* IS10 */
-    else if (pep->locked && !installing) cause = PP_CAUSE_FLOOR_LOST; /* Q5: a locked PEP still takes install statements */
+    else if (pep->locked && !installing && !answer)
+        cause = PP_CAUSE_FLOOR_LOST; /* Q5: a locked PEP still takes install statements and answers */
     else if (pp_ceiling_lost(pep) && e && !pp_on_trust_stream(e->artifact) && e->artifact != PP_ART_INSTALL_CEILING &&
              e->artifact != PP_ART_INSTALL_TRUST && e->artifact != PP_ART_OPERATOR_ANSWER)
         cause = PP_CAUSE_INSTALL_LOST; /* IS10: frozen until a ceiling is held again */
@@ -2593,6 +2747,7 @@ static uint8_t pp_stage_one(pp_pep_machine *pep, const uint8_t *sealed, size_t s
     if (cause) { pp_emit_about(pep, PP_EV_REFUSED, cause, subject); return cause; }
     if (verdict.unchanged) { pp_emit(pep, PP_EV_BEAT, 0); return PP_CAUSE_NONE; } /* Q3, R1, IS6 */
     if (installing) return pp_stage_install(pep, &verdict, sealed, sealed_len, body, body_len);
+    if (answer) return pp_apply_answer(pep, e, body, body_len);
     if (e->artifact == PP_ART_TRUST_REVOCATION) {
         uint8_t cause = pp_apply_revocation(pep, e, body, body_len); /* B2: applied when it verifies, durable before reported (R3) */
         if (cause) { pp_refuse(pep, cause); return cause; }
@@ -2894,6 +3049,8 @@ void pp_pep_ask(pp_pep_machine *pep, const uint8_t *regs, size_t regs_len, const
                 pp_decision *out) {
     pp_begin(pep, now);
     memset(out, 0, sizeof *out);
+    out->decided_rule = out->would_rule = -1;
+    pep->escalating = 0;
     pp_durable *d = &pep->d;
     pp_target kind = pep->config.kind;
     size_t n_ages = ages && regs_len >= 4 ? (regs_len - 4) / 8 : 0;
@@ -2913,7 +3070,7 @@ void pp_pep_ask(pp_pep_machine *pep, const uint8_t *regs, size_t regs_len, const
         basis = PP_BASIS_FALLBACK;
     }
     uint8_t outcome = PP_OUT_REFUSE, cause = pep->locked ? PP_CAUSE_FLOOR_LOST : PP_CAUSE_POLICY_LAPSED;
-    if (table) (void)pp_table_answer(kind, table, table_len, regs, regs_len, &outcome, &cause);
+    int decided = table ? pp_table_answer(kind, table, table_len, regs, regs_len, &outcome, &cause) : -1;
     out->held_mark = basis == PP_BASIS_RELEASE && pep->held;
     /* AF1, AF2: the action floor first. It allows, on cfs it also escalates with its rule's cause, and it is silent
      * on a refusal, on a request it cannot read and when an independent field it tests is stale (AF10) */
@@ -2930,16 +3087,16 @@ void pp_pep_ask(pp_pep_machine *pep, const uint8_t *regs, size_t regs_len, const
         const pp_envelope *fe = &floor->envelope;
         if (floor_outcome == PP_OUT_ALLOW && override && fe->has_rate && k < PP_FLOOR_RULES) {
             /* AF8: overrides counted per rule in fixed windows of the PEP's time */
-            long long time = pp_time(pep);
-            if (d->rate_count[k] == 0 || time >= d->rate_start[k] + fe->rate_window || time < d->rate_start[k]) {
-                d->rate_start[k] = time;
-                d->rate_count[k] = 0;
-            }
+            pp_window(&d->rate_start[k], &d->rate_count[k], fe->rate_window, pp_time(pep));
             if (d->rate_count[k] >= (uint32_t)fe->rate_allows) {
                 /* past the rate: escalated with dist:floor-rate where the kind escalates, else the release decides */
                 if (kind == PP_TGT_CFS) {
                     floor_outcome = PP_OUT_ESCALATE;
                     floor_cause = PP_CAUSE_FLOOR_RATE;
+                    out->rate_escalated = 1; /* RC3: the spent window, for the run's rates */
+                    out->rule = k;
+                    out->window = d->rate_start[k];
+                    out->count = d->rate_count[k];
                 } else {
                     answers = 0;
                 }
@@ -2963,6 +3120,12 @@ void pp_pep_ask(pp_pep_machine *pep, const uint8_t *regs, size_t regs_len, const
             memcpy(out->policy_sha256, fe->policy_sha256, 32);
             out->held_mark = pep->held;
             out->override = override;
+            out->decided_rule = k;
+            out->would_rule = decided;
+            if (floor_outcome == PP_OUT_ESCALATE) { /* OP3: an escalation pp_pep_escalated may open */
+                pep->escalating = 1;
+                memcpy(pep->escalating_policy, fe->policy_sha256, 32);
+            }
             out->would = table ? outcome : PP_OUT_NONE;
             out->would_cause = table ? cause : 0;
             if (table) {
@@ -2972,8 +3135,10 @@ void pp_pep_ask(pp_pep_machine *pep, const uint8_t *regs, size_t regs_len, const
             return;
         }
         out->counted = 0;
+        out->rate_escalated = 0;
     }
     out->outcome = outcome;
+    out->decided_rule = decided;
     out->cause = cause;
     out->basis = basis;
     if (policy) {
@@ -3155,6 +3320,12 @@ static void pp_io_part(pp_io *io, pp_durable *d, int part) {
             pp_io_bytes(io, &d->rate_start[k], sizeof d->rate_start[k]);
             pp_io_u32(io, &d->rate_count[k]);
         }
+        pp_io_bytes(io, &d->answer_start, sizeof d->answer_start); /* OP4, OP3 */
+        pp_io_u32(io, &d->answer_count);
+        pp_io_array(io, d->open, &d->n_open, sizeof d->open[0], PP_OPEN_ESCALATIONS);
+        if (io->ok && !io->p)
+            for (size_t k = 0; k < d->n_open; k++)
+                if (d->open[k].request_len > PP_REQUEST_MAX || d->open[k].answered > 1) io->ok = 0;
         break;
     case PP_PART_SET_FLOOR: case PP_PART_SET_FALLBACK: case PP_PART_SET_CEILING: {
         pp_install_set *set = &d->sets[index - pp_part_index(PP_PART_SET_FLOOR)];
@@ -3186,7 +3357,12 @@ static void pp_part_lost(pp_durable *d, int part, int absent) {
     case PP_PART_STAGED: d->has_staged = 0; break;
     case PP_PART_PENDING: d->has_pending = !absent; break; /* an intent that does not read is an interrupted one */
     case PP_PART_INSTALL: d->install_reads = 0; d->has_install = 0; break; /* IS10: lost when the anchor marks one */
-    case PP_PART_RATES: d->rates_reads = 0; memset(d->rate_count, 0, sizeof d->rate_count); break;
+    case PP_PART_RATES:
+        d->rates_reads = 0;
+        memset(d->rate_count, 0, sizeof d->rate_count);
+        d->answer_count = 0;
+        d->n_open = 0; /* an escalation no copy holds can be answered no more */
+        break;
     case PP_PART_SET_FLOOR: case PP_PART_SET_FALLBACK: case PP_PART_SET_CEILING: {
         pp_install_set *set = &d->sets[pp_part_index(part) - pp_part_index(PP_PART_SET_FLOOR)];
         set->has_held = set->has_staged = 0;

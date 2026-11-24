@@ -164,7 +164,8 @@ static void print_decision(const pp_decision *d) {
     print_hex16(d->has_policy ? d->policy_sha256 : NULL);
     printf(" %u %u ", d->would, d->would_cause);
     print_hex16(d->has_would_policy ? d->would_policy : NULL);
-    printf(" %d %d %d %lld %u\n", d->override, d->counted, d->rule, d->window, d->count);
+    printf(" %d %d %d %lld %u %d %d %d\n", d->override, d->counted, d->rule, d->window, d->count, d->rate_escalated,
+           d->decided_rule, d->would_rule);
 }
 
 /* One machine script, read from stdin up to its "done". Beyond the steps above:
@@ -184,6 +185,10 @@ static void print_decision(const pp_decision *d) {
  *   lose2 <part> | corrupt <part>       the second copy does not read | one byte of the first copy changed
  *   installid
  *   held                                the envelope id of the held floor, fallback policy and ceiling, or "-" each
+ *   escalated <receipt hex> <request hex or ->   OP3: open the escalation the last ask made, under that receipt hash
+ *   answer                              OP3: the answer the last step applied: "answer <applied> <allow> <envelope
+ *                                       id> <receipt> <request hex>", or "answer 0"
+ *   pepid                               H1: "pepid <hex>"
  *
  * print "provision-refused <cause>", "ask ...", "legacy <cause>", "installid <hex>", "anchor <cause> <stream>
  * <target> <fingerprint>" and "check <cause>". */
@@ -324,6 +329,31 @@ static int machine(const char *args, pp_trust *anchor) {
             pp_decision d;
             pp_pep_ask(&pep, regs, n, given, now, &d);
             print_decision(&d);
+        } else if (strcmp(word, "escalated") == 0) {
+            static uint8_t request[PP_REQUEST_MAX + 1];
+            uint8_t receipt[32];
+            if (sscanf(rest, "%s %s", a, b) != 2) return 2;
+            hash32(a, receipt);
+            size_t n = unhex(b, request, sizeof request);
+            printf("escalated %u\n", pp_pep_escalated(&pep, receipt, request, n));
+        } else if (strcmp(word, "answer") == 0) {
+            if (!pep.answer.applied) printf("answer 0\n");
+            else {
+                printf("answer 1 %d ", pep.answer.allow);
+                for (int k = 0; k < 32; k++) printf("%02x", pep.answer.envelope_id[k]);
+                printf(" ");
+                for (int k = 0; k < 32; k++) printf("%02x", pep.answer.receipt[k]);
+                printf(" ");
+                if (pep.answer.request_len == 0) printf("-");
+                for (size_t k = 0; k < pep.answer.request_len; k++) printf("%02x", pep.answer.request[k]);
+                printf("\n");
+            }
+        } else if (strcmp(word, "pepid") == 0) {
+            uint8_t id[16];
+            pp_pep_id(&pep, id);
+            printf("pepid ");
+            for (int k = 0; k < 16; k++) printf("%02x", id[k]);
+            printf("\n");
         } else if (strcmp(word, "legacy") == 0) {
             printf("legacy %u\n", pp_pep_legacy(&pep, rest));
         } else if (strcmp(word, "held") == 0) { /* P2 step 4, IS8: the envelope id of each install set held */
