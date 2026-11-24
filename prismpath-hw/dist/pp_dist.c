@@ -2688,6 +2688,7 @@ static uint8_t pp_apply_answer(pp_pep_machine *pep, const pp_envelope *e, const 
     pp_persist(pep, PP_PART_RATES); /* OP3: before the PEP acts on it */
     pep->answer.applied = 1;
     pep->answer.allow = allow;
+    pep->answer.cause = one->cause;
     memcpy(pep->answer.envelope_id, e->envelope_id, 32);
     memcpy(pep->answer.receipt, receipt, 32);
     memcpy(pep->answer.policy_sha256, one->policy_sha256, 32);
@@ -2711,6 +2712,7 @@ uint8_t pp_pep_escalated(pp_pep_machine *pep, const uint8_t receipt_sha256[32], 
     memset(one, 0, sizeof *one);
     memcpy(one->receipt, receipt_sha256, 32);
     memcpy(one->policy_sha256, pep->escalating_policy, 32);
+    one->cause = pep->escalating_cause;
     one->at = pp_time(pep);
     one->request_len = (uint8_t)len;
     memcpy(one->request, request, len);
@@ -3126,6 +3128,7 @@ void pp_pep_ask(pp_pep_machine *pep, const uint8_t *regs, size_t regs_len, const
             if (floor_outcome == PP_OUT_ESCALATE) { /* OP3: an escalation pp_pep_escalated may open */
                 pep->escalating = 1;
                 memcpy(pep->escalating_policy, fe->policy_sha256, 32);
+                pep->escalating_cause = floor_cause;
             }
             out->would = table ? outcome : PP_OUT_NONE;
             out->would_cause = table ? cause : 0;

@@ -34,6 +34,12 @@ held when the run began pinned beside the two keys, `KEYS/install.json`, the `in
 ground provisioned it with (`install_pin`). A run with no install statements has both files empty, run.json names
 neither, and it is verified as before with no install key pinned.
 
+An app whose action floor escalates also downlinks `escalations.jsonl`, every escalation document it opened (OP3),
+which run.json names by hash. `escalations` reads them by the SHA-256 the ground seals an operator's answer to. The
+answers the app applied are in `install.jsonl`, and each answered request is an `operator` case of the run, its
+receipt the answer's, a route to allow or the escalation's own refusal, which the verifier holds to the answer and to
+the escalation it names.
+
 The app also sends a state record of policy distribution (docs/design/spec-policy-distribution.md H1) in every
 housekeeping packet, signed by the same instance key. `read_state_record` checks one and reads it, with the type 3
 entry of H10 an app that holds an install record carries.
@@ -106,6 +112,19 @@ def root_history(run: Path, instance_pub: bytes) -> List[Dict]:
     return out
 
 
+def escalations(run: Path) -> Dict[str, Dict]:
+    """OP3: {receipt hash: escalation document} of every escalation the app opened, from `escalations.jsonl` (empty for
+    a run with none), each a canonical `prismpath.cfs-escalation/1` document, or Bad."""
+    path = Path(run) / "escalations.jsonl"
+    out = {}
+    for number, line in enumerate(core_evidence._lines(path) if path.exists() else []):
+        doc = canon2.loads(line)
+        if canon2.dumps(doc) != line or not isinstance(doc, dict) or doc.get("format") != core_evidence.ESCALATION_FORMAT:
+            raise Bad(f"escalations.jsonl line {number} is not a {core_evidence.ESCALATION_FORMAT} document")
+        out[core_evidence.sha256_hex(line)] = doc
+    return out
+
+
 def install_pin(anchor: bytes) -> Dict:
     """RC4: the install key set a run of an app provisioned with `anchor` starts from, the anchor's `install` member,
     which the ground keeps as `KEYS/install.json`."""
@@ -117,7 +136,8 @@ def install_pin(anchor: bytes) -> Dict:
 
 def verify(run: Path, keys: Path) -> Dict:
     """Both checks, or Bad (the verifier's own refusal is passed on as Bad with its message). The install key set is
-    pinned from `KEYS/install.json` when the ground holds one (RC4)."""
+    pinned from `KEYS/install.json` when the ground holds one (RC4), and the escalation documents are held to the hash
+    run.json names and counted (OP3)."""
     run, keys = Path(run), Path(keys)
     pin_install = keys / "install.json"
     try:
@@ -127,6 +147,11 @@ def verify(run: Path, keys: Path) -> Dict:
     except core_evidence.Bad as bad:
         raise Bad(f"prismpath evidence verify refuses the run: {bad}") from None
     summary["roots"] = root_history(run, (keys / "instance.pub").read_bytes())
+    named = core_evidence._manifest(run).get("escalations_sha256")
+    path = run / "escalations.jsonl"
+    if named is not None and (not path.exists() or core_evidence.sha256_hex(path.read_bytes()) != named):
+        raise Bad("escalations.jsonl is not the file run.json names")
+    summary["escalations"] = len(escalations(run))
     return summary
 
 

@@ -326,6 +326,24 @@ static void PRISMPATH_APP_SendRecord(const uint8 *Record, size_t Len)
     PRISMPATH_APP_SendHk();
 }
 
+static void PRISMPATH_APP_Forward(PRISMPATH_APP_ProposedCmd_t *Proposed, uint32 Seq);
+
+/* OP3: an answer `allow` whose operator case is written carries out the request it answers, the payload the escalation
+ * kept, on the vehicle message id as an allowed proposal is. The proposal's function code is not kept with it, so the
+ * command goes with code 0 and the same payload. */
+static void PRISMPATH_APP_Enact(const PP_AppStep_t *Step)
+{
+    PRISMPATH_APP_ProposedCmd_t Request;
+    size_t                      Room = sizeof(Request) - sizeof(CFE_MSG_CommandHeader_t);
+
+    memset(&Request, 0, sizeof(Request));
+    CFE_MSG_Init(CFE_MSG_PTR(Request.CommandHeader), PRISMPATH_APP_Data.VehicleMid, sizeof(Request));
+    memcpy(&((uint8 *)&Request)[sizeof(CFE_MSG_CommandHeader_t)], Step->AnswerRequest,
+           Step->AnswerRequestLen < Room ? Step->AnswerRequestLen : Room);
+    PRISMPATH_APP_Data.HkTlm.Payload.Allowed++;
+    PRISMPATH_APP_Forward(&Request, PRISMPATH_APP_Data.HkTlm.Payload.Proposed);
+}
+
 /* Every state record a step made, each in a housekeeping packet with an event, then the events of what it did. */
 static void PRISMPATH_APP_Report(void)
 {
@@ -399,15 +417,20 @@ static void PRISMPATH_APP_Report(void)
         {
             snprintf(&hex[2 * i], 3, "%02x", Step->AnswerReceipt[i]);
         }
-        /* OP3, OP4: the answered record is in housekeeping; the request is not republished, since an operator receipt
-         * needs the basis `operator`, which a core run does not have yet (RC4) */
-        if (Step->AnswerAllow)
+        /* OP3, OP4, RC4: the answered record is in housekeeping, and the request is receipted in a case of basis
+         * operator before an answer `allow` carries it out */
+        if (Step->AnswerRecordError)
         {
-            PRISMPATH_APP_Data.HkTlm.Payload.NotEnacted++;
+            PRISMPATH_APP_Data.HkTlm.Payload.RecordErrors++;
         }
         CFE_EVS_SendEvent(PRISMPATH_APP_ANSWERED_EID, CFE_EVS_EventType_CRITICAL,
-                          "PRISMPATH_APP ANSWERED %s receipt=%s: not enacted, the request is not republished",
-                          Step->AnswerAllow ? "allow" : "refuse", hex);
+                          "PRISMPATH_APP ANSWERED %s receipt=%s operator receipt=%u%s",
+                          Step->AnswerAllow ? "allow" : "refuse", hex, (unsigned int)Step->AnswerIndex,
+                          Step->AnswerReceipted ? "" : ": not receipted, so the request is not carried out");
+        if (Step->AnswerAllow && Step->AnswerReceipted)
+        {
+            PRISMPATH_APP_Enact(Step);
+        }
     }
     if (Step->RunError && DIST->Started)
     {

@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """What the app's receipts must be, from the Python reference: the reading a payload is, its receipt line, which
-receipts the app made while held, and the RC4 files of an app with install statements, each written as
-`core_evidence.produce` writes it.
+receipts the app made while held, and the RC4 files of an app with install statements, its escalation documents and
+its operator cases (OP3), each written as `core_evidence.produce` writes it.
 
 The app writes both in C (fsw/src/prismpath_app_run.c). These are written from the layout header and the
 reference's own writers (`canon2.dumps`, `core_evidence._decision`, the reference decision path through
@@ -91,3 +91,34 @@ def bases(run: Path) -> List[Tuple[str, str, bool, int]]:
         case = canon2.loads(line)
         out.append((case["case"], case.get("basis", "release"), case.get("enacted", True), len(case["readings"])))
     return out
+
+
+def escalation_doc(*, floor_version: int, cause_code: int, n: int, policy_sha256: str, payload: bytes, time: int) -> bytes:
+    """The escalation document the app opens an escalation of its action floor under (OP3,
+    `prismpath.cfs-escalation/1`), whose SHA-256 an operator's answer names as its `receipt`."""
+    return canon2.dumps({"case": f"v{floor_version}", "cause_code": cause_code, "decider": DECIDER,
+                         "format": core_evidence.ESCALATION_FORMAT, "n": n, "policy_sha256": policy_sha256,
+                         "reading_sha256": core_evidence.sha256_hex(reading_bytes(payload)), "time": time})
+
+
+def escalation_lines(docs) -> bytes:
+    """escalations.jsonl for the escalation documents the app opened, in order, as core_evidence.produce writes it."""
+    return b"".join(bytes(doc) + b"\n" for doc in docs)
+
+
+def operator_cases(run: Path) -> List[Tuple[str, str, str, bytes]]:
+    """(case id, answer envelope id, floor statement envelope id, reading bytes) of every `operator` case of a run, in
+    order (OP3, RC4): each holds the one request an operator answered."""
+    out = []
+    for line in core_evidence._lines(Path(run) / "cases.jsonl"):
+        case = canon2.loads(line)
+        if case.get("basis") == "operator":
+            out.append((case["case"], case["answer"], case["install"], bytes.fromhex(case["readings"][0])))
+    return out
+
+
+def unasked(run: Path) -> List[str]:
+    """The id of every floor case of a run marked `asked` false: the floor decided with no release and no fallback
+    policy to ask, so its `would` is none and no not enacted line goes with it (AF7)."""
+    return [canon2.loads(line)["case"] for line in core_evidence._lines(Path(run) / "cases.jsonl")
+            if canon2.loads(line).get("asked") is False]

@@ -31,6 +31,8 @@
  *   install.jsonl         every install statement the enforcement point decided under or applied, in order, each
  *                         its body and sealed envelope in hex (RC4), empty for an app with none
  *   rates.jsonl           a line per override the action floor counted, naming its receipt's leaf (AF8, RC3)
+ *   escalations.jsonl     every escalation document the action floor opened (OP3), the bytes whose SHA-256 an
+ *                         operator's answer names as its `receipt`, one per line
  *
  * The state that must survive a processor reset is PP_RunState_t, which the app keeps in the Critical Data
  * Store: the highest accepted image version and its table digest, the accumulator's peaks and count, the open
@@ -82,17 +84,26 @@ typedef struct
     int64_t               TrustSeq;     /**< the seq of the last install.trust in install.jsonl, when HasTrust */
     uint32_t              HasTrust;
     uint32_t              Installed;    /**< 1 once a floor or fallback case was opened */
+    uint64_t              EscalationsLen; /**< bytes of escalations.jsonl written (OP3) */
     struct ppt_merkle_acc Acc;          /**< the receipts' peaks and count */
 } PP_RunState_t;
 
-/** What a case holds (RC4): the decisions of the active release, of the action floor, of the fallback policy, and the
- *  release's answer for a reading the action floor decided (AF7), a case of the release marked not enacted. */
+/** What a case holds (RC4): the decisions of the active release, of the action floor, of the fallback policy, the
+ *  release's answer for a reading the action floor decided (AF7), a case of the release marked not enacted, the one
+ *  request an operator answered (OP2, OP3), a case of basis operator under the floor's image, the fallback policy's
+ *  answer for a reading the action floor decided while the fallback policy decides, a case of the fallback policy
+ *  marked not enacted, and the action floor's decisions while no release and no fallback policy was held to ask, a
+ *  floor case marked `asked` false, whose `would` is none. */
 enum
 {
-    PP_CASE_RELEASE  = 0,
-    PP_CASE_FLOOR    = 1,
-    PP_CASE_FALLBACK = 2,
-    PP_CASE_WOULD    = 3
+    PP_CASE_RELEASE        = 0,
+    PP_CASE_FLOOR          = 1,
+    PP_CASE_FALLBACK       = 2,
+    PP_CASE_WOULD          = 3,
+    PP_CASE_OPERATOR       = 4,
+    PP_CASE_FALLBACK_WOULD = 5,
+    PP_CASE_FLOOR_ALONE    = 6,
+    PP_CASE_KINDS          = 7
 };
 
 #define PP_RUN_MAGIC 0x50505253u /* "PPRS" */
@@ -116,6 +127,7 @@ enum
     PP_FILE_INSTANCE,
     PP_FILE_INSTALL,
     PP_FILE_RATES,
+    PP_FILE_ESCALATIONS,
     PP_FILE_COUNT
 };
 
@@ -210,16 +222,36 @@ int PP_Run_Record(PP_RunState_t *State, const PP_RunIo_t *Io, const PP_RunKeys_t
 /**
  * Record one decision in a case of `Kind` (RC4): PP_CASE_RELEASE as PP_Run_Record does, PP_CASE_FLOOR or
  * PP_CASE_FALLBACK under the install set's table `Table`, whose body hash is `Digest`, named by the envelope id of its
- * install statement `Install`, and PP_CASE_WOULD for the active release's answer to a reading the action floor decided
- * (AF7), a case of the release marked not enacted. A case opens when the kind, the table, the install statement or the
- * hold changes. A floor or fallback case's image line names its install statement and carries no signature; its id is
- * floor.v<version>.<n> or fallback.v<version>.<n>, a would case's would.v<version>.<n>. Leaf is the receipt's leaf
- * hash, for rates.jsonl. Returns 0, or -1 with the state and the files unchanged.
+ * install statement `Install`, PP_CASE_WOULD for the active release's answer to a reading the action floor decided
+ * (AF7), a case of the release marked not enacted, PP_CASE_FALLBACK_WOULD for the fallback policy's answer to one, a
+ * fallback case marked not enacted under the fallback policy's table and statement, and PP_CASE_FLOOR_ALONE for a
+ * floor decision with no release and no fallback policy to ask, a floor case with `asked` false. A case opens when
+ * the kind, the table, the install statement or the hold changes. An installed case's image line names its install
+ * statement and carries no signature; its id is floor.v<version>.<n>, fallback.v<version>.<n>, would.v<version>.<n>
+ * or would.fallback.v<version>.<n>. Leaf is the receipt's leaf hash, for rates.jsonl. PP_CASE_OPERATOR is
+ * PP_Run_RecordOperator's. Returns 0, or -1 with the state and the files unchanged.
  */
 int PP_Run_RecordCase(PP_RunState_t *State, const PP_RunIo_t *Io, const PP_RunKeys_t *Keys, int Kind,
                       const uint8_t Install[32], const PP_PolicyTable_t *Table, const uint8_t Digest[32],
                       const uint8_t *Payload, size_t PayloadLen, const PP_Verdict_t *Verdict, int Hold, uint64_t *Index,
                       uint8_t Leaf[32]);
+
+/**
+ * OP2, OP3: the one request an operator answered, in a case of its own with basis operator: `Floor` the action floor's
+ * table it was escalated under, whose body hash is `Digest`, `Install` the envelope id of the floor's statement,
+ * `Answer` the envelope id of the operator.answer, and `Request` the request the escalation kept. Its receipt is the
+ * answer's: a route to allow for `Allow`, else a refusal with the escalation's own `Cause`, spelled by the registry
+ * (prismpath_app_causes.h). The case's id is operator.v<floor version>.<n>, and its image line names the answer beside
+ * the floor's statement. Returns 0, or -1 with the state and the files unchanged.
+ */
+int PP_Run_RecordOperator(PP_RunState_t *State, const PP_RunIo_t *Io, const PP_RunKeys_t *Keys,
+                          const uint8_t Install[32], const uint8_t Answer[32], const PP_PolicyTable_t *Floor,
+                          const uint8_t Digest[32], const uint8_t *Request, size_t RequestLen, int Allow, uint8_t Cause,
+                          int Hold, uint64_t *Index);
+
+/** OP3: an escalation document the action floor opened, a line of escalations.jsonl. 0, or -1 with the state and the
+ *  file unchanged. */
+int PP_Run_Escalation(PP_RunState_t *State, const PP_RunIo_t *Io, const char *Doc, size_t Len);
 
 /** AF8, RC3: a counted override's line of rates.jsonl, {"count","receipt_sha256","rule","window"}. 0, or -1 with the
  *  state and the file unchanged. */
@@ -236,7 +268,8 @@ int PP_Run_Install(PP_RunState_t *State, const PP_RunIo_t *Io, const uint8_t *Se
  * Seal the run: write cases.jsonl (the stream, its open case closed), run.json, receipts.roots.jsonl with one
  * statement signed with the instance key, the two public keys, and append the statement to roots.log.jsonl.
  * A run that holds an install statement or a floor or fallback case names install.jsonl and rates.jsonl by hash in
- * run.json, with the seq of its last install.trust (null for none); one that holds neither is written as before.
+ * run.json, with the seq of its last install.trust (null for none), and escalations.jsonl when the action floor opened
+ * an escalation (OP3); one that holds neither is written as before.
  * TimeUs is the statement's time. Returns 0, -2 when no instance or authority key is loaded, -1 when a document
  * does not fit its buffer, or PP_SEAL_FILE_ERR(file) for the file that could not be read or written.
  */

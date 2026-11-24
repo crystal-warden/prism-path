@@ -161,6 +161,13 @@ typedef struct
     int     AnswerAllow;           /**< the answer was `allow` */
     uint8_t AnswerId[32];          /**< its envelope id */
     uint8_t AnswerReceipt[32];     /**< the receipt hash of the escalation it answered */
+    int     AnswerReceipted;       /**< its operator case was written (OP3, RC4), receipt AnswerIndex: an answer
+                                        `allow` is then carried out with AnswerRequest */
+    int     AnswerRecordError;     /**< the operator case could not be written, so an answer `allow` is not carried
+                                        out */
+    uint64_t AnswerIndex;
+    size_t  AnswerRequestLen;      /**< the escalated request, the payload the escalation kept */
+    uint8_t AnswerRequest[PP_REQUEST_MAX];
     int     RunError;              /**< the run's files could not be begun, or an install statement the core applied
                                         could not be written to install.jsonl, so the run will not verify (RC4) */
 } PP_AppStep_t;
@@ -177,7 +184,8 @@ typedef struct
     int      Receipted; /**< a receipt was written, at Receipt */
     uint64_t Receipt;
     int      NotEnacted;   /**< the action floor escalated past its signed rate (dist:floor-rate, AF8), which no
-                                line of a core run carries: refused, unreceipted, its escalation opened */
+                                line of a core run carries, since its table allows the request: refused, unreceipted,
+                                its escalation opened, and an operator's answer to it receipted (OP3) */
     int      RecordError;  /**< the decision could not be receipted, so an allow is not carried out */
     int      Escalated;    /**< OP3: an escalation of the action floor is open, under EscalationReceipt */
     uint8_t  EscalationReceipt[32]; /**< the SHA-256 of the escalation's document (PP_Run_EscalationBytes) */
@@ -239,10 +247,11 @@ int PP_AppDist_Start(PP_AppDist_t *D, const PP_AppDistConfig_t *Cfg, int Record,
                      long long Now);
 
 /** One frame of an offer or a chunk from the command topic, at the app's monotonic time and its time. An operator's
- *  answer travels in these frames as any sealed envelope does (OP2): the core applies it, and Step says so. The answer
- *  is not enacted: an operator receipt needs the basis `operator`, which a core run does not have yet (RC4), so the
- *  request it answers is not republished, and the answer shows in the state record of housekeeping and in an
- *  event. */
+ *  answer travels in these frames as any sealed envelope does (OP2): the core applies it, durably first, and the app
+ *  enacts it (OP3, RC4). The answer is appended to install.jsonl and its one request is receipted in a case of basis
+ *  operator under the floor's image, naming the answer and the floor's statement, its receipt a route to allow or the
+ *  escalation's own refusal. Step says so, with the request an answer `allow` lets through, which the app carries
+ *  out only once the case is written. */
 void PP_AppDist_Frame(PP_AppDist_t *D, const uint8_t *Frame, size_t Len, uint32_t NowMs, long long Now);
 
 /** A commit or an abort frame, the commit with the table's image attestation. */
@@ -271,9 +280,13 @@ int PP_AppDist_ValidateTable(PP_AppDist_t *D, const PP_PolicyTable_t *Table);
  * receipted first in a case of its basis keyed by that table and naming its install statement (RC4). When the action
  * floor answers and the release decides, the release's answer for the same reading is a second line, in a case of the
  * release marked not enacted (AF7), and a counted override writes its line of rates.jsonl (AF8). An escalation by
- * the action floor is opened in the core (OP3), under the SHA-256 of its escalation document, which the app downlinks
- * so the ground can seal an operator's answer to it; the request is kept with it. An escalation past the floor's rate
- * (dist:floor-rate) has no line in a core run: it is refused unreceipted and counted NotEnacted.
+ * the action floor is opened in the core (OP3), under the SHA-256 of its escalation document, which is a line of
+ * escalations.jsonl and which the app downlinks so the ground can seal an operator's answer to it; the request is kept
+ * with it. When the fallback policy decides and the floor answers, the fallback policy's answer is a not enacted line
+ * in a case of the fallback policy, and a floor decision with no release and no fallback policy to ask is in a floor
+ * case marked `asked` false. An escalation past the floor's rate (dist:floor-rate) has no line in a core run, since
+ * the floor's table allows the request: it is refused unreceipted and counted NotEnacted, and its escalation is opened
+ * and answered as any other.
  */
 void PP_AppDist_Propose(PP_AppDist_t *D, const PP_RunIo_t *Io, const uint8_t *Payload, size_t PayloadLen,
                         uint32_t MonitorAge, long long Now, PP_AppDecision_t *Out);

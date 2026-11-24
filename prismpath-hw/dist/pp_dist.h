@@ -505,7 +505,8 @@ typedef struct {
 const uint8_t *pp_statement_bytes(const pp_statement *st, size_t *len);
 
 /* OP3: an escalation the action floor made, by the hash of its receipt, under the floor of `policy_sha256`, at the
- * PEP's time `at`, with the request it holds for an answer `allow` (the caller's bytes, at most PP_REQUEST_MAX). */
+ * PEP's time `at`, with the cause it escalated with and the request it holds for an answer `allow` (the caller's
+ * bytes, at most PP_REQUEST_MAX). The cause is the refusal an answer `refuse` receipts (OP3). */
 typedef struct {
     uint8_t receipt[32];
     uint8_t policy_sha256[32];
@@ -513,13 +514,16 @@ typedef struct {
     uint8_t answered;
     uint8_t request_len;
     uint8_t request[PP_REQUEST_MAX];
+    uint8_t cause;
 } pp_escalation;
 
 /* OP2, OP3: an answer the last call applied: `allow` or not, the answer's envelope id, the receipt hash it answered,
- * the floor's policy hash and the request of that escalation, for the caller's receipt with basis operator. */
+ * the floor's policy hash, the cause and the request of that escalation, for the caller's receipt with basis
+ * operator. */
 typedef struct {
     int applied;
     int allow;
+    uint8_t cause;
     uint8_t envelope_id[32];
     uint8_t receipt[32];
     uint8_t policy_sha256[32];
@@ -610,6 +614,7 @@ typedef struct {
     pp_answer answer;         /* OP3: the answer the last call applied, `applied` 0 for none */
     int escalating;           /* OP3: the last ask was a floor escalation, which pp_pep_escalated may open */
     uint8_t escalating_policy[32];
+    uint8_t escalating_cause;
     size_t n_out;
     size_t out_len[PP_OUTBOX];
     uint8_t out[PP_OUTBOX][PP_RECORD_MAX]; /* the records made by the last call, oldest first (H4) */

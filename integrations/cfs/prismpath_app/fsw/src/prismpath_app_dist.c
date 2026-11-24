@@ -691,6 +691,57 @@ int PP_AppDist_Start(PP_AppDist_t *D, const PP_AppDistConfig_t *Cfg, int Record,
     return 0;
 }
 
+/* ----------------------------------------------------------------- an operator's answer */
+static const pp_statement *SetTable(const PP_AppDist_t *D, int Set, PP_PolicyTable_t *Table);
+static PP_PolicyTable_t    s_SetTable, s_WouldTable;
+static PP_RunState_t       s_Work; /* a working copy of the run, so a decision's lines are written whole or not at all */
+
+/* OP3, RC4: the answer the core just applied, in install.jsonl, and its one request in a case of basis operator under
+ * the floor's image, naming the answer and the floor's statement, with the answer's receipt: a route to allow, or the
+ * escalation's own refusal. The core applies an answer only under the floor the escalation was made under, so the
+ * floor it holds now is that floor. */
+static void Answer(PP_AppDist_t *D)
+{
+    const pp_answer    *a = &D->Pep.answer;
+    const pp_statement *floor;
+    uint8_t             id[32];
+
+    D->Step.Answered    = 1;
+    D->Step.AnswerAllow = a->allow;
+    memcpy(D->Step.AnswerId, a->envelope_id, 32);
+    memcpy(D->Step.AnswerReceipt, a->receipt, 32);
+    if (LogStatement(D, D->Assembler.t.sealed, D->Assembler.t.sealed_len, D->Assembler.t.body,
+                     D->Assembler.t.body_len, id) != 0)
+    {
+        D->Step.RunError          = 1;
+        D->Step.AnswerRecordError = 1;
+        return;
+    }
+    floor = SetTable(D, PP_SET_FLOOR, &s_SetTable);
+    if (D->Io == NULL || floor == NULL || memcmp(floor->envelope.policy_sha256, a->policy_sha256, 32) != 0 ||
+        a->request_len > PP_REQUEST_MAX)
+    {
+        D->Step.AnswerRecordError = 1;
+        (void)PP_AppDist_SaveRun(D);
+        return;
+    }
+    s_Work = D->Record.Run;
+    if (PP_Run_RecordOperator(&s_Work, D->Io, &D->Keys, floor->envelope.envelope_id, a->envelope_id, &s_SetTable,
+                              floor->envelope.body_sha256, a->request, a->request_len, a->allow, a->cause,
+                              D->Pep.held, &D->Step.AnswerIndex) != 0)
+    {
+        (void)PP_Run_Recover(&D->Record.Run, D->Io);
+        D->Step.AnswerRecordError = 1;
+        (void)PP_AppDist_SaveRun(D);
+        return;
+    }
+    D->Record.Run           = s_Work;
+    D->Step.AnswerReceipted = 1;
+    D->Step.AnswerRequestLen = a->request_len;
+    memcpy(D->Step.AnswerRequest, a->request, a->request_len);
+    (void)PP_AppDist_SaveRun(D);
+}
+
 /* ----------------------------------------------------------------- the steps */
 void PP_AppDist_Frame(PP_AppDist_t *D, const uint8_t *Frame, size_t Len, uint32_t NowMs, long long Now)
 {
@@ -715,10 +766,7 @@ void PP_AppDist_Frame(PP_AppDist_t *D, const uint8_t *Frame, size_t Len, uint32_
         Collect(D);
         if (D->Pep.answer.applied)
         {
-            D->Step.Answered    = 1; /* OP3: the escalation is answered durably, and nothing is republished (RC4) */
-            D->Step.AnswerAllow = D->Pep.answer.allow;
-            memcpy(D->Step.AnswerId, D->Pep.answer.envelope_id, 32);
-            memcpy(D->Step.AnswerReceipt, D->Pep.answer.receipt, 32);
+            Answer(D); /* OP3: the escalation is answered durably, then receipted before it is carried out */
         }
     }
     else if (event == PP_ASM_DROPPED)
@@ -868,9 +916,10 @@ void PP_AppDist_Beat(PP_AppDist_t *D, long long Now)
 /* OP3: open the escalation the action floor just made, under the SHA-256 of its escalation document, with the
  * proposal's payload kept for an answer. The document names the floor's table, the cause, the reading, the PEP's
  * count of floor answers and its time, and not the PEP, so two apps may write the same bytes (an answer names its
- * PEP, OP2). */
-static void Escalate(PP_AppDist_t *D, const pp_decision *Asked, const uint8_t *Payload, size_t PayloadLen,
-                     PP_AppDecision_t *Out)
+ * PEP, OP2). It is a line of escalations.jsonl before the escalation is open, so every escalation an answer can name
+ * is in the run. */
+static void Escalate(PP_AppDist_t *D, const PP_RunIo_t *Io, const pp_decision *Asked, const uint8_t *Payload,
+                     size_t PayloadLen, PP_AppDecision_t *Out)
 {
     static char    doc[512];
     char           reading[256];
@@ -894,12 +943,24 @@ static void Escalate(PP_AppDist_t *D, const pp_decision *Asked, const uint8_t *P
                                             (uint32_t)floor[PP_CFS_OFF_VERSION + 3] << 24),
                                  Asked->cause, D->Pep.d.floor_answers, Asked->policy_sha256, reading_sha,
                                  (uint64_t)D->Now, doc, sizeof(doc));
-    if (len == 0)
+    if (len == 0 || Io == NULL)
     {
         return;
     }
     pp_sha256((const uint8_t *)doc, len, Out->EscalationReceipt);
-    Out->Escalated = pp_pep_escalated(&D->Pep, Out->EscalationReceipt, Payload, PayloadLen) == 0;
+    s_Work = D->Record.Run;
+    if (PP_Run_Escalation(&s_Work, Io, doc, len) != 0)
+    {
+        return; /* not in the run, so not opened: no answer can name it */
+    }
+    if (pp_pep_escalated(&D->Pep, Out->EscalationReceipt, Payload, PayloadLen) != 0)
+    {
+        (void)PP_Run_Recover(&D->Record.Run, Io); /* the line goes again with the escalation that did not open */
+        return;
+    }
+    D->Record.Run  = s_Work;
+    Out->Escalated = 1;
+    (void)PP_AppDist_SaveRun(D);
 }
 
 static uint8_t KindOf(uint8_t Outcome)
@@ -907,10 +968,8 @@ static uint8_t KindOf(uint8_t Outcome)
     return Outcome == PP_OUT_ALLOW ? PP_KIND_ALLOW : Outcome == PP_OUT_ESCALATE ? PP_KIND_ESCALATE : PP_KIND_REFUSE;
 }
 
-/* RC4: the install set's table of `Set`, as the app's table struct, or NULL */
-static PP_PolicyTable_t s_SetTable;
-
-static const pp_statement *SetTable(const PP_AppDist_t *D, int Set)
+/* RC4: the install set's table of `Set`, as the app's table struct in `Table`, and its statement, or NULL */
+static const pp_statement *SetTable(const PP_AppDist_t *D, int Set, PP_PolicyTable_t *Table)
 {
     const pp_install_set *set = &D->Pep.d.sets[Set];
 
@@ -918,8 +977,8 @@ static const pp_statement *SetTable(const PP_AppDist_t *D, int Set)
     {
         return NULL;
     }
-    memset(&s_SetTable, 0, sizeof(s_SetTable));
-    memcpy(&s_SetTable, set->held.body, PP_CFS_TABLE_MAX);
+    memset(Table, 0, sizeof(*Table));
+    memcpy(Table, set->held.body, PP_CFS_TABLE_MAX);
     return &set->held;
 }
 
@@ -948,10 +1007,6 @@ static int SetVerdict(const PP_PolicyTable_t *Table, int Rule, uint8_t Outcome, 
     return V->Kind == KindOf(Outcome) && (V->Kind == PP_KIND_ALLOW || (uint8_t)V->Cause == Cause) ? 0 : -1;
 }
 
-/* a working copy of the run, so a decision's lines (the receipt, its `would` and its rate) are written whole or not at
- * all */
-static PP_RunState_t s_Work;
-
 void PP_AppDist_Propose(PP_AppDist_t *D, const PP_RunIo_t *Io, const uint8_t *Payload, size_t PayloadLen,
                         uint32_t MonitorAge, long long Now, PP_AppDecision_t *Out)
 {
@@ -961,8 +1016,10 @@ void PP_AppDist_Propose(PP_AppDist_t *D, const PP_RunIo_t *Io, const uint8_t *Pa
     PP_Verdict_t        would;
     pp_decision         asked;
     const pp_statement *set   = NULL; /* the install statement whose table decided */
+    const pp_statement *would_set = NULL; /* the fallback policy's, when its answer is the `would` line */
     int                 kind  = PP_CASE_RELEASE;
-    int                 with_would = 0;
+    int                 with_would = 0; /* PP_CASE_WOULD or PP_CASE_FALLBACK_WOULD for a `would` line (AF7) */
+    int                 escalate   = 0; /* OP3: a floor escalation receipted, opened once its lines are written */
     size_t              n;
     int                 k;
     int                 receipt = 0;
@@ -996,7 +1053,7 @@ void PP_AppDist_Propose(PP_AppDist_t *D, const PP_RunIo_t *Io, const uint8_t *Pa
             Out->Basis = PP_BASIS_RELEASE;
             receipt    = 1;
         }
-        else if (cause == 0 && (set = SetTable(D, PP_SET_FALLBACK)) != NULL)
+        else if (cause == 0 && (set = SetTable(D, PP_SET_FALLBACK, &s_SetTable)) != NULL)
         {
             Out->Basis = PP_BASIS_FALLBACK; /* FB1: no release decides, and the fallback policy does */
             kind       = PP_CASE_FALLBACK;
@@ -1034,20 +1091,39 @@ void PP_AppDist_Propose(PP_AppDist_t *D, const PP_RunIo_t *Io, const uint8_t *Pa
             verdict.Field   = -1;
             verdict.Reason  = PP_REASON_NONE;
             Out->NotEnacted = 1;
-            Escalate(D, &asked, Payload, PayloadLen, Out);
+            Escalate(D, Io, &asked, Payload, PayloadLen, Out);
         }
         else if (asked.basis == PP_BASIS_FLOOR || asked.basis == PP_BASIS_FALLBACK)
         {
             /* RC4: decided by the install set's table, enacted, and receipted in a case of its basis */
             kind = asked.basis == PP_BASIS_FLOOR ? PP_CASE_FLOOR : PP_CASE_FALLBACK;
-            set  = SetTable(D, asked.basis == PP_BASIS_FLOOR ? PP_SET_FLOOR : PP_SET_FALLBACK);
+            set  = SetTable(D, asked.basis == PP_BASIS_FLOOR ? PP_SET_FLOOR : PP_SET_FALLBACK, &s_SetTable);
             if (set == NULL || SetVerdict(&s_SetTable, asked.decided_rule, asked.outcome, asked.cause, &verdict) != 0)
             {
                 Out->RecordError = 1;
                 End(D);
                 return;
             }
-            if (kind == PP_CASE_FLOOR && asked.would != PP_OUT_NONE && PP_Kernel_Active())
+            if (kind == PP_CASE_FLOOR && asked.would == PP_OUT_NONE)
+            {
+                kind = PP_CASE_FLOOR_ALONE; /* AF7: no release and no fallback policy to ask, so `asked` is false */
+            }
+            else if (kind == PP_CASE_FLOOR && !PP_Kernel_Active())
+            {
+                /* AF7, FB1: the fallback policy decides, so its answer for the same reading is a not enacted line of
+                 * its own case, decided by its table as the core read it */
+                would_set = SetTable(D, PP_SET_FALLBACK, &s_WouldTable);
+                if (would_set == NULL || !asked.has_would_policy ||
+                    memcmp(asked.would_policy, would_set->envelope.policy_sha256, 32) != 0 ||
+                    SetVerdict(&s_WouldTable, asked.would_rule, asked.would, asked.would_cause, &would) != 0)
+                {
+                    Out->RecordError = 1;
+                    End(D);
+                    return;
+                }
+                with_would = PP_CASE_FALLBACK_WOULD;
+            }
+            else if (kind == PP_CASE_FLOOR)
             {
                 /* AF7: the release decides, so its answer for the same reading is a not enacted line */
                 PP_Kernel_Decide(Payload, PayloadLen, &would);
@@ -1058,13 +1134,10 @@ void PP_AppDist_Propose(PP_AppDist_t *D, const PP_RunIo_t *Io, const uint8_t *Pa
                     End(D);
                     return;
                 }
-                with_would = 1;
+                with_would = PP_CASE_WOULD;
             }
-            if (kind == PP_CASE_FLOOR && asked.outcome == PP_OUT_ESCALATE)
-            {
-                Escalate(D, &asked, Payload, PayloadLen, Out);
-            }
-            receipt = 1;
+            escalate = asked.basis == PP_BASIS_FLOOR && asked.outcome == PP_OUT_ESCALATE;
+            receipt  = 1;
         }
         else
         {
@@ -1101,16 +1174,26 @@ void PP_AppDist_Propose(PP_AppDist_t *D, const PP_RunIo_t *Io, const uint8_t *Pa
         {
             rc = PP_Run_Rate(&s_Work, Io, (uint32_t)asked.rule, (uint64_t)asked.window, asked.count, leaf); /* AF8 */
         }
-        if (rc == 0 && with_would)
+        if (rc == 0 && with_would == PP_CASE_WOULD)
         {
             rc = PP_Run_RecordCase(&s_Work, Io, &D->Keys, PP_CASE_WOULD, NULL, &D->Active, D->ActiveDigest, Payload,
                                    PayloadLen, &would, Out->Held, &index, leaf);
+        }
+        else if (rc == 0 && with_would == PP_CASE_FALLBACK_WOULD)
+        {
+            rc = PP_Run_RecordCase(&s_Work, Io, &D->Keys, PP_CASE_FALLBACK_WOULD, would_set->envelope.envelope_id,
+                                   &s_WouldTable, would_set->envelope.body_sha256, Payload, PayloadLen, &would,
+                                   Out->Held, &index, leaf);
         }
         if (rc == 0)
         {
             D->Record.Run  = s_Work;
             Out->Receipted = 1;
             (void)PP_AppDist_SaveRun(D);
+            if (escalate)
+            {
+                Escalate(D, Io, &asked, Payload, PayloadLen, Out); /* OP3: answerable once it is receipted */
+            }
         }
         else
         {

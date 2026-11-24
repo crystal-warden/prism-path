@@ -1229,14 +1229,46 @@ def test_case_193_the_cfs_app_enacts_its_floor_and_fallback_and_writes_a_run_tha
 
 def test_case_193_a_floor_allow_with_no_release_has_no_would_line(app, tmp_path):
     """case_193: AF7, RC1, the cfs lines with no release and no fallback policy. The floor's allow is enacted and
-    receipted in its case, and `would` is none, so no line of the release is written for it."""
-    from integrations.cfs.ground import reference
+    receipted in its case, and `would` is none, so no line of the release is written for it: the floor's case is
+    marked `asked` false, and the run verifies with the install keys pinned."""
+    from integrations.cfs.ground import downlink, reference
     floor_one = install("install.floor", floors()["one"])
     pairs = [(bytes.fromhex(floor_one[0]), bytes.fromhex(floor_one[1]))]
     out = app_run(app, tmp_path / "a", [*app_head(install=("J", "K"), bring=pairs, stale=5), f"start 0 0 1 {N}",
                                         f"propose {payload(3, slew=15, thrust=20)} 1 - {N}", f"seal {TIME_US}"])
     assert [(one["basis"], one["kind"], one["receipted"]) for one in decisions(out)] == [(2, 0, 1)]
-    assert reference.bases(tmp_path / "a" / "run") == [("floor.v1.1", "floor", True, 1)]
+    run = tmp_path / "a" / "run"
+    assert reference.bases(run) == [("floor.v1.1", "floor", True, 1)] and reference.unasked(run) == ["floor.v1.1"]
+    keys = _ground_keys(tmp_path, app_anchor(install=("J", "K"), stale=5))
+    summary = downlink.verify(downlink.fetch(run, tmp_path / "ground"), keys)
+    assert (summary["receipts"], summary["disagree"], summary["escalations"]) == (1, 0, 0)
+
+
+def test_case_193_a_floor_allow_under_the_fallback_policy_has_its_would_line(app, tmp_path):
+    """case_193: AF7, FB1, RC4, the cfs lines under the fallback policy. With no release and a fallback policy that
+    allows only command 5, the floor's allow of command 3 is enacted in the floor's case, and the fallback policy's
+    own answer for the same reading, its no-match refusal, is a line in a case of the fallback policy marked not
+    enacted, named by the fallback policy's statement. The run verifies with the install keys pinned."""
+    from integrations.cfs.ground import downlink, reference
+    from prismpath.kernel import canon2
+    from prismpath.ledgers import core_evidence
+    floor_one = install("install.floor", floors()["one"])
+    fallback = install("install.fallback", floors()["fallback"])
+    pairs = [(bytes.fromhex(sealed), bytes.fromhex(body_hex)) for sealed, body_hex in (floor_one, fallback)]
+    out = app_run(app, tmp_path / "a", [*app_head(install=("J", "K"), bring=pairs, stale=5), f"start 0 0 1 {N}",
+                                        f"propose {payload(3, slew=15, thrust=20)} 1 - {N}",
+                                        f"propose {payload(5)} 1 - {N}", f"seal {TIME_US}"])
+    assert [(one["basis"], one["kind"], one["receipted"]) for one in decisions(out)] == [(2, 0, 1), (3, 0, 1)]
+    run = tmp_path / "a" / "run"
+    assert reference.bases(run) == [("floor.v1.1", "floor", True, 1), ("would.fallback.v1.2", "fallback", False, 1),
+                                    ("fallback.v1.3", "fallback", True, 1)]
+    cases = [canon2.loads(line) for line in core_evidence._lines(run / "cases.jsonl")]
+    assert cases[1]["install"] == cases[2]["install"] == base._envelope_id(fallback[0]) and not reference.unasked(run)
+    receipts = [canon2.loads(line) for line in core_evidence._lines(run / "receipts.jsonl")]
+    assert [one.get("target", one.get("cause")) for one in receipts] == ["allow", "route:no-matching-edge", "allow"]
+    keys = _ground_keys(tmp_path, app_anchor(install=("J", "K"), stale=5))
+    summary = downlink.verify(downlink.fetch(run, tmp_path / "ground"), keys)
+    assert (summary["receipts"], summary["cases"], summary["disagree"]) == (3, 3, 0)
 
 
 def test_a_cfs_app_run_with_no_install_statements_verifies_exactly_as_before(app, tmp_path):
@@ -1278,10 +1310,10 @@ def _app_escalating(*, seed=None, threshold=2, keys=("J", "K")) -> list:
             f"propose {payload(3, slew=15, thrust=20)} 1 - {N}", f"propose {payload(3, slew=15, thrust=20)} 1 - {N}"]
 
 
-def _app_answer(receipt: str, verdict="allow", *, pep=None, transfer=40, now=N) -> list:
+def _app_answer(receipt: str, verdict="allow", *, pep=None, transfer=40, now=N, floor=None) -> list:
     from integrations.cfs.ground import answer
     sealed, body = answer.seal_answer(_private("O1"), pep=pep or pep_id(), receipt=receipt,
-                                      policy=policy(floors()["one"]), answer=verdict, now=now - 10, stream=S)
+                                      policy=floor or policy(floors()["one"]), answer=verdict, now=now - 10, stream=S)
     return offer(sealed, body, transfer, now)
 
 
@@ -1300,13 +1332,19 @@ def _answered(out: list) -> list:
     return [line.split()[1:] for line in out if line.startswith("answered")]
 
 
-def test_case_220_a_cfs_app_opens_a_floor_escalation_and_applies_an_operator_answer_once(app, tmp_path):
-    """case_220: OP2, OP3, AF8, in the cFS app. The app's floor escalates a proposal past its rate with
-    dist:floor-rate, which no line of a core run carries, so it is refused unreceipted, and opens the escalation under the SHA-256 of its escalation document, which it
-    downlinks. The ground's answer `allow`, sealed by the operator key for that receipt hash and the app's PEP id and
-    offered in frames on the command topic, is applied with an `answered` record of subject 5, and the same answer
-    again, also after a processor reset, is dist:answer-unbound. The request is not republished: an operator receipt
-    has no case in a core run yet (RC4), so the answer is in housekeeping and the state record only."""
+def test_case_220_a_cfs_app_opens_a_floor_escalation_and_enacts_an_operator_answer_once(app, tmp_path):
+    """case_220: OP2, OP3, AF8, RC4, in the cFS app, end to end. The app's floor escalates a proposal past its rate
+    with dist:floor-rate, which no line of a core run carries, so it is refused unreceipted, and opens the escalation
+    under the SHA-256 of its escalation document, a line of escalations.jsonl it downlinks. The ground's answer
+    `allow`, sealed by the operator key for that receipt hash and the app's PEP id and offered in frames on the command
+    topic, is applied with an `answered` record of subject 5, appended to install.jsonl, and enacted: the request
+    passes once and leaves a receipt with basis `operator`, the answer's envelope id and the floor's statement, a route
+    to allow, before the app carries it out. The same answer again, also after a processor reset, is
+    dist:answer-unbound. An answer `refuse` leaves the request refused with its own operator receipt, the escalation's
+    dist:floor-rate. Each sealed run, downlinked, verifies under core_evidence with the install keys pinned."""
+    from integrations.cfs.ground import downlink, reference
+    from prismpath.kernel import canon2
+    from prismpath.ledgers import core_evidence
     out = app_run(app, tmp_path / "a", [*_app_escalating()])
     made = decisions(out)
     # the first is the floor's allow within its rate, enacted and receipted; the second is past the rate
@@ -1315,14 +1353,88 @@ def test_case_220_a_cfs_app_opens_a_floor_escalation_and_applies_an_operator_ans
     receipt = [line.split()[1] for line in out if line.startswith("escalation")][0]
     assert receipt == hashlib.sha256(_escalation_doc(2, N)).hexdigest()
     out = app_run(app, tmp_path / "b", [*_app_escalating(), *_app_answer(receipt), *_app_answer(receipt, transfer=41),
-                                        "reset", f"start 0 0 1 {N + 1}", *_app_answer(receipt, transfer=42, now=N + 1)])
+                                        "reset", f"start 0 0 1 {N + 1}", *_app_answer(receipt, transfer=42, now=N + 1),
+                                        f"seal {TIME_US}"])
     done = steps(out)
     events = [(one["event"], one["cause"], one.get("subject")) for records, _flags in done for one in records]
     assert events.count(("answered", None, 5)) == 1
     assert events.count(("refused", "dist:answer-unbound", 5)) == 2
     answered = _answered(out)
-    assert len(answered) == 1 and answered[0][1] == receipt
+    request = bytes.fromhex(payload(3, slew=15, thrust=20))
+    assert len(answered) == 1 and answered[0][1] == receipt and answered[0][2:6] == ["1", "0", "2", request.hex()]
     assert [flags[8:10] for _records, flags in done if flags[8]] == [[1, 1]]
+    run = tmp_path / "b" / "run"
+    floor_id = core_evidence.canon2.loads(core_evidence._lines(run / "install.jsonl")[0])
+    floor_id = env.envelope_id(env.unseal(bytes.fromhex(floor_id["sealed"]))[0])
+    assert reference.bases(run) == [("floor.v1.1", "floor", True, 1), ("would.v1.2", "release", False, 1),
+                                    ("operator.v1.3", "operator", True, 1)]
+    assert reference.operator_cases(run) == [("operator.v1.3", answered[0][0], floor_id, reference.reading_bytes(request))]
+    assert (run / "escalations.jsonl").read_bytes() == reference.escalation_lines([_escalation_doc(2, N)])
+    statements = [canon2.loads(line) for line in core_evidence._lines(run / "install.jsonl")]
+    assert len(statements) == 2 and env.envelope_id(env.unseal(bytes.fromhex(statements[1]["sealed"]))[0]) == answered[0][0]
+    receipts = [canon2.loads(line) for line in core_evidence._lines(run / "receipts.jsonl")]
+    assert (receipts[-1]["case"], receipts[-1]["decision"], receipts[-1]["target"]) == ("operator.v1.3", "route", "allow")
+    images = [canon2.loads(line) for line in core_evidence._lines(run / "images.jsonl")]
+    assert images[-1] == {"answer": answered[0][0], "case": "operator.v1.3", "format": core_evidence.IMAGE_FORMAT,
+                          "image_sha256": policy(floors()["one"]), "install": floor_id}
+    manifest = canon2.loads((run / "run.json").read_bytes().rstrip(b"\n"))
+    assert manifest["escalations_sha256"] == core_evidence.sha256_hex((run / "escalations.jsonl").read_bytes())
+    keys = _ground_keys(tmp_path, app_anchor(install=("J", "K"), operators=("O1",), stale=5))
+    ground = downlink.fetch(run, tmp_path / "ground")
+    summary = downlink.verify(ground, keys)
+    assert (summary["receipts"], summary["cases"], summary["disagree"], summary["replayed"], summary["escalations"]) == (
+        3, 3, 0, 2, 1)
+    assert list(downlink.escalations(ground)) == [receipt]
+    direct = core_evidence.verify(ground, sample=None, pin_authority=keys / "authority.pub",
+                                  pin_instance=keys / "instance.pub", pin_install=keys / "install.json")
+    assert direct["root"] == summary["root"]
+    # an answer refuse: the request stays refused, with its own operator receipt, the escalation's cause
+    out = app_run(app, tmp_path / "c", [*_app_escalating(), *_app_answer(receipt, "refuse"), f"seal {TIME_US}"])
+    assert _answered(out)[0][2:6] == ["1", "0", "2", request.hex()]
+    run = tmp_path / "c" / "run"
+    last = canon2.loads(core_evidence._lines(run / "receipts.jsonl")[-1])
+    assert (last["case"], last["decision"], last["cause"], last["cause_code"]) == (
+        "operator.v1.3", "refuse", "dist:floor-rate", causes.code("dist:floor-rate"))
+    summary = downlink.verify(downlink.fetch(run, tmp_path / "ground-refuse"), keys)
+    assert (summary["receipts"], summary["disagree"]) == (3, 0)
+
+
+def test_case_220_a_cfs_app_receipts_a_floor_rule_escalation_and_each_answer_to_it(app, tmp_path):
+    """case_220: OP3, RC4, in the cFS app. A floor whose rule escalates command 3 (escalate_34) under a release that
+    refuses it escalates two proposals, each receipted in the floor's case as a route to escalate_34 with the
+    release's refusal as its not enacted line, and each opened under its escalation document. An answer `refuse` to
+    the first is receipted as the escalation's own refusal, route:needs-human, and an answer `allow` to the second as
+    a route to allow that the app carries out. The run verifies with the install keys pinned."""
+    from integrations.cfs.ground import downlink, reference
+    from prismpath.kernel import canon2
+    from prismpath.ledgers import core_evidence
+    floor = install("install.floor", floors()["escalate"], meta=floor_meta(answer_rate=ANSWER_RATE))
+    brought = [(bytes.fromhex(floor[0]), bytes.fromhex(floor[1]))]
+    rules = [{"target": "refuse_104", "when": ["in", "cmd_class", [["num", 3]]]},
+             {"target": "allow", "when": ["in", "cmd_class", [["num", 1], ["num", 2]]]}]
+    propose = f"propose {payload(3, slew=15, thrust=20)} 1 - {N}"
+    lines = [*app_head(install=("J", "K"), operators=("O1",), bring=brought, stale=5), f"start 0 0 1 {N}",
+             *release_lines(app_table(rules), 1, 10), propose, propose]
+    out = app_run(app, tmp_path / "a", lines)
+    made = decisions(out)
+    assert [(one["basis"], one["kind"], one["receipted"], one["escalated"], one["not_enacted"]) for one in made] == [
+        (2, 2, 1, 1, 0)] * 2
+    escalated = [line.split()[1] for line in out if line.startswith("escalation")]
+    pol = policy(floors()["escalate"])
+    out = app_run(app, tmp_path / "b", [*lines, *_app_answer(escalated[0], "refuse", floor=pol),
+                                        *_app_answer(escalated[1], transfer=41, floor=pol), f"seal {TIME_US}"])
+    assert [one[2:4] for one in _answered(out)] == [["1", "0"], ["1", "0"]]
+    run = tmp_path / "b" / "run"
+    assert [one[:2] for one in reference.bases(run)] == [
+        ("floor.v1.1", "floor"), ("would.v1.2", "release"), ("floor.v1.3", "floor"), ("would.v1.4", "release"),
+        ("operator.v1.5", "operator"), ("operator.v1.6", "operator")]
+    receipts = [canon2.loads(line) for line in core_evidence._lines(run / "receipts.jsonl")]
+    assert [one.get("target", one.get("cause")) for one in receipts] == [
+        "escalate_34", "refuse_104", "escalate_34", "refuse_104", "route:needs-human", "allow"]
+    assert set(downlink.escalations(run)) == set(escalated)
+    keys = _ground_keys(tmp_path, app_anchor(install=("J", "K"), operators=("O1",), stale=5))
+    summary = downlink.verify(downlink.fetch(run, tmp_path / "ground"), keys)
+    assert (summary["receipts"], summary["cases"], summary["disagree"], summary["escalations"]) == (6, 6, 0, 2)
 
 
 def test_case_231_a_cfs_app_takes_no_answer_at_a_threshold_of_one_nor_one_for_another_pep(app, tmp_path):

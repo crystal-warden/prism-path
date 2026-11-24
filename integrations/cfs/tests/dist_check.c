@@ -10,7 +10,8 @@
  *
  * The script's lines, each printing "records <hex of each state record the step made>" and then
  * "step <hold began> <hold ended> <provisioned> <locked> <floor at minimum> <table cause> <table busy> <dropped>
- * <answered> <answer allow>", and after a step that applied an operator's answer "answered <envelope id> <receipt>":
+ * <answered> <answer allow>", and after a step that applied an operator's answer "answered <envelope id> <receipt>
+ * <operator case written> <record error> <its receipt index> <the request it carries out, hex>":
  *
  *   authority <public hex> | instance <seed hex> | anchor <document hex> | stale <seconds>
  *   bring <statement file hex> | boot_release <statement file hex>     what the next start is provisioned with
@@ -251,7 +252,12 @@ static void PrintStep(void)
         {
             printf("%02x", s->AnswerReceipt[j]);
         }
-        printf("\n");
+        printf(" %d %d %llu ", s->AnswerReceipted, s->AnswerRecordError, (unsigned long long)s->AnswerIndex);
+        for (j = 0; j < s->AnswerRequestLen; j++)
+        {
+            printf("%02x", s->AnswerRequest[j]);
+        }
+        printf("%s\n", s->AnswerRequestLen ? "" : "-");
     }
 }
 

@@ -15,6 +15,7 @@
 #include <string.h>
 
 #include "prismpath_app_run.h"
+#include "prismpath_app_causes.h"
 #include "prismpath_app_layout.h"
 #include "monocypher-ed25519.h"
 
@@ -24,6 +25,7 @@
 const char *const PP_RunFileNames[PP_FILE_COUNT] = {
     "receipts.jsonl", "cases.stream",    "images.jsonl",  "cases.jsonl",  "run.json",
     "roots.jsonl",    "roots.log.jsonl", "authority.pub", "instance.pub", "install.jsonl", "rates.jsonl",
+    "escalations.jsonl",
 };
 
 /* the domain prefixes the signatures are taken over, NUL included (core_evidence.IMAGE_DOMAIN, ROOT_DOMAIN) */
@@ -111,14 +113,23 @@ static void PutHexMember(Buf_t *B, const char *Key, const uint8_t *Data, size_t 
 
 /* v<version>, or v<version>.<case number> for a release case whose version is not above every version a release case
  * of this run had before: a hold that begins or ends, another table of one version or an older one again, so every
- * case id of a run is its own, which the verifier needs (core_evidence keys a case's readings by its id). A floor, a
- * fallback or a would case is always numbered, after its kind: floor.v<version>.<n> (RC4). */
-static const char *const k_CasePrefix[4] = {"\"v", "\"floor.v", "\"fallback.v", "\"would.v"};
-static const char *const k_BasisName[4]  = {"release", "floor", "fallback", "release"};
+ * case id of a run is its own, which the verifier needs (core_evidence keys a case's readings by its id). Every other
+ * case is always numbered, after its kind: floor.v<version>.<n> (RC4), operator.v<version>.<n> (OP3). */
+static const char *const k_CasePrefix[PP_CASE_KINDS] = {"\"v",          "\"floor.v",          "\"fallback.v", "\"would.v",
+                                                        "\"operator.v", "\"would.fallback.v", "\"floor.v"};
+static const char *const k_BasisName[PP_CASE_KINDS]  = {"release",  "floor",    "fallback", "release",
+                                                        "operator", "fallback", "floor"};
+
+/* a case named by an install statement in place of the authority's signature (RC4) */
+static int Installed(uint32_t Kind)
+{
+    return Kind == PP_CASE_FLOOR || Kind == PP_CASE_FALLBACK || Kind == PP_CASE_OPERATOR ||
+           Kind == PP_CASE_FALLBACK_WOULD || Kind == PP_CASE_FLOOR_ALONE;
+}
 
 static void PutCaseIdOf(Buf_t *B, uint32_t Kind, uint32_t Version, uint32_t Number)
 {
-    PutS(B, k_CasePrefix[Kind & 3u]);
+    PutS(B, k_CasePrefix[Kind < PP_CASE_KINDS ? Kind : 0u]);
     PutU64(B, Version);
     if (Number != 0u)
     {
@@ -156,7 +167,7 @@ int PP_Run_StateValid(const PP_RunState_t *State)
     return State->Magic == PP_RUN_MAGIC && State->Size == (uint32_t)sizeof(*State) && State->CaseOpen <= 1u &&
            (State->CaseOpen == 0u || State->CaseCount > 0u) && (uint64_t)State->CaseReadings <= State->Acc.count &&
            (State->Acc.count == 0u || State->CaseCount > 0u) && State->FloorLost <= 1u && State->CaseHold <= 1u &&
-           State->CaseKind <= PP_CASE_WOULD && State->HasTrust <= 1u && State->Installed <= 1u;
+           State->CaseKind < PP_CASE_KINDS && State->HasTrust <= 1u && State->Installed <= 1u;
 }
 
 void PP_Run_SetInstanceSeed(PP_RunKeys_t *Keys, uint8_t Seed[32])
@@ -327,6 +338,21 @@ static const char *CauseName(uint16_t Code)
     }
 }
 
+/* a registered cause's canonical name, or NULL (prismpath_app_causes.h, generated from the registry) */
+static const char *RegistryName(uint16_t Code)
+{
+    size_t k;
+
+    for (k = 0; k < PP_CAUSE_REGISTRY_COUNT; k++)
+    {
+        if (k_CauseRegistry[k].Code == Code)
+        {
+            return k_CauseRegistry[k].Name;
+        }
+    }
+    return NULL;
+}
+
 static const char *ReasonName(uint8_t Reason)
 {
     switch (Reason)
@@ -349,13 +375,23 @@ static size_t ReceiptBytesOf(uint64_t Index, uint32_t CaseKind, uint32_t CaseVer
     Buf_t       B     = {Out, 0, Cap, 0};
     const char *cause = NULL;
     const char *reason = NULL;
-    int         route = (Verdict->Rule >= 0);
+    int         answer = (CaseKind == PP_CASE_OPERATOR);
+    int         route  = answer ? Verdict->Kind == PP_KIND_ALLOW : (Verdict->Rule >= 0);
 
-    if (route && (uint16_t)Verdict->Rule >= Active->RuleCount)
+    if (!answer && route && (uint16_t)Verdict->Rule >= Active->RuleCount)
     {
         return 0;
     }
-    if (!route)
+    if (answer && !route)
+    {
+        /* OP3: an operator's refusal is the escalation's own, which may be any registered cause */
+        cause = RegistryName(Verdict->Cause);
+        if (cause == NULL || Verdict->Field >= 0)
+        {
+            return 0;
+        }
+    }
+    else if (!route)
     {
         cause = CauseName(Verdict->Cause);
         if (cause == NULL)
@@ -401,7 +437,11 @@ static size_t ReceiptBytesOf(uint64_t Index, uint32_t CaseKind, uint32_t CaseVer
         PutS(&B, reason);
         PutS(&B, "\"");
     }
-    if (route)
+    if (route && answer)
+    {
+        PutS(&B, ",\"target\":\"allow\""); /* OP3: an answer allow lets the request through */
+    }
+    else if (route)
     {
         const PP_Rule_t *rule = &Active->Rules[Verdict->Rule];
         /* the rule's target, as the core image names it: allow, refuse_<code> or escalate_<code> */
@@ -482,8 +522,9 @@ static int Replace(const PP_RunIo_t *Io, int File, const void *Data, size_t Len)
 
 int PP_Run_Recover(const PP_RunState_t *State, const PP_RunIo_t *Io)
 {
-    static const int k_Files[5] = {PP_FILE_RECEIPTS, PP_FILE_STREAM, PP_FILE_IMAGES, PP_FILE_INSTALL, PP_FILE_RATES};
-    uint64_t         want[5];
+    static const int k_Files[6] = {PP_FILE_RECEIPTS, PP_FILE_STREAM, PP_FILE_IMAGES, PP_FILE_INSTALL, PP_FILE_RATES,
+                                   PP_FILE_ESCALATIONS};
+    uint64_t         want[6];
     int              i;
     int              rc = 0;
 
@@ -492,7 +533,8 @@ int PP_Run_Recover(const PP_RunState_t *State, const PP_RunIo_t *Io)
     want[2] = State->ImagesLen;
     want[3] = State->InstallLen;
     want[4] = State->RatesLen;
-    for (i = 0; i < 5; i++)
+    want[5] = State->EscalationsLen;
+    for (i = 0; i < 6; i++)
     {
         int64_t size = Io->Size(Io->Ctx, k_Files[i]);
         if (size < 0)
@@ -530,10 +572,12 @@ static char s_Line[1024];
 static char s_Reading[256];
 
 /* the case line's opening, up to the readings array, its members in key order:
- * {"basis":..,"case":..,"enacted":false,"flow":..,"hold":true,"image":"<hex>","install":"<hex>","readings":[
- * with basis and install only for a floor or fallback case, enacted only for a would case and hold only when held */
-static int OpenCase(const PP_RunIo_t *Io, uint32_t Kind, const uint8_t Install[32], const PP_PolicyTable_t *Active,
-                    uint32_t Number, int Hold, uint64_t *Written)
+ * {"answer":"<hex>","asked":false,"basis":..,"case":..,"enacted":false,"flow":..,"hold":true,"image":"<hex>",
+ *  "install":"<hex>","readings":[
+ * with basis and install only for an installed case, answer only for an operator case, asked only for a floor case
+ * with no set to ask, enacted only for a would case and hold only when held */
+static int OpenCase(const PP_RunIo_t *Io, uint32_t Kind, const uint8_t Install[32], const uint8_t Answer[32],
+                    const PP_PolicyTable_t *Active, uint32_t Number, int Hold, uint64_t *Written)
 {
     Buf_t    B = {s_Line, 0, sizeof(s_Line), 0};
     uint16_t at;
@@ -546,7 +590,16 @@ static int OpenCase(const PP_RunIo_t *Io, uint32_t Kind, const uint8_t Install[3
         return -1;
     }
     PutS(&B, "{");
-    if (Kind == PP_CASE_FLOOR || Kind == PP_CASE_FALLBACK)
+    if (Kind == PP_CASE_OPERATOR)
+    {
+        PutHexMember(&B, "answer", Answer, 32); /* OP3: the operator.answer of install.jsonl */
+        PutS(&B, ",");
+    }
+    if (Kind == PP_CASE_FLOOR_ALONE)
+    {
+        PutS(&B, "\"asked\":false,"); /* AF7: no release and no fallback policy to ask, so `would` is none */
+    }
+    if (Installed(Kind))
     {
         PutS(&B, "\"basis\":\"");
         PutS(&B, k_BasisName[Kind]);
@@ -554,9 +607,9 @@ static int OpenCase(const PP_RunIo_t *Io, uint32_t Kind, const uint8_t Install[3
     }
     PutS(&B, "\"case\":");
     PutCaseIdOf(&B, Kind, Active->Version, Number);
-    if (Kind == PP_CASE_WOULD)
+    if (Kind == PP_CASE_WOULD || Kind == PP_CASE_FALLBACK_WOULD)
     {
-        PutS(&B, ",\"enacted\":false"); /* AF7: what the release would have answered, not what was done */
+        PutS(&B, ",\"enacted\":false"); /* AF7: what the release or the fallback policy would have answered */
     }
     PutS(&B, ",\"flow\":");
     rc |= (B.Err ? -1 : Io->Write(Io->Ctx, h, B.P, B.Len));
@@ -582,7 +635,7 @@ static int OpenCase(const PP_RunIo_t *Io, uint32_t Kind, const uint8_t Install[3
     }
     B.Len = 0;
     PutS(&B, "\"");
-    if (Kind == PP_CASE_FLOOR || Kind == PP_CASE_FALLBACK)
+    if (Installed(Kind))
     {
         PutS(&B, ",");
         PutHexMember(&B, "install", Install, 32);
@@ -595,20 +648,27 @@ static int OpenCase(const PP_RunIo_t *Io, uint32_t Kind, const uint8_t Install[3
 }
 
 /* the case's image attestation: {"case":..,"format":"prismpath.core-image/1","image_sha256":..,"key_id":..,"sig":..},
- * or for a floor or fallback case, which its install statement's signature block attests (RC4),
- * {"case":..,"format":"prismpath.core-image/1","image_sha256":..,"install":..} */
-static size_t ImageLine(const PP_RunKeys_t *Keys, uint32_t Kind, const uint8_t Install[32],
+ * or for an installed case, which its install statement's signature block attests (RC4),
+ * {"case":..,"format":"prismpath.core-image/1","image_sha256":..,"install":..}, an operator case's with its answer
+ * first, {"answer":..,"case":.., ...} (OP3) */
+static size_t ImageLine(const PP_RunKeys_t *Keys, uint32_t Kind, const uint8_t Install[32], const uint8_t Answer[32],
                         const PP_PolicyTable_t *Active, uint32_t Number, const uint8_t CoreSha[32])
 {
     Buf_t   B = {s_Line, 0, sizeof(s_Line), 0};
     uint8_t key_id[32];
 
     Sha256(Keys->AuthorityPub, 32, key_id);
-    PutS(&B, "{\"case\":");
+    PutS(&B, "{");
+    if (Kind == PP_CASE_OPERATOR)
+    {
+        PutHexMember(&B, "answer", Answer, 32);
+        PutS(&B, ",");
+    }
+    PutS(&B, "\"case\":");
     PutCaseIdOf(&B, Kind, Active->Version, Number);
     PutS(&B, ",\"format\":\"prismpath.core-image/1\",");
     PutHexMember(&B, "image_sha256", CoreSha, 32);
-    if (Kind == PP_CASE_FLOOR || Kind == PP_CASE_FALLBACK)
+    if (Installed(Kind))
     {
         PutS(&B, ",");
         PutHexMember(&B, "install", Install, 32);
@@ -623,23 +683,24 @@ static size_t ImageLine(const PP_RunKeys_t *Keys, uint32_t Kind, const uint8_t I
     return B.Err ? 0 : B.Len;
 }
 
-int PP_Run_RecordCase(PP_RunState_t *State, const PP_RunIo_t *Io, const PP_RunKeys_t *Keys, int Kind,
-                      const uint8_t Install[32], const PP_PolicyTable_t *Active, const uint8_t ActiveDigest[32],
-                      const uint8_t *Payload, size_t PayloadLen, const PP_Verdict_t *Verdict, int Hold, uint64_t *Index,
-                      uint8_t Leaf[32])
+static int RecordCaseOf(PP_RunState_t *State, const PP_RunIo_t *Io, const PP_RunKeys_t *Keys, int Kind,
+                        const uint8_t Install[32], const uint8_t Answer[32], const PP_PolicyTable_t *Active,
+                        const uint8_t ActiveDigest[32], const uint8_t *Payload, size_t PayloadLen,
+                        const PP_Verdict_t *Verdict, int Hold, uint64_t *Index, uint8_t Leaf[32])
 {
     static const uint8_t k_NoInstall[32];
     PP_RunState_t next = *State;
     uint32_t      number;
     uint32_t      kind = (uint32_t)Kind;
-    int           installed = (Kind == PP_CASE_FLOOR || Kind == PP_CASE_FALLBACK);
+    int           installed = Kind >= 0 && Installed(kind);
     uint8_t       core_sha[32];
     uint8_t       reading_sha[32];
     size_t        reading_len;
     size_t        len;
     Buf_t         B;
 
-    if (Kind < PP_CASE_RELEASE || Kind > PP_CASE_WOULD || (installed && Install == NULL) || !Keys->HaveAuthority ||
+    if (Kind < PP_CASE_RELEASE || Kind >= PP_CASE_KINDS || (installed && Install == NULL) ||
+        (Kind == PP_CASE_OPERATOR && Answer == NULL) || !Keys->HaveAuthority ||
         next.Acc.count == UINT64_MAX || Active->CoreLen == 0u || Active->CoreLen > PRISMPATH_APP_CORE_MAX ||
         Active->FlowJsonLen < 2u || Active->FlowJsonLen > PRISMPATH_APP_FLOW_MAX)
     {
@@ -656,7 +717,7 @@ int PP_Run_RecordCase(PP_RunState_t *State, const PP_RunIo_t *Io, const PP_RunKe
     Hold = Hold ? 1 : 0;
     if (!next.CaseOpen || next.CaseKind != kind || next.CaseVersion != Active->Version ||
         memcmp(next.CaseDigest, ActiveDigest, 32) != 0 || memcmp(next.CaseInstall, Install, 32) != 0 ||
-        next.CaseHold != (uint32_t)Hold)
+        next.CaseHold != (uint32_t)Hold || kind == PP_CASE_OPERATOR) /* OP3: one answered request per case */
     {
         if (next.CaseOpen)
         {
@@ -674,11 +735,11 @@ int PP_Run_RecordCase(PP_RunState_t *State, const PP_RunIo_t *Io, const PP_RunKe
         {
             number = (next.CaseCount == 0u || Active->Version > next.CaseMaxVersion) ? 0u : next.CaseCount + 1u;
         }
-        if (OpenCase(Io, kind, Install, Active, number, Hold, &next.StreamLen) != 0)
+        if (OpenCase(Io, kind, Install, Answer, Active, number, Hold, &next.StreamLen) != 0)
         {
             goto fail;
         }
-        len = ImageLine(Keys, kind, Install, Active, number, core_sha);
+        len = ImageLine(Keys, kind, Install, Answer, Active, number, core_sha);
         if (len == 0 || Append(Io, PP_FILE_IMAGES, s_Line, len) != 0)
         {
             goto fail;
@@ -747,6 +808,58 @@ int PP_Run_RecordCase(PP_RunState_t *State, const PP_RunIo_t *Io, const PP_RunKe
 fail:
     (void)PP_Run_Recover(State, Io); /* cut back whatever part of this decision reached the files */
     return -1;
+}
+
+int PP_Run_RecordCase(PP_RunState_t *State, const PP_RunIo_t *Io, const PP_RunKeys_t *Keys, int Kind,
+                      const uint8_t Install[32], const PP_PolicyTable_t *Active, const uint8_t ActiveDigest[32],
+                      const uint8_t *Payload, size_t PayloadLen, const PP_Verdict_t *Verdict, int Hold, uint64_t *Index,
+                      uint8_t Leaf[32])
+{
+    if (Kind == PP_CASE_OPERATOR)
+    {
+        return -1; /* an operator case names its answer: PP_Run_RecordOperator */
+    }
+    return RecordCaseOf(State, Io, Keys, Kind, Install, NULL, Active, ActiveDigest, Payload, PayloadLen, Verdict, Hold,
+                        Index, Leaf);
+}
+
+int PP_Run_RecordOperator(PP_RunState_t *State, const PP_RunIo_t *Io, const PP_RunKeys_t *Keys,
+                          const uint8_t Install[32], const uint8_t Answer[32], const PP_PolicyTable_t *Floor,
+                          const uint8_t Digest[32], const uint8_t *Request, size_t RequestLen, int Allow, uint8_t Cause,
+                          int Hold, uint64_t *Index)
+{
+    PP_Verdict_t verdict;
+    uint8_t      leaf[32];
+
+    memset(&verdict, 0, sizeof(verdict));
+    verdict.Kind   = Allow ? PP_KIND_ALLOW : PP_KIND_REFUSE;
+    verdict.Cause  = Allow ? 0u : Cause;
+    verdict.Rule   = -1;
+    verdict.Field  = -1;
+    verdict.Reason = PP_REASON_NONE;
+    return RecordCaseOf(State, Io, Keys, PP_CASE_OPERATOR, Install, Answer, Floor, Digest, Request, RequestLen,
+                        &verdict, Hold, Index, leaf);
+}
+
+int PP_Run_Escalation(PP_RunState_t *State, const PP_RunIo_t *Io, const char *Doc, size_t Len)
+{
+    int32_t h = Io->Open(Io->Ctx, PP_FILE_ESCALATIONS, PP_IO_APPEND);
+    int32_t rc;
+
+    if (h < 0)
+    {
+        return -1;
+    }
+    rc = Io->Write(Io->Ctx, h, Doc, Len);
+    rc |= rc == 0 ? Io->Write(Io->Ctx, h, "\n", 1) : -1;
+    Io->Close(Io->Ctx, h);
+    if (rc != 0)
+    {
+        (void)PP_Run_Recover(State, Io);
+        return -1;
+    }
+    State->EscalationsLen += Len + 1u;
+    return 0;
 }
 
 int PP_Run_Record(PP_RunState_t *State, const PP_RunIo_t *Io, const PP_RunKeys_t *Keys, const PP_PolicyTable_t *Active,
@@ -875,7 +988,7 @@ int PP_Run_Seal(PP_RunState_t *State, const PP_RunIo_t *Io, const PP_RunKeys_t *
 {
     ppt_sha256_ctx ctx;
     uint8_t        cases_sha[32], images_sha[32], run_sha[32], authority_id[32], instance_id[32], root[32], sig[64];
-    uint8_t        install_sha[32], rates_sha[32];
+    uint8_t        install_sha[32], rates_sha[32], escalations_sha[32];
     int            installed = State->InstallLen > 0u || State->RatesLen > 0u || State->Installed;
     int32_t        h;
     int            rc;
@@ -928,6 +1041,16 @@ int PP_Run_Seal(PP_RunState_t *State, const PP_RunIo_t *Io, const PP_RunKeys_t *
         }
         ppt_sha256_final(&ctx, rates_sha);
     }
+    if (State->EscalationsLen > 0u)
+    {
+        /* OP3: the escalation documents the action floor opened, which an operator's answer names by hash */
+        ppt_sha256_init(&ctx);
+        if (CopyHash(Io, PP_FILE_ESCALATIONS, -1, &ctx) != 0)
+        {
+            return PP_SEAL_FILE_ERR(PP_FILE_ESCALATIONS);
+        }
+        ppt_sha256_final(&ctx, escalations_sha);
+    }
     Sha256(Keys->AuthorityPub, 32, authority_id);
     Sha256(Keys->InstancePub, 32, instance_id);
     leaves = PP_Run_Root(State, root);
@@ -940,7 +1063,13 @@ int PP_Run_Seal(PP_RunState_t *State, const PP_RunIo_t *Io, const PP_RunKeys_t *
     PutU64(&B, State->CaseCount);
     PutS(&B, ",");
     PutHexMember(&B, "cases_sha256", cases_sha, 32);
-    PutS(&B, ",\"decider\":\"" PP_RUN_DECIDER "\",\"excluded\":[],\"format\":\"prismpath.core-run/1\",");
+    PutS(&B, ",\"decider\":\"" PP_RUN_DECIDER "\",");
+    if (State->EscalationsLen > 0u)
+    {
+        PutHexMember(&B, "escalations_sha256", escalations_sha, 32);
+        PutS(&B, ",");
+    }
+    PutS(&B, "\"excluded\":[],\"format\":\"prismpath.core-run/1\",");
     PutHexMember(&B, "images_sha256", images_sha, 32);
     if (installed)
     {
