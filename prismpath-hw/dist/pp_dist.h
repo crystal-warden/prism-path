@@ -90,6 +90,13 @@
 #ifndef PP_TABLE_MAX
 #define PP_TABLE_MAX PP_MESH_TABLE_MAX
 #endif
+/* OP3: the open escalations a PEP holds, the oldest dropped first. Only a cfs PEP escalates, so a build without the cfs
+ * row keeps one slot that is never used, and a mesh node keeps its RAM. */
+#if PP_TABLE_MAX >= PP_CFS_TABLE_MAX
+#define PP_OPEN_ESCALATIONS 8
+#else
+#define PP_OPEN_ESCALATIONS 1
+#endif
 /* The members of a cfs.table body (PP_PolicyTable_t in integrations/cfs/prismpath_app/fsw/inc/prismpath_app_kernel.h,
  * which holds itself to these offsets at compile time). Little endian, no padding. */
 #define PP_CFS_OFF_LAYOUT 0
@@ -116,6 +123,8 @@
 #define PP_FLOOR_RULES 8      /* AF9: the rules of an action floor */
 #define PP_LAYOUT_FIELDS 32   /* AF10: the fields a layout labels */
 #define PP_LEGACY_STREAMS 4   /* L2: the streams the older forms are refused on, past which every stream is */
+#define PP_ANSWER_LIFE 600    /* OP2, OP3: an answer's lifetime and an escalation's, in seconds */
+#define PP_REQUEST_MAX 32     /* OP3: the bytes of the one request an escalation keeps for its answer */
 
 /* ------------------------------------------------------------------ the kinds (section 3) */
 typedef enum {
@@ -490,6 +499,29 @@ typedef struct {
     int has_held, has_staged;
     pp_statement held, staged;
 } pp_install_set;
+
+/* OP3: an escalation the action floor made, by the hash of its receipt, under the floor of `policy_sha256`, at the
+ * PEP's time `at`, with the request it holds for an answer `allow` (the caller's bytes, at most PP_REQUEST_MAX). */
+typedef struct {
+    uint8_t receipt[32];
+    uint8_t policy_sha256[32];
+    long long at;
+    uint8_t answered;
+    uint8_t request_len;
+    uint8_t request[PP_REQUEST_MAX];
+} pp_escalation;
+
+/* OP2, OP3: an answer the last call applied: `allow` or not, the answer's envelope id, the receipt hash it answered,
+ * the floor's policy hash and the request of that escalation, for the caller's receipt with basis operator. */
+typedef struct {
+    int applied;
+    int allow;
+    uint8_t envelope_id[32];
+    uint8_t receipt[32];
+    uint8_t policy_sha256[32];
+    size_t request_len;
+    uint8_t request[PP_REQUEST_MAX];
+} pp_answer;
 typedef struct {
     int provisioned;            /* the anchor is confirmed (P2) */
     int setting_reads, expiry_hold; /* X10: the expiry response the PEP was provisioned with */
@@ -520,6 +552,10 @@ typedef struct {
     int rates_reads;
     long long rate_start[PP_FLOOR_RULES]; /* AF8: the window of each floor rule and the overrides counted in it */
     uint32_t rate_count[PP_FLOOR_RULES];
+    long long answer_start;     /* OP4: the window of the operator answers `allow` and the count in it */
+    uint32_t answer_count;
+    size_t n_open;              /* OP3: the open escalations, oldest first, kept with the rate counts */
+    pp_escalation open[PP_OPEN_ESCALATIONS];
     int set_reads[PP_SETS];
     pp_install_set sets[PP_SETS]; /* last, so a provisioning clears all before it and keeps these (IS6) */
 } pp_durable;
@@ -543,6 +579,9 @@ typedef struct {
     pp_runtime_fn runtime;
     void *context;
     uint8_t (*table_check)(void *context, const uint8_t *body, size_t len); /* V11, as in pp_pep, given `context` */
+    /* RC4: an install statement the PEP applied, a set or an install.trust, once it is durable and before its event,
+     * so a run can hold every statement it decided under in the order applied. NULL for none. */
+    void (*applied)(void *context, const uint8_t *sealed, size_t sealed_len, const uint8_t *body, size_t body_len);
 } pp_config;
 
 #define PP_OUTBOX 6
@@ -564,6 +603,9 @@ typedef struct {
     int stood_out;            /* an install set applied by the last call stood out (IS12) */
     int record_lost;          /* IS10: no copy of the install record reads */
     int set_lost[PP_SETS];    /* IS10: a set the record names that no copy holds */
+    pp_answer answer;         /* OP3: the answer the last call applied, `applied` 0 for none */
+    int escalating;           /* OP3: the last ask was a floor escalation, which pp_pep_escalated may open */
+    uint8_t escalating_policy[32];
     size_t n_out;
     size_t out_len[PP_OUTBOX];
     uint8_t out[PP_OUTBOX][PP_RECORD_MAX]; /* the records made by the last call, oldest first (H4) */
@@ -706,6 +748,9 @@ typedef struct {
     int counted, rule;          /* AF8: a counted override, its rule (edge), the window start and the count after */
     long long window;
     uint32_t count;
+    int rate_escalated;         /* AF8: escalated past the rate, with `rule`, `window` and `count` the spent window */
+    int decided_rule;           /* the rule (edge) of the set that decided, -1 for none (a receipt's route target) */
+    int would_rule;             /* AF7: the rule of the set `would` names, -1 for none */
 } pp_decision;
 
 /* The decision of one request on a `mesh` PEP: `regs` the register file the table reads (a 4 byte prefix, then 8
@@ -716,6 +761,14 @@ typedef struct {
  * (FB1), or the refusal of X3. */
 void pp_pep_ask(pp_pep_machine *pep, const uint8_t *regs, size_t regs_len, const uint32_t *ages, long long now,
                 pp_decision *out);
+
+/* OP3: open the escalation the last pp_pep_ask made by the action floor, under the hash of the receipt the caller wrote
+ * for it and with the request an answer `allow` lets through (at most PP_REQUEST_MAX bytes), durably, the oldest of
+ * nine dropped. 0, or dist:not-staged when the last ask was no floor escalation. */
+uint8_t pp_pep_escalated(pp_pep_machine *pep, const uint8_t receipt_sha256[32], const uint8_t *request, size_t len);
+
+/* H1: the PEP id, the first 16 bytes of the SHA-256 of the instance public key. */
+void pp_pep_id(const pp_pep_machine *pep, uint8_t out[16]);
 
 /* AF9, AF10: whether the table `image` is a narrow action floor for `layout` with command register `command`: 0, or
  * dist:floor-broad. One pass over each edge's postfix program with a bounded stack (PP_FLOOR_WALK). */

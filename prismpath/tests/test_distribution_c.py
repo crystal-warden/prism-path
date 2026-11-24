@@ -960,7 +960,7 @@ FIELDS = [(0, COMMAND, -1000, 1000, 0), (1, PARAMETER, 0, 100, 0), (2, INDEPENDE
 EVENTS21 = [*state_record.EVENTS, "fallback", "install-applied", "install-widened", "answered"]
 SUBJECT = {"install.floor": 1, "install.fallback": 2, "install.ceiling": 3, "install.trust": 4}
 ALLOW, REFUSE = 1, 2
-BASIS = {0: None, 1: "release", 2: "floor", 3: "fallback"}
+BASIS = {0: None, 1: "release", 2: "floor", 3: "fallback", 4: "operator"}
 
 
 def _pub(name: str) -> bytes:
@@ -1151,7 +1151,8 @@ def _ask(line: str) -> dict:
             "basis": BASIS[int(words[3])], "held": words[4] == "1", "policy": None if words[5] == "-" else words[5],
             "would": int(words[6]), "would_cause": causes.name(int(words[7])) if int(words[7]) else None,
             "would_policy": None if words[8] == "-" else words[8], "override": words[9] == "1",
-            "counted": words[10] == "1", "rule": int(words[11]), "window": int(words[12]), "count": int(words[13])}
+            "counted": words[10] == "1", "rule": int(words[11]), "window": int(words[12]), "count": int(words[13]),
+            "rate_escalated": words[14] == "1", "decided_rule": int(words[15]), "would_rule": int(words[16])}
 
 
 def _stage(statement, now=N) -> str:
