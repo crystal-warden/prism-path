@@ -182,3 +182,49 @@ def test_case_269_a_cfs_app_with_hold_cut_off_past_its_fresh_statement_is_held(t
     held = state_record.read(point.pep.tick(), point.key.public_raw)
     assert (held.event, held.cause, held.held, held.state) == ("held", "dist:held", True, "active")
     assert point.pep.decide(lambda: point.pep.adapter.decide(READING))["mark"] == "held"
+
+
+# ------------------------------------------------------------------ section 21 on a modelled cFS app
+
+def _install(tmp_path, name="app", **settings):
+    settings.setdefault("install_keys", ["N1", "N2", "N3"])
+    settings.setdefault("install_threshold", 2)
+    return CfsPep(tmp_path / name, **settings)
+
+
+def _fallback(point, body, seq=1, **args):
+    args.setdefault("widens", True)
+    return point.install_set("install.fallback", {"cfs.table": body}, seq, **args)
+
+
+def test_case_200_hold_and_a_fallback_policy_on_a_cfs_app(tmp_path):
+    """case_200: FB6, X7, X8. A cFS app with HOLD and a fallback policy is held at expiry with bit 5 set and bit 4
+    clear, and a revocation of its release then hands it to its fallback policy with bit 4 set, bit 5 clear and event
+    `fallback` with `dist:revoked`."""
+    point = _install(tmp_path, expiry_response="hold")
+    assert point.send(_fallback(point, _body(2)))[-1].event == "install-widened"
+    point.commit(_body(1))
+    point.clock.now = _dist.EXPIRES
+    held = state_record.read(point.pep.tick(), point.key.public_raw)
+    assert (held.event, held.held, held.fallback) == ("held", True, False)
+    assert point.pep.decide(lambda: point.pep.adapter.table)["decision"] == _body(1)
+    point.pep.drain()
+    point.revoke(1, policies=[point.policy_of(_body(1))])
+    sent = [state_record.read(one, point.key.public_raw) for one in point.pep.drain()]
+    fallback = [one for one in sent if one.event == "fallback"]
+    assert [(one.cause, one.held, one.fallback) for one in fallback] == [("dist:revoked", False, True)]
+    decided = point.pep.decide(lambda: point.pep.adapter.table)
+    assert decided["basis"] == "fallback" and decided["decision"] == _body(2)
+
+
+def test_case_226_a_cfs_app_keeps_its_second_copy_in_a_critical_data_store_area(tmp_path):
+    """case_226: IS10, the cFS half. A cFS app whose second copy of its install record is in a Critical Data Store
+    area loses the file that holds the first, uses the second copy and holds its sets."""
+    point = _install(tmp_path, install_copy=tmp_path / "cds")
+    point.send(_fallback(point, _body(2)))
+    import shutil
+    shutil.rmtree(point.state_dir / "dist" / "install")
+    point.pep = point.open()
+    assert point.pep.installed.fallback is not None and not point.pep.installed.record_lost
+    decided = point.pep.decide(lambda: point.pep.adapter.table)
+    assert decided["basis"] == "fallback" and decided["decision"] == _body(2)
