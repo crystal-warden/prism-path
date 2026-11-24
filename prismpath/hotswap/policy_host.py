@@ -277,9 +277,21 @@ class PolicyHost:
     def _distribution_floor(self) -> bool:
         """True when this state directory's enforcement point has committed a distribution envelope, or when
         it was provisioned and its floor file is missing or cannot be read, which is answered the same way
-        (fail closed). Only a directory no enforcement point was provisioned in, or one whose readable floor
-        is still 0, keeps the older path open."""
+        (fail closed). The marks of its anchor part close the path too: an install statement it ever held (IS9),
+        and a release it committed on the stream it follows, whatever provisioning came after (L2, P3). Only a
+        directory no enforcement point was provisioned in, or one whose readable floor is still 0 and whose marks
+        say neither, keeps the older path open."""
+        from prismpath.distribution import install, kinds, trust
         dist = os.path.join(self.state_dir, "dist")
+        stream = None
+        if os.path.exists(os.path.join(dist, "anchor.json")):
+            try:
+                with open(os.path.join(dist, "anchor.json"), "rb") as anchor_file:
+                    stream = trust.read_anchor(anchor_file.read()).stream
+            except (OSError, ValueError, kinds.Refused):
+                return True
+        if install.older_forms_refused(dist, stream):
+            return True
         path = os.path.join(dist, "floor.json")
         if not os.path.exists(path):
             return os.path.exists(os.path.join(dist, "anchor.json"))

@@ -25,7 +25,7 @@
  *
  * A machine script drives one enforcement point instead, after the key lines of its anchor:
  *
- *   machine <hold 0|1> <has clock 0|1> <instance seed hex>
+ *   machine <hold 0|1> <has clock 0|1> <instance seed hex> [mesh | cfs]
  *   provision <stream> <now>
  *   stage <sealed hex> <body hex or -> <now>
  *   commit <stream> <seq> <policy hex> <delay ms> <now ms> <now>
@@ -165,7 +165,8 @@ static void print_decision(const pp_decision *d) {
     print_hex16(d->has_policy ? d->policy_sha256 : NULL);
     printf(" %u %u ", d->would, d->would_cause);
     print_hex16(d->has_would_policy ? d->would_policy : NULL);
-    printf(" %d %d %d %lld %u\n", d->override, d->counted, d->rule, d->window, d->count);
+    printf(" %d %d %d %lld %u %d %d %d\n", d->override, d->counted, d->rule, d->window, d->count, d->rate_escalated,
+           d->decided_rule, d->would_rule);
 }
 
 /* One machine script, read from stdin up to its "done". Beyond the steps above:
@@ -178,14 +179,22 @@ static void print_decision(const pp_decision *d) {
  *   install <threshold> <seq> <domain hex> <fingerprint hex>   the next anchor has an install member
  *   bring <sealed hex> <body hex>       a statement the next provisioning or install provisioning brings
  *   install_provision <now>             IS13
+ *   anchor_doc <hex>                    the next anchor and its install member, read from a trust anchor document
+ *   commit_check <stream> <seq> <policy hex> <now> | rollback_check <now>   what a commit or rollback would answer
  *   domain <hex>                        the domain hash the PEP was built with
  *   layout <hex> | field <register> <role> <min> <max> <stale>  the layout it was built with (AF10)
  *   ask <now> <regs hex> <ages, comma separated, - for none, or ->
  *   legacy <stream>                     L2, IS9
  *   lose2 <part> | corrupt <part>       the second copy does not read | one byte of the first copy changed
  *   installid
+ *   held                                the envelope id of the held floor, fallback policy and ceiling, or "-" each
+ *   escalated <receipt hex> <request hex or ->   OP3: open the escalation the last ask made, under that receipt hash
+ *   answer                              OP3: the answer the last step applied: "answer <applied> <allow> <envelope
+ *                                       id> <receipt> <request hex>", or "answer 0"
+ *   pepid                               H1: "pepid <hex>"
  *
- * print "provision-refused <cause>", "ask ...", "legacy <cause>", "installid <hex>". */
+ * print "provision-refused <cause>", "ask ...", "legacy <cause>", "installid <hex>", "anchor <cause> <stream>
+ * <target> <fingerprint>" and "check <cause>". */
 static int machine(const char *args, pp_trust *anchor) {
     static pp_pep_machine pep;
     static pp_config config;
@@ -201,9 +210,10 @@ static int machine(const char *args, pp_trust *anchor) {
     memset(&layout, 0, sizeof layout);
     memset(&install, 0, sizeof install);
     n_brought = 0;
-    if (sscanf(args, "%d %d %79s", &config.expiry_hold, &config.has_clock, seed) != 3) return 2;
+    char kind[16] = "mesh";
+    if (sscanf(args, "%d %d %79s %15s", &config.expiry_hold, &config.has_clock, seed, kind) < 3) return 2;
     hash32(seed, config.instance_seed);
-    config.kind = PP_TGT_MESH;
+    config.kind = strcmp(kind, "cfs") == 0 ? PP_TGT_CFS : PP_TGT_MESH;
     config.persist = persist;
     memset(part_kept, 0, sizeof part_kept);
     written = writes = largest_write = 0;
@@ -271,6 +281,26 @@ static int machine(const char *args, pp_trust *anchor) {
             brought[n_brought].body_len = unhex(b, brought_body[n_brought], PP_CEILING_BODY_MAX_TEST);
             n_brought++;
             continue;
+        } else if (strcmp(word, "anchor_doc") == 0) { /* P4: the next anchor is this document, read by the core */
+            static uint8_t doc[4096];
+            char anchor_stream[PP_STREAM_MAX + 1];
+            pp_target target;
+            uint8_t fingerprint[32];
+            size_t n = unhex(rest, doc, sizeof doc);
+            uint8_t cause = pp_read_anchor(doc, n, anchor, &install, anchor_stream, &target, fingerprint);
+            n_brought = 0;
+            printf("anchor %u %s %s ", cause, cause ? "-" : anchor_stream, cause ? "-" : pp_target_name(target));
+            if (cause) printf("-\n");
+            else {
+                for (int k = 0; k < 32; k++) printf("%02x", fingerprint[k]);
+                printf("\n");
+            }
+        } else if (strcmp(word, "commit_check") == 0) {
+            if (sscanf(rest, "%64s %lld %79s %lld", a, &seq, c, &now) != 4) return 2;
+            hash32(c, policy);
+            printf("check %u\n", pp_pep_commit_check(&pep, a, seq, policy, now));
+        } else if (strcmp(word, "rollback_check") == 0) {
+            printf("check %u\n", pp_pep_rollback_check(&pep, strtoll(rest, NULL, 10)));
         } else if (strcmp(word, "install_provision") == 0) {
             uint8_t cause = pp_pep_install_provision(&pep, brought, n_brought, strtoll(rest, NULL, 10));
             n_brought = 0;
@@ -312,8 +342,42 @@ static int machine(const char *args, pp_trust *anchor) {
             pp_decision d;
             pp_pep_ask(&pep, regs, n, given, now, &d);
             print_decision(&d);
+        } else if (strcmp(word, "escalated") == 0) {
+            static uint8_t request[PP_REQUEST_MAX + 1];
+            uint8_t receipt[32];
+            if (sscanf(rest, "%s %s", a, b) != 2) return 2;
+            hash32(a, receipt);
+            size_t n = unhex(b, request, sizeof request);
+            printf("escalated %u\n", pp_pep_escalated(&pep, receipt, request, n));
+        } else if (strcmp(word, "answer") == 0) {
+            if (!pep.answer.applied) printf("answer 0\n");
+            else {
+                printf("answer 1 %d ", pep.answer.allow);
+                for (int k = 0; k < 32; k++) printf("%02x", pep.answer.envelope_id[k]);
+                printf(" ");
+                for (int k = 0; k < 32; k++) printf("%02x", pep.answer.receipt[k]);
+                printf(" ");
+                if (pep.answer.request_len == 0) printf("-");
+                for (size_t k = 0; k < pep.answer.request_len; k++) printf("%02x", pep.answer.request[k]);
+                printf("\n");
+            }
+        } else if (strcmp(word, "pepid") == 0) {
+            uint8_t id[16];
+            pp_pep_id(&pep, id);
+            printf("pepid ");
+            for (int k = 0; k < 16; k++) printf("%02x", id[k]);
+            printf("\n");
         } else if (strcmp(word, "legacy") == 0) {
             printf("legacy %u\n", pp_pep_legacy(&pep, rest));
+        } else if (strcmp(word, "held") == 0) { /* P2 step 4, IS8: the envelope id of each install set held */
+            printf("held");
+            for (int k = 0; k < PP_SETS; k++) {
+                printf(" ");
+                if (pep.d.has_install && pep.d.install.sets[k].held && !pep.set_lost[k])
+                    for (int j = 0; j < 32; j++) printf("%02x", pep.d.install.sets[k].envelope_id[j]);
+                else printf("-");
+            }
+            printf("\n");
         } else if (strcmp(word, "installid") == 0) {
             uint8_t id[16];
             pp_pep_install_id(&pep, id);

@@ -70,14 +70,23 @@ def _register_comparator() -> None:
 _register_comparator()
 
 
+def built_layout() -> str:
+    """CL4, P4: the layout the app is built for, the layout signature of its example core image's fields, which the
+    table header's `LayoutHash` hashes. The anchor's `domain` names the hash of the domain this gives."""
+    from integrations.cfs.prismpath_app.policy import gen_image
+    from prismpath.kernel import canon2
+    return gen_image.layout_signature(gen_image.field_defs(canon2.loads(gen_image.CORE.read_bytes().rstrip(b"\n"))))
+
+
 class CfsAdapter(Adapter):
     """A model of the cFS app. `activate` holds the committed table, `deactivate` drops it, and `decide(reading)`
-    is the verdict of the table's core image on one reading."""
+    is the verdict of the table's core image on one reading. `layout` is the layout the app is built for."""
     kind = "cfs"
 
     def __init__(self):
         self.table: Optional[bytes] = None
         self._policy = None
+        self.layout = built_layout()
 
     def activate(self, release) -> None:
         from prismpath.agent.policy import Policy

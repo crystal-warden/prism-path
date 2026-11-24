@@ -3,13 +3,15 @@
 //! The reconciling state of the Rust enforcement point (spec-policy-distribution.md, section 9.5, H14 and P5)
 //! on the `host` target, over a host adapter whose runtime steps the test makes fail. Each test names the
 //! conformance case of section 20 it covers. A restart is a fresh `Pep` over the same state directory, and a
-//! death is the commit hook stopping a step. This crate builds no action floor and no fallback policy
-//! (section 21), so every PEP here holds neither, and the withdrawal leaves the runtime running nothing.
+//! death is the commit hook stopping a step. A PEP here holds no action floor and no fallback policy unless the
+//! test provisions one (section 21), and with none the withdrawal leaves the runtime running nothing.
 
 #[path = "common/mod.rs"]
 mod common;
 #[path = "common/dist.rs"]
 mod dist;
+#[path = "common/install.rs"]
+mod installs;
 
 use dist::*;
 use prismpath_hotswap_rs::dist::pep::{Adapter, HostAdapter, Pep, PepError, PepStep, Release, REFUSE};
@@ -80,6 +82,19 @@ impl Adapter for Flaky {
         }
         self.host.deactivate(cause)
     }
+
+    fn floor_layout(&self) -> Option<Vec<u8>> {
+        self.host.floor_layout()
+    }
+
+    /// FB1: a withdrawal to the fallback set is a withdrawal, and fails when the withdrawal does.
+    fn withdraw_to(&self, fallback: &Release, cause: &str) -> Result<(), PepError> {
+        self.switches.withdrawals.set(self.switches.withdrawals.get() + 1);
+        if self.switches.fail_withdraw.get() {
+            return Err(PepError::Refused("the runtime did not withdraw".into()));
+        }
+        self.host.withdraw_to(fallback, cause)
+    }
 }
 
 /// A provisioned host PEP over a flaky runtime, its clock and its switches.
@@ -92,19 +107,44 @@ struct Rig {
 
 impl Rig {
     fn new(tag: &str) -> Rig {
+        Rig::anchored(tag, &anchor_of(&["A"]))
+    }
+
+    /// A rig provisioned from `anchor`.
+    fn anchored(tag: &str, anchor: &[u8]) -> Rig {
         let scratch = common::Scratch::new(&format!("dist_reconciling_{tag}"));
         let now = Rc::new(Cell::new(NOW));
         let switches = Switches::default();
         let mut pep = Rig::pep_over(&scratch, &now, &switches).unwrap();
-        let fingerprint = pep.provision(&anchor_of(&["A"])).unwrap();
+        let fingerprint = pep.provision(anchor).unwrap();
         pep.confirm(&fingerprint).unwrap();
         Rig { scratch, now, switches, pep }
     }
 
     fn pep_over(scratch: &common::Scratch, now: &Rc<Cell<i64>>, switches: &Switches) -> Result<Pep<Flaky>, PepError> {
         let dir = scratch.join("host");
-        let flaky = Flaky { host: HostAdapter::new(host_at(&dir)), switches: switches.clone() };
+        let flaky = Flaky { host: HostAdapter::with_layout(host_at(&dir), installs::layout()), switches: switches.clone() };
         Pep::new(dir.to_str().unwrap(), flaky, test_key("I"), clock_of(now), REFUSE, true)
+    }
+
+    /// A rig provisioned from a `/2` anchor holding the install keys N1 to N3 at a threshold of 2 (section 21).
+    fn installing(tag: &str) -> Rig {
+        let scratch = common::Scratch::new(&format!("dist_reconciling_{tag}"));
+        let now = Rc::new(Cell::new(NOW));
+        let switches = Switches::default();
+        let mut pep = Rig::pep_over(&scratch, &now, &switches).unwrap();
+        let fingerprint = pep.provision(&installs::anchor2(&installs::INSTALL_KEYS, 2, &[], 0)).unwrap();
+        pep.confirm(&fingerprint).unwrap();
+        Rig { scratch, now, switches, pep }
+    }
+
+    /// Stage every statement of an install set, the record of the last.
+    fn send(&mut self, statements: &[(Vec<u8>, Vec<u8>)]) -> StateRecord {
+        let mut last = None;
+        for (sealed, body) in statements {
+            last = Some(self.pep.stage(sealed, body).unwrap());
+        }
+        read(&last.unwrap())
     }
 
     /// A fresh PEP over the same directory and the same runtime switches, as after a restart.
@@ -302,13 +342,15 @@ fn case_242_a_reconciling_pep_refuses_a_commit_and_a_rollback_and_keeps_the_stag
     assert_eq!(rig.switches.tries(), tries, "no call but a tick tries the runtime");
 }
 
-/// case_243: C8, C9, G2, A1, R3, the half this crate builds. A reconciling PEP stages a new release with a stage
-/// ack that names it, replaces it with a higher one, aborts, applies a revocation and takes an anchor to confirm,
-/// and none of these tries the runtime. The controller statement is pending, since this crate does not build the
-/// controller key (K6, K7).
+/// case_243: C8, C9, G2, A1, R3. A reconciling PEP stages a new release with a stage ack that names it, replaces it
+/// with a higher one, aborts, applies a revocation, takes an anchor to confirm and takes the epoch id of a controller
+/// statement, and none of these tries the runtime. The PEP gained its controller key by a `trust.controller` (K7).
 #[test]
-fn case_243_a_reconciling_pep_stages_aborts_and_applies_trust_statements_without_a_try() {
+fn case_243_a_reconciling_pep_stages_aborts_applies_trust_takes_an_anchor_and_a_statement_without_a_try() {
     let mut rig = Rig::new("243");
+    let named = controller_key("C");
+    let sealed = trust_statement(ArtifactKind::TrustController, &named, 1, &["A"], &[TargetKind::Host]);
+    assert_eq!(rig.stage(&sealed, &named).event, "trust-applied");
     rig.commit_at(&old(), 1);
     rig.stage(&ppt(&new(), &at(2)), &new());
     rig.switches.set(true, true);
@@ -319,12 +361,66 @@ fn case_243_a_reconciling_pep_stages_aborts_and_applies_trust_statements_without
     let higher = rig.stage(&ppt(&old(), &at(4)), &old());
     assert_eq!((higher.event, higher.staged_seq), ("staged", 4));
     assert_eq!(read(&rig.pep.abort(STREAM, 4, &h(&old())).unwrap()).event, "aborted");
-    let applied = rig.revoke(1, &revocation(&[], &[], &[h(&newer())], &[]));
-    assert_eq!((applied.event, applied.state, applied.trust_seq), ("trust-applied", "reconciling", 1));
+    let applied = rig.revoke(2, &revocation(&[], &[], &[h(&newer())], &[]));
+    assert_eq!((applied.event, applied.state, applied.trust_seq), ("trust-applied", "reconciling", 2));
     rig.pep.provision(&anchor_of(&["A"])).unwrap();
     assert!(rig.path("anchor.pending").exists());
+    rig.pep.drain();
+    assert!(rig.pep.take_statement(&signed_by("C", Said { key_seq: 1, epoch: 4, ..Said::default() })).unwrap());
+    assert!(rig.pep.drain().is_empty(), "a statement sends no record");
+    let beat = read(&rig.pep.record("beat", None).unwrap());
+    assert_eq!((beat.epoch, beat.state), (4, "reconciling"));
     assert_eq!(rig.switches.tries(), tries);
     assert!(rig.pep.is_reconciling());
+}
+
+/// C10, H16: a reconciling PEP holds its held release, and its running release while the withdrawal fails, to
+/// freshness as to expiry. Past the kept fresh statement's `expires` plus SKEW the held release falls unrun as a
+/// lapse with dist:expired, and a running release that falls is named with that cause.
+#[test]
+fn a_held_and_a_running_release_fall_when_freshness_lapses() {
+    let fresh = |rig: &mut Rig| {
+        let statement = signed_by("C", Said { fresh: true, stream_seq: 1, expires: (NOW + 3600) as u64, ..Said::default() });
+        assert!(rig.pep.take_statement(&statement).unwrap());
+        assert_eq!(rig.pep.kept().unwrap().expires, NOW + 3600);
+    };
+    let mut rig = Rig::anchored("fresh_held", &anchor2_of(&["A"], "C", 3600));
+    rig.commit_at(&old(), 1);
+    fresh(&mut rig);
+    rig.stage(&ppt(&new(), &at(2)), &new());
+    rig.switches.set(true, false);
+    assert_eq!(read(&rig.pep.commit(STREAM, 2, &h(&new()), 0).unwrap()).state, "reconciling");
+    rig.switches.set(false, false);
+    rig.now.set(NOW + 3900);
+    rig.pep.drain();
+    assert!(rig.pep.tick().unwrap().is_some_and(|record| read(&record).event == "committed"), "fresh until expires plus SKEW");
+    let mut rig = Rig::anchored("fresh_held_lapse", &anchor2_of(&["A"], "C", 3600));
+    rig.commit_at(&old(), 1);
+    fresh(&mut rig);
+    rig.stage(&ppt(&new(), &at(2)), &new());
+    rig.switches.set(true, false);
+    rig.pep.commit(STREAM, 2, &h(&new()), 0).unwrap();
+    rig.switches.set(false, false);
+    let before = rig.switches.tries().0;
+    rig.now.set(NOW + 3901);
+    let left = read(&rig.pep.tick().unwrap().unwrap());
+    assert_eq!((left.event, left.cause.as_deref(), left.state), ("lapsed", Some("dist:expired"), "no-policy"));
+    assert_eq!(rig.switches.tries().0, before, "the held release that fell is never installed");
+    assert_eq!(rig.host_active(), json!(null));
+
+    let mut rig = Rig::anchored("fresh_running", &anchor2_of(&["A"], "C", 3600));
+    rig.commit_at(&old(), 1);
+    fresh(&mut rig);
+    rig.stage(&ppt(&new(), &at(2)), &new());
+    rig.switches.set(true, true);
+    rig.pep.commit(STREAM, 2, &h(&new()), 0).unwrap();
+    rig.now.set(NOW + 3901);
+    rig.pep.drain();
+    assert!(rig.pep.tick().unwrap().is_none(), "the withdrawal fails again and nothing is owed yet");
+    let beat = read(&rig.pep.record("beat", None).unwrap());
+    let named = entry(&beat).unwrap();
+    assert_eq!((beat.state, beat.active_seq), ("reconciling", 0));
+    assert_eq!((named.owed, named.cause.as_deref(), running(&named)), ("lapsed", Some("dist:expired"), Some((prefix(&old()), 1))));
 }
 
 fn prefix_of_release(body: &[u8]) -> [u8; 16] {
@@ -373,37 +469,126 @@ fn case_245_a_lapse_killed_before_its_active_record_is_lapsed_again_at_the_start
     assert_eq!((rig.pep.state(), rig.host_active()), ("no-policy", json!(null)));
 }
 
-/// case_246: C10, R5, X1, Q4, H14, the expiry and revocation runs. While a commit is reconciling with its runtime
-/// withdrawn, the held release expires, and in another run is revoked: it is never installed, the PEP is
-/// `no-policy` at once, sends one `lapsed` record with that cause and no `committed` record, and the floor stays
-/// the commit's. The ceiling and fallback runs are pending, since this crate builds no section 21.
+/// case_246: C10, R5, X1, CL3, Q4, H14. While a commit is reconciling with its runtime withdrawn, the held release
+/// expires, in another run is revoked, in a third a ceiling it is above is applied: it is never installed, the PEP is
+/// `no-policy` at once, sends one `lapsed` record with that cause and no `committed` record, and the floor stays the
+/// commit's. In a fourth it expires on a PEP with a fallback policy, which sends one `fallback` record with
+/// `dist:expired` instead.
 #[test]
 fn case_246_a_held_release_that_falls_while_withdrawn_is_never_installed() {
-    for cause in ["dist:expired", "dist:revoked"] {
-        let mut rig = Rig::new(&format!("246_{}", &cause[5..]));
+    for cause in ["dist:expired", "dist:revoked", "dist:above-ceiling", "fallback"] {
+        let mut rig = Rig::installing(&format!("246_{}", cause.trim_start_matches("dist:")));
+        if cause == "dist:above-ceiling" {
+            rig.send(&installs::ceiling_set(&[&old(), &new()], &installs::SetArgs { widens: false, ..installs::seq(1) }));
+        }
+        if cause == "fallback" {
+            rig.send(&installs::fallback_set(&newer(), &installs::seq(1)));
+        }
         rig.commit_at(&old(), 1);
         rig.stage(&ppt(&new(), &at(2)), &new());
         rig.switches.set(true, false);
         rig.pep.commit(STREAM, 2, &h(&new()), 0).unwrap();
         rig.pep.drain();
         let activations = rig.switches.tries().0;
-        if cause == "dist:expired" {
-            rig.now.set(EXPIRES);
-            rig.pep.tick().unwrap();
-        } else {
-            rig.revoke(1, &revocation(&[], &[], &[h(&new())], &[]));
+        match cause {
+            "dist:revoked" => {
+                rig.revoke(1, &revocation(&[], &[], &[h(&new())], &[]));
+            }
+            "dist:above-ceiling" => {
+                let narrower = installs::SetArgs { widens: false, replaces: rig.pep.installed.held(installs_kind()).map(|set| set.policy_sha256().clone()), ..installs::seq(2) };
+                rig.send(&installs::ceiling_set(&[&old()], &narrower));
+            }
+            _ => {
+                rig.now.set(EXPIRES);
+                rig.pep.tick().unwrap();
+            }
         }
         let records = rig.records();
-        let lapsed: Vec<_> = records.iter().filter(|record| record.event == "lapsed").collect();
+        let (event, expected) = if cause == "fallback" { ("fallback", "dist:expired") } else { ("lapsed", cause) };
+        let lapsed: Vec<_> = records.iter().filter(|record| record.event == event).collect();
         assert_eq!(lapsed.len(), 1, "{cause}");
-        assert_eq!((lapsed[0].cause.as_deref(), lapsed[0].state, lapsed[0].active_seq), (Some(cause), "no-policy", 0), "{cause}");
+        assert_eq!((lapsed[0].cause.as_deref(), lapsed[0].state, lapsed[0].active_seq), (Some(expected), "no-policy", 0), "{cause}");
         assert!(records.iter().all(|record| record.event != "committed"), "{cause}");
         assert_eq!(rig.switches.tries().0, activations, "{cause}: never installed");
-        assert_eq!((rig.pep.state(), rig.pep.floor().seq, rig.host_active()), ("no-policy", 2, json!(null)), "{cause}");
+        let running = if cause == "fallback" { json!(h(&newer()).as_str()) } else { json!(null) };
+        assert_eq!((rig.pep.state(), rig.pep.floor().seq, rig.host_active()), ("no-policy", 2, running), "{cause}");
         let never_ran = rig.pep.audit.events().into_iter().filter(|event| event["action"] == "lapsed").collect::<Vec<_>>();
         assert_eq!(never_ran.len(), 1, "{cause}");
         assert_eq!(never_ran[0]["data"]["ran"], json!(false), "{cause}");
     }
+}
+
+fn installs_kind() -> prismpath_hotswap_rs::dist::install::SetKind {
+    prismpath_hotswap_rs::dist::install::SetKind::Ceiling
+}
+
+/// case_265: C8, AF1, FB1, FB2. A host PEP with an action floor and a fallback policy reconciling with its runtime
+/// withdrawn allows a request the floor allows with basis `floor` and decides one the floor is silent on under the
+/// fallback policy, with bit 4 set and status 3. A second such PEP whose withdrawal failed allows the first with
+/// basis `floor` and refuses the second with `dist:reconciling`.
+#[test]
+fn case_265_a_reconciling_pep_asks_its_floor_and_then_its_fallback_policy() {
+    for withdrawn in [true, false] {
+        let mut rig = Rig::installing(&format!("265_{withdrawn}"));
+        rig.send(&installs::floor_set(&installs::good_table(), &installs::seq(1)));
+        rig.send(&installs::fallback_set(&newer(), &installs::seq(1)));
+        rig.commit_at(&old(), 1);
+        rig.stage(&ppt(&new(), &at(2)), &new());
+        rig.switches.set(true, !withdrawn);
+        rig.pep.commit(STREAM, 2, &h(&new()), 0).unwrap();
+        assert!(rig.pep.is_reconciling());
+        let floor = rig.pep.decide_request(Some(&installs::request([3, 3, 0, 0])), || "fallback").unwrap();
+        assert_eq!(floor.basis, Some("floor"), "withdrawn {withdrawn}");
+        let silent = rig.pep.decide_request(Some(&installs::request([9, 3, 0, 0])), || "fallback").unwrap();
+        let record = read(&rig.pep.record("beat", None).unwrap());
+        assert_eq!(record.state, "reconciling");
+        if withdrawn {
+            assert_eq!((silent.basis, silent.decision), (Some("fallback"), Some("fallback")));
+            assert!(record.fallback, "FB2: bit 4 under status 3");
+        } else {
+            assert_eq!((silent.basis, silent.cause), (None, Some("dist:reconciling")));
+            assert!(!record.fallback);
+        }
+    }
+}
+
+/// case_266: C6, H14, FB8, CL3. A host PEP under its fallback policy applies a new fallback policy whose runtime step
+/// fails and is reconciling with an entry that owes `install-applied` (11); another has its release lapsed by a
+/// ceiling whose runtime step fails and owes `fallback` (10) with `dist:above-ceiling`. Each sends that record when
+/// a try works.
+#[test]
+fn case_266_an_install_set_whose_runtime_step_fails_is_reconciled() {
+    let mut rig = Rig::installing("266a");
+    rig.send(&installs::fallback_set(&newer(), &installs::seq(1)));
+    rig.pep.drain();
+    rig.switches.set(false, true);
+    let renewal = installs::SetArgs { widens: false, replaces: Some(h(&newer())), ..installs::seq(2) };
+    let record = rig.send(&installs::fallback_set(&newer(), &renewal));
+    assert_eq!(said(&record), ("reconciling", "reconciling", 0));
+    let owes = entry(&record).unwrap();
+    assert_eq!((owes.owed, owes.cause.as_deref()), ("install-applied", None));
+    rig.switches.set(false, false);
+    let sent = read(&rig.pep.tick().unwrap().unwrap());
+    assert_eq!((sent.event, sent.state, sent.fallback), ("install-applied", "no-policy", true));
+    assert_eq!(installs::Installer::entry(&sent).subject, "install.fallback");
+
+    let mut rig = Rig::installing("266b");
+    rig.send(&installs::ceiling_set(&[&old(), &newer()], &installs::SetArgs { widens: false, ..installs::seq(1) }));
+    rig.send(&installs::fallback_set(&newer(), &installs::seq(1)));
+    rig.commit_at(&old(), 1);
+    rig.pep.drain();
+    rig.switches.set(false, true);
+    let narrower = installs::SetArgs { widens: false, replaces: rig.pep.installed.held(installs_kind()).map(|set| set.policy_sha256().clone()), ..installs::seq(2) };
+    rig.send(&installs::ceiling_set(&[&newer()], &narrower));
+    let records = rig.records();
+    let last = records.last().unwrap();
+    assert_eq!(said(last), ("reconciling", "reconciling", 0));
+    let owes = entry(last).unwrap();
+    assert_eq!((owes.owed, owes.cause.as_deref()), ("fallback", Some("dist:above-ceiling")));
+    rig.switches.set(false, false);
+    let sent = read(&rig.pep.tick().unwrap().unwrap());
+    assert_eq!((sent.event, sent.cause.as_deref(), sent.state, sent.fallback), ("fallback", Some("dist:above-ceiling"), "no-policy", true));
+    assert_eq!(rig.host_active(), json!(h(&newer()).as_str()));
 }
 
 /// case_247: C10, H14, X1. A commit whose runtime refuses to withdraw names the running release in every record,

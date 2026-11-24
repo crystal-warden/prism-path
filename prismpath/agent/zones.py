@@ -113,6 +113,10 @@ class _Fixed:
     def reach(self, raw: str, config: Any = None) -> str:
         return self.answer
 
+    def reach_names(self, raw: str, config: Any = None) -> Tuple[str, frozenset]:
+        """`reach` and the protected names the path reaches, none known for a fixed answer."""
+        return self.answer, frozenset()
+
     def __repr__(self) -> str:
         return f"<zones {self.answer}: {self.why}>"
 
@@ -448,6 +452,11 @@ def _covered(name: str, protected: Sequence[str]) -> bool:
     return any(name == p or name.startswith(p + ".") for p in protected)
 
 
+def _covering(name: str, protected: Sequence[str]) -> frozenset:
+    """The protected names that cover `name`."""
+    return frozenset(p for p in protected if name == p or name.startswith(p + "."))
+
+
 class ContextCloudZones:
     """The information point that asks Context Cloud (`contextcloud reaches --json`, whose JSON output is described in the Context Cloud repository)."""
 
@@ -613,10 +622,17 @@ class ContextCloudZones:
 
     # --- one path
     def reach(self, raw: str, config: Any, budget_s: Optional[float] = None) -> str:
+        return self.reach_names(raw, config, budget_s)[0]
+
+    def reach_names(self, raw: str, config: Any, budget_s: Optional[float] = None) -> Tuple[str, frozenset]:
+        """`reach`, and the protected names of the zone document the path reaches (spec-policy-distribution.md, AF1),
+        for `zone_name`. A file that defines protected code names the names that cover it. A file found protected only
+        by a lookup of its functions names none, since Context Cloud answers for the protected set as a whole."""
         from prismpath.agent import classifier
+        self.names = frozenset()
         if self.why:
             self.stats = {"functions": 0, "cached": False, "seconds": 0.0, "untrusted_index": self.why}
-            return "unknown"
+            return "unknown", frozenset()
         started = time.monotonic()
         budget = self.budget_s if budget_s is None else budget_s
         self.stats = {"functions": 0, "cached": False, "seconds": 0.0}
@@ -624,12 +640,12 @@ class ContextCloudZones:
             real = Path(os.path.realpath(classifier.host_path(raw, config)))
             rel = real.relative_to(self.project).as_posix()
             if real.suffix != ".py" or not real.is_file():
-                return "unknown"
+                return "unknown", frozenset()
             content = real.read_bytes()
         except (ValueError, OSError):
-            return "unknown"
+            return "unknown", frozenset()
         try:
-            return self._file(rel, content, started, budget)
+            return self._file(rel, content, started, budget), self.names
         finally:
             self.stats["seconds"] = round(time.monotonic() - started, 4)
 
@@ -641,6 +657,7 @@ class ContextCloudZones:
         if indexed_sha != _sha256(content):
             return "unknown"                      # the index holds another version of this file
         if _covered(module, self.protected) or any(_covered(n, self.protected) for n in names):
+            self.names = _covering(module, self.protected).union(*(_covering(n, self.protected) for n in names))
             return "protected"                    # the file defines protected code, no lookup needed
         key = _sha256("|".join((self._index_signature(), self.zones_sha, indexed_sha, rel)).encode())
         cached = self._cache_get(key) if self._confined() else None      # elsewhere the agent can write the cache

@@ -57,7 +57,8 @@ def release_id(artifacts: Iterable[Tuple[str, str]]) -> str:
     `trust.widening` envelope binds to its release by carrying the same `release` (E7)."""
     pairs = sorted([artifact, body_sha256] for artifact, body_sha256 in artifacts)
     _require(bool(pairs) and len({pair[0] for pair in pairs}) == len(pairs), "a release names each artifact once")
-    _require(all(artifact in kinds.ARTIFACTS and artifact not in kinds.TRUST_ARTIFACTS for artifact, _ in pairs),
+    _require(all(artifact in kinds.ARTIFACTS and artifact not in kinds.TRUST_ARTIFACTS | kinds.INSTALL_ARTIFACTS
+                 for artifact, _ in pairs),
              "a release id names only artifact kinds that are not trust kinds")
     _require(all(is_hex64(body_sha256) for _, body_sha256 in pairs), "a body hash in a release id")
     return canon.sha256_hex(canon.canon2_bytes(pairs))
@@ -97,9 +98,13 @@ class Envelope:
 
 def _check_meta(artifact: str, meta: Any) -> None:
     """E1, E11: an object of exactly the members section 3 lists for the artifact, each of the form the kind
-    table gives it, so no check that reads a signed member has to guess its type."""
+    table gives it, so no check that reads a signed member has to guess its type. An install statement's members
+    are `as` and those of the artifact `as` names (IS1)."""
     _require(isinstance(meta, dict), "meta is not an object")
-    required, optional = kinds.ARTIFACTS[artifact].meta_required, kinds.ARTIFACTS[artifact].meta_optional
+    if artifact in kinds.INSTALL_ARTIFACTS:
+        required, optional = kinds.install_meta(artifact, meta)
+    else:
+        required, optional = kinds.ARTIFACTS[artifact].meta_required, kinds.ARTIFACTS[artifact].meta_optional
     names = set(meta)
     _require(required <= names and names <= required | optional, f"meta members {sorted(names)} for {artifact}")
     for name, value in meta.items():
@@ -142,21 +147,74 @@ def read(envelope_bytes: bytes, *, reads_meta: bool = True) -> Envelope:
     _require(isinstance(doc["widens"], bool), "widens")
     stream = doc["stream"]
     trust = artifact in kinds.TRUST_ARTIFACTS
+    install = artifact in kinds.INSTALL_ARTIFACTS
     _require(is_stream(stream) or stream == TRUST_STREAM, "stream")
     _require(stream != TRUST_STREAM or doc["policy_sha256"] == doc["release"] == ZERO_HASH,
              "a @trust envelope's policy_sha256 and release are 64 zeros")
-    if trust:
-        _require(doc["expires"] == 0, "a trust kind's expires is 0")                       # E5, X4
+    if trust or install:
+        _require(doc["expires"] == 0, "a trust or an install kind's expires is 0")         # E5, X4, IS1
     else:
         _require(doc["expires"] > doc["not_before"], "expires is not above not_before")      # E5
+    if artifact == kinds.ANSWER:                     # OP2: one PEP, one escalation, at most 600 seconds
+        _require(doc["expires"] - doc["not_before"] <= kinds.ANSWER_LIFE, "an answer lives at most 600 seconds")
+        _require(doc["seq"] == 1 and doc["release"] == ZERO_HASH and doc["replaces"] == "" and not doc["widens"]
+                 and len(targets) == 1 and stream != TRUST_STREAM, "an answer's seq, release, replaces, widens, "
+                                                                   "targets or stream")
+    if install:
+        _check_install(doc)
     if reads_meta:
         _check_meta(artifact, doc["meta"])
     else:
         _require(isinstance(doc["meta"], dict) and _depth(doc["meta"]) <= META_DEPTH, "meta is not a bounded object")
+        if install:                                  # IS1: the scanners read these members of an install kind too
+            meta = doc["meta"]
+            _require(artifact == "install.trust" or "as" in meta, "an install statement names its artifact in as")
+            _require(all(kinds.FORMS[name](meta[name]) for name in kinds.READ_ALWAYS if name in meta),
+                     "an install member that is not of its form")
+            _require(artifact == "install.floor" or not (kinds.FLOOR_META & set(meta)), "a floor member off a floor")
     return Envelope(artifact=artifact, body_sha256=doc["body_sha256"], body_size=doc["body_size"],
                     expires=doc["expires"], meta=doc["meta"], not_before=doc["not_before"],
                     policy_sha256=doc["policy_sha256"], release=doc["release"], replaces=doc["replaces"], seq=doc["seq"], stream=stream,
                     targets=tuple(targets), widens=doc["widens"], raw=raw)
+
+
+def install_release_id(pairs: Iterable[Tuple[str, str]]) -> str:
+    """IS1: the release id of an install set, E10 over its `[as, body_sha256]` pairs, sorted. `as` may also be
+    `policy.list` (CL1) or `none`, the empty set."""
+    pairs = sorted([name, body_sha256] for name, body_sha256 in pairs)
+    _require(bool(pairs) and len({pair[0] for pair in pairs}) == len(pairs), "a set names each artifact once")
+    _require(all(name in kinds.INSTALL_AS or name in (kinds.POLICY_LIST, kinds.NONE) for name, _ in pairs),
+             "an install set names an artifact it may hold")
+    _require(all(is_hex64(body_sha256) for _, body_sha256 in pairs), "a body hash in a set's release id")
+    return canon.sha256_hex(canon.canon2_bytes(pairs))
+
+
+def set_id(envelope_ids: Iterable[str]) -> str:
+    """IS1: the set id, the SHA-256 of the envelope ids of the set, sorted, as raw bytes."""
+    return canon.sha256_hex(b"".join(bytes.fromhex(one) for one in sorted(envelope_ids)))
+
+
+EMPTY_SHA256 = canon.sha256_hex(b"")
+
+
+def _check_install(doc: dict) -> None:
+    """IS1, IS11: an install statement's own members. A set names exactly one kind and the PEP's stream; the empty
+    set has `as` `none`, an empty body and 64 zeros for its policy hash; a policy list's policy hash is the hash of
+    the list. An `install.trust` carries 64 zeros for its policy hash and release, no `replaces` and no `meta`."""
+    _require(doc["stream"] != TRUST_STREAM, "an install statement is on the PEP's own stream")
+    if doc["artifact"] == "install.trust":
+        _require(doc["policy_sha256"] == doc["release"] == ZERO_HASH and doc["replaces"] == "" and doc["meta"] == {},
+                 "an install trust statement's policy hash, release, replaces and meta")
+        return
+    _require(len(doc["targets"]) == 1, "an install set names exactly one target kind")
+    meta = doc["meta"] if isinstance(doc["meta"], dict) else {}
+    named = meta.get("as")
+    if named == kinds.NONE:
+        _require(doc["body_size"] == 0 and doc["policy_sha256"] == ZERO_HASH
+                 and doc["release"] == install_release_id([(kinds.NONE, EMPTY_SHA256)]), "the empty set")
+    elif named == kinds.POLICY_LIST:
+        _require(doc["artifact"] == "install.ceiling" and doc["policy_sha256"] == doc["body_sha256"],
+                 "a policy list is a ceiling, and its policy hash is the list's")
 
 
 def build(artifact: str, body: bytes, *, stream: str, seq: int, policy_sha256: str, release: str,

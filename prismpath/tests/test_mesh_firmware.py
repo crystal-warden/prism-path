@@ -203,8 +203,8 @@ def test_the_install_parts_are_read_from_their_second_copy(binary):
 
 def test_the_nvs_partitions_hold_the_largest_durable_state_the_core_allows(binary):
     """The review's finding: the default NVS partition of 24 kB is too small. partitions.csv gives `nvs` 128 kB and
-    `nvs_copy` 64 kB. At the bounds of pp_dist.h every part takes 69,494 bytes with the instance key's seed, and the
-    install parts 28,048 bytes on the second medium. Each partition holds them, PHY calibration (1,904 bytes, on
+    `nvs_copy` 64 kB. At the bounds of pp_dist.h every part takes 69,510 bytes with the instance key's seed, and the
+    install parts 28,064 bytes on the second medium. Each partition holds them, PHY calibration (1,904 bytes, on
     `nvs`), room to write its largest part again and the one free page NVS keeps."""
     fleet = _fleet(binary)
     try:
@@ -213,7 +213,7 @@ def test_the_nvs_partitions_hold_the_largest_durable_state_the_core_allows(binar
         fleet.close()
     copied = [sizes[part] for part in (256, 512, 1024, 2048, 4096)]
     main = [*sizes.values(), 32]
-    assert len(sizes) == 14 and sum(main) == 69494 and sum(copied) == 28048 and sizes[2] == 20
+    assert (len(sizes), sum(main), sum(copied), sizes[2]) == (14, 69510, 28064, 20)
     table = sim.partitions(MESH / "partitions.csv")
     assert table["nvs"][3] == 0x20000 and table["nvs_copy"][3] == 0x10000
     assert sim.nvs_pages(main, extra_entries=sim.nvs_entries(1904) + 1) <= table["nvs"][3] // sim.NVS_PAGE

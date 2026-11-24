@@ -382,6 +382,57 @@ def _boundary_domain(name: str, text: str, atoms: List[list]) -> List[Any]:
     return values
 
 
+ZONE_NAME = "zone_name"
+ZONE_NAME_MAX = 512
+
+
+def zone_name_ok(name: Any) -> bool:
+    """A value the zone point can read as one `agent.zones` name: 1 to 512 characters and no path."""
+    return isinstance(name, str) and 1 <= len(name) <= ZONE_NAME_MAX and "/" not in name and name not in (".", "..")
+
+
+def _conjuncts(when) -> List[Any]:
+    if isinstance(when, list) and when and when[0] == "and":
+        return [part for operand in when[1:] for part in _conjuncts(operand)]
+    return [when]
+
+
+def _mentions(when, name: str) -> bool:
+    if not isinstance(when, list):
+        return False
+    return (len(when) >= 2 and when[0] in ("cmp", "in", "not in", "truthy") and when[1] == name) or any(
+        _mentions(part, name) for part in when[1:] if isinstance(part, list))
+
+
+def zone_name_problem(when) -> bool:
+    """AF1 (spec-policy-distribution.md, 21.2): a rule tests `zone_name` other than for equality with one name the
+    zone point can read, as a conjunct of the whole rule. Such a rule is `policy:out-of-domain`."""
+    for conjunct in _conjuncts(when):
+        if not _mentions(conjunct, ZONE_NAME):
+            continue
+        if not (isinstance(conjunct, list) and len(conjunct) == 4 and conjunct[0] == "cmp" and conjunct[1] == ZONE_NAME
+                and conjunct[2] == "==" and isinstance(conjunct[3], list) and len(conjunct[3]) == 2
+                and conjunct[3][0] == "str" and zone_name_ok(conjunct[3][1])):
+            return True
+    return False
+
+
+def _zone_names(docs) -> List[Any]:
+    """AF1, 9.4: the walk of `zone_name` needs no list of every name, because a rule only tests equality. It takes the
+    empty name, each name either document tests, and one name neither tests, which stands for every other."""
+    tested = set()
+    for doc in docs:
+        for rule in doc["rules"]:
+            for conjunct in _conjuncts(rule["when"]):
+                if (isinstance(conjunct, list) and len(conjunct) == 4 and conjunct[:3] == ["cmp", ZONE_NAME, "=="]
+                        and isinstance(conjunct[3], list) and len(conjunct[3]) == 2):
+                    tested.add(conjunct[3][1])
+    other = "zone"
+    while other in tested:
+        other += "_"
+    return ["", *sorted(tested), other]
+
+
 def domain_classes(docs, read_also: Tuple[str, ...] = (), boundary_ints: bool = False):
     """The finite reading domain of one or more policy documents over the same fields, as value classes:
     `(names, constant, groups)`. `names` are the fields some rule of some document reads (and `read_also`),
@@ -407,6 +458,11 @@ def domain_classes(docs, read_also: Tuple[str, ...] = (), boundary_ints: bool = 
             read |= _names_read(rule["when"], fields)
     domains = {}
     for name, text in sorted(fields.items()):
+        if name == ZONE_NAME and text.split()[:1] == ["category"]:
+            if any(zone_name_problem(rule["when"]) for doc in docs for rule in doc["rules"]):
+                raise ProfileError("a rule tests zone_name other than for equality with one name")
+            domains[name] = _zone_names(docs)
+            continue
         try:
             domains[name] = _domain(name, text)
         except ProfileError:
@@ -473,6 +529,8 @@ def outside_domain(doc) -> Optional[str]:
     if not isinstance(fields, dict):
         return None
     for rule in doc.get("rules") or ():
+        if ZONE_NAME in fields and isinstance(rule, dict) and zone_name_problem(rule.get("when")):
+            return "a rule tests zone_name other than for equality with one name the zone point can read"
         stack = [rule.get("when") if isinstance(rule, dict) else None]
         while stack:
             item = stack.pop()
@@ -551,6 +609,24 @@ def allow_set(policy):
 
 
 # ------------------------------------------------------------------------------------------- the compile
+NET_ORDER = ("none", "proxy_model", "proxy_allow")
+
+
+def join(*profiles: Profile) -> Profile:
+    """The least profile that permits what each of `profiles` permits (spec-policy-distribution.md, AF1): the mounts
+    of each, the host mount read write where one has it, the host network where one shares it, and the widest proxy
+    state, which the host network replaces since a profile never has both. The limits are the first profile's."""
+    if not profiles:
+        raise ProfileError("a join of no profiles")
+    first = profiles[0]
+    mounts = ("/",) if any("/" in one.ro_mounts for one in profiles) else tuple(sorted({mount for one in profiles
+                                                                                       for mount in one.ro_mounts}))
+    network = any(one.network for one in profiles)
+    net = "none" if network else max((one.net for one in profiles), key=NET_ORDER.index)
+    return Profile(ro_mounts=mounts, rw_path=first.rw_path, host_write=any(one.host_write for one in profiles),
+                   network=network, max_processes=first.max_processes, timeout_s=first.timeout_s, net=net)
+
+
 def compile_profile(image: Union[bytes, "Policy"], role: str = "bash") -> Profile:  # noqa: F821
     """The profile an image needs: the strictest one its allow set permits. `role` is `bash` (one allowed shell
     command, never a proxy) or `agent` (the whole agent process tree, `net` from the allow set). Raises ProfileError."""

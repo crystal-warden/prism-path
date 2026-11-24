@@ -123,7 +123,8 @@ class TrustStore:
         key = self.keys.get(kid)
         return kid in self.retired or (key is not None and key.role != role)
 
-    def check_controller(self, body: bytes, instance_key_id: Optional[str] = None) -> Optional[str]:
+    def check_controller(self, body: bytes, instance_key_id: Optional[str] = None,
+                         others: FrozenSet[str] = frozenset()) -> Optional[str]:
         """K7 for a `trust.controller` whose body already reads (V11): `key` is never an authority key the store
         holds, the PEP's own instance key, a revoked key or a retired one, the controller key a statement replaced
         before included (`dist:rotation-invalid`), and a store with no controller key that would then hold a ninth
@@ -133,7 +134,7 @@ class TrustStore:
         held = self.controller
         if held is not None and held[0] == added_id:
             return None
-        if (added_id == instance_key_id or added_id in self.revoked_keys
+        if (added_id == instance_key_id or added_id in self.revoked_keys or added_id in others
                 or self._held_elsewhere(added_id, kinds.CONTROLLER)):
             return ROTATION_INVALID
         live = {kid for kid in self.keys if kid not in self.retired} | {added_id}
@@ -268,7 +269,7 @@ class TrustStore:
 
     # ------------------------------------------------------------------ O1 to O4: rotation
     def check_rotation(self, body: bytes, entries: Sequence[Tuple[str, bytes]], message: bytes,
-                       instance_key_id: Optional[str] = None) -> Optional[str]:
+                       instance_key_id: Optional[str] = None, others: FrozenSet[str] = frozenset()) -> Optional[str]:
         """O2 to O4 for a rotation whose envelope already counts under this store (V3) and reads (V11): the key in
         `add` signs it too, so it is signed under the store it leaves as well, `add` is neither the PEP's own
         instance key, a revoked key nor a key the store retired, since a retired key does not come back, and
@@ -278,9 +279,10 @@ class TrustStore:
         doc = kinds.read_rotation(body)
         added = bytes.fromhex(doc["add"])
         added_id = canon.sha256_hex(added)
-        if (added_id == instance_key_id or added_id in self.revoked_keys
+        if (added_id == instance_key_id or added_id in self.revoked_keys or added_id in others
                 or self._held_elsewhere(added_id, kinds.AUTHORITY)):
-            return ROTATION_INVALID                                  # O4, K4: never a key held in another role
+            return ROTATION_INVALID                                  # O4, K4: never a key held in another role,
+                                                                     # the install and operator keys included (IS7)
         if doc["retire"] and doc["retire"] not in self.keys:
             return ROTATION_INVALID                                  # O3
         live = {kid for kid in self.keys if kid not in self.retired} | {added_id}
@@ -399,6 +401,7 @@ class Anchor:
     controller: Optional[bytes] = None
     fresh: int = 0
     format: str = ANCHOR_FORMAT
+    install: Any = None                            # P4: the install record the `install` member brings, or None
 
     def store(self) -> TrustStore:
         """P3: the trust store an anchor provisions, with the trust sequence, the time floor and the key sequence
@@ -414,19 +417,21 @@ class Anchor:
 
 
 def anchor_bytes(public_keys: Sequence[bytes], *, target: str, stream: str, controller: Optional[bytes] = None,
-                 fresh: int = 0, version: Optional[int] = None) -> bytes:
+                 fresh: int = 0, version: Optional[int] = None, install: Optional[dict] = None) -> bytes:
     """The canon/2 bytes of an anchor trusting the authority keys `public_keys` (32 raw bytes each). The owner's
     tool. It writes `prismpath.dist-trust/2` with the controller key and `fresh` when a controller key is given,
     and `/1` otherwise unless `version` asks for 2, so a PEP that reads `/1` alone is never handed a `/2` it
     refuses (P4)."""
     keys = {canon.sha256_hex(bytes(raw)): Key(bytes(raw), kinds.AUTHORITY) for raw in public_keys}
-    version = version or (2 if controller is not None or fresh else 1)
+    version = version or (2 if controller is not None or fresh or install is not None else 1)
     doc = {canon.ENCODING_KEY: canon.CANON2, "format": ANCHOR_FORMAT if version == 2 else ANCHOR_FORMAT_1,
            "keys": _keys_document(keys), "stream": stream, "target": target, "threshold": THRESHOLD}
     if version == 2:
         if controller is None:
             raise ValueError("a prismpath.dist-trust/2 anchor names the first controller key (P4, K6)")
         doc.update(controller=bytes(controller).hex(), fresh=fresh)
+    if install is not None:
+        doc["install"] = install                   # P4: `install.anchor_part`, on a `/2` anchor only
     raw = canon.canon2_bytes(doc)
     read_anchor(raw)
     return raw
@@ -435,12 +440,13 @@ def anchor_bytes(public_keys: Sequence[bytes], *, target: str, stream: str, cont
 def read_anchor(raw: bytes) -> Anchor:
     """The anchor in `raw`, `/2` or `/1` (P4), or `Refused` (`dist:bad-format`, `document:not-canonical`). Every
     entry of `keys` is an authority key in both formats, and the controller key is none of them (P2 step 3, K4).
-    A `/2` anchor that holds the `install` member is refused here, since this PEP builds no install record
-    (section 21) and is never given install keys it would not keep."""
+    A `/2` anchor may hold the `install` member, whose keys go to the install record (`install.read_anchor_part`),
+    and no key is in two roles. A `/1` anchor that holds one is not an anchor."""
     doc = kinds.load_canonical(raw, "trust anchor")
     version = {ANCHOR_FORMAT: 2, ANCHOR_FORMAT_1: 1}.get(doc.get("format")) if isinstance(doc, dict) else None
     members = _ANCHOR_MEMBERS_2 if version == 2 else _ANCHOR_MEMBERS
-    if not (version and set(doc) == members and doc["encoding"] == canon.CANON2 and doc["threshold"] == THRESHOLD
+    optional = {"install"} if version == 2 else set()
+    if not (version and members <= set(doc) <= members | optional and doc["encoding"] == canon.CANON2 and doc["threshold"] == THRESHOLD
             and doc["target"] in kinds.TARGET_KINDS and is_stream(doc["stream"])):
         raise Refused(kinds.BAD_FORMAT, "not a trust anchor")
     keys = _read_keys(doc["keys"], "trust anchor")
@@ -459,6 +465,13 @@ def read_anchor(raw: bytes) -> Anchor:
             raise Refused(kinds.BAD_FORMAT, "the anchor's controller key is also an authority key (K4, K6)")
         if len(keys) + 1 > MAX_KEYS:
             raise Refused(kinds.BAD_FORMAT, "a trust anchor with more keys than a store holds (K5)")
+    part = None
+    if "install" in doc:                           # P4: the install keys go to the install record, never the store
+        from prismpath.distribution import install
+        part = install.read_anchor_part(doc["install"])
+        others = set(keys) | ({canon.sha256_hex(controller)} if controller is not None else set())
+        if others & (set(part.keys) | set(part.operators)):
+            raise Refused(kinds.BAD_FORMAT, "an anchor that holds one key in two roles (P2 step 3, K4)")
     return Anchor(keys=keys, threshold=doc["threshold"], target=doc["target"], stream=doc["stream"],
                   fingerprint=canon.sha256_hex(bytes(raw)), controller=controller, fresh=fresh,
-                  format=doc["format"])
+                  format=doc["format"], install=part)

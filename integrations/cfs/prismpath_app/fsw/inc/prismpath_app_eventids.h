@@ -29,5 +29,12 @@
 #define PRISMPATH_APP_STATE_INF_EID       30 /* the run state at startup: restored from the CDS or begun fresh */
 #define PRISMPATH_APP_STATE_ERR_EID       31 /* the CDS or the run files could not be used as recorded */
 #define PRISMPATH_APP_KEY_ERR_EID         32 /* a key file is missing or unreadable */
+#define PRISMPATH_APP_DIST_INF_EID        33 /* a state record of policy distribution: staged, committed, refused... */
+#define PRISMPATH_APP_DIST_ERR_EID        34 /* a frame dropped, the table service refused a switch, a start refused */
+#define PRISMPATH_APP_HELD_EID            35 /* X7: a hold began (the release expired and the mission holds) or ended */
+#define PRISMPATH_APP_PROVISIONED_EID     36 /* P2 step 4: the anchor's fingerprint and each install statement held */
+#define PRISMPATH_APP_NOT_ENACTED_EID     37 /* RC4: a decision of the action floor or the fallback policy, refused */
+#define PRISMPATH_APP_ESCALATION_EID      38 /* OP3: an escalation of the action floor is open, by its receipt hash */
+#define PRISMPATH_APP_ANSWERED_EID        39 /* OP3, OP4: an operator's signed answer to an open escalation applied */
 
 #endif
