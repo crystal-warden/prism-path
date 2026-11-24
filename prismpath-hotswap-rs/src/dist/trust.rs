@@ -13,9 +13,10 @@
 //! the trust anchor a PEP is provisioned with (P2, P3).
 
 use super::envelope::{Entry, Envelope};
+use super::install::{self, AnchorPart, Record};
 use super::{
-    load, require, AnchorFormat, ArtifactKind, Canon2Tag, Hex64, MaybeHex64, Refused, SortedSet, Stream, TargetKind,
-    TrustStoreFormat, Verdict, AUTHORITY, BAD_FORMAT, MAX_SEQ, ROTATION_INVALID, SIG_INVALID, SIG_REVOKED_KEY,
+    load, require, Anchor2Format, AnchorFormat, ArtifactKind, Canon2Tag, Hex64, MaybeHex64, Refused, SortedSet, Stream, TargetKind,
+    TrustStoreFormat, Verdict, AUTHORITY, BAD_FORMAT, CONTROLLER, MAX_SEQ, ROTATION_INVALID, SIG_INVALID, SIG_REVOKED_KEY,
     TOO_LARGE, TRUST_REPLAY, UNKNOWN_KEY,
 };
 use crate::host::HostError;
@@ -233,12 +234,28 @@ impl TrustStore {
     /// O2 to O4 and K5 for a rotation whose envelope already counts under this store (V3) and reads (V11): the
     /// key in `add` signs it too, so it is signed under the store it leaves as well, `add` is neither the PEP's
     /// own instance key nor a revoked key, `retire` names a key the store holds, and no ninth key is made.
-    pub fn check_rotation(&self, body: &[u8], entries: &[Entry], message: &[u8], instance_key_id: Option<&Hex64>) -> Option<&'static str> {
+    /// `others` is every install and operator key id the install record holds or retired (K4).
+    pub fn check_rotation(
+        &self,
+        body: &[u8],
+        entries: &[Entry],
+        message: &[u8],
+        instance_key_id: Option<&Hex64>,
+        others: &std::collections::BTreeSet<Hex64>,
+    ) -> Option<&'static str> {
         let Ok(rotation) = super::read_rotation(body) else { return None };
         let added = rotation.add.raw();
         let added_id = Hex64::of(&added);
-        if instance_key_id == Some(&added_id) || self.revoked_keys.contains(&added_id) || self.retired.contains(&added_id) {
-            return Some(ROTATION_INVALID); // O4: never the instance key, a revoked key or a retired one
+        let elsewhere = self.keys.get(&added_id).is_some_and(|key| key.role.as_str() != AUTHORITY);
+        if instance_key_id == Some(&added_id)
+            || self.revoked_keys.contains(&added_id)
+            || self.retired.contains(&added_id)
+            || others.contains(&added_id)
+            || elsewhere
+        {
+            // O4, K4: never the instance key, a revoked key, a retired one or a key held in another role, the
+            // install, operator and controller keys included (IS7)
+            return Some(ROTATION_INVALID);
         }
         if let Some(retire) = &rotation.retire.0 {
             if !self.keys.contains_key(retire) {
@@ -355,7 +372,7 @@ impl TrustStore {
 
 // ------------------------------------------------------------------ the trust anchor (P2, P3)
 
-/// The canon/2 document of a trust anchor, its members exactly these.
+/// The canon/2 document of a `/1` trust anchor, its members exactly these.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct AnchorDoc {
@@ -367,8 +384,26 @@ struct AnchorDoc {
     threshold: i64,
 }
 
-/// A trust anchor (P2 step 3): the keys with their roles, the threshold, the PEP's target kind and its stream.
-/// `fingerprint` is the SHA-256 of its bytes, which the operator compares (P2 step 4).
+/// P4: the canon/2 document of a `/2` trust anchor, with the controller key, `fresh` and the install part.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Anchor2Doc {
+    controller: Hex64,
+    encoding: Canon2Tag,
+    format: Anchor2Format,
+    fresh: i64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    install: Option<AnchorPart>,
+    keys: BTreeMap<Hex64, Key>,
+    stream: Stream,
+    target: TargetKind,
+    threshold: i64,
+}
+
+/// A trust anchor (P2 step 3, P4): the authority keys, the threshold, the PEP's target kind and its stream, and
+/// from `/2` the first controller key (K6) and `fresh`, the longest lifetime in seconds of a fresh statement (H16),
+/// and the install record its `install` member brings. A `/1` anchor names no controller key, no install part and
+/// `fresh` 0. `fingerprint` is the SHA-256 of its bytes, which the operator compares (P2 step 4).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Anchor {
     pub keys: BTreeMap<Hex64, Key>,
@@ -376,16 +411,29 @@ pub struct Anchor {
     pub target: TargetKind,
     pub stream: Stream,
     pub fingerprint: Hex64,
+    pub controller: Option<Hex64>,
+    pub fresh: i64,
+    pub install: Option<Record>,
 }
 
 impl Anchor {
-    /// P3: the trust store an anchor provisions, with the trust sequence and the time floor at their start.
+    /// P3: the trust store an anchor provisions, with the trust sequence and the time floor at their start. The
+    /// controller key is held in its own role (K4, K6) and counts on no envelope.
     pub fn store(&self) -> TrustStore {
-        TrustStore { keys: self.keys.clone(), threshold: self.threshold, ..TrustStore::default() }
+        let mut keys = self.keys.clone();
+        if let Some(controller) = &self.controller {
+            keys.insert(Hex64::of(&controller.raw()), Key { public: controller.clone(), role: Role(CONTROLLER.to_string()) });
+        }
+        TrustStore { keys, threshold: self.threshold, ..TrustStore::default() }
+    }
+
+    /// The id of the controller key the anchor names.
+    pub fn controller_id(&self) -> Option<Hex64> {
+        self.controller.as_ref().map(|public| Hex64::of(&public.raw()))
     }
 }
 
-/// The canon/2 bytes of an anchor trusting `public_keys` (32 raw bytes each) in `role`. The owner's tool.
+/// The canon/2 bytes of a `/1` anchor trusting `public_keys` (32 raw bytes each) in `role`. The owner's tool.
 pub fn anchor_bytes(public_keys: &[[u8; 32]], target: TargetKind, stream: &Stream, role: &Role) -> Result<Vec<u8>, Refused> {
     let doc = AnchorDoc {
         encoding: Canon2Tag,
@@ -400,14 +448,92 @@ pub fn anchor_bytes(public_keys: &[[u8; 32]], target: TargetKind, stream: &Strea
     Ok(raw)
 }
 
-/// The anchor in `raw`, or `Refused` (`dist:bad-format`, `document:not-canonical`).
+/// The canon/2 bytes of a `/2` anchor (P4): authority keys `public_keys`, the controller key, `fresh` and the
+/// install part, if any. The owner's tool, which writes only an anchor `read_anchor` reads.
+pub fn anchor2_bytes(
+    public_keys: &[[u8; 32]],
+    target: TargetKind,
+    stream: &Stream,
+    controller: &[u8; 32],
+    fresh: i64,
+    install: Option<AnchorPart>,
+) -> Result<Vec<u8>, Refused> {
+    let doc = Anchor2Doc {
+        controller: Hex64::from_raw(controller),
+        encoding: Canon2Tag,
+        format: Anchor2Format,
+        fresh,
+        install,
+        keys: TrustStore::with_keys(public_keys, &Role::authority()).keys,
+        stream: stream.clone(),
+        target,
+        threshold: THRESHOLD,
+    };
+    let raw = prismpath_rs::canon2::codec::to_bytes(&doc).map_err(|error| Refused::new(BAD_FORMAT, error.to_string()))?;
+    read_anchor(&raw)?;
+    Ok(raw)
+}
+
+fn check_keys(keys: &BTreeMap<Hex64, Key>, extra: usize) -> Result<(), Refused> {
+    require(!keys.is_empty(), "a trust anchor with no key")?;
+    require(keys.len() + extra <= MAX_KEYS, "a trust anchor with more keys than a trust store holds (K5)")?;
+    require(keys.iter().all(|(kid, key)| Hex64::of(&key.public.raw()) == *kid), "a trust anchor key id that is not its key's")?;
+    // P4: in both formats `keys` holds authority keys only
+    require(keys.values().all(|key| key.role.as_str() == AUTHORITY), "a trust anchor whose keys name another role than authority (P4)")
+}
+
+/// The anchor in `raw`, `/2` or `/1` (P4), or `Refused` (`dist:bad-format`, `document:not-canonical`). Every entry
+/// of `keys` is an authority key, the controller key is none of them, and no key of the install part is one of
+/// them, so no key is in two roles (P2 step 3, K4). A `/1` anchor that holds an install member is no anchor.
 pub fn read_anchor(raw: &[u8]) -> Result<Anchor, Refused> {
+    let format = match prismpath_rs::canon2::read(raw) {
+        Ok(prismpath_rs::canon2::Doc::Obj(members)) => {
+            members.iter().find(|(name, _)| name == "format").and_then(|(_, value)| match value {
+                prismpath_rs::canon2::Doc::Str(text) => Some(text.clone()),
+                _ => None,
+            })
+        }
+        _ => None,
+    };
+    if format.as_deref() == Some(Anchor2Format::TEXT) {
+        let doc: Anchor2Doc = load(raw, "trust anchor")?;
+        require(doc.threshold == THRESHOLD, "a trust anchor's threshold")?;
+        require((0..=MAX_SEQ).contains(&doc.fresh), "a trust anchor's fresh")?;
+        check_keys(&doc.keys, 1)?;
+        let controller_id = Hex64::of(&doc.controller.raw());
+        require(!doc.keys.contains_key(&controller_id), "the anchor's controller key is also an authority key (K4, K6)")?;
+        let install = doc.install.as_ref().map(install::read_anchor_part).transpose()?;
+        if let Some(record) = &install {
+            let named: Vec<&Hex64> = record.keys.keys().chain(record.operators.keys()).collect();
+            require(
+                named.iter().all(|kid| !doc.keys.contains_key(*kid) && **kid != controller_id),
+                "an anchor that holds one key in two roles (P2 step 3, K4)",
+            )?;
+        }
+        return Ok(Anchor {
+            keys: doc.keys,
+            threshold: doc.threshold,
+            target: doc.target,
+            stream: doc.stream,
+            fingerprint: Hex64::of(raw),
+            controller: Some(doc.controller),
+            fresh: doc.fresh,
+            install,
+        });
+    }
     let doc: AnchorDoc = load(raw, "trust anchor")?;
     require(doc.threshold == THRESHOLD, "a trust anchor's threshold")?;
-    require(!doc.keys.is_empty(), "a trust anchor with no key")?;
-    require(doc.keys.len() <= MAX_KEYS, "a trust anchor with more keys than a trust store holds (K5)")?;
-    require(doc.keys.iter().all(|(kid, key)| Hex64::of(&key.public.raw()) == *kid), "a trust anchor key id that is not its key's")?;
-    Ok(Anchor { keys: doc.keys, threshold: doc.threshold, target: doc.target, stream: doc.stream, fingerprint: Hex64::of(raw) })
+    check_keys(&doc.keys, 0)?;
+    Ok(Anchor {
+        keys: doc.keys,
+        threshold: doc.threshold,
+        target: doc.target,
+        stream: doc.stream,
+        fingerprint: Hex64::of(raw),
+        controller: None,
+        fresh: 0,
+        install: None,
+    })
 }
 
 #[cfg(test)]

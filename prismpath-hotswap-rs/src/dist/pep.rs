@@ -47,20 +47,30 @@
 //! and the entry of H14. A switch between two releases whose bodies are the same, as a renewal's are, never
 //! enters the state (C10). Provisioning withdraws the runtime first and is refused when it does not (P5).
 //!
-//! This crate reads `prismpath.dist-trust/1` anchors only and does not build the `trust.controller` kind, so
-//! a PEP here holds no controller key (P4, K6). It takes no epoch id from anything (H9) and every record
-//! carries epoch 0, which is the id H15 starts at.
+//! Section 21 is the `install` module's and this machine's: install statements and install trust statements under
+//! an install record kept in two copies apart from the trust store (IS1 to IS13), a fallback policy that decides
+//! whenever no release does, handed to the runtime in place of a withdrawn release (FB1 to FB9), a ceiling list
+//! every release and install set is held inside (CL1 to CL3), and an action floor the machine asks first on every
+//! request in every state (AF1 to AF10, `floor`). The floor of a `host` lives in the machine and not in its runtime,
+//! so applying one has no runtime step, and DIVERGENCES.md says so.
+//!
+//! This crate reads `prismpath.dist-trust/1` and `/2` anchors and holds the `/2` anchor's controller key in its own
+//! role, apart from every other (K4, K6), but does not build the controller statement or the `trust.controller`
+//! kind. It takes no epoch id from anything (H9) and every record carries epoch 0, which is the id H15 starts at.
 //! A home holding the private half of a trusted authority key is refused at start (K2).
 
 use super::envelope::{self as env, Envelope};
+use super::floor::{self as floors, Answer, Request};
+use super::install::{self, AsName, InstallSet, Installed, Record, SetKind};
 use super::state_record::{self, StateRecord};
-use super::trust::{read_anchor, TrustStore};
-use super::verify::{self, Floor, PepKind, PepView, Staged, SKEW};
+use super::trust::{read_anchor, Anchor, TrustStore};
+use super::verify::{self, Floor, InstallView, PepKind, PepView, Staged, SKEW};
 use super::{
-    load, ActiveFormat, ArtifactKind, Canon2Tag, CounterFormat, FloorFormat, Hex64, MaybeHex64, Meta, PendingFormat,
+    load, ActiveFormat, ArtifactKind, PendingInstallFormat, Canon2Tag, CounterFormat, FloorFormat, Hex64, MaybeHex64, Meta, PendingFormat,
     Refused, SettingFormat, SortedSet, StagedFormat, Stream, Target, TargetKind, AUTHORITY, BAD_FORMAT, EXPIRED, FLOOR_LOST, HELD,
     INCOMPLETE, MAX_SEQ, NOT_STAGED, NOT_YET_VALID, POLICY_LAPSED, REVOKED, SEQ_REPLAY, SIDECAR_MISMATCH,
-    SIDECAR_MISSING, UNKNOWN_KEY, WIDENING_UNSIGNED, RECONCILING,
+    SIDECAR_MISSING, UNKNOWN_KEY, WIDENING_UNSIGNED, RECONCILING, ABOVE_CEILING, FALLBACK, FLOOR_ALLOWED, INSTALL_LOST,
+    INSTALL_WIDENED, TRUST_REPLAY,
 };
 use crate::host::{abspath, atomic_write_bytes, fsync_dir, AuditLog, Fields, HostError, PolicyHost};
 use ed25519_dalek::SigningKey;
@@ -277,9 +287,20 @@ pub trait Adapter {
         None
     }
 
+    /// AF10: the layout document a table kind was built with, without which it takes no action floor.
+    fn floor_layout(&self) -> Option<Vec<u8>> {
+        None
+    }
+
     fn activate(&self, release: &Release) -> Result<(), PepError>;
 
     fn deactivate(&self, cause: &str) -> Result<(), PepError>;
+
+    /// C10, FB1: withdraw the release and run the PEP's fallback set, given in the shape of a release, in its
+    /// place. A runtime that runs what `activate` gives it runs the fallback set the same way.
+    fn withdraw_to(&self, fallback: &Release, _cause: &str) -> Result<(), PepError> {
+        self.activate(fallback)
+    }
 }
 
 // ------------------------------------------------------------------ the durable documents
@@ -357,6 +378,15 @@ struct PendingDoc {
     running: Option<ReleaseDoc>,
     #[serde(default)]
     withdrawn: bool,
+}
+
+/// P2 step 3: the install statements brought with a waiting anchor, each sealed envelope and body in hex.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PendingInstallDoc {
+    encoding: Canon2Tag,
+    format: PendingInstallFormat,
+    statements: Vec<(String, String)>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -648,13 +678,30 @@ fn base64_decode(bytes: &[u8]) -> Option<Vec<u8>> {
     Some(out)
 }
 
-/// What `decide` answers: the decision made under the active release, or the cause every decision is
-/// refused with (X3, C8), and the hold mark a receipt carries (X7).
+/// What `decide` answers: the decision made under the active release or the fallback policy, or the cause every
+/// decision is refused with (X3, C8), and the hold mark a receipt carries (X7). A PEP that holds an install record
+/// names the basis and the policy hash of the set that decided (RC1), and `floor` is the action floor's answer
+/// when it answered (AF1, AF7).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Decision<T> {
     pub decision: Option<T>,
     pub cause: Option<&'static str>,
     pub mark: Option<&'static str>,
+    pub basis: Option<&'static str>,
+    pub policy_sha256: Option<Hex64>,
+    pub floor: Option<FloorAnswer>,
+}
+
+/// AF1, AF7, AF8, RC3: what the action floor answered: always an allow on `host` (AF2), with `dist:floor-allowed`,
+/// the floor rule that allowed, `would`, the outcome, cause and policy hash of the set the release or the fallback
+/// policy would have decided with (None when no set would), whether it is an override, and for a counted override
+/// the start of its window and the count after it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FloorAnswer {
+    pub rule: String,
+    pub would: Option<(&'static str, Option<&'static str>, Hex64)>,
+    pub overrides: bool,
+    pub counted: Option<(i64, i64)>,
 }
 
 /// One enforcement point following one stream. `adapter` is the target's, `instance_key` the PEP's own,
@@ -692,32 +739,49 @@ pub struct Pep<A: Adapter> {
     /// C12: the seq and cause of a lapse whose audit event a start found written before the death that cut it
     /// short, so the lapse the start's checks make again is not audited twice. Only a start sets it.
     lapse_audited: Option<(Option<i64>, String)>,
+    /// IS10: the install part, its second copy on a second medium where the deployment gives one.
+    pub installed: Installed,
+    /// IS10: the install kinds a start found lost, reported once the start is done.
+    lost: Vec<SetKind>,
+    /// IS8, P2 step 4: the envelope ids of the install statements brought with the waiting anchor.
+    printed: Vec<Hex64>,
 }
 
-/// The record a transition owes once its runtime step works (C9, H14).
+/// The record a transition owes once its runtime step works (C9, H14). `Installed` is a fallback policy applied
+/// whose runtime step it is (FB8), widened or not (IS12).
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Owed {
     Nothing,
     Committed,
     RolledBack,
     Lapsed(String),
+    Installed(bool),
 }
 
 impl Owed {
-    fn event(&self) -> &'static str {
+    /// The event, `fallback` in place of `lapsed` for a PEP that goes to its fallback policy (FB3).
+    fn event(&self, fallback: bool) -> &'static str {
         match self {
             Owed::Nothing => "beat",
             Owed::Committed => "committed",
             Owed::RolledBack => "rolled-back",
+            Owed::Lapsed(_) if fallback => "fallback",
             Owed::Lapsed(_) => "lapsed",
+            Owed::Installed(true) => "install-widened",
+            Owed::Installed(false) => "install-applied",
         }
     }
 
     fn cause(&self) -> Option<&str> {
         match self {
             Owed::Lapsed(cause) => Some(cause),
+            Owed::Installed(true) => Some(INSTALL_WIDENED),
             _ => None,
         }
+    }
+
+    fn subject(&self) -> Option<&'static str> {
+        matches!(self, Owed::Installed(_)).then_some(SetKind::Fallback.name())
     }
 }
 
@@ -744,6 +808,21 @@ impl<A: Adapter> Pep<A> {
         expiry_response: &str,
         has_clock: bool,
     ) -> Result<Pep<A>, PepError> {
+        Pep::with_install_copy(state_dir, adapter, instance_key, clock, expiry_response, has_clock, None)
+    }
+
+    /// `new` with the second copy of the install record on `install_copy`, a directory on a second file system
+    /// where the deployment gives one (IS10). With none both copies are under `<state_dir>/dist/`, and one loss of
+    /// that file system takes both.
+    pub fn with_install_copy(
+        state_dir: &str,
+        adapter: A,
+        instance_key: SigningKey,
+        clock: Box<dyn Fn() -> i64>,
+        expiry_response: &str,
+        has_clock: bool,
+        install_copy: Option<&str>,
+    ) -> Result<Pep<A>, PepError> {
         let kind = adapter.kind();
         let target = kind.target().ok_or_else(|| refused(format!("no enforcement point of kind {kind} is built")))?;
         if expiry_response != REFUSE && expiry_response != HOLD {
@@ -754,6 +833,7 @@ impl<A: Adapter> Pep<A> {
         }
         let store = Store::new(&format!("{state_dir}/dist"))?;
         let audit = AuditLog::open(&store.path("audit.log"))?;
+        let installed = Installed::new(&store.dir, install_copy);
         let instance_key_id = env::key_id(&instance_key.verifying_key().to_bytes());
         let mut pep = Pep {
             adapter,
@@ -781,11 +861,20 @@ impl<A: Adapter> Pep<A> {
             reconciling: None,
             retry_runtime: false,
             lapse_audited: None,
+            installed,
+            lost: Vec::new(),
+            printed: Vec::new(),
         };
         pep.load()?;
         pep.check_setting()?;
         pep.check_separation(&pep.trust.clone())?;
         pep.recover()?;
+        for kind in std::mem::take(&mut pep.lost) {
+            pep.refuse_about(INSTALL_LOST, Some(kind.name()), vec![("artifact", json!(kind.name()))])?; // IS10
+        }
+        if pep.installed.record_lost {
+            pep.refuse(INSTALL_LOST, Vec::new())?;
+        }
         Ok(pep)
     }
 
@@ -811,6 +900,7 @@ impl<A: Adapter> Pep<A> {
         if !self.provisioned {
             return Ok(()); // P1: nothing to believe yet
         }
+        self.lost = self.installed.load(); // apart from the store Q5 can lose (IS10)
         self.trust = TrustStore::load(&self.trust_path());
         // H3: the counter is kept apart from the floor. One that cannot be read must still never repeat: the PEP
         // locks, and its records count on from its time in microseconds, above any counter it can have sent one
@@ -1039,19 +1129,77 @@ impl<A: Adapter> Pep<A> {
         }
         let stepped = self.step(&owed);
         match stepped {
-            Ok(()) if owed == Owed::Nothing => Ok(()),
+            Ok(()) if owed == Owed::Nothing => {
+                if self.fallback_decides() {
+                    // FB3: a start with nothing committed goes to its fallback policy
+                    let cause = if self.locked { FLOOR_LOST } else { FALLBACK };
+                    self.make_record("fallback", Some(cause))?;
+                }
+                Ok(())
+            }
             Ok(()) => self.settle(owed).map(|_| ()),
             Err(error) if owed != Owed::Nothing && self.same_bodies(running.as_ref()) => self.renewal_failed(owed, &error).map(|_| ()),
             Err(error) => self.enter_reconciling(owed, running, &error.to_string()).map(|_| ()), // C6: it still starts
         }
     }
 
-    /// The runtime step: run the held release, or nothing when none is held or the PEP is locked (X3, C13).
+    /// The runtime step: run the held release, or the fallback set or nothing when none is held or the PEP is
+    /// locked (X3, C13, FB1).
     fn step(&self, owed: &Owed) -> Result<(), PepError> {
         match (self.own_refusal(), &self.active) {
             (None, Some(held)) => self.adapter.activate(held),
-            (refusal, _) => self.adapter.deactivate(owed.cause().or(refusal).unwrap_or(POLICY_LAPSED)),
+            (refusal, _) => self.withdraw(owed.cause().or(refusal).unwrap_or(POLICY_LAPSED)),
         }
+    }
+
+    /// C10, FB1: make the runtime run no release: the fallback set where the PEP holds one, else nothing.
+    fn withdraw(&self, cause: &str) -> Result<(), PepError> {
+        match self.installed.held(SetKind::Fallback) {
+            Some(fallback) => self.adapter.withdraw_to(&self.release_of_set(fallback), cause),
+            None => self.adapter.deactivate(cause),
+        }
+    }
+
+    /// FB1: an install set in the shape of a release, for a runtime that runs it in place of one, each body's path
+    /// the first copy of it that reads.
+    pub fn release_of_set(&self, set: &InstallSet) -> Release {
+        let mut release = Release {
+            stream: self.stream.as_ref().map_or_else(String::new, |stream| stream.as_str().to_string()),
+            seq: set.seq(),
+            policy_sha256: set.doc.policy_sha256.clone(),
+            release: set.doc.release.clone(),
+            replaces: set.doc.replaces.clone(),
+            widens: set.doc.widens,
+            held: BTreeMap::new(),
+            envelopes: BTreeMap::new(),
+            bodies: BTreeMap::new(),
+            paths: BTreeMap::new(),
+        };
+        for (name, held) in &set.doc.statements {
+            let AsName::Artifact(artifact) = name else { continue };
+            release.held.insert(*artifact, held.clone());
+            release.envelopes.insert(*artifact, set.envelopes[name].clone());
+            release.bodies.insert(*artifact, set.bodies[name].clone());
+            release.paths.insert(*artifact, self.installed.body_path(held));
+        }
+        release
+    }
+
+    /// FB1, FB2, C8: the fallback policy decides while no release does, in `no-policy`, in `locked` and while
+    /// reconciling once the runtime is withdrawn, and never under a hold (FB6).
+    pub fn fallback_decides(&self) -> bool {
+        if self.installed.held(SetKind::Fallback).is_none() || self.held {
+            return false;
+        }
+        match &self.reconciling {
+            Some(state) => state.withdrawn,
+            None => self.own_refusal().is_some(),
+        }
+    }
+
+    /// FB3: the event of a lapse, `fallback` where the PEP holds a fallback policy.
+    fn owed_event(&self, owed: &Owed) -> &'static str {
+        owed.event(self.installed.held(SetKind::Fallback).is_some())
     }
 
     // ------------------------------------------------------------------ what the PEP is
@@ -1146,7 +1294,7 @@ impl<A: Adapter> Pep<A> {
         self.trust = trust;
     }
 
-    fn view(&self) -> Option<PepView> {
+    fn view(&self, message: bool) -> Option<PepView> {
         Some(PepView {
             kind: PepKind::try_from(self.adapter.kind()).ok()?,
             stream: self.stream.clone()?,
@@ -1164,6 +1312,13 @@ impl<A: Adapter> Pep<A> {
             body_bound: self.adapter.body_bound(),
             has_clock: self.has_clock,
             instance_key_id: Some(self.instance_key_id.clone()),
+            install: Some(InstallView {
+                record: self.installed.record.clone(),
+                staged: self.installed.staged.clone(),
+                ceiling: self.installed.held(SetKind::Ceiling).cloned(),
+                message,
+                layout: self.adapter.floor_layout(),
+            }),
         })
     }
 
@@ -1182,6 +1337,12 @@ impl<A: Adapter> Pep<A> {
     /// Make one record, its counter durable first (H3), and put it in the outbox. The active fields name the
     /// held release in every state, and a reconciling PEP's record carries the entry of H14.
     fn make_record(&mut self, event: &'static str, cause: Option<&str>) -> Result<Vec<u8>, PepError> {
+        self.make_record_about(event, cause, None)
+    }
+
+    /// `make_record` with the subject of H10, the install kind an event of `staged`, `refused`, `install-applied`
+    /// or `install-widened` is about.
+    fn make_record_about(&mut self, event: &'static str, cause: Option<&str>, subject: Option<&'static str>) -> Result<Vec<u8>, PepError> {
         self.counter += 1;
         if self.provisioned {
             self.store.write("counter.json", &CounterDoc { counter: self.counter, encoding: Canon2Tag, format: CounterFormat })?;
@@ -1206,7 +1367,12 @@ impl<A: Adapter> Pep<A> {
             staged: staged.is_some(),
             dev_build: super::DEV_BUILD,
             held: self.held,
-            extensions: self.reconciling_entry().map_or_else(Vec::new, |entry| entry.extension()),
+            fallback: self.fallback_decides(),
+            extensions: [
+                self.install_entry(event, subject).map_or_else(Vec::new, |entry| entry.extension()),
+                self.reconciling_entry().map_or_else(Vec::new, |entry| entry.extension()),
+            ]
+            .concat(),
             ..StateRecord::new(event, self.state())
         };
         let signed = state_record::build(&record, &self.instance_key).map_err(PepError::Refused)?;
@@ -1214,20 +1380,38 @@ impl<A: Adapter> Pep<A> {
         Ok(signed)
     }
 
+    /// H10: the install entry of a PEP that holds an install record or held one it lost, None otherwise.
+    fn install_entry(&self, event: &str, subject: Option<&'static str>) -> Option<state_record::InstallEntry> {
+        let record = self.installed.record.as_ref().filter(|_| !self.installed.record_lost);
+        if record.is_none() && !self.installed.record_lost {
+            return None;
+        }
+        let about = ["staged", "refused", "answered", "install-applied", "install-widened"].contains(&event).then_some(subject).flatten();
+        Some(state_record::InstallEntry {
+            install_id: record.map_or([0; 16], Record::install_id),
+            trust_seq: record.map_or(0, |record| u64::try_from(record.trust_seq).unwrap_or(0)),
+            subject: about.unwrap_or("none"),
+            answers: record.map_or(0, |record| record.answers),
+            overrides: record.map_or(0, |record| record.overrides),
+        })
+    }
+
     /// H14: the reconciling entry, or None outside the state. A locked PEP names the cause `dist:floor-lost` and
-    /// no running release (C13). This crate holds no action floor, so the floor field is zeros.
+    /// no running release (C13). The floor field is the set id of the action floor the PEP holds, which on `host` is
+    /// the one it asks, since the floor lives in the machine; zeros for none.
     fn reconciling_entry(&self) -> Option<state_record::ReconcilingEntry> {
         let state = self.reconciling.as_ref()?;
         let running = self.running();
         let prefix = |hash: Option<&Hex64>| state_record::prefix(hash.map(Hex64::as_str));
         let cause = if self.locked { Some(FLOOR_LOST) } else { state.owed.cause().or(state.running_fell) };
+        let floor = self.installed.held(SetKind::Floor).map_or([0; 16], |set| state_record::prefix(Some(set.set_id().as_str())));
         Some(state_record::ReconcilingEntry {
-            owed: state.owed.event(),
+            owed: self.owed_event(&state.owed),
             cause: cause.map(str::to_string),
             running_policy: prefix(running.map(|release| &release.policy_sha256)),
             running_release: prefix(running.map(|release| &release.release)),
             running_seq: u64::try_from(running.map_or(0, |release| release.seq)).unwrap_or(0),
-            floor: [0; 16],
+            floor,
         })
     }
 
@@ -1251,11 +1435,18 @@ impl<A: Adapter> Pep<A> {
     }
 
     // ------------------------------------------------------------------ G1, G2: stage
-    fn refuse(&mut self, cause: &str, mut details: Fields) -> Result<Vec<u8>, PepError> {
+    fn refuse(&mut self, cause: &str, details: Fields) -> Result<Vec<u8>, PepError> {
+        self.refuse_about(cause, None, details)
+    }
+
+    fn refuse_about(&mut self, cause: &str, subject: Option<&'static str>, mut details: Fields) -> Result<Vec<u8>, PepError> {
         details.push(("cause", json!(cause)));
+        if let Some(subject) = subject {
+            details.push(("subject", json!(subject)));
+        }
         details.push(("result", json!("refused")));
         self.audit.append("distribution", "refused", details)?;
-        self.make_record("refused", Some(cause))
+        self.make_record_about("refused", Some(cause), subject)
     }
 
     /// B4, B9: the binding refused the blob `name` before anything was staged. The refusal is the PEP's own,
@@ -1271,28 +1462,53 @@ impl<A: Adapter> Pep<A> {
     /// reconciling PEP stages as in any other state, and the rule compares with the held release (C8).
     pub fn stage(&mut self, sealed: &[u8], body: &[u8]) -> Result<Vec<u8>, PepError> {
         self.check_active()?;
-        if self.locked {
-            return self.refuse(FLOOR_LOST, Vec::new());
+        if !self.provisioned {
+            return self.refuse(UNKNOWN_KEY, Vec::new()); // P1, P2 step 4
         }
-        let view = match (self.provisioned, self.view()) {
-            (true, Some(view)) => view,
-            _ => return self.refuse(UNKNOWN_KEY, Vec::new()), // P1, P2 step 4
+        self.stage_one(sealed, body, true)
+    }
+
+    /// `stage` once the PEP is provisioned. `message` false is a statement brought by provisioning (IS4, IS13). A
+    /// locked PEP still takes install statements, because its install record is kept apart from the store it lost
+    /// (IS6). A PEP whose install record is lost takes nothing but the trust statements, and one whose ceiling is lost
+    /// takes no install set but a ceiling and no release (IS10).
+    fn stage_one(&mut self, sealed: &[u8], body: &[u8], message: bool) -> Result<Vec<u8>, PepError> {
+        let Some(view) = self.view(message) else {
+            return self.refuse(if self.locked { FLOOR_LOST } else { UNKNOWN_KEY }, Vec::new());
         };
         let verdict = verify::verify(sealed, body, &self.trust, &view, (self.clock)());
+        let artifact = verdict.envelope.as_ref().map(|envelope| envelope.artifact);
+        let installing = artifact.is_some_and(ArtifactKind::is_install);
+        let subject = artifact.filter(|_| installing).map(ArtifactKind::name);
+        let on_trust = artifact.is_some_and(ArtifactKind::on_trust_stream);
+        let id_of = |verdict: &super::Verdict| json!(verdict.envelope.as_ref().map(|envelope| envelope.envelope_id().to_string()));
+        if self.installed.record_lost && !on_trust {
+            return self.refuse_about(INSTALL_LOST, subject, vec![("envelope_id", id_of(&verdict))]); // IS10
+        }
+        if self.locked && !installing {
+            return self.refuse(FLOOR_LOST, Vec::new()); // Q5: a locked PEP takes install statements only
+        }
+        let ceiling_or_trust = matches!(artifact, Some(ArtifactKind::InstallCeiling | ArtifactKind::InstallTrust));
+        if self.installed.ceiling_lost && artifact.is_some() && !on_trust && !ceiling_or_trust {
+            return self.refuse_about(INSTALL_LOST, subject, vec![("envelope_id", id_of(&verdict))]); // IS10: frozen
+        }
         if let Some(time_floor) = verdict.time_floor {
             if self.trust.is_readable() && time_floor > self.trust.time_floor {
                 self.trust.time_floor = time_floor; // V13, T1
                 self.trust.save(&self.trust_path())?;
             }
         }
-        let envelope_id = json!(verdict.envelope.as_ref().map(|envelope| envelope.envelope_id().to_string()));
+        let envelope_id = id_of(&verdict);
         if let Some(cause) = &verdict.cause {
-            return self.refuse(cause, vec![("envelope_id", envelope_id)]);
+            return self.refuse_about(cause, subject, vec![("envelope_id", envelope_id)]);
         }
         if verdict.unchanged {
-            return self.make_record("beat", None); // Q3, R1: changes nothing, reports its state
+            return self.make_record("beat", None); // Q3, R1, IS6: changes nothing, reports its state
         }
         let envelope = verdict.envelope.expect("an accepted verdict carries its envelope");
+        if installing {
+            return self.stage_install(&envelope, sealed, body);
+        }
         match envelope.artifact {
             ArtifactKind::TrustRevocation => return self.apply_revocation(&envelope, body),
             ArtifactKind::TrustRotation => return self.apply_rotation(&envelope, body),
@@ -1352,6 +1568,147 @@ impl<A: Adapter> Pep<A> {
             ],
         )?;
         self.make_record("staged", None)
+    }
+
+    // ------------------------------------------------------------------ IS4 to IS12: the install statements
+    /// IS4: an `install.trust` is applied as soon as it verifies (IS11). A statement of a set is staged durably, as
+    /// G1 stages an envelope, with event `staged` and its subject, a set at a higher `seq` replacing the one staged of
+    /// its kind, and the set is applied when it is whole.
+    fn stage_install(&mut self, envelope: &Envelope, sealed: &[u8], body: &[u8]) -> Result<Vec<u8>, PepError> {
+        let Some(kind) = SetKind::of(envelope.artifact) else { return self.apply_install_trust(envelope, body) };
+        let whole = self.installed.stage(kind, envelope, sealed, body)?.whole();
+        let named = install::install_meta(envelope).map_or("", |meta| meta.as_name.name());
+        self.audit.append(
+            "distribution",
+            "staged",
+            vec![
+                ("envelope_id", json!(envelope.envelope_id().as_str())),
+                ("artifact", json!(kind.name())),
+                ("as", json!(named)),
+                ("seq", json!(envelope.seq)),
+                ("release", json!(envelope.release.as_str())),
+                ("result", json!("staged")),
+            ],
+        )?;
+        let ack = self.make_record_about("staged", None, Some(kind.name()))?;
+        if !whole {
+            return Ok(ack);
+        }
+        self.apply_set(kind)
+    }
+
+    fn refuse_set(&mut self, kind: SetKind, cause: &str, seq: i64) -> Result<Vec<u8>, PepError> {
+        self.installed.drop_staged(kind)?;
+        self.refuse_about(cause, Some(kind.name()), vec![("seq", json!(seq))])
+    }
+
+    /// IS4, IS6, IS12, CL3: apply the whole set staged of `kind`. It is held to its `seq` again, to the target's own
+    /// check over the whole set, to the ceiling the PEP holds now (an action floor and a fallback policy inside it,
+    /// and a ceiling the held ones are inside), and to the widening rule of IS12. The marks, both copies of every
+    /// statement and the record are durable before the event, `install-widened` for a set that stands out and
+    /// `install-applied` otherwise. The empty set withdraws its kind. A ceiling the active release is above lapses
+    /// it (CL3), and a fallback policy that now decides is run (FB8).
+    fn apply_set(&mut self, kind: SetKind) -> Result<Vec<u8>, PepError> {
+        let staged = self.installed.staged.get(&kind).cloned().expect("a whole staged set");
+        let record = self.installed.record.clone().expect("a staged set verified under a record");
+        let seq = staged.seq();
+        if seq <= record.seq(kind) {
+            return self.refuse_set(kind, SEQ_REPLAY, seq);
+        }
+        let empty = staged.is_empty_set();
+        let as_release = self.release_of_set(&staged);
+        for (artifact, body) in &as_release.bodies {
+            if let Some(cause) = self.adapter.check(*artifact, body, &as_release) {
+                return self.refuse_set(kind, &cause, seq);
+            }
+        }
+        let ceiling = self.installed.held(SetKind::Ceiling).cloned();
+        let table = |set: &InstallSet| set.bodies.get(&AsName::Artifact(ArtifactKind::PolicyPpt)).cloned();
+        if kind != SetKind::Ceiling && !empty && !install::table_inside(ceiling.as_ref(), table(&staged).as_deref()) {
+            return self.refuse_set(kind, ABOVE_CEILING, seq); // CL3, IS4: the ceiling held at apply
+        }
+        if kind == SetKind::Ceiling && !empty {
+            for other in [SetKind::Floor, SetKind::Fallback] {
+                if let Some(held) = self.installed.held(other) {
+                    if !install::table_inside(Some(&staged), table(held).as_deref()) {
+                        return self.refuse_set(kind, ABOVE_CEILING, seq); // CL3: the engineer narrows those first
+                    }
+                }
+            }
+        }
+        let (cause, stands_out) = install::widens_ok(kind, record.held(kind), &staged);
+        if let Some(cause) = cause {
+            return self.refuse_set(kind, cause, seq);
+        }
+        let active_table = self.active.as_ref().and_then(|active| active.bodies.get(&ArtifactKind::PolicyPpt)).cloned();
+        let lapses = kind == SetKind::Ceiling && !empty && active_table.is_some() && !install::table_inside(Some(&staged), active_table.as_deref());
+        let stands_out = stands_out || lapses; // IS12: it hands the PEP to its fallback policy
+        let before = self.fallback_decides();
+        let ceiling_mark = (kind == SetKind::Ceiling).then_some(!empty);
+        self.installed.mark(true, false, ceiling_mark)?; // IS9: before the first install statement is applied
+        self.installed.keep_both(&staged)?;
+        let mut next = record.clone();
+        next.sets[kind as usize] = (!empty).then(|| staged.clone());
+        next.seqs[kind as usize] = seq;
+        next.applied[kind as usize] = Some(staged.set_id());
+        self.installed.save(next)?;
+        self.installed.drop_staged(kind)?;
+        if kind == SetKind::Ceiling {
+            self.installed.ceiling_lost = false;
+        }
+        let event = if stands_out { "install-widened" } else { "install-applied" };
+        self.audit.append(
+            "distribution",
+            event,
+            vec![
+                ("artifact", json!(kind.name())),
+                ("seq", json!(seq)),
+                ("set_id", json!(staged.set_id().as_str())),
+                ("envelopes", json!(self.installed.statement_ids().iter().map(Hex64::as_str).collect::<Vec<_>>())),
+                ("result", json!(event)),
+            ],
+        )?;
+        let cause = stands_out.then_some(INSTALL_WIDENED);
+        if lapses {
+            let applied = self.make_record_about(event, cause, Some(kind.name()))?;
+            self.lapse(ABOVE_CEILING)?; // CL3, as under R5
+            return Ok(applied);
+        }
+        if kind == SetKind::Fallback && self.reconciling.is_some() {
+            if self.reconciling.as_ref().is_some_and(|state| state.withdrawn) && self.withdraw(&self.withdraw_cause()).is_err() {
+                // C8: the withdrawn runtime runs the new set, and when it does not the next tick tries again (C9)
+                if let Some(state) = self.reconciling.as_mut() {
+                    state.withdrawn = false;
+                }
+            }
+            return self.make_record_about(event, cause, Some(kind.name()));
+        }
+        if kind == SetKind::Fallback && (before || self.fallback_decides()) {
+            return self.runtime_step(Owed::Installed(stands_out), None); // FB8: the new fallback set decides at once
+        }
+        self.make_record_about(event, cause, Some(kind.name()))
+    }
+
+    /// IS11: apply a verified `install.trust` at once, durably before its event. It widens when it adds a key of
+    /// either role or lowers the threshold.
+    fn apply_install_trust(&mut self, envelope: &Envelope, body: &[u8]) -> Result<Vec<u8>, PepError> {
+        let record = self.installed.record.clone().expect("an install trust statement verified under a record");
+        let widened = envelope.widens || install::trust_widens(&record, body);
+        let next = record.apply_trust(envelope, body).map_err(|refusal| refused(refusal.to_string()))?;
+        self.installed.mark(true, false, None)?;
+        self.installed.save(next)?;
+        let event = if widened { "install-widened" } else { "install-applied" };
+        self.audit.append(
+            "distribution",
+            event,
+            vec![
+                ("artifact", json!(ArtifactKind::InstallTrust.name())),
+                ("seq", json!(envelope.seq)),
+                ("envelope_id", json!(envelope.envelope_id().as_str())),
+                ("result", json!(event)),
+            ],
+        )?;
+        self.make_record_about(event, widened.then_some(INSTALL_WIDENED), Some(ArtifactKind::InstallTrust.name()))
     }
 
     /// V12 against the held release (C8). `artifacts` are the bodies judged and `statements` the widening statement
@@ -1527,6 +1884,9 @@ impl<A: Adapter> Pep<A> {
         if self.reconciling.is_some() {
             return self.refuse(RECONCILING, vec![("seq", json!(seq))]);
         }
+        if self.installed.record_lost || self.installed.ceiling_lost {
+            return self.refuse(INSTALL_LOST, vec![("seq", json!(seq))]); // IS10: a lost ceiling never fails open
+        }
         if !self.trust.is_readable() {
             return self.refuse(UNKNOWN_KEY, Vec::new()); // K1: decides nothing, commits nothing
         }
@@ -1541,8 +1901,11 @@ impl<A: Adapter> Pep<A> {
                 return self.refuse(&cause, vec![("seq", json!(seq))]);
             }
         }
-        if let Some(cause) = self.still_valid(&staged, true) {
-            // C3
+        let mut cause = self.still_valid(&staged, true); // C3
+        if cause.is_none() && !self.inside_ceiling(&staged) {
+            cause = Some(ABOVE_CEILING.to_string()); // CL2: the ceiling may have changed since staging
+        }
+        if let Some(cause) = cause {
             self.drop_staged()?;
             return self.refuse(&cause, vec![("seq", json!(seq))]);
         }
@@ -1557,7 +1920,13 @@ impl<A: Adapter> Pep<A> {
         }
         let floor = Floor { seq: staged.seq, ids: staged.envelope_ids() };
         let previous = self.active.clone();
+        self.installed.mark(false, true, None)?; // L2: before the commit, in the anchor part
         self.flip("commit", staged, previous, floor)
+    }
+
+    /// CL2: the release's table is on the held ceiling's list.
+    fn inside_ceiling(&self, release: &Release) -> bool {
+        install::table_inside(self.installed.held(SetKind::Ceiling), release.bodies.get(&ArtifactKind::PolicyPpt).map(Vec::as_slice))
     }
 
     /// C7: the intent record of a transition.
@@ -1665,7 +2034,7 @@ impl<A: Adapter> Pep<A> {
 
     /// The state record a transition owes, then the clean up, which takes the intent record (C12).
     fn settle(&mut self, owed: Owed) -> Result<Vec<u8>, PepError> {
-        let record = self.make_record(owed.event(), owed.cause())?;
+        let record = self.make_record_about(self.owed_event(&owed), owed.cause(), owed.subject())?;
         self.fault(PepStep::Cleanup)?;
         self.cleanup()?;
         Ok(record)
@@ -1696,7 +2065,7 @@ impl<A: Adapter> Pep<A> {
     fn enter_reconciling(&mut self, owed: Owed, running: Option<Release>, error: &str) -> Result<Vec<u8>, PepError> {
         let stepped_withdrawal = self.locked || self.active.is_none() || !self.trust.is_readable();
         self.reconciling = Some(Reconciling { owed, running, withdrawn: false, running_fell: None });
-        if !stepped_withdrawal && self.adapter.deactivate(&self.withdraw_cause()).is_ok() {
+        if !stepped_withdrawal && self.withdraw(&self.withdraw_cause()).is_ok() {
             self.note_withdrawn()?;
         }
         let withdrawn = self.reconciling.as_ref().is_some_and(|state| state.withdrawn);
@@ -1740,8 +2109,8 @@ impl<A: Adapter> Pep<A> {
         Ok(())
     }
 
-    /// Whether `release` fell, and for what: the test of R5, then expiry (X1). HOLD is for `mesh` and `cfs`,
-    /// which never reconcile, so expiry always fells a release here (C10).
+    /// Whether `release` fell, and for what: the test of R5, then expiry (X1), then the ceiling (CL3). HOLD is for
+    /// `mesh` and `cfs`, which never reconcile, so expiry always fells a release here (C10).
     fn fell(&self, release: &Release) -> Option<&'static str> {
         if release.envelopes.len() != release.held.len() {
             return None; // a running release whose blobs do not read: it is still named, and its tests wait
@@ -1750,6 +2119,8 @@ impl<A: Adapter> Pep<A> {
             Some(REVOKED)
         } else if self.still_valid(release, false).as_deref() == Some(EXPIRED) {
             Some(EXPIRED)
+        } else if !self.inside_ceiling(release) {
+            Some(ABOVE_CEILING)
         } else {
             None
         }
@@ -1826,7 +2197,7 @@ impl<A: Adapter> Pep<A> {
         self.run_tests(true)?;
         let Some(state) = self.reconciling.clone() else { return Ok(None) };
         if !state.withdrawn {
-            if self.adapter.deactivate(&self.withdraw_cause()).is_err() {
+            if self.withdraw(&self.withdraw_cause()).is_err() {
                 return Ok(None);
             }
             self.note_withdrawn()?;
@@ -1834,7 +2205,7 @@ impl<A: Adapter> Pep<A> {
         if let (None, Some(held)) = (self.own_refusal(), self.active.clone()) {
             self.note_running(&held)?;
             if self.adapter.activate(&held).is_err() {
-                if self.adapter.deactivate(&self.withdraw_cause()).is_ok() {
+                if self.withdraw(&self.withdraw_cause()).is_ok() {
                     self.note_withdrawn()?;
                 }
                 return Ok(None);
@@ -1856,7 +2227,8 @@ impl<A: Adapter> Pep<A> {
     /// record.
     fn leave(&mut self) -> Result<Vec<u8>, PepError> {
         let state = self.reconciling.take().expect("only a reconciling PEP leaves the state");
-        let record = match self.make_record(state.owed.event(), state.owed.cause()) {
+        let event = self.owed_event(&state.owed);
+        let record = match self.make_record_about(event, state.owed.cause(), state.owed.subject()) {
             Ok(record) => record,
             Err(error) => {
                 self.reconciling = Some(state);
@@ -1980,13 +2352,99 @@ impl<A: Adapter> Pep<A> {
     }
 
     /// One decision through the PEP, after the expiry check (X1). With no active release, locked or reconciling,
-    /// it is refused with the cause of X3 or C8 and `under_release` is not called. No decision tries the runtime.
+    /// it is refused with the cause of X3 or C8 and `under_release` is not called, unless the fallback policy decides
+    /// (FB1): the runtime then runs the fallback set, so `under_release` decides under it. No decision tries the
+    /// runtime. `decide_request` asks the action floor first.
     pub fn decide<T>(&mut self, under_release: impl FnOnce() -> T) -> Result<Decision<T>, PepError> {
+        self.decide_request(None, under_release)
+    }
+
+    /// AF1: a PEP that holds an action floor asks it first on `request`, the register file of the request and the
+    /// age of each independent register's value, in every state. When the floor allows, nothing else decides, and
+    /// `under_release` is not called. Otherwise the decision is made exactly as with no floor (AF2).
+    pub fn decide_request<T>(&mut self, request: Option<&Request>, under_release: impl FnOnce() -> T) -> Result<Decision<T>, PepError> {
         self.check_active()?;
+        let receipts = self.installed.record.is_some() || self.installed.record_lost;
+        if let (Some(request), Some(floor)) = (request, self.installed.held(SetKind::Floor).cloned()) {
+            if let Some(answer) = self.floor_answer(&floor, request)? {
+                return Ok(Decision {
+                    decision: None,
+                    cause: Some(FLOOR_ALLOWED), // RC3
+                    mark: self.receipt_mark(),
+                    basis: Some("floor"),
+                    policy_sha256: Some(floor.policy_sha256().clone()),
+                    floor: Some(answer),
+                });
+            }
+        }
+        let decided = |decision, basis: Option<&'static str>, policy: Option<Hex64>, mark| Decision {
+            decision,
+            cause: None,
+            mark,
+            basis,
+            policy_sha256: policy,
+            floor: None,
+        };
         Ok(match self.refusal() {
-            Some(cause) => Decision { decision: None, cause: Some(cause), mark: None },
-            None => Decision { decision: Some(under_release()), cause: None, mark: self.receipt_mark() },
+            Some(_) if self.fallback_decides() => {
+                let policy = self.installed.held(SetKind::Fallback).map(|set| set.policy_sha256().clone());
+                decided(Some(under_release()), Some("fallback"), policy, None)
+            }
+            Some(cause) => Decision { decision: None, cause: Some(cause), mark: None, basis: None, policy_sha256: None, floor: None },
+            None => {
+                let policy = self.active.as_ref().map(|active| active.policy_sha256.clone()).filter(|_| receipts);
+                decided(Some(under_release()), receipts.then_some("release"), policy, self.receipt_mark())
+            }
         })
+    }
+
+    /// AF7: what the active release, or the fallback policy when that decides, answers the request, and the policy
+    /// hash of the set it asked. None when no set would have decided.
+    fn would(&self, request: &Request) -> Option<(Answer, Hex64)> {
+        if self.refusal().is_none() {
+            let active = self.active.as_ref()?;
+            return Some((floors::ask(active.bodies.get(&ArtifactKind::PolicyPpt)?, request, false, None), active.policy_sha256.clone()));
+        }
+        if self.fallback_decides() {
+            let fallback = self.installed.held(SetKind::Fallback)?;
+            let table = fallback.bodies.get(&AsName::Artifact(ArtifactKind::PolicyPpt))?;
+            return Some((floors::ask(table, request, false, None), fallback.policy_sha256().clone()));
+        }
+        None
+    }
+
+    /// AF1, AF2, AF7, AF8: the action floor's answer, None when it is silent. A table floor only allows (AF2). The
+    /// release or the fallback policy is asked too and its answer is `would`. An override, a floor allow whose
+    /// `would` is not an allow, of a rule past the signed `rate` leaves the floor silent, since a `host` floor may
+    /// only allow, and the release decides. The count of a counted override, and the counts of floor answers and
+    /// overrides of the state record (H10), are durable before the PEP acts.
+    fn floor_answer(&mut self, floor: &InstallSet, request: &Request) -> Result<Option<FloorAnswer>, PepError> {
+        let Some(table) = floor.bodies.get(&AsName::Artifact(ArtifactKind::PolicyPpt)) else { return Ok(None) };
+        let answer = floors::ask(table, request, true, self.adapter.floor_layout().as_deref());
+        if !answer.allows() {
+            return Ok(None); // AF2: silent
+        }
+        let rule = answer.rule.clone().unwrap_or_default();
+        let would = self.would(request);
+        let overrides = !would.as_ref().is_some_and(|(answer, _)| answer.allows());
+        let mut counted = None;
+        if let (true, Some(rate)) = (overrides, floor.rate()) {
+            let mut book = floors::Book::load(self.installed.paths("rates.json"));
+            counted = book.spend(&rule, rate, self.time())?;
+            if counted.is_none() {
+                return Ok(None); // AF8: past the rate the release decides
+            }
+        }
+        if let Some(record) = self.installed.record.clone() {
+            let next = Record {
+                answers: record.answers.saturating_add(1),
+                overrides: record.overrides.saturating_add(u32::from(overrides)),
+                ..record
+            };
+            self.installed.save(next)?;
+        }
+        let would = would.and_then(|(answer, policy)| answer.outcome.map(|outcome| (outcome, answer.cause, policy)));
+        Ok(Some(FloorAnswer { rule, would, overrides, counted }))
     }
 
     // ------------------------------------------------------------------ RB1, RB2, X9: rollback
@@ -2005,6 +2463,9 @@ impl<A: Adapter> Pep<A> {
         if self.reconciling.is_some() {
             return self.refuse(RECONCILING, Vec::new());
         }
+        if self.installed.record_lost || self.installed.ceiling_lost {
+            return self.refuse(INSTALL_LOST, Vec::new()); // IS10
+        }
         if !self.trust.is_readable() {
             return self.refuse(UNKNOWN_KEY, Vec::new());
         }
@@ -2014,6 +2475,13 @@ impl<A: Adapter> Pep<A> {
         let mut cause = self.still_valid(&kept, true); // RB2: what a commit checks, as it is active anew
         if cause.is_none() && kept.seq < self.raised_floor(&kept.stream) {
             cause = Some(SEQ_REPLAY.to_string()); // R4: below a floor a revocation raised
+        }
+        if cause.is_none() && !self.inside_ceiling(&kept) {
+            // CL2: the kept release is dropped
+            self.previous = None;
+            self.write_active(self.active.as_ref(), None)?;
+            self.keep_blobs();
+            return self.refuse(ABOVE_CEILING, vec![("seq", json!(kept.seq))]);
         }
         if let Some(cause) = cause {
             return self.refuse(&cause, vec![("seq", json!(kept.seq))]);
@@ -2044,17 +2512,168 @@ impl<A: Adapter> Pep<A> {
     /// P2 step 3: receive a trust anchor and return its fingerprint for the operator to compare. The PEP follows
     /// no stream until `confirm` is given that fingerprint (P2 step 4).
     pub fn provision(&mut self, anchor: &[u8]) -> Result<Hex64, PepError> {
+        self.provision_with(anchor, &[])
+    }
+
+    /// P2 step 3 with the install statements the engineer brings beside the anchor. An anchor whose keys are not
+    /// apart from each other, from the instance key and from what the PEP holds in another role, or whose `domain`
+    /// is not the hash of the domain the PEP was built with, is refused and leaves the PEP as it was (K4, P4).
+    /// `printed` is what the PEP prints beside the fingerprint: the envelope id of each install statement (IS8).
+    pub fn provision_with(&mut self, anchor: &[u8], statements: &[(Vec<u8>, Vec<u8>)]) -> Result<Hex64, PepError> {
         let read = read_anchor(anchor).map_err(|refusal| refused(refusal.to_string()))?;
         if read.target != self.adapter.kind() {
             return Err(refused(format!("the anchor is for a {} PEP, not a {} one", read.target, self.adapter.kind())));
         }
+        self.check_separation(&read.store())?;
+        self.check_roles(&read)?;
+        self.provisioned_record(&read)?; // IS6: refused here, the PEP left as it was
+        let mut ids = Vec::new();
+        for (sealed, _) in statements {
+            let (envelope_bytes, _) = env::unseal(sealed).map_err(|refusal| refused(refusal.to_string()))?;
+            ids.push(env::envelope_id(envelope_bytes));
+        }
+        let pending = PendingInstallDoc {
+            encoding: Canon2Tag,
+            format: PendingInstallFormat,
+            statements: statements.iter().map(|(sealed, body)| (hex::encode(sealed), hex::encode(body))).collect(),
+        };
+        self.store.write("install.pending", &pending)?;
         self.store.write_bytes("anchor.pending", anchor)?;
+        self.printed = ids.clone();
         self.audit.append(
             "distribution",
             "anchor_received",
-            vec![("fingerprint", json!(read.fingerprint.as_str())), ("result", json!("pending"))],
+            vec![
+                ("fingerprint", json!(read.fingerprint.as_str())),
+                ("install", json!(ids.iter().map(Hex64::as_str).collect::<Vec<_>>())),
+                ("result", json!("pending")),
+            ],
         )?;
         Ok(read.fingerprint)
+    }
+
+    /// IS8, P2 step 4: the envelope ids of the install statements brought with the waiting anchor, which the PEP
+    /// prints beside its fingerprint.
+    pub fn printed(&self) -> &[Hex64] {
+        &self.printed
+    }
+
+    /// P2 step 3, P4, K4: no key of the anchor is the instance key or a key the PEP holds in another role or has
+    /// retired in any role, its install part's domain is the one the PEP was built with, and an anchor that reaches
+    /// a PEP holding an install record is checked against its install and operator keys too.
+    fn check_roles(&self, read: &Anchor) -> Result<(), PepError> {
+        let held = self.installed.record.as_ref();
+        let mut authority: BTreeSet<Hex64> = read.keys.keys().cloned().collect();
+        authority.extend(read.controller_id());
+        if held.is_some_and(|held| !authority.is_disjoint(&held.ids())) {
+            return Err(refused("an anchor key is an install or an operator key the PEP holds or retired (K4)"));
+        }
+        let Some(part) = &read.install else { return Ok(()) };
+        let named: BTreeSet<Hex64> = part.keys.keys().chain(part.operators.keys()).cloned().collect();
+        if named.contains(&self.instance_key_id) {
+            return Err(refused("an install or operator key of the anchor is the PEP's instance key (K4)"));
+        }
+        if self.trust.is_readable() && named.iter().any(|kid| self.trust.keys.contains_key(kid) || self.trust.retired.contains(kid)) {
+            return Err(refused("an install or operator key of the anchor is a key the trust store holds or retired (K4)"));
+        }
+        if let Some(held) = held {
+            let crossed = part.keys.keys().any(|kid| held.operators.contains_key(kid) || held.retired.contains(kid))
+                || part.operators.keys().any(|kid| held.keys.contains_key(kid) || held.retired.contains(kid));
+            if crossed {
+                return Err(refused("an install or operator key of the anchor is held in another role or retired (K4)"));
+            }
+        }
+        if part.domain != install::domain_sha256(self.adapter.qualification().as_ref()) {
+            return Err(refused("the anchor's domain is not the hash of the domain this PEP was built with (P4, CL4)"));
+        }
+        Ok(())
+    }
+
+    /// IS6, P4: the install record a provisioning leaves. An anchor with no install part leaves the held one as it
+    /// is. One whose install trust sequence is below the held one is refused, one at the same number brings the same
+    /// key set, and one above it may bring another: every key it leaves out is retired, and only a key set that
+    /// shares no key with the held one starts the install sequences again and drops the held sets. The install trust
+    /// id becomes the anchor's fingerprint.
+    fn provisioned_record(&self, read: &Anchor) -> Result<Option<Record>, PepError> {
+        let held = self.installed.record.clone();
+        let Some(part) = read.install.clone() else { return Ok(held) };
+        let part = Record { trust_id: Some(read.fingerprint.clone()), ..part };
+        let Some(held) = held else { return Ok(Some(part)) };
+        if part.trust_seq < held.trust_seq {
+            return Err(refused(format!("{TRUST_REPLAY}: the anchor's install trust sequence is below the PEP's (IS6)")));
+        }
+        let same = (&part.keys, &part.operators, part.threshold) == (&held.keys, &held.operators, held.threshold);
+        if part.trust_seq == held.trust_seq {
+            if !same {
+                return Err(refused(format!("{TRUST_REPLAY}: an anchor at the held install trust sequence brings another key set (IS6)")));
+            }
+            return Ok(Some(Record { trust_id: Some(read.fingerprint.clone()), domain: part.domain, ..held }));
+        }
+        let dropped: Vec<Hex64> =
+            held.keys.keys().chain(held.operators.keys()).filter(|kid| !part.keys.contains_key(*kid) && !part.operators.contains_key(*kid)).cloned().collect();
+        let mut retired = held.retired.clone();
+        let mut sorted = dropped;
+        sorted.sort();
+        for kid in sorted {
+            if !retired.contains(&kid) {
+                retired.push(kid);
+            }
+        }
+        let excess = retired.len().saturating_sub(install::MAX_RETIRED);
+        retired.drain(..excess);
+        let counts = |record: Record| Record { retired: retired.clone(), answers: held.answers, overrides: held.overrides, ..record };
+        if part.keys.keys().any(|kid| held.keys.contains_key(kid)) {
+            return Ok(Some(counts(Record { seqs: held.seqs, sets: held.sets.clone(), applied: held.applied.clone(), ..part })));
+        }
+        Ok(Some(counts(part))) // disjoint: the install sequences start again and the held sets go
+    }
+
+    /// P2 step 3: every install statement the engineer brings verifies under the install record the provisioning
+    /// leaves, before anything changes.
+    fn precheck(&self, read: &Anchor, store: &TrustStore, record: Option<&Record>, brought: &[(Vec<u8>, Vec<u8>)]) -> Result<(), PepError> {
+        if brought.is_empty() {
+            return Ok(());
+        }
+        let Some(record) = record else { return Err(refused("install statements came with an anchor that holds no install keys")) };
+        for (sealed, body) in brought {
+            let view = PepView {
+                kind: PepKind::try_from(self.adapter.kind()).map_err(refused)?,
+                stream: read.stream.clone(),
+                floor: Floor::default(),
+                active: None,
+                staged: None,
+                qualification: self.adapter.qualification(),
+                body_bound: self.adapter.body_bound(),
+                has_clock: self.has_clock,
+                instance_key_id: Some(self.instance_key_id.clone()),
+                install: Some(InstallView { record: Some(record.clone()), message: false, layout: self.adapter.floor_layout(), ..InstallView::default() }),
+            };
+            let verdict = verify::verify(sealed, body, store, &view, (self.clock)());
+            if !verdict.envelope.as_ref().is_some_and(|envelope| envelope.artifact.is_install()) {
+                return Err(refused("only install statements come with an anchor (P2 step 3)"));
+            }
+            if let Some(cause) = verdict.cause.filter(|cause| ![ABOVE_CEILING, SEQ_REPLAY, INCOMPLETE].contains(&cause.as_str())) {
+                return Err(refused(format!("{cause}: an install statement brought with the anchor does not verify")));
+            }
+        }
+        Ok(())
+    }
+
+    /// IS13: an install provisioning brings install statements and no anchor, by the channel of P2 step 3. Each is
+    /// held to IS5 and IS6 as any install statement is, with no message rule, and reported with the event IS12 gives
+    /// its set. The trust store, the floors, the time floor and the PEP's state stay as they were, and a locked PEP
+    /// stays locked. It is written to the audit log as a provisioning. Returns the records it made.
+    pub fn provision_install(&mut self, statements: &[(Vec<u8>, Vec<u8>)]) -> Result<Vec<Vec<u8>>, PepError> {
+        if !self.provisioned || self.installed.record.is_none() {
+            return Err(refused("an install provisioning reaches a PEP that holds an install record (IS13)"));
+        }
+        let sent = self.outbox.len();
+        for (sealed, body) in statements {
+            self.stage_one(sealed, body, false)?;
+        }
+        let ids: Vec<String> = self.installed.statement_ids().iter().map(|id| id.to_string()).collect();
+        self.audit.append("distribution", "install-provisioned", vec![("install", json!(ids)), ("result", json!("provisioned"))])?;
+        Ok(self.outbox[sent..].to_vec())
     }
 
     /// P2 step 4, P3, P5: the operator confirmed `fingerprint`. The runtime is withdrawn first, and when it does
@@ -2069,6 +2688,19 @@ impl<A: Adapter> Pep<A> {
         }
         let store = read.store();
         self.check_separation(&store)?;
+        self.check_roles(&read)?;
+        let new_record = self.provisioned_record(&read)?;
+        let brought: Vec<(Vec<u8>, Vec<u8>)> = self
+            .store
+            .read::<PendingInstallDoc>("install.pending")
+            .map(|doc| {
+                doc.statements
+                    .iter()
+                    .filter_map(|(sealed, body)| Some((hex::decode(sealed).ok()?, hex::decode(body).ok()?)))
+                    .collect()
+            })
+            .unwrap_or_default();
+        self.precheck(&read, &store, new_record.as_ref(), &brought)?;
         // only now, with the new store known to be one and the runtime withdrawn, does anything held go (P5)
         self.adapter
             .deactivate(POLICY_LAPSED)
@@ -2093,21 +2725,47 @@ impl<A: Adapter> Pep<A> {
         self.store.write("setting.json", &SettingDoc { encoding: Canon2Tag, expiry: self.expiry_response.clone(), format: SettingFormat })?;
         self.store.write_bytes("anchor.json", &raw)?;
         self.store.remove("anchor.pending")?;
+        self.store.remove("install.pending")?;
         self.stream = Some(read.stream.clone());
         self.floor = Floor::default();
         self.locked = false;
         self.provisioned = true;
         self.keep_blobs();
+        match new_record {
+            None => self.installed.clear()?,
+            Some(record) => {
+                self.installed.mark(true, false, None)?; // IS9: before the first statement is applied
+                self.installed.ceiling_lost = false;
+                let held_ceiling = record.held(SetKind::Ceiling).is_some();
+                self.installed.save(record)?;
+                self.installed.mark(false, false, Some(held_ceiling))?;
+                self.installed.clear_staged()?;
+            }
+        }
+        let sent = self.outbox.len();
+        for (sealed, body) in &brought {
+            self.stage_one(sealed, body, false)?;
+        }
+        let applied: Vec<Vec<u8>> = self.outbox.drain(sent..).collect(); // P3: provisioning reports as its own event
+        let public = self.instance_public();
+        let widened = applied.iter().any(|one| state_record::read(one, &public).is_ok_and(|record| record.event == "install-widened"));
         self.audit.append(
             "distribution",
             "provisioned",
             vec![
                 ("fingerprint", json!(read.fingerprint.as_str())),
                 ("stream", json!(read.stream.as_str())),
+                ("install", json!(self.installed.statement_ids().iter().map(Hex64::as_str).collect::<Vec<_>>())),
                 ("result", json!("provisioned")),
             ],
         )?;
-        self.make_record("provisioned", None)
+        let record = self.make_record("provisioned", widened.then_some(INSTALL_WIDENED))?;
+        if self.fallback_decides() {
+            if let Err(error) = self.step(&Owed::Nothing) {
+                self.enter_reconciling(Owed::Nothing, None, &error.to_string())?; // C6: after the record is durable
+            }
+        }
+        Ok(record)
     }
 }
 
@@ -2118,18 +2776,28 @@ impl<A: Adapter> Pep<A> {
 /// with no release is `PolicyHost::withdraw`, so the host holds nothing and allows nothing (X3). The adapter's
 /// own check is the spiral sidecar: when the `policy.ppt` envelope's `meta.packing` declares one, the release
 /// needs a `policy.spiral` whose SHA-256 is the declared `sidecar_sha256` (C2, V11).
+///
+/// The fallback set is run the same way, in place of a withdrawn release (FB1). `layout` is the layout document the
+/// deployment built the host with (AF10), whose labels the action floor is held to; a host with none takes no
+/// action floor.
 pub struct HostAdapter {
     pub host: PolicyHost,
+    pub layout: Option<Vec<u8>>,
 }
 
 impl HostAdapter {
     pub fn new(host: PolicyHost) -> HostAdapter {
-        HostAdapter { host }
+        HostAdapter { host, layout: None }
+    }
+
+    /// A host built with the layout document `layout` (AF10).
+    pub fn with_layout(host: PolicyHost, layout: Vec<u8>) -> HostAdapter {
+        HostAdapter { host, layout: Some(layout) }
     }
 }
 
 fn packing_of(release: &Release) -> Option<Hex64> {
-    match release.envelopes.get(&ArtifactKind::PolicyPpt).map(Envelope::form) {
+    match release.envelopes.get(&ArtifactKind::PolicyPpt).map(|envelope| envelope.form().artifact_form()) {
         Some(Meta::PolicyPpt(meta)) => meta.packing.as_ref().map(|packing| packing.sidecar_sha256.clone()),
         _ => None,
     }
@@ -2150,6 +2818,10 @@ impl Adapter for HostAdapter {
 
     fn qualification(&self) -> Option<Value> {
         Some(self.host.envelope.clone())
+    }
+
+    fn floor_layout(&self) -> Option<Vec<u8>> {
+        self.layout.clone()
     }
 
     fn check(&self, artifact: ArtifactKind, body: &[u8], staged: &Release) -> Option<String> {
@@ -2174,7 +2846,7 @@ impl Adapter for HostAdapter {
         if current["active"] == json!(sha256) && current["version"] == json!(release.seq) {
             return Ok(()); // a restart that finds the host already there
         }
-        let Meta::PolicyPpt(meta) = envelope.form() else {
+        let Meta::PolicyPpt(meta) = envelope.form().artifact_form() else {
             return Err(refused("a policy.ppt envelope whose meta is not its form"));
         };
         let counts = crate::read_ppt_header(image).map_err(refused)?.to_value();

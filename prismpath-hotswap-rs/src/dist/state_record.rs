@@ -16,8 +16,7 @@ use sha2::{Digest, Sha256};
 pub const MAGIC: &[u8; 4] = b"PPSR";
 pub const VERSION: u8 = 1;
 pub const PAYLOAD_TYPE: &str = "application/vnd.prismpath.dist-state";
-/// H1 `event`, by its code. Events 10 to 13 belong to section 21, which this crate does not build yet; they
-/// are named so a record carrying one reads.
+/// H1 `event`, by its code. Event 13, `answered`, is the operator's (OP4), which a `host` PEP never sends.
 pub const EVENTS: [&str; 15] = [
     "beat", "staged", "refused", "committed", "aborted", "trust-applied", "lapsed", "rolled-back", "provisioned", "held",
     "fallback", "install-applied", "install-widened", "answered", "reconciling",
@@ -27,6 +26,8 @@ pub const STATES: [&str; 4] = ["no-policy", "active", "locked", "reconciling"];
 pub const STAGED_BIT: u8 = 0x80;
 pub const DEV_BUILD_BIT: u8 = 0x40;
 pub const HELD_BIT: u8 = 0x20;
+/// FB2: set while the installed fallback policy decides.
+pub const FALLBACK_BIT: u8 = 0x10;
 pub const MAX_BODY: usize = 1024;
 pub const MAX_EXTENSIONS: usize = 512;
 pub const SIGNATURE_SIZE: usize = 64;
@@ -35,6 +36,64 @@ pub const HEAD_SIZE: usize = 144;
 /// H10, H14: the extension type of the reconciling entry and its length.
 pub const RECONCILING_TYPE: u8 = 4;
 pub const RECONCILING_SIZE: usize = 58;
+
+/// H10: the extension type of the install entry and its length.
+pub const INSTALL_TYPE: u8 = 3;
+pub const INSTALL_SIZE: usize = 27;
+/// H10: what an event of `staged`, `refused`, `answered`, `install-applied` or `install-widened` is about.
+pub const SUBJECTS: [&str; 6] = ["none", "install.floor", "install.fallback", "install.ceiling", "install.trust", "operator.answer"];
+
+/// H10: the install entry of a PEP that holds an install statement or install keys, in every record it sends.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InstallEntry {
+    pub install_id: [u8; 16],
+    /// The full install trust sequence; the entry carries its low 16 bits.
+    pub trust_seq: u64,
+    pub subject: &'static str,
+    pub answers: u32,
+    pub overrides: u32,
+}
+
+impl InstallEntry {
+    /// The entry as one extension of H10: its type, its two byte length and its 27 bytes.
+    pub fn extension(&self) -> Vec<u8> {
+        let subject = SUBJECTS.iter().position(|name| *name == self.subject).expect("a PEP names only the subjects of H10");
+        let mut out = vec![INSTALL_TYPE];
+        out.extend_from_slice(&(INSTALL_SIZE as u16).to_le_bytes());
+        out.extend_from_slice(&self.install_id);
+        out.extend_from_slice(&(self.trust_seq as u16).to_le_bytes());
+        out.push(subject as u8);
+        out.extend_from_slice(&self.answers.to_le_bytes());
+        out.extend_from_slice(&self.overrides.to_le_bytes());
+        out
+    }
+
+    fn read(data: &[u8]) -> Result<InstallEntry, Refused> {
+        if data.len() != INSTALL_SIZE || usize::from(data[18]) >= SUBJECTS.len() {
+            return Err(invalid("an install entry that does not read"));
+        }
+        let u32_at = |at: usize| u32::from_le_bytes(data[at..at + 4].try_into().expect("four bytes"));
+        Ok(InstallEntry {
+            install_id: sixteen_at(data, 0),
+            trust_seq: u64::from(u16::from_le_bytes([data[16], data[17]])),
+            subject: SUBJECTS[usize::from(data[18])],
+            answers: u32_at(19),
+            overrides: u32_at(23),
+        })
+    }
+}
+
+/// H10: the install entry of a record that reads, None when it carries none, `fleet:state-invalid` for more than
+/// one or one that does not read.
+pub fn install_entry(record: &StateRecord) -> Result<Option<InstallEntry>, Refused> {
+    let entries: Vec<&[u8]> =
+        extensions(&record.extensions)?.into_iter().filter(|(kind, _)| *kind == INSTALL_TYPE).map(|(_, bytes)| bytes).collect();
+    match entries.as_slice() {
+        [] => Ok(None),
+        [entry] => InstallEntry::read(entry).map(Some),
+        _ => Err(invalid("more than one install entry")),
+    }
+}
 
 /// H14: the reconciling entry, the one extension a reconciling PEP's record carries. `owed` is an event of H1
 /// or `beat` for none, and the hashes are the 16 byte prefixes H1 carries.
@@ -178,6 +237,8 @@ pub struct StateRecord {
     pub staged: bool,
     pub dev_build: bool,
     pub held: bool,
+    /// FB2: the installed fallback policy decides.
+    pub fallback: bool,
     pub body: Vec<u8>,
     pub extensions: Vec<u8>,
 }
@@ -204,6 +265,7 @@ impl StateRecord {
             staged: false,
             dev_build: false,
             held: false,
+            fallback: false,
             body: Vec::new(),
             extensions: Vec::new(),
         }
@@ -214,7 +276,8 @@ impl StateRecord {
         Ok(state as u8
             | if self.staged { STAGED_BIT } else { 0 }
             | if self.dev_build { DEV_BUILD_BIT } else { 0 }
-            | if self.held { HELD_BIT } else { 0 })
+            | if self.held { HELD_BIT } else { 0 }
+            | if self.fallback { FALLBACK_BIT } else { 0 })
     }
 
     /// Bytes 0 to 148+m+x, the part the signature covers.
@@ -292,10 +355,10 @@ fn parse(data: &[u8]) -> Result<(StateRecord, &[u8], &[u8]), Refused> {
         return Err(invalid("shorter than a state record"));
     }
     let (version, event, status, code) = (data[4], usize::from(data[5]), data[6], data[7]);
-    if &data[..4] != MAGIC || version != VERSION || event >= EVENTS.len() || usize::from(status & 0x1F) >= STATES.len() {
+    if &data[..4] != MAGIC || version != VERSION || event >= EVENTS.len() || usize::from(status & 0x0F) >= STATES.len() {
         return Err(invalid("magic, version, event or state"));
     }
-    if status & 0x1C != 0 {
+    if status & 0x0C != 0 || status & (HELD_BIT | FALLBACK_BIT) == HELD_BIT | FALLBACK_BIT {
         return Err(invalid("a status bit this version does not define"));
     }
     let cause = match code {
@@ -330,10 +393,12 @@ fn parse(data: &[u8]) -> Result<(StateRecord, &[u8], &[u8]), Refused> {
         staged: status & STAGED_BIT != 0,
         dev_build: status & DEV_BUILD_BIT != 0,
         held: status & HELD_BIT != 0,
+        fallback: status & FALLBACK_BIT != 0,
         body: data[HEAD_SIZE + 2..HEAD_SIZE + 2 + m].to_vec(),
         extensions: data[HEAD_SIZE + 4 + m..end].to_vec(),
     };
     reconciling_entry(&record)?;
+    install_entry(&record)?;
     Ok((record, &data[..end], &data[end..]))
 }
 
