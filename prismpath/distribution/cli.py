@@ -102,8 +102,9 @@ def add_parser(subparsers) -> None:
     anchor.add_argument('--out', required=True, metavar='FILE')
     anchor.set_defaults(func=anchor_cmd)
 
-    inst = commands.add_parser('install', help='seal an install set: a fallback policy or a ceiling (section 21)')
-    inst.add_argument('--kind', required=True, choices=('fallback', 'ceiling'),
+    inst = commands.add_parser('install', help='seal an install set: an action floor, a fallback policy or a ceiling '
+                                               '(section 21)')
+    inst.add_argument('--kind', required=True, choices=('floor', 'fallback', 'ceiling'),
                       help='the install kind; this version builds the fallback policy and the ceiling')
     inst.add_argument('--set', dest='bodies', action='append', default=[], metavar='AS=FILE',
                       help='an artifact of the set and its body, repeatable, such as policy.ppt=table.ppt')
@@ -121,6 +122,11 @@ def add_parser(subparsers) -> None:
                       help='the set this one follows, as this command wrote it; sets replaces and is compared (IS12)')
     inst.add_argument('--ceiling', default=None, metavar='DIR', help='the held ceiling, as this command wrote it (CL3)')
     inst.add_argument('--widens', action='store_true', help='say the set allows more than the one it follows')
+    inst.add_argument('--rate', default=None, metavar='ALLOWS/WINDOW', help="a floor's signed rate of overrides (AF8)")
+    inst.add_argument('--answer-rate', default=None, metavar='ALLOWS/WINDOW',
+                      help="a floor's signed rate of operator allows (OP4)")
+    inst.add_argument('--layout', default=None, metavar='FILE', help="a table floor's layout document (AF10)")
+    inst.add_argument('--command', type=int, default=None, help="a table floor's command register (AF9)")
     inst.add_argument('--out', required=True, metavar='DIR', help='where each <as>.sealed and <as>.body is written')
     inst.set_defaults(func=install_cmd)
 
@@ -633,12 +639,32 @@ def read_set_dir(directory: str):
                            bodies)
 
 
+def _rate(text: Optional[str]):
+    """AF8, OP4: `ALLOWS/WINDOW` as a signed rate, None when not given."""
+    if text is None:
+        return None
+    allows, _, window = text.partition("/")
+    rate = {"allows": int(allows), "window": int(window)}
+    if not kinds.FORMS["rate"](rate):
+        raise Refused(kinds.BAD_FORMAT, f"a rate is 1 to 65535 allows in 1 to 86400 seconds, not {text}")
+    return rate
+
+
+def _rated(kind: str, rates) -> Optional[dict]:
+    """The statements of a floor as IS12 compares their rates: one whose `meta` holds the rates given."""
+    from types import SimpleNamespace
+    from prismpath.distribution import install
+    if kind != install.FLOOR:
+        return None
+    return {"set": SimpleNamespace(meta={name: value for name, value in rates.items() if value is not None})}
+
+
 def install_cmd(args) -> int:
     """The sealing tool's install set (section 21). It compares the set with the one it follows and refuses one it
     computes as larger whose `widens` is false, on a `cfs` table by the core image inside it (IS12, H13), and holds
     a fallback policy to the held ceiling (CL3)."""
-    from prismpath.distribution import install, widening
-    kind = {"fallback": install.FALLBACK, "ceiling": install.CEILING}[args.kind]
+    from prismpath.distribution import floor, install, widening
+    kind = {"floor": install.FLOOR, "fallback": install.FALLBACK, "ceiling": install.CEILING}[args.kind]
     try:
         if args.empty:
             bodies = {kinds.NONE: b""}
@@ -654,9 +680,14 @@ def install_cmd(args) -> int:
         follows = read_set_dir(args.follows) if args.follows else None
         ceiling = read_set_dir(args.ceiling) if args.ceiling else None
         real = {name: body for name, body in bodies.items() if name != kinds.NONE}
-        if kind == install.FALLBACK and real and not install.inside(args.target, ceiling, real):
+        if kind != install.CEILING and real and not install.inside(args.target, ceiling, real,
+                                                                  whole=kind != install.FLOOR):
             return _fail(install.ABOVE_CEILING, "the set is above the held ceiling (CL3)")
-        larger = install.set_larger(args.target, kind, follows, bodies)
+        rates = {name: _rate(getattr(args, name)) for name in ("rate", "answer_rate")}
+        layout = _read(args.layout) if args.layout else None
+        if kind == install.FLOOR and layout is not None:
+            floor.read_layout(layout)                 # AF10: a staleness bound of 0 is refused here
+        larger = install.set_larger(args.target, kind, follows, bodies, _rated(kind, rates))
         if larger is None:                          # H13: a cfs table, by the core image inside it
             larger = widening.compare_release(dict(follows.bodies), real) != widening.NOT_LARGER
         if larger and not args.widens:
@@ -664,10 +695,14 @@ def install_cmd(args) -> int:
         metas = {}
         if "policy.ppt" in bodies and args.qualification:
             metas["policy.ppt"] = policy_meta(bodies["policy.ppt"], _json(args.qualification))
+        for name in ("policy.ppt", "cfs.table"):
+            if kind == install.FLOOR and name in bodies and args.command is not None:
+                metas.setdefault(name, {})["command"] = args.command
         pairs = install.seal_set(kind, bodies, stream=args.stream, seq=args.seq, target=args.target,
-                                 signers=_authority(args.key), replaces=follows.policy_sha256 if follows and not follows.empty else "",
+                                 signers=_authority(args.key),
+                                 replaces=follows.policy_sha256 if follows and not follows.empty else "",
                                  widens=bool(args.widens), metas=metas,
-                                 not_before=args.not_before or int(time.time()))
+                                 not_before=args.not_before or int(time.time()), layout=layout, **rates)
     except Refused as refused:
         return _fail(refused.cause, str(refused))
     os.makedirs(args.out, exist_ok=True)

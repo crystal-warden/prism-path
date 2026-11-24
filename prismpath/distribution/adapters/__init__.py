@@ -13,7 +13,8 @@ adapter never verifies a signature, reads a clock or touches a floor. Those are 
 
 Beside the calls an adapter tells the machine what it needs to build its view: `home`, the directory the
 runtime keeps its files in (K2), `qualification`, the qualification envelope a `policy.ppt` is admitted
-under, and `body_bound`, its bound on a body (E6).
+under, `body_bound`, its bound on a body (E6), and `floor_layout`, the layout document (AF10) a table kind was built
+with, without which it takes no action floor.
 """
 from __future__ import annotations
 
@@ -28,6 +29,7 @@ class Adapter:
     home: Optional[str] = None
     qualification: Optional[dict] = None
     body_bound: int = 16777215
+    floor_layout: Optional[bytes] = None
 
     def check(self, artifact: str, body: bytes, staged: Mapping[str, Tuple[Any, bytes]]) -> Optional[str]:
         """The target's own check of one staged artifact against the rest of the staged release, which maps

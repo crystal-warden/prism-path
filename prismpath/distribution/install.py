@@ -18,9 +18,8 @@ holds what the PEP machine (`prismpath.distribution.pep`) and the sealing tool s
     set_larger      IS12: whether an install set allows more than the one it follows
     domain_sha256   P4, CL4: the hash of the reading domain a PEP was built with
 
-This version builds the fallback policy and the ceiling. An action floor is refused at V5 with
-`dist:target-mismatch` until the floor's own rules (section 21.2) are built, so a PEP that has none refuses as
-before (X3), and no PEP holds a floor it would not ask.
+The action floor's own rules (section 21.2), the operator's answer (21.5) and the receipts (21.6) are
+`prismpath.distribution.floor`'s. A PEP that holds none of the three sets refuses as before (X3).
 
 Files, under the PEP's `dist/` directory and its second medium (`copy`), each written whole:
 
@@ -52,7 +51,7 @@ MAX_RETIRED = 8                                    # IS10: the retired install a
 FLOOR, FALLBACK, CEILING, TRUST = "install.floor", "install.fallback", "install.ceiling", "install.trust"
 SET_KINDS = (FLOOR, FALLBACK, CEILING)             # H10: the order of the install id
 SUBJECT = {FLOOR: 1, FALLBACK: 2, CEILING: 3, TRUST: 4, "operator.answer": 5}       # H10
-BUILT = frozenset({FALLBACK, CEILING, TRUST})      # the install kinds this version admits (see the module note)
+BUILT = frozenset({FLOOR, FALLBACK, CEILING, TRUST})   # the install kinds this version admits
 INSTALL_LOST, ABOVE_CEILING, WIDENED = "dist:install-lost", "dist:above-ceiling", "dist:install-widened"
 UNKNOWN_KEY, INVALID, REVOKED_KEY = "dist:unknown-key", "sig:invalid", "sig:revoked-key"
 ROTATION_INVALID, UNSIGNED = "dist:rotation-invalid", "dist:widening-unsigned"
@@ -408,7 +407,24 @@ def inside(kind: str, ceiling: Optional[HeldSet], bodies: Mapping[str, bytes], *
 
 # ------------------------------------------------------------------ IS12: the widening of an install set
 
-def set_larger(kind: str, install_kind: str, held: Optional[HeldSet], bodies: Mapping[str, bytes]) -> Optional[bool]:
+def _rates(envelopes: Mapping[str, Any]) -> Tuple[Any, Any]:
+    first = next(iter(envelopes.values()), None) if envelopes else None
+    meta = first.meta if first is not None else {}
+    return meta.get("rate"), meta.get("answer_rate")
+
+
+def looser(old: Any, new: Any) -> bool:
+    """AF8, IS12: a rate is looser when it is removed, or allows more in a window or has a shorter window. Two rates
+    that differ both ways are looser, since a burst of the new one passes what the old one held."""
+    if old is None:
+        return False
+    if new is None:
+        return True
+    return new["allows"] > old["allows"] or new["window"] < old["window"]
+
+
+def set_larger(kind: str, install_kind: str, held: Optional[HeldSet], bodies: Mapping[str, bytes],
+               envelopes: Optional[Mapping[str, Any]] = None) -> Optional[bool]:
     """IS12: whether the set `bodies` allows or escalates more than `held`, the set it follows or None, or None when
     the PEP cannot tell. A first action floor and a first fallback policy widen, the empty one does not; a first
     ceiling does not, the empty ceiling does, and a ceiling that allows more does. A list that holds a hash the one
@@ -432,6 +448,10 @@ def set_larger(kind: str, install_kind: str, held: Optional[HeldSet], bodies: Ma
         return False
     elif before is None:
         return True
+    if install_kind == FLOOR and envelopes is not None:
+        (rate, answers), (new_rate, new_answers) = _rates(held.envelopes), _rates(envelopes)
+        if looser(rate, new_rate) or looser(answers, new_answers):
+            return True                                # IS12: a looser `rate` or a removed one widens
     if kinds.TARGETS[kind].decides:
         return widening.compare_release(before, dict(bodies)) != NOT_LARGER
     if kind in ("host", "mesh"):
@@ -440,13 +460,13 @@ def set_larger(kind: str, install_kind: str, held: Optional[HeldSet], bodies: Ma
 
 
 def widens_ok(kind: str, install_kind: str, held: Optional[HeldSet], bodies: Mapping[str, bytes], *, widens: bool,
-              replaces: str) -> Tuple[Optional[str], bool]:
+              replaces: str, envelopes: Optional[Mapping[str, Any]] = None) -> Tuple[Optional[str], bool]:
     """IS12: (cause, stands out) of a set whose signer said `widens` and `replaces`. A set the PEP computes as larger
     whose `widens` is false is `dist:widening-unsigned`. A PEP that cannot decide also takes `widens` false only when
     `replaces` is the policy hash of the set it holds, the empty string when it holds none. A set stands out, with
     event `install-widened`, when its `widens` is true or the PEP computes it as larger. A kind the empty set withdrew
     holds none, so the set after it names the empty string (IS6)."""
-    larger = set_larger(kind, install_kind, held, bodies)
+    larger = set_larger(kind, install_kind, held, bodies, envelopes)
     if widens:
         return None, True
     if larger:
@@ -816,12 +836,31 @@ def protected_names(kind: str, fallback: Optional[HeldSet], ceiling: Optional[He
 
 def seal_set(install_kind: str, bodies: Mapping[str, bytes], *, stream: str, seq: int, target: str, signers,
              policy_sha256: Optional[str] = None, replaces: str = "", widens: bool = False,
-             metas: Optional[Mapping[str, Mapping[str, Any]]] = None, not_before: int = 0) -> List[Tuple[bytes, bytes]]:
+             metas: Optional[Mapping[str, Mapping[str, Any]]] = None, not_before: int = 0,
+             rate: Optional[Mapping[str, int]] = None, answer_rate: Optional[Mapping[str, int]] = None,
+             layout: Optional[bytes] = None, check: bool = True) -> List[Tuple[bytes, bytes]]:
     """The (sealed, body) pairs of one install set of `install_kind` for a PEP of kind `target`, signed by every key in
     `signers`. `bodies` maps each artifact `as` to its body, `{"none": b""}` for the empty set. `metas` gives the
     `meta` members of each artifact beyond `as`. The policy hash is the set's `policy.core` or the table's, the list's
-    hash for a policy list, and 64 zeros for the empty set, unless given."""
+    hash for a policy list, and 64 zeros for the empty set, unless given. An action floor carries `rate` and
+    `answer_rate` on every statement (AF8, OP4), and a table floor names `layout`, the layout document of AF10, by its
+    hash. With `check` the tool refuses an action floor that is not narrow (AF9, AF10, `dist:floor-broad`) or that can
+    escalate with no `answer_rate` (OP4), as a PEP would."""
+    from prismpath.distribution import floor
     names = sorted(bodies)
+    floor_meta = {}
+    if install_kind == FLOOR:
+        floor_meta = {**({"rate": dict(rate)} if rate else {}), **({"answer_rate": dict(answer_rate)} if answer_rate else {})}
+        if layout is not None:
+            floor_meta["layout"] = canon.sha256_hex(layout)
+    if install_kind == FLOOR and check and names != [kinds.NONE]:
+        for name in names:
+            meta = {**floor_meta, **dict((metas or {}).get(name, {}))}
+            if floor.needs_answer_rate(target, name, bodies[name], meta) and "answer_rate" not in meta:
+                raise Refused(kinds.BAD_FORMAT, "an action floor that can escalate carries answer_rate (OP4)")
+            cause = floor.narrow(target, name, bodies[name], meta, layout)
+            if cause is not None:
+                raise Refused(cause, f"the action floor's {name} is not narrow (AF9, AF10)")
     release = env.install_release_id([(name, canon.sha256_hex(bodies[name])) for name in names])
     if policy_sha256 is None:
         if names == [kinds.NONE]:
@@ -835,7 +874,7 @@ def seal_set(install_kind: str, bodies: Mapping[str, bytes], *, stream: str, seq
                 policy_sha256 = canon.sha256_hex(bodies[primary or names[0]])
     out = []
     for name in names:
-        meta = {"as": name, **dict((metas or {}).get(name, {}))}
+        meta = {"as": name, **floor_meta, **dict((metas or {}).get(name, {}))}
         envelope_bytes = env.build(install_kind, bodies[name], stream=stream, seq=seq, targets=[target],
                                    not_before=not_before, expires=0, policy_sha256=policy_sha256, release=release,
                                    replaces=replaces, widens=widens, meta=meta)

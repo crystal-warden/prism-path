@@ -59,6 +59,7 @@ from prismpath import canon
 from prismpath.distribution import devbuild, heartbeat, install, kinds, state_record, statement as statements, widening
 from prismpath.distribution.adapters import LARGER, NOT_LARGER
 from prismpath.distribution import envelope as env
+from prismpath.distribution import floor as floors
 from prismpath.distribution.kinds import Refused
 from prismpath.distribution.trust import TrustStore, read_anchor
 from prismpath.distribution.verify import SKEW, Floor, InstallView, PepView, Staged, verify
@@ -222,6 +223,17 @@ def read_release_in_force(state_dir: str, kind: str, now: int) -> "Release":
     return release
 
 
+def _plain(value: Any) -> Any:
+    """A request as canon/2 can spell it: bytes as hex."""
+    if isinstance(value, (bytes, bytearray)):
+        return bytes(value).hex()
+    if isinstance(value, dict):
+        return {str(key): _plain(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_plain(item) for item in value]
+    return value
+
+
 class PepRefused(Exception):
     """The PEP refuses to start or to be provisioned (K2, X10, an anchor for another kind)."""
 
@@ -375,6 +387,7 @@ class Pep:
         self.outbox: list = []
         self.recent: deque = deque(maxlen=heartbeat.MAX_FRAMES)    # H5: the readings decided since the last record
         self.bad_readings = 0                                        # readings the Facet codec refused, not carried
+        self.receipts = 0                                            # RC1: the receipts written since start
         self._load()
         self._check_setting()
         self._check_separation(self.trust)
@@ -630,7 +643,8 @@ class Pep:
                        qualification=self.adapter.qualification, body_bound=self.adapter.body_bound,
                        has_clock=self.has_clock, instance_key_id=self.instance_key.key_id,
                        install=InstallView(record=self.installed.record, staged=dict(self.installed.staged),
-                                           ceiling=self.installed.ceiling, message=message))
+                                           ceiling=self.installed.ceiling, message=message,
+                                           layout=getattr(self.adapter, "floor_layout", None)))
 
     def record(self, event: str, cause: Optional[str] = None) -> bytes:
         """A signed state record of the PEP as it is now (H1), after the expiry check every report comes
@@ -693,7 +707,8 @@ class Pep:
 
     def reconciling_entry(self) -> Optional[state_record.ReconcilingEntry]:
         """H14: the reconciling entry, or None outside the state. A locked PEP names `dist:floor-lost` and no
-        running release (C13). This version holds no action floor, so the floor field is zeros (section 21)."""
+        running release (C13). The floor field is the set id of the action floor the PEP holds, which in the Python
+        machine is the one it asks, zeros for none."""
         state = self.reconciling
         if state is None:
             return None
@@ -703,7 +718,8 @@ class Pep:
             owed=state["owed"], cause=cause,
             running_policy=state_record.prefix(running.policy_sha256 if running else None),
             running_release=state_record.prefix(running.release if running else None),
-            running_seq=running.seq if running else 0)
+            running_seq=running.seq if running else 0,
+            floor=bytes.fromhex(held.set_id)[:16] if (held := self.floor_set()) is not None else b"\x00" * 16)
 
     def _keep(self, image: bytes, reading: Any) -> bool:
         """H5: put `reading` in the ring when the Facet codec of `image` encodes it, as `decide` and the readings
@@ -944,15 +960,16 @@ class Pep:
                 if cause is not None:
                     return refuse(cause)
         new = staged.held()
-        if kind != install.CEILING and bodies and not install.inside(target, self.installed.ceiling, bodies):
+        if kind != install.CEILING and bodies and not install.inside(target, self.installed.ceiling, bodies,
+                                                                     whole=kind != install.FLOOR):
             return refuse(install.ABOVE_CEILING)                     # CL3, IS4: the ceiling held at apply
         if kind == install.CEILING and bodies:
             for other in (install.FLOOR, install.FALLBACK):
                 held = self.installed.held(other)
-                if held is not None and not install.inside(target, new, held.bodies):
+                if held is not None and not install.inside(target, new, held.bodies, whole=other != install.FLOOR):
                     return refuse(install.ABOVE_CEILING)             # CL3: the engineer narrows those first
         cause, stands_out = install.widens_ok(target, kind, held_raw, staged.bodies, widens=staged.widens,
-                                              replaces=staged.replaces)
+                                              replaces=staged.replaces, envelopes=staged.envelopes)
         if cause is not None:
             return refuse(cause)
         lapses = (kind == install.CEILING and self.active is not None and bodies
@@ -1426,25 +1443,128 @@ class Pep:
         """X7: `held` on every receipt written while the PEP holds an expired release, else None."""
         return "held" if self.held else None
 
-    def decide(self, under_release: Callable[[], Any], reading: Optional[Dict[str, Any]] = None) -> dict:
-        """One decision through the PEP, after the expiry check (X1). With no active release, locked or
-        reconciling, it is refused with the cause of X3 or C8 and `under_release` is not called, and no decision
-        tries the runtime. Otherwise its answer is the decision, and the receipt carries the hold mark while the
-        PEP is held (X7). The adapter hands the `reading` it decided, which the next state record carries in its
-        Facet body when the active release has a `policy.core` (H5). A reading the Facet codec refuses is decided
-        and not carried."""
+    def decide(self, under_release: Callable[[], Any], reading: Optional[Dict[str, Any]] = None, *,
+               request: Optional[Dict[str, Any]] = None) -> dict:
+        """One decision through the PEP, after the expiry check (X1). A PEP that holds an action floor asks it first
+        on `request`, the reading of the request in the form of its kind (`floors.ask`), in every state (AF1): when
+        the floor allows or escalates, nothing else decides (`_floor_answer`). Otherwise, with no active release,
+        locked or reconciling, it is refused with the cause of X3 or C8 and `under_release` is not called, unless the
+        fallback policy decides (FB1), and no decision tries the runtime. Otherwise its answer is the decision, and
+        the receipt carries the hold mark while the PEP is held (X7). The adapter hands the `reading` it decided,
+        which the next state record carries in its Facet body when the active release has a `policy.core` (H5). A
+        reading the Facet codec refuses is decided and not carried. A PEP that holds an install record names the
+        basis and the policy hash of the set that decided on every receipt (RC1), and `receipt` is its bytes."""
         self._check_active()
+        held = self.floor_set()
+        if held is not None and request is not None:
+            answered = self._floor_answer(held, request)
+            if answered is not None:
+                return answered
         cause = self.refusal()
         if cause is not None:
             if self.fallback_decides():                               # FB1: the runtime runs the fallback set
-                return {"decision": under_release(), "cause": None, "mark": None, "basis": "fallback",
-                        "policy_sha256": self.installed.fallback.policy_sha256}
-            return {"decision": None, "cause": cause, "mark": None}
+                return self._receipted({"decision": under_release(), "cause": None, "mark": None, "basis": "fallback",
+                                        "policy_sha256": self.installed.fallback.policy_sha256}, request)
+            return self._receipted({"decision": None, "cause": cause, "mark": None}, request)
         decision = under_release()
         image = self.active.bodies.get("policy.core") if reading is not None else None
         if image is not None:
             self._keep(image, reading)
-        return {"decision": decision, "cause": None, "mark": self.receipt_mark()}
+        out = {"decision": decision, "cause": None, "mark": self.receipt_mark()}
+        if self.installed.record is not None or self.installed.record_lost:
+            out.update(basis="release", policy_sha256=self.active.policy_sha256)
+        return self._receipted(out, request)
+
+    def floor_set(self) -> Optional["install.HeldSet"]:
+        """The action floor the PEP asks, None when it holds none or its install record is lost (IS10)."""
+        return None if self.installed.record_lost else self.installed.held(install.FLOOR)
+
+    def _receipted(self, out: dict, request: Optional[Dict[str, Any]]) -> dict:
+        """RC1: a PEP that holds an install record writes the receipt of every decision, with its basis, and a
+        refusal made with no set carries no basis. The release's own outcome is named when the request reads."""
+        if self.installed.record is None and not self.installed.record_lost:
+            return out
+        outcome = None
+        if request is not None and out.get("basis") in ("release", "fallback"):
+            decided = self.active if out["basis"] == "release" else self.installed.fallback
+            outcome = floors.ask(self.adapter.kind, decided.bodies, request).document(None)
+        data, digest = floors.receipt({"basis": out.get("basis"), "cause": out["cause"], "mark": out["mark"],
+                                       "decided": outcome, "policy_sha256": out.get("policy_sha256"),
+                                       **self._receipt_place(request)})
+        return {**out, "receipt": data, "receipt_sha256": digest}
+
+    def _receipt_place(self, request: Optional[Dict[str, Any]]) -> dict:
+        """What sets one receipt apart from the next: the PEP's time, its count of receipts since start and the hash
+        of the request. The PEP id is not in it, so two PEPs may write the same bytes, which is why an answer names its
+        PEP (OP2)."""
+        self.receipts += 1
+        try:
+            asked = canon.sha256_hex(canon.canon2_bytes(_plain(request))) if request is not None else None
+        except (TypeError, ValueError):
+            asked = None
+        return {"time": self.time(), "n": self.receipts, "request": asked}
+
+    def _would(self, request: Dict[str, Any]) -> Tuple["floors.Answer", Optional[str]]:
+        """AF7: what the active release, or the fallback policy when that decides, answers the request, and the policy
+        hash of the set it asked. None when no set would have decided."""
+        if self.refusal() is None:
+            return floors.ask(self.adapter.kind, self.active.bodies, request), self.active.policy_sha256
+        if self.fallback_decides():
+            fallback = self.installed.fallback
+            return floors.ask(self.adapter.kind, fallback.bodies, request), fallback.policy_sha256
+        return floors.SILENT, None
+
+    def _ceiling_names(self) -> Tuple[str, ...]:
+        ceiling = self.installed.ceiling
+        if ceiling is None or "agent.zones" not in ceiling.bodies:
+            return ()
+        return tuple(kinds.read_zones(ceiling.bodies["agent.zones"])["protected"])
+
+    def _floor_answer(self, held: "install.HeldSet", request: Dict[str, Any]) -> Optional[dict]:
+        """AF1, AF2, AF7, AF8: the action floor's answer, or None when it is silent. An allow is allowed with
+        `dist:floor-allowed` (RC3), an escalation is escalated with the floor's own cause and opens an escalation an
+        operator may answer (OP3). The release or the fallback policy is asked too and its answer is `would`. An
+        override, a floor answer whose `would` is not an allow, of a rule past the signed `rate` is escalated with
+        `dist:floor-rate`, or leaves the floor silent on a rule that may only allow. Its count is durable before the
+        PEP acts, and so are the counts of floor answers and overrides of the state record (H10)."""
+        kind = self.adapter.kind
+        answer = floors.ask(kind, held.bodies, request, floor=True, layout=getattr(self.adapter, "floor_layout", None),
+                           ceiling_names=self._ceiling_names())
+        if answer.outcome not in (floors.ALLOW, floors.ESCALATE):
+            return None                                               # AF2: silent
+        would, would_policy = self._would(request)
+        override = would.outcome != floors.ALLOW
+        meta = next(iter(held.envelopes.values())).meta if held.envelopes else {}
+        outcome, cause, counted = answer.outcome, answer.cause, None
+        book = self.book()
+        if outcome == floors.ALLOW and override and meta.get("rate") is not None:
+            counted = book.spend(answer.rule, meta["rate"], self.time())
+            if counted is None:
+                if answer.allow_only or kind not in floors.ESCALATING:
+                    return None                                       # AF8: past the rate the release decides
+                outcome, cause = floors.ESCALATE, floors.RATE
+        if outcome == floors.ALLOW:
+            cause = floors.ALLOWED                                     # RC3
+        record = self.installed.record
+        self.installed.save(replace(record, answers=min(record.answers + 1, 2 ** 32 - 1),
+                                    overrides=min(record.overrides + (1 if override else 0), 2 ** 32 - 1)))
+        mark = self.receipt_mark()
+        doc = {"basis": "floor", "cause": cause, "mark": mark, "outcome": outcome, "policy_sha256": held.policy_sha256,
+               "would": would.document(would_policy), "zone": answer.zone, **self._receipt_place(request)}
+        if counted is not None:
+            doc.update(rule=answer.rule, window=counted[0], count=counted[1])          # RC3
+        data, digest = floors.receipt(doc)
+        if outcome == floors.ESCALATE:
+            book.escalated(digest, held.policy_sha256, self.time())    # OP3
+        return {"decision": outcome, "cause": cause, "mark": mark, "basis": "floor",
+                "policy_sha256": held.policy_sha256, "would": would.document(would_policy), "zone": answer.zone,
+                "override": override, "receipt": data, "receipt_sha256": digest,
+                **({"rule": answer.rule, "window": counted[0], "count": counted[1]} if counted is not None else {})}
+
+    def book(self) -> "floors.Book":
+        """AF8, OP3, OP4: the rate counts and the open escalations, beside the install record in both copies."""
+        return floors.Book.load((os.path.join(self.installed.dir, "rates.json"),
+                                os.path.join(self.installed.copy, "rates.json")))
 
     # ------------------------------------------------------------------ RB1, RB2, X9: rollback
     def rollback(self) -> bytes:
@@ -1651,7 +1771,8 @@ class Pep:
             view = PepView(kind=self.adapter.kind, stream=read.stream, qualification=self.adapter.qualification,
                            body_bound=self.adapter.body_bound, has_clock=self.has_clock,
                            instance_key_id=self.instance_key.key_id,
-                           install=InstallView(record=record, staged={}, ceiling=None, message=False))
+                           install=InstallView(record=record, staged={}, ceiling=None, message=False,
+                                               layout=getattr(self.adapter, "floor_layout", None)))
             verdict = verify(sealed, body, trust=trust, pep=view, now=int(self.clock()))
             if verdict.envelope is None or verdict.envelope.artifact not in kinds.INSTALL_ARTIFACTS:
                 raise PepRefused("only install statements come with an anchor (P2 step 3)")

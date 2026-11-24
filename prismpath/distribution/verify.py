@@ -210,6 +210,22 @@ def _verify(sealed: bytes, body: bytes, trust: TrustStore, pep: PepView, now: in
     return Verdict(None, envelope, time_floor=time_floor)
 
 
+def _floor_statement(kind: str, named: str, body: bytes, meta: Mapping[str, Any], layout: Optional[bytes]) -> Optional[str]:
+    """V11 of an action floor statement past its artifact's own check: a floor that can escalate carries
+    `answer_rate` (OP4, `dist:bad-format`), an `xdp` floor carries no `rate` (AF8), and the floor is narrow (AF9,
+    AF10), `dist:floor-broad` otherwise. A table floor names the layout the PEP was built with
+    (`dist:target-mismatch`)."""
+    from prismpath.distribution import floor
+    if kind == "xdp" and "rate" in meta:
+        return kinds.BAD_FORMAT
+    try:
+        if floor.needs_answer_rate(kind, named, body, meta) and "answer_rate" not in meta:
+            return kinds.BAD_FORMAT
+        return floor.narrow(kind, named, body, meta, layout)
+    except Refused as refused:
+        return refused.cause if refused.cause != kinds.BAD_FORMAT else floor.BROAD
+
+
 @dataclass(frozen=True)
 class InstallView:
     """What the verifier needs of a PEP's install part (section 21): the install record, the staged install sets by
@@ -219,6 +235,7 @@ class InstallView:
     staged: Mapping[str, Any] = field(default_factory=dict)
     ceiling: Any = None
     message: bool = True
+    layout: Optional[bytes] = None                 # AF10: the layout document a table kind was built with
 
 
 def _verify_install(envelope, entries, message: bytes, body: bytes, trust: TrustStore, pep: PepView, now: int,
@@ -280,9 +297,10 @@ def _verify_install(envelope, entries, message: bytes, body: bytes, trust: Trust
         staged = view.staged.get(artifact)
         if staged is not None and staged.seq == envelope.seq:
             first = next(iter(staged.envelopes.values()))
-            if ((first.policy_sha256, first.release, first.replaces, first.widens, first.meta.get("rate"))
+            if ((first.policy_sha256, first.release, first.replaces, first.widens, first.meta.get("rate"),
+                 first.meta.get("answer_rate"))
                     != (envelope.policy_sha256, envelope.release, envelope.replaces, envelope.widens,
-                        envelope.meta.get("rate"))):
+                        envelope.meta.get("rate"), envelope.meta.get("answer_rate"))):
                 return Verdict("dist:incomplete", envelope)
             if named in staged.statements and staged.statements[named][0] != envelope_id:
                 return Verdict("dist:incomplete", envelope)
@@ -300,7 +318,12 @@ def _verify_install(envelope, entries, message: bytes, body: bytes, trust: Trust
         except Refused as refused:
             cause = refused.cause
     else:
-        cause = target.check_for(named)(envelope, body, pep)
+        cause = None
+        if artifact == install.FLOOR and named == "egress.hosts":
+            cause = _floor_statement(pep.kind, named, body, envelope.meta, view.layout)       # AF9: a wildcard is broad
+        cause = cause or target.check_for(named)(envelope, body, pep)
+        if cause is None and artifact == install.FLOOR:
+            cause = _floor_statement(pep.kind, named, body, envelope.meta, view.layout)       # AF8, AF9, AF10, OP4
         if cause is None and artifact != install.CEILING and not install.inside(
                 pep.kind, view.ceiling, {named: body}, whole=False):
             cause = install.ABOVE_CEILING                                       # CL3

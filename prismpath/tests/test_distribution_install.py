@@ -411,7 +411,7 @@ def test_case_201_a_cut_off_pep_decides_under_its_release_then_under_its_fallbac
     point.send(_fallback(point, image(9)))
     point.commit(image(5))
     point.clock.now = EXPIRES - 1
-    assert "basis" not in point.pep.decide(lambda: "release")
+    assert point.pep.decide(lambda: "release")["basis"] == "release"
     for now in (EXPIRES, EXPIRES + 86400, EXPIRES + 365 * 86400):
         point.clock.now = now
         point.pep.tick()
@@ -638,7 +638,7 @@ def test_case_226_a_host_with_one_file_system_loses_both_copies_of_its_install_r
     point.pep = point.open()
     assert [(one.event, one.cause) for one in map(lambda data: _read(point, data), point.pep.drain())][-1] \
         == ("refused", "dist:install-lost")
-    assert point.pep.installed.fallback is None and "basis" not in point.pep.decide(lambda: "release")
+    assert point.pep.installed.fallback is None and point.pep.decide(lambda: "release")["basis"] == "release"
     assert point.send(_fallback(point, image(8), 2))[-1].cause == "dist:install-lost"
     assert _read(point, point.stage(image(6), 2)).cause == "dist:install-lost"
     point.pep.confirm(point.pep.provision(point.anchor()))
