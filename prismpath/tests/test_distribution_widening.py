@@ -322,9 +322,8 @@ def test_case_064_a_statement_does_not_save_a_larger_release_that_says_it_does_n
     assert _read(agent, agent.pep.commit(STREAM, 3, H(WIDER))).event == "committed"
 
 
-def test_a_host_list_with_one_more_host_is_larger_on_an_agent_pep(agent):
-    """Case 59's agent half (W1). The gateway half, a changed route table, waits for the gateway row, so the case
-    stays pending."""
+def test_case_059_a_host_list_with_one_more_host_is_larger_on_an_agent_pep(agent):
+    """case_059: W1, the agent half. The gateway half, a changed route table, is in test_distribution_gateway.py."""
     agent.commit(NARROW)
     more = _hosts("api.example.com", "other.example.com")
     assert _read(agent, agent.stage(NARROW, 2, hosts=more)).cause == "dist:widening-unsigned"

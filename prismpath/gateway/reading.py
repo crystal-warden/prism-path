@@ -26,7 +26,7 @@ The route table is the owner's. `{"routes": [{"match": "/admin/*", "class": "adm
 that matches wins; `/x/*` matches `/x` and everything below it, and an entry without `*` matches that path only.
 Matching ignores case, since many servers do. A path no entry matches is `other`.
 
-The grant is read by grants.py against the gateway's authority key, policy and revocation list, and covers a
+The grant is read by grants.py against the gateway's trust store, policy and revocation list, and covers a
 path class and a method class. Without a verifier (a reading taken outside a gateway) a request with the grant
 header reads `invalid`, since nothing can verify it.
 """

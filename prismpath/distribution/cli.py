@@ -151,8 +151,9 @@ def add_parser(subparsers) -> None:
     pep = commands.add_parser('pep', help='run a host enforcement point (provision, poll, status, rollback)')
     pep.add_argument('pep_command', choices=('provision', 'poll', 'status', 'rollback'))
     pep.add_argument('--state', required=True, metavar='DIR', help='the PEP\'s state directory')
-    pep.add_argument('--kind', choices=('host', 'agent'), default='host',
-                     help='host (a policy host) or agent (an agent home that `prismpath agent init --follow` made)')
+    pep.add_argument('--kind', choices=('host', 'agent', 'gateway'), default='host',
+                     help='host (a policy host), agent (an agent home that `prismpath agent init --follow` made) or '
+                          'gateway (a gateway home holding its instance key and no authority key)')
     pep.add_argument('--key', required=True, metavar='FILE', help='the PEP\'s instance key (`ledger keygen`)')
     pep.add_argument('--anchor', default=None, metavar='FILE', help='provision: the trust anchor')
     pep.add_argument('--qualification', default=None, metavar='FILE', help='provision: the qualification envelope')
@@ -611,6 +612,9 @@ def _host_pep(args):
     if getattr(args, "kind", "host") == "agent":
         from prismpath.distribution.adapters.agent_home import AgentHomeAdapter
         return Pep(args.state, AgentHomeAdapter(args.state), key, time.time)
+    if getattr(args, "kind", "host") == "gateway":
+        from prismpath.distribution.adapters.gateway import GatewayHomeAdapter
+        return Pep(args.state, GatewayHomeAdapter(args.state), key, time.time)
     saved = os.path.join(args.state, "dist-qualification.json")
     if args.qualification:
         os.makedirs(args.state, exist_ok=True)
