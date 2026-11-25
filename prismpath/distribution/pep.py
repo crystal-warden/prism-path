@@ -1019,9 +1019,11 @@ class Pep:
                 held = self.installed.held(other)
                 if held is not None and not install.inside(target, new, held.bodies, whole=other != install.FLOOR):
                     return refuse(install.ABOVE_CEILING)             # CL3: the engineer narrows those first
+        lost = kind == install.CEILING and self.installed.ceiling_lost       # IS10, IS12: a ceiling after a lost one
         cause, stands_out = install.widens_ok(target, kind, held_raw, staged.bodies, widens=staged.widens,
                                               replaces=staged.replaces, envelopes=staged.envelopes,
-                                              change=staged.change_body)
+                                              change=staged.change_body, lost=lost,
+                                              lost_set=self.installed.lost_ceiling if lost else None)
         if cause is not None:
             return refuse(cause)
         # CL3: a ceiling that narrows below the active release is no widening; the release lapses and says so itself
@@ -1372,12 +1374,18 @@ class Pep:
             self.store.write("pending.json", _PENDING, {**intent, "running": None, "withdrawn": True})
 
     def _fell(self, release: Release) -> Optional[str]:
-        """Why `release` falls, the test of R5 and then expiry (X1, and H16's freshness), else None. HOLD is for
-        `mesh` and `cfs`, which never reconcile, so expiry always fells a release here (C10)."""
+        """Why `release` falls, the test of R5, then expiry (X1, and H16's freshness), then the ceiling (CL3), else
+        None. HOLD is for `mesh` and `cfs`, which never reconcile, so expiry always fells a release here (C10)."""
         if release.envelopes.keys() != release.held.keys():
             return None                           # a running release whose blobs do not read: still named (C11)
         cause = standing(self.trust, release, self.store.get, self.time())
-        return cause or (EXPIRED if self._stale() else None)
+        cause = cause or (EXPIRED if self._stale() else None)
+        return cause or (None if self._inside_ceiling(release) else install.ABOVE_CEILING)
+
+    def _inside_ceiling(self, release: Release) -> bool:
+        """CL3: `release` is inside the ceiling the PEP holds and reads. A lost ceiling bounds nothing here: the PEP
+        keeps the release it has, which was inside it when it was committed (IS10)."""
+        return install.inside(self.adapter.kind, self.installed.ceiling, release.bodies)
 
     def _run_tests(self, *, never_ran: bool) -> None:
         """C10: hold the held release, and the running one while the withdrawal has not worked, to the tests. A
@@ -1486,7 +1494,7 @@ class Pep:
 
     def _check_ground(self) -> Optional[bytes]:
         """What every entry point and the periodic tick run first: an active release that no longer stands lapses
-        with `dist:revoked` (R5), and an expired one, or one whose freshness ran out (H16), lapses or is held (X1,
+        with `dist:revoked` (R5), one above the held ceiling with `dist:above-ceiling` (CL3), and an expired one, or one whose freshness ran out (H16), lapses or is held (X1,
         X7). A reconciling PEP runs the tests of C10 instead, which try no runtime. A staged release is held to the
         same test when a revocation is applied and at a restart, and again at its commit (C3)."""
         if self.reconciling is not None:
@@ -1499,6 +1507,8 @@ class Pep:
         cause = standing(self.trust, self.active, self.store.get, self.time())
         if cause == REVOKED:
             return self.lapse(cause)
+        if not self._inside_ceiling(self.active):
+            return self.lapse(install.ABOVE_CEILING)                 # CL3: also when a restart came between the two
         if cause != EXPIRED and not self._stale():
             return None
         if self.expiry_response == HOLD:
@@ -1829,7 +1839,8 @@ class Pep:
             self.installed.staged = {}
             self.installed.save(new_record)
             self.installed.save_staged()
-            self.installed.ceiling_lost = False
+            # IS10: a provisioning that keeps the install sequences keeps a lost ceiling lost (P4, IS6)
+            self.installed.ceiling_lost = self.installed.ceiling_lost and self.installed.named_lost(new_record)
         sent = len(self.outbox)
         for sealed, body in brought:
             self._stage(sealed, body, message=False)

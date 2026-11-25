@@ -65,11 +65,13 @@ prismpath-hotswap-rs/tests/common/mod.rs
 prismpath-hotswap-rs/tests/fixtures/distribution.json
 prismpath-hotswap-rs/tests/fixtures/host_trace.json
 prismpath-hotswap-rs/tests/fixtures/hotswap.json
+prismpath-hotswap-rs/tests/fixtures/install_larger.json
 prismpath-hotswap-rs/tests/fixtures/receipts.json
 prismpath-hotswap-rs/tests/test_cause_names.rs
 prismpath-hotswap-rs/tests/test_distribution_conformance.rs
 prismpath-hotswap-rs/tests/test_distribution_cross_language.rs
 prismpath-hotswap-rs/tests/test_distribution_install.rs
+prismpath-hotswap-rs/tests/test_distribution_larger.rs
 prismpath-hotswap-rs/tests/test_distribution_pep.rs
 prismpath-hotswap-rs/tests/test_distribution_reconciling.rs
 prismpath-hotswap-rs/tests/test_distribution_statement.rs
@@ -516,6 +518,7 @@ prismpath/portable/conformance/field_definitions.json
 prismpath/portable/conformance/flows.json
 prismpath/portable/conformance/host_trace.json
 prismpath/portable/conformance/hotswap.json
+prismpath/portable/conformance/install_larger.json
 prismpath/portable/conformance/level_m.json
 prismpath/portable/conformance/locked_flows.json
 prismpath/portable/conformance/merkle_consistency.json
@@ -541,6 +544,7 @@ prismpath/portable/gen_durable_fixtures.py
 prismpath/portable/gen_field_definitions.py
 prismpath/portable/gen_host_trace_fixtures.py
 prismpath/portable/gen_hotswap_fixtures.py
+prismpath/portable/gen_install_larger_fixtures.py
 prismpath/portable/gen_level_m.py
 prismpath/portable/gen_merkle_consistency_fixtures.py
 prismpath/portable/gen_merkle_stream_fixtures.py
@@ -806,6 +810,7 @@ prismpath/tests/test_distribution_http.py
 prismpath/tests/test_distribution_identity.py
 prismpath/tests/test_distribution_install.py
 prismpath/tests/test_distribution_install_controller.py
+prismpath/tests/test_distribution_larger.py
 prismpath/tests/test_distribution_legacy.py
 prismpath/tests/test_distribution_ocsf_schema.py
 prismpath/tests/test_distribution_pep.py
