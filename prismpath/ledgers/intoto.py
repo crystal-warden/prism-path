@@ -180,6 +180,14 @@ def _export_one(run: Path, keys: Any = None, instance_key: Any = None) -> Dict[s
         "predicateType": PREDICATE_TYPE,
         "predicate": predicate,
     }
+    return sign_statement(statement, signer)
+
+
+def sign_statement(statement: Dict[str, Any], signer: root_statement.InstanceKey) -> Dict[str, Any]:
+    """A DSSE envelope of the in-toto Statement v1 `statement`: its canon/2 bytes as the payload, signed by the
+    instance key `signer` over the PAE, with the key id as the hint."""
+    if not isinstance(statement, dict) or statement.get("_type") != STATEMENT_TYPE:
+        raise Bad(f"a statement to sign has _type {STATEMENT_TYPE}")
     payload_bytes = canon2.dumps(statement)
     sig_bytes = signer.sign(pae(PAYLOAD_TYPE, payload_bytes))
     return {
@@ -192,6 +200,46 @@ def _export_one(run: Path, keys: Any = None, instance_key: Any = None) -> Dict[s
             }
         ],
     }
+
+
+def open_statement(envelope: Any, public_raw: bytes, predicate_type: str) -> Dict[str, Any]:
+    """The Statement v1 a DSSE envelope carries, once the envelope has its three members, a payload in canonical
+    base64 and canonical canon/2, the Statement v1 fields with `predicate_type`, and a signature that verifies
+    under the 32 raw public bytes `public_raw` over the PAE. `Bad` otherwise. Key ids are a hint only: every
+    entry whose signature verifies counts, and one that does not is skipped."""
+    if not isinstance(envelope, dict) or set(envelope) != {"payloadType", "payload", "signatures"}:
+        raise Bad("the DSSE envelope must be an object with payloadType, payload and signatures")
+    if envelope["payloadType"] != PAYLOAD_TYPE:
+        raise Bad(f"the DSSE payloadType is not {PAYLOAD_TYPE}")
+    payload_bytes = _b64_decode(envelope["payload"], "payload")
+    sigs = envelope["signatures"]
+    if not isinstance(sigs, list) or not sigs:
+        raise Bad("the DSSE envelope carries no signatures")
+    public = core_evidence._public_key(bytes(public_raw), "signer")
+    _Priv, _Pub, _ser, InvalidSignature = root_statement._ed25519()
+    message = pae(PAYLOAD_TYPE, payload_bytes)
+    verified = False
+    for entry in sigs:
+        if not isinstance(entry, dict) or not isinstance(entry.get("sig"), str):
+            continue
+        try:
+            public.verify(_b64_decode(entry["sig"], "signature"), message)
+            verified = True
+        except (Bad, InvalidSignature, ValueError):
+            continue
+    if not verified:
+        raise Bad("no DSSE signature verifies under the key given")
+    try:
+        statement = canon2.loads(payload_bytes)
+    except canon2.Canon2Error as exc:
+        raise Bad(f"the in-toto statement payload is not a canon/2 document ({exc.rule})") from None
+    if not isinstance(statement, dict) or canon2.dumps(statement) != payload_bytes:
+        raise Bad("the in-toto statement payload is not in its canonical canon/2 spelling")
+    if set(statement) != {"_type", "subject", "predicateType", "predicate"} or statement["_type"] != STATEMENT_TYPE:
+        raise Bad("the in-toto statement does not have the Statement v1 fields")
+    if statement["predicateType"] != predicate_type:
+        raise Bad(f"the in-toto statement predicateType is not {predicate_type}")
+    return statement
 
 
 def export(run_dir: Union[Path, str], keys: Any = None, *, instance_key: Any = None) -> List[Dict[str, Any]]:

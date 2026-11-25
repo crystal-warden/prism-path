@@ -12,7 +12,8 @@ directory given with `--held`.
 
 The controller's commands work on its directory, which is its whole state, so they may run beside
 `serve`: `serve` listens, `enroll` adds a PEP and the anchor of its stream, `offer`, `commit` and `abort`
-drive a group's rollout, and `fleet` prints the fleet view. A sealed envelope and its body dropped in the
+drive a group's rollout, and `fleet` prints the fleet view, or with `--export` writes its state records and
+findings as OpenTelemetry events, OCSF or in-toto, each carrying the signed record it came from. A sealed envelope and its body dropped in the
 directory's `inbox/` as `<name>.sealed` and `<name>.body` are verified and stored at the next request or
 command (F1). `verify` runs the one verifier on a sealed envelope and its body.
 
@@ -216,8 +217,11 @@ def add_parser(subparsers) -> None:
             command.add_argument('--delay', type=int, default=0, metavar='MS', help='the flip delay of B8')
         command.set_defaults(func=rollout_cmd, action=name)
 
-    fleet = commands.add_parser('fleet', help='print the fleet view (F4)')
+    fleet = commands.add_parser('fleet', help='print the fleet view (F4), or export its state records and findings')
     _controller_args(fleet)
+    fleet.add_argument('--export', choices=('otel', 'ocsf', 'intoto'), default=None,
+                       help='write each state record and finding as JSON lines: OpenTelemetry events, OCSF 1.10.0, '
+                            'or an in-toto statement about each commit signed by the controller\'s instance key')
     fleet.set_defaults(func=fleet_cmd)
 
     revoke = commands.add_parser('revoke', help='seal the next revocation list (the owner, where the key is)')
@@ -1154,6 +1158,12 @@ def fleet_cmd(args) -> int:
     controller = _controller(args)
     with controller.locked():
         ingest(controller)
+        if getattr(args, "export", None):
+            from prismpath.distribution import export
+            controller.tick()
+            for doc in export.export(controller, args.export):
+                print(json.dumps(doc, sort_keys=True))
+            return 0
         _print(controller.fleet())
     return 0
 

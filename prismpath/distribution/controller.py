@@ -70,6 +70,8 @@ STATE_INVALID, STATE_REPLAY, POLICY_MISMATCH, SILENT, HELD, RECONCILING = (
     "fleet:state-invalid", "fleet:state-replay", "fleet:policy-mismatch", "fleet:silent", "dist:held",
     "dist:reconciling")
 MAX_UNKNOWN = 64                                   # the senders of records from no enrolled PEP that are kept
+MAX_RECORD = (144 + 2 + state_record.MAX_BODY + 2 + state_record.MAX_EXTENSIONS
+              + state_record.SIGNATURE_SIZE)       # the longest record that reads, so longer bytes are not kept
 EAT = 1                                            # H10: the extension type of an Entity Attestation Token
 _ZERO = "0" * 32
 
@@ -198,6 +200,10 @@ class Member:
     install_refused: List[str] = field(default_factory=list)      # the sets and statements it refused
     install_enrolled: Optional[int] = None                        # the install trust sequence it was enrolled at
     answered: List[dict] = field(default_factory=list)            # OP4: the operator answers it applied
+    records: Dict[str, str] = field(default_factory=dict)         # the signed bytes, in hex, of the last accepted
+                                                                  # record of each event, which every export carries
+    evidence: Dict[str, str] = field(default_factory=dict)        # an open finding's code -> the signed bytes, in
+                                                                  # hex, of the record it was filed on
 
     def document(self) -> dict:
         return {"pep": self.pep, "public": self.public, "kind": self.kind, "stream": self.stream, "group": self.group,
@@ -205,7 +211,7 @@ class Member:
                 "findings": dict(self.findings), "reconciling_since": self.reconciling_since,
                 "install": self.install, "install_previous": self.install_previous,
                 "install_refused": list(self.install_refused), "install_enrolled": self.install_enrolled,
-                "answered": list(self.answered)}
+                "answered": list(self.answered), "records": dict(self.records), "evidence": dict(self.evidence)}
 
     @classmethod
     def from_document(cls, doc: dict) -> "Member":
@@ -214,7 +220,8 @@ class Member:
                    findings=dict(doc["findings"]), reconciling_since=doc.get("reconciling_since"),
                    install=doc.get("install"), install_previous=doc.get("install_previous"),
                    install_refused=list(doc.get("install_refused", [])), install_enrolled=doc.get("install_enrolled"),
-                   answered=list(doc.get("answered", [])))
+                   answered=list(doc.get("answered", [])), records=dict(doc.get("records", {})),
+                   evidence=dict(doc.get("evidence", {})))
 
 
 # F4: what a rollout does to the scope a PEP allows, as the controller computes it. A widening is a release that
@@ -275,6 +282,7 @@ class Controller(InstallDesk):
         if instance_key is None:
             raise ValueError("a controller needs its own instance key to sign its audit log (F5)")
         self.dir, self.instance_key, self.clock = directory, instance_key, clock
+        self._receiving: Optional[bytes] = None
         self.interval, self.stage_window, self.commit_window = interval, stage_window, commit_window
         for name in ("anchors", "blobs"):
             os.makedirs(os.path.join(directory, name), exist_ok=True)
@@ -290,6 +298,7 @@ class Controller(InstallDesk):
             raise ValueError(f"{directory} holds no controller state")
         controller = cls.__new__(cls)
         controller.dir, controller.instance_key, controller.clock, controller.audit = directory, None, _time.time, None
+        controller._receiving = None
         controller.interval, controller.stage_window, controller.commit_window = INTERVAL, None, None
         controller._load()
         return controller
@@ -889,8 +898,17 @@ class Controller(InstallDesk):
     # ------------------------------------------------------------------ H6 to H10: state records
     def receive(self, data: bytes) -> Optional[str]:
         """H6: check one state record in order and file the first finding, or None when it is accepted. An
-        accepted record clears the findings it answers and moves the rollouts its PEP is in."""
+        accepted record clears the findings it answers and moves the rollouts its PEP is in. The signed bytes of
+        the last accepted record of each event, and of the record each open finding was filed on, are kept, so
+        an export carries them and can be checked against the PEP's key (section 7.6 of the plan)."""
         data = bytes(data)
+        self._receiving = data if len(data) <= MAX_RECORD else None
+        try:
+            return self._receive(data)
+        finally:
+            self._receiving = None
+
+    def _receive(self, data: bytes) -> Optional[str]:
         try:
             pep = _hex(state_record.named_pep(data))
         except Refused as refused:
@@ -927,6 +945,7 @@ class Controller(InstallDesk):
                        "staged_release": _hex(record.staged_release), "staged_seq": record.staged_seq,
                        "trust_seq": record.trust_seq, "held": record.held, "dev_build": record.dev_build,
                        "unverified": unverified, "no_controller_key": self._no_controller_key(member, record)}
+        member.records[record.event] = data.hex()
         self._log("ack", pep=pep, event=record.event, cause=record.cause, counter=record.counter, seq=record.active_seq,
                   **({"unverified": True} if unverified else {}))
         for cleared in (STATE_INVALID, SILENT) if unverified else (STATE_INVALID, STATE_REPLAY, SILENT):
@@ -1054,12 +1073,20 @@ class Controller(InstallDesk):
             self._advance(rollout)
 
     def _file(self, member: Member, code: str, detail: str) -> str:
+        receiving = getattr(self, "_receiving", None)
         if member.findings.get(code) != detail:
             member.findings[code] = detail
             self._log("finding", pep=member.pep, finding=code, detail=detail)
+            if receiving is not None:
+                member.evidence[code] = receiving.hex()
+            else:                                        # filed with no record, as `fleet:silent` is
+                member.evidence.pop(code, None)
+        elif receiving is not None and code not in member.evidence:
+            member.evidence[code] = receiving.hex()
         return code
 
     def _clear(self, member: Member, code: str) -> None:
+        member.evidence.pop(code, None)
         if code in member.findings:
             del member.findings[code]
             self._log("cleared", pep=member.pep, finding=code)
@@ -1077,6 +1104,8 @@ class Controller(InstallDesk):
             del self.unknown[:-MAX_UNKNOWN]
         entry["count"] += 1
         entry["at"], entry["detail"] = now, detail
+        receiving = getattr(self, "_receiving", None)
+        entry["record"] = receiving.hex() if receiving is not None else ""          # the bytes the export carries
         if entry["logged"] is None or now - entry["logged"] >= self.interval:
             entry["logged"] = now
             self._log("finding", pep=pep, finding=STATE_INVALID, detail=detail, count=entry["count"])

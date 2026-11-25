@@ -8,6 +8,15 @@ spec stable.
 
 ## [Unreleased]
 
+### Added: state records and fleet findings export as OpenTelemetry events, OCSF and in-toto (2026-11-24)
+
+- **`prismpath dist fleet --export otel|ocsf|intoto` writes what the fleet view holds as JSON lines, at the controller only.** Per PEP that is the last accepted record of each event and each open finding. The controller now keeps the signed bytes of those records and of the record each finding was filed on, so every export carries them.
+- **OpenTelemetry events `prismpath.dist.state` and `prismpath.dist.finding`** through the sink pattern of `prismpath/ledgers/otel.py`, testable with no SDK, with every record field, the reconciling and install entries, the cause code, the hashes, `seq` and the controller statement's epoch id as attributes. `to_otel_sink` hands them to an OpenTelemetry logger.
+- **OCSF 1.10.0.** A commit or a lapse is Device Config State Change (5019), a finding is Detection Finding (2004), with the signed record in `raw_data`. The mapping is not yet checked against the OCSF schema files.
+- **in-toto.** A Statement v1 about each commit, in a DSSE envelope signed by the controller's instance key through `prismpath/ledgers/intoto.py`, which gains `sign_statement` and `open_statement`.
+- **`check_otel`, `check_ocsf` and `check_intoto` check an export back against the signed record it carries.** A rollout's scope is exported as the controller marks it, and only a widening is exported as one.
+- **The OCSF export is checked against the OCSF 1.10.0 schema.** A subset of the release 1.10 schema for classes 5019 and 2004 and the objects they reach is a test fixture, and every exported commit, lapse and finding has each required attribute, no unknown one and values in their type and enum.
+
 ### Added: the sealing tool shows a ceiling's lapse preview before it signs, and a ceiling may be staged to a canary group
 
 - **`dist install --kind ceiling` shows a lapse preview and signs only on the engineer's yes (CL5).** With `--held` it reads the controller's directory, never writing it, and names each release the new ceiling is above, as the release the controller expects of each PEP, and how many PEPs run it. With no state, a state that serves no PEP of the target on the stream, or a release whose bodies the controller does not hold, it says the fleet or that PEP is unknown, never that nothing lapses. A ceiling that lapses nothing shows zero. Every ceiling is signed only on a yes at the terminal or `--yes`, and without one nothing is written.

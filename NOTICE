@@ -31,3 +31,8 @@ below; each is used under its own terms:
     (https://github.com/transparency-dev/merkle, commit c39fbf3), Copyright 2017 Google
     LLC and the transparency-dev authors, used under the Apache License 2.0, with base64 byte
     strings rewritten as hex.
+  * OCSF schema subset (prismpath/tests/fixtures/ocsf/ocsf-1.10.0-subset.json) -- the
+    classes 5019 and 2004 and the objects they reach, compiled from the Open Cybersecurity
+    Schema Framework release 1.10 (https://github.com/ocsf/ocsf-schema, commit 2d20903),
+    Copyright OCSF a Series of LF Projects, LLC, used under the Apache License 2.0, reduced
+    to each attribute's requirement, type, array flag and enum values.
