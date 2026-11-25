@@ -513,6 +513,8 @@ kind_names!(
         SandboxProfile = "sandbox.profile",
         EgressHosts = "egress.hosts",
         GatewayRoutes = "gateway.routes",
+        IdentityBundle = "identity.bundle",
+        IdentityMap = "identity.map",
         NetDests = "net.dests",
         NetEdge = "net.edge",
         CfsTable = "cfs.table",
@@ -588,7 +590,7 @@ impl ArtifactKind {
             },
             InstallChange => Artifact { check: Some(install::check_install_change), role: INSTALL, ..PLAIN },
             OperatorAnswer => Artifact { role: OPERATOR, ..PLAIN },
-            PolicyCore | EgressHosts | GatewayRoutes | NetDests | CfsTable | Grant => PLAIN,
+            PolicyCore | EgressHosts | GatewayRoutes | IdentityBundle | IdentityMap | NetDests | CfsTable | Grant => PLAIN,
         }
     }
 
