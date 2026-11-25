@@ -142,6 +142,19 @@ def test_case_043_another_policy_at_the_staged_seq_is_incomplete(point):
     assert point.pep.staged.policy_sha256 == H(OLD)
 
 
+def test_case_306_a_withheld_artifact_at_commit_on_host_is_incomplete(point):
+    """case_306: C2, E10, the `host` half. A release whose signed release id covers a `policy.ppt` and a
+    `policy.spiral` is committed with only its `policy.ppt` staged: `dist:incomplete`, and the release active before
+    stays active. The same table with a release id over what is staged then commits."""
+    from prismpath.distribution import envelope as env
+    point.commit(OLD)
+    release = env.release_id([("policy.ppt", H(NEW)), ("policy.spiral", H(b"a withheld spiral"))])
+    record = _read(point, point.commit(NEW, 2, release=release))
+    assert (record.event, record.cause) == ("refused", "dist:incomplete")
+    assert point.pep.active.policy_sha256 == H(OLD) and point.pep.floor.seq == 1
+    assert _read(point, point.commit(NEW, 3)).event == "committed"
+
+
 def test_case_046_staged_and_refused_are_acked_and_in_the_audit_log(point):
     """case_046: G1."""
     record = _read(point, point.stage(OLD))

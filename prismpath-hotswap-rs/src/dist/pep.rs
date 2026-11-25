@@ -2088,6 +2088,9 @@ impl<A: Adapter> Pep<A> {
                 return self.refuse(&cause, vec![("seq", json!(seq))]);
             }
         }
+        if !whole(&staged) {
+            return self.refuse(INCOMPLETE, vec![("seq", json!(seq))]); // C2, E10: an artifact of the release is not staged
+        }
         let mut cause = self.still_valid(&staged, true); // C3
         if cause.is_none() && !self.inside_ceiling(&staged) {
             cause = Some(ABOVE_CEILING.to_string()); // CL2: the ceiling may have changed since staging
@@ -2962,6 +2965,20 @@ impl<A: Adapter> Pep<A> {
 }
 
 // ------------------------------------------------------------------ the host adapter
+
+/// C2, E10: the artifacts staged, trust kinds left out, are the whole release the authority signed. Their release id,
+/// computed again over what is staged, is the `release` every envelope carries, so a transport that withholds one
+/// artifact of a signed release, such as its `policy.spiral`, cannot commit the rest (Python's `Pep._whole`, the C
+/// core's `pp_whole`).
+fn whole(staged: &Release) -> bool {
+    let pairs: Vec<(ArtifactKind, Hex64)> = staged
+        .envelopes
+        .iter()
+        .filter(|(artifact, _)| !artifact.is_trust())
+        .map(|(artifact, envelope)| (*artifact, envelope.body_sha256.clone()))
+        .collect();
+    !pairs.is_empty() && env::release_id(&pairs).is_ok_and(|release| release == staged.release)
+}
 
 /// The `host` adapter: the software tier of `PolicyHost` as a distribution target (section 3). A committed
 /// release is installed with `PolicyHost::install_verified`, the commit half `swap` also ends in, and a PEP

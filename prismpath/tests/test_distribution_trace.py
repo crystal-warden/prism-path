@@ -101,11 +101,12 @@ def _covered(impl: str) -> set:
     return covered - PARTIAL[impl]
 
 
-def test_the_spec_has_284_numbered_cases_each_naming_rules_and_implementations():
+def test_the_spec_has_285_numbered_cases_each_naming_rules_and_implementations():
     # 144 to 160 are left to the pull requests in flight that number their cases from 144; section 21 starts after them,
     # 289 to 295 are the table comparator's and the change statement's (W8 to W11), and 296 to 301 the install change
-    # statement's (IS14, IS15), and 302 to 305 the ceiling's preview and staged rollout (CL5 to CL7)
-    assert sorted(SPEC) == [*range(1, 144), *range(161, 306)]
+    # statement's (IS14, IS15), 302 to 305 the ceiling's preview and staged rollout (CL5 to CL7), and 306 a withheld
+    # artifact at commit (C2, E10)
+    assert sorted(SPEC) == [*range(1, 144), *range(161, 307)]
     assert all(case["rules"].strip() and case["runs_on"] for case in SPEC.values())
 
 

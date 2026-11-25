@@ -693,6 +693,25 @@ def test_a_widening_statement_holds_at_most_64_hashes(host_check):
     assert _events(out[1]) == [("staged", None)] and _events(out[2]) == [("refused", "dist:too-large")]
 
 
+def test_case_306_a_withheld_artifact_at_commit_is_incomplete(host_check):
+    """case_306: C2, E10, the mesh half of the host case. A release whose signed release id covers a policy.ppt and a
+    policy.spiral is committed with only its policy.ppt staged: dist:incomplete and nothing is committed. The same
+    table with a release id over what is staged then commits."""
+    body, policy = BODIES[0], canon.sha256_hex(BODIES[0])
+    withheld = env.release_id([("policy.ppt", policy), ("policy.spiral", canon.sha256_hex(b"a withheld spiral"))])
+    statement = _dist.widening()
+    steps = [f"provision {S} {N}"]
+    for seq, release in ((1, withheld), (2, env.release_id([("policy.ppt", policy)]))):
+        cover = _dist.seal("trust.widening", statement, seq=seq, release=release, policy_sha256=policy,
+                           targets=("mesh",), widens=True)
+        table = _dist.seal("policy.ppt", body, seq=seq, release=release, targets=("mesh",), widens=True)
+        steps += [f"stage {cover.hex()} {statement.hex()} {N}", f"stage {table.hex()} {body.hex()} {N}",
+                  f"commit {S} {seq} {policy} 0 0 {N}"]
+    out = _machine(host_check, steps)
+    assert _events(out[2])[-1] == ("staged", None) and _events(out[3]) == [("refused", "dist:incomplete")]
+    assert _events(out[6])[-1] == ("committed", None)
+
+
 def _after_loss(host_check, steps: list, cut: list) -> str:
     """Run `steps`, then `cut` with the power lost after each count of writes in turn, then a restart and the
     durable state read back. One line per count."""
