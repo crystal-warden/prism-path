@@ -1206,3 +1206,113 @@ fn a_confirm_whose_write_fails_after_the_withdrawal_holds_nothing() {
     assert_ne!(point.pep.state(), "active");
     assert_eq!(point.pep.decide(|| "ran").unwrap().decision, None);
 }
+
+/// Runs one `commits` entry of the corpus on a host PEP provisioned to trust A on the corpus stream, as the Python
+/// replay does: each `stage` step and each `commit` step at the entry's `now`. The cause of the last state record
+/// and the seq of the release active after it.
+fn replay_commit_entry(entry: &serde_json::Value, tag: &str) -> (Option<String>, i64) {
+    assert_eq!(entry["kind"], "host", "{}", entry["name"]);
+    let mut point = Point::new(tag);
+    point.now.set(entry["now"].as_i64().unwrap());
+    let mut last = None;
+    for step in entry["steps"].as_array().unwrap() {
+        let signed = if step["op"] == "stage" {
+            let (sealed, body) = (hex::decode(step["sealed"].as_str().unwrap()).unwrap(), hex::decode(step["body"].as_str().unwrap()).unwrap());
+            point.pep.stage(&sealed, &body).unwrap()
+        } else {
+            let seq = step["seq"].as_i64().unwrap();
+            point.pep.commit(STREAM, seq, &Hex64::try_from(step["policy_sha256"].as_str().unwrap().to_string()).unwrap(), 0).unwrap()
+        };
+        last = Some(point.read(&signed));
+    }
+    let active = point.pep.active().map_or(0, |release| release.seq);
+    (last.unwrap().cause, active)
+}
+
+fn commit_entries(case: i64) -> Vec<&'static serde_json::Value> {
+    let found: Vec<_> = corpus()["commits"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|entry| entry["case"] == case && entry["runs_on"].as_array().unwrap().iter().any(|one| one == "R"))
+        .collect();
+    assert!(!found.is_empty(), "the corpus has commit entries for case {case} that run on Rust");
+    found
+}
+
+/// case_137: C2, E10. A first install whose signed release id names an artifact that is not staged (here a
+/// `policy.spiral` its `policy.ppt` does not declare, which the transport withheld) is `dist:incomplete`, and no
+/// release is active. The corpus entry Python recorded replays to the same cause and the same empty floor.
+#[test]
+fn case_137_a_first_install_whose_release_id_names_an_unstaged_artifact_is_incomplete() {
+    for entry in commit_entries(137) {
+        let (cause, active) = replay_commit_entry(entry, "137");
+        assert_eq!((cause.as_deref(), active), (entry["expect"]["cause"].as_str(), entry["expect"]["active_seq"].as_i64().unwrap()), "{}", entry["name"]);
+        assert_eq!((cause.as_deref(), active), (Some("dist:incomplete"), 0));
+    }
+    // the same first install by hand: the release id names a spiral that was never staged
+    let mut point = Point::new("137_by_hand");
+    let spiral = h(b"a spiral sidecar the transport withheld");
+    let release = env::release_id(&[(ArtifactKind::PolicyPpt, h(&old())), (ArtifactKind::PolicySpiral, spiral)]).unwrap();
+    point.stage(&ppt(&old(), &Args { release: Some(release), ..at(1) }), &old());
+    let record = rec!(point, point.pep.commit(STREAM, 1, &h(&old()), 0));
+    assert_eq!(record.cause.as_deref(), Some("dist:incomplete"));
+    assert!(point.pep.active().is_none());
+    assert_eq!(point.host_active(), json!(null));
+}
+
+/// case_138: C2, E10. An update whose signed release id names an artifact that is not staged is `dist:incomplete`
+/// and the old release stays active, and the same update whose release id names only what is staged commits.
+#[test]
+fn case_138_an_update_whose_release_id_names_an_unstaged_artifact_keeps_the_old_release() {
+    for entry in commit_entries(138) {
+        let (cause, active) = replay_commit_entry(entry, "138");
+        assert_eq!((cause.as_deref(), active), (entry["expect"]["cause"].as_str(), entry["expect"]["active_seq"].as_i64().unwrap()), "{}", entry["name"]);
+    }
+    let mut point = Point::new("138_by_hand");
+    assert_eq!(point.commit_at(&old(), 1).cause, None);
+    let spiral = h(b"a spiral sidecar the transport withheld");
+    let release = env::release_id(&[(ArtifactKind::PolicyPpt, h(&new())), (ArtifactKind::PolicySpiral, spiral)]).unwrap();
+    let args = Args { release: Some(release), replaces: Some(h(&old())), ..at(2) };
+    let record = point.commit(&new(), &args);
+    assert_eq!(record.cause.as_deref(), Some("dist:incomplete"));
+    assert_eq!(point.pep.active().unwrap().seq, 1);
+    assert_eq!(point.pep.active().unwrap().policy_sha256, h(&old()));
+    assert_eq!(point.commit(&new(), &Args { replaces: Some(h(&old())), ..at(3) }).cause, None);
+    assert_eq!(point.pep.active().unwrap().seq, 3);
+}
+
+/// case_281: E8, V5, ID8. An envelope of `identity.bundle` or `identity.map` for target `gateway` is well formed, so
+/// a `host` PEP refuses it with `dist:target-mismatch` and not `dist:bad-format`, and an artifact name the closed
+/// list does not hold is `dist:bad-format`. Rust builds the `host` kind only, so the `mesh` refusal is the C core's and
+/// Python's, and the `gateway` PEP that accepts and reads the two bodies (ID1, ID2) is Python's; the names, the
+/// kinds' roles and their body bound are the format's, which Rust reads and writes as Python does.
+#[test]
+fn case_281_the_identity_kinds_are_artifacts_a_host_pep_reads_and_refuses_for_another_target() {
+    use prismpath_hotswap_rs::dist::verify::{self, PepView};
+    let point = Point::new("281");
+    let pep = PepView::new(TargetKind::Host, STREAM).unwrap();
+    assert!(PepView::new(TargetKind::Gateway, STREAM).is_err(), "Rust builds no gateway PEP");
+    let (bundle, map) = (canon2::write_json(&json!({"domains": {}, "encoding": "canon/2", "format": "prismpath.dist-identity-bundle/1"})).unwrap(),
+                         canon2::write_json(&json!({"encoding": "canon/2", "entries": [], "format": "prismpath.dist-identity-map/1"})).unwrap());
+    for (artifact, body) in [(ArtifactKind::IdentityBundle, &bundle), (ArtifactKind::IdentityMap, &map)] {
+        assert_eq!(ArtifactKind::from_name(artifact.name()), Some(artifact));
+        let args = Args { targets: vec![TargetKind::Gateway], seq: 2, ..Args::default() };
+        let sealed = seal(artifact, body, &args);
+        let verdict = verify::verify(&sealed, body, point.pep.trust(), &pep, NOW);
+        assert_eq!(verdict.cause.as_deref(), Some("dist:target-mismatch"), "{artifact}");
+        // a trusted release for the host itself is no better: no host PEP uses an identity kind
+        let for_host = seal(artifact, body, &Args { seq: 2, ..Args::default() });
+        assert_eq!(verify::verify(&for_host, body, point.pep.trust(), &pep, NOW).cause.as_deref(), Some("dist:target-mismatch"), "{artifact} for host");
+    }
+    // an artifact name the closed list does not hold is dist:bad-format, in the writer and in the reader
+    let sealed = seal(ArtifactKind::IdentityMap, &map, &Args { targets: vec![TargetKind::Gateway], seq: 1, ..Args::default() });
+    let (envelope_bytes, _) = env::unseal(&sealed).unwrap();
+    let mut doc: serde_json::Value = serde_json::from_slice(envelope_bytes).unwrap();
+    doc["artifact"] = json!("identity.other");
+    let raw = canon2::write_json(&doc).unwrap();
+    assert!(env::read(&raw).is_err());
+    let resealed = env::seal(&raw, &[test_key("A")]).unwrap();
+    assert_eq!(verify::verify(&resealed, &map, point.pep.trust(), &pep, NOW).cause.as_deref(), Some("dist:bad-format"));
+    assert_eq!(ArtifactKind::from_name("identity.other"), None);
+}
