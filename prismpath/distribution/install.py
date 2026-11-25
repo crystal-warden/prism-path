@@ -627,8 +627,8 @@ class Installed:
         self.record: Optional[Record] = None
         self.record_lost = False
         self.ceiling_lost = False
-        self.lost_ceiling: Optional[HeldSet] = None    # IS10: the ceiling the record names and no copy reads
         self.staged: Dict[str, Staged] = {}
+        self.lost: Dict[str, Tuple[int, HeldSet]] = {}     # IS6, IS10: {kind: (seq, the set as the record names it)}
         self.marks = {"ceiling": False, "install": False}
         self.streams: FrozenSet[str] = frozenset()
         self.zones: Optional[List[str]] = None
@@ -668,7 +668,7 @@ class Installed:
         Returns the install kinds lost this start. A record no copy reads is lost when a mark says one was held."""
         self._read_marks()
         self.record, self.record_lost, self.ceiling_lost, lost = None, False, False, []
-        self.lost_ceiling = None
+        self.lost = {}
         for path in self._paths():
             try:
                 with open(path, "rb") as handle:
@@ -689,8 +689,7 @@ class Installed:
             if read is None:
                 sets[kind] = None
                 lost.append(kind)
-                if kind == CEILING:
-                    self.lost_ceiling = held
+                self.lost[kind] = (self.record.seqs[kind], held)
             else:
                 sets[kind] = read
         self.record = replace(self.record, sets=sets)
@@ -770,14 +769,23 @@ class Installed:
             names.append(name)
         return names[0], names[1]
 
+    @property
+    def lost_ceiling(self) -> Optional[HeldSet]:
+        """IS10: the ceiling the record names and no copy reads, while nothing has replaced it."""
+        lost = self.lost.get(CEILING)
+        return lost[1] if lost is not None else None
+
     def save(self, record: Record) -> None:
         """Both copies of the record, the first then the second, each whole. Every statement it names is already in
-        both copies (`put`)."""
-        lost = self.lost_ceiling
-        if lost is not None and record.sets[CEILING] is None and record.seqs[CEILING] == lost.seq:
-            data = replace(record, sets={**record.sets, CEILING: lost}).to_bytes()   # IS10: still named, still lost
-        else:
-            data, self.lost_ceiling = record.to_bytes(), None
+        both copies (`put`). A set lost at start that nothing has replaced stays named, at its `seq`, so the same
+        statement sent again changes nothing after a restart too (IS6), as the C core's record slot keeps it."""
+        sets = dict(record.sets)
+        for kind, (seq, held) in list(self.lost.items()):
+            if sets[kind] is None and record.seqs[kind] == seq:
+                sets[kind] = held
+            else:
+                del self.lost[kind]
+        data = replace(record, sets=sets).to_bytes()
         for path in self._paths():
             _write(path, data)
         self.record, self.record_lost = record, False
@@ -820,7 +828,7 @@ class Installed:
             except OSError:
                 pass
         self.record, self.record_lost, self.ceiling_lost, self.staged = None, False, False, {}
-        self.lost_ceiling = None
+        self.lost = {}
         self.keep()
 
     # ------------------------------------------------------------------ FB9: the last committed zones
@@ -864,6 +872,10 @@ class Installed:
             release.paths[name] = first if _get(os.path.join(self.dir, "blobs"), body_name) is not None \
                 else os.path.join(self.copy, "blobs", body_name)
         return release
+
+    def lost_ids(self) -> Dict[str, Tuple[int, FrozenSet[str]]]:
+        """IS6: {kind: (seq, envelope ids)} of each set lost at start that nothing has replaced since."""
+        return {kind: (seq, held.envelope_ids) for kind, (seq, held) in self.lost.items()}
 
     def statement_ids(self) -> List[str]:
         """The envelope ids of every install statement held (IS8)."""

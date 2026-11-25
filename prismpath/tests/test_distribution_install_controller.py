@@ -1146,7 +1146,7 @@ def test_case_183_a_pep_uses_a_good_copy_and_never_decides_under_a_body_it_canno
     """case_183: IS10, IS6, the Python half. A PEP that starts with one byte of its stored action floor changed and a
     second good copy uses the good copy. With no good copy it reports `refused` with `dist:install-lost`, its install
     id no longer counts the floor and it decides as a PEP that never had one. The same floor sent again changes
-    nothing, refused at its held `seq`, and one at a new `seq` is applied. A PEP that starts with one copy of its
+    nothing, as the same statement again does (IS6), also after a restart, and one at a new `seq` is applied. A PEP that starts with one copy of its
     install record unreadable uses the second, and with both unreadable it holds no set, reports
     `dist:install-lost`, keeps deciding under its release and takes no install statement by message and no release
     until it is provisioned."""
@@ -1168,7 +1168,11 @@ def test_case_183_a_pep_uses_a_good_copy_and_never_decides_under_a_body_it_canno
     without = replace(record, sets={**record.sets, FLOOR: None}).install_id()
     assert sent[-1].install.install_id == without
     assert point.pep.decide(lambda: "r", request=ASK)["cause"] == "dist:policy-lapsed"
-    assert {one.cause for one in point.send(floor)} == {"dist:seq-replay"} and point.pep.floor_set() is None
+    assert [(one.event, one.cause) for one in point.send(floor)][-1] == ("beat", None) and point.pep.floor_set() is None
+    point.pep.installed.save(point.pep.installed.record)             # a save leaves the lost set named at its seq
+    point.pep = point.open()
+    point.pep.drain()
+    assert [(one.event, one.cause) for one in point.send(floor)][-1] == ("beat", None) and point.pep.floor_set() is None
     assert point.send(_set(point, FLOOR, NARROW, 2))[-1].event == "install-widened"
     other = _agent(tmp_path, "b")
     other.send(_set(other, FALLBACK, NARROW, 1))

@@ -1776,6 +1776,45 @@ impl<A: Adapter> Pep<A> {
         self.refuse_about(cause, Some(kind.name()), vec![("seq", json!(seq))])
     }
 
+    /// IS4, IS6, IS12, CL3: what applying the whole set `staged` over `record` meets, (cause or None, whether it stands
+    /// out). It is held to its `seq` again, to the target's own check over the whole set, to the ceiling `record`
+    /// holds (an action floor and a fallback policy inside it, and a ceiling the held ones are inside), and to the
+    /// widening rule of IS12, under which a ceiling after a lost one, `ceiling_lost`, is larger unless it is the lost
+    /// one sent again (IS10).
+    fn set_refusal(&self, staged: &InstallSet, record: &Record, ceiling_lost: bool) -> (Option<String>, bool) {
+        let kind = staged.kind;
+        if staged.seq() <= record.seq(kind) {
+            return (Some(SEQ_REPLAY.to_string()), false);
+        }
+        let empty = staged.is_empty_set();
+        let as_release = self.release_of_set(staged);
+        for (artifact, body) in &as_release.bodies {
+            if let Some(cause) = self.adapter.check(*artifact, body, &as_release) {
+                return (Some(cause), false);
+            }
+        }
+        let table = |set: &InstallSet| set.bodies.get(&AsName::Artifact(ArtifactKind::PolicyPpt)).cloned();
+        if kind != SetKind::Ceiling && !empty && !install::table_inside(record.held(SetKind::Ceiling), table(staged).as_deref()) {
+            return (Some(ABOVE_CEILING.to_string()), false); // CL3, IS4: the ceiling held at apply
+        }
+        if kind == SetKind::Ceiling && !empty {
+            for other in [SetKind::Floor, SetKind::Fallback] {
+                if let Some(held) = record.held(other) {
+                    if !install::table_inside(Some(staged), table(held).as_deref()) {
+                        return (Some(ABOVE_CEILING.to_string()), false); // CL3: the engineer narrows those first
+                    }
+                }
+            }
+        }
+        // IS10, IS12: a ceiling after a lost one is held to the set the record names for it
+        let lost = install::Lost {
+            lost: kind == SetKind::Ceiling && ceiling_lost,
+            named: self.installed.lost_ceiling.as_ref().filter(|_| kind == SetKind::Ceiling),
+        };
+        let (cause, stands_out) = install::widens_ok(kind, record.held(kind), staged, lost);
+        (cause.map(str::to_string), stands_out)
+    }
+
     /// IS4, IS6, IS12, CL3: apply the whole set staged of `kind`. It is held to its `seq` again, to the target's own
     /// check over the whole set, to the ceiling the PEP holds now (an action floor and a fallback policy inside it,
     /// and a ceiling the held ones are inside), and to the widening rule of IS12. The marks, both copies of every
@@ -1786,39 +1825,11 @@ impl<A: Adapter> Pep<A> {
         let staged = self.installed.staged.get(&kind).cloned().expect("a whole staged set");
         let record = self.installed.record.clone().expect("a staged set verified under a record");
         let seq = staged.seq();
-        if seq <= record.seq(kind) {
-            return self.refuse_set(kind, SEQ_REPLAY, seq);
+        let (cause, stands_out) = self.set_refusal(&staged, &record, self.installed.ceiling_lost);
+        if let Some(cause) = cause {
+            return self.refuse_set(kind, &cause, seq);
         }
         let empty = staged.is_empty_set();
-        let as_release = self.release_of_set(&staged);
-        for (artifact, body) in &as_release.bodies {
-            if let Some(cause) = self.adapter.check(*artifact, body, &as_release) {
-                return self.refuse_set(kind, &cause, seq);
-            }
-        }
-        let ceiling = self.installed.held(SetKind::Ceiling).cloned();
-        let table = |set: &InstallSet| set.bodies.get(&AsName::Artifact(ArtifactKind::PolicyPpt)).cloned();
-        if kind != SetKind::Ceiling && !empty && !install::table_inside(ceiling.as_ref(), table(&staged).as_deref()) {
-            return self.refuse_set(kind, ABOVE_CEILING, seq); // CL3, IS4: the ceiling held at apply
-        }
-        if kind == SetKind::Ceiling && !empty {
-            for other in [SetKind::Floor, SetKind::Fallback] {
-                if let Some(held) = self.installed.held(other) {
-                    if !install::table_inside(Some(&staged), table(held).as_deref()) {
-                        return self.refuse_set(kind, ABOVE_CEILING, seq); // CL3: the engineer narrows those first
-                    }
-                }
-            }
-        }
-        // IS10, IS12: a ceiling after a lost one is held to the set the record names for it
-        let lost = install::Lost {
-            lost: kind == SetKind::Ceiling && self.installed.ceiling_lost,
-            named: self.installed.lost_ceiling.as_ref().filter(|_| kind == SetKind::Ceiling),
-        };
-        let (cause, stands_out) = install::widens_ok(kind, record.held(kind), &staged, lost);
-        if let Some(cause) = cause {
-            return self.refuse_set(kind, cause, seq);
-        }
         // CL3: a ceiling that narrows below the active release is no widening; the release lapses and says so itself
         let active_table = self.active.as_ref().and_then(|active| active.bodies.get(&ArtifactKind::PolicyPpt)).cloned();
         let lapses = kind == SetKind::Ceiling && !empty && active_table.is_some() && !install::table_inside(Some(&staged), active_table.as_deref());
@@ -2092,6 +2103,9 @@ impl<A: Adapter> Pep<A> {
             if let Some(cause) = self.adapter.check(*artifact, body, &staged) {
                 return self.refuse(&cause, vec![("seq", json!(seq))]);
             }
+        }
+        if !whole(&staged) {
+            return self.refuse(INCOMPLETE, vec![("seq", json!(seq))]); // C2, E10: an artifact of the release is not staged
         }
         let mut cause = self.still_valid(&staged, true); // C3
         if cause.is_none() && !self.inside_ceiling(&staged) {
@@ -2824,12 +2838,19 @@ impl<A: Adapter> Pep<A> {
     }
 
     /// P2 step 3: every install statement the engineer brings verifies under the install record the provisioning
-    /// leaves, before anything changes.
+    /// leaves, before anything changes. The statements are taken in order as `confirm` then stages them: each against
+    /// the record as the ones before it leave it, the sets staged so far (V10) and the ceiling then held (CL3), and a
+    /// set that is whole is held to what applying it meets. Any refusal refuses the provisioning but `dist:seq-replay`,
+    /// a set the PEP already holds at or above its `seq`, which is refused and leaves the provisioning to go on (case
+    /// 170, IS6), as Python's `Pep._precheck` does.
     fn precheck(&self, read: &Anchor, store: &TrustStore, record: Option<&Record>, brought: &[(Vec<u8>, Vec<u8>)]) -> Result<(), PepError> {
         if brought.is_empty() {
             return Ok(());
         }
         let Some(record) = record else { return Err(refused("install statements came with an anchor that holds no install keys")) };
+        let mut record = record.clone();
+        let mut staged: BTreeMap<SetKind, InstallSet> = BTreeMap::new();
+        let refusal = |cause: &str| refused(format!("{cause}: an install statement brought with the anchor does not verify"));
         for (sealed, body) in brought {
             let view = PepView {
                 kind: PepKind::try_from(self.adapter.kind()).map_err(refused)?,
@@ -2841,15 +2862,64 @@ impl<A: Adapter> Pep<A> {
                 body_bound: self.adapter.body_bound(),
                 has_clock: self.has_clock,
                 instance_key_id: Some(self.instance_key_id.clone()),
-                install: Some(InstallView { record: Some(record.clone()), message: false, layout: self.adapter.floor_layout(), ..InstallView::default() }),
+                install: Some(InstallView {
+                    record: Some(record.clone()),
+                    staged: staged.clone(),
+                    ceiling: record.held(SetKind::Ceiling).cloned(),
+                    message: false,
+                    layout: self.adapter.floor_layout(),
+                }),
             };
             let verdict = verify::verify(sealed, body, store, &view, (self.clock)());
-            if !verdict.envelope.as_ref().is_some_and(|envelope| envelope.artifact.is_install()) {
+            let Some(envelope) = verdict.envelope.clone().filter(|envelope| envelope.artifact.is_install()) else {
                 return Err(refused("only install statements come with an anchor (P2 step 3)"));
+            };
+            match verdict.cause.as_deref() {
+                Some(SEQ_REPLAY) => continue, // case 170: refused, the provisioning goes on
+                Some(cause) => return Err(refusal(cause)),
+                None if verdict.unchanged => continue,
+                None => {}
             }
-            if let Some(cause) = verdict.cause.filter(|cause| ![ABOVE_CEILING, SEQ_REPLAY, INCOMPLETE].contains(&cause.as_str())) {
-                return Err(refused(format!("{cause}: an install statement brought with the anchor does not verify")));
+            let held_doc = HeldDoc { body: Hex64::of(body), envelope_id: envelope.envelope_id(), sealed: Hex64::of(sealed) };
+            let staging = |staged: &mut BTreeMap<SetKind, InstallSet>, kind: SetKind| match staged.remove(&kind) {
+                Some(set) if set.seq() == envelope.seq => set,
+                _ => InstallSet::of(kind, &envelope),
+            };
+            if envelope.artifact == ArtifactKind::InstallChange {
+                let (kind, _from) = install::read_install_change(body).map_err(|refusal| refused(refusal.to_string()))?;
+                let held = record.held(kind).map(|held| held.policy_sha256().clone());
+                if !install::changes_set(Some(body), kind, held.as_ref()) {
+                    return Err(refusal(WIDENING_UNSIGNED)); // IS15
+                }
+                let mut set = staging(&mut staged, kind);
+                (set.doc.change, set.change_body) = (Some(held_doc), Some(body.clone()));
+                staged.insert(kind, set);
+                continue;
             }
+            let Some(kind) = SetKind::of(envelope.artifact) else {
+                record = record.apply_trust(&envelope, body).map_err(|refusal| refused(refusal.to_string()))?; // IS11
+                continue;
+            };
+            let name = install::install_meta(&envelope).map(|meta| meta.as_name).ok_or_else(|| refused("an install statement names no as"))?;
+            let mut set = staging(&mut staged, kind);
+            set.doc.statements.insert(name, held_doc);
+            set.envelopes.insert(name, envelope.clone());
+            set.bodies.insert(name, body.clone());
+            if !set.whole() {
+                staged.insert(kind, set);
+                continue;
+            }
+            // IS10: the provisioning keeps a lost ceiling lost while the record it leaves still names it lost
+            let ceiling_lost = self.installed.ceiling_lost && self.installed.named_lost(&record);
+            match self.set_refusal(&set, &record, ceiling_lost).0 {
+                Some(cause) if cause == SEQ_REPLAY => continue,
+                Some(cause) => return Err(refusal(&cause)),
+                None => {}
+            }
+            let empty = set.is_empty_set();
+            record.seqs[kind as usize] = set.seq();
+            record.applied[kind as usize] = Some(set.set_id());
+            record.sets[kind as usize] = (!empty).then_some(set);
         }
         Ok(())
     }
@@ -2953,6 +3023,8 @@ impl<A: Adapter> Pep<A> {
         let applied: Vec<Vec<u8>> = self.outbox.drain(sent..).collect(); // P3: provisioning reports as its own event
         let public = self.instance_public();
         let widened = applied.iter().any(|one| state_record::read(one, &public).is_ok_and(|record| record.event == "install-widened"));
+        // ...and a statement it brought that was refused keeps its record
+        self.outbox.extend(applied.into_iter().filter(|one| state_record::read(one, &public).is_ok_and(|record| record.event == "refused")));
         self.audit.append(
             "distribution",
             "provisioned",
@@ -2974,6 +3046,20 @@ impl<A: Adapter> Pep<A> {
 }
 
 // ------------------------------------------------------------------ the host adapter
+
+/// C2, E10: the artifacts staged, trust kinds left out, are the whole release the authority signed. Their release id,
+/// computed again over what is staged, is the `release` every envelope carries, so a transport that withholds one
+/// artifact of a signed release, such as its `policy.spiral`, cannot commit the rest (Python's `Pep._whole`, the C
+/// core's `pp_whole`).
+fn whole(staged: &Release) -> bool {
+    let pairs: Vec<(ArtifactKind, Hex64)> = staged
+        .envelopes
+        .iter()
+        .filter(|(artifact, _)| !artifact.is_trust())
+        .map(|(artifact, envelope)| (*artifact, envelope.body_sha256.clone()))
+        .collect();
+    !pairs.is_empty() && env::release_id(&pairs).is_ok_and(|release| release == staged.release)
+}
 
 /// The `host` adapter: the software tier of `PolicyHost` as a distribution target (section 3). A committed
 /// release is installed with `PolicyHost::install_verified`, the commit half `swap` also ends in, and a PEP
