@@ -428,7 +428,8 @@ pub struct InstallSet {
 }
 
 impl InstallSet {
-    fn of(kind: SetKind, envelope: &Envelope) -> InstallSet {
+    /// A set of `kind` with nothing staged yet, sharing what the statement `envelope` says of its set.
+    pub fn of(kind: SetKind, envelope: &Envelope) -> InstallSet {
         InstallSet {
             kind,
             doc: SetDoc {
