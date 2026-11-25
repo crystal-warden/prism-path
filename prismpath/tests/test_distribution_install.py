@@ -469,7 +469,7 @@ def test_case_222_zone_protection_never_drops_with_the_release(tmp_path):
 
 def _list(point, seq, *tables, widens=False):
     """A ceiling list of `tables`, which replaces the held ceiling (IS12)."""
-    held = point.pep.installed.record.sets[CEILING]
+    held = point.pep.installed.record.sets[CEILING] or point.pep.installed.lost_ceiling
     return point.install_set(CEILING, {kinds.POLICY_LIST: install.ceiling_body(tables)}, seq, widens=widens,
                              replaces=held.policy_sha256 if held else "")
 
@@ -621,8 +621,125 @@ def test_a_lost_ceiling_never_fails_open(tmp_path):
     assert _read(point, point.pep.rollback() if point.pep.previous else point.pep.commit(STREAM, 2, H(image(6)))).cause \
         == "dist:install-lost"
     assert point.send(_fallback(point, image(5)))[-1].cause == "dist:install-lost"
-    assert point.send(_list(point, 2, image(5), image(6)))[-1].event == "install-applied"
+    lost = point.pep.installed.lost_ceiling.policy_sha256
+    resend = {kinds.POLICY_LIST: install.ceiling_body([image(5), image(6)])}
+    assert point.send(point.install_set(CEILING, resend, 2, widens=False, replaces=""))[-1].cause \
+        == "dist:widening-unsigned"                                  # IS12: it follows the lost set, not none
+    assert point.send(point.install_set(CEILING, resend, 2, widens=False, replaces=lost))[-1].event == "install-applied"
     assert _read(point, point.stage(image(6), 2)).event == "staged"
+
+
+class _Cut(BaseException):
+    """A power loss: the process is gone, and no step of the machine catches it."""
+
+
+def _cut_lapse(monkeypatch):
+    """Make the next lapse a power loss, after whatever was durable before it."""
+    from prismpath.distribution.pep import Pep
+
+    def lapse(self, cause):
+        raise _Cut(cause)
+    monkeypatch.setattr(Pep, "lapse", lapse)
+
+
+def test_case_306_a_power_loss_between_a_narrower_ceiling_and_its_lapse_still_lapses_the_release(tmp_path,
+                                                                                              monkeypatch):
+    """case_306: CL3, C10, IS12. A `host` and a `mesh` PEP commit a release inside their ceiling, and the power is
+    lost after a narrower ceiling the release is above is durable and before the lapse. At the restart the release
+    lapses with `dist:above-ceiling`, and one that is not restarted lapses at its next tick. A reconciling `host`
+    PEP whose ceiling comes the same way lapses its held release at its next try and never installs it."""
+    for make in (_host, _mesh):
+        for how in ("start", "tick"):
+            point = make(tmp_path, f"{make.__name__}-{how}")
+            point.send(_list(point, 1, image(5), image(6)))
+            point.commit(image(5))
+            with monkeypatch.context() as patch:
+                _cut_lapse(patch)
+                with pytest.raises(_Cut):
+                    point.send(_list(point, 2, image(6)))
+            assert point.pep.installed.record.seqs[CEILING] == 2 and point.pep.active is not None
+            if how == "start":
+                point.pep = point.open()
+                sent = [_read(point, one) for one in point.pep.drain()]
+            else:
+                point.pep.drain()
+                sent = [_read(point, point.pep.tick())]
+            assert [(one.event, one.cause) for one in sent if one.event == "lapsed"] == \
+                [("lapsed", "dist:above-ceiling")], (make.__name__, how)
+            assert point.pep.active is None and point.pep.state() == "no-policy"
+            point.pep = point.open()
+            assert point.pep.active is None
+    from prismpath.tests.test_distribution_reconciling import NEW, OLD, FlakyHost
+    rig = FlakyHost(tmp_path / "reconciling", install_keys=KEYS, install_threshold=2)
+    rig.send(rig.install_set(CEILING, {kinds.POLICY_LIST: install.ceiling_body([OLD, NEW])}, 1))
+    rig.commit(OLD)
+    rig.stage(NEW, 2)
+    rig.switches.set(True, False)
+    rig.pep.commit(STREAM, 2, H(NEW))
+    rig.pep.drain()
+    held = rig.pep.installed.record.sets[CEILING].policy_sha256
+    with monkeypatch.context() as patch:
+        _cut_lapse(patch)
+        with pytest.raises(_Cut):
+            rig.send(rig.install_set(CEILING, {kinds.POLICY_LIST: install.ceiling_body([OLD])}, 2, replaces=held))
+    rig.switches.set(False, False)                                   # the runtime would now take the release
+    activations = rig.switches.activations
+    rig.pep.tick()
+    fell = [(one.event, one.cause) for one in rig.records() if one.event in ("lapsed", "committed")]
+    assert fell == [("lapsed", "dist:above-ceiling")] and rig.switches.activations == activations
+    assert rig.pep.state() == "no-policy" and rig.host_active() is None
+
+
+def test_case_307_a_ceiling_after_a_lost_one_stands_out_unless_it_is_the_lost_one_again(tmp_path):
+    """case_307: IS10, IS12. A `host` and a `mesh` PEP whose ceiling no copy holds are sent, with `widens` false, the
+    empty ceiling, a wider list, a narrower list whose `replaces` is the lost list's policy hash, and the lost list
+    again with `replaces` empty: `dist:widening-unsigned` each time and still lost. The lost list again naming the
+    lost hash is `install-applied`, and on another such PEP a narrower list with `widens` true is `install-widened`.
+    A PEP whose ceiling is lost and that is provisioned with an anchor sharing its install keys stays lost, also
+    after a restart, until a ceiling is applied."""
+    def lose(point):
+        for directory in (point.state_dir / "dist" / "install" / "blobs",
+                          point.state_dir / "dist" / "install-copy" / "blobs"):
+            for blob in directory.iterdir():
+                blob.write_bytes(b"gone")
+        point.pep = point.open()
+        assert point.pep.installed.ceiling_lost
+
+    def ceiling(point, seq, *tables, widens=False, replaces=""):
+        bodies = {kinds.POLICY_LIST: install.ceiling_body(tables)} if tables else {kinds.NONE: b""}
+        return point.send(point.install_set(CEILING, bodies, seq, widens=widens, replaces=replaces))[-1]
+
+    for make in (_host, _mesh):
+        point = make(tmp_path, make.__name__)
+        point.send(_list(point, 1, image(5), image(6)))
+        point.commit(image(5))
+        lost_hash = point.pep.installed.record.sets[CEILING].policy_sha256
+        lose(point)
+        assert ceiling(point, 2).cause == "dist:widening-unsigned"
+        assert ceiling(point, 2, image(5), image(6), image(7), replaces=lost_hash).cause == "dist:widening-unsigned"
+        assert ceiling(point, 2, image(5), replaces=lost_hash).cause == "dist:widening-unsigned"
+        assert ceiling(point, 2, image(5), image(6)).cause == "dist:widening-unsigned"
+        assert point.pep.installed.ceiling_lost
+        point.pep = point.open()                                     # still named, still lost after a restart
+        assert point.pep.installed.ceiling_lost and point.pep.installed.lost_ceiling.policy_sha256 == lost_hash
+        applied = ceiling(point, 2, image(5), image(6), replaces=lost_hash)
+        assert (applied.event, applied.cause) == ("install-applied", None)
+        assert not point.pep.installed.ceiling_lost
+        other = make(tmp_path, f"{make.__name__}-widened")
+        other.send(_list(other, 1, image(5), image(6)))
+        lose(other)
+        widened = ceiling(other, 2, image(5), widens=True)
+        assert (widened.event, widened.cause) == ("install-widened", "dist:install-widened")
+    point = _host(tmp_path, "provisioned")
+    point.send(_list(point, 1, image(5), image(6)))
+    point.commit(image(5))
+    lose(point)
+    point.pep.confirm(point.pep.provision(point.anchor(seq=1)))      # IS6: a higher install trust seq, the same keys
+    assert point.pep.installed.ceiling_lost
+    assert _read(point, point.stage(image(6), 2)).cause == "dist:install-lost"
+    point.pep = point.open()
+    assert point.pep.installed.ceiling_lost
+    assert _read(point, point.stage(image(6), 2)).cause == "dist:install-lost"
 
 
 def test_case_226_a_host_with_one_file_system_loses_both_copies_of_its_install_record(tmp_path):
