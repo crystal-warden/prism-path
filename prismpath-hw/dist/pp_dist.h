@@ -138,6 +138,7 @@ typedef enum {
     PP_ART_TRUST_CONTROLLER,                                                                   /* K7 */
     PP_ART_TRUST_CHANGE,                                                                       /* W10 */
     PP_ART_INSTALL_CHANGE,                                                                     /* IS14 */
+    PP_ART_IDENTITY_BUNDLE, PP_ART_IDENTITY_MAP, /* E8, ID8: known, used by no kind this core has (a gateway's) */
     PP_ART_COUNT
 } pp_artifact;
 
