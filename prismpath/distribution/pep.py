@@ -785,9 +785,11 @@ class Pep:
         floor, an `expires` later than the kept one's and at most `fresh` plus SKEW ahead of the PEP's time. A PEP
         with no clock takes, from the first statement after each start that passes every other check, its
         `expires` less `fresh` as a raise of its time floor (T1). The latest fresh statement is kept durably,
-        written before it counts, and a newer one is written only when the kept one has used half its life."""
-        if not read.fresh or read.trust_seq < self.trust.trust_seq or read.stream_seq < self.reported_floor():
-            return
+        written before it counts, and a newer one is written only when the kept one has used half its life. An
+        `expires` past what a canon/2 document holds exactly gives no freshness and no time, as in Rust and the C core."""
+        if (not read.fresh or read.expires > kinds.MAX_SEQ or read.trust_seq < self.trust.trust_seq
+                or read.stream_seq < self.reported_floor()):
+            return                                                    # past what canon/2 holds: no freshness, no time
         kept = self.kept
         if kept is not None and read.expires <= kept["expires"]:
             return
