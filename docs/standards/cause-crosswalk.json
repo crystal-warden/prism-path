@@ -2779,6 +2779,23 @@
     "ids": [],
     "none": "An enforcement point whose runtime did not take a switch of policy, which withdraws its runtime, refuses what its action floor and fallback policy leave, and reports what the runtime may still run until the two agree. It records a condition, not a weakness or an attack."
    }
+  },
+  "170": {
+   "name": "dist:save-failed",
+   "class": "state",
+   "kind": "internal",
+   "owasp_asi": {
+    "ids": [],
+    "none": "An enforcement point that could not save the count or the answered mark it writes before it acts, and so does not act. It records a fail closed storage condition, not a weakness or an attack."
+   },
+   "mitre_atlas": {
+    "ids": [],
+    "none": "An enforcement point that could not save the count or the answered mark it writes before it acts, and so does not act. It records a fail closed storage condition, not a weakness or an attack."
+   },
+   "cwe": {
+    "ids": [],
+    "none": "An enforcement point that could not save the count or the answered mark it writes before it acts, and so does not act. It records a fail closed storage condition, not a weakness or an attack."
+   }
   }
  }
 }

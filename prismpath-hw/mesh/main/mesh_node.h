@@ -8,8 +8,8 @@
  * The C core in prismpath-hw/dist/ decides everything: the frame reassembly (B6, B7, B9), the verifier (V2 to
  * V11), stage, commit and abort, revocation, rotation, the controller key and statement (K6, K7, H9, H16),
  * expiry, the action floor (section 21) and every decision (pp_pep_ask). This file keeps the durable parts in a
- * store, each under its own name, the parts IS10 names on two media, turns frames into calls of the core, and
- * sends each state record the core signs as a frame of type 3.
+ * store, each under its own name, the anchor part and the parts IS10 names on two media, turns frames into calls
+ * of the core, and sends each state record the core signs as a frame of type 3.
  *
  * Nothing here allocates. The caller gives the node its three large blocks (the machine, the assembler and the
  * packing buffer), which the board allocates once at boot and the host holds statically. */

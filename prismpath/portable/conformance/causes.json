@@ -1,7 +1,7 @@
 {
  "version": 1,
  "comment": "FROZEN. The cause registry of prismpath.kernel.causes: every row, its hash, the engine stop mapping and the lookups a consumer must answer. prismpath-rs/src/causes.rs is generated from the same registry and prismpath-rs/tests/test_causes.rs replays this file. Appending a row regenerates it.",
- "registry_sha256": "bd4e4964001bb5f3db786a1f0178e86b07c8c36d42679f23fc23cbffc0c63a56",
+ "registry_sha256": "8137137fbb97707b40ec4a2f73aac9f868244fa0c216772986c6e225690d534f",
  "registry": [
   {
    "code": 1,
@@ -812,6 +812,12 @@
    "name": "dist:reconciling",
    "class": "state",
    "description": "a decision the action floor and the fallback policy leave, a commit or a rollback asked of an enforcement point whose runtime may not run what it holds, after the runtime step of a commit, a rollback, a lapse, an install set or a start failed; marked in every state record while it lasts and filed by the controller"
+  },
+  {
+   "code": 170,
+   "name": "dist:save-failed",
+   "class": "state",
+   "description": "an action floor override or an operator's answer allow refused because the write that saves its count or its answered mark before the enforcement point acts did not take; the override is not allowed and the escalation stays open"
   }
  ],
  "engine_stop_to_cause": {

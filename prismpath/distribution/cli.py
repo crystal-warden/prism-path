@@ -113,7 +113,7 @@ def add_parser(subparsers) -> None:
     inst = commands.add_parser('install', help='seal an install set: an action floor, a fallback policy or a ceiling '
                                                '(section 21)')
     inst.add_argument('--kind', required=True, choices=('floor', 'fallback', 'ceiling'),
-                      help='the install kind; this version builds the fallback policy and the ceiling')
+                      help='the install kind: an action floor, a fallback policy or a ceiling')
     inst.add_argument('--set', dest='bodies', action='append', default=[], metavar='AS=FILE',
                       help='an artifact of the set and its body, repeatable, such as policy.ppt=table.ppt')
     inst.add_argument('--list', dest='tables', action='append', default=[], metavar='FILE',
@@ -146,7 +146,8 @@ def add_parser(subparsers) -> None:
     inst.add_argument('--answer-rate', default=None, metavar='ALLOWS/WINDOW',
                       help="a floor's signed rate of operator allows (OP4)")
     inst.add_argument('--layout', default=None, metavar='FILE', help="a table floor's layout document (AF10)")
-    inst.add_argument('--command', type=int, default=None, help="a table floor's command register (AF9)")
+    inst.add_argument('--command', dest='command_register', type=int, default=None,
+                      help="a table floor's command register (AF9)")
     inst.add_argument('--out', required=True, metavar='DIR', help='where each <as>.sealed and <as>.body is written')
     inst.set_defaults(func=install_cmd)
 
@@ -958,8 +959,8 @@ def install_cmd(args) -> int:
         if "policy.ppt" in bodies and args.qualification:
             metas["policy.ppt"] = policy_meta(bodies["policy.ppt"], _json(args.qualification))
         for name in ("policy.ppt", "cfs.table"):
-            if kind == install.FLOOR and name in bodies and args.command is not None:
-                metas.setdefault(name, {})["command"] = args.command
+            if kind == install.FLOOR and name in bodies and args.command_register is not None:
+                metas.setdefault(name, {})["command"] = args.command_register
         larger = install.set_larger(args.target, kind, follows, bodies, _rated(kind, rates))
         if larger is None:                          # H13: a cfs table, by the core image inside it
             larger = widening.compare_release(dict(follows.bodies), real) != widening.NOT_LARGER

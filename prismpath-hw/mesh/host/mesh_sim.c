@@ -24,6 +24,8 @@
  *   erase <i> <medium 0|1|2>               its store forgets one medium, or both (2)
  *   corrupt <i> <medium> <part>            one byte of a part's blob on a medium changed (the index of its PP_PART_*
  *                                          bit), which NVS finds by its CRC, so the blob no longer reads
+ *   drop <i> <medium> <part>               a part's blob is gone from a medium, as one NVS never held
+ *   wfail <i> <0|1>                        every NVS write of node i fails from now on (1), or takes again (0)
  *   radio <frame hex> <ms>                 the host's radio sends a frame that every node that is up hears
  *   serial <i> <frame hex> <ms>            a frame on node i's serial line only
  *   tick <ms>                              every node that is up ticks (X1, B8)
@@ -62,7 +64,7 @@ typedef struct {
 } medium;
 
 typedef struct {
-    int defined, up, hold;
+    int defined, up, hold, fail_writes;
     uint8_t seed[32];
     int64_t boot_ms;
     medium media[2];
@@ -125,6 +127,7 @@ static int store_get(void *context, int which, const char *name, uint8_t *out, s
 static int store_set(void *context, int which, const char *name, const uint8_t *data, size_t len) {
     sim_node *s = context;
     medium *m = &s->media[which];
+    if (s->fail_writes) return -1; /* nvs_set_blob answers an error and the blob is as it was */
     blob *b = find(m, name);
     if (b == NULL) {
         if (m->n == BLOBS || len > BLOB_MAX) return -1;
@@ -311,6 +314,19 @@ int main(void) {
             if (bl == NULL || bl->len == 0) return 2;
             bl->data[bl->len - 1] ^= 0x01;
             bl->damaged = 1;
+        } else if (strcmp(word, "drop") == 0) {
+            int which = 0, part = 0;
+            if (sscanf(rest, "%d %d %d", &i, &which, &part) != 3 || i < 0 || i >= NODES || which < 0 || which > 1) return 2;
+            char name[8];
+            snprintf(name, sizeof name, "d%d", part);
+            medium *md = &nodes[i].media[which];
+            blob *bl = find(md, name);
+            if (bl == NULL) return 2;
+            *bl = md->blobs[--md->n];
+        } else if (strcmp(word, "wfail") == 0) {
+            int on = 0;
+            if (sscanf(rest, "%d %d", &i, &on) != 2 || i < 0 || i >= NODES) return 2;
+            nodes[i].fail_writes = on;
         } else if (strcmp(word, "radio") == 0) {
             static uint8_t frame[PP_FRAME_LIMIT + 64];
             if (sscanf(rest, "%s %lld", a, &ms) != 2) return 2;

@@ -349,10 +349,12 @@ pub struct InstallTrust {
 /// install `threshold`, from 1 to the number of keys.
 pub fn read_install_trust(body: &[u8]) -> Result<InstallTrust, Refused> {
     let doc: InstallTrust = load(body, "install trust body")?;
+    // IS11 in its own order, as Python and the C core read it: no install key is a body that does not read, before
+    // either list is held to its bound
+    require(!doc.keys.is_empty(), "an install trust statement with no install key")?;
     if doc.keys.len() > INSTALL_KEYS || doc.operators.len() > OPERATOR_KEYS {
         return Err(Refused::new(TOO_LARGE, "an install trust statement past 4 install or 4 operator keys"));
     }
-    require(!doc.keys.is_empty(), "an install trust statement with no install key")?;
     require((1..=doc.keys.len() as i64).contains(&doc.threshold), "an install threshold outside 1 to the number of keys")?;
     Ok(doc)
 }
@@ -426,7 +428,8 @@ pub struct InstallSet {
 }
 
 impl InstallSet {
-    fn of(kind: SetKind, envelope: &Envelope) -> InstallSet {
+    /// A set of `kind` with nothing staged yet, sharing what the statement `envelope` says of its set.
+    pub fn of(kind: SetKind, envelope: &Envelope) -> InstallSet {
         InstallSet {
             kind,
             doc: SetDoc {

@@ -602,7 +602,7 @@ static void PRISMPATH_APP_InitState(void)
     if (record == PP_APP_STORE_LOST)
     {
         CFE_EVS_SendEvent(PRISMPATH_APP_STATE_ERR_EID, CFE_EVS_EventType_ERROR,
-                          "PRISMPATH_APP the CDS record does not read, so the floor is lost; a new run begins");
+                          "PRISMPATH_APP the CDS record does not read; its file copy stands in, or the floor is lost");
     }
     s_Config.ExpiryResponse = PRISMPATH_APP_PLATFORM_EXPIRY_RESPONSE;
     s_Config.LostFloor      = PRISMPATH_APP_PLATFORM_LOST_FLOOR;
@@ -626,7 +626,7 @@ static void PRISMPATH_APP_InitState(void)
                           "PRISMPATH_APP the enforcement point did not start (no anchor, another expiry setting than it "
                           "was provisioned with, or an instance key that is a trusted key): every proposal is refused");
     }
-    if (record == PP_APP_STORE_READ)
+    if (DIST->RecordRead) /* from the CDS or, after a power on reset, from its file */
     {
         if (PP_Run_Recover(&DIST->Record.Run, &PP_Io) != 0)
         {

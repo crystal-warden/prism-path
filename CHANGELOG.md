@@ -8,6 +8,13 @@ spec stable.
 
 ## [Unreleased]
 
+### Fixed: the durable state holds through a lost part, a failed write and a clock set back (2026-11-25)
+
+- **The C core keeps its anchor part on both media and locks when no copy holds it (P1, IS9, IS10).** A PEP whose anchor part is gone beside parts it holds is locked with every mark set and reports `dist:install-lost`, keeps its floor, release and install record, and is never provisioned again as if it never was. A provisioning then holds what it brings to what the locked PEP keeps.
+- **Rate counts no copy holds start every window spent (AF8, OP4)**, and **a clock set back keeps each rate window and its count** in Python, Rust and the C core.
+- **`pp_persist_fn` returns whether its writes took (AF8, OP3).** An override or an operator's `allow` whose save did not take is refused with the new cause 170 `dist:save-failed`, the count spent and the escalation open, and a provisioning whose save did not take is refused with it and leaves the PEP locked. The mesh node and the cFS app report their writes.
+- **The cFS app keeps its record in `record.ppd` as well as the Critical Data Store**, so a power on reset recovers it, and a provisioned app with no copy of its record takes it as lost (Q5). The mesh's `nvs_copy` holds the anchor part with the install parts, 28,641 bytes at the bounds.
+
 ### Fixed: the ceiling holds at every start and tick, and a ceiling after a lost one stands out (2026-11-24)
 
 - **The checks every entry point, tick and start run hold the active release to the held ceiling (CL3, C10).** Python, Rust and the C core lapse a release above the ceiling with `dist:above-ceiling` there as they do one that is revoked, so a power loss after a narrower ceiling is durable and before its lapse lapses the release at the next start. Python's reconciling tests hold the held and the running release to the ceiling too, as Rust's did.

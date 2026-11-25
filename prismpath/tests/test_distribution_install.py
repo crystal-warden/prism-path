@@ -217,6 +217,60 @@ def _lock(point):
     assert point.pep.state() == "locked"
 
 
+def test_a_provisioning_refuses_a_brought_set_its_staging_would_refuse_and_keeps_a_seq_replay_record(tmp_path):
+    """P2 step 3, CL3, V10: a statement brought with an anchor is held, before anything changes, to what staging it
+    meets in order: the ceiling the provisioning leaves or one brought before it, and the statements of its set staged
+    before it. A fallback policy outside the held ceiling, one outside a ceiling brought first, and a second statement
+    of one set that disagrees with the first each refuse the provisioning and leave the PEP as it was. A set below the
+    held `seq` is `dist:seq-replay` and the provisioning goes on (case 170), and that refusal is reported beside the
+    `provisioned` record."""
+    point = _host(tmp_path)
+    point.send(point.install_set(CEILING, {kinds.POLICY_LIST: install.ceiling_body([image(5)])}, 1, widens=False))
+    record = point.pep.installed.record
+
+    def refused(*brought):
+        with pytest.raises(PepRefused) as raised:
+            point.pep.confirm(point.pep.provision(point.anchor(), [pair for pairs in brought for pair in pairs]))
+        assert point.pep.installed.record == record and point.pep.installed.fallback is None
+        return str(raised.value)
+    assert "dist:above-ceiling" in refused(_fallback(point, image(9)))
+    narrower = point.install_set(CEILING, {kinds.POLICY_LIST: install.ceiling_body([])}, 2, widens=False,
+                                 replaces=H(install.ceiling_body([image(5)])))
+    assert "dist:above-ceiling" in refused(narrower, _fallback(point, image(5)))
+    spiral = b"a spiral sidecar"
+    first = point.install_set(FALLBACK, {"policy.ppt": image(5), "policy.spiral": spiral}, 1, widens=True)
+    other = point.install_set(FALLBACK, {"policy.ppt": image(5)}, 1, widens=True)
+    assert "dist:incomplete" in refused([pair for pair in first if H(pair[1]) == H(spiral)], other)
+    point.send(_fallback(point, image(5), 2))
+    point.pep.drain()
+    point.pep.confirm(point.pep.provision(point.anchor(), _fallback(point, image(5), 1)))
+    sent = [_read(point, one) for one in point.pep.drain()]
+    assert [(one.event, one.cause) for one in sent] == [("refused", "dist:seq-replay"), ("provisioned", None)]
+    assert _held(point, FALLBACK).seq == 2
+
+
+def test_an_authority_signed_answer_on_host_is_unknown_key_and_a_trust_body_with_no_key_is_bad_format(tmp_path):
+    """K4, V5: the role an answer needs is checked before the kind it is for, so an answer signed only by an authority
+    key is `dist:unknown-key` on `host`, and one by an operator key, no key held or one install key below the
+    threshold is `dist:target-mismatch`, as in Rust and the C core. IS11: an install trust body with no install key
+    and 5 operator keys is `dist:bad-format`, read before the bound of either list."""
+    point = _host(tmp_path, operators=["O1"])
+    for signer, cause in (("A", "dist:unknown-key"), ("O1", "dist:target-mismatch"), ("O9", "dist:target-mismatch"),
+                          ("N1", "dist:target-mismatch")):
+        assert _read(point, point.pep.stage(*_dist.answer(point, "ab" * 32, signer=signer))).cause == cause, signer
+
+    def body(keys, operators):
+        return canon.canon2_bytes({"encoding": "canon/2", "format": kinds.INSTALL_TRUST_FORMAT,
+                                   "keys": sorted(public(name).hex() for name in keys),
+                                   "operators": sorted(public(name).hex() for name in operators), "threshold": 1})
+    five = ["O1", "O2", "O3", "O4", "O5"]
+    for keys, operators, cause in (([], five, "dist:bad-format"), (["N1"], five, "dist:too-large"),
+                                   (["N1", "N2", "N3", "N4", "N5"], [], "dist:too-large")):
+        with pytest.raises(Refused) as raised:
+            kinds.read_install_trust(body(keys, operators))
+        assert raised.value.cause == cause
+
+
 def test_case_171_a_locked_pep_still_takes_install_statements(tmp_path):
     """case_171: IS6, FB1. A `locked` PEP with an install threshold of 2 applies a fallback policy at a higher `seq`
     and stays `locked`, deciding under it."""
@@ -1280,3 +1334,15 @@ def test_case_305_a_staged_ceiling_goes_to_the_canary_group_first_and_to_the_res
     assert fleet.run("install", "--kind", "fallback", "--set", f"policy.ppt={tmp_path / 't9.ppt'}", "--seq", "1",
                      "--widens", "--staged", "--yes", *fleet.common, "--out", str(tmp_path / "fb")) == 2
     assert not (tmp_path / "fb").exists()
+
+
+def test_dist_install_keeps_the_subcommand_whether_or_not_a_command_register_is_given():
+    """`prismpath dist install` dispatches on `args.command`; the floor's `--command` register (AF9) has its own
+    destination, so it never overwrites the subcommand and the top level CLI reaches `dist`."""
+    from prismpath import cli
+    base = ["dist", "install", "--kind", "floor", "--stream", STREAM, "--target", "mesh", "--key", "k", "--seq", "1",
+            "--out", "o"]
+    for extra in ([], ["--command", "7"]):
+        args = cli.build_parser().parse_args(base + extra)
+        assert args.command == "dist"
+        assert args.command_register == (7 if extra else None)
