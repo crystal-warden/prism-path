@@ -33,7 +33,7 @@
 #define PRISMPATH_APP_DIST_ERR_EID        34 /* a frame dropped, the table service refused a switch, a start refused */
 #define PRISMPATH_APP_HELD_EID            35 /* X7: a hold began (the release expired and the mission holds) or ended */
 #define PRISMPATH_APP_PROVISIONED_EID     36 /* P2 step 4: the anchor's fingerprint and each install statement held */
-#define PRISMPATH_APP_NOT_ENACTED_EID     37 /* RC4: a decision of the action floor or the fallback policy, refused */
+#define PRISMPATH_APP_NOT_ENACTED_EID     37 /* AF8: an escalation past the floor's rate, refused unreceipted */
 #define PRISMPATH_APP_ESCALATION_EID      38 /* OP3: an escalation of the action floor is open, by its receipt hash */
 #define PRISMPATH_APP_ANSWERED_EID        39 /* OP3, OP4: an operator's signed answer to an open escalation applied */
 

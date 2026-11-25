@@ -125,6 +125,7 @@
 #define PP_LEGACY_STREAMS 4   /* L2: the streams the older forms are refused on, past which every stream is */
 #define PP_ANSWER_LIFE 600    /* OP2, OP3: an answer's lifetime and an escalation's, in seconds */
 #define PP_REQUEST_MAX 32     /* OP3: the bytes of the one request an escalation keeps for its answer */
+#define PP_COMMAND_MAX 8      /* OP3: the bytes of the caller's command an escalation keeps beside its request */
 
 /* ------------------------------------------------------------------ the kinds (section 3) */
 typedef enum {
@@ -539,8 +540,16 @@ typedef struct {
     pp_change change;
 } pp_install_set;
 
+/* RC4: a held statement's body as its bytes, a policy list written again from its hashes (CL1), so a run can hold the
+ * statement it decided under. The pointer is to the statement, or to a buffer the next call writes again. */
+const uint8_t *pp_statement_bytes(const pp_statement *st, size_t *len);
+
 /* OP3: an escalation the action floor made, by the hash of its receipt, under the floor of `policy_sha256`, at the
- * PEP's time `at`, with the request it holds for an answer `allow` (the caller's bytes, at most PP_REQUEST_MAX). */
+ * PEP's time `at`, with the cause it escalated with and the request it holds for an answer `allow` (the caller's
+ * bytes, at most PP_REQUEST_MAX). The cause is the refusal an answer `refuse` receipts (OP3). `command` is the
+ * caller's bytes that say how the request was asked, which the core never reads, so an answer `allow` carries out
+ * that command and no other (a cFS command's message id and function code). An escalation kept by a build before
+ * the command was kept reads with none (command_len 0), which the caller does not carry out. */
 typedef struct {
     uint8_t receipt[32];
     uint8_t policy_sha256[32];
@@ -548,18 +557,25 @@ typedef struct {
     uint8_t answered;
     uint8_t request_len;
     uint8_t request[PP_REQUEST_MAX];
+    uint8_t cause;
+    uint8_t command_len; /* the first member after the older layout's, so that layout is a prefix of this one */
+    uint8_t command[PP_COMMAND_MAX];
 } pp_escalation;
 
 /* OP2, OP3: an answer the last call applied: `allow` or not, the answer's envelope id, the receipt hash it answered,
- * the floor's policy hash and the request of that escalation, for the caller's receipt with basis operator. */
+ * the floor's policy hash, the cause and the request of that escalation, for the caller's receipt with basis
+ * operator. */
 typedef struct {
     int applied;
     int allow;
+    uint8_t cause;
     uint8_t envelope_id[32];
     uint8_t receipt[32];
     uint8_t policy_sha256[32];
     size_t request_len;
     uint8_t request[PP_REQUEST_MAX];
+    size_t command_len;         /* the command its escalation kept, 0 for none */
+    uint8_t command[PP_COMMAND_MAX];
 } pp_answer;
 typedef struct {
     int provisioned;            /* the anchor is confirmed (P2) */
@@ -650,6 +666,7 @@ typedef struct {
     pp_answer answer;         /* OP3: the answer the last call applied, `applied` 0 for none */
     int escalating;           /* OP3: the last ask was a floor escalation, which pp_pep_escalated may open */
     uint8_t escalating_policy[32];
+    uint8_t escalating_cause;
     size_t n_out;
     size_t out_len[PP_OUTBOX];
     uint8_t out[PP_OUTBOX][PP_RECORD_MAX]; /* the records made by the last call, oldest first (H4) */
@@ -815,9 +832,11 @@ void pp_pep_ask(pp_pep_machine *pep, const uint8_t *regs, size_t regs_len, const
                 pp_decision *out);
 
 /* OP3: open the escalation the last pp_pep_ask made by the action floor, under the hash of the receipt the caller wrote
- * for it and with the request an answer `allow` lets through (at most PP_REQUEST_MAX bytes), durably, the oldest of
- * nine dropped. 0, or dist:not-staged when the last ask was no floor escalation. */
-uint8_t pp_pep_escalated(pp_pep_machine *pep, const uint8_t receipt_sha256[32], const uint8_t *request, size_t len);
+ * for it and with the request an answer `allow` lets through (at most PP_REQUEST_MAX bytes) and the command it was
+ * asked as (at most PP_COMMAND_MAX bytes, or none), durably, the oldest of nine dropped. 0, or dist:not-staged when
+ * the last ask was no floor escalation or a bound is passed. */
+uint8_t pp_pep_escalated(pp_pep_machine *pep, const uint8_t receipt_sha256[32], const uint8_t *request, size_t len,
+                         const uint8_t *command, size_t command_len);
 
 /* H1: the PEP id, the first 16 bytes of the SHA-256 of the instance public key. */
 void pp_pep_id(const pp_pep_machine *pep, uint8_t out[16]);

@@ -2645,6 +2645,7 @@ static const uint8_t *pp_statement_body(const pp_statement *st, size_t *len) {
     return list;
 }
 
+const uint8_t *pp_statement_bytes(const pp_statement *st, size_t *len) { return pp_statement_body(st, len); }
 
 /* A table on the list of a ceiling statement, or any table for none. */
 static int pp_on_list(const pp_statement *ceiling, const uint8_t body_sha256[32]) {
@@ -2941,18 +2942,23 @@ static uint8_t pp_apply_answer(pp_pep_machine *pep, const pp_envelope *e, const 
     pp_persist(pep, PP_PART_RATES); /* OP3: before the PEP acts on it */
     pep->answer.applied = 1;
     pep->answer.allow = allow;
+    pep->answer.cause = one->cause;
     memcpy(pep->answer.envelope_id, e->envelope_id, 32);
     memcpy(pep->answer.receipt, receipt, 32);
     memcpy(pep->answer.policy_sha256, one->policy_sha256, 32);
     pep->answer.request_len = one->request_len;
     memcpy(pep->answer.request, one->request, one->request_len);
+    pep->answer.command_len = one->command_len;
+    memcpy(pep->answer.command, one->command, one->command_len);
     pp_emit_about(pep, PP_EV_ANSWERED, 0, PP_SUBJECT_ANSWER);
     return PP_CAUSE_NONE;
 }
 
-uint8_t pp_pep_escalated(pp_pep_machine *pep, const uint8_t receipt_sha256[32], const uint8_t *request, size_t len) {
+uint8_t pp_pep_escalated(pp_pep_machine *pep, const uint8_t receipt_sha256[32], const uint8_t *request, size_t len,
+                         const uint8_t *command, size_t command_len) {
     pp_durable *d = &pep->d;
-    if (!pep->escalating || len > PP_REQUEST_MAX) return PP_CAUSE_NOT_STAGED;
+    if (!pep->escalating || len > PP_REQUEST_MAX || command_len > PP_COMMAND_MAX || (command_len && !command))
+        return PP_CAUSE_NOT_STAGED;
     pep->escalating = 0;
     size_t kept = 0;
     for (size_t k = 0; k < d->n_open; k++) /* the answered ones go, and the oldest past eight */
@@ -2964,9 +2970,12 @@ uint8_t pp_pep_escalated(pp_pep_machine *pep, const uint8_t receipt_sha256[32], 
     memset(one, 0, sizeof *one);
     memcpy(one->receipt, receipt_sha256, 32);
     memcpy(one->policy_sha256, pep->escalating_policy, 32);
+    one->cause = pep->escalating_cause;
     one->at = pp_time(pep);
     one->request_len = (uint8_t)len;
     memcpy(one->request, request, len);
+    one->command_len = (uint8_t)command_len;
+    if (command_len) memcpy(one->command, command, command_len);
     pp_persist(pep, PP_PART_RATES);
     return PP_CAUSE_NONE;
 }
@@ -3493,6 +3502,7 @@ void pp_pep_ask(pp_pep_machine *pep, const uint8_t *regs, size_t regs_len, const
             if (floor_outcome == PP_OUT_ESCALATE) { /* OP3: an escalation pp_pep_escalated may open */
                 pep->escalating = 1;
                 memcpy(pep->escalating_policy, fe->policy_sha256, 32);
+                pep->escalating_cause = floor_cause;
             }
             out->would = table ? outcome : PP_OUT_NONE;
             out->would_cause = table ? cause : 0;
@@ -3608,6 +3618,37 @@ static void pp_io_ikeys(pp_io *io, pp_ikey *keys, size_t *n, size_t max) {
     }
 }
 
+/* OP3: the open escalations, the last of the rates part. A part a build wrote before an escalation kept its command
+ * holds items of the older layout, a prefix of this one padded to its alignment, which read with no command, so the
+ * caller carries none of them out and never guesses one. The two layouts differ in size, so a count reads as one of
+ * them by the bytes that follow it. */
+typedef struct {
+    char c;
+    pp_escalation e;
+} pp_escalation_align;
+#define PP_ESCALATION_ALIGN offsetof(pp_escalation_align, e)
+#define PP_ESCALATION_OLDER                                                                                            \
+    ((offsetof(pp_escalation, command_len) + PP_ESCALATION_ALIGN - 1) / PP_ESCALATION_ALIGN * PP_ESCALATION_ALIGN)
+_Static_assert(PP_ESCALATION_OLDER < sizeof(pp_escalation), "the older layout is shorter");
+static void pp_io_open(pp_io *io, pp_durable *d) {
+    uint32_t n = 0;
+    if (!io->p && io->ok && io->i + sizeof n <= io->n) {
+        memcpy(&n, io->q + io->i, sizeof n);
+        if (n > 0 && n <= PP_OPEN_ESCALATIONS && io->n - io->i - sizeof n == (size_t)n * PP_ESCALATION_OLDER) {
+            io->i += sizeof n;
+            d->n_open = n;
+            for (size_t k = 0; k < n; k++) {
+                memset(&d->open[k], 0, sizeof d->open[k]);
+                pp_io_bytes(io, &d->open[k], PP_ESCALATION_OLDER);
+                d->open[k].command_len = 0; /* the older layout's padding, never a command */
+                memset(d->open[k].command, 0, sizeof d->open[k].command);
+            }
+            return;
+        }
+    }
+    pp_io_array(io, d->open, &d->n_open, sizeof d->open[0], PP_OPEN_ESCALATIONS);
+}
+
 /* The parts' tags are their bit's index, so a part read under another name never reads. */
 static int pp_part_index(int part) {
     for (int k = 0; k < PP_PART_COUNT; k++)
@@ -3692,10 +3733,12 @@ static void pp_io_part(pp_io *io, pp_durable *d, int part) {
         }
         pp_io_bytes(io, &d->answer_start, sizeof d->answer_start); /* OP4, OP3 */
         pp_io_u32(io, &d->answer_count);
-        pp_io_array(io, d->open, &d->n_open, sizeof d->open[0], PP_OPEN_ESCALATIONS);
+        pp_io_open(io, d);
         if (io->ok && !io->p)
             for (size_t k = 0; k < d->n_open; k++)
-                if (d->open[k].request_len > PP_REQUEST_MAX || d->open[k].answered > 1) io->ok = 0;
+                if (d->open[k].request_len > PP_REQUEST_MAX || d->open[k].answered > 1 ||
+                    d->open[k].command_len > PP_COMMAND_MAX)
+                    io->ok = 0;
         break;
     case PP_PART_SET_FLOOR: case PP_PART_SET_FALLBACK: case PP_PART_SET_CEILING: {
         pp_install_set *set = &d->sets[index - pp_part_index(PP_PART_SET_FLOOR)];
