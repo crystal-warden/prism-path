@@ -666,3 +666,59 @@ def test_case_255_the_controller_takes_a_commit_from_the_fields_of_any_record(tm
             fleet.rig.pep.record("beat")
             fleet.send()
             assert rollout.members[fleet.pep_id] == "committed"
+
+
+# ------------------------------------------------------------------ C6, H14, FB8, CL3: install sets while reconciling
+
+KEYS = ["N1", "N2", "N3"]
+
+
+def test_case_266_a_new_fallback_policy_and_a_ceiling_lapse_reconcile_and_send_what_they_owed(tmp_path):
+    """case_266: C6, H14, FB8, CL3. A `host` PEP under its fallback policy applies a new fallback policy whose
+    runtime step fails, and another has its release lapsed by a ceiling whose runtime step fails. Each is
+    `reconciling`, the first entry owes 11 (`install-applied`) and the second 10 (`fallback`) with
+    `dist:above-ceiling`, and each sends that record, the first with the new fallback policy running and the second
+    with the held fallback policy, once a try works."""
+    from prismpath.distribution import install, kinds
+    fallback_kind, ceiling_kind = "install.fallback", "install.ceiling"
+    from prismpath.tests.test_distribution_floor import table
+    first, second, narrower_table = _dist.image(9), table("cmd == 1", "cmd == 2"), table("cmd == 1")
+
+    under = FlakyHost(tmp_path / "under", install_keys=["N1", "N2", "N3"], install_threshold=2)
+    held = under.send(under.install_set(fallback_kind, {"policy.ppt": second}, 1, widens=True))[-1]
+    assert held.event == "install-widened" and under.pep.fallback_decides() and under.host_active() == H(second)
+    under.pep.drain()
+    under.switches.set(True, False)
+    narrower = under.install_set(fallback_kind, {"policy.ppt": narrower_table}, 2, widens=False, replaces=H(second))
+    change = install.seal_change(narrower[0][0], [_dist.GEN.test_key(name) for name in KEYS[:2]])
+    assert under.send([change])[-1].event == "staged"
+    entered = under.send(narrower)[-1]
+    assert (entered.event, entered.cause) == ("reconciling", None), entered
+    assert (entered.reconciling.owed, entered.reconciling.cause) == ("install-applied", None)
+    assert under.pep.installed.fallback.policy_sha256 == H(narrower_table)       # the set is held, the runtime is not
+    assert under.pep.decide(lambda: "ran")["cause"] == "dist:reconciling"
+    assert under.pep.tick() is None
+    under.switches.set(False, False)
+    left = under.read(under.pep.tick())
+    assert (left.event, left.state, left.cause) == ("install-applied", "no-policy", None)
+    assert left.fallback and under.host_active() == H(narrower_table)
+    assert under.pep.decide(lambda: "ran")["basis"] == "fallback"
+
+    lapsed = FlakyHost(tmp_path / "lapsed", install_keys=KEYS, install_threshold=2)
+    wide = lambda seq, replaces, *tables: lapsed.install_set(  # noqa: E731
+        ceiling_kind, {kinds.POLICY_LIST: install.ceiling_body(tables)}, seq, widens=False, replaces=replaces)
+    assert lapsed.send(wide(1, "", first, OLD))[-1].event == "install-applied"
+    lapsed.send(lapsed.install_set(fallback_kind, {"policy.ppt": first}, 1, widens=True))
+    lapsed.commit(OLD)
+    lapsed.pep.drain()
+    lapsed.switches.set(True, False)
+    narrower = lapsed.send(wide(2, lapsed.pep.installed.record.sets[ceiling_kind].policy_sha256, first))
+    assert narrower[-1].event == "install-applied"
+    entered = next(record for record in lapsed.records() if record.event == "reconciling")
+    assert (entered.state, entered.reconciling.owed, entered.reconciling.cause) \
+        == ("reconciling", "fallback", "dist:above-ceiling")
+    assert lapsed.pep.active is None and lapsed.pep.decide(lambda: "ran")["cause"] == "dist:reconciling"
+    lapsed.switches.set(False, False)
+    left = lapsed.read(lapsed.pep.tick())
+    assert (left.event, left.cause, left.state) == ("fallback", "dist:above-ceiling", "no-policy")
+    assert left.fallback and lapsed.host_active() == H(first)
