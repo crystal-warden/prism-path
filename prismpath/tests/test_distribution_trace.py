@@ -57,7 +57,7 @@ PARTIAL["P"] = PARTIAL["P"] | frozenset({193, 194})
 # 223: the `host` and `mesh` floors' `meta` is read as their `policy.ppt`'s, and the `xdp` part waits for its kind.
 PARTIAL["P"] = PARTIAL["P"] | frozenset({187, 223, 225})
 PENDING = {
-    "P": "104-105 164 187 191 193-194 206 223 225 266 272-273",
+    "P": "104-105 164 187 193-194 206 223 225 272-273",
     "R": "272",
     "C": "97 104-105 122 202 230 235 269 281",
 }
