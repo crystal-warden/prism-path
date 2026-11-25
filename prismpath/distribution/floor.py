@@ -52,7 +52,7 @@ MAX_OPEN = 8                                       # OP3: the open escalations a
 ESCALATING = frozenset({"agent", "gateway", "cfs"})        # AF2, OP1: the kinds whose policy form escalates
 ROLES = ("command", "parameter", "independent", "proposer")    # AF10
 # AF9: the action field of each kind and the tools of an `agent` that change files
-ACTION = {"agent": "tool", "gateway": "path_class"}
+ACTION = {"agent": "tool", "gateway": "path_class", "xdp": "net_dest"}
 CHANGES = frozenset({"write_file", "delete_path", "git"})
 ALLOW, ESCALATE, REFUSE = "allow", "escalate", "refuse"
 
@@ -233,6 +233,8 @@ def _core_rule_problem(kind: str, rule: dict, layout: Optional[dict]) -> Optiona
     if kind == "gateway":
         if value in ("other", "unknown") or equal.get("method_class") in (None, "other", "unknown"):
             return "a gateway floor rule tests `path_class` and `method_class` for equality, never `other` or `unknown`"
+    if kind == "xdp" and value in ("other", "unknown"):
+        return "an xdp floor rule tests the destination class `net_dest` for equality, never `other` or `unknown`"
     return None
 
 
@@ -402,6 +404,19 @@ def narrow(kind: str, named: str, body: bytes, meta: Mapping[str, Any], layout: 
             return BROAD                               # AF9: at most 8 entries, each one full name
         kinds.read_hosts(body)
         return None
+    if named == "net.dests" and kind == "xdp":
+        table = kinds.load_canonical(body, "net.dests")
+        classes = [hosts for name, hosts in table.items() if name != "format"] if isinstance(table, dict) else [None]
+        if not all(isinstance(hosts, dict) for hosts in classes):
+            return BROAD
+        entries = [(host, addresses) for hosts in classes for host, addresses in hosts.items()]
+        if len(entries) > MAX_RULES or any(not isinstance(host, str) or "*" in host or "." not in host.strip(".")
+                                           or not isinstance(addresses, list) or len(addresses) != 1
+                                           for host, addresses in entries):
+            return BROAD                               # AF9: at most 8 entries, each one full name at one address
+        return None
+    if named == "net.edge" and kind == "xdp":
+        return None                                    # AF9: held byte for byte to what the two above compile to (V11)
     if named == "gateway.routes":
         routes = kinds.read_routes(body)
         return BROAD if len(routes.entries) > MAX_RULES or any(prefix for _b, prefix, _n in routes.entries) else None
@@ -712,9 +727,10 @@ class Book:
 
     @staticmethod
     def _window(slot: List[int], rate: Mapping[str, int], now: int) -> List[int]:
-        """A fixed window of the PEP's own time: a new one starts once `window` seconds passed since the start."""
+        """A fixed window of the PEP's own time: a new one starts once `window` seconds passed since the start. A time
+        before the start, a clock set back, keeps the window and its count, so it never grants a fresh allowance."""
         start, count = slot
-        if count == 0 or now >= start + rate["window"] or now < start:
+        if count == 0 or now >= start + rate["window"]:
             return [now, 0]
         return [start, count]
 

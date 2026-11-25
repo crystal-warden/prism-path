@@ -109,6 +109,7 @@ prismpath = ["flows/*.md",                    # example + reference flows
 markers = [
     "cross_language: drives a second language toolchain (cargo, rustc); excluded from single language legs",
     "fresh_needs: walks the profile's reading domain every time instead of sharing the walk within the test session",
+    "parity: runs one corpus through more than one implementation (Python, the Rust test binary, the C harness) and compares the result lists row by row",
     "checkpoint: an exhaustive check (every documented option) that the per push jobs deselect and the checkpoint workflow runs; a seeded sample of it runs on every push",
 ]
 

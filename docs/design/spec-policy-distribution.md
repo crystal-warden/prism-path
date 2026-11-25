@@ -1543,6 +1543,7 @@ written. If another change lands first the numbers move up together and the name
 | 167 | `dist:floor-broad` | envelope | An action floor with a default or catch all, a rule that names no one action or lacks a required test, a test of a field that is not independent, or more rules or entries than its bound |
 | 168 | `dist:answer-unbound` | authority | An operator's answer that names no open escalation of this PEP, or one already answered |
 | 169 | `dist:reconciling` | state | A decision the action floor and the fallback policy leave, a commit or a rollback asked of a PEP whose runtime may not run what it holds (C6), and the controller's finding for it |
+| 170 | `dist:save-failed` | state | A floor override or an operator's answer `allow` refused because the write that saves its count or its answered mark before the PEP acts did not take (AF8, OP3, OP4) |
 
 Reused as they are. `sig:invalid` (2), `sig:revoked-key` (3), `wire:codebook-mismatch` (51),
 `document:not-canonical` (103), and the causes of the artifact checks of section 3.

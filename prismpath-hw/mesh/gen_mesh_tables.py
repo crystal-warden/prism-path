@@ -194,13 +194,15 @@ class Signer:
                                     expires=expires)
         return statements.build(read, key or self.controller)
 
-    def floor(self, body: bytes, seq: int = 1) -> tuple:
-        """An action floor of the table `body` (section 21, IS1), signed by every install key the signer holds."""
+    def floor(self, body: bytes, seq: int = 1, rate: Optional[dict] = None) -> tuple:
+        """An action floor of the table `body` (section 21, IS1), signed by every install key the signer holds, with
+        the signed `rate` of AF8 when one is given."""
         policy = canon.sha256_hex(body)
+        meta = {"as": "policy.ppt", "command": 0, "layout": layout_sha256(), **({"rate": rate} if rate else {})}
         # written as a document here, since the Python envelope writer does not take the install kinds yet
         envelope_bytes = canon.canon2_bytes({
             "artifact": "install.floor", "body_sha256": policy, "body_size": len(body), canon.ENCODING_KEY: canon.CANON2,
-            "expires": 0, "format": env.FORMAT, "meta": {"as": "policy.ppt", "command": 0, "layout": layout_sha256()},
+            "expires": 0, "format": env.FORMAT, "meta": meta,
             "not_before": NOT_BEFORE, "policy_sha256": policy, "release": env.release_id([("policy.ppt", policy)]),
             "replaces": "", "seq": seq, "stream": self.stream, "targets": ["mesh"], "widens": True})
         return env.seal(envelope_bytes, self.install), body

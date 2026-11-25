@@ -63,6 +63,7 @@
 #define PP_CAUSE_FLOOR_RATE 166           /* dist:floor-rate */
 #define PP_CAUSE_FLOOR_BROAD 167          /* dist:floor-broad */
 #define PP_CAUSE_ANSWER_UNBOUND 168       /* dist:answer-unbound */
+#define PP_CAUSE_SAVE_FAILED 170          /* dist:save-failed */
 
 /* ------------------------------------------------------------------ bounds */
 #define PP_MAX_ENVELOPE 2048  /* E6 */
@@ -137,6 +138,7 @@ typedef enum {
     PP_ART_TRUST_CONTROLLER,                                                                   /* K7 */
     PP_ART_TRUST_CHANGE,                                                                       /* W10 */
     PP_ART_INSTALL_CHANGE,                                                                     /* IS14 */
+    PP_ART_IDENTITY_BUNDLE, PP_ART_IDENTITY_MAP, /* E8, ID8: known, used by no kind this core has (a gateway's) */
     PP_ART_COUNT
 } pp_artifact;
 
@@ -483,7 +485,7 @@ uint8_t *pp_held_body(pp_release *release, size_t k);
  * counter alone. A restart opens the PEP from the parts it can read. A commit and a rollback write the intent
  * (pending), a commit the floor, then one call each in this order: previous, active, staged, then the intent
  * cleared. Each call names one part, so a power loss between two calls leaves a known state (pp_flip). */
-#define PP_PART_ANCHOR 1     /* provisioned, the stream and the expiry response (P2, X10) */
+#define PP_PART_ANCHOR 1     /* provisioned, the stream, the expiry response and the marks of IS9, IS10 (P2, X10) */
 #define PP_PART_COUNTER 2    /* the state record counter (H3) */
 #define PP_PART_TRUST 4      /* the trust store (K1) */
 #define PP_PART_FLOOR 8      /* the floor (Q1) */
@@ -501,7 +503,11 @@ uint8_t *pp_held_body(pp_release *release, size_t k);
 #define PP_PART_SET_FLOOR 1024    /* the action floor held and the one staged (IS4) */
 #define PP_PART_SET_FALLBACK 2048 /* the fallback policy held and the one staged */
 #define PP_PART_SET_CEILING 4096  /* the ceiling held and the one staged */
-#define PP_PART_COPIED (PP_PART_INSTALL | PP_PART_RATES | PP_PART_SET_FLOOR | PP_PART_SET_FALLBACK | PP_PART_SET_CEILING)
+/* The anchor part is copied too, since it holds the marks of IS9 and IS10. A PEP that holds no copy of its anchor
+ * part and holds another part lost the anchor (the caller unpacks it from bytes that are not the part, P1, IS9): it
+ * is locked, reports dist:install-lost and keeps both marks, and is never taken for a PEP never provisioned. */
+#define PP_PART_COPIED (PP_PART_ANCHOR | PP_PART_INSTALL | PP_PART_RATES | PP_PART_SET_FLOOR | PP_PART_SET_FALLBACK | \
+                        PP_PART_SET_CEILING)
 #define PP_PART_FRESH 8192   /* H16: the latest fresh controller statement, where freshness is on */
 #define PP_PART_COUNT 14
 #define PP_PARTS 16383
@@ -606,7 +612,7 @@ typedef struct {
     int install_reads;          /* the install record part read */
     int has_install;            /* the PEP holds an install record */
     pp_install install;
-    int rates_reads;
+    int rates_reads;            /* 0: a PEP opened with it starts each window of AF8 and OP4 spent (PP_RATE_SPENT) */
     long long rate_start[PP_FLOOR_RULES]; /* AF8: the window of each floor rule and the overrides counted in it */
     uint32_t rate_count[PP_FLOOR_RULES];
     int has_kept;               /* H16: a fresh statement is kept, its bytes, its expires and the time it was kept */
@@ -621,8 +627,13 @@ typedef struct {
     pp_install_set sets[PP_SETS]; /* last, so a provisioning clears all before it and keeps these (IS6) */
 } pp_durable;
 
-/* Write the `parts` (PP_PART_* bits) of `durable` that changed, each whole. */
-typedef void (*pp_persist_fn)(void *context, const pp_durable *durable, int parts);
+/* A count no copy of the rates part held: the window is spent, so a lost part grants no fresh allowance (AF8, OP4). */
+#define PP_RATE_SPENT 0xFFFFFFFFu
+
+/* Write the `parts` (PP_PART_* bits) of `durable` that changed, each whole. 0 when every write took, nonzero when
+ * one did not: the PEP then refuses an override or an operator's `allow` it saves first with dist:save-failed (AF8,
+ * OP3, OP4). */
+typedef int (*pp_persist_fn)(void *context, const pp_durable *durable, int parts);
 /* What the runtime runs: the active release, or with `fallback` set the fallback policy's table when no release
  * decides (FB1), or nothing (NULL), when the runtime refuses (X3). */
 typedef void (*pp_runtime_fn)(void *context, const pp_release *active, const pp_statement *fallback);
@@ -678,10 +689,16 @@ typedef struct {
  * what is used is written. pp_durable_pack answers the length of `part`, 0 when `room` is too small.
  * pp_durable_unpack reads one part into `out`, given NULL when the store holds none of it: answered 0, or -1 for
  * bytes that are not the part, which leaves that part as one that does not read (an anchor or a floor that does
- * not read locks the PEP, a trust store that does not read counts nothing, Q5, K1). Clear `out` before the first. */
+ * not read locks the PEP, an anchor that does not read keeps every mark of IS9 and IS10 set, a trust store that does
+ * not read counts nothing, rates that do not read start every window spent, Q5, K1, AF8). Clear `out` before the
+ * first. */
 #define PP_PART_PACKED_MAX (2 * (PP_MAX_SEALED + PP_INSTALL_BODY_MAX + 512) + 1024) /* the largest part, a set */
 size_t pp_durable_pack(const pp_durable *d, int part, uint8_t *out, size_t room);
 int pp_durable_unpack(pp_durable *out, int part, const uint8_t *bytes, size_t len);
+/* P1, IS9, IS10: after every part is unpacked, `held` the parts (PP_PART_* bits) of which the store held a copy, read
+ * or not. An anchor part no copy holds while another part is held is one the PEP lost, not a PEP never provisioned:
+ * it is left as an anchor that does not read, so the PEP is locked and keeps its marks. */
+void pp_durable_held(pp_durable *d, int held);
 
 /* Open the PEP from what it holds durably (NULL for a PEP never provisioned), finishing or reporting an
  * interrupted commit (C4). 0, or -1 when the PEP refuses to start: HOLD on a kind without it, an expiry
@@ -727,7 +744,10 @@ typedef struct {
  * anchor whose keys are not apart (K4, dist:rotation-invalid), whose install trust sequence is below the PEP's or at
  * it with another key set (dist:trust-replay), whose domain is not the PEP's (dist:target-mismatch), or a brought
  * statement that staging in order would refuse, under the record the provisioning leaves and the sets brought
- * before it, but dist:seq-replay, which is refused and reported beside provisioned (case 170). */
+ * before it, but dist:seq-replay, which is refused and reported beside provisioned (case 170). The statements are
+ * held to what the PEP keeps when it is locked, as by a lost anchor part (P1, IS9). A provisioning whose save did not
+ * take is dist:save-failed with the PEP locked and nothing it brought staged, since the store no longer holds what the
+ * PEP does. */
 uint8_t pp_pep_provision_install(pp_pep_machine *pep, const pp_trust *anchor, const pp_install_anchor *install,
                                  const char *stream, const pp_brought *brought, size_t n_brought, long long now);
 

@@ -497,7 +497,7 @@ def test_case_225_an_answer_reaches_only_a_kind_with_escalation_and_never_moves_
     """case_225: V5, V13, OP1, OP2, the `host`, `mesh` and `cfs` halves. A `host` and a `mesh` PEP are each sent a
     well signed `operator.answer` and refuse it with `dist:target-mismatch`, and a cFS app with an install threshold
     of 2 and an open floor escalation applies a good answer whose `not_before` is above its time floor, which does
-    not move. The `xdp` half waits for its kind."""
+    not move. The `xdp` half is in prismpath/tests/test_distribution_xdp.py."""
     from prismpath.tests.test_distribution_floor import HostFloor, MeshFloor
     for cls, kind in ((HostFloor, "host"), (MeshFloor, "mesh")):
         other = cls(tmp_path / kind, install_keys=["N1", "N2", "N3"], install_threshold=2, operators=["O1"])

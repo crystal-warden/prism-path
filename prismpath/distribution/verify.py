@@ -333,6 +333,9 @@ def _verify_install(envelope, entries, message: bytes, body: bytes, trust: Trust
             return Verdict("dist:target-mismatch", envelope)                  # IS14: only host and mesh take it
     elif artifact != install.TRUST:
         _needed, allowed = kinds.install_form(pep.kind, artifact)
+        if artifact == install.FLOOR and named == "agent.zones" and pep.kind in envelope.targets \
+                and named in kinds.install_form(pep.kind, install.FALLBACK)[1]:
+            return Verdict(kinds.BAD_FORMAT, envelope)                        # IS3: an action floor holds no zone
         if pep.kind not in envelope.targets or not (named in allowed or named == kinds.NONE):
             return Verdict("dist:target-mismatch", envelope)
     listed = artifact in (install.TRUST, install.CHANGE) or named == kinds.POLICY_LIST

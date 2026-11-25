@@ -555,7 +555,7 @@ def test_case_187_the_real_home_asks_its_floor_first_in_the_hook_the_proxies_and
     `policy.core` allows a call allows it through the hook and through the MCP proxy, with basis `floor` and a receipt
     of the floor's own run, and its egress proxy reaches a host of the floor's `egress.hosts`. Its running sandbox
     profile is the one compiled from the release's policy and the floor's together. The `gateway` part is in
-    test_distribution_gateway.py and the `xdp` part waits for its kind."""
+    test_distribution_gateway.py and the `xdp` part in test_distribution_xdp.py."""
     from prismpath.agent import egress_policy, mcp_proxy, profile as profiles
     from prismpath.distribution import floor as floors
     monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)    # the hook is given HOME only, so both find one home

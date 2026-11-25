@@ -1209,7 +1209,7 @@ def test_case_223_a_table_floor_s_meta_is_read_as_its_policy_ppt_s(tmp_path):
     """case_223: IS1, IS5, the `host` and `mesh` parts. A `host` PEP refuses a floor whose `meta` carries `counts`
     that differ from the table with `manifest:count-mismatch` and one with no `qualification` with
     `dist:bad-format`, and applies one whose members are those of its `policy.ppt`. A `mesh` PEP applies a floor whose
-    `meta` holds `counts` as a string, since it skips it. The `xdp` part waits for its kind."""
+    `meta` holds `counts` as a string, since it skips it. The `xdp` part is in test_distribution_xdp.py."""
     from prismpath.tests.test_distribution_floor import HostFloor
     body = table("cmd == 3 and p >= 2 and p <= 5")
     host = _table_point(HostFloor, tmp_path, "host")

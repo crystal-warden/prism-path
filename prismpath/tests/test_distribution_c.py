@@ -553,6 +553,35 @@ def test_case_035_036_037_120_121_the_assembler_answers_frame_for_frame_as_frame
 
 
 
+def test_case_122_an_ordered_link_stages_chunks_in_order_and_drops_a_chunk_out_of_order(host_check):
+    """case_122: B11. On an ordered link the chunks of each part in offset order are staged, and a chunk out of order,
+    one repeated, or one that skips ahead drops the transfer with dist:frame-invalid, as frames.Assembler does. A link
+    not declared ordered takes the same out of order chunks."""
+    frames = _frames_module()
+    case = next(case for case in C_CASES if case["name"].startswith("001_round_trip"))
+    sealed, body = bytes.fromhex(case["sealed"]), bytes.fromhex(case["body"])
+    invalid = f"dropped {causes.NAMES['dist:frame-invalid']}"
+    for limit in (64, 250):
+        offer, *chunks = frames.frames_for(7, sealed, body, limit)
+        sealed_chunks = [data for data in chunks if frames.decode(data).part == frames.SEALED]
+        assert len(sealed_chunks) >= 3, limit
+        runs = {"in order": [offer, *chunks], "second first": [offer, sealed_chunks[1]],
+                "skips one": [offer, sealed_chunks[0], sealed_chunks[2]],
+                "repeat": [offer, sealed_chunks[0], sealed_chunks[0]],
+                "reversed": [offer, *reversed(sealed_chunks)]}
+        for name, run in runs.items():
+            sequence = [(data, 10 * index) for index, data in enumerate(run)]
+            got = _c_events(host_check, case, sequence, ordered=True, limit=limit)
+            assert got == _python_events(frames, case, sequence, ordered=True, limit=limit), (name, limit)
+            if name == "in order":
+                assert got[-1].startswith("whole ") and invalid not in got
+            else:
+                assert got[-1] == invalid or invalid in got, (name, limit)
+        loose = [(data, 10 * index) for index, data in enumerate(runs["reversed"] + chunks[len(sealed_chunks):])]
+        got = _c_events(host_check, case, loose, ordered=False, limit=limit)
+        assert got == _python_events(frames, case, loose, ordered=False, limit=limit) and invalid not in got
+
+
 # ------------------------------------------------------------------ the trust statements, against pep.py
 
 def _revoke(seq: int, now: int, signer: str = "A", **lists) -> tuple:
@@ -1525,6 +1554,136 @@ def test_case_170_a_provisioning_never_lowers_the_install_part_and_a_disjoint_ke
     assert _refused(out[12])[0] == "sig:revoked-key"
 
 
+def _anchor_docs(**install):
+    """The anchor documents the owner's tool writes for a mesh node: a `/1`, and a `/2` with an install member whose
+    keys, threshold, operators and domain are `install`'s, or with none when `install` is empty."""
+    from integrations.cfs.ground import provision as ground
+    from prismpath.distribution import trust
+    v1 = trust.anchor_bytes([_pub("A")], target="mesh", stream=S)
+    keys = [_pub(name) for name in install.pop("keys", ())]
+    second = ground.anchor_document([_pub("A")], controller_public=_pub("C"), stream=S, target="mesh",
+                                    install_publics=keys, threshold=install.pop("threshold", 2),
+                                    operator_publics=[_pub(name) for name in install.pop("operators", ())],
+                                    domain=install.pop("domain", DOMAIN))
+    return v1, second
+
+
+def test_case_230_the_anchor_brings_the_install_keys_to_the_install_record(host_check):
+    """case_230: P4, CL4, K3, K4, the mesh half. A `/1` anchor that holds an `install` member is not read
+    (dist:bad-format), a `/2` anchor whose domain is not the hash of the domain the PEP was built with is refused at
+    provisioning (dist:target-mismatch), and a good `/2` anchor provisions with the install keys in the install record
+    and none in the trust store, so a release signed by an install key is dist:unknown-key."""
+    from prismpath.kernel import canon2
+    v1, good = _anchor_docs(keys=("J", "K"))
+    doc = canon2.loads(good)
+    first = canon2.dumps({"encoding": "canon/2", "format": "prismpath.dist-trust/1", "install": doc["install"],
+                          "keys": doc["keys"], "stream": S, "target": "mesh", "threshold": 1})
+    _v1, other = _anchor_docs(keys=("J", "K"), domain="00" * 32)
+    release = _dist.seal("policy.ppt", RELEASE, seq=1, targets=("mesh",), widens=True, signer="J")
+    out = _run21(host_check, [
+        *_node(), "anchor_clear", f"anchor_doc {first.hex()}", "anchor_clear", f"anchor_doc {other.hex()}",
+        f"provision {S} {N}", "installid", "anchor_clear", f"anchor_doc {good.hex()}", f"provision {S} {N}", "installid",
+        f"stage {release.hex()} {RELEASE.hex()} {N}"])
+    assert out[0] == f"anchor {causes.code('dist:bad-format')} - - -"
+    assert out[1].startswith(f"anchor 0 {S} mesh ")
+    assert out[2] == f"provision-refused {causes.NAMES['dist:target-mismatch']}"
+    assert out[3] == f"installid {'0' * 32}"                      # a refused provisioning leaves no install record
+    held = _install_id(trust_id=hashlib.sha256(good).hexdigest())
+    assert _last(out[5])["event"] == "provisioned" and out[6] == f"installid {held}"
+    assert _refused(out[7])[0] == "dist:unknown-key"
+    # the install keys are held by the install record alone: a floor signed by two of them applies
+    out = _run21(host_check, [*_node(), "anchor_clear", f"anchor_doc {good.hex()}", f"provision {S} {N}",
+                              _stage(_install("install.fallback", FALLBACK, seq=1))])
+    assert _last(out[2])["event"] == "install-widened"
+
+
+def test_case_235_an_anchor_without_an_install_part_leaves_the_install_record(host_check):
+    """case_235: P4, P2, K4, the mesh half. An anchor whose `keys` holds an entry in the role `install` is
+    dist:bad-format. A PEP that holds an install record is provisioned with a `/1` anchor and with a `/2` anchor with no
+    `install` member, its install id (the sets, their sequences and the key state) unchanged each time, and refuses a
+    `/1` anchor whose authority key is a held install key and one whose authority key is an operator key it
+    retired."""
+    from prismpath.distribution import trust
+    from prismpath.kernel import canon2
+    v1, no_install = _anchor_docs()
+    role = canon2.dumps({**canon2.loads(no_install), "keys": {_kid("A"): {"public": _pub("A").hex(), "role": "install"}}})
+    retire = _install("install.trust", _trust_body(("J", "K"), 2, ("O1",)), seq=1, signers=("J", "K"))
+    floor = _install("install.floor", FLOOR, seq=1)
+    out = _run21(host_check, [
+        *_node(), "anchor_clear", f"anchor_doc {role.hex()}",
+        *_anchor(("J", "K"), operators=("O1", "O2"), bring=[floor]), f"provision {S} {N}", _stage(retire), "installid",
+        "anchor_clear", f"anchor_doc {v1.hex()}", f"provision {S} {N}", "installid",
+        "anchor_clear", f"anchor_doc {no_install.hex()}", f"provision {S} {N}", "installid",
+        *(line for name in ("J", "O2") for line in (
+            "anchor_clear", f"anchor_doc {trust.anchor_bytes([_pub(name)], target='mesh', stream=S).hex()}",
+            f"provision {S} {N}", "installid"))])
+    assert out[0] == f"anchor {causes.code('dist:bad-format')} - - -"
+    assert _last(out[2])["event"] == "install-widened"
+    before = out[3]
+    assert before.startswith("installid ") and before != f"installid {'0' * 32}"
+    assert out[6] == out[9] == before                       # the older anchor and the one with no install part
+    assert _last(out[5])["event"] == "provisioned" and _last(out[8])["event"] == "provisioned"
+    refused = f"provision-refused {causes.NAMES['dist:rotation-invalid']}"
+    assert out[11] == out[14] == refused and out[12] == out[15] == before
+
+
+def test_case_097_the_c_targets_have_no_hatch_in_any_build_and_the_check_runs(host_check):
+    """case_097: D1, D2, the C half. The `mesh` and `cfs` targets have no escape hatch (D2), so the core and the cFS
+    app read no environment variable and name no hatch switch, a build that does not define PPT_DEV_BUILD sets no bit 6
+    in its state record (D3), and an envelope whose signature was skipped, with the hatch variables of the other
+    targets set, is refused by the same check as without them."""
+    import os
+    sources = [*DIST.glob("pp_dist.[ch]"), *(ROOT / "integrations" / "cfs" / "prismpath_app" / "fsw" / "src").glob("*.[ch]")]
+    assert len(sources) >= 6
+    named = {path.name: sorted(set(re.findall(r"getenv|secure_getenv|allow[_-]unsigned|allow[_-]unverified|hatch[_-]allowed",
+                                              path.read_text(encoding="utf-8"), re.IGNORECASE))) for path in sources}
+    assert {name: found for name, found in named.items() if found} == {}
+    assert "PPT_DEV_BUILD" not in " ".join(FLAGS)
+    good = _install("install.fallback", FALLBACK, seq=1)
+    envelope_bytes, entries = env.unseal(bytes.fromhex(good[0]))
+    unsigned = env.seal_entries(envelope_bytes, [(entries[0][0], bytes(64))])         # its signature skipped
+    lines = [*_node(), *_anchor(), f"provision {S} {N}", f"stage {unsigned.hex()} {FALLBACK.hex()} {N}", "record 0 %d" % N,
+             "done"]
+    hatches = {"PPT_NET_ALLOW_UNVERIFIED": "1", "PRISMPATH_ALLOW_UNSIGNED": "1", "PPT_DEV_BUILD": "1"}
+    runs = [subprocess.run([str(host_check)], input="\n".join(lines) + "\n", capture_output=True, text=True, timeout=60,
+                           env={**os.environ, **extra}) for extra in ({}, hatches)]
+    assert all(done.returncode == 0 for done in runs), [done.stderr for done in runs]
+    assert runs[0].stdout == runs[1].stdout
+    out = runs[0].stdout.splitlines()
+    cause, _subject = _refused(out[1])
+    assert cause == "sig:invalid"
+    for item in (*out[1].split()[1:], *out[2].split()[1:]):
+        assert not bytes.fromhex(item)[6] & 0x40            # D3: no dev build bit in a build that is not a dev build
+
+
+def _identity_stages() -> list:
+    """The stage lines of an envelope of `identity.bundle` and one of `identity.map`, each for target `gateway`, and one
+    of the artifact `identity.other` that the list does not hold, each signed by the authority key A (E8, ID8)."""
+    lines = []
+    for artifact in ("identity.bundle", "identity.map"):
+        body = canon.canon2_bytes({"encoding": "canon/2", "format": f"prismpath.dist-{artifact.replace('.', '-')}/1"})
+        lines.append(f"stage {_dist.seal(artifact, body, seq=2, targets=('gateway',)).hex()} {body.hex()} {N}")
+    body = canon.canon2_bytes({"encoding": "canon/2"})
+    raw = canon.canon2_bytes({
+        "artifact": "identity.other", "body_sha256": canon.sha256_hex(body), "body_size": len(body), "encoding": "canon/2",
+        "expires": E, "format": "prismpath.dist/1", "meta": {}, "not_before": NB, "policy_sha256": canon.sha256_hex(body),
+        "release": env.release_id([("identity.map", canon.sha256_hex(body))]), "replaces": "", "seq": 1, "stream": S,
+        "targets": ["gateway"], "widens": False})
+    return [*lines, f"stage {env.seal(raw, [G.test_key('A')]).hex()} {body.hex()} {N}"]
+
+
+def test_case_281_the_identity_kinds_are_artifacts_every_pep_reads_and_only_a_gateway_uses(host_check):
+    """case_281: E8, ID8, the mesh half (the `cfs` half is in test_distribution_c_cfs.py). An envelope of
+    `identity.bundle` and one of `identity.map` for target `gateway` read as well formed, so the PEP refuses each with
+    dist:target-mismatch and not dist:bad-format, an artifact name the list does not hold is still dist:bad-format,
+    and no state changes. The core has no `gateway` PEP, so what a gateway accepts is the Python and Rust halves'."""
+    out = _run21(host_check, [*_node(), *_anchor(None), f"provision {S} {N}", "installid", *_identity_stages(),
+                              "installid"])
+    assert [(_last(line)["event"], _last(line)["cause"]) for line in out[2:5]] == [
+        ("refused", "dist:target-mismatch"), ("refused", "dist:target-mismatch"), ("refused", "dist:bad-format")]
+    assert out[1] == out[5]
+
+
 def test_a_provisioning_refuses_a_brought_set_its_staging_would_refuse_and_keeps_a_seq_replay_record(host_check):
     """P2 step 3, CL3, IS10, IS12, the C half of the Python and Rust tests. A statement brought with an anchor is held,
     before anything changes, to what staging it in order meets, as pp_apply_set holds it: a fallback policy outside the
@@ -1565,6 +1724,39 @@ def test_a_provisioning_refuses_a_brought_set_its_staging_would_refuse_and_keeps
     assert [(one["event"], one["cause"]) for one in _recs(out[2])] == [("refused", "dist:seq-replay"),
                                                                        ("provisioned", None)]
     assert out[3] == f"installid {_install_id(fallback=(fallback2[0], 2))}"
+
+
+def test_a_pep_locked_by_a_lost_anchor_part_holds_a_provisioning_to_what_it_keeps(host_check):
+    """P1, P2 step 3, IS9, CL3 in the C core. A PEP with no copy of its anchor part is locked and keeps its install
+    record. A provisioning then holds what it brings to the ceiling that record keeps, as staging would after it: a
+    fallback policy outside it is dist:above-ceiling and leaves the PEP locked with its record as it was, and one
+    inside it is applied by a provisioning that unlocks the PEP."""
+    ceiling = _install("install.ceiling", _ceiling(FLOOR, FALLBACK), seq=1)
+    inside = _install("install.fallback", FALLBACK, seq=1)
+    out = _run21(host_check, [
+        *_node(), *_anchor(bring=[ceiling]), f"provision {S} {N}", "installid", "drop anchor", f"restart {N}",
+        *_anchor(bring=[_install("install.fallback", FALLBACK_B, seq=1)]), f"provision {S} {N}", "installid",
+        f"record 0 {N}", *_anchor(bring=[inside]), f"provision {S} {N}", "installid"])
+    assert [(one["event"], one["cause"], one["state"]) for one in _recs(out[2])] == [
+        ("refused", "dist:install-lost", "locked")]
+    assert out[3] == f"provision-refused {causes.NAMES['dist:above-ceiling']}"
+    assert out[4] == out[1] and _last(out[5])["state"] == "locked"
+    assert _last(out[6])["event"] == "provisioned" and _last(out[6])["state"] != "locked"
+    assert out[7] == f"installid {_install_id(fallback=(inside[0], 1), ceiling=(ceiling[0], 1))}"
+
+
+def test_a_provisioning_whose_save_did_not_take_is_refused_and_locks_the_pep(host_check):
+    """P2 step 3, AF8, OP3 in the C core. A provisioning writes the state it leaves before it stages what it brings.
+    When that write does not take it is dist:save-failed: the PEP is locked, since it no longer holds what its store
+    does, and stages nothing it brought, and a restart once the store takes writes again reads the state the store
+    kept."""
+    out = _run21(host_check, [
+        *_node(), *_anchor(), f"provision {S} {N}", "installid", "wfail 1",
+        *_anchor(bring=[_install("install.fallback", FALLBACK, seq=1)]), f"provision {S} {N}", f"record 0 {N}",
+        "wfail 0", f"restart {N}", "installid"])
+    assert out[2] == f"provision-refused {causes.NAMES['dist:save-failed']}"
+    assert _last(out[3])["state"] == "locked"
+    assert out[5] == out[1]
 
 
 def test_case_171_227_a_locked_pep_and_an_install_provisioning_keep_their_state(host_check):
@@ -1759,6 +1951,42 @@ def test_case_199_the_only_way_out_of_the_fallback_policy_is_a_commit(host_check
     assert [_refused(line)[0] for line in out[2:5]] == ["dist:floor-lost"] * 3
     assert _ask(out[5])["basis"] == "fallback"
     assert _last(out[6])["state"] == "no-policy" and _ask(out[7])["basis"] == "fallback"
+
+
+def test_case_202_a_new_fallback_policy_decides_at_once_or_waits_behind_the_release(host_check):
+    """case_202: FB8, IS12. A mesh PEP under its fallback policy decides under a narrower one and then a wider one at
+    once, with bit 4 still set and the wider one reported install-widened. A PEP with an active release is sent the
+    wider one with the same event, holds it while its release keeps deciding, and decides under it when the release
+    lapses."""
+    base = _install("install.fallback", FALLBACK, seq=1)
+    narrower = _install("install.fallback", FALLBACK_B, seq=2, widens=False, replaces=canon.sha256_hex(FALLBACK))
+    wide_table = _ppt([[0]], atoms=[(0, GE, INT, 50)])                      # allows a command of 50 and above
+    wider = _install("install.fallback", wide_table, seq=3, replaces=canon.sha256_hex(FALLBACK_B))
+    out = _run21(host_check, [
+        *_node(), *_anchor(bring=[base]), f"provision {S} {N}", f"ask {N} {_regs(150)} -",
+        _stage(_change("install.fallback", FALLBACK_B, 2, canon.sha256_hex(FALLBACK))), _stage(narrower),
+        f"ask {N} {_regs(150)} -", f"ask {N} {_regs(250)} -", _stage(wider), f"ask {N} {_regs(60)} -"])
+    assert _ask(out[1])["outcome"] == ALLOW and _ask(out[1])["basis"] == "fallback"
+    assert _last(out[2])["event"] == "staged"                                # IS15: the change statement first
+    applied = _last(out[3])
+    assert (applied["event"], applied["cause"], applied["fallback"]) == ("install-applied", None, True)
+    assert _ask(out[4])["outcome"] == REFUSE and _ask(out[5])["outcome"] == ALLOW
+    assert _ask(out[4])["basis"] == _ask(out[5])["basis"] == "fallback"
+    widened = _last(out[6])
+    assert (widened["event"], widened["fallback"], widened["subject"]) == ("install-widened", True, 2)
+    assert _ask(out[7])["outcome"] == ALLOW and _ask(out[7])["basis"] == "fallback"
+    # a PEP with an active release holds the wider one and its release keeps deciding
+    wide_table = _ppt([[0]], atoms=[(0, GE, INT, 1)])                       # allows what the release does not (3)
+    out = _run21(host_check, [
+        *_node(), *_anchor(bring=[_install("install.fallback", FALLBACK_B, seq=1)]),
+        f"provision {S} {N}", *_release_steps21(RELEASE, 1), _stage(_install("install.fallback", wide_table, seq=2)),
+        f"ask {N} {_regs(7)} -", f"ask {N} {_regs(3)} -", "installid", f"tick 0 {E}", f"ask {E} {_regs(3)} -"])
+    held = _recs(out[4])[-1]
+    assert (held["event"], held["fallback"], held["state"]) == ("install-widened", False, "active")
+    assert (_ask(out[5])["outcome"], _ask(out[5])["basis"]) == (ALLOW, "release")
+    assert (_ask(out[6])["outcome"], _ask(out[6])["basis"]) == (REFUSE, "release")
+    assert out[7] == f"installid {_install_id(fallback=(_install('install.fallback', wide_table, seq=2)[0], 2))}"
+    assert (_ask(out[9])["outcome"], _ask(out[9])["basis"]) == (ALLOW, "fallback")
 
 
 def test_case_204_205_everything_the_pep_decides_under_is_inside_its_ceiling(host_check):
@@ -2299,7 +2527,7 @@ def test_case_261_the_controller_key_signs_no_envelope_and_no_rotation_adds_it(h
 
 
 def test_case_269_a_node_cut_off_past_its_fresh_statement_lapses(host_check, tmp_path):
-    """case_269: H16, X1, X7, the `mesh` half (the `cfs` half waits for the cfs kind in the C core). With `fresh`
+    """case_269: H16, X1, X7, the `mesh` half (the `cfs` half is in test_distribution_c_cfs.py). With `fresh`
     3600 the node takes a fresh statement and, cut off for 3901 seconds, lapses with dist:expired, as pep.py does.
     A node built with HOLD is held instead, with bit 5 set."""
     script = [("provision", S, N), ("stage", _sealed(0, 1), BODIES[0].hex(), N), ("commit", S, 1, H[0], N),

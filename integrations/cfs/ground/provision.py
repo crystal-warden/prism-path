@@ -17,7 +17,8 @@ controller key the anchor names (K6). Into the build's `cf/` it writes
                      `install` member, whose domain is the SHA-256 of the app's layout document (CL4, AF10)
   pp_boot0.pps,      the boot release: the example table's widening statement and its sealed envelope with the
   pp_boot1.pps       table's image attestation, which the app stages and commits as if offered when it starts with
-                     no release active (a power on reset clears the floor and the release with the store)
+                     no release active (a first start, or after a lost record under MINIMUM; a power on reset of a
+                     provisioned app reads its record from its file and carries on)
 
 and signs `cf/pp_app_policy.tbl` in place (integrations/cfs/ground/table.py), which the app no longer loads at start.
 The ground keeps `KEYS`, and pins its `authority.pub` and `instance.pub` when it verifies a downlinked run.
