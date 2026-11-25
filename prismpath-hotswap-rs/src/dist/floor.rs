@@ -472,15 +472,34 @@ impl Book {
 
     /// AF8: count one override of `rule` under `rate`, durably, and answer (window start, count after it), or None
     /// when the rate is spent and nothing was counted. A fixed window of the PEP's own time starts once `window`
-    /// seconds passed since the start.
+    /// seconds passed since the start. A time before the start, a clock set back, keeps the window and its count.
     pub fn spend(&mut self, rule: &str, rate: super::install::Rate, now: i64) -> Result<Option<(i64, i64)>, HostError> {
         let (start, count) = self.rules.get(rule).copied().unwrap_or((0, 0));
-        let (start, count) = if count == 0 || now >= start + rate.window || now < start { (now, 0) } else { (start, count) };
+        let (start, count) = if count == 0 || now >= start + rate.window { (now, 0) } else { (start, count) };
         if count >= rate.allows {
             return Ok(None);
         }
         self.rules.insert(rule.to_string(), (start, count + 1));
         self.save()?;
         Ok(Some((start, count + 1)))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_clock_set_back_keeps_the_rate_window_and_its_count() {
+        // AF8, T1: a time before the window's start, a clock set back, grants no fresh allowance
+        let dir = std::env::temp_dir().join(format!("pp-book-{}", std::process::id()));
+        let paths = [dir.join("a/rates.json").display().to_string(), dir.join("b/rates.json").display().to_string()];
+        let mut book = Book::load(paths);
+        let rate = super::super::install::Rate { allows: 1, window: 60 };
+        let now = 1_800_003_600;
+        assert_eq!(book.spend("r", rate, now).unwrap(), Some((now, 1)));
+        assert_eq!(book.spend("r", rate, now - 100).unwrap(), None, "the window and its count stay");
+        assert_eq!(book.spend("r", rate, now + 60).unwrap(), Some((now + 60, 1)), "the next window allows again");
+        let _ = std::fs::remove_dir_all(dir);
     }
 }

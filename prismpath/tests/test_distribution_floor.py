@@ -927,6 +927,16 @@ def test_case_299_a_staged_change_statement_survives_a_restart(tmp_path, cls):
     assert (applied.event, applied.cause) == ("install-applied", None)
 
 
+def test_a_clock_set_back_keeps_the_rate_window_and_its_count(tmp_path):
+    """AF8, OP4, T1: a time before the start of a window, a clock set back, keeps the window and its count, so the
+    override and the operator `allow` it spent are not granted again, and the next window allows again."""
+    book = floor.Book((str(tmp_path / "a" / "rates.json"), str(tmp_path / "b" / "rates.json")))
+    rate = {"allows": 1, "window": 60}
+    assert book.spend("r", rate, NOW) == (NOW, 1) and book.spend_answer(rate, NOW) == (NOW, 1)
+    assert book.spend("r", rate, NOW - 100) is None and book.spend_answer(rate, NOW - 100) is None
+    assert book.spend("r", rate, NOW + 60) == (NOW + 60, 1) and book.spend_answer(rate, NOW + 60) == (NOW + 60, 1)
+
+
 # ------------------------------------------------------------------ AF5, IS5: the cost of the floor
 
 def _full_table(first: int, narrow: bool = False) -> bytes:

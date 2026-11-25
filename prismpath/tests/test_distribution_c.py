@@ -1567,6 +1567,39 @@ def test_a_provisioning_refuses_a_brought_set_its_staging_would_refuse_and_keeps
     assert out[3] == f"installid {_install_id(fallback=(fallback2[0], 2))}"
 
 
+def test_a_pep_locked_by_a_lost_anchor_part_holds_a_provisioning_to_what_it_keeps(host_check):
+    """P1, P2 step 3, IS9, CL3 in the C core. A PEP with no copy of its anchor part is locked and keeps its install
+    record. A provisioning then holds what it brings to the ceiling that record keeps, as staging would after it: a
+    fallback policy outside it is dist:above-ceiling and leaves the PEP locked with its record as it was, and one
+    inside it is applied by a provisioning that unlocks the PEP."""
+    ceiling = _install("install.ceiling", _ceiling(FLOOR, FALLBACK), seq=1)
+    inside = _install("install.fallback", FALLBACK, seq=1)
+    out = _run21(host_check, [
+        *_node(), *_anchor(bring=[ceiling]), f"provision {S} {N}", "installid", "drop anchor", f"restart {N}",
+        *_anchor(bring=[_install("install.fallback", FALLBACK_B, seq=1)]), f"provision {S} {N}", "installid",
+        f"record 0 {N}", *_anchor(bring=[inside]), f"provision {S} {N}", "installid"])
+    assert [(one["event"], one["cause"], one["state"]) for one in _recs(out[2])] == [
+        ("refused", "dist:install-lost", "locked")]
+    assert out[3] == f"provision-refused {causes.NAMES['dist:above-ceiling']}"
+    assert out[4] == out[1] and _last(out[5])["state"] == "locked"
+    assert _last(out[6])["event"] == "provisioned" and _last(out[6])["state"] != "locked"
+    assert out[7] == f"installid {_install_id(fallback=(inside[0], 1), ceiling=(ceiling[0], 1))}"
+
+
+def test_a_provisioning_whose_save_did_not_take_is_refused_and_locks_the_pep(host_check):
+    """P2 step 3, AF8, OP3 in the C core. A provisioning writes the state it leaves before it stages what it brings.
+    When that write does not take it is dist:save-failed: the PEP is locked, since it no longer holds what its store
+    does, and stages nothing it brought, and a restart once the store takes writes again reads the state the store
+    kept."""
+    out = _run21(host_check, [
+        *_node(), *_anchor(), f"provision {S} {N}", "installid", "wfail 1",
+        *_anchor(bring=[_install("install.fallback", FALLBACK, seq=1)]), f"provision {S} {N}", f"record 0 {N}",
+        "wfail 0", f"restart {N}", "installid"])
+    assert out[2] == f"provision-refused {causes.NAMES['dist:save-failed']}"
+    assert _last(out[3])["state"] == "locked"
+    assert out[5] == out[1]
+
+
 def test_case_171_227_a_locked_pep_and_an_install_provisioning_keep_their_state(host_check):
     """case_171: IS6, FB1. A locked PEP with a threshold of 2 applies a fallback policy and stays locked. case_227:
     IS13, IS6, P3. With a threshold of 1, a floor of section 6 at 7, a time floor a day ahead of its clock and a floor

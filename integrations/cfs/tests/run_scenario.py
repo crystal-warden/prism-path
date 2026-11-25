@@ -533,7 +533,10 @@ def run_bad_image(exe_dir: Path, keys: Path, check: Check, log) -> None:
     tp = topics()
     proposed_mid = CMD_BASE | tp["PROPOSED_CMD"]
     ground = Ground()
-    core = Core(exe_dir)                      # a power on reset: the store, its floor and its release are cleared
+    # a first start with no release: a power on reset of a provisioned app reads its record from its file and carries
+    # on with the release run_good committed, so the app's files go too and it provisions itself from its anchor
+    shutil.rmtree(exe_dir / "cf" / "ppdist", ignore_errors=True)
+    core = Core(exe_dir)
     try:
         core.wait_for(r"PRISMPATH_APP initialized")
         ground.connect()

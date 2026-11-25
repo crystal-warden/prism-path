@@ -8,6 +8,6 @@ CONFIG_ESP_MAIN_TASK_STACK_SIZE=16384
 # One build runs on every ESP32 classic board, the 26 MHz and the 40 MHz crystal alike.
 CONFIG_XTAL_FREQ_AUTO=y
 # The durable state is kept in NVS part by part on two partitions (partitions.csv): `nvs` for every part and
-# `nvs_copy` for the second copy of the install parts (IS10).
+# `nvs_copy` for the second copy of the anchor part and the install parts (IS9, IS10).
 CONFIG_PARTITION_TABLE_CUSTOM=y
 CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"

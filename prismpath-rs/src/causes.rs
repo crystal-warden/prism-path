@@ -11,7 +11,7 @@
 pub const CAUSE_NONE: u8 = 0;
 
 /// `registry_sha256()` of the Python registry when this file was generated.
-pub const REGISTRY_SHA256: &str = "bd4e4964001bb5f3db786a1f0178e86b07c8c36d42679f23fc23cbffc0c63a56";
+pub const REGISTRY_SHA256: &str = "8137137fbb97707b40ec4a2f73aac9f868244fa0c216772986c6e225690d534f";
 
 /// The cause class, the semantic axis of the registry.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -315,6 +315,8 @@ pub const DIST_FLOOR_BROAD: u8 = 167;
 pub const DIST_ANSWER_UNBOUND: u8 = 168;
 /// `dist:reconciling`
 pub const DIST_RECONCILING: u8 = 169;
+/// `dist:save-failed`
+pub const DIST_SAVE_FAILED: u8 = 170;
 
 /// Every registered cause, in registry order.
 pub const REGISTRY: &[Cause] = &[
@@ -453,6 +455,7 @@ pub const REGISTRY: &[Cause] = &[
     Cause { code: 167, name: "dist:floor-broad", class: CauseClass::Envelope, description: "an action floor with a default or catch all, a rule that names no one action or lacks a required test, a test of a field that is not independent, or more rules or entries than its bound" },
     Cause { code: 168, name: "dist:answer-unbound", class: CauseClass::Authority, description: "an operator's signed answer that names no open escalation of this enforcement point, or one already answered" },
     Cause { code: 169, name: "dist:reconciling", class: CauseClass::State, description: "a decision the action floor and the fallback policy leave, a commit or a rollback asked of an enforcement point whose runtime may not run what it holds, after the runtime step of a commit, a rollback, a lapse, an install set or a start failed; marked in every state record while it lasts and filed by the controller" },
+    Cause { code: 170, name: "dist:save-failed", class: CauseClass::State, description: "an action floor override or an operator's answer allow refused because the write that saves its count or its answered mark before the enforcement point acts did not take; the override is not allowed and the escalation stays open" },
 ];
 
 /// The engine's stop vocabulary mapped onto the registry; `terminal` and `waiting` are clean and have no cause.

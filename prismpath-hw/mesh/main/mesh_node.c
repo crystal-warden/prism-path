@@ -27,30 +27,42 @@ static void mesh_name(char name[8], int part) {
     name[3] = 0;
 }
 
-/* Each part the core says changed is packed and written whole under its own name (C4), and a part of section 21 to
- * both media (IS10), so a state record writes its counter and no more. */
-static void mesh_persist(void *context, const pp_durable *durable, int parts) {
+/* Each part the core says changed is packed and written whole under its own name (C4), and the anchor part and the
+ * parts of section 21 to both media (IS9, IS10), so a state record writes its counter and no more. Answers 0, or -1
+ * when a write or a commit did not take, so the core does not act on what it saved first (AF8, OP3). */
+static int mesh_persist(void *context, const pp_durable *durable, int parts) {
     mesh_node *node = context;
-    int touched[2] = {0, 0};
+    int touched[2] = {0, 0}, failed = 0;
     for (int part = 1; part <= PP_PARTS; part <<= 1) {
         if (!(parts & part)) continue;
         size_t n = pp_durable_pack(durable, part, node->packed, PP_PART_PACKED_MAX);
         char name[8];
         mesh_name(name, part);
         for (int medium = 0; medium < ((part & PP_PART_COPIED) ? 2 : 1); medium++) {
-            if (n == 0 || node->store.set(node->store.context, medium, name, node->packed, n) != 0) node->write_failures++;
-            else node->bytes_written += n;
+            if (n == 0 || node->store.set(node->store.context, medium, name, node->packed, n) != 0) {
+                node->write_failures++;
+                failed = 1;
+            } else {
+                node->bytes_written += n;
+            }
             touched[medium] = 1;
         }
     }
     for (int medium = 0; medium < 2; medium++)
-        if (touched[medium] && node->store.commit(node->store.context, medium) != 0) node->write_failures++;
+        if (touched[medium] && node->store.commit(node->store.context, medium) != 0) {
+            node->write_failures++;
+            failed = 1;
+        }
+    return failed ? -1 : 0;
 }
 
 /* Every part read back into the machine's durable state, a copied part from the first medium that holds one that
- * reads (IS10). A part no medium holds is absent. One a medium holds that does not read is lost (Q5, K1). */
+ * reads (IS10). A part no medium holds is absent. One a medium holds that does not read is lost (Q5, K1). An anchor
+ * part no medium holds while another part is held is lost, so the node is locked and never provisioned again from
+ * the anchor baked into the build over what it holds (P1, IS9, IS10). */
 static void mesh_read_parts(mesh_node *node) {
     pp_durable *d = &node->pep->d;
+    int parts_held = 0;
     memset(d, 0, sizeof *d);
     for (int part = 1; part <= PP_PARTS; part <<= 1) {
         char name[8];
@@ -65,7 +77,9 @@ static void mesh_read_parts(mesh_node *node) {
         }
         if (!held) pp_durable_unpack(d, part, NULL, 0);
         else if (!read) pp_durable_unpack(d, part, (const uint8_t *)"", 0); /* bytes that are not the part */
+        if (held) parts_held |= part;
     }
+    pp_durable_held(d, parts_held);
 }
 
 /* Each record the core made in the last call, to the serial report and as a frame of type 3 on the radio (H1). */

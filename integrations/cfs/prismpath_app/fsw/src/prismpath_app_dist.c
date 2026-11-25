@@ -34,17 +34,18 @@ _Static_assert(PRISMPATH_APP_FIELD_COUNT <= PP_LAYOUT_FIELDS, "the layout fits t
 /* OSAL limits a file name to 19 characters */
 const char *const PP_AppDistFiles[3 + PP_APP_COPY_PARTS] = {
     "active.ppd", "previous.ppd", "staged.ppd", "install.ppd", "rates.ppd", "floor.ppd", "fallback.ppd", "ceiling.ppd",
+    "anchor.ppd",
 };
 
-static const int    k_SmallPart[PP_APP_SMALL_PARTS] = {PP_PART_ANCHOR, PP_PART_COUNTER, PP_PART_TRUST, PP_PART_FLOOR,
-                                                       PP_PART_PENDING};
-static const size_t k_SmallCap[PP_APP_SMALL_PARTS]  = {256, 64, 8576, 192, 128};
+static const int    k_SmallPart[PP_APP_SMALL_PARTS] = {PP_PART_COUNTER, PP_PART_TRUST, PP_PART_FLOOR, PP_PART_PENDING};
+static const size_t k_SmallCap[PP_APP_SMALL_PARTS]  = {64, 8576, 192, 128};
 static const int    k_FilePart[3] = {PP_PART_ACTIVE, PP_PART_PREVIOUS, PP_PART_STAGED};
+/* the parts the core copies (PP_PART_COPIED): a file each and the second Critical Data Store area (IS9, IS10) */
 static const int    k_CopyPart[PP_APP_COPY_PARTS] = {PP_PART_INSTALL, PP_PART_RATES, PP_PART_SET_FLOOR,
-                                                     PP_PART_SET_FALLBACK, PP_PART_SET_CEILING};
+                                                     PP_PART_SET_FALLBACK, PP_PART_SET_CEILING, PP_PART_ANCHOR};
 static const size_t k_CopyCap[PP_APP_COPY_PARTS] = {1024, PP_APP_RATES_BYTES, PP_APP_SET_BYTES, PP_APP_SET_BYTES,
-                                                     PP_APP_SET_BYTES};
-_Static_assert(256 + 64 + 8576 + 192 + 128 == PP_APP_SMALL_BYTES, "the record's parts");
+                                                     PP_APP_SET_BYTES, PP_APP_ANCHOR_BYTES};
+_Static_assert(64 + 8576 + 192 + 128 == PP_APP_SMALL_BYTES, "the record's parts");
 
 static size_t SmallAt(int K)
 {
@@ -120,12 +121,24 @@ static const uint8_t *ReleaseSig(const PP_AppDist_t *D, int Part)
     return k_Zero64;
 }
 
-/* pp_persist_fn: each part the core says changed, whole, to its store; the record and the copy area once each */
-static void Persist(void *Ctx, const pp_durable *Durable, int Parts)
+/* The record to both its copies, the Critical Data Store and its file: 0 when both took */
+static int SaveRecordCopies(PP_AppDist_t *D)
+{
+    int cds  = D->Store.SaveRecord(D->Store.Ctx);
+    int file = D->Store.WriteFile(D->Store.Ctx, PP_APP_RECORD_FILE, &D->Record, sizeof(D->Record));
+
+    return cds == 0 && file == 0 ? 0 : -1;
+}
+
+/* pp_persist_fn: each part the core says changed, whole, to its store; the record and the copy area once each.
+ * Answers 0, or -1 when a part did not pack or a write did not take, so the core does not act on an override or an
+ * operator's allow it saved first (AF8, OP3, OP4). */
+static int Persist(void *Ctx, const pp_durable *Durable, int Parts)
 {
     PP_AppDist_t *D      = (PP_AppDist_t *)Ctx;
     int           record = 0;
     int           copy   = 0;
+    int           failed = 0;
     int           k;
 
     for (k = 0; k < PP_APP_SMALL_PARTS; k++)
@@ -134,6 +147,7 @@ static void Persist(void *Ctx, const pp_durable *Durable, int Parts)
         {
             D->Record.Len[k] = (uint32_t)pp_durable_pack(Durable, k_SmallPart[k], D->Record.Bytes + SmallAt(k),
                                                          k_SmallCap[k]);
+            failed |= D->Record.Len[k] == 0u;
             record = 1;
         }
     }
@@ -143,9 +157,9 @@ static void Persist(void *Ctx, const pp_durable *Durable, int Parts)
         {
             size_t n = pp_durable_pack(Durable, k_FilePart[k], s_File + 64, sizeof(s_File) - 64);
             memcpy(s_File, ReleaseSig(D, k_FilePart[k]), 64);
-            if (n != 0)
+            if (n == 0 || D->Store.WriteFile(D->Store.Ctx, PP_AppDistFiles[k], s_File, 64 + n) != 0)
             {
-                (void)D->Store.WriteFile(D->Store.Ctx, PP_AppDistFiles[k], s_File, 64 + n);
+                failed = 1;
             }
         }
     }
@@ -155,9 +169,9 @@ static void Persist(void *Ctx, const pp_durable *Durable, int Parts)
         {
             size_t n = pp_durable_pack(Durable, k_CopyPart[k], D->Copy.Bytes + CopyAt(k), k_CopyCap[k]);
             D->Copy.Len[k] = (uint32_t)n;
-            if (n != 0)
+            if (n == 0 || D->Store.WriteFile(D->Store.Ctx, PP_AppDistFiles[3 + k], D->Copy.Bytes + CopyAt(k), n) != 0)
             {
-                (void)D->Store.WriteFile(D->Store.Ctx, PP_AppDistFiles[3 + k], D->Copy.Bytes + CopyAt(k), n);
+                failed = 1;
             }
             copy = 1;
         }
@@ -166,21 +180,22 @@ static void Persist(void *Ctx, const pp_durable *Durable, int Parts)
     {
         D->Record.Magic = PP_APP_RECORD_MAGIC;
         D->Record.Size  = (uint32_t)sizeof(D->Record);
-        (void)D->Store.SaveRecord(D->Store.Ctx);
+        failed |= SaveRecordCopies(D) != 0;
     }
     if (copy)
     {
         D->Copy.Magic = PP_APP_COPY_MAGIC;
         D->Copy.Size  = (uint32_t)sizeof(D->Copy);
-        (void)D->Store.SaveCopy(D->Store.Ctx);
+        failed |= D->Store.SaveCopy(D->Store.Ctx) != 0;
     }
+    return failed ? -1 : 0;
 }
 
 int PP_AppDist_SaveRun(PP_AppDist_t *D)
 {
     D->Record.Magic = PP_APP_RECORD_MAGIC;
     D->Record.Size  = (uint32_t)sizeof(D->Record);
-    return D->Store.SaveRecord(D->Store.Ctx);
+    return SaveRecordCopies(D);
 }
 
 /* ----------------------------------------------------------------- the runtime: the kernel */
@@ -516,6 +531,7 @@ int PP_AppDist_Start(PP_AppDist_t *D, const PP_AppDistConfig_t *Cfg, int Record,
 {
     static char doc[1024];
     size_t      doc_len;
+    int         held = 0; /* the parts of which a store held a copy, read or not */
     int         k;
 
     Begin(D, Now);
@@ -559,6 +575,24 @@ int PP_AppDist_Start(PP_AppDist_t *D, const PP_AppDistConfig_t *Cfg, int Record,
 
     /* the durable state from its stores: the record's parts, the release files, each install part from its first
      * copy that reads */
+    if (Record != PP_APP_STORE_READ)
+    {
+        /* the record's second copy, which a power on reset keeps: it stands in for a store that does not hold one
+         * that reads, and a copy that does not read either leaves the record lost */
+        static PP_AppRecord_t file;
+        int32_t               n = D->Store.ReadFile(D->Store.Ctx, PP_APP_RECORD_FILE, &file, sizeof(file));
+        if (n == (int32_t)sizeof(file) && file.Magic == PP_APP_RECORD_MAGIC && file.Size == sizeof(file) &&
+            PP_Run_StateValid(&file.Run))
+        {
+            memcpy(&D->Record, &file, sizeof(file));
+            Record = PP_APP_STORE_READ;
+        }
+        else if (n >= 0)
+        {
+            Record = PP_APP_STORE_LOST;
+        }
+    }
+    D->RecordRead = Record == PP_APP_STORE_READ;
     memset(&s_Saved, 0, sizeof(s_Saved));
     memset(D->ActiveSig, 0, 64);
     memset(D->PreviousSig, 0, 64);
@@ -567,10 +601,12 @@ int PP_AppDist_Start(PP_AppDist_t *D, const PP_AppDistConfig_t *Cfg, int Record,
         if (Record == PP_APP_STORE_READ && D->Record.Len[k] > 0u && D->Record.Len[k] <= k_SmallCap[k])
         {
             (void)pp_durable_unpack(&s_Saved, k_SmallPart[k], D->Record.Bytes + SmallAt(k), D->Record.Len[k]);
+            held |= k_SmallPart[k];
         }
         else if (Record == PP_APP_STORE_LOST)
         {
             (void)pp_durable_unpack(&s_Saved, k_SmallPart[k], k_Garbage, sizeof(k_Garbage));
+            held |= k_SmallPart[k];
         }
         else
         {
@@ -580,6 +616,7 @@ int PP_AppDist_Start(PP_AppDist_t *D, const PP_AppDistConfig_t *Cfg, int Record,
     for (k = 0; k < 3; k++)
     {
         int32_t n = D->Store.ReadFile(D->Store.Ctx, PP_AppDistFiles[k], s_File, sizeof(s_File));
+        held |= n >= 0 ? k_FilePart[k] : 0;
         if (n < 0)
         {
             (void)pp_durable_unpack(&s_Saved, k_FilePart[k], NULL, 0);
@@ -614,6 +651,16 @@ int PP_AppDist_Start(PP_AppDist_t *D, const PP_AppDistConfig_t *Cfg, int Record,
         {
             (void)pp_durable_unpack(&s_Saved, k_CopyPart[k], present ? k_Garbage : NULL, present ? sizeof(k_Garbage) : 0);
         }
+        held |= present ? k_CopyPart[k] : 0;
+    }
+    /* P1, IS9, IS10: an anchor part neither copy holds, beside a part a store holds, was lost: the PEP is locked and
+     * keeps its marks, and is never provisioned again over what it holds as if it never was */
+    pp_durable_held(&s_Saved, held);
+    if (Record == PP_APP_STORE_ABSENT && s_Saved.provisioned)
+    {
+        /* a provisioned app that finds no copy of its record beside its files lost it: its floor, trust store and
+         * counter are lost, and the mission's response to a lost floor applies (Q5) */
+        Record = PP_APP_STORE_LOST;
     }
     if (Record != PP_APP_STORE_READ)
     {
@@ -641,7 +688,7 @@ int PP_AppDist_Start(PP_AppDist_t *D, const PP_AppDistConfig_t *Cfg, int Record,
         }
         D->Pep.d.floor_seq   = Cfg->MinSeq > 1 ? Cfg->MinSeq - 1 : 0;
         D->Pep.d.n_floor_ids = 0;
-        Persist(D, &D->Pep.d, PP_PART_FLOOR);
+        (void)Persist(D, &D->Pep.d, PP_PART_FLOOR);
         D->Step.FloorAt = 1;
     }
     else if (!s_Saved.provisioned)
@@ -1143,6 +1190,16 @@ void PP_AppDist_Propose(PP_AppDist_t *D, const PP_RunIo_t *Io, const uint8_t *Pa
             verdict.Reason  = PP_REASON_NONE;
             Out->NotEnacted = 1;
             Escalate(D, Io, &asked, Payload, PayloadLen, Command, Out);
+        }
+        else if (asked.basis == PP_BASIS_FLOOR && asked.cause == PP_CAUSE_SAVE_FAILED)
+        {
+            /* AF8: an override whose count the core could not save is refused by the floor with dist:save-failed,
+             * which is no decision of its table, so no line of a core run carries it: refused and unreceipted */
+            verdict.Kind   = PP_KIND_REFUSE;
+            verdict.Cause  = asked.cause;
+            verdict.Rule   = -1;
+            verdict.Field  = -1;
+            verdict.Reason = PP_REASON_NONE;
         }
         else if (asked.basis == PP_BASIS_FLOOR || asked.basis == PP_BASIS_FALLBACK)
         {
