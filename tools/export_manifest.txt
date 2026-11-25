@@ -67,6 +67,7 @@ prismpath-hotswap-rs/tests/fixtures/host_trace.json
 prismpath-hotswap-rs/tests/fixtures/hotswap.json
 prismpath-hotswap-rs/tests/fixtures/install_larger.json
 prismpath-hotswap-rs/tests/fixtures/receipts.json
+prismpath-hotswap-rs/tests/parity_dump.rs
 prismpath-hotswap-rs/tests/test_cause_names.rs
 prismpath-hotswap-rs/tests/test_distribution_conformance.rs
 prismpath-hotswap-rs/tests/test_distribution_cross_language.rs
@@ -814,6 +815,7 @@ prismpath/tests/test_distribution_install_controller.py
 prismpath/tests/test_distribution_larger.py
 prismpath/tests/test_distribution_legacy.py
 prismpath/tests/test_distribution_ocsf_schema.py
+prismpath/tests/test_distribution_parity.py
 prismpath/tests/test_distribution_pep.py
 prismpath/tests/test_distribution_reconciling.py
 prismpath/tests/test_distribution_revocation.py
