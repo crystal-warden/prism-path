@@ -807,6 +807,38 @@ def app(tmp_path_factory):
     return out
 
 
+@pytest.fixture(scope="module")
+def app_c(tmp_path_factory):
+    """integrations/cfs/tests/app_check.c: the cFS app itself, prismpath_app.c, with its enforcement point, kernel and
+    run and the C core, against a stub of the cFE and OSAL calls it makes (stub_cfe), built with a staleness bound of
+    5 seconds as the app harness's scripts are, so what it sends on the software bus is seen."""
+    if not (CFS / "tests" / "app_check.c").exists() or not (DIST / "pp_dist.c").exists():
+        pytest.skip("the cFS app and the C core are in integrations/cfs and prismpath-hw, which this tree does not carry")
+    if CC is None:
+        pytest.skip("no C compiler (cc) on this host, so the cFS app is not built here")
+    work = tmp_path_factory.mktemp("app_check")
+    probe = subprocess.run([CC, "-x", "c", "-", "-lcrypto", "-o", str(work / "probe")],
+                           input="#include <openssl/sha.h>\nint main(void){return 0;}", capture_output=True, text=True)
+    if probe.returncode != 0:
+        pytest.skip("no OpenSSL development files (the run's Merkle accumulator uses OpenSSL's SHA-256)")
+    config = work / "config"
+    config.mkdir()
+    for default in sorted((APP / "config").glob("default_prismpath_app_*.h")):
+        name = default.name[len("default_"):]
+        text = f'#include "{default.name}"\n'
+        if name == "prismpath_app_mission_cfg.h":
+            text += "#undef PRISMPATH_APP_MONITOR_STALE_SECS\n#define PRISMPATH_APP_MONITOR_STALE_SECS 5\n"
+        (config / name).write_text(text)
+    out = work / "app_check"
+    includes = [f"-I{CFS / 'tests' / 'stub_cfe'}", f"-I{config}", f"-I{APP / 'config'}", f"-I{ROOT / 'prismpath-hw'}",
+                f"-I{DIST}", f"-I{ROOT / 'prismpath-ebpf'}", f"-I{MONOCYPHER}", f"-I{APP / 'fsw' / 'inc'}",
+                f"-I{APP / 'fsw' / 'src'}", f"-I{APP / 'fsw' / 'tables'}"]
+    subprocess.run([CC, *base.FLAGS, "-DPP_TABLE_MAX=4692", *includes, "-o", str(out), str(CFS / "tests" / "app_check.c"),
+                    str(DIST / "pp_dist.c"), str(MONOCYPHER / "monocypher.c"), str(MONOCYPHER / "monocypher-ed25519.c"),
+                    "-lcrypto"], check=True, capture_output=True, text=True)
+    return out
+
+
 def _private(name: str):
     return _dist.GEN.test_key(name)
 
@@ -1484,6 +1516,60 @@ def test_case_220_a_kept_command_larger_than_the_command_struct_is_not_carried_o
     lines[-1] = lines[-1][:-3] + " 18"
     out = app_run(app, tmp_path / "b", [*lines, *_app_answer(receipt)])
     assert _answered(out)[0][6:] == ["1", "0", "00001882", "5", "18"]
+
+
+def _app_c_run(exe, root: Path, lines: list) -> list:
+    root.mkdir(parents=True, exist_ok=True)
+    done = subprocess.run([str(exe), str(root)], input="\n".join([*lines, "done"]) + "\n", capture_output=True,
+                          text=True, timeout=300)
+    assert done.returncode == 0, done.stderr[-4000:]
+    return done.stdout.splitlines()
+
+
+def _sent(out: list) -> list:
+    """(message id, function code, size, payload hex) of every command the app sent on the vehicle message id."""
+    return [tuple(line.split()[1:]) for line in out if line.startswith("sent")]
+
+
+def _hk(out: list) -> list:
+    return [[int(word) for word in line.split()[1:]] for line in out if line.startswith("hk")]
+
+
+VEHICLE_MID = "000018e3"  # the vehicle command id of the app's default configuration, CFE_PLATFORM_CMD_TOPICID_TO_MIDV
+
+
+def test_case_220_the_cfs_app_sends_an_answered_command_as_it_was_proposed_on_the_vehicle_message_id(app_c, tmp_path):
+    """case_220: OP3, in the cFS app itself (prismpath_app.c on a stub of cFE). A proposal of command 3 with function
+    code 5 past the floor's rate escalates, and an answer `allow` sends the command it was asked as on the vehicle
+    message id: function code 5, the size it was proposed with and the payload its escalation kept, which is the one
+    the floor's allow of the same proposal sent, and never a command with function code 0."""
+    request = bytearray.fromhex(payload(3, slew=15, thrust=20))
+    request[6] = 1                                     # the app writes its own reading of the monitor into the payload
+    out = _app_c_run(app_c, tmp_path / "a", [*_app_escalating(code=5), "hk"])
+    receipt = [line.split("receipt=")[1] for line in out if "ESCALATION seq=2" in line]
+    assert len(receipt) == 1
+    assert _sent(out) == [(VEHICLE_MID, "5", "18", request.hex())]          # the floor's allow, within its rate
+    out = _app_c_run(app_c, tmp_path / "b", [*_app_escalating(code=5), "hk", *_app_answer(receipt[0]), "hk"])
+    assert _sent(out) == [(VEHICLE_MID, "5", "18", request.hex())] * 2
+    before, after = _hk(out)
+    assert (after[1] - before[1], after[4] - before[4], after[5] - before[5]) == (1, 1, 0)   # allowed, forwarded
+
+
+def test_case_220_the_cfs_app_sends_nothing_for_a_kept_command_of_another_id_or_size(app_c, tmp_path):
+    """case_220: OP3, in the cFS app itself. A kept command proposed on another message id than the proposals', or
+    with a size larger than the command struct, is not sent after an answer `allow`: nothing reaches the vehicle
+    message id, and the app counts it not enacted once."""
+    for name, extra in (("mid", " 18 18e5"), ("size", " 19")):
+        lines = _app_escalating(code=5)
+        lines[-1] += extra
+        out = _app_c_run(app_c, tmp_path / name, [*lines, "hk"])
+        receipt = [line.split("receipt=")[1] for line in out if "ESCALATION seq=2" in line]
+        assert len(receipt) == 1, name
+        out = _app_c_run(app_c, tmp_path / (name + "-answer"), [*lines, "hk", *_app_answer(receipt[0]), "hk"])
+        assert len(_sent(out)) == 1, name                                    # the floor's allow, and nothing after
+        before, after = _hk(out)
+        assert (after[1] - before[1], after[4] - before[4], after[5] - before[5]) == (0, 0, 1), name
+        assert any("NOT ENACTED basis=operator" in line for line in out), name
 
 
 def test_case_220_a_cfs_app_receipts_a_floor_rule_escalation_and_each_answer_to_it(app, tmp_path):
