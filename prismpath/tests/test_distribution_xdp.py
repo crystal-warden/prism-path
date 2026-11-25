@@ -63,19 +63,30 @@ def _read(point, signed):
 
 class Loader:
     """Stands in for `./loader`: records each call, the table it was handed and the PEP's floor when it ran, and
-    holds the loader to the hash it must be handed (`PPT_NET_VERIFIED_SHA256`)."""
+    holds the loader to the hash it must be handed (`PPT_NET_VERIFIED_SHA256`). `kernel` is the table the last load
+    that worked left in the kernel, `fail_next` fails that many loads before `rc` holds again, and `netstats` reports
+    `floor_count` passes of the `floor` node, which a load zeroes as the kernel's histogram is zeroed."""
 
     def __init__(self, rc: int = 0):
         self.calls, self.tables, self.floors, self.rc = [], [], [], rc
+        self.kernel, self.fail_next, self.floor_count, self.stats = None, 0, 0, 0
 
     def __call__(self, argv, capture_output=True, text=True, env=None):
+        if argv[2] == "netstats":
+            self.stats += 1
+            rows = f"  floor          {self.floor_count}\n" if self.floor_count else ""
+            return subprocess.CompletedProcess(argv, 0, "\n[ppt_net histogram]\n" + rows + "  ----\n", "")
         table = Path(argv[1]).read_bytes()
         assert env["PPT_NET_VERIFIED_SHA256"] == H(table)
         floor = Path(argv[1]).parent.parent / "dist" / "floor.json"
         self.floors.append(json.loads(floor.read_bytes())["seq"] if floor.exists() else None)
         self.calls.append(argv[2:])
         self.tables.append(table)
-        return subprocess.CompletedProcess(argv, self.rc, "OK\n", "" if self.rc == 0 else "the kernel refused\n")
+        rc = 2 if self.fail_next else self.rc
+        self.fail_next = max(self.fail_next - 1, 0)
+        if rc == 0:
+            self.kernel, self.floor_count = table, 0
+        return subprocess.CompletedProcess(argv, rc, "OK\n", "" if rc == 0 else "the kernel refused\n")
 
 
 @dataclass
@@ -405,3 +416,261 @@ def test_one_release_changes_the_egress_proxy_and_the_xdp_table_and_both_report_
         for started in proxies:
             started.close()
         echo.server.close()
+
+
+# ------------------------------------------------------------------ section 21: the action floor and the fallback policy
+
+FLOOR_A, FLOOR_B, OTHER_DOCS = "10.0.0.1", "10.0.0.2", "93.184.216.35"
+INSTALL = {"install_keys": ["N1", "N2", "N3"], "install_threshold": 2}
+
+
+def _floor_core(rule: str = '-> allow: when tool == "connect" and net_dest == "allowed_host"') -> bytes:
+    """An xdp action floor's `policy.core`: one rule that tests the destination class `net_dest` (AF9)."""
+    from prismpath.kernel.policy_source import compile_source
+    fields = ("tool", "net_dest", "path_scope", "command_class", "git_op", "path_control", "zone_reach")
+    head = "".join(f"field.{name}: {'bool' if name == 'path_control' else 'category'}\n" for name in fields)
+    return compile_source("---\nname: floor\nstart: core_decision\n" + head + "---\n## core_decision\n" + rule + "\n")
+
+
+FLOOR_CORE = _floor_core()
+FLOOR_DESTS = nf.Destinations.from_object({"format": nf.DEST_FORMAT, "model_api": {},
+                                           "allowed_host": {"a.floor.example.com": [FLOOR_A],
+                                                            "b.floor.example.com": [FLOOR_B]}}).canonical()
+
+
+def _set(point, install_kind: str, core: bytes, dests: bytes, seq: int = 1, *, edge=None, meta=None, **args):
+    """The (sealed, body) pairs of an xdp install set: a `policy.core`, a `net.dests` and the `net.edge` they compile
+    to, with the flow and names hashes its `meta` signs, unless `edge` and `meta` say otherwise (IS3)."""
+    compiled = net_dist.compiled_edge(core, dests, GOVERNED)
+    bodies = {"policy.core": core, "net.dests": dests, "net.edge": compiled.ppt if edge is None else edge}
+    args.setdefault("widens", True)
+    return point.install_set(install_kind, bodies, seq, metas={"net.edge": meta or net_dist.edge_meta(compiled, "edge-env")},
+                             **args)
+
+
+def _floored(evaluator, point, frames) -> list:
+    return nf.decide_frames(evaluator, point.loader.kernel, nf.FLOOR_NODE_NAMES, frames)
+
+
+def test_case_187_an_xdp_floor_passes_its_own_addresses_and_leaves_a_third_to_the_release(tmp_path, evaluator):
+    """case_187: AF1, AF9, IS3, the `xdp` part (the `agent` part is in test_distribution_agent_home.py and the
+    `gateway` part in test_distribution_gateway.py). An xdp PEP whose floor holds two addresses loads the floor with
+    no release, to a `floor` node reached before the release, and then with a release that refuses both: a packet to
+    one of them passes by the floor, and a packet to a third is left to the release, which drops it, or allows it when
+    it is the release's. A floor that tests no destination class, or whose table holds a ninth entry, is
+    `dist:floor-broad`."""
+    from prismpath.distribution import floor as floors
+    point = EdgePep(tmp_path / "edge", **INSTALL)
+    assert point.send(_set(point, "install.floor", FLOOR_CORE, FLOOR_DESTS))[-1].event == "install-widened"
+    frames = [_syn(GOVERNED[0], FLOOR_A), _syn(GOVERNED[0], DOCS), _syn(GOVERNED[0], MODEL),
+              _syn(GOVERNED[0], FLOOR_B, 80), _syn("192.168.4.21", DOCS)]
+    assert point.pep.active is None and point.loader.calls[-1] == ["netupdate", "lo"]
+    assert _floored(evaluator, point, frames) == ["floor", "drop", "drop", "drop", "pass"]
+    assert point.release(DEFAULT, 1)[-1].event == "committed"
+    assert _floored(evaluator, point, frames) == ["floor", "drop", "allow", "drop", "pass"]
+    assert _floored(evaluator, point, [_syn(GOVERNED[0], FLOOR_B)]) == ["floor"]
+    assert net_dist.edge_table(point.pep.active.bodies, None, GOVERNED) == point.pep.active.bodies["net.edge"]
+    broad = _floor_core('-> allow: when tool == "connect"')
+    nine = nf.Destinations.from_object({"format": nf.DEST_FORMAT, "model_api": {}, "allowed_host": {
+        f"h{index}.floor.example.com": [f"10.0.1.{index}"] for index in range(9)}}).canonical()
+    assert floors.narrow("xdp", "policy.core", broad, {}, None) == floors.BROAD
+    assert floors.narrow("xdp", "net.dests", nine, {}, None) == floors.BROAD
+    assert floors.narrow("xdp", "policy.core", FLOOR_CORE, {}, None) is None
+    with pytest.raises(kinds.Refused, match="not narrow"):
+        _set(point, "install.floor", FLOOR_CORE, nine, 2)
+
+
+def test_case_193_an_xdp_floor_pass_is_counted_as_a_floor_answer_with_no_would(tmp_path, evaluator):
+    """case_193: AF7, RC1, the `xdp` part (the receipts of the other kinds are in test_distribution_floor.py and the
+    `cfs` lines in test_distribution_c_cfs.py). The program passes a packet by its floor's edge table and writes no
+    receipt, so the PEP records no `would`: the `floor` node's count in the kernel's histogram becomes the floor
+    answers of the next state record and the override count stays at zero. A load zeroes the histogram, and what it
+    held before is still counted."""
+    point = EdgePep(tmp_path / "edge", **INSTALL)
+    point.send(_set(point, "install.floor", FLOOR_CORE, FLOOR_DESTS))
+    point.release(DEFAULT, 1)
+    assert _floored(evaluator, point, [_syn(GOVERNED[0], FLOOR_A)] * 2) == ["floor", "floor"]
+    point.loader.floor_count = 2                              # the kernel counted the two passes
+    record = _read(point, point.pep.record("beat"))
+    assert (record.install.answers, record.install.overrides) == (2, 0)
+    assert _read(point, point.pep.record("beat")).install.answers == 2       # counted once
+    point.loader.floor_count = 3
+    assert point.release(ALLOW_HOSTS, 2)[-1].event == "committed"        # the load zeroes the histogram
+    assert point.loader.floor_count == 0
+    record = _read(point, point.pep.record("beat"))
+    assert (record.install.answers, record.install.overrides) == (3, 0)
+    assert not list((point.state_dir / "dist").rglob("*receipt*"))
+    assert point.pep.installed.record.overrides == 0
+
+
+def test_case_194_an_xdp_pep_refuses_a_floor_with_a_rate(tmp_path):
+    """case_194: AF8, the `xdp` part (the `mesh` part is in test_distribution_floor.py and the `cfs` part in
+    test_cfs_dist.py). The program has no durable write on the packet path and records no `would`, so an xdp floor
+    takes no `rate`, and one sent with a rate is `dist:bad-format` and loads nothing."""
+    point = EdgePep(tmp_path / "edge", **INSTALL)
+    loads = len(point.loader.calls)
+    sent = point.send(_set(point, "install.floor", FLOOR_CORE, FLOOR_DESTS, rate={"allows": 3, "window": 60}))
+    assert sent[0].cause == "dist:bad-format" and point.pep.floor_set() is None
+    assert len(point.loader.calls) == loads
+
+
+def test_case_223_an_xdp_floor_whose_net_edge_lacks_names_sha256_is_bad_format(tmp_path):
+    """case_223: IS1, IS5, the `xdp` part (the `host` and `mesh` parts are in test_distribution_install_controller.py
+    and test_distribution_c.py). An xdp floor's `net.edge` statement signs the `meta` section 3 gives the artifact, so
+    one without `names_sha256` is `dist:bad-format`, and the same set with it is applied."""
+    from prismpath.tests.test_distribution_install_controller import _resealed
+    point = EdgePep(tmp_path / "edge", **INSTALL)
+    pairs = _set(point, "install.floor", FLOOR_CORE, FLOOR_DESTS)
+    unnamed = [(_resealed(sealed, lambda meta: {key: value for key, value in meta.items() if key != "names_sha256"})
+                if meta_as(sealed) == "net.edge" else sealed, body) for sealed, body in pairs]
+    sent = point.send(unnamed)
+    assert [record.cause for record in sent if record.event == "refused"] == ["dist:bad-format"]
+    assert point.pep.floor_set() is None
+    assert "install-widened" in [record.event for record in point.send(pairs)] and point.pep.floor_set() is not None
+
+
+def meta_as(sealed: bytes) -> str:
+    envelope_bytes, _entries = env.unseal(sealed)
+    return json.loads(envelope_bytes.decode("utf-8"))["meta"]["as"]
+
+
+def test_case_225_an_xdp_pep_refuses_an_operator_answer(tmp_path):
+    """case_225: V5, OP1, the `xdp` third (the `host`, `mesh` and `cfs` parts are in test_cfs_dist.py and
+    test_distribution_c_cfs.py). The xdp kind has no escalation, so a well signed `operator.answer` on its stream,
+    with an install threshold of 2 and an operator key, is `dist:target-mismatch`."""
+    point = EdgePep(tmp_path / "edge", operators=["O1"], **INSTALL)
+    point.send(_set(point, "install.floor", FLOOR_CORE, FLOOR_DESTS))
+    record = _read(point, point.pep.stage(*_dist.answer(point, "ab" * 32)))
+    assert (record.event, record.cause) == ("refused", "dist:target-mismatch")
+
+
+def test_case_273_an_xdp_swap_that_fails_withdraws_to_the_floor_and_the_fallback(tmp_path, evaluator):
+    """case_273: C8, C10, C6. An xdp PEP with an action floor and a fallback policy has a loader swap that fails and a
+    withdrawal that works: it loads the floor's and the fallback's edge tables, a packet the floor allows passes and
+    one the fallback allows is allowed. Another xdp PEP's withdrawal fails too: the kernel keeps passing packets under
+    the running release and its floor, every record names that release, and the controller files
+    `dist:reconciling` at once."""
+    from prismpath.distribution.controller import Controller
+    newer = _dests(docs_example_org=[OTHER_DOCS])
+    frames = [_syn(GOVERNED[0], FLOOR_A), _syn(GOVERNED[0], DOCS), _syn(GOVERNED[0], MODEL),
+              _syn(GOVERNED[0], OTHER_DOCS)]
+    point = EdgePep(tmp_path / "first", **INSTALL)
+    point.release(DEFAULT, 1)
+    point.send(_set(point, "install.floor", FLOOR_CORE, FLOOR_DESTS))
+    assert point.send(_set(point, "install.fallback", ALLOW_HOSTS, DESTS))[-1].event == "install-widened"
+    point.loader.fail_next = 1
+    record = point.release(ALLOW_HOSTS, 2, dests=newer)[-1]
+    assert (record.event, point.pep.state(), point.pep.reconciling["withdrawn"]) == ("reconciling", "reconciling", True)
+    assert record.fallback and record.reconciling.running_seq == 0
+    fallback = point.pep.installed.fallback.bodies
+    assert point.loader.kernel == net_dist.edge_table(fallback, net_dist.floor_addresses(
+        point.pep.floor_set().bodies, GOVERNED), GOVERNED)
+    assert _floored(evaluator, point, frames) == ["floor", "allow", "allow", "drop"]
+
+    stuck = EdgePep(tmp_path / "second", controller="C", **INSTALL)
+    controller = Controller(str(tmp_path / "controller"), _dist.instance_key("C"), clock=stuck.clock)
+    controller.add_anchor(stuck.anchor())
+    pep_id = controller.enroll(stuck.key.public_raw, "xdp", STREAM, "fleet")
+    stuck.release(DEFAULT, 1)
+    stuck.send(_set(stuck, "install.floor", FLOOR_CORE, FLOOR_DESTS))
+    running = stuck.loader.kernel
+    stuck.loader.rc = 2
+    record = stuck.release(ALLOW_HOSTS, 2, dests=newer)[-1]
+    assert (record.event, stuck.pep.reconciling["withdrawn"]) == ("reconciling", False)
+    assert stuck.loader.kernel == running
+    assert _floored(evaluator, stuck, frames) == ["floor", "drop", "allow", "drop"]
+    assert _read(stuck, stuck.pep.tick() or stuck.pep.record("beat")).state == "reconciling"
+    stuck.pep.take_statement(controller.statement(STREAM))
+    stuck.pep.record("beat")
+    records = [_read(stuck, signed) for signed in stuck.pep.outbox]
+    assert all(one.reconciling.running_policy == state_record.prefix(H(DEFAULT)) for one in records
+               if one.state == "reconciling")
+    for signed in stuck.pep.drain():
+        controller.receive(signed)
+    assert "dist:reconciling" in controller.members[pep_id].findings
+
+
+def test_case_164_each_kind_takes_its_three_sets_in_its_own_form(tmp_path, monkeypatch):
+    """case_164: IS1, IS3, IS5, CL1. A PEP of each of the six kinds is sent an action floor, a fallback policy and a
+    ceiling in the form of its kind, a table for `host` and `mesh`, a `cfs.table` for `cfs` and a policy list as the
+    ceiling of those three, a `policy.core` with its `egress.hosts`, its `gateway.routes` or its `net.dests` and
+    `net.edge` for the others, and applies all three. Then an `agent` PEP is sent a fallback set with no
+    `egress.hosts`, which is never whole, so it is not applied and the held set still decides, and a floor set that
+    holds an `agent.zones`, an `xdp` PEP a floor whose `net.edge` is not compiled from its `policy.core` and
+    `net.dests`, and a `gateway` PEP two statements at one `seq` with different release ids: `dist:bad-format`,
+    `dist:derived-mismatch` and `dist:incomplete`, each with the held set unchanged."""
+    from integrations.cfs.tests.test_cfs_dist import ALLOW_3, _body, _cfs_floor, _floor_point
+    from prismpath.distribution import install
+    from prismpath.distribution.adapters import agent_home
+    from prismpath.gateway import reading as rd
+    from prismpath.kernel import canon2
+    from prismpath.tests import test_distribution_floor as tf
+    from prismpath.tests.test_distribution_gateway import DEMO, ROUTES, GatewayHome
+    monkeypatch.setattr(agent_home, "clock", lambda: _dist.NOW)
+    FLOOR, FALLBACK, CEILING = "install.floor", "install.fallback", "install.ceiling"
+
+    def events(point, pairs):
+        return [record.event if record.event != "refused" else record.cause for record in point.send(pairs)]
+
+    def listed(point, seq, *tables):
+        return point.install_set(CEILING, {kinds.POLICY_LIST: install.ceiling_body(tables)}, seq)
+
+    applied = {}
+    for name in ("host", "mesh"):                                    # a table, and a policy list as the ceiling
+        point = tf._table_point(tf.HostFloor if name == "host" else tf.MeshFloor, tmp_path, name)
+        fallback = _dist.image(9)
+        applied[name] = (events(point, tf._table_floor(point))[-1],
+                         events(point, point.install_set(FALLBACK, {"policy.ppt": fallback}, 1, widens=True))[-1],
+                         events(point, listed(point, 1, tf.GOOD_TABLE, fallback))[-1])
+    app = _floor_point(tmp_path)
+    applied["cfs"] = (events(app, _cfs_floor(app, ALLOW_3))[-1],
+                      events(app, app.install_set(FALLBACK, {"cfs.table": _body(2)}, 1, widens=True))[-1],
+                      events(app, listed(app, 1, ALLOW_3, _body(2)))[-1])
+    agent = tf._agent(tmp_path)
+    ceiling = tf.core(tf.LIST, '-> allow: when tool == "read_file" and path_scope == "workspace"')
+    applied["agent"] = (events(agent, tf._set(agent, FLOOR, tf.NARROW))[-1],
+                        events(agent, tf._set(agent, FALLBACK, tf.NARROW))[-1],
+                        events(agent, tf._set(agent, CEILING, ceiling))[-1])
+    gateway, ceiled = GatewayHome(tmp_path / "gateway", **INSTALL), GatewayHome(tmp_path / "ceiled", **INSTALL)
+    fields = canon2.loads(DEMO)["fields"]
+    floor_core = canon2.dumps({"fields": fields, "format": "prismpath.core/1", "rules": [
+        {"target": "allow", "when": ["and", ["cmp", "path_class", "==", ["str", "orders"]],
+                                     ["cmp", "method_class", "==", ["str", "read"]]]}]})
+    today = rd.Routes.from_doc({"routes": [{"match": "/api/orders/today", "class": "orders"}]}).canonical()
+    applied["gateway"] = (
+        events(gateway, gateway.install_set(FLOOR, {"policy.core": floor_core, "gateway.routes": today}, 1,
+                                            widens=True))[-1],
+        events(gateway, gateway.install_set(FALLBACK, {"policy.core": DEMO, "gateway.routes": ROUTES}, 1,
+                                            widens=True))[-1],
+        # the policy comparator has no finite domain for the gateway's categories, so it decides only between equal
+        # bodies, and a gateway ceiling holds only its own policy: that one goes to a second home (section 9.4)
+        events(ceiled, ceiled.install_set(CEILING, {"policy.core": DEMO, "gateway.routes": ROUTES}, 1))[-1])
+    edge = EdgePep(tmp_path / "edge", **INSTALL)
+    two = _floor_core('-> allow: when tool == "connect" and net_dest == "allowed_host"\n'
+                      '-> allow: when tool == "connect" and net_dest == "model_api"')
+    wide = nf.Destinations.from_object({**TABLE, "allowed_host": {
+        "docs.example.com": [DOCS], "a.floor.example.com": [FLOOR_A], "b.floor.example.com": [FLOOR_B]}}).canonical()
+    applied["xdp"] = (events(edge, _set(edge, FLOOR, FLOOR_CORE, FLOOR_DESTS))[-1],
+                      events(edge, _set(edge, FALLBACK, FLOOR_CORE, DESTS))[-1],
+                      events(edge, _set(edge, CEILING, two, wide, widens=False))[-1])
+    first = ("install-widened", "install-widened", "install-applied")
+    assert applied == {name: first for name in ("host", "mesh", "cfs", "agent", "gateway", "xdp")}
+
+    held = agent.pep.installed.record
+    hostless = agent.install_set(FALLBACK, {"policy.core": tf.NARROW}, 2, widens=True)
+    assert events(agent, hostless) == ["staged"] and agent.pep.installed.record.sets == held.sets
+    assert agent.pep.fallback_decides() and agent.pep.installed.fallback.seq == 1           # the held set decides
+    zoned = agent.install_set(FLOOR, {"policy.core": tf.NARROW, "egress.hosts": tf.HOSTS,
+                                      "agent.zones": tf._zones("keys")}, 2, widens=True, check=False)
+    assert "dist:bad-format" in [record.cause for record in agent.send(zoned)]
+    assert agent.pep.installed.held(FLOOR).seq == 1
+    other = net_dist.compiled_edge(two, wide, GOVERNED)
+    sent = edge.send(_set(edge, FLOOR, FLOOR_CORE, FLOOR_DESTS, 2, edge=other.ppt,
+                          meta=net_dist.edge_meta(other, "edge-env")))
+    assert sent[-1].cause == "dist:derived-mismatch" and edge.pep.floor_set().seq == 1
+    one = gateway.install_set(FLOOR, {"policy.core": floor_core, "gateway.routes": today}, 2, widens=True)
+    another = gateway.install_set(FLOOR, {"policy.core": floor_core, "gateway.routes": ROUTES}, 2, widens=True,
+                                  check=False)
+    by_name = {meta_as(sealed): (sealed, body) for sealed, body in another}
+    sent = gateway.send([one[1], by_name["gateway.routes"]])
+    assert sent[-1].cause == "dist:incomplete" and gateway.pep.installed.held(FLOOR).seq == 1

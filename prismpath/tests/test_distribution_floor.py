@@ -580,8 +580,8 @@ def test_case_180_a_floor_never_moves_the_time_floor_of_a_pep_with_no_clock(tmp_
 def test_case_193_a_floor_receipt_records_what_it_overrode(tmp_path):
     """case_193: AF7, RC1, the `agent` part. A floor allow where the release would allow, refuse and escalate records
     `would` with the release's outcome, its cause and its policy hash, and the override count rises by two; with no
-    release and no fallback policy `would` is none. The `cfs` lines and the `xdp` count wait for their kinds (see
-    test_distribution_trace.py PARTIAL)."""
+    release and no fallback policy `would` is none. The `cfs` lines are in test_distribution_c_cfs.py and the `xdp`
+    count in test_distribution_xdp.py."""
     point = _agent(tmp_path)
     _floor(point)
     wills = [("allow", None, core(LIST)), ("refuse", "agent:network", core('-> refuse agent:network: when tool == "list_dir"')),
@@ -632,7 +632,7 @@ def test_case_194_a_signed_rate_limits_overrides_on_a_kind_with_no_escalation(tm
     """case_194: AF8, AF5, the `mesh` half. A `mesh` PEP whose floor has a rate of 3 in 60 seconds is asked five
     times for an action its release refuses, and the last two are decided by the release, since a kind with no
     escalation is silent past the rate. A release whose `not_before` is two windows ahead arrives in mid window and
-    the window ends early. The `cfs` half is in test_cfs_dist.py and the `xdp` half waits for its kind."""
+    the window ends early. The `cfs` half is in test_cfs_dist.py and the `xdp` half in test_distribution_xdp.py."""
     point = _table_point(MeshFloor, tmp_path, "mesh", has_clock=False)
     assert point.send(_table_floor(point, rate={"allows": 3, "window": 60}))[-1].event == "install-widened"
     point.commit(table("cmd == 1"), expires=NOW + 86400)
