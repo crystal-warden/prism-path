@@ -72,7 +72,7 @@ static const char *const pp_artifact_names[PP_ART_COUNT] = {
     "policy.core", "policy.ppt", "policy.spiral", "sandbox.profile", "egress.hosts", "agent.zones", "gateway.routes",
     "net.dests", "net.edge", "cfs.table", "grant", "trust.widening", "trust.revocation", "trust.rotation",
     "install.floor", "install.fallback", "install.ceiling", "install.trust", "operator.answer", "trust.controller",
-    "trust.change", "install.change"};
+    "trust.change", "install.change", "identity.bundle", "identity.map"};
 static const char *const pp_target_names[PP_TGT_COUNT] = {"agent", "cfs", "gateway", "host", "mesh", "xdp"};
 
 const char *pp_artifact_name(pp_artifact artifact) {
