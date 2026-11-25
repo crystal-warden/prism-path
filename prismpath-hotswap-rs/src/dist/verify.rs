@@ -199,7 +199,14 @@ pub fn verify(sealed: &[u8], body: &[u8], trust: &TrustStore, pep: &PepView, now
         return verify_install(envelope, &entries, &message, body, trust, pep, now, installed);
     }
     if envelope.artifact == ArtifactKind::OperatorAnswer {
-        return Verdict { cause: Some(TARGET_MISMATCH.to_string()), envelope: Some(envelope), ..Verdict::default() };
+        // K4: V5 first requires the role an answer needs, `operator`, to be one it is signed under, with V3's cause
+        // for that role otherwise, and only then holds it to this kind, which has no escalation (OP1)
+        let cause = match answering {
+            Some(answering) if answering.ok() => TARGET_MISMATCH.to_string(),
+            Some(answering) => answering.cause.unwrap_or_else(|| UNKNOWN_KEY.to_string()),
+            None => UNKNOWN_KEY.to_string(),
+        };
+        return Verdict { cause: Some(cause), envelope: Some(envelope), ..Verdict::default() };
     }
     if !counted.ok() {
         return Verdict { envelope: Some(envelope), ..counted };

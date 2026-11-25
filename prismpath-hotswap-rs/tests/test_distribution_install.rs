@@ -523,6 +523,41 @@ fn case_225_a_host_takes_no_operator_answer() {
     assert_eq!(point.pep.trust().time_floor, time_floor);
 }
 
+/// K4, V5: the role an answer needs is checked before the kind it is for, as Python and the C core check it. An
+/// answer signed only by an authority key passes V3 under that role and is `dist:unknown-key` at V5, not
+/// `dist:target-mismatch`; one signed by an operator key, by no key the PEP holds or by one install key below the
+/// threshold is `dist:target-mismatch`.
+#[test]
+fn an_authority_signed_answer_on_host_is_unknown_key() {
+    let mut point = Installer::with("answer-role", &anchor2(&INSTALL_KEYS, 2, &["O1"], 0), &[], false);
+    for (signer, cause) in [("A", "dist:unknown-key"), ("O1", "dist:target-mismatch"), ("O9", "dist:target-mismatch"), ("N1", "dist:target-mismatch")] {
+        assert_eq!(point.send(&[answer(signer)]).cause.as_deref(), Some(cause), "{signer}");
+    }
+}
+
+/// IS11: an install trust body is read in the order of its rule, as Python and the C core read it. No install key
+/// is `dist:bad-format` before either list is held to its bound, so 0 keys and 5 operators is `dist:bad-format`;
+/// 5 keys, or 1 key and 5 operators, is `dist:too-large`.
+#[test]
+fn an_install_trust_body_with_no_key_is_bad_format_before_too_large() {
+    let body = |keys: &[&str], operators: &[&str]| {
+        let mut keys: Vec<String> = keys.iter().map(|name| hex::encode(public(name))).collect();
+        let mut operators: Vec<String> = operators.iter().map(|name| hex::encode(public(name))).collect();
+        keys.sort();
+        operators.sort();
+        prismpath_rs::canon2::write_json(&json!({"encoding": "canon/2", "format": "prismpath.dist-install-trust/1",
+                                                 "keys": keys, "operators": operators, "threshold": 1}))
+        .unwrap()
+    };
+    let five = ["O1", "O2", "O3", "O4", "O5"];
+    let cause = |keys: &[&str], operators: &[&str]| install::read_install_trust(&body(keys, operators)).err().map(|refused| refused.cause);
+    assert_eq!(cause(&[], &five).as_deref(), Some("dist:bad-format"));
+    assert_eq!(cause(&[], &[]).as_deref(), Some("dist:bad-format"));
+    assert_eq!(cause(&["N1"], &five).as_deref(), Some("dist:too-large"));
+    assert_eq!(cause(&["N1", "N2", "N3", "N4", "N5"], &[]).as_deref(), Some("dist:too-large"));
+    assert_eq!(cause(&["N1"], &["O1"]), None);
+}
+
 /// case_233: IS13, IS11. On an install threshold of 1 with two operator keys, an install provisioning that carries an
 /// `install.trust` dropping one of them is applied with the key retired, the trust state and the floor of section 6
 /// unchanged, and an answer that key signs is `dist:target-mismatch`.

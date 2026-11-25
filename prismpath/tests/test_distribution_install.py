@@ -217,6 +217,28 @@ def _lock(point):
     assert point.pep.state() == "locked"
 
 
+def test_an_authority_signed_answer_on_host_is_unknown_key_and_a_trust_body_with_no_key_is_bad_format(tmp_path):
+    """K4, V5: the role an answer needs is checked before the kind it is for, so an answer signed only by an authority
+    key is `dist:unknown-key` on `host`, and one by an operator key, no key held or one install key below the
+    threshold is `dist:target-mismatch`, as in Rust and the C core. IS11: an install trust body with no install key
+    and 5 operator keys is `dist:bad-format`, read before the bound of either list."""
+    point = _host(tmp_path, operators=["O1"])
+    for signer, cause in (("A", "dist:unknown-key"), ("O1", "dist:target-mismatch"), ("O9", "dist:target-mismatch"),
+                          ("N1", "dist:target-mismatch")):
+        assert _read(point, point.pep.stage(*_dist.answer(point, "ab" * 32, signer=signer))).cause == cause, signer
+
+    def body(keys, operators):
+        return canon.canon2_bytes({"encoding": "canon/2", "format": kinds.INSTALL_TRUST_FORMAT,
+                                   "keys": sorted(public(name).hex() for name in keys),
+                                   "operators": sorted(public(name).hex() for name in operators), "threshold": 1})
+    five = ["O1", "O2", "O3", "O4", "O5"]
+    for keys, operators, cause in (([], five, "dist:bad-format"), (["N1"], five, "dist:too-large"),
+                                   (["N1", "N2", "N3", "N4", "N5"], [], "dist:too-large")):
+        with pytest.raises(Refused) as raised:
+            kinds.read_install_trust(body(keys, operators))
+        assert raised.value.cause == cause
+
+
 def test_case_171_a_locked_pep_still_takes_install_statements(tmp_path):
     """case_171: IS6, FB1. A `locked` PEP with an install threshold of 2 applies a fallback policy at a higher `seq`
     and stays `locked`, deciding under it."""
