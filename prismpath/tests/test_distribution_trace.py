@@ -26,8 +26,10 @@ CASE = re.compile(r"\bcase_(\d{3})\b")
 SOURCES = {
     "P": [*sorted((REPO / "tests").glob("test_distribution_*.py")), ROOT / "integrations" / "cfs" / "tests" / "test_cfs_dist.py",
           ROOT / "tools" / "tests" / "test_export.py"],
-    "C": [REPO / "tests" / "test_distribution_c.py", REPO / "tests" / "test_distribution_c_cfs.py"],
-    "R": sorted((ROOT / "prismpath-hotswap-rs" / "tests").glob("test_distribution_*.rs")),
+    "C": [REPO / "tests" / "test_distribution_c.py", REPO / "tests" / "test_distribution_c_cfs.py",
+          REPO / "tests" / "test_distribution_parity.py"],
+    "R": [*sorted((ROOT / "prismpath-hotswap-rs" / "tests").glob("test_distribution_*.rs")),
+          REPO / "tests" / "test_distribution_parity.py"],
 }
 EXCLUDED = {REPO / "tests" / "test_distribution_trace.py", REPO / "tests" / "test_distribution_c.py",
             REPO / "tests" / "test_distribution_c_cfs.py"}
