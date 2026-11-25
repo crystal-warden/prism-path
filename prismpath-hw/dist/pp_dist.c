@@ -2310,22 +2310,40 @@ static uint8_t pp_next_record(const pp_pep_machine *pep, const pp_install_anchor
     return PP_CAUSE_NONE;
 }
 
-uint8_t pp_pep_provision_install(pp_pep_machine *pep, const pp_trust *anchor, const pp_install_anchor *install,
-                                 const char *stream, const pp_brought *brought, size_t n_brought, long long now) {
-    static pp_install next;
+static const char *pp_as_name(uint8_t as);
+static void pp_install_take_trust(pp_install *r, const pp_envelope *e, const uint8_t *body, size_t len);
+static uint8_t pp_read_ceiling(const uint8_t *body, size_t len, uint8_t (*out)[32], size_t *n);
+static uint8_t pp_set_refusal(const pp_pep_machine *pep, const pp_install *r, const pp_statement *const held_sets[PP_SETS],
+                              const pp_change *change, const pp_statement *st, int kind, int ceiling_lost, int *larger_out);
+
+/* P2 step 3 (pep._precheck): every install statement the engineer brings verifies under the install record the
+ * provisioning leaves (`next`, *has and *keeps as pp_next_record left them) and the anchor's store, whose time floor
+ * is its own, before anything changes. The statements are taken in order as pp_stage_one then stages them: each
+ * against the record as the ones before it leave it, the sets staged so far (V10) and the ceiling then held (CL3),
+ * and a set that is whole is held to pp_set_refusal, as pp_apply_set holds it. Any refusal refuses the provisioning
+ * but dist:seq-replay, a set the PEP already holds at or above its `seq`, which is refused and leaves the
+ * provisioning to go on (case 170, IS6). */
+static uint8_t pp_precheck(const pp_pep_machine *pep, const pp_trust *anchor, const char *stream, const pp_install *next,
+                           int has, int keeps, const pp_brought *brought, size_t n_brought, long long now) {
+    static pp_install record;
     static pp_pep view;
     static pp_install_view iview;
     static pp_verdict verdict;
-    pep->now = now;
-    pep->n_out = 0;
-    pep->stood_out = 0;
-    int has = 0, keeps = 1;
-    uint8_t cause = pp_check_anchor(pep, anchor, install);
-    if (!cause) cause = pp_next_record(pep, install, &next, &has, &keeps);
-    if (cause) return cause;
-    if (n_brought && !has) return PP_CAUSE_BAD_FORMAT; /* install statements with an anchor that holds no install keys */
-    /* P2 step 3: every statement brought verifies under the record the provisioning leaves and the anchor's store,
-     * whose time floor is its own (0 from a tool), before anything changes */
+    static pp_statement one, made[PP_SETS]; /* the set being checked, and each set the statements before it applied */
+    static pp_envelope pending[PP_SETS];    /* each set staged and not yet whole (IS4, G2) */
+    static pp_change changes[PP_SETS];      /* each install change statement staged (IS15) */
+    if (n_brought == 0) return PP_CAUSE_NONE;
+    if (!has) return PP_CAUSE_BAD_FORMAT; /* install statements with an anchor that holds no install keys */
+    record = *next;
+    const pp_statement *held_sets[PP_SETS];
+    int has_pending[PP_SETS], has_change[PP_SETS];
+    for (int k = 0; k < PP_SETS; k++) {
+        held_sets[k] = keeps && record.sets[k].held && !pep->set_lost[k] && pep->d.sets[k].has_held
+                           ? &pep->d.sets[k].held : NULL;
+        has_pending[k] = has_change[k] = 0;
+    }
+    /* IS10: the provisioning keeps a lost ceiling lost while the record it leaves still names it */
+    int ceiling_lost = keeps && pep->set_lost[PP_SET_CEILING] && record.sets[PP_SET_CEILING].held;
     for (size_t k = 0; k < n_brought; k++) {
         memset(&view, 0, sizeof view);
         memset(&iview, 0, sizeof iview);
@@ -2337,17 +2355,97 @@ uint8_t pp_pep_provision_install(pp_pep_machine *pep, const pp_trust *anchor, co
         pp_sha256(pep->instance_public, 32, view.instance_key_id);
         view.table_check = pep->config.table_check;
         view.table_context = pep->config.context;
-        iview.record = &next;
+        iview.record = &record;
+        for (int j = 0; j < PP_SETS; j++) {
+            iview.staged[j] = has_pending[j] ? &pending[j] : NULL;
+            iview.change[j] = has_change[j] ? &changes[j] : NULL;
+        }
+        if (held_sets[PP_SET_CEILING]) {
+            iview.has_ceiling = 1;
+            iview.ceiling = (const uint8_t (*)[32])held_sets[PP_SET_CEILING]->body;
+            iview.n_ceiling = held_sets[PP_SET_CEILING]->body_len / 32;
+        }
         iview.layout = pep->config.layout;
         iview.trust = anchor;
         view.install = &iview;
         pp_verify(brought[k].sealed, brought[k].sealed_len, brought[k].body, brought[k].body_len, anchor, &view, now,
                   &verdict);
-        if (!verdict.has_envelope || !pp_is_install(verdict.envelope.artifact)) return PP_CAUSE_BAD_FORMAT;
-        if (verdict.cause && verdict.cause != PP_CAUSE_ABOVE_CEILING && verdict.cause != PP_CAUSE_SEQ_REPLAY &&
-            verdict.cause != PP_CAUSE_INCOMPLETE)
-            return verdict.cause;
+        const pp_envelope *e = &verdict.envelope;
+        if (!verdict.has_envelope || !pp_is_install(e->artifact)) return PP_CAUSE_BAD_FORMAT;
+        if (verdict.cause == PP_CAUSE_SEQ_REPLAY) continue; /* case 170: refused, the provisioning goes on */
+        if (verdict.cause) return verdict.cause;
+        if (verdict.unchanged) continue;
+        if (e->artifact == PP_ART_INSTALL_TRUST) { /* IS11: the statements after it verify under it */
+            pp_install_take_trust(&record, e, brought[k].body, brought[k].body_len);
+            continue;
+        }
+        if (e->artifact == PP_ART_INSTALL_CHANGE) { /* IS15, as pp_stage_change holds it */
+            int kind = verdict.change_set;
+            const pp_statement *held = held_sets[kind];
+            if (held == NULL || memcmp(verdict.change_from, held->envelope.policy_sha256, 32) != 0)
+                return PP_CAUSE_WIDENING_UNSIGNED;
+            if (has_pending[kind] && pending[kind].seq != e->seq) has_pending[kind] = 0; /* G2 */
+            has_change[kind] = 1;
+            memset(&changes[kind], 0, sizeof changes[kind]);
+            changes[kind].seq = e->seq;
+            memcpy(changes[kind].policy_sha256, e->policy_sha256, 32);
+            memcpy(changes[kind].release, e->release, 32);
+            memcpy(changes[kind].from, verdict.change_from, 32);
+            memcpy(changes[kind].envelope_id, e->envelope_id, 32);
+            continue;
+        }
+        int kind = pp_set_of(e->artifact);
+        if (has_change[kind] && changes[kind].seq != e->seq) has_change[kind] = 0; /* G2 */
+        memset(&one, 0, sizeof one);
+        one.envelope = *e;
+        if (e->as == PP_AS_POLICY_LIST) {
+            size_t n = 0;
+            pp_read_ceiling(brought[k].body, brought[k].body_len, (uint8_t (*)[32])one.body, &n);
+            one.body_len = 32 * n;
+        } else {
+            one.body_len = brought[k].body_len;
+            memcpy(one.body, brought[k].body, brought[k].body_len);
+        }
+        uint8_t release[32];
+        pp_release_of_one(pp_as_name(e->as), e->body_sha256, release);
+        if (memcmp(release, e->release, 32) != 0) { /* not whole: staged, and applied by nothing here */
+            pending[kind] = *e;
+            has_pending[kind] = 1;
+            continue;
+        }
+        int larger = 0;
+        uint8_t cause = pp_set_refusal(pep, &record, held_sets, has_change[kind] ? &changes[kind] : NULL, &one, kind,
+                                       ceiling_lost, &larger);
+        if (cause == PP_CAUSE_SEQ_REPLAY) continue;
+        if (cause) return cause;
+        int empty = e->as == PP_AS_NONE;
+        pp_install_slot *slot = &record.sets[kind]; /* as pp_apply_set leaves the record */
+        slot->seq = e->seq;
+        slot->held = !empty;
+        memcpy(slot->envelope_id, e->envelope_id, 32);
+        pp_sha256(e->envelope_id, 32, slot->set_id);
+        memcpy(slot->policy_sha256, e->policy_sha256, 32);
+        memcpy(slot->body_sha256, e->body_sha256, 32);
+        made[kind] = one;
+        held_sets[kind] = empty ? NULL : &made[kind];
+        has_pending[kind] = has_change[kind] = 0;
+        if (kind == PP_SET_CEILING) ceiling_lost = 0;
     }
+    return PP_CAUSE_NONE;
+}
+
+uint8_t pp_pep_provision_install(pp_pep_machine *pep, const pp_trust *anchor, const pp_install_anchor *install,
+                                 const char *stream, const pp_brought *brought, size_t n_brought, long long now) {
+    static pp_install next;
+    pep->now = now;
+    pep->n_out = 0;
+    pep->stood_out = 0;
+    int has = 0, keeps = 1;
+    uint8_t cause = pp_check_anchor(pep, anchor, install);
+    if (!cause) cause = pp_next_record(pep, install, &next, &has, &keeps);
+    if (cause) return cause;
+    cause = pp_precheck(pep, anchor, stream, &next, has, keeps, brought, n_brought, now);
+    if (cause) return cause;
     pp_durable *d = &pep->d;
     uint64_t counter = d->counter;
     /* what no provisioning clears: the marks of the anchor part, the counts of H10 and AF8, and the held sets the
@@ -2365,7 +2463,7 @@ uint8_t pp_pep_provision_install(pp_pep_machine *pep, const pp_trust *anchor, co
     for (int k = 0; k < PP_SETS; k++) {
         lost[k] = pep->set_lost[k];
         if (!keeps || !has) d->sets[k].has_held = 0;
-        d->sets[k].has_staged = 0;
+        d->sets[k].has_staged = d->sets[k].has_change = 0;
     }
     memset(d, 0, offsetof(pp_durable, sets)); /* the held statements, the last member, stay where they are */
     d->provisioned = d->setting_reads = d->trust_reads = d->floor_reads = d->counter_reads = 1;
@@ -2402,10 +2500,22 @@ uint8_t pp_pep_provision_install(pp_pep_machine *pep, const pp_trust *anchor, co
     pp_runtime(pep);
     pp_persist(pep, PP_PARTS);
     pep->message = 0;
-    for (size_t k = 0; k < n_brought; k++)
-        (void)pp_stage_one(pep, brought[k].sealed, brought[k].sealed_len, brought[k].body, brought[k].body_len);
+    size_t kept = 0; /* P3: provisioning reports as its own event, and a statement it brought that was refused keeps its
+                      * record, the last one its staging made */
+    for (size_t k = 0; k < n_brought; k++) {
+        pep->n_out = kept;
+        if (pp_stage_one(pep, brought[k].sealed, brought[k].sealed_len, brought[k].body, brought[k].body_len) &&
+            pep->n_out > kept) {
+            size_t last = pep->n_out - 1;
+            if (last != kept) {
+                memcpy(pep->out[kept], pep->out[last], pep->out_len[last]);
+                pep->out_len[kept] = pep->out_len[last];
+            }
+            kept++;
+        }
+    }
     pep->message = 1;
-    pep->n_out = 0; /* P3: provisioning reports as its own event */
+    pep->n_out = kept;
     pp_emit(pep, PP_EV_PROVISIONED, pep->stood_out ? PP_CAUSE_INSTALL_WIDENED : 0);
     if (n_brought) pp_runtime(pep); /* FB1: a fallback policy brought decides at once */
     return PP_CAUSE_NONE;
@@ -2672,37 +2782,36 @@ const uint8_t *pp_statement_bytes(const pp_statement *st, size_t *len) { return 
 
 static void pp_lapse(pp_pep_machine *pep, uint8_t cause);
 
-/* IS4, IS6, IS12, CL3 (pep._apply_set): apply the whole set staged of `kind`. It is held to its `seq` again, to the
- * ceiling the PEP holds now (an action floor and a fallback policy inside it, and a ceiling the held ones are
- * inside), and to the widening rule of IS12, on which a `mesh` PEP compares bytes and lists and takes `widens` false
- * only when `replaces` is the policy hash of the set it holds. The record goes first and the set part after, both
- * durable before the event, `install-widened` for a set that stands out and `install-applied` otherwise. A ceiling
- * the active release is above lapses it (CL3), and a fallback policy that now decides is run (FB8). */
-static uint8_t pp_apply_set(pp_pep_machine *pep, int kind) {
-    pp_durable *d = &pep->d;
-    pp_install *r = &d->install;
-    pp_install_set *set = &d->sets[kind];
-    const pp_statement *st = &set->staged;
+/* IS4, IS6, IS12, CL3 (pep._set_refusal): what applying the whole set `st` of `kind` over the record `r` meets, the
+ * cause or 0, and in *larger whether it enlarges what is held. `held[k]` is the set of kind k the record holds and
+ * reads, NULL for none, and `change` the install change statement staged for `kind`, NULL for none. It is held to its
+ * `seq` again, to the ceiling `held` holds (an action floor and a fallback policy inside it, and a ceiling the held
+ * ones are inside), and to the widening rule of IS12, on which a `mesh` PEP compares bytes and lists and takes
+ * `widens` false only when `replaces` is the policy hash of the set it holds, and a ceiling after a lost one,
+ * `ceiling_lost`, is larger unless it is the lost one sent again byte for byte (IS10). pp_apply_set and the
+ * provisioning precheck both ask it. */
+static uint8_t pp_set_refusal(const pp_pep_machine *pep, const pp_install *r, const pp_statement *const held_sets[PP_SETS],
+                              const pp_change *change, const pp_statement *st, int kind, int ceiling_lost, int *larger_out) {
     const pp_envelope *e = &st->envelope;
-    uint8_t subject = (uint8_t)(kind + 1), cause = PP_CAUSE_NONE;
+    uint8_t cause = PP_CAUSE_NONE;
     int empty = e->as == PP_AS_NONE;
-    const pp_statement *held = pp_held_set(pep, kind), *ceiling = pp_held_set(pep, PP_SET_CEILING);
-    int lost = kind == PP_SET_CEILING && pp_ceiling_lost(pep); /* IS10: a ceiling after a lost one */
+    const pp_statement *held = held_sets[kind], *ceiling = held_sets[PP_SET_CEILING];
+    int lost = kind == PP_SET_CEILING && ceiling_lost; /* IS10: a ceiling after a lost one */
+    *larger_out = 0;
     if (e->seq <= r->sets[kind].seq) cause = PP_CAUSE_SEQ_REPLAY;
     else if (kind != PP_SET_CEILING && !empty && !pp_on_list(ceiling, e->body_sha256)) cause = PP_CAUSE_ABOVE_CEILING;
     else if (kind == PP_SET_CEILING && !empty) {
         for (int other = 0; other < PP_SET_CEILING; other++) {
-            const pp_statement *one = pp_held_set(pep, other);
+            const pp_statement *one = held_sets[other];
             if (one && !pp_on_list(st, one->envelope.body_sha256)) cause = PP_CAUSE_ABOVE_CEILING; /* narrow those first */
         }
     }
     int larger = 0;
     /* IS15: a change statement staged for this set, from the held set's policy hash, stands for its table */
-    const pp_install_set *slot_set = &d->sets[kind];
-    int carried = !cause && kind != PP_SET_CEILING && !empty && held != NULL && slot_set->has_change &&
-                  slot_set->change.seq == e->seq && !e->widens && e->has_replaces &&
+    int carried = !cause && kind != PP_SET_CEILING && !empty && held != NULL && change != NULL &&
+                  change->seq == e->seq && !e->widens && e->has_replaces &&
                   memcmp(e->replaces, held->envelope.policy_sha256, 32) == 0 &&
-                  memcmp(slot_set->change.from, held->envelope.policy_sha256, 32) == 0;
+                  memcmp(change->from, held->envelope.policy_sha256, 32) == 0;
     if (!cause) {
         if (lost) /* IS10, IS12: all but a byte for byte resend of the set the record names, the empty one too */
             larger = !(r->sets[kind].held && !empty && memcmp(e->body_sha256, r->sets[kind].body_sha256, 32) == 0);
@@ -2733,6 +2842,26 @@ static uint8_t pp_apply_set(pp_pep_machine *pep, int kind) {
                                               r->sets[kind].held)))
             cause = PP_CAUSE_WIDENING_UNSIGNED;
     }
+    *larger_out = larger;
+    return cause;
+}
+
+/* IS4, IS6, IS12, CL3 (pep._apply_set): apply the whole set staged of `kind`, held first to pp_set_refusal over the
+ * record and the sets the PEP holds now. The record goes first and the set part after, both durable before the
+ * event, `install-widened` for a set that stands out and `install-applied` otherwise. A ceiling the active release
+ * is above lapses it (CL3), and a fallback policy that now decides is run (FB8). */
+static uint8_t pp_apply_set(pp_pep_machine *pep, int kind) {
+    pp_durable *d = &pep->d;
+    pp_install *r = &d->install;
+    pp_install_set *set = &d->sets[kind];
+    const pp_statement *st = &set->staged;
+    const pp_envelope *e = &st->envelope;
+    uint8_t subject = (uint8_t)(kind + 1);
+    int empty = e->as == PP_AS_NONE, larger = 0;
+    const pp_statement *held_sets[PP_SETS];
+    for (int k = 0; k < PP_SETS; k++) held_sets[k] = pp_held_set(pep, k);
+    uint8_t cause = pp_set_refusal(pep, r, held_sets, set->has_change ? &set->change : NULL, st, kind,
+                                   pp_ceiling_lost(pep), &larger);
     if (cause) {
         set->has_staged = set->has_change = 0;
         pp_persist(pep, pp_set_part(kind));
@@ -2781,10 +2910,8 @@ static uint8_t pp_apply_set(pp_pep_machine *pep, int kind) {
 /* IS11: apply a verified install.trust at once, durably before its event. Its keys, operators and threshold replace
  * the held ones, every key it leaves out is retired, oldest first and the ninth forgetting the oldest, and its seq
  * and envelope id are the install trust sequence and id. */
-static void pp_apply_install_trust(pp_pep_machine *pep, const pp_envelope *e, const uint8_t *sealed,
-                                   size_t sealed_len, const uint8_t *body, size_t len, int widened) {
+static void pp_install_take_trust(pp_install *r, const pp_envelope *e, const uint8_t *body, size_t len) {
     static pp_install_trust_body b;
-    pp_install *r = &pep->d.install;
     pp_read_install_trust(body, len, &b); /* V11 read it */
     uint8_t dropped[PP_INSTALL_KEYS + PP_OPERATOR_KEYS][32];
     size_t n_dropped = 0;
@@ -2825,6 +2952,11 @@ static void pp_apply_install_trust(pp_pep_machine *pep, const pp_envelope *e, co
     r->threshold = b.threshold;
     r->trust_seq = e->seq;
     memcpy(r->trust_id, e->envelope_id, 32);
+}
+
+static void pp_apply_install_trust(pp_pep_machine *pep, const pp_envelope *e, const uint8_t *sealed,
+                                   size_t sealed_len, const uint8_t *body, size_t len, int widened) {
+    pp_install_take_trust(&pep->d.install, e, body, len);
     if (!pep->d.install_mark) {
         pep->d.install_mark = 1;
         pp_persist(pep, PP_PART_ANCHOR);

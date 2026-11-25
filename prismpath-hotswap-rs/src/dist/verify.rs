@@ -102,13 +102,21 @@ pub struct PepView {
 /// What the verifier needs of a PEP's install part (section 21): the install record, the staged install sets by
 /// kind, the held ceiling, whether the statement came in a message, where an install threshold of 1 takes no
 /// install statement (IS4), or by provisioning, and the layout document a table kind was built with (AF10).
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct InstallView {
     pub record: Option<Record>,
     pub staged: BTreeMap<SetKind, InstallSet>,
     pub ceiling: Option<InstallSet>,
     pub message: bool,
     pub layout: Option<Vec<u8>>,
+}
+
+impl Default for InstallView {
+    /// A statement in a message unless said otherwise, as Python's `InstallView` has it, so a view built from the
+    /// default holds a threshold of 1 to provisioning only (IS4) and never takes a message for a provisioning.
+    fn default() -> InstallView {
+        InstallView { record: None, staged: BTreeMap::new(), ceiling: None, message: true, layout: None }
+    }
 }
 
 impl PepView {
@@ -199,7 +207,14 @@ pub fn verify(sealed: &[u8], body: &[u8], trust: &TrustStore, pep: &PepView, now
         return verify_install(envelope, &entries, &message, body, trust, pep, now, installed);
     }
     if envelope.artifact == ArtifactKind::OperatorAnswer {
-        return Verdict { cause: Some(TARGET_MISMATCH.to_string()), envelope: Some(envelope), ..Verdict::default() };
+        // K4: V5 first requires the role an answer needs, `operator`, to be one it is signed under, with V3's cause
+        // for that role otherwise, and only then holds it to this kind, which has no escalation (OP1)
+        let cause = match answering {
+            Some(answering) if answering.ok() => TARGET_MISMATCH.to_string(),
+            Some(answering) => answering.cause.unwrap_or_else(|| UNKNOWN_KEY.to_string()),
+            None => UNKNOWN_KEY.to_string(),
+        };
+        return Verdict { cause: Some(cause), envelope: Some(envelope), ..Verdict::default() };
     }
     if !counted.ok() {
         return Verdict { envelope: Some(envelope), ..counted };

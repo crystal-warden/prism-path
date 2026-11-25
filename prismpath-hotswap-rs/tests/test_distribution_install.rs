@@ -17,7 +17,7 @@ use dist::*;
 use installs::*;
 use prismpath_hotswap_rs::dist::envelope as env;
 use prismpath_hotswap_rs::dist::floor;
-use prismpath_hotswap_rs::dist::install::{self, SetKind};
+use prismpath_hotswap_rs::dist::install::{self, AsName, SetKind};
 use prismpath_hotswap_rs::dist::pep::PepError;
 use prismpath_hotswap_rs::dist::state_record;
 use prismpath_hotswap_rs::dist::trust::{anchor_bytes, Role};
@@ -521,6 +521,85 @@ fn case_225_a_host_takes_no_operator_answer() {
     assert_eq!(point.send(&[answer("O1")]).cause.as_deref(), Some("dist:target-mismatch"));
     assert_eq!(point.send(&[answer("O9")]).cause.as_deref(), Some("dist:target-mismatch"));
     assert_eq!(point.pep.trust().time_floor, time_floor);
+}
+
+/// K4, V5: the role an answer needs is checked before the kind it is for, as Python and the C core check it. An
+/// answer signed only by an authority key passes V3 under that role and is `dist:unknown-key` at V5, not
+/// `dist:target-mismatch`; one signed by an operator key, by no key the PEP holds or by one install key below the
+/// threshold is `dist:target-mismatch`.
+#[test]
+fn an_authority_signed_answer_on_host_is_unknown_key() {
+    let mut point = Installer::with("answer-role", &anchor2(&INSTALL_KEYS, 2, &["O1"], 0), &[], false);
+    for (signer, cause) in [("A", "dist:unknown-key"), ("O1", "dist:target-mismatch"), ("O9", "dist:target-mismatch"), ("N1", "dist:target-mismatch")] {
+        assert_eq!(point.send(&[answer(signer)]).cause.as_deref(), Some(cause), "{signer}");
+    }
+}
+
+/// IS11: an install trust body is read in the order of its rule, as Python and the C core read it. No install key
+/// is `dist:bad-format` before either list is held to its bound, so 0 keys and 5 operators is `dist:bad-format`;
+/// 5 keys, or 1 key and 5 operators, is `dist:too-large`.
+#[test]
+fn an_install_trust_body_with_no_key_is_bad_format_before_too_large() {
+    let body = |keys: &[&str], operators: &[&str]| {
+        let mut keys: Vec<String> = keys.iter().map(|name| hex::encode(public(name))).collect();
+        let mut operators: Vec<String> = operators.iter().map(|name| hex::encode(public(name))).collect();
+        keys.sort();
+        operators.sort();
+        prismpath_rs::canon2::write_json(&json!({"encoding": "canon/2", "format": "prismpath.dist-install-trust/1",
+                                                 "keys": keys, "operators": operators, "threshold": 1}))
+        .unwrap()
+    };
+    let five = ["O1", "O2", "O3", "O4", "O5"];
+    let cause = |keys: &[&str], operators: &[&str]| install::read_install_trust(&body(keys, operators)).err().map(|refused| refused.cause);
+    assert_eq!(cause(&[], &five), Some("dist:bad-format"));
+    assert_eq!(cause(&[], &[]), Some("dist:bad-format"));
+    assert_eq!(cause(&["N1"], &five), Some("dist:too-large"));
+    assert_eq!(cause(&["N1", "N2", "N3", "N4", "N5"], &[]), Some("dist:too-large"));
+    assert_eq!(cause(&["N1"], &["O1"]), None);
+}
+
+/// P2 step 3, CL3, V10: a statement brought with an anchor is held, before anything changes, to what staging it meets
+/// in order: the ceiling the provisioning leaves or one brought before it, and the statements of its set staged before
+/// it. A fallback policy outside the held ceiling, one outside a ceiling brought first, and a second statement of one
+/// set that disagrees with the first each refuse the provisioning and leave the PEP as it was. A set below the held
+/// `seq` is `dist:seq-replay` and the provisioning goes on (case 170), and that refusal is reported beside the
+/// `provisioned` record, as Python's `confirm` reports it.
+#[test]
+fn a_provisioning_refuses_a_brought_set_its_staging_would_refuse_and_keeps_a_seq_replay_record() {
+    let anchor = anchor2(&INSTALL_KEYS, 2, &[], 0);
+    let mut point = Installer::with("brought", &anchor, &[], false);
+    let listed = install::ceiling_body(&[&image(5)]).unwrap();
+    point.send(&ceiling_set(&[&image(5)], &SetArgs { widens: false, ..seq(1) }));
+    let record = point.pep.installed.record.clone();
+    let refused = |point: &mut Installer, brought: Vec<(Vec<u8>, Vec<u8>)>| {
+        let error = provision(point, &anchor, &brought).unwrap_err();
+        assert_eq!(point.pep.installed.record, record);
+        assert_eq!(point.held(FALLBACK), None);
+        error
+    };
+    assert!(refused(&mut point, fallback_set(&image(9), &seq(1))).contains("dist:above-ceiling"));
+    let narrower = ceiling_set(&[], &SetArgs { widens: false, replaces: Some(h(&listed)), ..seq(2) });
+    assert!(refused(&mut point, [narrower, fallback_set(&image(5), &seq(1))].concat()).contains("dist:above-ceiling"));
+    let spiral = b"a spiral sidecar".to_vec();
+    let first = set(FALLBACK, &[(PPT, image(5)), (AsName::Artifact(ArtifactKind::PolicySpiral), spiral.clone())], &seq(1));
+    let first: Vec<_> = first.into_iter().filter(|(_, body)| *body == spiral).collect();
+    assert!(refused(&mut point, [first, fallback_set(&image(5), &seq(1))].concat()).contains("dist:incomplete"));
+    point.send(&fallback_set(&image(5), &seq(2)));
+    point.pep.drain();
+    provision(&mut point, &anchor, &fallback_set(&image(5), &seq(1))).unwrap();
+    let sent: Vec<_> = point.pep.drain().iter().map(|one| point.read(one)).collect();
+    let sent: Vec<_> = sent.iter().map(about).collect();
+    assert_eq!(sent, [("refused", Some("dist:seq-replay")), ("provisioned", None)]);
+    assert_eq!(point.seq_of(FALLBACK), 2);
+}
+
+/// D5: a view of the install part built from the default takes a statement as one in a message, as Python's
+/// `InstallView` does, so a provisioning is always said so and never taken for the default.
+#[test]
+fn the_default_install_view_is_a_message() {
+    let view = prismpath_hotswap_rs::dist::verify::InstallView::default();
+    assert!(view.message);
+    assert!(view.record.is_none() && view.staged.is_empty() && view.ceiling.is_none() && view.layout.is_none());
 }
 
 /// case_233: IS13, IS11. On an install threshold of 1 with two operator keys, an install provisioning that carries an

@@ -726,7 +726,8 @@ typedef struct {
  * present for none) and the install statements the engineer brings. 0, or a cause and the PEP left as it was: an
  * anchor whose keys are not apart (K4, dist:rotation-invalid), whose install trust sequence is below the PEP's or at
  * it with another key set (dist:trust-replay), whose domain is not the PEP's (dist:target-mismatch), or a brought
- * statement that does not verify under the record the provisioning leaves. */
+ * statement that staging in order would refuse, under the record the provisioning leaves and the sets brought
+ * before it, but dist:seq-replay, which is refused and reported beside provisioned (case 170). */
 uint8_t pp_pep_provision_install(pp_pep_machine *pep, const pp_trust *anchor, const pp_install_anchor *install,
                                  const char *stream, const pp_brought *brought, size_t n_brought, long long now);
 
