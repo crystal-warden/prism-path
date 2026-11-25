@@ -482,6 +482,11 @@ impl InstallSet {
         self.envelopes.values().next().and_then(install_meta).and_then(|meta| meta.rate)
     }
 
+    /// OP4: the signed `answer_rate` of an action floor, shared by every statement (V10).
+    pub fn answer_rate(&self) -> Option<Rate> {
+        self.envelopes.values().next().and_then(install_meta).and_then(|meta| meta.answer_rate)
+    }
+
     /// AF9, AF10: the `layout` and the `command` register a table floor is read with.
     fn reading(&self) -> (Option<Hex64>, Option<i64>) {
         let meta = self.envelopes.values().next().and_then(install_meta);
@@ -623,10 +628,6 @@ impl Record {
             trust_id: MaybeHex64(self.trust_id.clone()),
             trust_seq: self.trust_seq,
         }
-    }
-
-    fn to_bytes(&self) -> Result<Vec<u8>, HostError> {
-        codec::to_bytes(&self.document()).map_err(|error| HostError::Canonical(format!("install record: {error}")))
     }
 
     /// The record a document holds, its sets named and not yet read from their blobs.
@@ -880,16 +881,39 @@ pub fn looser(old: Option<Rate>, new: Option<Rate>) -> bool {
     }
 }
 
+/// IS10, IS12: whether a ceiling the PEP lost was held, and the set its install record names for it, None when only
+/// the mark of IS10 says one was held.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Lost<'a> {
+    pub lost: bool,
+    pub named: Option<&'a SetDoc>,
+}
+
+/// IS10, IS12: `new` is byte for byte the set `named`, as the body hashes the record keeps for it show. With no set
+/// named nothing is a resend.
+pub fn resends(named: Option<&SetDoc>, new: &InstallSet) -> bool {
+    let Some(named) = named else { return false };
+    let hashes: BTreeMap<AsName, Hex64> = new.bodies.iter().map(|(name, body)| (*name, Hex64::of(body))).collect();
+    let held: BTreeMap<AsName, Hex64> = named.statements.iter().map(|(name, one)| (*name, one.body.clone())).collect();
+    !named.statements.keys().all(|name| *name == AsName::None) && hashes == held
+}
+
 /// IS12 on `host`: whether `new` allows more than `held`, the set it follows or None. A first action floor and a
 /// first fallback policy widen and the empty one does not. A first ceiling does not widen, the empty ceiling does,
-/// and a list that holds a hash the one before did not is larger. A looser `rate` widens. Otherwise a table that
-/// is not byte for byte the held one is larger (W2).
+/// and a list that holds a hash the one before did not is larger. A looser `rate` or `answer_rate` widens.
+/// Otherwise a table that is not byte for byte the held one is larger (W2).
 ///
 /// With `carried`, an install change statement from the held set's policy hash stands for the tables of an action
-/// floor or a fallback policy (IS15): their bytes are not compared, and everything else is, the rate and a floor's
+/// floor or a fallback policy (IS15): their bytes are not compared, and everything else is, the rates and a floor's
 /// `layout` and `command` included, and the set holds the same artifacts as the held one.
-pub fn set_larger(kind: SetKind, held: Option<&InstallSet>, new: &InstallSet, carried: bool) -> bool {
+///
+/// With `lost.lost` the PEP held a ceiling it no longer reads, and every ceiling but a byte for byte resend of the
+/// set the record names is larger, the empty one too, since the PEP cannot tell what the lost one allowed.
+pub fn set_larger(kind: SetKind, held: Option<&InstallSet>, new: &InstallSet, carried: bool, lost: Lost) -> bool {
     let empty = new.is_empty_set();
+    if kind == SetKind::Ceiling && lost.lost {
+        return !resends(lost.named, new);
+    }
     if kind == SetKind::Ceiling {
         return match (empty, held) {
             (true, held) => held.is_some(),
@@ -901,8 +925,8 @@ pub fn set_larger(kind: SetKind, held: Option<&InstallSet>, new: &InstallSet, ca
     if empty {
         return false;
     }
-    if kind == SetKind::Floor && looser(held.rate(), new.rate()) {
-        return true;
+    if kind == SetKind::Floor && (looser(held.rate(), new.rate()) || looser(held.answer_rate(), new.answer_rate())) {
+        return true; // AF8, OP4, IS12: a looser `rate` or `answer_rate`, or one removed
     }
     if carried {
         return held.bodies.keys().ne(new.bodies.keys()) || held.reading() != new.reading();
@@ -916,14 +940,28 @@ pub fn set_larger(kind: SetKind, held: Option<&InstallSet>, new: &InstallSet, ca
 /// event `install-widened`, when its `widens` is true or it is larger. The install change statement staged before
 /// `new`, from the held set's policy hash, stands for its table when `new` says it does not widen and replaces that
 /// hash (IS15), so the set is applied with event `install-applied`.
-pub fn widens_ok(kind: SetKind, held: Option<&InstallSet>, new: &InstallSet) -> (Option<&'static str>, bool) {
+///
+/// A ceiling sent while the held one is lost is larger unless it is a byte for byte resend, and it is taken with
+/// `widens` false only when it is that resend and its `replaces` is the policy hash the record names for the lost
+/// set. With no set named no `replaces` passes, so such a ceiling stands out and needs `widens` true.
+pub fn widens_ok(kind: SetKind, held: Option<&InstallSet>, new: &InstallSet, lost: Lost) -> (Option<&'static str>, bool) {
+    if kind == SetKind::Ceiling && lost.lost {
+        if new.doc.widens {
+            return (None, true);
+        }
+        let named = lost.named.map(|doc| &doc.policy_sha256);
+        if set_larger(kind, None, new, false, lost) || named.is_none() || new.doc.replaces.0.as_ref() != named {
+            return (Some(WIDENING_UNSIGNED), true);
+        }
+        return (None, false);
+    }
     let held_policy = held.map(InstallSet::policy_sha256);
     let carried = kind != SetKind::Ceiling
         && !new.doc.widens
         && held_policy.is_some()
         && new.doc.replaces.0.as_ref() == held_policy
         && changes_set(new.change_body.as_deref(), kind, held_policy);
-    let larger = set_larger(kind, held, new, carried);
+    let larger = set_larger(kind, held, new, carried, Lost::default());
     if new.doc.widens {
         return (None, true);
     }
@@ -986,6 +1024,8 @@ pub struct Installed {
     pub record: Option<Record>,
     pub record_lost: bool,
     pub ceiling_lost: bool,
+    /// IS10: the ceiling the record names and no copy reads, kept named in the record until a ceiling replaces it.
+    pub lost_ceiling: Option<SetDoc>,
     pub staged: BTreeMap<SetKind, InstallSet>,
     pub marks: Marks,
 }
@@ -1001,6 +1041,7 @@ impl Installed {
             record: None,
             record_lost: false,
             ceiling_lost: false,
+            lost_ceiling: None,
             staged: BTreeMap::new(),
             marks: Marks::default(),
         }
@@ -1050,7 +1091,7 @@ impl Installed {
     /// the install kinds lost this start. A record no copy reads is lost when a mark says one was held.
     pub fn load(&mut self) -> Vec<SetKind> {
         self.read_marks();
-        (self.record, self.record_lost, self.ceiling_lost) = (None, false, false);
+        (self.record, self.record_lost, self.ceiling_lost, self.lost_ceiling) = (None, false, false, None);
         self.staged.clear();
         let read = self.record_paths().iter().find_map(|path| std::fs::read(path).ok().and_then(|raw| Record::from_bytes(&raw).ok()));
         let Some((mut record, named)) = read else {
@@ -1066,9 +1107,10 @@ impl Installed {
                 None => lost.push(kind),
             }
         }
-        if lost.contains(&SetKind::Ceiling) || (record.held(SetKind::Ceiling).is_none() && self.marks.ceiling) {
-            self.ceiling_lost = true;
+        if lost.contains(&SetKind::Ceiling) {
+            self.lost_ceiling = named[SetKind::Ceiling.index()].clone();
         }
+        self.ceiling_lost = lost.contains(&SetKind::Ceiling) || self.named_lost(&record);
         self.record = Some(record);
         self.read_staged();
         lost
@@ -1178,8 +1220,23 @@ impl Installed {
 
     /// Both copies of the record, the first then the second, each whole. Every statement it names is already in
     /// both copies.
+    /// IS10: `record` holds no ceiling while the mark says one was held and its ceiling sequence is not 0, so the
+    /// crash between the first ceiling's mark and its record is no lost ceiling (Python's `seqs[CEILING]` test). The
+    /// empty ceiling clears the mark, and a provisioning with a key set that shares no key starts the sequences again.
+    pub fn named_lost(&self, record: &Record) -> bool {
+        record.held(SetKind::Ceiling).is_none() && self.marks.ceiling && record.seq(SetKind::Ceiling) > 0
+    }
+
     pub fn save(&mut self, record: Record) -> Result<(), HostError> {
-        let raw = record.to_bytes()?;
+        let mut doc = record.document();
+        match &self.lost_ceiling {
+            // IS10: still named, and still lost at the next start
+            Some(lost) if record.held(SetKind::Ceiling).is_none() && record.seq(SetKind::Ceiling) == lost.seq => {
+                doc.sets.insert(SetKind::Ceiling.name().to_string(), Some(lost.clone()));
+            }
+            _ => self.lost_ceiling = None,
+        }
+        let raw = codec::to_bytes(&doc).map_err(|error| HostError::Canonical(format!("install record: {error}")))?;
         for path in self.record_paths() {
             write(&path, &raw)?;
         }
@@ -1229,7 +1286,7 @@ impl Installed {
                 Err(error) => return Err(HostError::Io(format!("{path}: {error}"))),
             }
         }
-        (self.record, self.record_lost, self.ceiling_lost) = (None, false, false);
+        (self.record, self.record_lost, self.ceiling_lost, self.lost_ceiling) = (None, false, false, None);
         self.staged.clear();
         self.keep();
         Ok(())

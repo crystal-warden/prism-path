@@ -247,6 +247,8 @@ typedef struct {
     uint8_t set_id[32];
     uint8_t envelope_id[32];       /* of the held set, or of the empty set that withdrew it */
     uint8_t policy_sha256[32];     /* of the held set, the `replaces` the next one names (IS12) */
+    uint8_t body_sha256[32];       /* of the held set's one statement, so a resend of a lost set is known (IS10,
+                                    * IS12); packed in place of the set id, which the envelope id gives */
 } pp_install_slot;
 
 /* IS10: the install keys and their threshold, the operator keys (OP1), the retired install and operator key ids

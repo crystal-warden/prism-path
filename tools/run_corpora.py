@@ -134,6 +134,11 @@ CONSUMERS: dict[str, dict[str, list[tuple]]] = {
         "py": [("generator", "prismpath/portable/gen_hotswap_fixtures.py")],
         "rs": [cargo("prismpath-hotswap-rs", "test_hotswap_conformance", "prismpath-hotswap-rs/tests/test_hotswap_conformance.rs")],
         "js": [NONE_JS], "go": [NONE_GO], "hw": [NONE_HW]},
+    "portable/install_larger": {
+        "py": [pytest("prismpath/tests/test_distribution_larger.py")],
+        "rs": [cargo("prismpath-hotswap-rs", "test_distribution_larger", "prismpath-hotswap-rs/tests/test_distribution_larger.rs")],
+        "js": [NONE_JS], "go": [NONE_GO],
+        "hw": [pytest("prismpath/tests/test_distribution_c.py")]},
     "portable/level_m": {
         "py": [pytest("prismpath/tests/test_level_m_conformance.py", PY_RUN)],
         "rs": [cargo("prismpath-rs", "test_proof", "prismpath-rs/tests/test_proof.rs")],

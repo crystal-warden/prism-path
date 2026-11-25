@@ -8,6 +8,15 @@ spec stable.
 
 ## [Unreleased]
 
+### Fixed: the ceiling holds at every start and tick, and a ceiling after a lost one stands out (2026-11-24)
+
+- **The checks every entry point, tick and start run hold the active release to the held ceiling (CL3, C10).** Python, Rust and the C core lapse a release above the ceiling with `dist:above-ceiling` there as they do one that is revoked, so a power loss after a narrower ceiling is durable and before its lapse lapses the release at the next start. Python's reconciling tests hold the held and the running release to the ceiling too, as Rust's did.
+- **A ceiling sent while the held one is lost counts as larger unless it is a byte for byte resend (IS10, IS12).** The empty ceiling and a narrower or wider list need `widens` true and stand out with `install-widened`. The resend is taken with `widens` false only when its `replaces` is the policy hash the install record names for the lost set, on all three. The record keeps the lost set named until a ceiling replaces it, and the C core keeps each held statement's body hash in the install part in place of the set id, which the envelope id gives, so the packed size is unchanged.
+- **Rust provisioning keeps a lost ceiling lost and marked while the record keeps the install sequences (IS10).** Only the empty ceiling and a key set that shares no key clear the mark. Python's provisioning keeps it lost for the rest of the session as well as after a restart. Rust no longer freezes on a crash between the first ceiling's mark and its record, by the ceiling sequence test Python has.
+- **A looser `answer_rate` is larger in Rust and the C core, as in Python (IS12, OP4).**
+- **`portable/conformance/install_larger.json` is the IS12 rule as one table of 47 rows** (what the PEP holds before, held, lost or withdrawn, the set it is sent, `widens` and `replaces`, and the event and cause), written by `gen_install_larger_fixtures.py` and replayed by Python on `host` and `mesh`, Rust on `host` and the C core on `mesh`.
+- **Cases 306 and 307.**
+
 ### Added: state records and fleet findings export as OpenTelemetry events, OCSF and in-toto (2026-11-24)
 
 - **`prismpath dist fleet --export otel|ocsf|intoto` writes what the fleet view holds as JSON lines, at the controller only.** Per PEP that is the last accepted record of each event and each open finding. The controller now keeps the signed bytes of those records and of the record each finding was filed on, so every export carries them.

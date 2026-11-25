@@ -1976,12 +1976,35 @@ static int pp_stale(const pp_pep_machine *pep) {
     return pep->d.trust.fresh > 0 && pep->d.has_kept && pp_time(pep) > (long long)pep->d.kept_expires + PP_SKEW;
 }
 
+/* A table on the list of a ceiling statement, or any table for none. */
+static int pp_on_list(const pp_statement *ceiling, const uint8_t body_sha256[32]) {
+    return ceiling == NULL || pp_listed((const uint8_t (*)[32])ceiling->body, ceiling->body_len / 32, body_sha256);
+}
+
+/* The table of the active release, its body hash in `hash`, or 0 when none is active. */
+static int pp_active_hash(const pp_pep_machine *pep, uint8_t hash[32]) {
+    const pp_durable *d = &pep->d;
+    if (!d->has_active) return 0;
+    for (size_t k = 0; k < d->active.n; k++)
+        if (!pp_is_trust(d->active.held[k].envelope.artifact)) {
+            memcpy(hash, d->active.held[k].envelope.body_sha256, 32);
+            return 1;
+        }
+    return 0;
+}
+
 /* What every entry point and the tick run first (pep._check_active): an active release that no longer stands lapses
- * with dist:revoked (R5, X8), and an expired one lapses or under HOLD is held (X1, X6, X7). */
+ * with dist:revoked (R5, X8), one above the held ceiling with dist:above-ceiling (CL3), also when a power loss came
+ * between the ceiling and its lapse, and an expired one lapses or under HOLD is held (X1, X6, X7). */
 static void pp_check_expiry(pp_pep_machine *pep) {
     if (!pep->d.has_active || pep->locked || !pep->d.trust_reads) return;
     if (!pp_stands(pep, &pep->d.active, 1)) {
         pp_lapse(pep, PP_CAUSE_REVOKED);
+        return;
+    }
+    uint8_t active_hash[32];
+    if (pp_active_hash(pep, active_hash) && !pp_on_list(pp_held_set(pep, PP_SET_CEILING), active_hash)) {
+        pp_lapse(pep, PP_CAUSE_ABOVE_CEILING);
         return;
     }
     if (pp_still_valid(pep, &pep->d.active, 0) != PP_CAUSE_EXPIRED && !pp_stale(pep)) return;
@@ -2646,23 +2669,6 @@ static const uint8_t *pp_statement_body(const pp_statement *st, size_t *len) {
 }
 
 
-/* A table on the list of a ceiling statement, or any table for none. */
-static int pp_on_list(const pp_statement *ceiling, const uint8_t body_sha256[32]) {
-    return ceiling == NULL || pp_listed((const uint8_t (*)[32])ceiling->body, ceiling->body_len / 32, body_sha256);
-}
-
-/* The table of the active release, its body hash in `hash`, or 0 when none is active. */
-static int pp_active_hash(const pp_pep_machine *pep, uint8_t hash[32]) {
-    const pp_durable *d = &pep->d;
-    if (!d->has_active) return 0;
-    for (size_t k = 0; k < d->active.n; k++)
-        if (!pp_is_trust(d->active.held[k].envelope.artifact)) {
-            memcpy(hash, d->active.held[k].envelope.body_sha256, 32);
-            return 1;
-        }
-    return 0;
-}
-
 static void pp_lapse(pp_pep_machine *pep, uint8_t cause);
 
 /* IS4, IS6, IS12, CL3 (pep._apply_set): apply the whole set staged of `kind`. It is held to its `seq` again, to the
@@ -2680,6 +2686,7 @@ static uint8_t pp_apply_set(pp_pep_machine *pep, int kind) {
     uint8_t subject = (uint8_t)(kind + 1), cause = PP_CAUSE_NONE;
     int empty = e->as == PP_AS_NONE;
     const pp_statement *held = pp_held_set(pep, kind), *ceiling = pp_held_set(pep, PP_SET_CEILING);
+    int lost = kind == PP_SET_CEILING && pp_ceiling_lost(pep); /* IS10: a ceiling after a lost one */
     if (e->seq <= r->sets[kind].seq) cause = PP_CAUSE_SEQ_REPLAY;
     else if (kind != PP_SET_CEILING && !empty && !pp_on_list(ceiling, e->body_sha256)) cause = PP_CAUSE_ABOVE_CEILING;
     else if (kind == PP_SET_CEILING && !empty) {
@@ -2696,7 +2703,9 @@ static uint8_t pp_apply_set(pp_pep_machine *pep, int kind) {
                   memcmp(e->replaces, held->envelope.policy_sha256, 32) == 0 &&
                   memcmp(slot_set->change.from, held->envelope.policy_sha256, 32) == 0;
     if (!cause) {
-        if (kind == PP_SET_CEILING) {
+        if (lost) /* IS10, IS12: all but a byte for byte resend of the set the record names, the empty one too */
+            larger = !(r->sets[kind].held && !empty && memcmp(e->body_sha256, r->sets[kind].body_sha256, 32) == 0);
+        else if (kind == PP_SET_CEILING) {
             if (empty) larger = held != NULL;
             else if (held != NULL)
                 for (size_t k = 0; k < st->body_len / 32; k++)
@@ -2714,6 +2723,10 @@ static uint8_t pp_apply_set(pp_pep_machine *pep, int kind) {
             if (kind == PP_SET_FLOOR && before && before->has_rate &&
                 (!e->has_rate || e->rate_allows > before->rate_allows || e->rate_window < before->rate_window))
                 larger = 1; /* AF8, IS12: a looser rate, or one removed */
+            if (kind == PP_SET_FLOOR && before && before->has_answer_rate &&
+                (!e->has_answer_rate || e->answer_allows > before->answer_allows ||
+                 e->answer_window < before->answer_window))
+                larger = 1; /* OP4, IS12: a looser answer_rate, or one removed */
         }
         if (!e->widens && (larger || !pp_same(e->replaces, e->has_replaces, r->sets[kind].policy_sha256,
                                               r->sets[kind].held)))
@@ -2740,6 +2753,7 @@ static uint8_t pp_apply_set(pp_pep_machine *pep, int kind) {
     memcpy(slot->envelope_id, e->envelope_id, 32);
     pp_sha256(e->envelope_id, 32, slot->set_id); /* IS1: the set id over its one envelope id */
     memcpy(slot->policy_sha256, e->policy_sha256, 32);
+    memcpy(slot->body_sha256, e->body_sha256, 32);
     pp_persist(pep, PP_PART_INSTALL);
     if (!empty) set->held = *st;
     set->has_held = !empty;
@@ -3678,9 +3692,13 @@ static void pp_io_part(pp_io *io, pp_durable *d, int part) {
             pp_install_slot *slot = &r->sets[k];
             pp_io_bytes(io, &slot->seq, sizeof slot->seq);
             pp_io_bytes(io, &slot->held, sizeof slot->held);
-            pp_io_bytes(io, slot->set_id, 32);
+            pp_io_bytes(io, slot->body_sha256, 32);
             pp_io_bytes(io, slot->envelope_id, 32);
             pp_io_bytes(io, slot->policy_sha256, 32);
+            if (!io->p) { /* IS1: a mesh set is one statement, so its set id is the hash of that envelope id */
+                memset(slot->set_id, 0, 32);
+                if (slot->seq > 0) pp_sha256(slot->envelope_id, 32, slot->set_id);
+            }
         }
         if (io->ok && (r->n_keys < 1 || r->threshold < 1 || r->threshold > (long long)r->n_keys)) io->ok = 0;
         break;
