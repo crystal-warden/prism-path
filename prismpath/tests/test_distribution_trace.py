@@ -27,8 +27,9 @@ SOURCES = {
     "P": [*sorted((REPO / "tests").glob("test_distribution_*.py")), ROOT / "integrations" / "cfs" / "tests" / "test_cfs_dist.py",
           ROOT / "tools" / "tests" / "test_export.py"],
     "C": [REPO / "tests" / "test_distribution_c.py", REPO / "tests" / "test_distribution_c_cfs.py",
-          REPO / "tests" / "test_distribution_end_to_end.py"],
-    "R": sorted((ROOT / "prismpath-hotswap-rs" / "tests").glob("test_distribution_*.rs")),
+          REPO / "tests" / "test_distribution_parity.py", REPO / "tests" / "test_distribution_end_to_end.py"],
+    "R": [*sorted((ROOT / "prismpath-hotswap-rs" / "tests").glob("test_distribution_*.rs")),
+          REPO / "tests" / "test_distribution_parity.py"],
 }
 EXCLUDED = {REPO / "tests" / "test_distribution_trace.py", REPO / "tests" / "test_distribution_c.py",
             REPO / "tests" / "test_distribution_c_cfs.py"}
@@ -50,9 +51,9 @@ PARTIAL = {"P": frozenset(), "R": frozenset(), "C": frozenset()}
 # loads its action floor in every table, counts the floor's passes with no `would`, and refuses a floor with a `rate`
 # and an operator's answer.
 PENDING = {
-    "P": "104 206 272",
+    "P": "206 272",
     "R": "272",
-    "C": "104",
+    "C": "",
 }
 
 
