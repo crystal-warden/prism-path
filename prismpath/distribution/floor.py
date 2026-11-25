@@ -712,9 +712,10 @@ class Book:
 
     @staticmethod
     def _window(slot: List[int], rate: Mapping[str, int], now: int) -> List[int]:
-        """A fixed window of the PEP's own time: a new one starts once `window` seconds passed since the start."""
+        """A fixed window of the PEP's own time: a new one starts once `window` seconds passed since the start. A time
+        before the start, a clock set back, keeps the window and its count, so it never grants a fresh allowance."""
         start, count = slot
-        if count == 0 or now >= start + rate["window"] or now < start:
+        if count == 0 or now >= start + rate["window"]:
             return [now, 0]
         return [start, count]
 
