@@ -327,6 +327,32 @@ def read_widening(body: bytes) -> dict:
     return doc
 
 
+CHANGE_FORMAT = "prismpath.dist-change/1"           # W10: a change statement
+CHANGE_BASIS = "prismpath.table-compare/1"          # W10: the comparator a change statement rests on (W8)
+
+
+def read_change(body: bytes) -> dict:
+    """W10: a change statement, the one policy hash the release replaces in `from` and the comparison it rests on
+    in `basis`, which is W8's table comparator in this version."""
+    doc = _trust_body(body, CHANGE_FORMAT, frozenset({"basis", "encoding", "format", "from"}))
+    if doc["basis"] != CHANGE_BASIS or not is_hex64(doc["from"]):
+        raise Refused(BAD_FORMAT, "a change statement whose basis is not the table comparator or whose from is not a hash")
+    return doc
+
+
+def check_change(envelope, body: bytes, _pep) -> Optional[str]:
+    """`trust.change` (V11, W10): the body reads, its `from` is the envelope's `replaces`, and the envelope says it
+    does not widen. A change statement that says it widens, or that replaces nothing, is `dist:bad-format`: a
+    first install is a widening and a change statement never stands for one."""
+    try:
+        doc = read_change(body)
+    except Refused as refused:
+        return refused.cause
+    if envelope.widens or not envelope.replaces or doc["from"] != envelope.replaces:
+        return BAD_FORMAT
+    return None
+
+
 def read_profile(body: bytes) -> dict:
     """`sandbox.profile`: a sandbox profile in canon/2 bytes (`Profile.canonical`). Whether it is the one the policy
     compiles to is the agent home's check at commit (`dist:derived-mismatch`)."""
@@ -471,18 +497,24 @@ ARTIFACTS: Dict[str, Artifact] = {
     "cfs.table": Artifact(),
     "grant": Artifact(check=_reads(read_grant)),
     "trust.widening": Artifact(check=_reads(read_widening)),
+    "trust.change": Artifact(check=check_change),
     "trust.revocation": Artifact(check=_reads(read_revocation)),
     "trust.rotation": Artifact(check=_reads(read_rotation)),
     "trust.controller": Artifact(check=_reads(read_controller)),
 }
-TRUST_ARTIFACTS = frozenset({"trust.widening", "trust.revocation", "trust.rotation", "trust.controller"})
+TRUST_ARTIFACTS = frozenset({"trust.widening", "trust.change", "trust.revocation", "trust.rotation",
+                             "trust.controller"})
+STATEMENTS = frozenset({"trust.widening", "trust.change"})   # W3, W11: travel with a release and staged before it
+APPLIES_WITH_CHANGE = frozenset(  # host, mesh: the trust kinds and a change statement (W11)
+    {"trust.widening", "trust.revocation", "trust.rotation", "trust.controller", "trust.change"})
 # R1, O1, K7: they travel on `@trust` and share the one trust sequence
 ON_TRUST_STREAM = frozenset({"trust.revocation", "trust.rotation", "trust.controller"})
 
 # ------------------------------------------------------------------ the install kinds (section 21)
 
 INSTALL_SETS = frozenset({"install.floor", "install.fallback", "install.ceiling"})      # IS1: a set of one kind
-INSTALL_ARTIFACTS = INSTALL_SETS | {"install.trust"}
+INSTALL_CHANGE = "install.change"                   # IS14: an install change statement, signed by the install keys
+INSTALL_ARTIFACTS = INSTALL_SETS | {"install.trust", INSTALL_CHANGE}
 POLICY_LIST, NONE = "policy.list", "none"           # CL1: the list of a ceiling; IS1: the empty set
 FLOOR_META = frozenset({"rate", "answer_rate", "command", "layout"})   # AF8, OP4, AF9, AF10: on an action floor only
 READ_ALWAYS = frozenset({"as"}) | FLOOR_META        # IS1: every reader reads these, the E9 scanners too
@@ -536,6 +568,36 @@ ARTIFACTS["install.floor"] = Artifact(role=INSTALL)
 ARTIFACTS["install.fallback"] = Artifact(role=INSTALL)
 ARTIFACTS["install.ceiling"] = Artifact(role=INSTALL)
 ARTIFACTS["install.trust"] = Artifact(check=_reads(read_install_trust), role=INSTALL)
+
+INSTALL_CHANGE_FORMAT = "prismpath.dist-install-change/1"      # IS14
+CHANGES_SETS = frozenset({"install.floor", "install.fallback"})  # IS14: the sets an install change statement carries
+
+
+def read_install_change(body: bytes) -> dict:
+    """IS14: an install change statement, the install kind of the set it carries in `set`, the one policy hash that
+    set replaces in `from` and the comparison it rests on in `basis`, W8's table comparator in this version. Only an
+    action floor or a fallback policy is carried: a `host` and a `mesh` PEP compare two ceiling lists themselves."""
+    doc = _trust_body(body, INSTALL_CHANGE_FORMAT, frozenset({"basis", "encoding", "format", "from", "set"}))
+    if doc["basis"] != CHANGE_BASIS or not is_hex64(doc["from"]) or doc["set"] not in CHANGES_SETS:
+        raise Refused(BAD_FORMAT, "an install change statement whose basis, from or set does not read")
+    return doc
+
+
+def check_install_change(envelope, body: bytes, _pep) -> Optional[str]:
+    """`install.change` (V11, IS14): the body reads, its `from` is the envelope's `replaces`, the envelope says it
+    does not widen, and its policy hash is a set's and not the empty set's 64 zeros. Anything else is
+    `dist:bad-format`: a first set and a set that says it widens are widenings, and the empty set never needs one."""
+    try:
+        doc = read_install_change(body)
+    except Refused as refused:
+        return refused.cause
+    if envelope.widens or not envelope.replaces or doc["from"] != envelope.replaces or \
+            envelope.policy_sha256 == "0" * 64:
+        return BAD_FORMAT
+    return None
+
+
+ARTIFACTS[INSTALL_CHANGE] = Artifact(check=check_install_change, role=INSTALL)
 # E11: what `as` may name, an artifact a release holds, never a trust kind, a grant or an install kind
 INSTALL_AS = frozenset(name for name in ARTIFACTS
                        if name not in TRUST_ARTIFACTS | INSTALL_ARTIFACTS and name not in ("grant", ANSWER))
@@ -545,7 +607,7 @@ def install_meta(artifact: str, meta: Any) -> Tuple[FrozenSet[str], FrozenSet[st
     """E11, IS1: the (required, optional) `meta` members of an install statement whose `meta` names `as`: `as`,
     then the members section 3 gives the artifact it names, and on an action floor `rate`, `answer_rate`,
     `command` and `layout`. An `install.trust` has none."""
-    if artifact == "install.trust":
+    if artifact in ("install.trust", INSTALL_CHANGE):
         return frozenset(), frozenset()
     named = meta.get("as") if isinstance(meta, dict) else None
     inner = ARTIFACTS.get(named) if named in INSTALL_AS else None
@@ -559,14 +621,15 @@ MESH_TABLE_MAX = 640                               # E6: TBL_MAX in prismpath-hw
 
 TARGETS: Dict[str, Target] = {
     "host": Target(needs=frozenset({"policy.ppt"}), decides=False, when_declared=frozenset({"policy.spiral"}),
-                   compares=frozenset({"policy.ppt"})),
+                   compares=frozenset({"policy.ppt"}), applies=APPLIES_WITH_CHANGE),
     "agent": Target(needs=frozenset({"policy.core", "egress.hosts"}), decides=True,
                     when_declared=frozenset({"agent.zones", "sandbox.profile"})),
     "gateway": Target(needs=frozenset({"policy.core", "gateway.routes"}), decides=True,
                       when_declared=frozenset({"identity.bundle", "identity.map"})),
     "xdp": Target(needs=frozenset({"policy.core", "net.dests", "net.edge"}), decides=True),
     "mesh": Target(needs=frozenset({"policy.ppt"}), decides=False, expiry_hold=True, body_bound=MESH_TABLE_MAX,
-                   checks={"policy.ppt": check_mesh_table}, reads_meta=False, compares=frozenset({"policy.ppt"})),
+                   checks={"policy.ppt": check_mesh_table}, reads_meta=False, compares=frozenset({"policy.ppt"}),
+                   applies=APPLIES_WITH_CHANGE),
 }
 
 

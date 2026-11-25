@@ -501,7 +501,7 @@ def test_case_219_a_first_floor_at_provisioning_is_acknowledged_by_enrollment_an
                       replaces=env.read(env.unseal(floor[0][0])[0]).policy_sha256)
     for sealed, body in new:
         controller.put(sealed, body)
-    controller.acknowledge(_ids(new), by="engineer")          # on mesh every changed table is larger (H13)
+    controller.acknowledge(_ids(new), by="engineer")          # a set that says it widens waits for this (H13)
     driver = FrameDriver(controller, "fleet", limit=frames.ESPNOW_LIMIT)
     monotonic = {"now": 0.0}
     for _ in range(3):
@@ -1323,3 +1323,138 @@ def test_a_stream_whose_install_threshold_is_1_has_its_statements_stored_and_nev
     later = _set(point, FLOOR, NARROW, 2, widens=False, replaces=H(NARROW))
     fleet.put(later)
     assert fleet.controller.answer(fleet.ids["p1"])["offers"] == []
+
+
+# ------------------------------------------------------------------ IS15, W8, H13: the controller and a change statement
+
+GOOD = table("cmd == 3 and p >= 2 and p <= 5")
+NARROWER = table("cmd == 3 and p >= 3 and p <= 5")
+LARGER = table("cmd == 3 and p >= 2 and p <= 6")
+
+
+def _mesh_fleet(tmp_path):
+    """A controller serving a `mesh` stream with the layout, one enrolled node pulling, and a first floor it holds."""
+    point = _table_point(MeshFloor, tmp_path, "m1", key=_dist.instance_key("m1"))
+    controller = Controller(str(tmp_path / "controller"), _dist.instance_key("C"), clock=point.clock)
+    controller.add_anchor(point.anchor(), layout=LAYOUT)
+    pep = controller.enroll(point.key.public_raw, "mesh", STREAM, "fleet")
+    client = PullClient(point.pep, LocalTransport(controller))
+    first = _mesh_floor(point, GOOD, 1)
+    for sealed, body in first:
+        controller.put(sealed, body)
+    controller.acknowledge(_ids(first), by="engineer")
+    for _ in range(2):
+        client.poll()
+    assert point.pep.installed.held(FLOOR).seq == 1
+    return point, controller, pep, client
+
+
+def _sets(controller, seq):
+    return [one for one in controller.install_view()[STREAM]["sets"] if one["seq"] == seq]
+
+
+def test_case_300_a_change_statement_w8_bears_out_is_offered_at_once(tmp_path):
+    """case_300: IS15, W8, H13, F4. A narrower floor with `widens` false and its install change statement is offered at
+    once with the statement first, shown as a change, not larger, with W8's answer, and the node applies it with event
+    `install-applied` and the install id the controller expects. A change statement with a floor W8 finds larger is
+    refused with `dist:widening-unsigned` and nothing of it is stored, and one handed after its set is whole is
+    `dist:incomplete`."""
+    point, controller, pep, client = _mesh_fleet(tmp_path)
+    narrow = _mesh_floor(point, NARROWER, 2, widens=False, replaces=H(GOOD))
+    change = install.seal_change(narrow[0][0], [GEN.test_key(name) for name in KEYS[:2]])
+    controller.put(*change)
+    for sealed, body in narrow:
+        controller.put(sealed, body)
+    (shown,) = _sets(controller, 2)
+    assert (shown["state"], shown["scope"], shown["finding"]) == ("offered", "change, not larger", None)
+    assert shown["comparison"]["answer"] == "not-larger" and shown["change"] == _ids([change])[0]
+    offered = [offer["envelope_id"] for offer in controller.answer(pep)["offers"]]
+    assert offered.index(_ids([change])[0]) < offered.index(_ids(narrow)[0])
+    for _ in range(2):
+        client.poll()
+    assert point.pep.installed.held(FLOOR).policy_sha256 == H(NARROWER)
+    events = [event for event in point.pep.audit.events if event["action"].startswith("install-")]
+    assert events[-1]["action"] == "install-applied" and events[-1]["data"]["change"] == _ids([change])[0]
+    member = controller.members[pep]
+    assert install.WIDENED not in member.findings and "fleet:policy-mismatch" not in member.findings
+    assert install_id_of(member.install) == point.pep.installed.record.install_id()
+    larger = _mesh_floor(point, LARGER, 3, widens=False, replaces=H(NARROWER))
+    wrong = install.seal_change(larger[0][0], [GEN.test_key(name) for name in KEYS[:2]])
+    controller.put(*wrong)
+    with pytest.raises(Refused) as refused:
+        controller.put(*larger[0])
+    assert refused.value.cause == install.UNSIGNED and "W8" in str(refused.value)
+    assert not _sets(controller, 3) and _ids([wrong])[0] not in controller.stored
+    renewal = _mesh_floor(point, NARROWER, 4, widens=False, replaces=H(NARROWER))
+    controller.put(*renewal[0])
+    late = install.seal_change(renewal[0][0], [GEN.test_key(name) for name in KEYS[:2]])
+    with pytest.raises(Refused) as refused:
+        controller.put(*late)
+    assert refused.value.cause == "dist:incomplete"
+
+
+def test_case_293_a_set_that_says_it_widens_waits_whatever_w8_finds(tmp_path):
+    """case_293: H13, W8, W9, IS12. A floor whose table allows less, sealed with `widens` true, is held with
+    `dist:install-widened` open until it is acknowledged, shown as a change, not larger, with the note that an install
+    change statement would carry it. A floor whose table allows more is held and shown as a widening with its witness.
+    Each is offered once acknowledged, and the node's `install-widened` record then files nothing that stays open."""
+    point, controller, pep, client = _mesh_fleet(tmp_path)
+    narrow = _mesh_floor(point, NARROWER, 2, replaces=H(GOOD))
+    for sealed, body in narrow:
+        controller.put(sealed, body)
+    (shown,) = _sets(controller, 2)
+    assert (shown["state"], shown["scope"]) == ("held", "change, not larger")
+    assert "install change statement would carry it" in shown["finding"]
+    controller.acknowledge(_ids(narrow), by="engineer")
+    for _ in range(2):
+        client.poll()
+    assert point.pep.installed.held(FLOOR).seq == 2 and install.WIDENED not in controller.members[pep].findings
+    wider = _mesh_floor(point, LARGER, 3, replaces=H(NARROWER))
+    for sealed, body in wider:
+        controller.put(sealed, body)
+    (shown,) = _sets(controller, 3)
+    assert (shown["state"], shown["scope"]) == ("held", "widening")
+    assert shown["comparison"]["answer"] == "larger" and shown["comparison"]["witness"]
+    controller.acknowledge(_ids(wider), by="engineer")
+    for _ in range(2):
+        client.poll()
+    assert point.pep.installed.held(FLOOR).seq == 3 and install.WIDENED not in controller.members[pep].findings
+
+
+def test_a_ceiling_that_lapses_an_expected_release_narrows_and_is_offered_at_once(tmp_path):
+    """IS12, CL3, H13: a ceiling list that drops the table of the release the controller expects of a node narrows,
+    so it is offered at once with no finding, and the fleet view names the node whose release it lapses. The empty
+    set of the ceiling, which removes the bound, is held as a widening."""
+    point = _mesh(tmp_path, "m1", key=_dist.instance_key("m1"))
+    controller = Controller(str(tmp_path / "controller"), _dist.instance_key("C"), clock=point.clock)
+    controller.add_anchor(point.anchor())
+    pep = controller.enroll(point.key.public_raw, "mesh", STREAM, "fleet")
+    client = PullClient(point.pep, LocalTransport(controller))
+    from prismpath.tests._dist import image
+    first = point.install_set(CEILING, {kinds.POLICY_LIST: install.ceiling_body([image(5), image(9)])}, 1)
+    for sealed, body in first:
+        controller.put(sealed, body)
+    release = _dist.release_with_statement(point, image(5), 1, widen=True, replaces="")
+    for sealed, body in release:
+        controller.put(sealed, body)
+    controller.offer("fleet", STREAM, 1)
+    for _ in range(3):
+        client.poll()
+    if any(rollout.open for rollout in controller.rollouts):
+        controller.commit("fleet")
+        for _ in range(3):
+            client.poll()
+    assert point.pep.active is not None
+    narrower = point.install_set(CEILING, {kinds.POLICY_LIST: install.ceiling_body([image(9)])}, 2,
+                                 replaces=env.read(env.unseal(first[0][0])[0]).policy_sha256)
+    for sealed, body in narrower:
+        controller.put(sealed, body)
+    (shown,) = _sets(controller, 2)
+    assert (shown["state"], shown["finding"], shown["lapses"], shown["scope"]) == (
+        "offered", None, [pep], "change, not larger")
+    withdraw = point.install_set(CEILING, {kinds.NONE: b""}, 3, widens=True,
+                                 replaces=env.read(env.unseal(narrower[0][0])[0]).policy_sha256)
+    for sealed, body in withdraw:
+        controller.put(sealed, body)
+    (shown,) = _sets(controller, 3)
+    assert (shown["state"], shown["scope"]) == ("held", "widening")

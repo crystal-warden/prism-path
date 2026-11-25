@@ -517,7 +517,7 @@ fn decide_widening(entry: &Value) -> Value {
     });
     let active_policy = entry["active_policy"].as_str().map(|text| Hex64::try_from(text).unwrap());
     let statement = hex_or_none(entry, "statement");
-    let cause = widening_check(&target, envelope.widens, &envelope.replaces, active_policy.as_ref(), answer, statement.as_deref());
+    let cause = widening_check(&target, envelope.widens, &envelope.replaces, active_policy.as_ref(), answer, statement.as_deref(), None);
     json!({"cause": cause})
 }
 

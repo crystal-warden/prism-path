@@ -545,3 +545,46 @@ def test_case_143_a_renewal_whose_active_release_lapsed_before_its_commit_needs_
         assert _read(point, point.pep.tick()).event == "lapsed"
         assert _read(point, point.pep.commit(STREAM, 2, H(OLD))).cause == "dist:widening-unsigned", make.__name__
         assert point.pep.active is None and point.pep.staged.seq == 2
+
+
+# ------------------------------------------------------------------ W10, W11: the change statement
+
+def test_case_294_a_table_carried_by_a_change_statement_commits_without_a_widening_statement(tmp_path):
+    """case_294: W10, W11, W2. On a host and a mesh node with OLD active, NEW with `widens` false and `replaces` the
+    active hash is refused alone, and staged and committed after a change statement from that hash. The PEP compares
+    nothing new: the change statement stands in place of the widening statement."""
+    for make in (_dist.HostPep, _dist.MeshPep):
+        point = make(tmp_path / make.__name__)
+        point.commit(OLD)
+        release = point.seal(NEW, seq=2, replaces=H(OLD))
+        assert _read(point, point.pep.stage(release, NEW)).cause == "dist:widening-unsigned"
+        sealed, body = _dist.change_of(point, NEW, 2, replaces=H(OLD))
+        assert _read(point, point.pep.stage(sealed, body)).event == "staged"
+        assert _read(point, point.pep.stage(release, NEW)).event == "staged"
+        assert _read(point, point.pep.commit(STREAM, 2, H(NEW))).event == "committed"
+        assert point.pep.active.seq == 2
+
+
+def test_case_295_a_change_statement_never_stands_for_a_widening(tmp_path, agent):
+    """case_295: W10, W11, V5. On a host and a mesh node a change statement that says it widens is dist:bad-format,
+    one on a first install and one from another hash are dist:widening-unsigned, and one after a widening statement
+    of its release is dist:bad-format, each with nothing changed. An agent PEP, which decides for itself, does not
+    take the kind at all."""
+    other = H(b"another policy")
+    for make in (_dist.HostPep, _dist.MeshPep):
+        first = make(tmp_path / f"{make.__name__}-first")
+        sealed, body = _dist.change_of(first, OLD, 1, replaces=other)
+        assert _read(first, first.pep.stage(sealed, body)).cause == "dist:widening-unsigned"
+        assert first.pep.active is None and first.pep.staged is None
+        point = make(tmp_path / make.__name__)
+        point.commit(OLD)
+        for args, cause in (({"replaces": H(OLD), "widens": True}, "dist:bad-format"),
+                            ({"replaces": other}, "dist:widening-unsigned")):
+            sealed, body = _dist.change_of(point, NEW, 2, **args)
+            assert _read(point, point.pep.stage(sealed, body)).cause == cause, (make.__name__, args)
+        point.widen(NEW, 2, [H(OLD)], replaces=H(OLD))
+        sealed, body = _dist.change_of(point, NEW, 2, replaces=H(OLD))
+        assert _read(point, point.pep.stage(sealed, body)).cause == "dist:bad-format"
+        assert point.pep.active.seq == 1
+    sealed, body = _dist.change_of(agent, NARROW, 1, replaces=H(NARROW))
+    assert _read(agent, agent.pep.stage(sealed, body)).cause == "dist:target-mismatch"

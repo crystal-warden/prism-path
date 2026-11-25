@@ -23,7 +23,9 @@ HERE = Path(__file__).resolve().parent
 INCLUDE = re.compile(r'#include\s+"(?:\.\./)+ppt_eval\.h"')
 LOCAL = re.compile(r'\bstatic\s+(?:inline\s+)?(?:uint8_t|int)\s+eval_atom\s*\(')
 
-# firmware files that evaluate a table; the wrapper headers count for the firmwares that include them
+# firmware files that evaluate a table; the wrapper headers count for the firmwares that include them. The ESP-NOW
+# mesh (mesh/main) carries no evaluator: every decision there is the C core of policy distribution's (pp_pep_ask in
+# dist/pp_dist.c), held to the Python machine by prismpath/tests/test_distribution_c.py
 FIRMWARE = [
     "esp-vision-node/main/vision_core.h",
     "esp-vision-c6/main/ppt_eval.h",
@@ -33,7 +35,6 @@ FIRMWARE = [
     "rp2350/ppt_tof.c",
     "esp-pot-pod/main/ppt_pot.c",
     "esp-fusion-pod/main/ppt_fusion.c",
-    "mesh/main/ppt_mesh.c",
     "mesh-fusion/main/ppt_fusion_mesh.c",
 ]
 
@@ -45,7 +46,6 @@ PENDING = {
     "rp2350/ppt_tof.c": "RP2350 ToF node, recertify on the board",
     "esp-pot-pod/main/ppt_pot.c": "pot pod, recertify on the board",
     "esp-fusion-pod/main/ppt_fusion.c": "fusion pod, recertify on the board",
-    "mesh/main/ppt_mesh.c": "ESP-NOW mesh, recertify with mesh/orchestrate.py; note it switches on raw opcode literals",
     "mesh-fusion/main/ppt_fusion_mesh.c": "mesh fusion, recertify with mesh-fusion/field_walk.py; raw opcode literals",
 }
 

@@ -88,14 +88,63 @@ controller offers a release's widening statement before the release itself.
 
 `seal --held ctl` fills in `replaces`, the policy hash of the release stored on the stream just below the new
 `seq`, and sets `widens` unless it holds that release and finds the new body allows no more. A `policy.ppt`
-image has no order, so for a host or a mesh table `widens` is false only on a renewal of the same table. The
+image has no order for a PEP, so for a host or a mesh table `widens` is false only on a renewal of the same
+table or with a change statement (below). The
 controller holds a release to the same test before it offers it to a target that cannot decide (W7). A PEP that can decide whether a policy allows more walks every reading of
 the policy's finite domain and compares the verdicts, so it does not trust `widens` (W1), and it refuses a
 release it finds larger whose `widens` is false even with a statement (W6). A host, a mesh node and the cFS app
 cannot decide. They take a release on its signature alone only when `widens` is false and `replaces` is the
-policy they have active (W2). Every other release needs a widening statement that covers them. A first install
+policy they have active (W2). A host and a mesh node also take a changed table on a change statement (W11).
+Every other release needs a widening statement that covers them. A first install
 goes from no policy to one, so every PEP counts it as larger and refuses one whose `widens` is false, even with
 a statement (W6).
+
+For a host or a mesh table the sealing tool and the controller also run the table comparator (W8). It walks
+every node of the two tables over one register value of each class the atoms cut a register into, and says
+whether the new table steps anywhere the old one does not. `seal --held` shows its answer as `comparison`, with
+a witness register file when the table is larger, and its `scope`, `widening` or `change, not larger`.
+
+A widening means the table allows more. For one that does not, `seal` asks you to confirm what the comparator
+found, or takes `--yes` in a script, then seals the release with `widens` false and writes a change statement
+beside it as `<out>.change.sealed` and `.body` (W10). A host or a mesh node takes the table on that statement
+(W11). Without a yes it writes nothing. A table that allows more gets no statement from `seal`, and you sign its
+widening statement with `widen` when you mean it. `rekey` refuses such a table unless you pass `--widens`, and
+takes `--yes` for a change statement. The fleet view shows each rollout as a widening or a change, not larger,
+and only a widening waits for an acknowledgement. No PEP runs the comparator, so each still checks bytes and
+the statement it is given (W2).
+
+The engineer's install sets work the same way on a host or a mesh node. `dist install --kind floor` or
+`--kind fallback` with `--follows` compares the new table with the one it follows and shows the answer. For a
+table that allows nothing more it asks you to confirm, or takes `--yes`, then seals the set with `widens` false
+and writes an install change statement signed by the install keys beside it, as `install.change.sealed` and
+`.body` (IS14). Hand it to the controller before the set. The node then applies the set as `install-applied`, and
+nothing waits for an acknowledgement (IS15). A ceiling that only narrows needs no statement, since the node compares
+two lists itself. Only a set that extends or enlarges what a node allows is a widening.
+
+A ceiling is the engineer's emergency brake, so the controller offers one that narrows at once. The check against a
+wrong ceiling is made before you sign it. `dist install --kind ceiling --held ctl` reads the controller's directory
+and shows a lapse preview, which names each release the new ceiling is above and how many machines run it. Without `--held`, or
+when the directory does not serve the stream, the preview says the fleet is unknown, which is not the same as
+nothing lapsing. A ceiling that lapses nothing shows zero. The tool signs only when you say yes at the terminal, or
+with `--yes` in a script, and without a yes it writes nothing (CL5).
+
+```bash
+prismpath dist install --kind ceiling --list table9.ppt --seq 2 --follows ceiling1 \
+    --held ctl --stream site/mesh --target mesh --key install1.pem --key install2.pem --out ceiling2
+```
+
+For each machine it lapses, the preview looks for a release inside the new ceiling that is offered to it or
+stored at the controller above the one it runs. When there is none it warns you that those machines run on their
+fallback policy, named by its install `seq` and set id, or refuse everything but what their action floor allows,
+until a release that fits ships (CL6). The warning does not stop the yes.
+
+For a planned change add `--staged`, and `--canary GROUP` when the group is not named `canary`. The tool writes
+`install.ceiling.rollout.json` beside the set. Copy it into the controller's `inbox/` with the set. The
+controller offers the ceiling to the canary group first, and to everyone else once each canary machine reports it
+applied and a later record with no lapse the preview did not name. A canary machine that refuses it, or lapses
+where none was expected, stops the rollout, and you seal the next ceiling. The rollout option is not signed. It
+only paces the controller, which may always hold a set back, and no PEP reads it. Leave it out, or seal without
+`--staged`, and the ceiling goes to every machine at once (CL7).
 
 The reading domain an agent policy is compared over is the one the engineer who installs PrismPath defines: the
 values the classifier produces for each category, true and false, and each int's min to max. A policy whose
@@ -113,7 +162,7 @@ that is not the signed `release`, because a transport left out an `agent.zones`,
 
 A rollback is held to the same rule (RB3). A rollback to a release identical to the active one is never a
 widening. On a host or a mesh node a local rollback to an older table works only when the kept release says it
-widens and holds a widening statement that covers the newer policy. When the owner signed the older release,
+widens and holds a widening statement that covers the newer policy, or holds a change statement from it. When the owner signed the older release,
 the newer policy's hash was not known, so in practice that is a statement with an empty `from`. A kept renewal
 says it does not widen, so it is never a rollback target from another table. Without one the owner releases
 the older policy again at a higher `seq`.
@@ -158,6 +207,46 @@ cause the PEP gave. Each finding stays open until a later record clears it (F4).
 
 The controller writes every offer, ack, commit, abort, finding and trust statement to its own audit log,
 signed with its instance key (F5).
+
+### Exports
+
+The controller exports what the fleet view holds, and only the controller does. No PEP exports anything.
+
+```bash
+prismpath dist fleet --dir ctl --key controller/instance.key --export otel     # OpenTelemetry events
+prismpath dist fleet --dir ctl --key controller/instance.key --export ocsf     # OCSF 1.10.0
+prismpath dist fleet --dir ctl --key controller/instance.key --export intoto   # in-toto statements in DSSE
+```
+
+Each writes one JSON document per line. For each PEP that is the last accepted record of each event and
+each open finding. The signed record stays the evidence. Every export carries the record's signed bytes in
+base64, and `prismpath.distribution.export` has `check_otel`, `check_ocsf` and `check_intoto`, which read
+those bytes again under the PEP's enrolled key and refuse an export whose fields are not the record's. A
+finding carries the record it was filed on. One filed with no record, such as `fleet:silent`, carries the
+PEP's last accepted record and says so. A record from a sender that is not enrolled carries its bytes and
+has no key to check them by. A held install statement (H13) carries its sealed envelope.
+
+The OpenTelemetry events are named `prismpath.dist.state` and `prismpath.dist.finding`. Their attributes
+are every field of the record under `prismpath.dist.record.`, with the cause code, the hashes, `seq`, the
+reconciling entry and the install entry, and the controller's own reading under
+`prismpath.dist.controller.`, which is the group, the stream, the controller statement's epoch id, the full policy
+hash and the scope of the rollout a commit ends. `export.to_otel_sink` hands them to an OpenTelemetry
+logger.
+
+In OCSF a commit or a lapse is Device Config State Change (5019) with activity 99, named `Commit` or
+`Lapse`, and a finding is Detection Finding (2004). The record is in `raw_data` and its SHA-256 in
+`raw_data_hash`. Every PrismPath field is under `unmapped`. Other events go to the OpenTelemetry export
+only. This mapping is not yet checked against the OCSF 1.10.0 schema files. It follows the published class
+and attribute names.
+
+The in-toto export is one Statement v1 per commit, in a DSSE envelope signed by the controller's instance
+key. Its subject is the record by its SHA-256 and the committed policy and release by theirs. Its predicate
+holds the record and its fields.
+
+A rollout's scope is exported as the controller marks it. `prismpath.dist.controller.widening` is true only
+for `widening`, a release that allows more than the one it replaces. A change that is not larger is never
+exported as a widening, and neither is the older mark `larger by rule`, which says only that a table
+changed. A 64 bit field above 2^53 - 1 is written as a decimal string.
 
 ## 7. Revoking and rotating keys
 
@@ -204,6 +293,7 @@ of the zones are the home's own setting in `zones.local.json`.
 
 A host, a mesh node and the cFS app send a state record with no Facet body, since their releases carry no
 flow text to build one from (H5). A rollback with `prismpath dist pep rollback` follows RB1 to RB3, so on a
-host, which cannot decide whether a policy allows more, it needs a widening statement that covers it. The
+host, which cannot decide whether a policy allows more, it needs a widening statement that covers it or a
+change statement from the active policy. The
 mesh and the cFS app use the frame binding of section 8.3, which the controller drives as a broadcast to
 the whole group.

@@ -982,7 +982,7 @@ fn case_204_a_staged_or_kept_release_meets_a_newer_ceiling_at_commit_and_at_roll
 
 /// case_205: CL3, IS12, AF1, the `host` half. A PEP with a ceiling refuses an action floor above it, a fallback
 /// policy above it and a ceiling its held floor is above with `dist:above-ceiling`, nothing changed. A ceiling its
-/// active release is above, with `widens` false, is applied with event `install-widened` and the release lapses with
+/// active release is above, with `widens` false, narrows, so it is applied with event `install-applied` and the release lapses with
 /// `dist:above-ceiling`, to the fallback policy where it holds one and to `no-policy` where it does not.
 #[test]
 fn case_205_everything_a_pep_decides_under_is_inside_its_ceiling() {
@@ -1007,7 +1007,7 @@ fn case_205_everything_a_pep_decides_under_is_inside_its_ceiling() {
         point.commit(&image(5), &at(1));
         let narrower: Vec<&[u8]> = if fallback { vec![&nine] } else { vec![&seven] };
         let applied = point.send(&ceiling_set(&narrower, &SetArgs { widens: false, replaces: point.held(CEILING), ..seq(2) }));
-        assert_eq!(about(&applied), ("install-widened", Some("dist:install-widened")));
+        assert_eq!(about(&applied), ("install-applied", None)); // IS12: a narrower ceiling is no widening
         let lapse = point.pep.drain().iter().map(|one| point.read(one)).last().unwrap();
         let event = if fallback { "fallback" } else { "lapsed" };
         assert_eq!((about(&lapse), lapse.state), ((event, Some("dist:above-ceiling")), "no-policy"));
@@ -1213,4 +1213,112 @@ fn a_host_floor_is_silent_past_its_rate() {
     assert_eq!(floor_decides(&mut point, inside), Some("release"), "a restart does not begin a new window");
     point.now.set(NOW + 60);
     assert_eq!(floor_decides(&mut point, inside), Some("floor"));
+}
+
+// ------------------------------------------------------------------ IS14, IS15: the install change statement
+
+fn narrower_table() -> Vec<u8> {
+    table(&[vec![(0, EQ, 3), (1, GE, 3), (1, LE, 5)]])
+}
+
+fn carried(seq_: i64, replaces: &Hex64) -> SetArgs {
+    SetArgs { widens: false, replaces: Some(replaces.clone()), ..seq(seq_) }
+}
+
+/// case_296: IS14, IS2, V5, IS4, the `host` half. A host PEP holding an action floor refuses an install change
+/// statement that says it widens, replaces nothing, names another hash than its `replaces`, carries a ceiling or the
+/// empty set with `dist:bad-format`, one signed by authority keys with `dist:unknown-key`, and a second one for a set
+/// that has one staged with `dist:incomplete`. A PEP whose install threshold is 1 takes none in a message.
+#[test]
+fn case_296_an_install_change_statement_out_of_its_form_is_refused() {
+    let mut point = floor_point("296");
+    let held = h(&good_table());
+    let narrow = narrower_table();
+    let good = carried(2, &held);
+    let staged_before = point.pep.installed.staged.clone();
+    let wrong = [
+        install_change(FLOOR, &narrow, &SetArgs { widens: true, ..good.clone() }, &held),
+        install_change(FLOOR, &narrow, &SetArgs { replaces: None, ..good.clone() }, &held),
+        install_change(FLOOR, &narrow, &carried(2, &h(&image(9))), &held),
+        change_body_of("install.ceiling", &narrow, &good, &held),
+        install_change(FLOOR, &narrow, &SetArgs { policy: Some(Hex64::zero()), ..good.clone() }, &held),
+    ];
+    for one in &wrong {
+        assert_eq!(point.send(std::slice::from_ref(one)).cause.as_deref(), Some("dist:bad-format"));
+    }
+    let by_authority = install_change(FLOOR, &narrow, &SetArgs { signers: vec!["A"], ..good.clone() }, &held);
+    assert_eq!(point.send(&[by_authority]).cause.as_deref(), Some("dist:unknown-key"));
+    assert_eq!(point.pep.installed.staged, staged_before);
+    let staged = point.send(&[install_change(FLOOR, &narrow, &good, &held)]);
+    assert_eq!((about(&staged), Installer::entry(&staged).subject), (("staged", None), "install.floor"));
+    let again = install_change(FLOOR, &narrow, &SetArgs { not_before: NOT_BEFORE + 1, ..good.clone() }, &held);
+    let refused = point.send(&[again]);
+    assert_eq!((about(&refused), Installer::entry(&refused).subject), (("refused", Some("dist:incomplete")), "install.floor"));
+    let floor = floor_set(&good_table(), &seq(1));
+    let mut one = Installer::with("296b", &anchor2(&INSTALL_KEYS, 1, &[], 0), &floor, false);
+    let refused = one.send(&[install_change(FLOOR, &narrow, &SetArgs { signers: vec!["N1"], ..good }, &held)]);
+    assert_eq!(about(&refused), ("refused", Some("dist:target-mismatch")));
+}
+
+/// case_297: IS15, IS12, the `host` half. With a change statement from the held set's policy hash, a floor table and
+/// a fallback table that allow less with `widens` false are applied with event `install-applied` and no cause, and a
+/// narrower floor with no change statement is `dist:widening-unsigned` with the floor before it still held.
+#[test]
+fn case_297_a_narrower_floor_or_fallback_carried_by_a_change_statement_is_applied() {
+    let mut point = floor_point("297");
+    point.send(&fallback_set(&image(9), &seq(1)));
+    let narrow = narrower_table();
+    let staged = point.send(&[install_change(FLOOR, &narrow, &carried(2, &h(&good_table())), &h(&good_table()))]);
+    assert_eq!(about(&staged), ("staged", None));
+    let applied = point.send(&floor_set(&narrow, &carried(2, &h(&good_table()))));
+    assert_eq!(about(&applied), ("install-applied", None));
+    assert_eq!(point.held(FLOOR), Some(h(&narrow)));
+    let applied = point.send(&[
+        install_change(FALLBACK, &image(7), &carried(2, &h(&image(9))), &h(&image(9))),
+        fallback_set(&image(7), &carried(2, &h(&image(9))))[0].clone(),
+    ]);
+    assert_eq!(about(&applied), ("install-applied", None));
+    let event = point.pep.audit.events().into_iter().rev().find(|event| event["action"] == "install-applied").unwrap();
+    assert!(event["data"]["change"].is_string(), "IS15: the audit names the change statement the set was taken on");
+    let alone = table(&[vec![(0, EQ, 3), (1, GE, 4), (1, LE, 5)]]);
+    let refused = point.send(&floor_set(&alone, &carried(3, &h(&narrow))));
+    assert_eq!(about(&refused), ("refused", Some("dist:widening-unsigned")));
+    assert_eq!(point.held(FLOOR), Some(h(&narrow)));
+}
+
+/// case_298: IS15, AF8, V10, the `host` half. A change statement on a PEP with no floor, and one from another hash,
+/// are `dist:widening-unsigned` with nothing staged. Beside a change statement a floor with a looser rate is
+/// `dist:widening-unsigned`, and a set that says it widens is `dist:incomplete`.
+#[test]
+fn case_298_a_change_statement_stands_only_for_a_set_it_can_carry() {
+    let mut point = Installer::new("298", 2);
+    let narrow = narrower_table();
+    let held = h(&good_table());
+    let refused = point.send(&[install_change(FLOOR, &narrow, &carried(2, &held), &held)]);
+    assert_eq!(about(&refused), ("refused", Some("dist:widening-unsigned")));
+    point.send(&floor_set(&good_table(), &SetArgs { rate: Some((3, 60)), ..seq(1) }));
+    let other = h(&image(9));
+    let refused = point.send(&[install_change(FLOOR, &narrow, &carried(2, &other), &other)]);
+    assert_eq!(about(&refused), ("refused", Some("dist:widening-unsigned")));
+    assert!(point.pep.installed.staged.is_empty());
+    let looser = SetArgs { rate: Some((5, 60)), ..carried(2, &held) };
+    assert_eq!(about(&point.send(&[install_change(FLOOR, &narrow, &looser, &held)])), ("staged", None));
+    assert_eq!(about(&point.send(&floor_set(&narrow, &looser))), ("refused", Some("dist:widening-unsigned")));
+    let rated = SetArgs { rate: Some((3, 60)), ..carried(3, &held) };
+    let widens = SetArgs { widens: true, ..rated.clone() };
+    assert_eq!(about(&point.send(&[install_change(FLOOR, &narrow, &rated, &held)])), ("staged", None));
+    assert_eq!(about(&point.send(&floor_set(&narrow, &widens))), ("refused", Some("dist:incomplete")));
+}
+
+/// case_299: IS15, IS4, the `host` half. A change statement staged survives a restart, and the narrower floor it
+/// carries is then applied with event `install-applied`.
+#[test]
+fn case_299_a_staged_change_statement_survives_a_restart() {
+    let mut point = floor_point("299");
+    let narrow = narrower_table();
+    let args = carried(2, &h(&good_table()));
+    point.send(&[install_change(FLOOR, &narrow, &args, &h(&good_table()))]);
+    point.reopen();
+    assert!(point.pep.installed.staged.get(&SetKind::Floor).is_some_and(|set| set.change_body.is_some()));
+    assert_eq!(about(&point.send(&floor_set(&narrow, &args))), ("install-applied", None));
 }

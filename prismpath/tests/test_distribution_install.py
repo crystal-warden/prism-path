@@ -544,8 +544,8 @@ def test_case_217_a_set_is_whole_only_when_its_signed_release_id_is_computed_aga
 
 
 def test_a_ceiling_the_active_release_is_above_lapses_it_to_the_fallback_policy(tmp_path):
-    """CL3, IS12, FB3: a ceiling the active release is above is applied with `install-widened`, whatever its `widens`
-    says, and the release lapses with `dist:above-ceiling` to the fallback policy, which must be inside the ceiling."""
+    """CL3, IS12, FB3: a ceiling the active release is above narrows, so it is applied with `install-applied` and no
+    cause, and the release lapses with `dist:above-ceiling` to the fallback policy, which must be inside the ceiling."""
     point = _host(tmp_path)
     point.send(_list(point, 1, image(5), image(9)))
     point.send(_fallback(point, image(9)))
@@ -553,8 +553,8 @@ def test_a_ceiling_the_active_release_is_above_lapses_it_to_the_fallback_policy(
     point.pep.drain()
     applied = point.send(_list(point, 2, image(9)))[-1]
     sent = [_read(point, one) for one in point.pep.drain()]
-    assert (applied.event, applied.cause) == ("install-widened", "dist:install-widened")
-    assert [(one.event, one.cause) for one in sent][-2:] == [("install-widened", "dist:install-widened"),
+    assert (applied.event, applied.cause) == ("install-applied", None)
+    assert [(one.event, one.cause) for one in sent][-2:] == [("install-applied", None),
                                                              ("fallback", "dist:above-ceiling")]
     assert point.pep.active is None and point.pep.decide(lambda: 1)["basis"] == "fallback"
     above = point.send(_list(point, 3, image(5)))[-1]
@@ -837,7 +837,7 @@ def test_the_engineer_s_tool_writes_the_anchor_s_install_part_sets_and_install_t
     common = ["--stream", STREAM, "--target", "mesh", "--key", str(keys["N1"]), "--key", str(keys["N2"]),
               "--not-before", str(NOT_BEFORE), "--qualification", str(tmp_path / "qualification.json")]
     assert run("install", "--kind", "ceiling", "--list", str(tmp_path / "t5.ppt"), "--list", str(tmp_path / "t9.ppt"),
-               "--seq", "1", *common, "--out", str(tmp_path / "ceiling")) == 0
+               "--seq", "1", "--yes", *common, "--out", str(tmp_path / "ceiling")) == 0
     ceiling = install_pairs(tmp_path / "ceiling")
     assert point.send(ceiling)[-1].event == "install-applied"
     assert run("install", "--kind", "fallback", "--set", f"policy.ppt={tmp_path / 't6.ppt'}", "--seq", "1",
@@ -851,10 +851,10 @@ def test_the_engineer_s_tool_writes_the_anchor_s_install_part_sets_and_install_t
                "--follows", str(tmp_path / "fallback"), *common, "--out", str(tmp_path / "renewal")) == 0
     assert point.send(install_pairs(tmp_path / "renewal"))[-1].event == "install-applied"
     assert run("install", "--kind", "ceiling", "--empty", "--seq", "2", "--follows", str(tmp_path / "ceiling"),
-               "--widens", *common, "--out", str(tmp_path / "withdrawn")) == 0
+               "--widens", "--yes", *common, "--out", str(tmp_path / "withdrawn")) == 0
     assert point.send(install_pairs(tmp_path / "withdrawn"))[-1].event == "install-widened"
     assert run("install", "--kind", "ceiling", "--list", str(tmp_path / "t9.ppt"), "--seq", "3", "--follows",
-               str(tmp_path / "withdrawn"), *common, "--out", str(tmp_path / "again")) == 0
+               str(tmp_path / "withdrawn"), "--yes", *common, "--out", str(tmp_path / "again")) == 0
     assert point.send(install_pairs(tmp_path / "again"))[-1].event == "install-applied"   # IS6: it replaces nothing
     (tmp_path / "meta.json").write_text(__import__("json").dumps(GEN.image_meta(image(6))))
     assert run("seal", "--artifact", "policy.ppt", "--body", str(tmp_path / "t6.ppt"), "--stream", STREAM, "--seq", "1",
@@ -872,12 +872,294 @@ def test_the_engineer_s_tool_writes_the_anchor_s_install_part_sets_and_install_t
                "--key", str(keys["N2"]), "--out", str(tmp_path / "back.sealed")) == 1
 
 
+def test_case_301_the_engineer_s_tool_signs_an_install_change_statement_only_on_a_yes(tmp_path, capsys):
+    """case_301: IS15, W8, W9. `prismpath dist install --kind fallback` given a `mesh` fallback table that allows less
+    than the one it follows writes nothing without a yes and says `dist:widening-unsigned` with the comparison shown,
+    and with `--yes` seals the set with `widens` false and an install change statement beside it, which a node takes
+    with event `install-applied`. A table that allows more is refused without `--widens`, and with it is sealed with
+    `widens` true and no change statement."""
+    import json
+    from prismpath import cli
+    from prismpath.hotswap import policy_pack
+    _priv, _pub, ser, _invalid = policy_pack._ed25519()
+    keys = {}
+    for name in ("N1", "N2"):
+        keys[name] = tmp_path / f"{name}.pem"
+        keys[name].write_bytes(GEN.test_key(name).private_bytes(ser.Encoding.PEM, ser.PrivateFormat.PKCS8,
+                                                                 ser.NoEncryption()))
+
+    def run(*argv):
+        args = cli.build_parser().parse_args(["dist", *argv])
+        return args.func(args)
+
+    for threshold in (8, 9, 10):
+        (tmp_path / f"t{threshold}.ppt").write_bytes(image(threshold))
+    (tmp_path / "qualification.json").write_text(json.dumps(GEN.QUALIFICATION))
+    common = ["--stream", STREAM, "--target", "mesh", "--key", str(keys["N1"]), "--key", str(keys["N2"]),
+              "--not-before", str(NOT_BEFORE), "--qualification", str(tmp_path / "qualification.json")]
+    point = _dist.MeshPep(tmp_path / "mesh", install_keys=["N1", "N2"], install_threshold=2)
+    assert run("install", "--kind", "fallback", "--set", f"policy.ppt={tmp_path / 't9.ppt'}", "--seq", "1",
+               "--widens", *common, "--out", str(tmp_path / "first")) == 0
+    assert point.send(install_pairs(tmp_path / "first"))[-1].event == "install-widened"
+    capsys.readouterr()
+    narrower = ["install", "--kind", "fallback", "--set", f"policy.ppt={tmp_path / 't10.ppt'}", "--seq", "2",
+                "--follows", str(tmp_path / "first"), *common]
+    assert run(*narrower, "--out", str(tmp_path / "unconfirmed")) == 1
+    shown = capsys.readouterr()
+    assert "dist:widening-unsigned" in shown.err and '"answer": "not-larger"' in shown.err
+    assert not (tmp_path / "unconfirmed").exists()
+    assert run(*narrower, "--yes", "--out", str(tmp_path / "narrow")) == 0
+    printed = json.loads(capsys.readouterr().out)
+    assert printed["widens"] is False and printed["scope"] == "change, not larger"
+    assert printed["change"]["basis"] == "prismpath.table-compare/1"
+    pairs = install_pairs(tmp_path / "narrow")
+    assert env.read(env.unseal(pairs[0][0])[0]).artifact == "install.change"     # sorted first: offered first
+    assert [(one.event, one.cause) for one in point.send(pairs)] == [("staged", None), ("install-applied", None)]
+    wider = ["install", "--kind", "fallback", "--set", f"policy.ppt={tmp_path / 't8.ppt'}", "--seq", "3",
+             "--follows", str(tmp_path / "narrow"), *common]
+    assert run(*wider, "--yes", "--out", str(tmp_path / "unsaid")) == 1
+    capsys.readouterr()
+    assert run(*wider, "--widens", "--out", str(tmp_path / "wider")) == 0
+    printed = json.loads(capsys.readouterr().out)
+    assert printed["widens"] is True and printed["scope"] == "widening" and "change" not in printed
+    assert not (tmp_path / "wider" / "install.change.sealed").exists()
+
+
 def install_pairs(directory: Path):
     return [((directory / name).read_bytes(), (directory / (name[:-len(".sealed")] + ".body")).read_bytes())
             for name in sorted(path.name for path in directory.iterdir() if path.name.endswith(".sealed"))]
-    assert run("install", "--kind", "ceiling", "--empty", "--seq", "2", "--follows", str(tmp_path / "ceiling"),
-               "--widens", *common, "--out", str(tmp_path / "withdrawn")) == 0
-    assert point.send(install_pairs(tmp_path / "withdrawn"))[-1].event == "install-widened"
-    assert run("install", "--kind", "ceiling", "--list", str(tmp_path / "t9.ppt"), "--seq", "3", "--follows",
-               str(tmp_path / "withdrawn"), *common, "--out", str(tmp_path / "again")) == 0
-    assert point.send(install_pairs(tmp_path / "again"))[-1].event == "install-applied"   # IS6: it replaces nothing
+
+
+# ------------------------------------------------------------------ CL5 to CL7: the sealing tool and a ceiling
+
+class CeilingFleet:
+    """A controller serving a `mesh` stream to two nodes, `m1` and `m2`, in the groups named, each pulling through
+    `LocalTransport`, with a first ceiling listing image(5) and image(9) that the tool sealed, and release image(5)
+    seq 1 committed on both. `run` is `prismpath dist` with the engineer's keys in `common`."""
+
+    def __init__(self, tmp_path, groups=("fleet", "fleet")):
+        from prismpath import cli
+        from prismpath.distribution.controller import Controller
+        from prismpath.distribution.http import LocalTransport, PullClient
+        from prismpath.hotswap import policy_pack
+        _priv, _pub, ser, _invalid = policy_pack._ed25519()
+        self.tmp, self.cli = tmp_path, cli
+        keys = {}
+        for name in ("N1", "N2"):
+            keys[name] = tmp_path / f"{name}.pem"
+            keys[name].write_bytes(GEN.test_key(name).private_bytes(ser.Encoding.PEM, ser.PrivateFormat.PKCS8,
+                                                                     ser.NoEncryption()))
+        for threshold in (5, 6, 9):
+            (tmp_path / f"t{threshold}.ppt").write_bytes(image(threshold))
+        (tmp_path / "qualification.json").write_text(__import__("json").dumps(GEN.QUALIFICATION))
+        self.common = ["--stream", STREAM, "--target", "mesh", "--key", str(keys["N1"]), "--key", str(keys["N2"]),
+                       "--not-before", str(NOT_BEFORE), "--qualification", str(tmp_path / "qualification.json")]
+        self.clock = _dist.Clock()
+        self.dir = tmp_path / "controller"
+        self.controller = Controller(str(self.dir), _dist.instance_key("C"), clock=self.clock)
+        self.points = {name: _dist.MeshPep(tmp_path / name, install_keys=["N1", "N2"], install_threshold=2,
+                                           clock=self.clock, key=_dist.instance_key(name)) for name in ("m1", "m2")}
+        self.controller.add_anchor(self.points["m1"].anchor())
+        self.ids = {name: self.controller.enroll(point.key.public_raw, "mesh", STREAM, group)
+                    for (name, point), group in zip(self.points.items(), groups)}
+        self.clients = {name: PullClient(point.pep, LocalTransport(self.controller))
+                        for name, point in self.points.items()}
+        assert self.run("install", "--kind", "ceiling", "--list", str(tmp_path / "t5.ppt"), "--list",
+                        str(tmp_path / "t9.ppt"), "--seq", "1", "--yes", *self.common,
+                        "--out", str(tmp_path / "ceiling1")) == 0
+        self.put(tmp_path / "ceiling1")
+        self.rounds()
+        self.release(image(5), 1)
+        assert all(point.pep.active is not None for point in self.points.values())
+        self.controller.save()
+
+    def run(self, *argv):
+        args = self.cli.build_parser().parse_args(["dist", *argv])
+        return args.func(args)
+
+    def put(self, directory):
+        for sealed, body in install_pairs(directory):
+            self.controller.put(sealed, body)
+
+    def rounds(self, *names, times=2):
+        for _ in range(times):
+            for name in names or self.clients:
+                self.clients[name].poll()
+
+    def release(self, body, seq, replaces="", offer=True):
+        for sealed, sealed_body in _dist.release_with_statement(self.points["m1"], body, seq, widen=True,
+                                                                replaces=replaces):
+            self.controller.put(sealed, sealed_body)
+        if not offer:
+            return
+        for group in sorted(set(self.controller.groups)):
+            self.controller.offer(group, STREAM, seq)
+        self.rounds(times=3)
+        for group in sorted(set(self.controller.groups)):
+            if any(rollout.open and rollout.group == group for rollout in self.controller.rollouts):
+                self.controller.commit(group)
+        self.rounds(times=3)
+
+    def ceiling(self, *tables, seq=2, extra=(), out="ceiling2"):
+        listed = [part for table in tables for part in ("--list", str(self.tmp / f"t{table}.ppt"))]
+        return self.run("install", "--kind", "ceiling", *listed, "--seq", str(seq), "--follows",
+                        str(self.tmp / "ceiling1"), *extra, *self.common, "--out", str(self.tmp / out))
+
+
+def _preview(err: str) -> dict:
+    import json
+    start = err.index("{")
+    doc, _end = json.JSONDecoder().raw_decode(err[start:])
+    return doc["ceiling preview"]
+
+
+def test_case_302_the_tool_shows_a_ceiling_s_lapse_preview_and_signs_only_on_a_yes(tmp_path, capsys):
+    """case_302: CL5, CL3, IS12. Against a controller's state, `dist install --kind ceiling` given a list that drops the
+    table both nodes run shows the release it lapses and the two machines that run it, writes nothing without a yes,
+    and seals the ceiling with `--yes`. A list that lapses nothing shows zero and still needs the yes."""
+    import json
+    fleet = CeilingFleet(tmp_path)
+    capsys.readouterr()
+    held = ["--held", str(fleet.dir)]
+    assert fleet.ceiling(9, extra=held) == 1
+    shown = capsys.readouterr().err
+    preview = _preview(shown)
+    assert (preview["fleet"], preview["machines"], preview["lapsing"]) == ("known", 2, 2)
+    (lapse,) = preview["lapses"]
+    assert (lapse["seq"], lapse["machines"], sorted(lapse["peps"])) == (1, 2, sorted(fleet.ids.values()))
+    assert "lapses 2 of 2 machine(s)" in shown and "not signed" in shown
+    assert not (tmp_path / "ceiling2").exists()
+    assert fleet.ceiling(9, extra=[*held, "--yes"]) == 0
+    printed = json.loads(capsys.readouterr().out)
+    assert printed["preview"]["lapsing"] == 2 and "rollout" not in printed
+    assert [env.read(env.unseal(sealed)[0]).artifact for sealed, _body in install_pairs(tmp_path / "ceiling2")] == [
+        CEILING]
+    assert fleet.ceiling(5, extra=held, out="kept") == 1
+    preview = _preview(capsys.readouterr().err)
+    assert (preview["fleet"], preview["lapsing"], preview["lapses"]) == ("known", 0, [])
+    assert not (tmp_path / "kept").exists()
+    assert fleet.ceiling(5, extra=[*held, "--yes"], out="kept") == 0
+
+
+def test_case_303_unknown_fleet_information_is_said_to_be_unknown_and_still_needs_a_yes(tmp_path, capsys):
+    """case_303: CL5. With no controller state, with a directory that holds none, and with a controller that serves no
+    PEP of the target on the stream, the preview says the fleet is unknown and that this is not nothing lapsing, writes
+    nothing without a yes, and with `--yes` seals the ceiling with the unknown preview in its output."""
+    import json
+    fleet = CeilingFleet(tmp_path)
+    (tmp_path / "empty").mkdir()
+    capsys.readouterr()
+    for extra in ((), ("--held", str(tmp_path / "empty"))):
+        assert fleet.ceiling(9, extra=extra) == 1
+        shown = capsys.readouterr().err
+        assert _preview(shown)["fleet"] == "unknown" and "not the same as nothing lapsing" in shown
+        assert not (tmp_path / "ceiling2").exists()
+    hosts = ["--target", "host"]
+    assert fleet.run("install", "--kind", "ceiling", "--list", str(tmp_path / "t9.ppt"), "--seq", "2", "--held",
+                     str(fleet.dir), *fleet.common, *hosts, "--out", str(tmp_path / "host")) == 1
+    assert "serves no host stream" in _preview(capsys.readouterr().err)["reason"]
+    assert fleet.ceiling(9, extra=["--yes"]) == 0
+    assert json.loads(capsys.readouterr().out)["preview"]["fleet"] == "unknown"
+
+
+def test_case_304_the_tool_warns_when_no_release_inside_the_ceiling_reaches_a_machine_it_lapses(tmp_path, capsys):
+    """case_304: CL6, FB1. Nodes that would lapse with no release inside the new ceiling staged or offered are warned
+    of, first as refusing everything, since they hold no fallback policy, then, once they hold one, as running on that
+    fallback policy, named by its install seq and set id. A release inside the ceiling stored at the controller and
+    then offered to them ends the warning, and the preview names it. The warning never stops the yes."""
+    fleet = CeilingFleet(tmp_path)
+    held = ["--held", str(fleet.dir)]
+    capsys.readouterr()
+    assert fleet.ceiling(9, extra=held) == 1
+    shown = capsys.readouterr().err
+    assert "warning: 2 machine(s) on seq 1" in shown and "hold no fallback policy and refuse everything" in shown
+    fallback = fleet.points["m1"].install_set(FALLBACK, {"policy.ppt": image(9)}, 1, widens=True)
+    for sealed, body in fallback:
+        fleet.controller.put(sealed, body)
+    fleet.controller.acknowledge([env.envelope_id(env.unseal(sealed)[0]) for sealed, _body in fallback],
+                                 by="engineer")
+    fleet.rounds()
+    assert all(point.pep.installed.held(FALLBACK) is not None for point in fleet.points.values())
+    fleet.controller.save()
+    assert fleet.ceiling(9, extra=held) == 1
+    shown = capsys.readouterr().err
+    set_id = env.set_id([env.envelope_id(env.unseal(sealed)[0]) for sealed, _body in fallback])
+    assert f"run on their fallback policy, install seq 1 (set {set_id[:16]})" in shown
+    (group,) = _preview(shown)["lapses"][0]["retiring"]
+    assert group["fallback"]["inside"] is True and len(group["peps"]) == 2
+    fleet.release(image(9), 2, replaces=fleet.points["m1"].policy_of(image(5)), offer=False)
+    fleet.controller.save()
+    assert fleet.ceiling(9, extra=held) == 1
+    shown = capsys.readouterr().err
+    lapse = _preview(shown)["lapses"][0]
+    assert "warning:" not in shown and lapse["retiring"] == []
+    assert {one["state"] for one in lapse["replaced"]} == {"stored, not offered"}
+    fleet.controller.offer("fleet", STREAM, 2)
+    fleet.controller.save()
+    assert fleet.ceiling(9, extra=[*held, "--yes"]) == 0
+    assert {one["state"] for one in _preview(capsys.readouterr().err)["lapses"][0]["replaced"]} == {"offered"}
+
+
+def test_case_305_a_staged_ceiling_goes_to_the_canary_group_first_and_to_the_rest_once_it_reports(tmp_path, capsys):
+    """case_305: CL7, CL5, F3. `dist install --kind ceiling --staged` writes the unsigned rollout option beside the set.
+    The controller takes it from its inbox with the set, offers the ceiling to the canary node alone and holds it from
+    the other node until the canary node reports it applied and a record after with no lapse it did not expect, then
+    offers it to the rest. A second staged ceiling under which the canary node lapses where the controller did not
+    expect it stops, and the other node is never offered it. `--staged` for another install kind is a usage error."""
+    import json
+    import shutil
+    from prismpath.distribution.cli import ingest
+    fleet = CeilingFleet(tmp_path, groups=("canary", "fleet"))
+    capsys.readouterr()
+    assert fleet.ceiling(5, 9, 6, extra=["--held", str(fleet.dir), "--staged", "--widens", "--yes"]) == 0
+    printed = json.loads(capsys.readouterr().out)
+    assert printed["rollout"]["canary"] == "canary"
+    option = json.loads((tmp_path / "ceiling2" / "install.ceiling.rollout.json").read_text())
+    assert option == {"canary": "canary", "format": "prismpath.dist-install-rollout/1", "set_id": printed["rollout"]
+                      ["set_id"], "staged": True}
+    # a ceiling that adds a table widens and waits for its acknowledgement; this one narrows, as a planned change does
+    assert fleet.ceiling(5, extra=["--held", str(fleet.dir), "--staged", "--yes"], out="narrow") == 0
+    capsys.readouterr()
+    narrow = json.loads((tmp_path / "narrow" / "install.ceiling.rollout.json").read_text())["set_id"]
+    inbox = fleet.dir / "inbox"
+    inbox.mkdir()
+    for path in (tmp_path / "narrow").iterdir():
+        shutil.copy(path, inbox / path.name)
+    with fleet.controller.locked() as controller:
+        done = ingest(controller)
+    assert done[0] == {"staged": narrow, "canary": "canary"} and not list(inbox.iterdir())
+    ceiling_ids = [env.envelope_id(env.unseal(sealed)[0]) for sealed, _body in install_pairs(tmp_path / "narrow")]
+    offered = {name: [one["envelope_id"] for one in fleet.controller.answer(pep)["offers"]]
+               for name, pep in fleet.ids.items()}
+    assert set(ceiling_ids) <= set(offered["m1"]) and not set(ceiling_ids) & set(offered["m2"])
+    fleet.rounds("m1", times=1)
+    shown = next(one for one in fleet.controller.install_view()[STREAM]["sets"] if one["set_id"] == narrow)
+    assert shown["rollout"]["state"] == "canary" and fleet.ids["m1"] in shown["rollout"]["applied"]
+    assert fleet.points["m2"].pep.installed.held(CEILING).seq == 1
+    fleet.rounds("m1", times=1)
+    shown = next(one for one in fleet.controller.install_view()[STREAM]["sets"] if one["set_id"] == narrow)
+    assert shown["rollout"]["state"] == "all" and shown["rollout"]["settled"] == [fleet.ids["m1"]]
+    fleet.rounds("m2")
+    assert fleet.points["m2"].pep.installed.held(CEILING).seq == 2
+    assert all(point.pep.active is not None for point in fleet.points.values())
+    # the next staged ceiling, the empty list, lapses every release; the controller is made to have expected no lapse
+    third = fleet.points["m1"].install_set(CEILING, {kinds.POLICY_LIST: install.ceiling_body([])}, 3,
+                                           replaces=fleet.points["m1"].pep.installed.held(CEILING).policy_sha256)
+    third_id = env.set_id(env.envelope_id(env.unseal(sealed)[0]) for sealed, _body in third)
+    fleet.controller.pace(third_id, "canary")
+    for sealed, body in third:
+        fleet.controller.put(sealed, body)
+    key = next(key for key, info in fleet.controller.install_sets.items() if info["set_id"] == third_id)
+    assert sorted(fleet.controller.install_sets[key]["lapses"]) == sorted(fleet.ids.values())
+    fleet.controller.install_sets[key]["lapses"] = []
+    fleet.rounds("m1", times=3)
+    pacing = fleet.controller.install_pacing[third_id]
+    assert pacing["state"] == "stopped" and "did not expect" in pacing["detail"]
+    assert install.ABOVE_CEILING in fleet.controller.members[fleet.ids["m1"]].findings
+    fleet.rounds("m2", times=3)
+    assert fleet.points["m2"].pep.installed.held(CEILING).seq == 2 and fleet.points["m2"].pep.active is not None
+    with pytest.raises(ValueError):
+        fleet.controller.pace(third_id, "nobody")
+    assert fleet.run("install", "--kind", "fallback", "--set", f"policy.ppt={tmp_path / 't9.ppt'}", "--seq", "1",
+                     "--widens", "--staged", "--yes", *fleet.common, "--out", str(tmp_path / "fb")) == 2
+    assert not (tmp_path / "fb").exists()

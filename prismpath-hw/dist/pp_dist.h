@@ -134,6 +134,9 @@ typedef enum {
     PP_ART_TRUST_WIDENING, PP_ART_TRUST_REVOCATION, PP_ART_TRUST_ROTATION,
     PP_ART_INSTALL_FLOOR, PP_ART_INSTALL_FALLBACK, PP_ART_INSTALL_CEILING, PP_ART_INSTALL_TRUST, /* section 21 */
     PP_ART_OPERATOR_ANSWER,                                                                    /* OP2 */
+    PP_ART_TRUST_CONTROLLER,                                                                   /* K7 */
+    PP_ART_TRUST_CHANGE,                                                                       /* W10 */
+    PP_ART_INSTALL_CHANGE,                                                                     /* IS14 */
     PP_ART_COUNT
 } pp_artifact;
 
@@ -179,6 +182,7 @@ typedef struct {
 
 #define PP_ROLE_AUTHORITY 0 /* K4: the role of every key of the trust store that counts */
 #define PP_ROLE_OTHER 1     /* a key in a role this version does not know is kept and never counts */
+#define PP_ROLE_CONTROLLER 2 /* K6: the controller key, which signs controller statements (H9) and never counts */
 
 typedef struct {
     uint8_t id[32];
@@ -210,6 +214,10 @@ typedef struct {
     uint8_t trust_id[32];
     int has_trust_id;
     long long time_floor;
+    long long key_seq;              /* K6, K7: the key sequence of the controller key, 0 when the anchor named it */
+    long long fresh;                /* H16, P4: the anchor's `fresh`, the longest lifetime in seconds of a fresh
+                                       statement, 0 for freshness off. Provisioning copies it from the anchor, and no
+                                       message changes it */
 } pp_trust;
 
 /* What a staged release shares (E7). */
@@ -273,11 +281,19 @@ typedef struct {
     pp_layout_field fields[PP_LAYOUT_FIELDS];
 } pp_layout;
 
+/* IS14, IS15: an install change statement staged before the set it carries, by what V10 and IS15 hold it to: its seq,
+ * policy hash, release id and `from`, which V11 held to its `replaces`, and its envelope id. */
+typedef struct {
+    long long seq;
+    uint8_t policy_sha256[32], release[32], from[32], envelope_id[32];
+} pp_change;
+
 /* What the verifier needs of a PEP's install part. NULL `record` for a PEP that holds none, which takes no
  * install statement (`dist:unknown-key`). */
 typedef struct {
     const pp_install *record;
     const pp_envelope *staged[PP_SETS]; /* the statement staged of each kind, NULL for none (IS4, G2, V10) */
+    const pp_change *change[PP_SETS];   /* the install change statement staged of each kind, NULL for none (IS15) */
     int message;                    /* 1 in a message, where a threshold of 1 takes no install statement (IS4) */
     int has_ceiling;                /* a policy list is held (CL1) */
     const uint8_t (*ceiling)[32];
@@ -319,6 +335,8 @@ typedef struct {
     int trust_bounded;              /* the body is held to the trust bound: a trust body, a policy list or an
                                        install.trust (E6, IS5) */
     int install_widens;             /* IS11: an install.trust that adds a key or lowers the threshold */
+    int change_set;                 /* IS14: the set kind an install change statement carries, once V11 read it */
+    uint8_t change_from[32];
 } pp_verdict;
 
 /* ------------------------------------------------------------------ the functions */
@@ -450,9 +468,9 @@ typedef struct {
     int has_replaces;
     int widens;
     size_t n;
-    pp_artifact_held held[2]; /* a mesh release holds a policy.ppt and may hold a trust.widening */
+    pp_artifact_held held[2]; /* a mesh release holds a policy.ppt and one statement, a trust.widening or a trust.change */
     uint8_t artifact_body[PP_RELEASE_BODY_MAX]; /* the body of the artifact, within the kind's bound */
-    uint8_t trust_body[PP_WIDENING_MAX];        /* the widening statement it holds, at most 64 hashes (W4) */
+    uint8_t trust_body[PP_WIDENING_MAX];        /* the statement it holds, a widening one of at most 64 hashes (W4) */
 } pp_release;
 
 /* The body of the release's k-th artifact, in the buffer for its kind. */
@@ -482,8 +500,27 @@ uint8_t *pp_held_body(pp_release *release, size_t k);
 #define PP_PART_SET_FALLBACK 2048 /* the fallback policy held and the one staged */
 #define PP_PART_SET_CEILING 4096  /* the ceiling held and the one staged */
 #define PP_PART_COPIED (PP_PART_INSTALL | PP_PART_RATES | PP_PART_SET_FLOOR | PP_PART_SET_FALLBACK | PP_PART_SET_CEILING)
-#define PP_PART_COUNT 13
-#define PP_PARTS 8191
+#define PP_PART_FRESH 8192   /* H16: the latest fresh controller statement, where freshness is on */
+#define PP_PART_COUNT 14
+#define PP_PARTS 16383
+
+/* H9, H16: the controller statement, 102 bytes, or 126 with the freshness fields, signed by the controller key over
+ * the DSSE encoding of the bytes before the signature with the payload type application/vnd.prismpath.dist-epoch.
+ * It is the twin of prismpath/distribution/statement.py. */
+#define PP_STATEMENT_SIZE 102
+#define PP_FRESH_STATEMENT_SIZE 126
+typedef struct {
+    uint64_t key_seq;
+    uint8_t stream[16];            /* the first 16 bytes of SHA-256 of the stream name */
+    uint64_t epoch;
+    int fresh;
+    uint64_t trust_seq, stream_seq, expires; /* 0 when `fresh` is 0 */
+} pp_controller_statement;
+
+/* 0 and the statement when `data` reads and its signature verifies under `public_key` (32 raw bytes), else
+ * PP_CAUSE_BAD_FORMAT for bytes that are not a statement and PP_CAUSE_SIG_INVALID for a signature that does not
+ * verify. NULL `public_key` is a PEP with no controller key, which takes nothing (K6). */
+uint8_t pp_statement_verify(const uint8_t *data, size_t len, const uint8_t *public_key, pp_controller_statement *out);
 
 /* A statement of an install set as the PEP holds it: the sealed envelope and the body, a table, or for a policy
  * list its hashes, 32 bytes each, from which the canonical body is written again to check its hash (CL1). */
@@ -499,6 +536,8 @@ typedef struct {
 typedef struct {
     int has_held, has_staged;
     pp_statement held, staged;
+    int has_change;                 /* IS15: a change statement is staged for this kind */
+    pp_change change;
 } pp_install_set;
 
 /* RC4: a held statement's body as its bytes, a policy list written again from its hashes (CL1), so a run can hold the
@@ -568,6 +607,10 @@ typedef struct {
     int rates_reads;
     long long rate_start[PP_FLOOR_RULES]; /* AF8: the window of each floor rule and the overrides counted in it */
     uint32_t rate_count[PP_FLOOR_RULES];
+    int has_kept;               /* H16: a fresh statement is kept, its bytes, its expires and the time it was kept */
+    uint8_t kept[PP_FRESH_STATEMENT_SIZE];
+    uint64_t kept_expires;
+    long long kept_at;
     long long answer_start;     /* OP4: the window of the operator answers `allow` and the count in it */
     uint32_t answer_count;
     size_t n_open;              /* OP3: the open escalations, oldest first, kept with the rate counts */
@@ -607,7 +650,8 @@ typedef struct {
     pp_durable d;
     uint8_t instance_secret[64], instance_public[32];
     int locked, held;
-    uint64_t epoch;
+    uint64_t epoch;           /* H9, H15: in memory only, 0 at every start, at provisioning and at a new key sequence */
+    int time_taken;           /* H16: a PEP with no clock took its time floor from a statement in this start */
     long long now; /* the clock reading of the call being made, Unix seconds */
     int commit_due; /* B8: a commit waiting for its delay */
     uint32_t commit_due_ms;
@@ -741,8 +785,16 @@ void pp_pep_record(pp_pep_machine *pep, uint8_t event, long long now);
  * after a power loss runs slow by the time without power and never fast. */
 void pp_pep_save_time(pp_pep_machine *pep, long long now);
 
-/* H9: keep the highest epoch id the controller sent. */
-void pp_pep_see_epoch(pp_pep_machine *pep, uint64_t epoch);
+/* H9, H16: one controller statement (a frame of type 6 carries one). The epoch id is taken from a statement that
+ * reads, names this PEP's stream, verifies under the controller key the trust store holds (not retired, not revoked,
+ * K6) and carries the key sequence the store holds for it, when the id is above the one held. Where freshness is on,
+ * such a statement may also give freshness, and on a PEP with no clock the first of a start that passes every other
+ * check raises the time floor to its `expires` less `fresh`. Anything else changes nothing. No call sends a record.
+ * Answers 1 when the epoch id was taken. */
+int pp_pep_take_statement(pp_pep_machine *pep, const uint8_t *data, size_t len, long long now);
+
+/* K6: the controller key a statement is verified under, or NULL. */
+const uint8_t *pp_pep_controller_key(const pp_pep_machine *pep);
 
 /* X3, X7: the cause every decision is refused with (0 while a release decides), and the hold mark. */
 uint8_t pp_pep_decide(pp_pep_machine *pep, int *held_mark, long long now);
