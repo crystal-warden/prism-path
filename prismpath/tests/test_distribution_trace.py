@@ -41,20 +41,18 @@ RESEARCH_ONLY = {99: ROOT / "tools" / "tests" / "test_export.py"}
 C_KINDS = frozenset({"mesh", "cfs"})
 # Cases one half of which an implementation runs, by its replay of the corpus or by a test that names the case,
 # while another half waits for a later pull request. Neither claims them, and they stay in PENDING until that half
-# has its test. 60: the C core
-# runs the mesh half, and the cfs half, a table taken on the signer's word, waits for the cfs kind in the C core.
-# 100: Python's grant writer emits an envelope, and the other older forms' writers wait for PRs 11 and 12.
+# has its test. 100: Python's grant writer emits an envelope, and the other older forms' writers wait for PRs 11 and 12.
 # 243: the Rust PEP stages, aborts and applies trust statements while reconciling, and taking a controller statement
 # waits for the controller key in Rust. 246: the Rust PEP lapses a held release that expires or is revoked while
 # reconciling, and the ceiling and fallback runs wait for section 21 in Rust.
-PARTIAL = {"P": frozenset(), "R": frozenset(), "C": frozenset({269})}
+PARTIAL = {"P": frozenset(), "R": frozenset(), "C": frozenset()}
 # The `xdp` halves of 187, 193, 194, 223 and 225 and the whole of 164 and 273 are in test_distribution_xdp.py: the edge
 # loads its action floor in every table, counts the floor's passes with no `would`, and refuses a floor with a `rate`
 # and an operator's answer.
 PENDING = {
     "P": "104 206 272",
-    "R": "137-138 272 281",
-    "C": "97 104 122 202 230 235 269 281",
+    "R": "272",
+    "C": "104",
 }
 
 
