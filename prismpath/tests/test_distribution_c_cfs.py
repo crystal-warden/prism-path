@@ -1415,20 +1415,75 @@ def test_case_220_an_answer_allow_sends_the_command_with_the_function_code_it_wa
         assert answered[0][6:] == ["1", "0", "00001882", "5", str(8 + len(request))], name
 
 
+def _not_enacted_run(tmp_path, out: list, request: bytes) -> None:
+    """The sealed run of `out` ends with the answer `allow` receipted as the operator's, a route to allow, in an
+    operator case written `enacted` false, and verifies under core_evidence with the install keys pinned."""
+    from integrations.cfs.ground import downlink, reference
+    from prismpath.kernel import canon2
+    from prismpath.ledgers import core_evidence
+    assert "sealed 0" in out
+    run = tmp_path / "run"
+    operator = [one for one in reference.bases(run) if one[1] == "operator"]
+    assert operator[0][1:] == ("operator", False, 1)
+    cases = [canon2.loads(line) for line in core_evidence._lines(run / "cases.jsonl")]
+    first = [one for one in cases if one.get("basis") == "operator"][0]
+    assert first["enacted"] is False and first["readings"] == [reference.reading_bytes(request).hex()]
+    receipts = [canon2.loads(line) for line in core_evidence._lines(run / "receipts.jsonl")]
+    mine = [one for one in receipts if one["case"] == operator[0][0]]
+    assert [(one["decision"], one["target"]) for one in mine] == [("route", "allow")]
+    keys = _ground_keys(tmp_path, app_anchor(install=("J", "K"), operators=("O1",), stale=5))
+    summary = downlink.verify(downlink.fetch(run, tmp_path / "ground"), keys)
+    assert summary["disagree"] == 0 and summary["escalations"] >= 1
+
+
 def test_case_220_an_escalation_an_older_build_kept_with_no_command_is_not_carried_out(app, tmp_path):
     """case_220: OP3. An escalation kept by a build before the command was kept reads from the older layout of the
-    rates part with no command, so its answer `allow` is applied and receipted as the operator's, and the request is
-    not carried out (not enacted), since no function code is guessed. An answer to an escalation opened afterwards is
-    carried out as it was asked."""
+    rates part with no command, so its answer `allow` is applied and receipted as the operator's, a route to allow,
+    in an operator case written `enacted` false, and the request is not carried out (not enacted, once), since no
+    function code is guessed. An answer to an escalation opened afterwards, which keeps its command, is carried out
+    as it was asked, with function code 5. The sealed run verifies under core_evidence."""
     request = bytes.fromhex(payload(3, slew=15, thrust=20))
     receipt = hashlib.sha256(_escalation_doc(2, N)).hexdigest()
+    again = f"propose {payload(3, slew=15, thrust=20)} 1 - {N} 5"
     out = app_run(app, tmp_path / "a", [*_app_escalating(code=5), "older", "reset", f"start 0 0 1 {N}",
-                                        *_app_answer(receipt)])
+                                        *_app_answer(receipt), again])
+    later = [line.split()[1] for line in out if line.startswith("escalation")]
+    assert len(later) == 2 and later[0] == receipt
+    out = app_run(app, tmp_path / "b", [*_app_escalating(code=5), "older", "reset", f"start 0 0 1 {N}",
+                                        *_app_answer(receipt), again, *_app_answer(later[1], transfer=41),
+                                        f"seal {TIME_US}"])
     events = [(one["event"], one["cause"], one.get("subject")) for records, _flags in steps(out) for one in records]
-    assert events.count(("answered", None, 5)) == 1
+    assert events.count(("answered", None, 5)) == 2
+    answered = _answered(out)
+    assert len(answered) == 2 and answered[0][1] == receipt and answered[1][1] == later[1]
+    assert answered[0][2:6] == ["1", "0", "2", request.hex()] and answered[0][6:] == ["0", "1", "-", "-", "-"]
+    assert answered[1][2:4] == ["1", "0"] and answered[1][6:] == ["1", "0", "00001882", "5", str(8 + len(request))]
+    assert [one[7] for one in answered].count("0") == 1                   # not enacted once, and only the first
+    _not_enacted_run(tmp_path / "b", out, request)
+    from integrations.cfs.ground import reference
+    assert [one[1:3] for one in reference.bases(tmp_path / "b" / "run") if one[1] == "operator"] == [
+        ("operator", False), ("operator", True)]
+
+
+def test_case_220_a_kept_command_larger_than_the_command_struct_is_not_carried_out(app, tmp_path):
+    """case_220: OP3. A proposal whose header gives a size larger than the app's command struct is cut to the struct
+    and escalated with that size kept. Its answer `allow` closes the escalation and is receipted as the operator's, a
+    route to allow, in an operator case written `enacted` false, before anything is sent, so nothing is carried out
+    and it is not enacted once. The sealed run verifies under core_evidence. A size the struct holds is sent."""
+    request = bytes.fromhex(payload(3, slew=15, thrust=20))
+    receipt = hashlib.sha256(_escalation_doc(2, N)).hexdigest()
+    lines = _app_escalating(code=5)
+    lines[-1] += " 19"                                                     # one byte past the command struct
+    out = app_run(app, tmp_path / "a", [*lines, *_app_answer(receipt), f"seal {TIME_US}"])
     answered = _answered(out)
     assert len(answered) == 1 and answered[0][1] == receipt
-    assert answered[0][2:6] == ["1", "0", "2", request.hex()] and answered[0][6:] == ["0", "1", "-", "-", "-"]
+    assert answered[0][2:6] == ["1", "0", "2", request.hex()] and answered[0][6:] == ["0", "2", "-", "-", "-"]
+    events = [(one["event"], one["cause"], one.get("subject")) for records, _flags in steps(out) for one in records]
+    assert events.count(("answered", None, 5)) == 1
+    _not_enacted_run(tmp_path / "a", out, request)
+    lines[-1] = lines[-1][:-3] + " 18"
+    out = app_run(app, tmp_path / "b", [*lines, *_app_answer(receipt)])
+    assert _answered(out)[0][6:] == ["1", "0", "00001882", "5", "18"]
 
 
 def test_case_220_a_cfs_app_receipts_a_floor_rule_escalation_and_each_answer_to_it(app, tmp_path):

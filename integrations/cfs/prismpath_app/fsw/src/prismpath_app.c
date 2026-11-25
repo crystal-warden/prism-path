@@ -331,7 +331,9 @@ static void PRISMPATH_APP_Forward(PRISMPATH_APP_ProposedCmd_t *Proposed, uint32 
 /* OP3: an answer `allow` whose operator case is written carries out the request it answers as it was asked: the
  * payload the escalation kept, with the function code and size its command was proposed with, on the vehicle message
  * id as an allowed proposal is. A kept command this app cannot send as it was asked, proposed on another message id
- * or with a size the command does not hold, is not carried out. */
+ * or with a size the command does not hold, is not carried out: the enforcement point decides that before it writes
+ * the operator case, which it then marks `enacted` false (PRISMPATH_APP_CommandLimits), and the check here is a
+ * second guard. */
 static void PRISMPATH_APP_NotEnacted(const char *Why)
 {
     PRISMPATH_APP_Data.HkTlm.Payload.NotEnacted++;
@@ -447,10 +449,14 @@ static void PRISMPATH_APP_Report(void)
         {
             PRISMPATH_APP_Enact(Step);
         }
-        else if (Step->AnswerNotEnacted)
+        else if (Step->AnswerNotEnacted == PP_APP_NOT_SENT_NONE)
         {
             PRISMPATH_APP_NotEnacted("its escalation kept no command to carry it out as it was asked, as one kept by "
                                      "an older build, and no function code is guessed");
+        }
+        else if (Step->AnswerNotEnacted)
+        {
+            PRISMPATH_APP_NotEnacted("the command its escalation kept is not one this app was proposed");
         }
     }
     if (Step->RunError && DIST->Started)
@@ -563,6 +569,14 @@ static int PRISMPATH_APP_Restore(CFE_ES_CDSHandle_t *Handle, bool *Have, void *D
     return PP_APP_STORE_ABSENT;
 }
 
+/* OP3: what a kept command must be for an answer `allow` to send it, the same as PRISMPATH_APP_Enact holds it to */
+static void PRISMPATH_APP_CommandLimits(PP_AppDistConfig_t *Cfg)
+{
+    Cfg->CommandMid = (uint32_t)CFE_SB_MsgIdToValue(PRISMPATH_APP_Data.ProposedMid);
+    Cfg->CommandMin = (uint16_t)sizeof(CFE_MSG_CommandHeader_t);
+    Cfg->CommandMax = (uint16_t)sizeof(PRISMPATH_APP_ProposedCmd_t);
+}
+
 static void PRISMPATH_APP_InitState(void)
 {
     int record, copy;
@@ -594,6 +608,7 @@ static void PRISMPATH_APP_InitState(void)
     s_Config.LostFloor      = PRISMPATH_APP_PLATFORM_LOST_FLOOR;
     s_Config.MinSeq         = PRISMPATH_APP_PLATFORM_LOST_FLOOR_MIN_SEQ;
     s_Config.MonitorStale   = PRISMPATH_APP_MONITOR_STALE_SECS;
+    PRISMPATH_APP_CommandLimits(&s_Config);
     n                       = PP_ReadPath(PRISMPATH_APP_PLATFORM_ANCHOR_FILE, s_Anchor, sizeof(s_Anchor));
     s_Config.Anchor         = n > 0 ? s_Anchor : NULL;
     s_Config.AnchorLen      = n > 0 ? (size_t)n : 0u;

@@ -242,12 +242,14 @@ int PP_Run_RecordCase(PP_RunState_t *State, const PP_RunIo_t *Io, const PP_RunKe
  * `Answer` the envelope id of the operator.answer, and `Request` the request the escalation kept. Its receipt is the
  * answer's: a route to allow for `Allow`, else a refusal with the escalation's own `Cause`, spelled by the registry
  * (prismpath_app_causes.h). The case's id is operator.v<floor version>.<n>, and its image line names the answer beside
- * the floor's statement. Returns 0, or -1 with the state and the files unchanged.
+ * the floor's statement. `Enacted` 0 marks the case `enacted` false: an answer `allow` the app applied but whose
+ * command it cannot send as it was asked, so the request is not carried out. Returns 0, or -1 with the state and the
+ * files unchanged.
  */
 int PP_Run_RecordOperator(PP_RunState_t *State, const PP_RunIo_t *Io, const PP_RunKeys_t *Keys,
                           const uint8_t Install[32], const uint8_t Answer[32], const PP_PolicyTable_t *Floor,
                           const uint8_t Digest[32], const uint8_t *Request, size_t RequestLen, int Allow, uint8_t Cause,
-                          int Hold, uint64_t *Index);
+                          int Enacted, int Hold, uint64_t *Index);
 
 /** OP3: an escalation document the action floor opened, a line of escalations.jsonl. 0, or -1 with the state and the
  *  file unchanged. */

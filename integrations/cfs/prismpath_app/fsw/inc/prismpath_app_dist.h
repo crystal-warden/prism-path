@@ -140,6 +140,10 @@ typedef struct
     size_t            NBrought;
     PP_AppStatement_t Boot[PP_APP_BOOT_MAX];
     size_t            NBoot;
+    uint32_t       CommandMid;     /**< OP3: the message id proposals are taken on, the one a kept command must carry
+                                        for an answer `allow` to send it */
+    uint16_t       CommandMin;     /**< the size of a command header, the least a kept command's size may be */
+    uint16_t       CommandMax;     /**< the size of the command struct an answer sends, the most it may be */
 } PP_AppDistConfig_t;
 
 /** OP3: how a proposal was asked beside its payload, kept with its escalation in the core's record (pp_escalation
@@ -152,6 +156,8 @@ typedef struct
     uint8_t  FcnCode; /**< its function code */
     uint16_t Size;    /**< the size its header gave */
 } PP_AppCommand_t;
+#define PP_APP_NOT_SENT_NONE  1 /**< AnswerNotEnacted: the escalation kept no command this app reads */
+#define PP_APP_NOT_SENT_OTHER 2 /**< AnswerNotEnacted: the kept command is not one the app can send as it was asked */
 #define PP_APP_COMMAND_FORMAT 1 /**< the first byte of a kept command: a format byte, then the id, code and size */
 #define PP_APP_COMMAND_BYTES  8 /**< format 1, message id 4, function code 1, size 2, little endian */
 _Static_assert(PP_APP_COMMAND_BYTES <= PP_COMMAND_MAX, "a kept command fits the core's escalation");
@@ -184,9 +190,11 @@ typedef struct
     uint8_t AnswerRequest[PP_REQUEST_MAX];
     int     AnswerEnact;           /**< an answer `allow` whose case is written and whose escalation kept the command
                                         it was asked as, AnswerCommand: the app sends that command with AnswerRequest */
-    int     AnswerNotEnacted;      /**< an answer `allow` whose case is written but whose escalation kept no command
-                                        this app reads, as one kept by an older build: the request is not carried out,
-                                        since no function code is guessed */
+    int     AnswerNotEnacted;      /**< an answer `allow` whose operator case is written `enacted` false, since the
+                                        command cannot be sent as it was asked: PP_APP_NOT_SENT_NONE when its
+                                        escalation kept no command this app reads, as one kept by an older build, since
+                                        no function code is guessed, and PP_APP_NOT_SENT_OTHER when the kept command
+                                        has another message id than CommandMid or a size outside the command struct */
     PP_AppCommand_t AnswerCommand;
     int     RunError;              /**< the run's files could not be begun, or an install statement the core applied
                                         could not be written to install.jsonl, so the run will not verify (RC4) */
@@ -248,6 +256,8 @@ typedef struct
     int                 Starting;   /**< within PP_AppDist_Start */
     size_t              NSeen;
     uint8_t             Seen[PP_APP_SEEN_MAX][32]; /**< the envelope ids applied by this start */
+    uint32_t            CommandMid;     /**< OP3: the start's PP_AppDistConfig_t CommandMid, CommandMin, CommandMax */
+    uint16_t            CommandMin, CommandMax;
     PP_AppStep_t        Step;
 } PP_AppDist_t;
 

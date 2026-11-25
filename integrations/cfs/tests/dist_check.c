@@ -19,8 +19,11 @@
  *   start <expiry 0|1> <lost floor 0 lock|1 minimum> <min seq> <now>   as the app's init: the stores as they are
  *   frame <hex> <now ms> <now> | control <frame hex> <image sig hex> <now ms> <now>
  *   tick <now ms> <now> | rollback <now> | beat <now>
- *   propose <payload hex> <monitor ok 0|1> <monitor age or -> <now> [<function code>]   proposed as command code 0,
- *                                                                      or the one given, on PROPOSED_MID; also prints "decision <kind> <cause> <rule>
+ *   propose <payload hex> <monitor ok 0|1> <monitor age or -> <now> [<function code> [<size>]]   proposed as
+ *                                                                      command code 0, or the one given, on
+ *                                                                      PROPOSED_MID, with the size its header gives,
+ *                                                                      8 and the payload's unless given; also prints
+ *                                                                      "decision <kind> <cause> <rule>
  *                                                                      <basis> <held> <receipted> <receipt>
  *                                                                      <not enacted> <record error> <escalated>",
  *                                                                      and "escalation <receipt hash hex>" for an
@@ -275,6 +278,7 @@ static void PrintStep(void)
 }
 
 #define PROPOSED_MID 0x1882u /* the proposals' message id the script's commands are proposed on */
+#define COMMAND_MAX  18u     /* the app's command struct: a command header and its ten bytes of payload */
 
 /* the size of an escalation in the layout before it kept its command: the members up to its cause, padded to the
  * escalation's alignment */
@@ -407,6 +411,9 @@ int main(int argc, char **argv)
                     copy = PP_APP_STORE_LOST;
                 }
             }
+            Config.CommandMid = PROPOSED_MID; /* as the app gives it: its proposals' id, a header to its struct */
+            Config.CommandMin = 8u;
+            Config.CommandMax = COMMAND_MAX;
             if (PP_AppDist_Start(&Dist, &Config, record, copy, 0, now) != 0)
             {
                 printf("refused-start\n");
@@ -471,7 +478,8 @@ int main(int argc, char **argv)
             int              ok = 1;
             unsigned         fc = 0;
             PP_AppCommand_t  command;
-            if (sscanf(rest, "%s %d %s %lld %u", a, &ok, b, &now, &fc) < 4 || fc > 127)
+            unsigned         size = 0;
+            if (sscanf(rest, "%s %d %s %lld %u %u", a, &ok, b, &now, &fc, &size) < 4 || fc > 127 || size > 0xFFFFu)
             {
                 return 2;
             }
@@ -483,7 +491,7 @@ int main(int argc, char **argv)
             }
             command.MsgId   = PROPOSED_MID;
             command.FcnCode = (uint8_t)fc;
-            command.Size    = (uint16_t)(8u + n); /* a command header, then the payload */
+            command.Size    = (uint16_t)(size ? size : 8u + n); /* a command header, then the payload */
             PP_AppDist_Propose(&Dist, &Io, bytes, n, &command,
                                strcmp(b, "-") == 0 ? PP_AGE_NONE : (uint32_t)strtoul(b, NULL, 10), now, &d);
             PrintStep();

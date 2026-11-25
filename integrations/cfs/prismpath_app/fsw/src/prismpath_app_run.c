@@ -575,9 +575,9 @@ static char s_Reading[256];
  * {"answer":"<hex>","asked":false,"basis":..,"case":..,"enacted":false,"flow":..,"hold":true,"image":"<hex>",
  *  "install":"<hex>","readings":[
  * with basis and install only for an installed case, answer only for an operator case, asked only for a floor case
- * with no set to ask, enacted only for a would case and hold only when held */
+ * with no set to ask, enacted only for a would case and an operator case NotEnacted, and hold only when held */
 static int OpenCase(const PP_RunIo_t *Io, uint32_t Kind, const uint8_t Install[32], const uint8_t Answer[32],
-                    const PP_PolicyTable_t *Active, uint32_t Number, int Hold, uint64_t *Written)
+                    const PP_PolicyTable_t *Active, uint32_t Number, int Hold, int NotEnacted, uint64_t *Written)
 {
     Buf_t    B = {s_Line, 0, sizeof(s_Line), 0};
     uint16_t at;
@@ -607,9 +607,11 @@ static int OpenCase(const PP_RunIo_t *Io, uint32_t Kind, const uint8_t Install[3
     }
     PutS(&B, "\"case\":");
     PutCaseIdOf(&B, Kind, Active->Version, Number);
-    if (Kind == PP_CASE_WOULD || Kind == PP_CASE_FALLBACK_WOULD)
+    if (Kind == PP_CASE_WOULD || Kind == PP_CASE_FALLBACK_WOULD || (Kind == PP_CASE_OPERATOR && NotEnacted))
     {
-        PutS(&B, ",\"enacted\":false"); /* AF7: what the release or the fallback policy would have answered */
+        /* AF7: what the release or the fallback policy would have answered; OP3: an answer whose command could not be
+         * sent */
+        PutS(&B, ",\"enacted\":false");
     }
     PutS(&B, ",\"flow\":");
     rc |= (B.Err ? -1 : Io->Write(Io->Ctx, h, B.P, B.Len));
@@ -686,7 +688,7 @@ static size_t ImageLine(const PP_RunKeys_t *Keys, uint32_t Kind, const uint8_t I
 static int RecordCaseOf(PP_RunState_t *State, const PP_RunIo_t *Io, const PP_RunKeys_t *Keys, int Kind,
                         const uint8_t Install[32], const uint8_t Answer[32], const PP_PolicyTable_t *Active,
                         const uint8_t ActiveDigest[32], const uint8_t *Payload, size_t PayloadLen,
-                        const PP_Verdict_t *Verdict, int Hold, uint64_t *Index, uint8_t Leaf[32])
+                        const PP_Verdict_t *Verdict, int Hold, int NotEnacted, uint64_t *Index, uint8_t Leaf[32])
 {
     static const uint8_t k_NoInstall[32];
     PP_RunState_t next = *State;
@@ -735,7 +737,7 @@ static int RecordCaseOf(PP_RunState_t *State, const PP_RunIo_t *Io, const PP_Run
         {
             number = (next.CaseCount == 0u || Active->Version > next.CaseMaxVersion) ? 0u : next.CaseCount + 1u;
         }
-        if (OpenCase(Io, kind, Install, Answer, Active, number, Hold, &next.StreamLen) != 0)
+        if (OpenCase(Io, kind, Install, Answer, Active, number, Hold, NotEnacted, &next.StreamLen) != 0)
         {
             goto fail;
         }
@@ -820,13 +822,13 @@ int PP_Run_RecordCase(PP_RunState_t *State, const PP_RunIo_t *Io, const PP_RunKe
         return -1; /* an operator case names its answer: PP_Run_RecordOperator */
     }
     return RecordCaseOf(State, Io, Keys, Kind, Install, NULL, Active, ActiveDigest, Payload, PayloadLen, Verdict, Hold,
-                        Index, Leaf);
+                        0, Index, Leaf);
 }
 
 int PP_Run_RecordOperator(PP_RunState_t *State, const PP_RunIo_t *Io, const PP_RunKeys_t *Keys,
                           const uint8_t Install[32], const uint8_t Answer[32], const PP_PolicyTable_t *Floor,
                           const uint8_t Digest[32], const uint8_t *Request, size_t RequestLen, int Allow, uint8_t Cause,
-                          int Hold, uint64_t *Index)
+                          int Enacted, int Hold, uint64_t *Index)
 {
     PP_Verdict_t verdict;
     uint8_t      leaf[32];
@@ -838,7 +840,7 @@ int PP_Run_RecordOperator(PP_RunState_t *State, const PP_RunIo_t *Io, const PP_R
     verdict.Field  = -1;
     verdict.Reason = PP_REASON_NONE;
     return RecordCaseOf(State, Io, Keys, PP_CASE_OPERATOR, Install, Answer, Floor, Digest, Request, RequestLen,
-                        &verdict, Hold, Index, leaf);
+                        &verdict, Hold, !Enacted, Index, leaf);
 }
 
 int PP_Run_Escalation(PP_RunState_t *State, const PP_RunIo_t *Io, const char *Doc, size_t Len)

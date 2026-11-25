@@ -522,6 +522,9 @@ int PP_AppDist_Start(PP_AppDist_t *D, const PP_AppDistConfig_t *Cfg, int Record,
     (void)NowMs;
     D->Starting = 1;
     D->NSeen    = 0;
+    D->CommandMid = Cfg->CommandMid; /* OP3: what a kept command must be for an answer `allow` to send it */
+    D->CommandMin = Cfg->CommandMin;
+    D->CommandMax = Cfg->CommandMax;
     D->Started = 0;
     D->Due     = 0;
     D->Pending = 0;
@@ -696,15 +699,39 @@ static const pp_statement *SetTable(const PP_AppDist_t *D, int Set, PP_PolicyTab
 static PP_PolicyTable_t    s_SetTable, s_WouldTable;
 static PP_RunState_t       s_Work; /* a working copy of the run, so a decision's lines are written whole or not at all */
 
+/* OP3: whether an answer `allow` can be carried out as its request was asked: its escalation kept a command this app
+ * reads, on the message id proposals are taken on, with a size from a command header to the command struct. Decided
+ * before the answer's operator case is written, so the case says whether it was carried out. */
+static int Sendable(const PP_AppDist_t *D, const pp_answer *A, PP_AppCommand_t *Command)
+{
+    if (A->command_len != PP_APP_COMMAND_BYTES || A->command[0] != PP_APP_COMMAND_FORMAT)
+    {
+        return PP_APP_NOT_SENT_NONE; /* as an older build kept it: its function code is never guessed */
+    }
+    Command->MsgId   = (uint32_t)A->command[1] | (uint32_t)A->command[2] << 8 | (uint32_t)A->command[3] << 16 |
+                     (uint32_t)A->command[4] << 24;
+    Command->FcnCode = A->command[5];
+    Command->Size    = (uint16_t)(A->command[6] | A->command[7] << 8);
+    if (Command->MsgId != D->CommandMid || Command->Size < D->CommandMin || Command->Size > D->CommandMax ||
+        D->CommandMax == 0u)
+    {
+        return PP_APP_NOT_SENT_OTHER;
+    }
+    return 0;
+}
+
 /* OP3, RC4: the answer the core just applied, in install.jsonl, and its one request in a case of basis operator under
  * the floor's image, naming the answer and the floor's statement, with the answer's receipt: a route to allow, or the
- * escalation's own refusal. The core applies an answer only under the floor the escalation was made under, so the
- * floor it holds now is that floor. */
+ * escalation's own refusal. An answer `allow` whose command cannot be sent as it was asked still closes its
+ * escalation, and its case is written `enacted` false. The core applies an answer only under the floor the escalation
+ * was made under, so the floor it holds now is that floor. */
 static void Answer(PP_AppDist_t *D)
 {
     const pp_answer    *a = &D->Pep.answer;
     const pp_statement *floor;
     uint8_t             id[32];
+    PP_AppCommand_t     command;
+    int                 not_sent = 0;
 
     D->Step.Answered    = 1;
     D->Step.AnswerAllow = a->allow;
@@ -725,36 +752,33 @@ static void Answer(PP_AppDist_t *D)
         (void)PP_AppDist_SaveRun(D);
         return;
     }
+    memset(&command, 0, sizeof(command));
+    if (a->allow)
+    {
+        not_sent = Sendable(D, a, &command);
+    }
     s_Work = D->Record.Run;
     if (PP_Run_RecordOperator(&s_Work, D->Io, &D->Keys, floor->envelope.envelope_id, a->envelope_id, &s_SetTable,
                               floor->envelope.body_sha256, a->request, a->request_len, a->allow, a->cause,
-                              D->Pep.held, &D->Step.AnswerIndex) != 0)
+                              not_sent == 0, D->Pep.held, &D->Step.AnswerIndex) != 0)
     {
         (void)PP_Run_Recover(&D->Record.Run, D->Io);
         D->Step.AnswerRecordError = 1;
         (void)PP_AppDist_SaveRun(D);
         return;
     }
-    D->Record.Run           = s_Work;
-    D->Step.AnswerReceipted = 1;
+    D->Record.Run            = s_Work;
+    D->Step.AnswerReceipted  = 1;
     D->Step.AnswerRequestLen = a->request_len;
     memcpy(D->Step.AnswerRequest, a->request, a->request_len);
-    if (a->allow)
+    if (a->allow && not_sent == 0)
     {
-        /* OP3: carried out only as the command it was asked as. An escalation that kept none this app reads, as one
-         * an older build kept, is not carried out: its function code is never guessed */
-        if (a->command_len == PP_APP_COMMAND_BYTES && a->command[0] == PP_APP_COMMAND_FORMAT)
-        {
-            D->Step.AnswerCommand.MsgId = (uint32_t)a->command[1] | (uint32_t)a->command[2] << 8 |
-                                          (uint32_t)a->command[3] << 16 | (uint32_t)a->command[4] << 24;
-            D->Step.AnswerCommand.FcnCode = a->command[5];
-            D->Step.AnswerCommand.Size    = (uint16_t)(a->command[6] | a->command[7] << 8);
-            D->Step.AnswerEnact           = 1;
-        }
-        else
-        {
-            D->Step.AnswerNotEnacted = 1;
-        }
+        D->Step.AnswerCommand = command; /* OP3: carried out only as the command it was asked as */
+        D->Step.AnswerEnact   = 1;
+    }
+    else if (a->allow)
+    {
+        D->Step.AnswerNotEnacted = not_sent;
     }
     (void)PP_AppDist_SaveRun(D);
 }
