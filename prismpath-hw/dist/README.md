@@ -23,7 +23,8 @@ durably in one `pp_durable` struct in parts (the anchor, the counter, the trust 
 and a pending intent named by release id and seq), and the caller's `persist` is told which parts changed and
 writes each whole, so a state record writes its 12 byte counter and no more, and it reports every
 transition in a state record signed by the instance key. `persist` answers whether every write took, and the
-machine does not act on an override or an operator's `allow` whose count it could not save first (AF8, OP3, OP4).
+machine refuses an override or an operator's `allow` whose count it could not save first with `dist:save-failed`
+(AF8, OP3, OP4).
 
 Section 21 is built for `mesh`. The install record, the rate counts and the held and staged statement of each install
 kind are five more parts, each written to two media by `persist` and read back from the first copy that reads, the

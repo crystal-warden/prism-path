@@ -373,7 +373,7 @@ int main(int argc, char **argv)
                 printf("refused-start\n");
                 continue;
             }
-            if (record == PP_APP_STORE_READ)
+            if (Dist.RecordRead)
             {
                 (void)PP_Run_Recover(&Dist.Record.Run, &Io);
             }

@@ -226,16 +226,16 @@ def test_a_node_that_lost_its_anchor_part_is_locked_and_never_provisioned_again(
 
 def test_a_node_whose_write_did_not_take_does_not_act_on_the_override(binary):
     """AF8 on the firmware. An override's count is written to NVS before the node acts on it. On node 0, whose NVS
-    writes fail, the floor does not allow it and the release decides, here none (dist:policy-lapsed); the others
-    allow it under the floor, and node 0 does once its writes take again."""
+    writes fail, the floor refuses it with dist:save-failed; the others allow it under the floor, and node 0 does once
+    its writes take again."""
     signer = _signer(install=[GEN.test_key("J"), GEN.test_key("K")])
     fleet = _fleet(binary, install=("J", "K"))
     try:
         fleet.deliver(*signer.floor(tables.floor_table(), rate={"allows": 3, "window": 60}))
-        floor_allowed, lapsed = causes.NAMES["dist:floor-allowed"], causes.NAMES["dist:policy-lapsed"]
+        floor_allowed, unsaved = causes.NAMES["dist:floor-allowed"], causes.NAMES["dist:save-failed"]
         fleet.lines(["wfail 0 1"])
         answers = fleet.ask(tables.regs(2, 15, 1), "-,-,1")
-        assert answers["node0"] == (REFUSE, lapsed, 0, 0)
+        assert answers["node0"] == (REFUSE, unsaved, BASIS_FLOOR, 0)
         assert answers["node1"] == answers["node2"] == (ALLOW, floor_allowed, BASIS_FLOOR, 0)
         fleet.lines(["wfail 0 0"])
         assert fleet.ask(tables.regs(2, 15, 1), "-,-,1")["node0"] == (ALLOW, floor_allowed, BASIS_FLOOR, 0)

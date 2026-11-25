@@ -2957,11 +2957,12 @@ static uint8_t pp_apply_answer(pp_pep_machine *pep, const pp_envelope *e, const 
     }
     one->answered = 1;
     if (pp_persist(pep, PP_PART_RATES) != 0 && allow) { /* OP3, OP4: before the PEP acts on it */
-        /* an allow whose count and answered mark are not durable is not acted on: it is refused as one past the
-           rate, the count stays spent and the escalation stays open. A refuse acted on twice lets nothing through */
+        /* an allow whose count and answered mark are not durable is not acted on: it is refused with
+           dist:save-failed, the count stays spent and the escalation stays open. A refuse acted on twice lets nothing
+           through */
         one->answered = 0;
-        pp_emit_about(pep, PP_EV_REFUSED, PP_CAUSE_FLOOR_RATE, PP_SUBJECT_ANSWER);
-        return PP_CAUSE_FLOOR_RATE;
+        pp_emit_about(pep, PP_EV_REFUSED, PP_CAUSE_SAVE_FAILED, PP_SUBJECT_ANSWER);
+        return PP_CAUSE_SAVE_FAILED;
     }
     pep->answer.applied = 1;
     pep->answer.allow = allow;
@@ -3475,7 +3476,7 @@ void pp_pep_ask(pp_pep_machine *pep, const uint8_t *regs, size_t regs_len, const
     if (k >= 0 && floor_outcome != PP_OUT_REFUSE && image &&
         pp_floor_fresh(image, image_len, k, pep->config.layout, ages, n_ages)) {
         int override = !(table && outcome == PP_OUT_ALLOW); /* AF7 */
-        int answers = 1;
+        int answers = 1, unsaved = 0;
         const pp_envelope *fe = &floor->envelope;
         if (floor_outcome == PP_OUT_ALLOW && override && fe->has_rate && k < PP_FLOOR_RULES) {
             /* AF8: overrides counted per rule in fixed windows of the PEP's time */
@@ -3483,10 +3484,16 @@ void pp_pep_ask(pp_pep_machine *pep, const uint8_t *regs, size_t regs_len, const
             int spent = d->rate_count[k] >= (uint32_t)fe->rate_allows;
             if (!spent) {
                 d->rate_count[k]++;
-                /* saved before the PEP acts on it: an override whose count is not durable is one past the rate */
-                spent = pp_persist(pep, PP_PART_RATES) != 0;
+                unsaved = pp_persist(pep, PP_PART_RATES) != 0; /* saved before the PEP acts on it */
             }
-            if (spent) {
+            if (unsaved) {
+                /* an override whose count is not durable is refused by the floor, and the count stays spent */
+                floor_outcome = PP_OUT_REFUSE;
+                floor_cause = PP_CAUSE_SAVE_FAILED;
+                out->rule = k;
+                out->window = d->rate_start[k];
+                out->count = d->rate_count[k];
+            } else if (spent) {
                 /* past the rate: escalated with dist:floor-rate where the kind escalates, else the release decides */
                 if (kind == PP_TGT_CFS) {
                     floor_outcome = PP_OUT_ESCALATE;
@@ -3506,9 +3513,11 @@ void pp_pep_ask(pp_pep_machine *pep, const uint8_t *regs, size_t regs_len, const
             }
         }
         if (answers) {
-            if (d->floor_answers < 0xFFFFFFFFu) d->floor_answers++;
-            if (override && d->floor_overrides < 0xFFFFFFFFu) d->floor_overrides++;
-            pp_persist(pep, PP_PART_COUNTER); /* H10: with the counter, so no count goes down */
+            if (!unsaved) {
+                if (d->floor_answers < 0xFFFFFFFFu) d->floor_answers++;
+                if (override && d->floor_overrides < 0xFFFFFFFFu) d->floor_overrides++;
+                pp_persist(pep, PP_PART_COUNTER); /* H10: with the counter, so no count goes down */
+            }
             out->outcome = floor_outcome;
             out->cause = floor_outcome == PP_OUT_ALLOW ? PP_CAUSE_FLOOR_ALLOWED : floor_cause; /* RC3 */
             out->basis = PP_BASIS_FLOOR;

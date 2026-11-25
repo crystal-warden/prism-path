@@ -121,6 +121,15 @@ static const uint8_t *ReleaseSig(const PP_AppDist_t *D, int Part)
     return k_Zero64;
 }
 
+/* The record to both its copies, the Critical Data Store and its file: 0 when both took */
+static int SaveRecordCopies(PP_AppDist_t *D)
+{
+    int cds  = D->Store.SaveRecord(D->Store.Ctx);
+    int file = D->Store.WriteFile(D->Store.Ctx, PP_APP_RECORD_FILE, &D->Record, sizeof(D->Record));
+
+    return cds == 0 && file == 0 ? 0 : -1;
+}
+
 /* pp_persist_fn: each part the core says changed, whole, to its store; the record and the copy area once each.
  * Answers 0, or -1 when a part did not pack or a write did not take, so the core does not act on an override or an
  * operator's allow it saved first (AF8, OP3, OP4). */
@@ -171,7 +180,7 @@ static int Persist(void *Ctx, const pp_durable *Durable, int Parts)
     {
         D->Record.Magic = PP_APP_RECORD_MAGIC;
         D->Record.Size  = (uint32_t)sizeof(D->Record);
-        failed |= D->Store.SaveRecord(D->Store.Ctx) != 0;
+        failed |= SaveRecordCopies(D) != 0;
     }
     if (copy)
     {
@@ -186,7 +195,7 @@ int PP_AppDist_SaveRun(PP_AppDist_t *D)
 {
     D->Record.Magic = PP_APP_RECORD_MAGIC;
     D->Record.Size  = (uint32_t)sizeof(D->Record);
-    return D->Store.SaveRecord(D->Store.Ctx);
+    return SaveRecordCopies(D);
 }
 
 /* ----------------------------------------------------------------- the runtime: the kernel */
@@ -483,6 +492,24 @@ int PP_AppDist_Start(PP_AppDist_t *D, const PP_AppDistConfig_t *Cfg, int Record,
 
     /* the durable state from its stores: the record's parts, the release files, each install part from its first
      * copy that reads */
+    if (Record != PP_APP_STORE_READ)
+    {
+        /* the record's second copy, which a power on reset keeps: it stands in for a store that does not hold one
+         * that reads, and a copy that does not read either leaves the record lost */
+        static PP_AppRecord_t file;
+        int32_t               n = D->Store.ReadFile(D->Store.Ctx, PP_APP_RECORD_FILE, &file, sizeof(file));
+        if (n == (int32_t)sizeof(file) && file.Magic == PP_APP_RECORD_MAGIC && file.Size == sizeof(file) &&
+            PP_Run_StateValid(&file.Run))
+        {
+            memcpy(&D->Record, &file, sizeof(file));
+            Record = PP_APP_STORE_READ;
+        }
+        else if (n >= 0)
+        {
+            Record = PP_APP_STORE_LOST;
+        }
+    }
+    D->RecordRead = Record == PP_APP_STORE_READ;
     memset(&s_Saved, 0, sizeof(s_Saved));
     memset(D->ActiveSig, 0, 64);
     memset(D->PreviousSig, 0, 64);
@@ -548,8 +575,8 @@ int PP_AppDist_Start(PP_AppDist_t *D, const PP_AppDistConfig_t *Cfg, int Record,
     pp_durable_held(&s_Saved, held);
     if (Record == PP_APP_STORE_ABSENT && s_Saved.provisioned)
     {
-        /* a power on reset clears the Critical Data Store, so a provisioned app finds no record beside its files: its
-         * floor, trust store and counter are lost, and the mission's response to a lost floor applies (Q5) */
+        /* a provisioned app that finds no copy of its record beside its files lost it: its floor, trust store and
+         * counter are lost, and the mission's response to a lost floor applies (Q5) */
         Record = PP_APP_STORE_LOST;
     }
     if (Record != PP_APP_STORE_READ)
@@ -884,7 +911,11 @@ void PP_AppDist_Propose(PP_AppDist_t *D, const PP_RunIo_t *Io, const uint8_t *Pa
         else
         {
             verdict.Kind   = PP_KIND_REFUSE;
-            verdict.Cause  = asked.basis == PP_BASIS_NONE ? asked.cause : PP_NO_IMAGE_CAUSE;
+            /* a floor refuses only an override whose count it could not save (dist:save-failed), and says so */
+            verdict.Cause = asked.basis == PP_BASIS_NONE ||
+                                    (asked.basis == PP_BASIS_FLOOR && asked.outcome == PP_OUT_REFUSE)
+                                ? asked.cause
+                                : PP_NO_IMAGE_CAUSE;
             verdict.Rule   = -1;
             verdict.Field  = -1;
             verdict.Reason = PP_REASON_NONE;

@@ -950,12 +950,14 @@ def test_d9_a_table_offered_on_the_bus_loads_through_the_table_service_and_an_ol
 
 
 def test_case_025_the_cfs_app_with_its_store_lost_locks_by_default_and_admits_from_the_minimum_when_set(app, tmp_path):
-    """case_025: Q5. With the Critical Data Store record lost at a processor reset, the app under LOCK is locked: it
+    """case_025: Q5. With both copies of the record lost at a processor reset, the one in the Critical Data Store and
+    its file, the app under LOCK is locked: it
     admits no table, with dist:floor-lost, and refuses every proposal unreceipted. Under MINIMUM it provisions itself
     again from its anchor with the floor one below the minimum, so a release below it is dist:seq-replay and one at it
     is committed and decides."""
     first = app_table(version=1)
-    prefix = [*app_head(), f"start 0 0 5 {N}", *release_lines(first, 6, 10), "reset", "lose record"]
+    prefix = [*app_head(), f"start 0 0 5 {N}", *release_lines(first, 6, 10), "reset", "lose record",
+              "unlink record.ppd"]
     out = app_run(app, tmp_path / "lock", [*prefix, f"start 0 0 5 {N + 1}", "state",
                                            *release_lines(app_table(version=2), 9, 20, now=N + 1),
                                            f"propose {payload(3)} 1 - {N + 1}"])
@@ -1071,7 +1073,7 @@ def test_case_106_107_108_109_110_the_cfs_app_answers_expiry_as_the_python_machi
         if k in proposals:
             lines.append(f"propose {payload(3)} 1 - {proposals[k]}")
     out = app_run(app, tmp_path / "app", [*lines, "seal 1000"])
-    lost_out = app_run(app, tmp_path / "lost", [*lines, "reset", "lose record", f"start {int(hold)} 0 1 {E + 2}",
+    lost_out = app_run(app, tmp_path / "lost", [*lines, "reset", "lose record", "unlink record.ppd", f"start {int(hold)} 0 1 {E + 2}",
                                                 f"propose {payload(3)} 1 - {E + 2}"])
     record_lines = [line for line in out if line.startswith("records")]
     flag_lines = [line.split()[1:] for line in out if line.startswith("step")]
@@ -1268,16 +1270,16 @@ def test_rates_no_copy_holds_start_every_window_spent(hc):
 
 def test_a_save_that_did_not_take_refuses_the_override_and_the_answer_it_was_for(hc):
     """AF8, OP3, OP4 on the core. The count of an override and the answered mark of an operator's `allow` are written
-    before the PEP acts on them. When that write does not take, the override is one past the rate (dist:floor-rate,
-    escalated on cfs) and the `allow` is refused with dist:floor-rate, its escalation still open, so the same answer
-    applies once the store takes writes again."""
+    before the PEP acts on them. When that write does not take, the floor refuses the override with dist:save-failed
+    and the `allow` is refused with dist:save-failed, its escalation still open, so the same answer applies once the
+    store takes writes again."""
     out = run(hc, [*escalating(), f"ask {N + 1} {regs(3)} -", f"escalated {H[0]} 0301", "wfail 1",
                    f"ask {N + 61} {regs(3)} -", answer(H[0], now=N + 61), "answer", "wfail 0",
                    answer(H[0], now=N + 62), "answer"])
     lost = ask(out[7])
-    assert (lost["outcome"], lost["cause"], lost["counted"], lost["rate_escalated"]) == (
-        ESCALATE, "dist:floor-rate", False, True)                            # a fresh window, but its count not saved
-    assert _refused(out[8]) == ("dist:floor-rate", 5) and out[9] == "answer 0"
+    assert (lost["outcome"], lost["cause"], lost["basis"], lost["counted"], lost["rate_escalated"]) == (
+        REFUSE, "dist:save-failed", "floor", False, False)                   # a fresh window, but its count not saved
+    assert _refused(out[8]) == ("dist:save-failed", 5) and out[9] == "answer 0"
     assert _last(out[10])["event"] == "answered" and out[11].startswith("answer 1 1 ")
 
 
@@ -1304,16 +1306,45 @@ def _app_installed():
     return app_head(install=("J", "K"), bring=brought, stale=5), ids
 
 
-def test_a_power_on_reset_of_a_provisioned_cfs_app_loses_its_record_and_is_never_a_first_start(app, tmp_path):
-    """P1, Q5, IS9, IS10 in the cFS app. A power on reset clears both Critical Data Store areas and keeps the files,
-    where the anchor part is now kept with the install parts. A provisioned app that starts so is one whose record is
-    lost, never a first start that provisions itself again with its floor at 0: under LOCK it is locked, admits
-    nothing (so the release it committed is not taken again), keeps its install sets and its floor decides; under
-    MINIMUM it provisions itself again with the floor one below the minimum and keeps its sets. With the anchor's file
-    gone as well it is locked and reports dist:install-lost."""
+def _counters(out: list) -> list:
+    """The counter of every state record in `out`, in order (H3)."""
+    return [int.from_bytes(bytes.fromhex(item)[24:32], "little") for line in out if line.startswith("records")
+            for item in line.split()[1:]]
+
+
+def test_a_power_on_reset_of_a_provisioned_cfs_app_recovers_its_record_from_its_file(app, tmp_path):
+    """P1, Q5, IS9, IS10, H3 in the cFS app. A power on reset clears both Critical Data Store areas and keeps the files.
+    The record, with the counter, the trust store and the floor, is kept in the Critical Data Store and in its file,
+    and the anchor part with the install parts. So a provisioned app that starts after a power on reset reads its
+    record from the file: it is not provisioned again and not locked, the release it committed decides, the same
+    release offered again changes nothing (Q3), its floor still answers first and its counter goes on rising."""
     head, ids = _app_installed()
     first = app_table(version=1)
     prefix = [*head, f"start 0 0 1 {N}", *release_lines(first, 1, 10), "power"]
+    before = app_run(app, tmp_path / "prefix", prefix)
+    out = app_run(app, tmp_path / "power", [*prefix, f"start 0 0 1 {N + 1}", "held", "state",
+                                            *release_lines(first, 1, 20, now=N + 1), "state",
+                                            f"propose {payload(3, slew=15, thrust=20)} 1 - {N + 1}",
+                                            f"propose {payload(1, slew=30)} 1 - {N + 1}"])[len(before):]
+    records, flags = steps(out)[0]
+    assert all(one["event"] != "provisioned" for one in records) and flags[2:4] == [0, 0]   # neither provisioned nor locked
+    states = [line for line in out if line.startswith("state")]
+    assert out[2] == ids and states[0] == states[1] == "state 1 1 1 0 0 1"
+    replay = [one for records, _flags in steps(out) for one in records if one["event"] == "refused"]
+    assert [one["cause"] for one in replay] == ["dist:not-staged"]          # Q3: the same release changes nothing
+    made = decisions(out)
+    assert made[0]["basis"] == 2 and made[1]["basis"] == 1                  # the floor first, then the release
+    assert min(_counters(out)) > max(_counters(before))                      # H3: no counter is sent twice
+
+
+def test_a_cfs_app_with_no_copy_of_its_record_is_locked_by_default(app, tmp_path):
+    """Q5, P1, IS9 in the cFS app. A power on reset with the record's file gone as well leaves no copy of the record:
+    the app is not provisioned again over what it holds. Under LOCK it is locked, admits nothing and keeps its sets,
+    under MINIMUM it provisions itself again with the floor one below the minimum and keeps its sets, and with the
+    anchor's file gone too it is locked and reports dist:install-lost."""
+    head, ids = _app_installed()
+    first = app_table(version=1)
+    prefix = [*head, f"start 0 0 1 {N}", *release_lines(first, 1, 10), "power", "unlink record.ppd"]
     skip = len(app_run(app, tmp_path / "prefix", prefix))
 
     def after(name: str, lines: list) -> list:
@@ -1338,9 +1369,9 @@ def test_a_power_on_reset_of_a_provisioned_cfs_app_loses_its_record_and_is_never
 
 def test_a_cfs_app_whose_store_write_did_not_take_acts_on_no_override_and_no_answer(app, tmp_path):
     """AF8, OP3, OP4 in the cFS app. The core saves an override's count and an answered escalation before it acts,
-    and the app now says when that write did not take. A floor override then escalates with dist:floor-rate rather
-    than being allowed, and an operator's `allow` is refused with dist:floor-rate, its escalation still open, so the
-    same answer applies once the store takes writes again."""
+    and the app now says when that write did not take. A floor override is then refused with dist:save-failed rather
+    than allowed, and an operator's `allow` is refused with dist:save-failed, its escalation still open, so the same
+    answer applies once the store takes writes again."""
     out = app_run(app, tmp_path / "a", [*_app_escalating()])
     receipt = [line.split()[1] for line in out if line.startswith("escalation")][0]
     out = app_run(app, tmp_path / "b", [*_app_escalating(), "wfail 1",
@@ -1348,8 +1379,8 @@ def test_a_cfs_app_whose_store_write_did_not_take_acts_on_no_override_and_no_ans
                                         *_app_answer(receipt, now=N + 61), "wfail 0",
                                         *_app_answer(receipt, transfer=41, now=N + 62)])
     last = decisions(out)[-1]
-    assert (last["basis"], last["escalated"]) == (2, 1)                    # a fresh window, its count not saved
+    assert (last["basis"], last["escalated"], last["cause"]) == (2, 0, causes.code("dist:save-failed"))
     events = [(one["event"], one["cause"], one.get("subject")) for records, _flags in steps(out) for one in records
               if one["event"] in ("answered", "refused")]
-    assert events == [("refused", "dist:floor-rate", 5), ("answered", None, 5)]
+    assert events == [("refused", "dist:save-failed", 5), ("answered", None, 5)]
     assert len(_answered(out)) == 1

@@ -533,8 +533,8 @@ def run_bad_image(exe_dir: Path, keys: Path, check: Check, log) -> None:
     tp = topics()
     proposed_mid = CMD_BASE | tp["PROPOSED_CMD"]
     ground = Ground()
-    # a first start: a power on reset of a provisioned app finds its files and is a lost record (Q5), so the
-    # files go too, and the app provisions itself from its anchor with no release
+    # a first start with no release: a power on reset of a provisioned app reads its record from its file and carries
+    # on with the release run_good committed, so the app's files go too and it provisions itself from its anchor
     shutil.rmtree(exe_dir / "cf" / "ppdist", ignore_errors=True)
     core = Core(exe_dir)
     try:

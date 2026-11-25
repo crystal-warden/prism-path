@@ -81,7 +81,9 @@ enum
 #define PP_APP_ANCHOR_BYTES 256
 #define PP_APP_COPY_BYTES (1024 + PP_APP_RATES_BYTES + 3 * PP_APP_SET_BYTES + PP_APP_ANCHOR_BYTES)
 
-/** The Critical Data Store record: the run, and the core's parts the store Q5 can lose. Plain data. */
+/** The record: the run, and the core's parts the store Q5 can lose. Plain data. It is kept in two copies, in the
+ *  Critical Data Store and in the file PP_APP_RECORD_FILE, so a power on reset, which clears the Critical Data Store,
+ *  finds it in the file; it is lost only when no copy of it reads. */
 typedef struct
 {
     uint32_t      Magic; /**< PP_APP_RECORD_MAGIC */
@@ -91,6 +93,7 @@ typedef struct
     uint8_t       Bytes[PP_APP_SMALL_BYTES];
 } PP_AppRecord_t;
 #define PP_APP_RECORD_MAGIC 0x50504452u /* "PPDR" */
+#define PP_APP_RECORD_FILE  "record.ppd"   /**< the record's second copy, under the app's distribution directory */
 
 /** The Critical Data Store area that holds the second copy of the install parts (IS10). Plain data. */
 typedef struct
@@ -194,6 +197,8 @@ typedef struct
     pp_layout           Layout;
     pp_assembler        Assembler;
     int                 Started;  /**< 0 when the core refused to start (X10, K2): nothing is admitted or decided */
+    int                 RecordRead; /**< the record read at the last start, from the Critical Data Store or its file:
+                                         the caller recovers the run from it, else begins a new run */
     PP_PolicyTable_t    Active;   /**< the table the kernel decides with, its digest and image attestation */
     uint8_t             ActiveDigest[32];
     uint8_t             ActiveSig[64], PreviousSig[64]; /**< the image attestations of the active and kept tables */
@@ -217,11 +222,12 @@ typedef struct
 
 /**
  * Start the enforcement point. Record and Copy are what the two Critical Data Store areas held, with what each was
- * (PP_APP_STORE_*), already copied into D->Record and D->Copy by the caller. A record that is absent beside no part
- * of the core on file or in the copy area is a first start: a new run begins and the app provisions itself from its
- * anchor and the statements brought with it (P2, P4). A record that is absent beside the app's files, as a power on
- * reset of a provisioned app leaves it, is a record that is lost, and an anchor part neither copy holds beside
- * another part locks the core (P1, IS9, IS10). A record that is lost loses the floor: under PP_LOST_FLOOR_LOCK the core is locked until ground
+ * (PP_APP_STORE_*), already copied into D->Record and D->Copy by the caller. A Critical Data Store record that does
+ * not read is taken from its file, PP_APP_RECORD_FILE, as a power on reset needs, and D->RecordRead says whether a
+ * copy read. A record that is absent from both beside no part of the core on file or in the copy area is a first
+ * start: a new run begins and the app provisions itself from its anchor and the statements brought with it (P2, P4).
+ * A record no copy of which reads beside the app's other files is a record that is lost, and an anchor part neither
+ * copy holds beside another part locks the core (P1, IS9, IS10). A record that is lost loses the floor: under PP_LOST_FLOOR_LOCK the core is locked until ground
  * deletes the store and restarts the app, and under PP_LOST_FLOOR_MINIMUM the app provisions itself again from its
  * anchor with the floor one below MinSeq. A record that reads restores the run and the core. When no release is
  * active the boot release is staged and committed as if offered. Returns 0, or -1 when the core refused to start.

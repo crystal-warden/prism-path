@@ -63,6 +63,7 @@
 #define PP_CAUSE_FLOOR_RATE 166           /* dist:floor-rate */
 #define PP_CAUSE_FLOOR_BROAD 167          /* dist:floor-broad */
 #define PP_CAUSE_ANSWER_UNBOUND 168       /* dist:answer-unbound */
+#define PP_CAUSE_SAVE_FAILED 170          /* dist:save-failed */
 
 /* ------------------------------------------------------------------ bounds */
 #define PP_MAX_ENVELOPE 2048  /* E6 */
@@ -611,7 +612,8 @@ typedef struct {
 #define PP_RATE_SPENT 0xFFFFFFFFu
 
 /* Write the `parts` (PP_PART_* bits) of `durable` that changed, each whole. 0 when every write took, nonzero when
- * one did not: the PEP then does not act on an override or an operator's `allow` it saves first (AF8, OP3, OP4). */
+ * one did not: the PEP then refuses an override or an operator's `allow` it saves first with dist:save-failed (AF8,
+ * OP3, OP4). */
 typedef int (*pp_persist_fn)(void *context, const pp_durable *durable, int parts);
 /* What the runtime runs: the active release, or with `fallback` set the fallback policy's table when no release
  * decides (FB1), or nothing (NULL), when the runtime refuses (X3). */
