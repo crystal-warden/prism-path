@@ -124,6 +124,7 @@ EDGE_PORT = classifier.MODEL_API_PORT
 TCP = 6
 MAX_ADDRESSES_PER_HOST = 16
 NODE_NAMES = ("edge", "allow", "pass", "drop")
+FLOOR_NODE_NAMES = NODE_NAMES + ("floor",)          # an edge that holds an action floor: `floor` after `drop` (net_dist.py)
 DROP_NODES = ("drop", "block")                    # the loader's drop mask names (loader.c config_set_drop_mask)
 CLASSES = ("model_api", "allowed_host")
 ABSENT, INT = 0, 2                                # TY_NONE, TY_INT of ppt_common.h
@@ -447,11 +448,22 @@ class Edge:
         return "\n".join(self.names) + "\n"
 
 
-def _flow(image_sha: str, dests_sha: str, sources: Sequence[int], allowed: Sequence[int]) -> str:
+def _flow(image_sha: str, dests_sha: str, sources: Sequence[int], allowed: Sequence[int],
+          floor: Optional[Sequence[int]] = None) -> str:
+    """The edge flow. With `floor`, the addresses an action floor allows (net_dist.py), a `floor` node after `drop` is
+    reached first for those, so the drop node keeps index 3 and the kernel's histogram counts the floor's own passes."""
     def members(addresses):
         return ", ".join(str(address_constant(a)) for a in addresses)
     scope = f"src_ip not in [{members(sources)}]" if sources else "never"
     allow = f"protocol == {TCP} and dst_port == {EDGE_PORT} and dst_ip in [{members(allowed)}]" if allowed else "never"
+    if floor is not None:
+        floor_allow = (f"protocol == {TCP} and dst_port == {EDGE_PORT} and dst_ip in [{members(floor)}]"
+                       if floor else "never")
+        floor_edge = f"-> floor: when {floor_allow}\n"
+        floor_node = ("## floor\nA governed source reaching an address the action floor allows. Passes, and is "
+                      "counted as a floor allow.\n")
+    else:
+        floor_edge = floor_node = ""
     fields = "\n".join(f"field.{name}: {text}" for name, text in FLOW_FIELDS.items())
     governed = ", ".join(address_text(a) for a in sources) if sources else "every source"
     return f"""---
@@ -464,7 +476,7 @@ The network edge compiled from one signed agent policy. Source image sha256 {ima
 Governed: {governed}. Only TCP to port {EDGE_PORT} at an address of the destination table is passed, and every other
 packet of a governed source is dropped.
 -> pass: when {scope}
--> allow: when {allow}
+{floor_edge}-> allow: when {allow}
 -> drop: else
 ## allow
 A governed source reaching an allowed destination. Passes.
@@ -472,17 +484,18 @@ A governed source reaching an allowed destination. Passes.
 A source the edge does not govern. Passes.
 ## drop
 Everything else of a governed source. The loader maps this reserved node name to XDP_DROP.
-"""
+{floor_node}"""
 
 
-def compile_flow(flow: str) -> Tuple[bytes, Tuple[str, ...]]:
+def compile_flow(flow: str, expected: Tuple[str, ...] = NODE_NAMES) -> Tuple[bytes, Tuple[str, ...]]:
     """The table and node names of an edge flow, compiled against the canonical packet schema and checked against the
-    evaluator's limits. The names are in index order, and the edge flow's order is fixed (`NODE_NAMES`)."""
+    evaluator's limits. The names are in index order, and the edge flow's order is fixed (`NODE_NAMES`, or
+    `FLOOR_NODE_NAMES` for an edge that holds an action floor)."""
     graph = parse(flow)
     image = net_compile.compile_with_schema(graph, net_compile.SCHEMA)
     names = tuple(name for name, _ in image.nodes)
-    if names != NODE_NAMES:
-        raise ProjectionError(f"the edge flow compiled to nodes {names}, not {NODE_NAMES}")
+    if names != expected:
+        raise ProjectionError(f"the edge flow compiled to nodes {names}, not {expected}")
     for field_name, reason in net_compile.address_refusals(image, bit_pattern_constants=True):
         raise ProjectionError(f"the kernel front end cannot decide an atom on {field_name}: {reason}")
     off_schema = [name for name, slot in image.fields.items() if slot >= len(net_compile.SCHEMA)]

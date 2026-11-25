@@ -1050,7 +1050,10 @@ class Pep:
             applied = self._record(*owed)
             self.lapse(install.ABOVE_CEILING)                        # CL3, as under R5
             return applied
-        if kind == install.FALLBACK and self.reconciling is not None:
+        # FB8, C6: a set the runtime runs, a fallback policy, or an action floor where the runtime holds it (`xdp`)
+        in_runtime = kind == install.FALLBACK or (kind == install.FLOOR
+                                                  and getattr(self.adapter, "floor_in_runtime", False))
+        if in_runtime and self.reconciling is not None:
             if self.reconciling["withdrawn"]:                        # C8: the withdrawn runtime runs the new set
                 try:
                     self._withdraw(self._withdraw_cause())
@@ -1059,6 +1062,8 @@ class Pep:
             return self._record(*owed)
         if kind == install.FALLBACK and (before or self.fallback_decides()):
             return self._runtime_step(owed, None)                    # FB8: the new fallback set decides at once
+        if in_runtime and kind == install.FLOOR:
+            return self._runtime_step(owed, self.active)             # C6, AF1: a runtime that holds the floor loads it
         return self._record(*owed)
 
     def _apply_install_trust(self, envelope, body: bytes) -> bytes:
