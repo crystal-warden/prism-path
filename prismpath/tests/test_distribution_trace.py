@@ -8,7 +8,7 @@ of the corpus and the corpus holds the case for that implementation. The C core 
 `cfs` kinds (I1), so a corpus case counts for C only when its PEP is one of those. Python's tests are
 prismpath/tests/test_distribution_*.py, integrations/cfs/tests/test_cfs_dist.py (the `cfs` kind's halves) and
 tools/tests/test_export.py, the C core's are
-prismpath/tests/test_distribution_c.py and test_distribution_c_cfs.py (its `cfs` kind and the cFS app) and Rust's are prismpath-hotswap-rs/tests/test_distribution_*.rs.
+prismpath/tests/test_distribution_c.py, test_distribution_c_cfs.py (its `cfs` kind and the cFS app) and test_distribution_end_to_end.py (the C harness beside the Python PEPs) and Rust's are prismpath-hotswap-rs/tests/test_distribution_*.rs.
 
 `PENDING` lists, per implementation, the cases whose pull request has not landed. Each pull request
 shortens it, and a case still listed that has a test fails here, so the list never hides a landed case.
@@ -26,7 +26,8 @@ CASE = re.compile(r"\bcase_(\d{3})\b")
 SOURCES = {
     "P": [*sorted((REPO / "tests").glob("test_distribution_*.py")), ROOT / "integrations" / "cfs" / "tests" / "test_cfs_dist.py",
           ROOT / "tools" / "tests" / "test_export.py"],
-    "C": [REPO / "tests" / "test_distribution_c.py", REPO / "tests" / "test_distribution_c_cfs.py"],
+    "C": [REPO / "tests" / "test_distribution_c.py", REPO / "tests" / "test_distribution_c_cfs.py",
+          REPO / "tests" / "test_distribution_end_to_end.py"],
     "R": sorted((ROOT / "prismpath-hotswap-rs" / "tests").glob("test_distribution_*.rs")),
 }
 EXCLUDED = {REPO / "tests" / "test_distribution_trace.py", REPO / "tests" / "test_distribution_c.py",
@@ -49,9 +50,9 @@ PARTIAL = {"P": frozenset(), "R": frozenset(), "C": frozenset()}
 # loads its action floor in every table, counts the floor's passes with no `would`, and refuses a floor with a `rate`
 # and an operator's answer.
 PENDING = {
-    "P": "104-105 206 272",
+    "P": "104 206 272",
     "R": "272",
-    "C": "104-105",
+    "C": "104",
 }
 
 

@@ -799,6 +799,7 @@ prismpath/tests/test_distribution_c_cfs.py
 prismpath/tests/test_distribution_controller.py
 prismpath/tests/test_distribution_corpus.py
 prismpath/tests/test_distribution_crash.py
+prismpath/tests/test_distribution_end_to_end.py
 prismpath/tests/test_distribution_envelope.py
 prismpath/tests/test_distribution_export.py
 prismpath/tests/test_distribution_floor.py
