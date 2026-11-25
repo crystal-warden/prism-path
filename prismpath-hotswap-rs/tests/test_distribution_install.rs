@@ -558,6 +558,15 @@ fn an_install_trust_body_with_no_key_is_bad_format_before_too_large() {
     assert_eq!(cause(&["N1"], &["O1"]), None);
 }
 
+/// D5: a view of the install part built from the default takes a statement as one in a message, as Python's
+/// `InstallView` does, so a provisioning is always said so and never taken for the default.
+#[test]
+fn the_default_install_view_is_a_message() {
+    let view = prismpath_hotswap_rs::dist::verify::InstallView::default();
+    assert!(view.message);
+    assert!(view.record.is_none() && view.staged.is_empty() && view.ceiling.is_none() && view.layout.is_none());
+}
+
 /// case_233: IS13, IS11. On an install threshold of 1 with two operator keys, an install provisioning that carries an
 /// `install.trust` dropping one of them is applied with the key retired, the trust state and the floor of section 6
 /// unchanged, and an answer that key signs is `dist:target-mismatch`.

@@ -102,13 +102,21 @@ pub struct PepView {
 /// What the verifier needs of a PEP's install part (section 21): the install record, the staged install sets by
 /// kind, the held ceiling, whether the statement came in a message, where an install threshold of 1 takes no
 /// install statement (IS4), or by provisioning, and the layout document a table kind was built with (AF10).
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct InstallView {
     pub record: Option<Record>,
     pub staged: BTreeMap<SetKind, InstallSet>,
     pub ceiling: Option<InstallSet>,
     pub message: bool,
     pub layout: Option<Vec<u8>>,
+}
+
+impl Default for InstallView {
+    /// A statement in a message unless said otherwise, as Python's `InstallView` has it, so a view built from the
+    /// default holds a threshold of 1 to provisioning only (IS4) and never takes a message for a provisioning.
+    fn default() -> InstallView {
+        InstallView { record: None, staged: BTreeMap::new(), ceiling: None, message: true, layout: None }
+    }
 }
 
 impl PepView {
