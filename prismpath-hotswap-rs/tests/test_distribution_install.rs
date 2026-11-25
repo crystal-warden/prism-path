@@ -551,10 +551,10 @@ fn an_install_trust_body_with_no_key_is_bad_format_before_too_large() {
     };
     let five = ["O1", "O2", "O3", "O4", "O5"];
     let cause = |keys: &[&str], operators: &[&str]| install::read_install_trust(&body(keys, operators)).err().map(|refused| refused.cause);
-    assert_eq!(cause(&[], &five).as_deref(), Some("dist:bad-format"));
-    assert_eq!(cause(&[], &[]).as_deref(), Some("dist:bad-format"));
-    assert_eq!(cause(&["N1"], &five).as_deref(), Some("dist:too-large"));
-    assert_eq!(cause(&["N1", "N2", "N3", "N4", "N5"], &[]).as_deref(), Some("dist:too-large"));
+    assert_eq!(cause(&[], &five), Some("dist:bad-format"));
+    assert_eq!(cause(&[], &[]), Some("dist:bad-format"));
+    assert_eq!(cause(&["N1"], &five), Some("dist:too-large"));
+    assert_eq!(cause(&["N1", "N2", "N3", "N4", "N5"], &[]), Some("dist:too-large"));
     assert_eq!(cause(&["N1"], &["O1"]), None);
 }
 
