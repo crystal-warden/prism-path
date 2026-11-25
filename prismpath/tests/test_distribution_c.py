@@ -693,6 +693,25 @@ def test_a_widening_statement_holds_at_most_64_hashes(host_check):
     assert _events(out[1]) == [("staged", None)] and _events(out[2]) == [("refused", "dist:too-large")]
 
 
+def test_case_308_a_withheld_artifact_at_commit_is_incomplete(host_check):
+    """case_308: C2, E10, the mesh half of the host case. A release whose signed release id covers a policy.ppt and a
+    policy.spiral is committed with only its policy.ppt staged: dist:incomplete and nothing is committed. The same
+    table with a release id over what is staged then commits."""
+    body, policy = BODIES[0], canon.sha256_hex(BODIES[0])
+    withheld = env.release_id([("policy.ppt", policy), ("policy.spiral", canon.sha256_hex(b"a withheld spiral"))])
+    statement = _dist.widening()
+    steps = [f"provision {S} {N}"]
+    for seq, release in ((1, withheld), (2, env.release_id([("policy.ppt", policy)]))):
+        cover = _dist.seal("trust.widening", statement, seq=seq, release=release, policy_sha256=policy,
+                           targets=("mesh",), widens=True)
+        table = _dist.seal("policy.ppt", body, seq=seq, release=release, targets=("mesh",), widens=True)
+        steps += [f"stage {cover.hex()} {statement.hex()} {N}", f"stage {table.hex()} {body.hex()} {N}",
+                  f"commit {S} {seq} {policy} 0 0 {N}"]
+    out = _machine(host_check, steps)
+    assert _events(out[2])[-1] == ("staged", None) and _events(out[3]) == [("refused", "dist:incomplete")]
+    assert _events(out[6])[-1] == ("committed", None)
+
+
 def _after_loss(host_check, steps: list, cut: list) -> str:
     """Run `steps`, then `cut` with the power lost after each count of writes in turn, then a restart and the
     durable state read back. One line per count."""
@@ -1504,6 +1523,81 @@ def test_case_170_a_provisioning_never_lowers_the_install_part_and_a_disjoint_ke
     assert _refused(out[9])[0] == "sig:revoked-key"                          # K was retired
     assert out[11] == f"installid {_install_id(floor=(floor1_new[0], 1), trust_seq=3, trust_id=third)}"
     assert _refused(out[12])[0] == "sig:revoked-key"
+
+
+def test_a_provisioning_refuses_a_brought_set_its_staging_would_refuse_and_keeps_a_seq_replay_record(host_check):
+    """P2 step 3, CL3, IS10, IS12, the C half of the Python and Rust tests. A statement brought with an anchor is held,
+    before anything changes, to what staging it in order meets, as pp_apply_set holds it: a fallback policy outside the
+    held ceiling, one outside a ceiling brought before it, one with widens false that nothing replaces, and on a node
+    whose ceiling is lost a ceiling that is not the lost one again each refuse the provisioning and leave the install
+    part as it was. The lost ceiling sent again naming its hash is applied. A set below the held seq is
+    dist:seq-replay and the provisioning goes on (case 170), and that refusal is reported beside provisioned."""
+    wide = _ceiling(FLOOR, FALLBACK)
+    ceiling = _install("install.ceiling", wide, seq=1)
+    narrower = _install("install.ceiling", _ceiling(FLOOR), seq=2, widens=False, replaces=canon.sha256_hex(wide))
+    out = _run21(host_check, [
+        *_node(), *_anchor(bring=[ceiling]), f"provision {S} {N}", "installid",
+        *_anchor(bring=[_install("install.fallback", FALLBACK_B, seq=1)]), f"provision {S} {N}", "installid",
+        *_anchor(bring=[narrower, _install("install.fallback", FALLBACK, seq=1)]), f"provision {S} {N}", "installid",
+        *_anchor(bring=[_install("install.fallback", FALLBACK, seq=1, widens=False)]), f"provision {S} {N}",
+        "installid"])
+    held = f"installid {_install_id(ceiling=(ceiling[0], 1))}"
+    assert out[1] == held
+    assert [out[2], out[4], out[6]] == [f"provision-refused {causes.NAMES['dist:above-ceiling']}"] * 2 + [
+        f"provision-refused {causes.NAMES['dist:widening-unsigned']}"]
+    assert [out[3], out[5], out[7]] == [held] * 3
+    lost_hash = canon.sha256_hex(wide)
+    out = _run21(host_check, [
+        *_node(), *_anchor(bring=[ceiling]), f"provision {S} {N}", "lose set_ceiling", "lose2 set_ceiling",
+        f"restart {N}",
+        *_anchor(bring=[_install("install.ceiling", _ceiling(FLOOR, FALLBACK, RELEASE), seq=2, widens=False,
+                                 replaces=lost_hash)]), f"provision {S} {N}",
+        *_anchor(bring=[_install("install.ceiling", wide, seq=2, widens=False, replaces=lost_hash)]),
+        f"provision {S} {N}", "installid"])
+    assert out[2] == f"provision-refused {causes.NAMES['dist:widening-unsigned']}"
+    resent = _install("install.ceiling", wide, seq=2, widens=False, replaces=lost_hash)
+    assert [(one["event"], one["cause"]) for one in _recs(out[3])] == [("provisioned", None)]
+    assert out[4] == f"installid {_install_id(ceiling=(resent[0], 2))}"
+    fallback2 = _install("install.fallback", FALLBACK, seq=2)
+    out = _run21(host_check, [
+        *_node(), *_anchor(), f"provision {S} {N}", _stage(fallback2),
+        *_anchor(bring=[_install("install.fallback", FALLBACK_B, seq=1)]), f"provision {S} {N}", "installid"])
+    assert [(one["event"], one["cause"]) for one in _recs(out[2])] == [("refused", "dist:seq-replay"),
+                                                                       ("provisioned", None)]
+    assert out[3] == f"installid {_install_id(fallback=(fallback2[0], 2))}"
+
+
+def test_a_pep_locked_by_a_lost_anchor_part_holds_a_provisioning_to_what_it_keeps(host_check):
+    """P1, P2 step 3, IS9, CL3 in the C core. A PEP with no copy of its anchor part is locked and keeps its install
+    record. A provisioning then holds what it brings to the ceiling that record keeps, as staging would after it: a
+    fallback policy outside it is dist:above-ceiling and leaves the PEP locked with its record as it was, and one
+    inside it is applied by a provisioning that unlocks the PEP."""
+    ceiling = _install("install.ceiling", _ceiling(FLOOR, FALLBACK), seq=1)
+    inside = _install("install.fallback", FALLBACK, seq=1)
+    out = _run21(host_check, [
+        *_node(), *_anchor(bring=[ceiling]), f"provision {S} {N}", "installid", "drop anchor", f"restart {N}",
+        *_anchor(bring=[_install("install.fallback", FALLBACK_B, seq=1)]), f"provision {S} {N}", "installid",
+        f"record 0 {N}", *_anchor(bring=[inside]), f"provision {S} {N}", "installid"])
+    assert [(one["event"], one["cause"], one["state"]) for one in _recs(out[2])] == [
+        ("refused", "dist:install-lost", "locked")]
+    assert out[3] == f"provision-refused {causes.NAMES['dist:above-ceiling']}"
+    assert out[4] == out[1] and _last(out[5])["state"] == "locked"
+    assert _last(out[6])["event"] == "provisioned" and _last(out[6])["state"] != "locked"
+    assert out[7] == f"installid {_install_id(fallback=(inside[0], 1), ceiling=(ceiling[0], 1))}"
+
+
+def test_a_provisioning_whose_save_did_not_take_is_refused_and_locks_the_pep(host_check):
+    """P2 step 3, AF8, OP3 in the C core. A provisioning writes the state it leaves before it stages what it brings.
+    When that write does not take it is dist:save-failed: the PEP is locked, since it no longer holds what its store
+    does, and stages nothing it brought, and a restart once the store takes writes again reads the state the store
+    kept."""
+    out = _run21(host_check, [
+        *_node(), *_anchor(), f"provision {S} {N}", "installid", "wfail 1",
+        *_anchor(bring=[_install("install.fallback", FALLBACK, seq=1)]), f"provision {S} {N}", f"record 0 {N}",
+        "wfail 0", f"restart {N}", "installid"])
+    assert out[2] == f"provision-refused {causes.NAMES['dist:save-failed']}"
+    assert _last(out[3])["state"] == "locked"
+    assert out[5] == out[1]
 
 
 def test_case_171_227_a_locked_pep_and_an_install_provisioning_keep_their_state(host_check):
@@ -2372,3 +2466,132 @@ def test_case_280_an_anchor_whose_controller_key_is_of_another_role_is_refused(h
     assert _taken(got[1]) == (True, 5)
     assert got[2:5] == [f"provision-refused {causes.NAMES['dist:rotation-invalid']}"] * 3
     assert _taken(got[5]) == (True, 6)
+
+
+def test_case_306_a_power_loss_between_a_narrower_ceiling_and_its_lapse_still_lapses_the_release(host_check):
+    """case_306: CL3, C10, IS12, the C half. A mesh node commits a release inside its ceiling and applies a narrower
+    ceiling the release is above, and the power is lost after each count of part writes in turn. After the restart
+    the node holds the old ceiling and still the release, or the new ceiling and no release: the start lapses a
+    release the held ceiling is above with dist:above-ceiling, so no cut leaves the release under the new ceiling."""
+    wide = _ceiling(RELEASE, BODIES[1])
+    narrow = _install("install.ceiling", _ceiling(BODIES[1]), seq=2, widens=False, replaces=canon.sha256_hex(wide))
+    first = _install("install.ceiling", wide)
+    seen = set()
+    for writes in range(12):
+        out = _run21(host_check, [*_node(), *_anchor(bring=[first]), f"provision {S} {N}", *_release_steps21(RELEASE, 1),
+                                  f"stop {writes}", _stage(narrow), f"restart {N}", "installid", "state"])
+        held = out[-2].split()[1]
+        active = out[-1].split()[1]
+        if held == _install_id(ceiling=(narrow[0], 2)):
+            assert active == "-", (writes, out[-3:])                  # the new ceiling never runs above the release
+            lapsed = [one for line in out[-3:-2] for one in _recs(line) if one["event"] == "lapsed"]
+            seen.add("lapsed" if lapsed else "already")
+            if lapsed:
+                assert lapsed[0]["cause"] == "dist:above-ceiling"
+        else:
+            assert held == _install_id(ceiling=(first[0], 1)) and active == "1", (writes, out[-3:])
+            seen.add("old")
+    assert {"old", "lapsed"} <= seen                                  # a cut came between the ceiling and the lapse
+
+
+def test_case_307_a_ceiling_after_a_lost_one_stands_out_unless_it_is_the_lost_one_again(host_check):
+    """case_307: IS10, IS12, the C half. A mesh node whose ceiling no copy holds is sent, with widens false, the
+    empty ceiling, a wider list, a narrower list whose replaces is the lost list's policy hash and the lost list
+    again with replaces empty: dist:widening-unsigned each time, and still lost after a restart. The lost list again
+    naming the lost hash is install-applied, and on another such node a narrower list with widens true is
+    install-widened. A node provisioned again with its own install keys keeps the lost ceiling lost."""
+    body = _ceiling(RELEASE, BODIES[1])
+    lost = canon.sha256_hex(body)
+    held = _install("install.ceiling", body)
+
+    def again(seq, *bodies, widens=False, replaces=lost, empty=False):
+        return _stage(_install("install.ceiling", b"" if empty else _ceiling(*bodies), seq=seq, widens=widens,
+                               replaces=replaces))
+    out = _run21(host_check, [
+        *_node(), *_anchor(bring=[held]), f"provision {S} {N}", *_release_steps21(RELEASE, 1),
+        "lose set_ceiling", "lose2 set_ceiling", f"restart {N}",
+        again(2, empty=True), again(2, RELEASE, BODIES[1], BODIES[2]), again(2, BODIES[1]),
+        again(2, RELEASE, BODIES[1], replaces=""), f"restart {N}",
+        "installid",
+        again(2, RELEASE, BODIES[1])])
+    assert [_refused(line)[0] for line in out[5:9]] == ["dist:widening-unsigned"] * 4
+    assert _refused(out[9]) == ("dist:install-lost", 3)              # still named, still lost at the restart
+    assert (_last(out[11])["event"], _last(out[11])["cause"]) == ("install-applied", None)
+    out = _run21(host_check, [
+        *_node(), *_anchor(bring=[held]), f"provision {S} {N}", "lose set_ceiling", "lose2 set_ceiling",
+        f"restart {N}", again(2, BODIES[1], widens=True, replaces="")])
+    assert (_last(out[-1])["event"], _last(out[-1])["cause"]) == ("install-widened", "dist:install-widened")
+    out = _run21(host_check, [
+        *_node(), *_anchor(bring=[held]), f"provision {S} {N}", *_release_steps21(RELEASE, 1),
+        "lose set_ceiling", "lose2 set_ceiling", f"restart {N}", *_anchor(seq=1), f"provision {S} {N}",
+        *_release_steps21(BODIES[1], 2, replaces=canon.sha256_hex(RELEASE))[:2], f"restart {N}",
+        *_release_steps21(BODIES[1], 2, replaces=canon.sha256_hex(RELEASE))[:2]])
+    lost_after = [line for line in out if line.startswith("records") and any(
+        one["event"] == "refused" and one["cause"] == "dist:install-lost" for one in _recs(line))]
+    assert len(lost_after) >= 3, out
+
+
+def test_a_looser_answer_rate_widens_an_action_floor_on_the_c_core(host_check):
+    """IS12, OP4: a looser answer_rate is larger, as a looser rate is, so with widens false it is
+    dist:widening-unsigned, and a tighter one is applied, as install.set_larger answers."""
+    def floor(seq, allows, window, *, widens=False, replaces=canon.sha256_hex(FLOOR)):
+        meta = {"as": "policy.ppt", "layout": LAYOUT, "command": 0, "answer_rate": {"allows": allows, "window": window}}
+        return _stage(_install("install.floor", FLOOR, seq=seq, widens=widens, replaces=replaces, meta=meta))
+    out = _run21(host_check, [*_node(), *_anchor(), f"provision {S} {N}", floor(1, 5, 60, widens=True, replaces=""),
+                              floor(2, 9, 60), floor(2, 5, 30), floor(2, 3, 60)])
+    assert _last(out[1])["event"] == "install-widened"
+    assert [_refused(line)[0] for line in out[2:4]] == ["dist:widening-unsigned"] * 2
+    assert _last(out[4])["event"] == "install-applied"
+
+
+LARGER = json.loads((ROOT / "prismpath" / "portable" / "conformance" / "install_larger.json").read_text(encoding="utf-8"))
+LARGER_TABLES = {"T1": BODIES[0], "T2": BODIES[1], "T3": BODIES[2], "F1": FLOOR, "F2": _floor_table((4,))}
+
+
+def _larger_statement(kind: str, spec, seq: int, *, widens: bool, replaces: str):
+    if spec == "empty":
+        return _install(kind, b"", seq=seq, widens=widens, replaces=replaces)
+    if kind == "install.ceiling":
+        return _install(kind, _ceiling(*(LARGER_TABLES[name] for name in spec["list"])), seq=seq, widens=widens,
+                        replaces=replaces)
+    meta = {"as": "policy.ppt", "layout": LAYOUT, "command": 0}
+    for member in ("rate", "answer_rate"):
+        if spec[member] is not None:
+            meta[member] = {"allows": spec[member][0], "window": spec[member][1]}
+    return _install(kind, LARGER_TABLES[spec["table"]], seq=seq, widens=widens, replaces=replaces, meta=meta)
+
+
+def _larger_replay(host_check, row: dict) -> dict:
+    """The event and the cause a fresh mesh node answers the row of install_larger.json with."""
+    kind = {"ceiling": "install.ceiling", "floor": "install.floor"}[row["set"]]
+    lines, held, seq = [*_node(), *_anchor(), f"provision {S} {N}"], "", 1
+    if row["before"] != "none":
+        first = _larger_statement(kind, row["held"], 1, widens=kind == "install.floor", replaces="")
+        lines.append(_stage(first))
+        held, seq = hashlib.sha256(bytes.fromhex(first[1])).hexdigest(), 2
+    if row["before"] == "withdrawn":
+        lines.append(_stage(_larger_statement(kind, "empty", 2, widens=kind == "install.ceiling", replaces=held)))
+        seq = 3
+    if row["before"] == "lost":
+        part = {"install.ceiling": "set_ceiling", "install.floor": "set_floor"}[kind]
+        lines += [f"lose {part}", f"lose2 {part}", f"restart {N}"]
+    replaces = {"held": held, "": "", "other": hashlib.sha256(b"a set this PEP never held").hexdigest()}[row["replaces"]]
+    lines.append(_stage(_larger_statement(kind, row["new"], seq, widens=row["widens"], replaces=replaces)))
+    out = _run21(host_check, lines)
+    for line in out[1:-1]:
+        if line.startswith("records") and row["before"] != "lost":
+            assert _last(line)["event"] in ("install-applied", "install-widened"), (row["name"], line)
+    last = _last(out[-1])
+    return {"event": last["event"], "cause": last["cause"]}
+
+
+def test_case_307_every_row_of_the_is12_table_answers_on_the_c_core_as_it_says(host_check):
+    """case_307 and IS12 as a table (install_larger.json): every row answers on a mesh node with its event and
+    cause, as Python and Rust answer it."""
+    wrong = []
+    for row in LARGER["rows"]:
+        if "mesh" in row["kinds"]:
+            got = _larger_replay(host_check, row)
+            if got != row["expect"]:
+                wrong.append((row["name"], got, row["expect"]))
+    assert wrong == []

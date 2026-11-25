@@ -35,6 +35,7 @@
  *                            command wrote it, the open escalations in the older layout
  *   unlink <file>            a file of DIST_DIR is gone
  *   tblfail <n>              the next n table loads are refused by the table service for its own reason
+ *   wfail <0|1>              every write to the store images and the files fails from now on (1), or takes (0)
  *   groundload <table hex>   a table loaded by the ground from a file: prints "validation <cause>"
  *   seal <time us>           prints "sealed <rc>"
  *   state                    prints "state <has active> <active seq> <floor seq> <locked> <held> <kernel active>"
@@ -130,10 +131,15 @@ static PP_AppRecord_t      SavedRecord; /* the Critical Data Store areas, which 
 static PP_AppInstallCopy_t SavedCopy;
 static int                 RecordState, CopyState; /* PP_APP_STORE_* each holds */
 static int                 TableFails;
+static int                 WriteFails; /* every store write answers that it did not take, and keeps nothing */
 
 static int SaveRecord(void *Ctx)
 {
     (void)Ctx;
+    if (WriteFails)
+    {
+        return -1;
+    }
     memcpy(&SavedRecord, &Dist.Record, sizeof(SavedRecord));
     RecordState = PP_APP_STORE_READ;
     return 0;
@@ -142,6 +148,10 @@ static int SaveRecord(void *Ctx)
 static int SaveCopy(void *Ctx)
 {
     (void)Ctx;
+    if (WriteFails)
+    {
+        return -1;
+    }
     memcpy(&SavedCopy, &Dist.Copy, sizeof(SavedCopy));
     CopyState = PP_APP_STORE_READ;
     return 0;
@@ -153,6 +163,10 @@ static int WriteFile(void *Ctx, const char *Name, const void *Data, size_t Len)
     FILE *f;
 
     (void)Ctx;
+    if (WriteFails)
+    {
+        return -1;
+    }
     snprintf(path, sizeof(path), "%s/%s", DistDir, Name);
     snprintf(temp, sizeof(temp), "%s.new", path);
     f = fopen(temp, "wb");
@@ -419,7 +433,7 @@ int main(int argc, char **argv)
                 printf("refused-start\n");
                 continue;
             }
-            if (record == PP_APP_STORE_READ)
+            if (Dist.RecordRead)
             {
                 (void)PP_Run_Recover(&Dist.Record.Run, &Io);
             }
@@ -550,6 +564,11 @@ int main(int argc, char **argv)
         else if (strcmp(word, "tblfail") == 0)
         {
             TableFails = atoi(rest);
+            printf("records\nstep 0 0 0 0 0 0 0 0 0 0\n");
+        }
+        else if (strcmp(word, "wfail") == 0)
+        {
+            WriteFails = atoi(rest);
             printf("records\nstep 0 0 0 0 0 0 0 0 0 0\n");
         }
         else if (strcmp(word, "groundload") == 0)

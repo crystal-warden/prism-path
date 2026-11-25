@@ -656,7 +656,8 @@ class Pep:
                        has_clock=self.has_clock, instance_key_id=self.instance_key.key_id,
                        install=InstallView(record=self.installed.record, staged=dict(self.installed.staged),
                                            ceiling=self.installed.ceiling, message=message,
-                                           layout=getattr(self.adapter, "floor_layout", None)))
+                                           layout=getattr(self.adapter, "floor_layout", None),
+                                           lost=self.installed.lost_ids()))
 
     def record(self, event: str, cause: Optional[str] = None) -> bytes:
         """A signed state record of the PEP as it is now (H1), after the expiry check every report comes
@@ -784,9 +785,11 @@ class Pep:
         floor, an `expires` later than the kept one's and at most `fresh` plus SKEW ahead of the PEP's time. A PEP
         with no clock takes, from the first statement after each start that passes every other check, its
         `expires` less `fresh` as a raise of its time floor (T1). The latest fresh statement is kept durably,
-        written before it counts, and a newer one is written only when the kept one has used half its life."""
-        if not read.fresh or read.trust_seq < self.trust.trust_seq or read.stream_seq < self.reported_floor():
-            return
+        written before it counts, and a newer one is written only when the kept one has used half its life. An
+        `expires` past what a canon/2 document holds exactly gives no freshness and no time, as in Rust and the C core."""
+        if (not read.fresh or read.expires > kinds.MAX_SEQ or read.trust_seq < self.trust.trust_seq
+                or read.stream_seq < self.reported_floor()):
+            return                                                    # past what canon/2 holds: no freshness, no time
         kept = self.kept
         if kept is not None and read.expires <= kept["expires"]:
             return
@@ -999,31 +1002,12 @@ class Pep:
         active release is above lapses it (CL3), and a fallback policy that now decides is run (FB8)."""
         kind, target = staged.kind, self.adapter.kind
         record = self.installed.record
-        held_raw = record.sets[kind]
         refuse = lambda cause: (self._drop_install_staged(kind), self._refuse(cause, subject=kind, seq=staged.seq))[1]  # noqa: E731
-        if staged.seq <= record.seqs[kind]:
-            return refuse("dist:seq-replay")
-        bodies = {name: body for name, body in staged.bodies.items() if name != kinds.NONE}
-        whole = {name: (staged.envelopes[name], body) for name, body in bodies.items()}
-        for name in sorted(bodies):
-            if name in kinds.INSTALL_AS:
-                cause = self.adapter.check(name, bodies[name], whole)
-                if cause is not None:
-                    return refuse(cause)
-        new = staged.held()
-        if kind != install.CEILING and bodies and not install.inside(target, self.installed.ceiling, bodies,
-                                                                     whole=kind != install.FLOOR):
-            return refuse(install.ABOVE_CEILING)                     # CL3, IS4: the ceiling held at apply
-        if kind == install.CEILING and bodies:
-            for other in (install.FLOOR, install.FALLBACK):
-                held = self.installed.held(other)
-                if held is not None and not install.inside(target, new, held.bodies, whole=other != install.FLOOR):
-                    return refuse(install.ABOVE_CEILING)             # CL3: the engineer narrows those first
-        cause, stands_out = install.widens_ok(target, kind, held_raw, staged.bodies, widens=staged.widens,
-                                              replaces=staged.replaces, envelopes=staged.envelopes,
-                                              change=staged.change_body)
+        cause, stands_out = self._set_refusal(staged, record, ceiling_lost=self.installed.ceiling_lost)
         if cause is not None:
             return refuse(cause)
+        bodies = {name: body for name, body in staged.bodies.items() if name != kinds.NONE}
+        new = staged.held()
         # CL3: a ceiling that narrows below the active release is no widening; the release lapses and says so itself
         lapses = (kind == install.CEILING and self.active is not None and bodies
                   and not install.inside(target, new, self.active.bodies))
@@ -1065,6 +1049,42 @@ class Pep:
         if in_runtime and kind == install.FLOOR:
             return self._runtime_step(owed, self.active)             # C6, AF1: a runtime that holds the floor loads it
         return self._record(*owed)
+
+    @staticmethod
+    def _held_in(record: "install.Record", kind: str) -> Optional["install.HeldSet"]:
+        held = record.sets[kind]
+        return None if held is None or held.empty else held
+
+    def _set_refusal(self, staged: "install.Staged", record: "install.Record", *,
+                     ceiling_lost: bool) -> Tuple[Optional[str], bool]:
+        """IS4, IS6, IS12, CL3: what applying the whole set `staged` over `record` meets, (cause or None, whether it
+        stands out). It is held to its `seq` again, to the kind's own checks over the whole set, to the ceiling
+        `record` holds (an action floor and a fallback policy inside it, and a ceiling the held ones are inside), and
+        to the widening rule of IS12, under which a ceiling after a lost one, `ceiling_lost`, is larger unless it is
+        the lost one sent again (IS10)."""
+        kind, target = staged.kind, self.adapter.kind
+        if staged.seq <= record.seqs[kind]:
+            return "dist:seq-replay", False
+        bodies = {name: body for name, body in staged.bodies.items() if name != kinds.NONE}
+        whole = {name: (staged.envelopes[name], body) for name, body in bodies.items()}
+        for name in sorted(bodies):
+            if name in kinds.INSTALL_AS:
+                cause = self.adapter.check(name, bodies[name], whole)
+                if cause is not None:
+                    return cause, False
+        new = staged.held()
+        if kind != install.CEILING and bodies and not install.inside(target, self._held_in(record, install.CEILING),
+                                                                     bodies, whole=kind != install.FLOOR):
+            return install.ABOVE_CEILING, False                      # CL3, IS4: the ceiling held at apply
+        if kind == install.CEILING and bodies:
+            for other in (install.FLOOR, install.FALLBACK):
+                held = self._held_in(record, other)
+                if held is not None and not install.inside(target, new, held.bodies, whole=other != install.FLOOR):
+                    return install.ABOVE_CEILING, False              # CL3: the engineer narrows those first
+        lost = kind == install.CEILING and ceiling_lost                      # IS10, IS12: a ceiling after a lost one
+        return install.widens_ok(target, kind, record.sets[kind], staged.bodies, widens=staged.widens,
+                                 replaces=staged.replaces, envelopes=staged.envelopes, change=staged.change_body,
+                                 lost=lost, lost_set=self.installed.lost_ceiling if lost else None)
 
     def _apply_install_trust(self, envelope, body: bytes) -> bytes:
         """IS11: apply a verified `install.trust` at once, durably before its event. It widens when it adds a key of
@@ -1377,12 +1397,18 @@ class Pep:
             self.store.write("pending.json", _PENDING, {**intent, "running": None, "withdrawn": True})
 
     def _fell(self, release: Release) -> Optional[str]:
-        """Why `release` falls, the test of R5 and then expiry (X1, and H16's freshness), else None. HOLD is for
-        `mesh` and `cfs`, which never reconcile, so expiry always fells a release here (C10)."""
+        """Why `release` falls, the test of R5, then expiry (X1, and H16's freshness), then the ceiling (CL3), else
+        None. HOLD is for `mesh` and `cfs`, which never reconcile, so expiry always fells a release here (C10)."""
         if release.envelopes.keys() != release.held.keys():
             return None                           # a running release whose blobs do not read: still named (C11)
         cause = standing(self.trust, release, self.store.get, self.time())
-        return cause or (EXPIRED if self._stale() else None)
+        cause = cause or (EXPIRED if self._stale() else None)
+        return cause or (None if self._inside_ceiling(release) else install.ABOVE_CEILING)
+
+    def _inside_ceiling(self, release: Release) -> bool:
+        """CL3: `release` is inside the ceiling the PEP holds and reads. A lost ceiling bounds nothing here: the PEP
+        keeps the release it has, which was inside it when it was committed (IS10)."""
+        return install.inside(self.adapter.kind, self.installed.ceiling, release.bodies)
 
     def _run_tests(self, *, never_ran: bool) -> None:
         """C10: hold the held release, and the running one while the withdrawal has not worked, to the tests. A
@@ -1491,7 +1517,7 @@ class Pep:
 
     def _check_ground(self) -> Optional[bytes]:
         """What every entry point and the periodic tick run first: an active release that no longer stands lapses
-        with `dist:revoked` (R5), and an expired one, or one whose freshness ran out (H16), lapses or is held (X1,
+        with `dist:revoked` (R5), one above the held ceiling with `dist:above-ceiling` (CL3), and an expired one, or one whose freshness ran out (H16), lapses or is held (X1,
         X7). A reconciling PEP runs the tests of C10 instead, which try no runtime. A staged release is held to the
         same test when a revocation is applied and at a restart, and again at its commit (C3)."""
         if self.reconciling is not None:
@@ -1504,6 +1530,8 @@ class Pep:
         cause = standing(self.trust, self.active, self.store.get, self.time())
         if cause == REVOKED:
             return self.lapse(cause)
+        if not self._inside_ceiling(self.active):
+            return self.lapse(install.ABOVE_CEILING)                 # CL3: also when a restart came between the two
         if cause != EXPIRED and not self._stale():
             return None
         if self.expiry_response == HOLD:
@@ -1834,12 +1862,14 @@ class Pep:
             self.installed.staged = {}
             self.installed.save(new_record)
             self.installed.save_staged()
-            self.installed.ceiling_lost = False
+            # IS10: a provisioning that keeps the install sequences keeps a lost ceiling lost (P4, IS6)
+            self.installed.ceiling_lost = self.installed.ceiling_lost and self.installed.named_lost(new_record)
         sent = len(self.outbox)
         for sealed, body in brought:
             self._stage(sealed, body, message=False)
         applied = [state_record.read(one, self.instance_key.public_raw) for one in self.outbox[sent:]]
-        del self.outbox[sent:]                                       # P3: provisioning reports as its own event
+        # P3: provisioning reports as its own event, and a statement it brought that was refused keeps its record
+        self.outbox[sent:] = [raw for raw, one in zip(self.outbox[sent:], applied) if one.event == "refused"]
         widened = any(one.event == "install-widened" for one in applied)
         self.audit.append("distribution", "provisioned", {"fingerprint": read.fingerprint, "stream": read.stream,
                                                           "install": self.installed.statement_ids(),
@@ -1854,23 +1884,74 @@ class Pep:
 
     def _precheck(self, read, store: TrustStore, record, brought) -> None:
         """P2 step 3: every install statement the engineer brings verifies under the install record the provisioning
-        leaves, before anything changes."""
+        leaves, before anything changes. The statements are taken in order as `confirm` then stages them: each against
+        the record as the ones before it leave it, the sets staged so far (V10) and the ceiling then held (CL3), and a
+        set that is whole is held to what applying it meets. Any refusal refuses the provisioning but `dist:seq-replay`,
+        a set the PEP already holds at or above its `seq`, which is refused and leaves the provisioning to go on
+        (case 170, IS6)."""
         if not brought:
             return
         if record is None:
             raise PepRefused("install statements came with an anchor that holds no install keys")
         trust = replace(store, path=None)
+        lost = {kind: (seq, ids) for kind, (seq, ids) in self.installed.lost_ids().items()
+                if record.sets[kind] is None and record.seqs[kind] == seq}
+        staged: Dict[str, install.Staged] = {}
+
+        def refused(cause: str) -> PepRefused:
+            return PepRefused(f"{cause}: an install statement brought with the anchor does not verify")
+
+        def staging(envelope, kind: str) -> install.Staged:
+            one = staged.get(kind)
+            if one is None or one.seq != envelope.seq:
+                one = install.Staged(kind, envelope.seq, envelope.policy_sha256, envelope.release, envelope.replaces,
+                                     envelope.widens)
+            staged[kind] = one
+            return one
         for sealed, body in brought:
             view = PepView(kind=self.adapter.kind, stream=read.stream, qualification=self.adapter.qualification,
                            body_bound=self.adapter.body_bound, has_clock=self.has_clock,
                            instance_key_id=self.instance_key.key_id,
-                           install=InstallView(record=record, staged={}, ceiling=None, message=False,
-                                               layout=getattr(self.adapter, "floor_layout", None)))
+                           install=InstallView(record=record, staged=dict(staged),
+                                               ceiling=self._held_in(record, install.CEILING), message=False,
+                                               layout=getattr(self.adapter, "floor_layout", None), lost=lost))
             verdict = verify(sealed, body, trust=trust, pep=view, now=int(self.clock()))
-            if verdict.envelope is None or verdict.envelope.artifact not in kinds.INSTALL_ARTIFACTS:
+            envelope = verdict.envelope
+            if envelope is None or envelope.artifact not in kinds.INSTALL_ARTIFACTS:
                 raise PepRefused("only install statements come with an anchor (P2 step 3)")
-            if not verdict.ok and verdict.cause not in ("dist:above-ceiling", "dist:seq-replay", "dist:incomplete"):
-                raise PepRefused(f"{verdict.cause}: an install statement brought with the anchor does not verify")
+            if verdict.cause == "dist:seq-replay":
+                continue                                             # case 170: refused, the provisioning goes on
+            if not verdict.ok:
+                raise refused(verdict.cause)
+            if verdict.unchanged:
+                continue
+            body = bytes(body)
+            if envelope.artifact == install.TRUST:
+                record = record.apply_trust(envelope, body)          # IS11: the statements after it verify under it
+                continue
+            if envelope.artifact == install.CHANGE:
+                kind = kinds.read_install_change(body)["set"]
+                held = self._held_in(record, kind)
+                if not install.changes_set(body, kind, held.policy_sha256 if held is not None else None):
+                    raise refused(install.UNSIGNED)                   # IS15
+                one = staging(envelope, kind)
+                one.change, one.change_body = (envelope.envelope_id, "", ""), body
+                continue
+            kind, named = envelope.artifact, envelope.meta["as"]
+            one = staging(envelope, kind)
+            one.statements[named] = (envelope.envelope_id, "", "")
+            one.envelopes[named], one.bodies[named] = envelope, body
+            if not one.whole(self.adapter.kind):
+                continue
+            del staged[kind]
+            # IS10: the provisioning keeps a lost ceiling lost while the record it leaves still names it lost
+            cause, _stands_out = self._set_refusal(
+                one, record, ceiling_lost=self.installed.ceiling_lost and self.installed.named_lost(record))
+            if cause == "dist:seq-replay":
+                continue
+            if cause is not None:
+                raise refused(cause)
+            record = replace(record, sets={**record.sets, kind: one.held()}, seqs={**record.seqs, kind: one.seq})
 
     def provision_install(self, statements: Iterable[Tuple[bytes, bytes]]) -> list:
         """IS13: an install provisioning brings install statements and no anchor, by the channel of P2 step 3. Each is

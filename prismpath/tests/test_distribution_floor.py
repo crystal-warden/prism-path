@@ -925,3 +925,68 @@ def test_case_299_a_staged_change_statement_survives_a_restart(tmp_path, cls):
     assert point.pep.installed.staged[FLOOR].change is not None
     applied = point.send(narrow)[-1]
     assert (applied.event, applied.cause) == ("install-applied", None)
+
+
+def test_a_clock_set_back_keeps_the_rate_window_and_its_count(tmp_path):
+    """AF8, OP4, T1: a time before the start of a window, a clock set back, keeps the window and its count, so the
+    override and the operator `allow` it spent are not granted again, and the next window allows again."""
+    book = floor.Book((str(tmp_path / "a" / "rates.json"), str(tmp_path / "b" / "rates.json")))
+    rate = {"allows": 1, "window": 60}
+    assert book.spend("r", rate, NOW) == (NOW, 1) and book.spend_answer(rate, NOW) == (NOW, 1)
+    assert book.spend("r", rate, NOW - 100) is None and book.spend_answer(rate, NOW - 100) is None
+    assert book.spend("r", rate, NOW + 60) == (NOW + 60, 1) and book.spend_answer(rate, NOW + 60) == (NOW + 60, 1)
+
+
+# ------------------------------------------------------------------ AF5, IS5: the cost of the floor
+
+def _full_table(first: int, narrow: bool = False) -> bytes:
+    """A table of exactly 640 bytes, the bound of a `mesh` artifact (E6). A fallback policy is 37 edges on `cmd`. A
+    narrow table, which an action floor must be (AF9), has 8 rules and is filled out to the bound with 99 nodes no
+    edge reaches."""
+    if not narrow:
+        body = table(*(f"cmd == {first + index}" for index in range(36)), "cmd == 90 and p > 2")
+    else:
+        rules = [f"cmd == {first + index} and p >= 2 and p <= 5" for index in range(8)]
+        body = table(nodes=lambda img: [("p", [(1, cond, img.compile_condition("when " + cond)) for cond in rules])]
+                     + [("t", [])] * 100)
+    assert len(body) == 640
+    return body
+
+
+def test_case_191_a_decision_asks_two_sets_and_a_full_install_part_fits_the_store(tmp_path, monkeypatch):
+    """case_191: AF5, IS5. A `mesh` PEP with an action floor and a fallback policy of 640 bytes each, a ceiling that
+    lists 64 hashes and no release decides a request the floor is silent on: the floor and the fallback policy are
+    asked and nothing else, every sealed envelope is at most 2,440 bytes and held in both copies, the two copies of
+    the install record are the same bytes and a restart reads all three sets from them, and an action floor of 641
+    bytes is `dist:too-large` from its signed `body_size` with no body given, the held floor unchanged."""
+    from pathlib import Path
+    from prismpath.distribution import pep as pep_module
+    full_floor, full_fallback = _full_table(1, narrow=True), _full_table(100)
+    point = _table_point(MeshFloor, tmp_path, "mesh")
+    ceiling = install.ceiling_body([full_floor, full_fallback] + [b"filler %d" % index for index in range(62)])
+    assert len(kinds.read_ceiling_list(ceiling)["bodies"]) == 64
+    sent = [point.install_set(CEILING, {kinds.POLICY_LIST: ceiling}, 1, widens=False), _table_floor(point, full_floor),
+            point.install_set(FALLBACK, {"policy.ppt": full_fallback}, 1, widens=True)]
+    assert [point.send(pairs)[-1].event for pairs in sent] == ["install-applied", "install-widened", "install-widened"]
+    assert point.pep.state() == "no-policy" and point.pep.fallback_decides()
+    asked, ask = [], pep_module.floors.ask
+    monkeypatch.setattr(pep_module.floors, "ask", lambda kind, bodies, request, **args: asked.append(dict(bodies))
+                        or ask(kind, bodies, request, **args))
+    decided = point.pep.decide(lambda: "fallback", request={"regs": regs(cmd=100)})
+    monkeypatch.undo()
+    assert (decided["basis"], decided["policy_sha256"]) == ("fallback", H(full_fallback))
+    assert asked == [{"policy.ppt": full_floor}, {"policy.ppt": full_fallback}]
+    installed = point.pep.installed
+    for [(sealed, _body)] in sent:
+        assert len(sealed) <= 2440
+        for directory in (installed.dir, installed.copy):
+            assert (Path(directory) / "blobs" / H(sealed)).read_bytes() == sealed
+    first, second = (Path(path).read_bytes() for path in installed._paths())
+    assert first == second
+    reopened = point.open().installed
+    assert [reopened.held(kind).policy_sha256 for kind in (FLOOR, FALLBACK, CEILING)] \
+        == [H(full_floor), H(full_fallback), H(ceiling)]
+    held = installed.record.sets[FLOOR].policy_sha256
+    [(sealed, _body)] = _table_floor(point, full_floor + b"\0", 2, replaces=held, widens=False)
+    refused = point.send([(sealed, b"")])[-1]
+    assert refused.cause == "dist:too-large" and installed.record.sets[FLOOR].policy_sha256 == held

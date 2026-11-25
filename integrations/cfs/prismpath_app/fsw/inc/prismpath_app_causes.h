@@ -14,8 +14,8 @@
 
 #include <stdint.h>
 
-#define PP_CAUSE_REGISTRY_SHA256 "bd4e4964001bb5f3db786a1f0178e86b07c8c36d42679f23fc23cbffc0c63a56"
-#define PP_CAUSE_REGISTRY_COUNT 135
+#define PP_CAUSE_REGISTRY_SHA256 "8137137fbb97707b40ec4a2f73aac9f868244fa0c216772986c6e225690d534f"
+#define PP_CAUSE_REGISTRY_COUNT 136
 
 typedef struct
 {
@@ -159,6 +159,7 @@ static const PP_CauseRow_t k_CauseRegistry[PP_CAUSE_REGISTRY_COUNT] = {
     {167, "dist:floor-broad"},
     {168, "dist:answer-unbound"},
     {169, "dist:reconciling"},
+    {170, "dist:save-failed"},
 };
 
 #endif

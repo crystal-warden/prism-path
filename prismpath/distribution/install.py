@@ -444,8 +444,18 @@ def looser(old: Any, new: Any) -> bool:
     return new["allows"] > old["allows"] or new["window"] < old["window"]
 
 
+def resends(lost: Optional[HeldSet], bodies: Mapping[str, bytes]) -> bool:
+    """IS10, IS12: `bodies` are byte for byte the bodies of `lost`, the set the install record names and no copy reads,
+    as the body hashes the record keeps for it show. With no set named nothing is a resend."""
+    if lost is None or lost.empty:
+        return False
+    return {name: canon.sha256_hex(body) for name, body in bodies.items()} == \
+        {name: one[2] for name, one in lost.statements.items()}
+
+
 def set_larger(kind: str, install_kind: str, held: Optional[HeldSet], bodies: Mapping[str, bytes],
-               envelopes: Optional[Mapping[str, Any]] = None, *, change: bool = False) -> Optional[bool]:
+               envelopes: Optional[Mapping[str, Any]] = None, *, change: bool = False, lost: bool = False,
+               lost_set: Optional[HeldSet] = None) -> Optional[bool]:
     """IS12: whether the set `bodies` allows or escalates more than `held`, the set it follows or None, or None when
     the PEP cannot tell. A first action floor and a first fallback policy widen, the empty one does not; a first
     ceiling does not, the empty ceiling does, and a ceiling that allows more does. A list that holds a hash the one
@@ -453,9 +463,15 @@ def set_larger(kind: str, install_kind: str, held: Optional[HeldSet], bodies: Ma
     section 9.4, and on `host` and `mesh` a table that is not byte for byte the held one is larger. A `cfs` PEP
     cannot tell for a table, and takes the signer's word (H13). With `change`, an install change statement from the
     held set's policy hash stands for the tables of a floor or a fallback policy on `host` and `mesh` (IS15): their
-    bytes are not compared, and everything else is, the rates and a floor's `layout` and `command` included."""
+    bytes are not compared, and everything else is, the rates and a floor's `layout` and `command` included.
+
+    With `lost` the PEP held a ceiling whose set it no longer reads, `lost_set` the set its install record names or
+    None when only the mark of IS10 says so. Every ceiling but a byte for byte resend of that set is then larger,
+    the empty one too, since the PEP cannot tell what the lost one allowed (IS10, IS12)."""
     from prismpath.distribution import widening
     empty = set(bodies) == {kinds.NONE}
+    if lost and install_kind == CEILING:
+        return not resends(lost_set, bodies)
     before = None if held is None or held.empty else dict(held.bodies)
     if install_kind == CEILING:
         if empty:
@@ -495,7 +511,8 @@ def _reading(envelopes: Mapping[str, Any]) -> Tuple[Any, Any]:
 
 def widens_ok(kind: str, install_kind: str, held: Optional[HeldSet], bodies: Mapping[str, bytes], *, widens: bool,
               replaces: str, envelopes: Optional[Mapping[str, Any]] = None,
-              change: Optional[bytes] = None) -> Tuple[Optional[str], bool]:
+              change: Optional[bytes] = None, lost: bool = False,
+              lost_set: Optional[HeldSet] = None) -> Tuple[Optional[str], bool]:
     """IS12: (cause, stands out) of a set whose signer said `widens` and `replaces`. A set the PEP computes as larger
     whose `widens` is false is `dist:widening-unsigned`. A PEP that cannot decide also takes `widens` false only when
     `replaces` is the policy hash of the set it holds, the empty string when it holds none. A set stands out, with
@@ -503,7 +520,19 @@ def widens_ok(kind: str, install_kind: str, held: Optional[HeldSet], bodies: Map
     holds none, so the set after it names the empty string (IS6). `change` is the body of the install change statement
     staged before the set, or None. On `host` and `mesh` it stands for a floor's or a fallback policy's tables when
     its `from` is the held set's policy hash, its `set` is `install_kind`, and the set says it does not widen and
-    replaces that hash (IS15), so the set is applied with event `install-applied`."""
+    replaces that hash (IS15), so the set is applied with event `install-applied`.
+
+    A ceiling sent while the held one is lost (`lost`, `lost_set` as `set_larger` takes them) is larger unless it is
+    a byte for byte resend, and on every kind it is taken with `widens` false only when it is that resend and its
+    `replaces` is the policy hash the install record names for the lost set. With no set named no `replaces` passes,
+    so such a ceiling stands out and needs `widens` true."""
+    if lost and install_kind == CEILING:
+        if widens:
+            return None, True
+        if set_larger(kind, install_kind, None, bodies, lost=True, lost_set=lost_set) \
+                or lost_set is None or replaces != lost_set.policy_sha256:
+            return UNSIGNED, True
+        return None, False
     held_policy = held.policy_sha256 if held is not None and not held.empty else ""
     carried = (change is not None and not widens and held_policy != "" and replaces == held_policy
                and changes_set(change, install_kind, held_policy))
@@ -599,6 +628,7 @@ class Installed:
         self.record_lost = False
         self.ceiling_lost = False
         self.staged: Dict[str, Staged] = {}
+        self.lost: Dict[str, Tuple[int, HeldSet]] = {}     # IS6, IS10: {kind: (seq, the set as the record names it)}
         self.marks = {"ceiling": False, "install": False}
         self.streams: FrozenSet[str] = frozenset()
         self.zones: Optional[List[str]] = None
@@ -638,6 +668,7 @@ class Installed:
         Returns the install kinds lost this start. A record no copy reads is lost when a mark says one was held."""
         self._read_marks()
         self.record, self.record_lost, self.ceiling_lost, lost = None, False, False, []
+        self.lost = {}
         for path in self._paths():
             try:
                 with open(path, "rb") as handle:
@@ -658,21 +689,20 @@ class Installed:
             if read is None:
                 sets[kind] = None
                 lost.append(kind)
+                self.lost[kind] = (self.record.seqs[kind], held)
             else:
                 sets[kind] = read
         self.record = replace(self.record, sets=sets)
-        if CEILING in lost:
-            self.ceiling_lost = True
-        elif sets[CEILING] is None and self.marks["ceiling"] and self.record.seqs[CEILING] and not self._withdrawn():
-            self.ceiling_lost = True
+        self.ceiling_lost = CEILING in lost or self.named_lost(self.record)
         self._read_staged()
         self._read_zones()
         return lost
 
-    def _withdrawn(self) -> bool:
-        """A ceiling the engineer withdrew with the empty set is not a lost one: the record then names the empty set."""
-        held = self.record.sets[CEILING] if self.record else None
-        return held is not None and held.empty
+    def named_lost(self, record: Record) -> bool:
+        """IS10: `record` holds no ceiling while the mark says one was held and its ceiling sequence is not 0. A
+        ceiling the engineer withdrew with the empty set is not a lost one, since the record then names the empty
+        set, and a provisioning with a key set that shares no key starts the sequences again."""
+        return record.sets[CEILING] is None and self.marks["ceiling"] and record.seqs[CEILING] > 0
 
     def _read_statement(self, envelope_id: str, sealed_name: str, body_name: str):
         for directory in (os.path.join(self.dir, "blobs"), os.path.join(self.copy, "blobs")):
@@ -739,10 +769,23 @@ class Installed:
             names.append(name)
         return names[0], names[1]
 
+    @property
+    def lost_ceiling(self) -> Optional[HeldSet]:
+        """IS10: the ceiling the record names and no copy reads, while nothing has replaced it."""
+        lost = self.lost.get(CEILING)
+        return lost[1] if lost is not None else None
+
     def save(self, record: Record) -> None:
         """Both copies of the record, the first then the second, each whole. Every statement it names is already in
-        both copies (`put`)."""
-        data = record.to_bytes()
+        both copies (`put`). A set lost at start that nothing has replaced stays named, at its `seq`, so the same
+        statement sent again changes nothing after a restart too (IS6), as the C core's record slot keeps it."""
+        sets = dict(record.sets)
+        for kind, (seq, held) in list(self.lost.items()):
+            if sets[kind] is None and record.seqs[kind] == seq:
+                sets[kind] = held
+            else:
+                del self.lost[kind]
+        data = replace(record, sets=sets).to_bytes()
         for path in self._paths():
             _write(path, data)
         self.record, self.record_lost = record, False
@@ -785,6 +828,7 @@ class Installed:
             except OSError:
                 pass
         self.record, self.record_lost, self.ceiling_lost, self.staged = None, False, False, {}
+        self.lost = {}
         self.keep()
 
     # ------------------------------------------------------------------ FB9: the last committed zones
@@ -828,6 +872,10 @@ class Installed:
             release.paths[name] = first if _get(os.path.join(self.dir, "blobs"), body_name) is not None \
                 else os.path.join(self.copy, "blobs", body_name)
         return release
+
+    def lost_ids(self) -> Dict[str, Tuple[int, FrozenSet[str]]]:
+        """IS6: {kind: (seq, envelope ids)} of each set lost at start that nothing has replaced since."""
+        return {kind: (seq, held.envelope_ids) for kind, (seq, held) in self.lost.items()}
 
     def statement_ids(self) -> List[str]:
         """The envelope ids of every install statement held (IS8)."""
@@ -1017,5 +1065,5 @@ def ceiling_body(tables: Iterable[bytes]) -> bytes:
 
 __all__ = ["Record", "HeldSet", "Staged", "Installed", "check_trust", "trust_widens", "read_anchor_part",
            "change_body", "seal_change", "changes_set",
-           "anchor_part", "domain_sha256", "inside", "set_larger", "widens_ok", "protected_names", "seal_set",
+           "anchor_part", "domain_sha256", "inside", "resends", "set_larger", "widens_ok", "protected_names", "seal_set",
            "trust_body", "seal_trust", "ceiling_body", "CANNOT_DECIDE", "LARGER"]
