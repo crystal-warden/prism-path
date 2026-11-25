@@ -226,6 +226,8 @@ rule refuses the pack. A flow that is not compiled to an image is authorized by 
 the same spelling beside the sha256 of the flow text, a monotonic version and the authority key's
 identity, under the same Ed25519 key a pack is signed with.
 
+A pack, a table or a flow also travels to the machines that enforce it in a distribution envelope. What is built in each implementation is in the status table of [`docs/design/spec-policy-distribution.md`](docs/design/spec-policy-distribution.md) section 19.1.
+
 **Grammar.** A definition is a kind word followed by `option=value` pairs separated by spaces, in any
 order. Each option may appear once. An unknown kind, an unknown option, an option the kind does not
 take, a repeated option, or a value that does not parse makes the whole flow invalid.

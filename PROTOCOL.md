@@ -481,6 +481,9 @@ this list on purpose: they are the novel part.
   (X25519 ECDHE, §2.5)
 - **[SPEC.md]** The PrismPath flow format and Level M predicate fragment, this repository. (the policy
   the codebook is derived from)
+- **[spec-policy-distribution.md]** `docs/design/spec-policy-distribution.md`, this repository. (how a signed
+  policy reaches each enforcement point, and how a state record carries a Facet body, §15.1. Its section 19.1
+  says what is built)
 
 ---
 

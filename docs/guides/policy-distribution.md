@@ -2,7 +2,7 @@
 
 This guide is for the person who sends a signed policy to the machines that enforce it and has to know,
 afterwards, which machine runs which policy. It covers the reference controller, the pull binding a host
-uses, and the `prismpath dist` commands. The rules themselves are in `docs/design/spec-policy-distribution.md`,
+uses, the engineer's install sets, the controller key, operator answers and the `prismpath dist` commands. The rules themselves are in `docs/design/spec-policy-distribution.md`,
 and each rule named here by its letter and number is defined there.
 
 ## 1. The parts
@@ -130,7 +130,7 @@ with `--yes` in a script, and without a yes it writes nothing (CL5).
 
 ```bash
 prismpath dist install --kind ceiling --list table9.ppt --seq 2 --follows ceiling1 \
-    --held ctl --stream site/mesh --target mesh --key install1.pem --key install2.pem --out ceiling2
+    --held ctl --stream site/mesh --target mesh --key install1.key --key install2.key --out ceiling2
 ```
 
 For each machine it lapses, the preview looks for a release inside the new ceiling that is offered to it or
@@ -289,7 +289,91 @@ hook, the egress proxy and the MCP proxy read the committed release on every loa
 egress proxy reaches the committed hosts and no others, so `--allow-host` is refused. The project and the index
 of the zones are the home's own setting in `zones.local.json`.
 
-## 9. What this version does not do
+## 9. The engineer's install sets
+
+The engineer who installs PrismPath signs three things beside the owner's releases, on any kind (spec section 21).
+They are sets, and each is signed by the install keys, which are a role of their own with a threshold of their
+own. The owner's authority key never signs one.
+
+| Set | What it says | When it decides |
+|---|---|---|
+| Action floor | What this kind always allows, or always puts to a person | First, on every request, in every state |
+| Fallback policy | What the machine decides by when no release is active | After a lapse, a revocation or a ceiling that removes the release, and while locked |
+| Ceiling | What no release, floor or fallback policy may allow | Checked when a release, floor or fallback policy is staged, and again at every start and tick |
+
+A machine with none of the three refuses when it has no release, as before. Each set has its own `seq`, and
+a lower or equal one is refused as a release is (IS6).
+
+Name the install keys, and the operator keys of section 11, in the anchor when you write it. The PEP prints the
+envelope ids of the install statements it came with beside the anchor's fingerprint, and `enroll --install`
+tells the controller them.
+
+```bash
+prismpath dist anchor --pub owner/authority.pub --target mesh --stream site/mesh \
+    --install-pub install1/install1.pub --install-pub install2/install2.pub --install-threshold 2 \
+    --out anchor.json
+prismpath dist enroll --dir ctl --key controller/instance.key --pub pep/instance.pub --anchor anchor.json \
+    --install <envelope id> --group mesh
+```
+
+`dist install --kind floor`, `--kind fallback` and `--kind ceiling` seal a set. A floor or fallback policy for a
+table kind takes `--set policy.ppt=table.ppt` and `--qualification`, a ceiling takes `--list table.ppt` for each
+table it holds, and `--empty` withdraws the held set. A floor may carry `--rate ALLOWS/WINDOW`, the most
+overrides it may make in a window, and `--answer-rate` for the operator's answers. `--follows DIR` names the set
+this one replaces and `--widens` says it allows more. A set that allows more is held by the controller with
+`dist:install-widened` until someone acknowledges it by the envelope ids of its statements.
+
+```bash
+prismpath dist acknowledge --dir ctl --key controller/instance.key --envelope <envelope id>
+```
+
+The install keys change through `prismpath dist install-trust`, which a threshold of the current keys and every
+key it adds must sign. A key once retired is never added again, so the tool keeps the list of retired key ids in
+a file you name with `--retired`. Adding a key of either role, or lowering the threshold, is a widening and
+waits for an acknowledgement like any other.
+
+Each PEP reports in its state record which install sets it holds, how many answers its floor gave and how many
+overrides it made. The fleet view compares them with what the controller expects.
+
+## 10. The controller key and freshness
+
+The controller key is the controller's instance key, named in the anchor. It signs one thing, a statement that
+gives each stream an epoch id, which rises at least once per heartbeat interval and lets the controller see that a
+record was made after that epoch began. It never signs an envelope, so a stolen controller key admits, commits
+and revokes nothing. Its worst use is to raise the epoch of a stream so that records read as replays until a PEP
+restarts or the authority names a new key with a `trust.controller` statement (K6, K7).
+
+```bash
+prismpath dist anchor --pub owner/authority.pub --target host --stream web/prod \
+    --controller controller/instance.pub --fresh 3600 --out anchor.json
+```
+
+`--fresh` turns freshness on. A PEP with it lapses with `dist:expired` when it has seen no fresh controller
+statement for longer than the lifetime you set, so the transport cannot keep a PEP from its controller without
+anyone noticing. Leave it at 0, or leave it out, and a PEP never lapses for that reason. Python, Rust and the C
+core read the statement and its freshness.
+
+## 11. Operator answers
+
+Where an action floor escalates a request to a person, an operator signs the answer, `allow` or `refuse`. The
+operator keys are a third role in the install record, set by `--operator-pub` on the anchor or in an
+`install-trust` statement. An answer is a sealed envelope that names one PEP and one escalation, lives at most 600
+seconds and is used once. It is taken only by a kind that can escalate, which is `agent`, `gateway` and `cfs`, and
+only where the install threshold is 2 or more. A `host`, a `mesh` node and an `xdp` edge refuse one with
+`dist:target-mismatch`.
+
+For the cFS app, the ground tool seals the answer from the escalation the app downlinked.
+
+```bash
+python -m integrations.cfs.ground.answer seal --key operator1.key --pep <pep id> --receipt <receipt hash> \
+    --policy <floor policy hash> -o answer.stmt
+```
+
+Add `--refuse` to answer refuse. The `agent` and `gateway` take the same envelope over the pull binding, and no
+command writes one yet. Each answer a PEP applies is an `answered` record and shows beside the PEP in the fleet
+view, and the floor's `answer_rate` limits how many `allow` answers it takes in a window.
+
+## 12. What this version does not do
 
 A host, a mesh node and the cFS app send a state record with no Facet body, since their releases carry no
 flow text to build one from (H5). A rollback with `prismpath dist pep rollback` follows RB1 to RB3, so on a
@@ -297,3 +381,7 @@ host, which cannot decide whether a policy allows more, it needs a widening stat
 change statement from the active policy. The
 mesh and the cFS app use the frame binding of section 8.3, which the controller drives as a broadcast to
 the whole group.
+
+Section 21 is built on Python, on the Rust host and on the C core and the cFS app. It is not yet enacted on the
+`xdp` edge. That part is in review, and until it merges an `xdp` PEP records an install set and loads none of it.
+The status table in section 19.1 of the spec lists every open case.

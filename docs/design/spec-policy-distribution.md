@@ -1550,27 +1550,63 @@ Reused as they are. `sig:invalid` (2), `sig:revoked-key` (3), `wire:codebook-mis
 ## 19. Implementations and parity
 
 Python holds every part. Rust (`prismpath-hotswap-rs`) holds the sealed envelope, the verifier, the trust
-store with revocation and rotation, the PEP machine for the `host` target and the state record. C holds
-the sealed envelope, the strict scanner, the verifier, the trust store and the PEP machine for the `mesh`
-and `cfs` targets, compiled natively for tests and unchanged for the targets. The controller, the HTTP
-binding and the `agent`, `gateway` and `xdp` targets are Python only, and so are the ceiling's lapse preview,
-retirement warning and staged rollout (CL5 to CL7), which live at the sealing tool and the controller. Rust and the C core hold the
-names `identity.bundle` and `identity.map` on their closed list of artifact kinds (ID8), and case 281 is
-pending in each until they do. The reconciling state (section 9.5)
-is Python's and Rust's, since the C core's switch cannot fail (C6). Every PEP reads the controller
-statement, its freshness and the `trust.controller` kind (H9, H16, K7).
+store with revocation and rotation, the PEP machine for the `host` target with the reconciling state, the
+state record, the controller key and statement, and section 21 for `host`. C holds the sealed envelope, the
+strict scanner, the verifier, the trust store and the PEP machine for the `mesh` and `cfs` targets, with
+section 21 on both, compiled natively for tests and unchanged for the targets. The controller, the HTTP
+binding, the `agent`, `gateway` and `xdp` targets and the exports are Python only, and so are the ceiling's
+lapse preview, retirement warning and staged rollout (CL5 to CL7), which live at the sealing tool and the
+controller. The reconciling state (section 9.5) is Python's and Rust's, since the C core's switch cannot
+fail (C6). Every PEP reads the controller statement, its freshness and the `trust.controller` kind (H9,
+H16, K7).
 
-Section 21 is built in no implementation yet, and its cases are pending in each. This is what exists
-today and what the section needs of each part.
+### 19.1 Status
 
-| Part | Today | Section 21 needs |
-|---|---|---|
-| Python | The envelope, the verifier, the trust store, the PEP machine for `host` and `mesh`, the controller, the table comparator of W8 and the HTTP binding. One role, a threshold of 1, no install kind | All of section 21. The install and operator roles, the install record, the three sets on every kind, the overlay of AF1 in the widening comparison, the acknowledgement of H13 and the replay of RC4 |
-| Rust | The envelope, the verifier, the trust store, the `host` PEP with the change statement of W11, and the state record | Section 21 for the `host` target |
-| C core | The envelope, the scanner, the verifier, the trust store and the PEP machine with the change statement of W11, in eight durable parts, with `PP_RECORD_MAX` at 212 bytes and one role | `PP_RECORD_MAX` at 242 bytes (H10). A ninth part for the install record and a tenth for the rate counts (IS10, AF8). The role `install` with a threshold above one (IS2), and the role `operator` for `cfs` alone, since `host`, `mesh` and `xdp` have no escalation (OP1). The staging of install statements as G1 stages an envelope (IS4). The readers of an install `meta`, of a list and of an `install.trust`. The narrowness check on a table (AF9). No table comparator, which stays at the sealing tool and the controller (W8, CL1) |
-| cFS app | It admits a table by `TableSig` and decides with one image. Its layout has `INT`, `BOOL` and `MONITOR` and no command label. A monitor staleness bound of 0 is accepted | The work of PR 18, then a second and third image for the floor and the fallback policy, the layout kinds `COMMAND` and a mark for a proposer's reading, a staleness bound that 0 cannot switch off (AF10), the not enacted case and `rates.jsonl` (AF7, RC4), and an event at the fallback (FB4) |
-| Mesh firmware | A local copy of the evaluator, one table, and an allow list of ids standing in for the signature check | The C core in place of the stand in, three tables, a layout with a command label and independent fields with staleness, and the durable rate counts |
-| `agent` home | Readings with `zone_reach` and no zone name | The reading field `zone_name` (AF1), the floor asked first by the hook, the proxies and the sandbox compiler, and the zones of FB9 |
+Each row is one part of this spec and where it stands in each implementation. `#N` is the pull request that
+built it. `review` means the work is on a branch that is not merged. `none` means no implementation was
+planned, and a dash means the part does not apply. The `xdp` column is the Python enforcement point of the
+`xdp` kind in `prismpath-ebpf/`, which has its own loader. `PENDING` and `PARTIAL` in
+`prismpath/tests/test_distribution_trace.py` list the cases still open, and the last column follows them.
+
+| Part | P | R | C | xdp | Still open |
+|---|---|---|---|---|---|
+| 4 to 7, the envelope, trust store, sequence floor and clocks | #109 | #112 | #117, #120 | #130 | none |
+| 8.1 and 8.2, messages and the HTTP binding | #123 | the offered epoch only | - | - | none. The Rust crate has no binding (DIVERGENCES.md) |
+| 8.3, the frame binding | #115 | - | #117, #143 | - | case 122 in C, the ordered link, has no test |
+| 9.1 to 9.4, the PEP machine and the widening rule | #113, #124 | #131, #124 | #117, #124 | #130 | none |
+| 9.5, reconciling | #134 | #131 | - (C6) | review (dist-xdp-s21) | case 273 is in review with the `xdp` branch |
+| 10 and 11, revocation and rotation | #114, #121 | #114, #121 | #114, #121 | #130 | none |
+| 12, expiry and the HOLD choice | #113 | #131 | #117, #143 | #130 | case 269, the cFS half in C, has no test |
+| 13, grants | #127 | - | - | - | none |
+| 13.1, workload identity (ID1 to ID8) | #135 | review (dist-pr19-wp1) | open | - | case 281 names the kinds in R and C |
+| 14, first key provisioning | #113 | #131 | #117 | #130 | none |
+| 15, state record and fleet view | #125 | #131 | #117 | #130 | none |
+| 15.3, the controller | #123, #139 | - | - | - | the controller is Python's alone |
+| 15 exports, OpenTelemetry, OCSF, in-toto | #145 | - | - | - | none |
+| 16, escape hatches | #122 | #122 | #117 | #122 | case 97 has no C test, the build with and without `PPT_DEV_BUILD` |
+| 17, the older signed forms | #132 | - | - | - | none |
+| 21.1, install statements and install trust | #136, #139 | #141 | #133 | review (dist-xdp-s21) | case 164 is in review with the `xdp` branch |
+| 21.1, install change statement (IS14, IS15) | #144 | #144 | #144 | - | none |
+| 21.2, action floor | #138 | #141 | #133, #146 | review (dist-xdp-s21) | the `xdp` parts of cases 187, 193, 194 and 223 are in review with the `xdp` branch. Case 272, a floor with a runtime step on `host`, needs an owner decision and no one is building it (DIVERGENCES.md) |
+| 21.3, fallback policy | #136 | #141 | #133, #146 | review (dist-xdp-s21) | case 202 has no C test |
+| 21.4, ceiling | #136, #147 | #141, #147 | #133, #147 | review (dist-xdp-s21) | case 206, the ceiling's fields narrowing the domain of an `agent` PEP, is not built |
+| 21.4, lapse preview, warning and staged rollout (CL5 to CL7) | #144 | - | - | - | none |
+| 21.5, operator role and answers | #138 | refuses (OP1) | #140, #146 on `cfs` | review (dist-xdp-s21) | the `xdp` part of case 225 is in review with the `xdp` branch. Cases 230 and 235, the install and operator keys in an anchor, have no C test |
+| 21.6, receipts | #138 | #141 | #133, #146 | review (dist-xdp-s21) | none beyond the cases above |
+| Case 104, one corpus replayed in three implementations | review (dist-pr19-parity) | built | review (dist-pr19-parity) | - | Python and C name the case when the parity test merges |
+| Case 105, one policy on a host, an agent and a cFS table | open | - | open | - | the end to end test is not written |
+| Cases 137 and 138, a release id that names an artifact not staged | built | review (dist-pr19-wp1) | built | - | the Rust tests |
+| C durable state, an unsaved floor override and a failed save | - | - | review (dist-arch-durable) | - | no case number |
+
+Also in review, with the `xdp` branch: the edge loads its action floor in every table it loads, as a floor
+node reached first, and counts the floor's passes as floor answers with no `would` and no override (AF7).
+The C columns above for the cFS app, the mesh firmware and the cFS ground tools follow #137, #143 and #146.
+
+The part of this section that said section 21 was built in no implementation was written before pull
+requests 136 to 147, and it is gone. The cFS app admits a policy table by its envelope (#137), decides under
+its floor and fallback policy and enacts them with the evidence of RC4 (#146), and takes an operator's
+answer (#140, #146). The mesh firmware runs the C core (#143). The `agent` home asks its floor first and
+reads `zone_name` (#139).
 
 **I1.** One corpus, `prismpath/portable/conformance/distribution.json`, holds the cases of section 20 as
 bytes in and results out. It is generated by the Python reference with fixed test keys and replayed by
@@ -1581,7 +1617,7 @@ it runs on. A case marked `C` runs on `mesh` or `cfs`, the only kinds the C core
 
 Each case names the rules it tests. `P` is Python, `R` Rust, `C` the C core. A case passes when the PEP
 reports exactly the cause given, or none, and its state after is the one given. Numbers 144 to 160 are
-not used, and 281 to 288 are left to the pull request in flight that numbers its cases from 281. Cases 289
+not used. Cases 289
 to 293 run at the sealing tool and the controller, which are Python only (section 19), and 294 and 295
 are the change statement on every PEP that takes it.
 
