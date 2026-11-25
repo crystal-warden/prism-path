@@ -1525,6 +1525,48 @@ def test_case_170_a_provisioning_never_lowers_the_install_part_and_a_disjoint_ke
     assert _refused(out[12])[0] == "sig:revoked-key"
 
 
+def test_a_provisioning_refuses_a_brought_set_its_staging_would_refuse_and_keeps_a_seq_replay_record(host_check):
+    """P2 step 3, CL3, IS10, IS12, the C half of the Python and Rust tests. A statement brought with an anchor is held,
+    before anything changes, to what staging it in order meets, as pp_apply_set holds it: a fallback policy outside the
+    held ceiling, one outside a ceiling brought before it, one with widens false that nothing replaces, and on a node
+    whose ceiling is lost a ceiling that is not the lost one again each refuse the provisioning and leave the install
+    part as it was. The lost ceiling sent again naming its hash is applied. A set below the held seq is
+    dist:seq-replay and the provisioning goes on (case 170), and that refusal is reported beside provisioned."""
+    wide = _ceiling(FLOOR, FALLBACK)
+    ceiling = _install("install.ceiling", wide, seq=1)
+    narrower = _install("install.ceiling", _ceiling(FLOOR), seq=2, widens=False, replaces=canon.sha256_hex(wide))
+    out = _run21(host_check, [
+        *_node(), *_anchor(bring=[ceiling]), f"provision {S} {N}", "installid",
+        *_anchor(bring=[_install("install.fallback", FALLBACK_B, seq=1)]), f"provision {S} {N}", "installid",
+        *_anchor(bring=[narrower, _install("install.fallback", FALLBACK, seq=1)]), f"provision {S} {N}", "installid",
+        *_anchor(bring=[_install("install.fallback", FALLBACK, seq=1, widens=False)]), f"provision {S} {N}",
+        "installid"])
+    held = f"installid {_install_id(ceiling=(ceiling[0], 1))}"
+    assert out[1] == held
+    assert [out[2], out[4], out[6]] == [f"provision-refused {causes.NAMES['dist:above-ceiling']}"] * 2 + [
+        f"provision-refused {causes.NAMES['dist:widening-unsigned']}"]
+    assert [out[3], out[5], out[7]] == [held] * 3
+    lost_hash = canon.sha256_hex(wide)
+    out = _run21(host_check, [
+        *_node(), *_anchor(bring=[ceiling]), f"provision {S} {N}", "lose set_ceiling", "lose2 set_ceiling",
+        f"restart {N}",
+        *_anchor(bring=[_install("install.ceiling", _ceiling(FLOOR, FALLBACK, RELEASE), seq=2, widens=False,
+                                 replaces=lost_hash)]), f"provision {S} {N}",
+        *_anchor(bring=[_install("install.ceiling", wide, seq=2, widens=False, replaces=lost_hash)]),
+        f"provision {S} {N}", "installid"])
+    assert out[2] == f"provision-refused {causes.NAMES['dist:widening-unsigned']}"
+    resent = _install("install.ceiling", wide, seq=2, widens=False, replaces=lost_hash)
+    assert [(one["event"], one["cause"]) for one in _recs(out[3])] == [("provisioned", None)]
+    assert out[4] == f"installid {_install_id(ceiling=(resent[0], 2))}"
+    fallback2 = _install("install.fallback", FALLBACK, seq=2)
+    out = _run21(host_check, [
+        *_node(), *_anchor(), f"provision {S} {N}", _stage(fallback2),
+        *_anchor(bring=[_install("install.fallback", FALLBACK_B, seq=1)]), f"provision {S} {N}", "installid"])
+    assert [(one["event"], one["cause"]) for one in _recs(out[2])] == [("refused", "dist:seq-replay"),
+                                                                       ("provisioned", None)]
+    assert out[3] == f"installid {_install_id(fallback=(fallback2[0], 2))}"
+
+
 def test_case_171_227_a_locked_pep_and_an_install_provisioning_keep_their_state(host_check):
     """case_171: IS6, FB1. A locked PEP with a threshold of 2 applies a fallback policy and stays locked. case_227:
     IS13, IS6, P3. With a threshold of 1, a floor of section 6 at 7, a time floor a day ahead of its clock and a floor
