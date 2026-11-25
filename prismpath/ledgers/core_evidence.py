@@ -86,6 +86,7 @@ LOG_CORE_RUN = "core-run"
 FILES = ("run.json", "cases.jsonl", "images.jsonl", "receipts.jsonl", "receipts.roots.jsonl",
          "authority.pub", "instance.pub")
 INSTALL_FILES = ("install.jsonl", "rates.jsonl")   # RC4: in a run whose run.json names them
+ANSWER_LIFE = 600                                   # OP2, OP3: an answer's and an escalation's life
 BASES = ("release", "floor", "fallback", "operator")   # RC1, RC4: a case's basis; `release` when none is named
 ESCALATION_FORMAT = "prismpath.cfs-escalation/1"   # OP3: what an operator's answer names on cfs
 INSTALL_OF = {"floor": "install.floor", "fallback": "install.fallback"}
@@ -563,12 +564,12 @@ def _install_chain(run: Path, manifest: dict, cases, pin_install):
     for case in cases:
         if case["basis"] not in BASES or not isinstance(case["enacted"], bool) or (
                 case["basis"] != "release") != (case["install"] is not None) or (
-                not case["enacted"] and case["basis"] not in ("release", "fallback")) or (
+                not case["enacted"] and case["basis"] not in ("release", "fallback", "operator")) or (
                 case["asked"] is not True and (case["asked"] is not False or case["basis"] != "floor")) or (
                 case["basis"] == "operator") != (case["answer"] is not None) or (
                 case["basis"] == "operator" and len(case["readings"]) != 1):
-            raise Bad(f"case {case['id']}: a basis of release, floor, fallback or operator, only a release or fallback "
-                      f"line not enacted, `asked` only on a floor case and one answered reading per operator case")
+            raise Bad(f"case {case['id']}: a basis of release, floor, fallback or operator, only a release, fallback "
+                      f"or operator line not enacted, `asked` only on a floor case and one answered reading per operator case")
     installed = any(case["basis"] != "release" for case in cases) or "install_sha256" in manifest
     if not installed:
         return None
@@ -705,7 +706,9 @@ def _check_install_receipts(run: Path, cases, receipts, sets) -> None:
 def _check_operator_receipts(run: Path, cases, receipts, sets) -> None:
     """OP2, OP3: each `operator` case's one reading was escalated under the floor its case names, by an escalation
     document of the run, and answered once by the answer its case names, whose policy is that floor's; its receipt is
-    the answer's decision, a route to `allow` or the escalation's own refusal."""
+    the answer's decision, a route to `allow` or the escalation's own refusal. An escalation closes at its one answer,
+    and the answer was in force at some time inside the escalation's 600 second life. A case not enacted records an
+    answer the PEP applied but whose command it could not send."""
     if not any(case["basis"] == "operator" for case in cases):
         return
     from prismpath.distribution import kinds
@@ -718,7 +721,7 @@ def _check_operator_receipts(run: Path, cases, receipts, sets) -> None:
         if canon2.dumps(doc) != line or not isinstance(doc, dict) or doc.get("format") != ESCALATION_FORMAT:
             raise Bad("an escalations.jsonl line is not an escalation document")
         escalations[sha256_hex(line)] = doc
-    used = set()
+    used, closed = set(), set()
     # OP2: an answer is bound to the PEP it answers, by the PEP id of H1 (the first 16 bytes of the SHA-256 of the
     # instance public key). A cFS run's receipts are signed by that same instance key, so the run names its PEP.
     pep = hashlib.sha256((run / "instance.pub").read_bytes()).digest()[:16].hex()
@@ -733,11 +736,18 @@ def _check_operator_receipts(run: Path, cases, receipts, sets) -> None:
         answer = kinds.read_answer(body)
         if answer["pep"] != pep:
             raise Bad(f"case {case['id']}: the operator answer is bound to another PEP (OP2)")
+        if answer["receipt"] in closed:
+            raise Bad(f"case {case['id']}: a second answer to an escalation its first answer closed (OP3)")
+        closed.add(answer["receipt"])
         doc = escalations.get(answer["receipt"])
         floor = sets[case["install"]]
         if doc is None or doc["policy_sha256"] != floor.policy_sha256 or envelope.policy_sha256 != floor.policy_sha256 \
                 or doc["reading_sha256"] != sha256_hex(case["readings"][index]):
             raise Bad(f"case {case['id']}: the answer names no escalation of this floor for this reading (OP3)")
+        opened = doc.get("time")
+        if not isinstance(opened, int) or isinstance(opened, bool) or \
+                max(envelope.not_before, opened) > min(envelope.expires, opened + ANSWER_LIFE):
+            raise Bad(f"case {case['id']}: the answer was never in force while its escalation was open (OP2, OP3)")
         want = {"decision": "route", "target": "allow"} if answer["answer"] == "allow" else {
             "decision": "refuse", "cause": causes.name(doc["cause_code"]), "cause_code": doc["cause_code"]}
         if {key: receipt.get(key) for key in ("decision", "target", "cause", "cause_code")} != {
