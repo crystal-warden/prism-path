@@ -14,8 +14,9 @@ and whose policy hash is the one of the action floor that escalated. It is signe
 600 seconds and is offered on the app's command topic in the offer and chunk frames of any sealed envelope
 (`table.frames`). `OUT` is a statement file (`table.statement_file`) holding the sealed envelope and its body.
 
-The app applies an answer once and keeps its request unsent: an operator receipt has no case in a core run yet, so the
-answer shows in the app's `answered` state record and its event, and the request it answers is not republished.
+The app applies an answer once, appends it to its run's install.jsonl and receipts the request it answers in a case
+of basis `operator` under the floor's image, a route to allow or the escalation's own refusal. An answer `allow` then
+carries out the request. The escalation documents are in the run's escalations.jsonl (`downlink.escalations`).
 """
 from __future__ import annotations
 

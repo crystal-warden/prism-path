@@ -1779,8 +1779,9 @@ impl<A: Adapter> Pep<A> {
     /// IS4, IS6, IS12, CL3: what applying the whole set `staged` over `record` meets, (cause or None, whether it stands
     /// out). It is held to its `seq` again, to the target's own check over the whole set, to the ceiling `record`
     /// holds (an action floor and a fallback policy inside it, and a ceiling the held ones are inside), and to the
-    /// widening rule of IS12.
-    fn set_refusal(&self, staged: &InstallSet, record: &Record) -> (Option<String>, bool) {
+    /// widening rule of IS12, under which a ceiling after a lost one, `ceiling_lost`, is larger unless it is the lost
+    /// one sent again (IS10).
+    fn set_refusal(&self, staged: &InstallSet, record: &Record, ceiling_lost: bool) -> (Option<String>, bool) {
         let kind = staged.kind;
         if staged.seq() <= record.seq(kind) {
             return (Some(SEQ_REPLAY.to_string()), false);
@@ -1805,7 +1806,12 @@ impl<A: Adapter> Pep<A> {
                 }
             }
         }
-        let (cause, stands_out) = install::widens_ok(kind, record.held(kind), staged);
+        // IS10, IS12: a ceiling after a lost one is held to the set the record names for it
+        let lost = install::Lost {
+            lost: kind == SetKind::Ceiling && ceiling_lost,
+            named: self.installed.lost_ceiling.as_ref().filter(|_| kind == SetKind::Ceiling),
+        };
+        let (cause, stands_out) = install::widens_ok(kind, record.held(kind), staged, lost);
         (cause.map(str::to_string), stands_out)
     }
 
@@ -1819,7 +1825,7 @@ impl<A: Adapter> Pep<A> {
         let staged = self.installed.staged.get(&kind).cloned().expect("a whole staged set");
         let record = self.installed.record.clone().expect("a staged set verified under a record");
         let seq = staged.seq();
-        let (cause, stands_out) = self.set_refusal(&staged, &record);
+        let (cause, stands_out) = self.set_refusal(&staged, &record, self.installed.ceiling_lost);
         if let Some(cause) = cause {
             return self.refuse_set(kind, &cause, seq);
         }
@@ -2480,7 +2486,7 @@ impl<A: Adapter> Pep<A> {
     }
 
     /// What every entry point and the periodic tick run first: an active release that no longer stands lapses
-    /// with `dist:revoked` (R5), and an expired one, or one whose freshness ran out (H16), lapses or is held (X1,
+    /// with `dist:revoked` (R5), one above the held ceiling with `dist:above-ceiling` (CL3), and an expired one, or one whose freshness ran out (H16), lapses or is held (X1,
     /// X7). A reconciling PEP runs the tests of C10 instead, which try no runtime.
     fn check_active(&mut self) -> Result<Option<Vec<u8>>, PepError> {
         if self.reconciling.is_some() {
@@ -2493,6 +2499,9 @@ impl<A: Adapter> Pep<A> {
         let Some(active) = self.active.clone() else { return Ok(None) };
         if !self.stands(&active, true) {
             return self.lapse_now(REVOKED).map(Some);
+        }
+        if !self.inside_ceiling(&active) {
+            return self.lapse_now(ABOVE_CEILING).map(Some); // CL3: also when a restart came between the two
         }
         if self.still_valid(&active, false).as_deref() != Some(EXPIRED) && !self.stale() {
             return Ok(None);
@@ -2900,7 +2909,9 @@ impl<A: Adapter> Pep<A> {
                 staged.insert(kind, set);
                 continue;
             }
-            match self.set_refusal(&set, &record).0 {
+            // IS10: the provisioning keeps a lost ceiling lost while the record it leaves still names it lost
+            let ceiling_lost = self.installed.ceiling_lost && self.installed.named_lost(&record);
+            match self.set_refusal(&set, &record, ceiling_lost).0 {
                 Some(cause) if cause == SEQ_REPLAY => continue,
                 Some(cause) => return Err(refusal(&cause)),
                 None => {}
@@ -2994,8 +3005,12 @@ impl<A: Adapter> Pep<A> {
             None => self.installed.clear()?,
             Some(record) => {
                 self.installed.mark(true, false, None)?; // IS9: before the first statement is applied
-                self.installed.ceiling_lost = false;
-                let held_ceiling = record.held(SetKind::Ceiling).is_some();
+                // IS10: a lost ceiling stays lost, and marked, while the record keeps the install sequences; only the
+                // empty ceiling, which cleared the mark, and a key set that shares no key, which starts them again,
+                // leave no ceiling to hold
+                let still_lost = self.installed.named_lost(&record);
+                self.installed.ceiling_lost = self.installed.ceiling_lost && still_lost;
+                let held_ceiling = record.held(SetKind::Ceiling).is_some() || still_lost;
                 self.installed.save(record)?;
                 self.installed.mark(false, false, Some(held_ceiling))?;
                 self.installed.clear_staged()?;

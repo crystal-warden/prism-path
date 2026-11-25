@@ -874,7 +874,10 @@ fn case_215_a_lost_ceiling_never_fails_open() {
     let rolled = point.pep.rollback().unwrap();
     assert_eq!(point.read(&rolled).cause.as_deref(), Some("dist:install-lost"));
     assert_eq!(point.send(&floor_set(&good_table(), &seq(1))).cause.as_deref(), Some("dist:install-lost"));
-    assert_eq!(point.send(&ceiling_set(&tables, &SetArgs { widens: false, ..seq(2) })).event, "install-applied");
+    // IS12: the resend follows the lost set, so it names that set's policy hash and not the empty string
+    assert_eq!(point.send(&ceiling_set(&tables, &SetArgs { widens: false, ..seq(2) })).cause.as_deref(), Some("dist:widening-unsigned"));
+    let lost = h(&install::ceiling_body(&tables).unwrap());
+    assert_eq!(point.send(&ceiling_set(&tables, &SetArgs { widens: false, replaces: Some(lost), ..seq(2) })).event, "install-applied");
     let sealed = ppt(&image(5), &Args { widens: false, replaces: Some(h(&image(7))), ..at(3) });
     assert_eq!(point.send(&[(sealed, image(5))]).cause.as_deref(), Some("dist:widening-unsigned"));
     assert_eq!(point.send(&[covering_statement(&ppt(&image(5), &at(3))).unwrap(), (ppt(&image(5), &at(3)), image(5))]).event, "staged");
@@ -1400,4 +1403,99 @@ fn case_299_a_staged_change_statement_survives_a_restart() {
     point.reopen();
     assert!(point.pep.installed.staged.get(&SetKind::Floor).is_some_and(|set| set.change_body.is_some()));
     assert_eq!(about(&point.send(&floor_set(&narrow, &args))), ("install-applied", None));
+}
+
+// ------------------------------------------------------------------ IS10, IS12: a ceiling after a lost one
+
+fn lose_ceiling(point: &mut Installer, tables: &[&[u8]]) {
+    let list = h(&install::ceiling_body(tables).unwrap()).to_string();
+    for dir in ["install/blobs", "install-copy/blobs"] {
+        std::fs::write(point.dist().join(dir).join(&list), b"unreadable").unwrap();
+    }
+    point.reopen();
+    assert!(point.pep.installed.ceiling_lost, "lost at the start");
+}
+
+/// case_307: IS10, IS12, the `host` half. A PEP whose ceiling no copy holds is sent, with `widens` false, the empty
+/// ceiling, a wider list, a narrower list whose `replaces` is the lost list's policy hash and the lost list again with
+/// `replaces` empty, each `dist:widening-unsigned` with the ceiling still lost, also after a restart; then the lost
+/// list again naming the lost hash is `install-applied`. On another such PEP a narrower list with `widens` true is
+/// `install-widened`. A PEP whose ceiling is lost and that is provisioned with an anchor sharing its install keys
+/// stays lost, before and after a restart, and refuses a release with `dist:install-lost`.
+#[test]
+fn case_307_a_ceiling_after_a_lost_one_stands_out_unless_it_is_the_lost_one_again() {
+    let tables: [&[u8]; 2] = [&image(5), &image(7)];
+    let lost = h(&install::ceiling_body(&tables).unwrap());
+    let mut point = Installer::new("307", 2);
+    point.send(&ceiling_set(&tables, &SetArgs { widens: false, ..seq(1) }));
+    point.commit(&image(5), &at(1));
+    lose_ceiling(&mut point, &tables);
+    let quiet = |replaces: Option<Hex64>| SetArgs { widens: false, replaces, ..seq(2) };
+    let unsigned = Some("dist:widening-unsigned");
+    assert_eq!(point.send(&empty_set(ArtifactKind::InstallCeiling, &quiet(Some(lost.clone())))).cause.as_deref(), unsigned);
+    assert_eq!(point.send(&ceiling_set(&[&image(5), &image(7), &image(9)], &quiet(Some(lost.clone())))).cause.as_deref(), unsigned);
+    assert_eq!(point.send(&ceiling_set(&[&image(5)], &quiet(Some(lost.clone())))).cause.as_deref(), unsigned);
+    assert_eq!(point.send(&ceiling_set(&tables, &quiet(None))).cause.as_deref(), unsigned);
+    assert!(point.pep.installed.ceiling_lost);
+    point.reopen();
+    assert!(point.pep.installed.ceiling_lost, "still named, still lost after a restart");
+    assert_eq!(point.pep.installed.lost_ceiling.as_ref().map(|doc| doc.policy_sha256.clone()), Some(lost.clone()));
+    assert_eq!(about(&point.send(&ceiling_set(&tables, &quiet(Some(lost.clone()))))), ("install-applied", None));
+    assert!(!point.pep.installed.ceiling_lost);
+
+    let mut other = Installer::new("307b", 2);
+    other.send(&ceiling_set(&tables, &SetArgs { widens: false, ..seq(1) }));
+    lose_ceiling(&mut other, &tables);
+    let widened = other.send(&ceiling_set(&[&image(5)], &SetArgs { widens: true, ..seq(2) }));
+    assert_eq!(about(&widened), ("install-widened", Some("dist:install-widened")));
+
+    let mut kept = Installer::new("307c", 2);
+    kept.send(&ceiling_set(&tables, &SetArgs { widens: false, ..seq(1) }));
+    kept.commit(&image(5), &at(1));
+    lose_ceiling(&mut kept, &tables);
+    provision(&mut kept, &anchor2(&INSTALL_KEYS, 2, &[], 1), &[]).unwrap(); // IS6: a higher install trust seq, the same keys
+    assert!(kept.pep.installed.ceiling_lost && kept.pep.installed.marks.ceiling);
+    let release = ppt(&image(7), &at(2));
+    let staged = |point: &mut Installer| {
+        let statement = covering_statement(&release).unwrap();
+        point.send(&[statement, (release.clone(), image(7))])
+    };
+    assert_eq!(staged(&mut kept).cause.as_deref(), Some("dist:install-lost"));
+    kept.reopen();
+    assert!(kept.pep.installed.ceiling_lost, "the mark is kept, so the restart knows a ceiling was held");
+    assert_eq!(staged(&mut kept).cause.as_deref(), Some("dist:install-lost"));
+}
+
+/// IS10: a crash between the first ceiling's mark and its record leaves the mark set and the record's ceiling
+/// sequence at 0, which no ceiling ever reached, so the PEP is not frozen as one whose ceiling is lost (Python's
+/// `seqs[CEILING]` test).
+#[test]
+fn a_first_ceiling_cut_between_its_mark_and_its_record_is_no_lost_ceiling() {
+    let mut point = Installer::new("first_mark", 2);
+    point.send(&floor_set(&good_table(), &seq(1)));
+    let marks = std::fs::read_to_string(point.dist().join("marks.json")).unwrap();
+    std::fs::write(point.dist().join("marks.json"), marks.replace("\"ceiling\":false", "\"ceiling\":true")).unwrap();
+    point.reopen();
+    assert!(point.pep.installed.marks.ceiling && !point.pep.installed.ceiling_lost);
+    let release = ppt(&image(5), &at(1));
+    let statement = covering_statement(&release).unwrap();
+    assert_eq!(point.send(&[statement, (release, image(5))]).event, "staged");
+}
+
+/// IS12, OP4: a looser `answer_rate` is larger, as a looser `rate` is, so with `widens` false it is
+/// `dist:widening-unsigned`, and a tighter one is applied.
+#[test]
+fn a_looser_answer_rate_widens_an_action_floor() {
+    let mut point = Installer::new("answer_rate", 2);
+    let meta = |allows: i64, window: i64| {
+        let mut meta = table_meta(&good_table());
+        meta["answer_rate"] = json!({"allows": allows, "window": window});
+        meta
+    };
+    point.send(&floor_set(&good_table(), &SetArgs { meta: Some(meta(5, 60)), ..seq(1) }));
+    let held = Some(h(&good_table()));
+    let quiet = |seq_: i64, meta_: serde_json::Value| SetArgs { meta: Some(meta_), widens: false, replaces: held.clone(), ..seq(seq_) };
+    assert_eq!(point.send(&floor_set(&good_table(), &quiet(2, meta(9, 60)))).cause.as_deref(), Some("dist:widening-unsigned"));
+    assert_eq!(point.send(&floor_set(&good_table(), &quiet(2, meta(5, 30)))).cause.as_deref(), Some("dist:widening-unsigned"));
+    assert_eq!(about(&point.send(&floor_set(&good_table(), &quiet(2, meta(3, 60))))), ("install-applied", None));
 }

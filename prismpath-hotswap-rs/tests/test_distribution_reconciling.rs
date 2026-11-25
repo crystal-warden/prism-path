@@ -991,3 +991,78 @@ fn a_running_release_that_is_revoked_is_named_with_dist_revoked() {
     let named = entry(&applied).unwrap();
     assert_eq!((named.owed, named.cause.as_deref(), running(&named)), ("committed", Some("dist:revoked"), Some((prefix(&old()), 1))));
 }
+
+/// Every file under `dir`, by its path relative to `dir`.
+fn files_of(dir: &std::path::Path) -> std::collections::BTreeMap<std::path::PathBuf, Vec<u8>> {
+    let mut out = std::collections::BTreeMap::new();
+    let mut todo = vec![dir.to_path_buf()];
+    while let Some(next) = todo.pop() {
+        for entry in std::fs::read_dir(&next).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                todo.push(path);
+            } else {
+                out.insert(path.strip_prefix(dir).unwrap().to_path_buf(), std::fs::read(&path).unwrap());
+            }
+        }
+    }
+    out
+}
+
+/// What a power loss right after a ceiling was durable leaves: the install part, the marks, the counter and the audit
+/// log as they are now, and every other file of the state directory, the active record, the intent record, the
+/// blobs and the runtime's own, as they were in `before`.
+fn cut_after_the_ceiling(dir: &std::path::Path, before: &std::collections::BTreeMap<std::path::PathBuf, Vec<u8>>) {
+    let durable = |path: &std::path::Path| {
+        ["dist/install", "dist/install-copy", "dist/marks.json", "dist/counter.json", "dist/audit.log"].iter().any(|kept| path.starts_with(kept))
+    };
+    for path in files_of(dir).keys().filter(|path| !durable(path)) {
+        std::fs::remove_file(dir.join(path)).unwrap();
+    }
+    for (path, data) in before.iter().filter(|(path, _)| !durable(path)) {
+        std::fs::create_dir_all(dir.join(path).parent().unwrap()).unwrap();
+        std::fs::write(dir.join(path), data).unwrap();
+    }
+}
+
+/// case_306: CL3, C10, IS12, the `host` half. A PEP commits a release inside its ceiling and the power is lost after
+/// a narrower ceiling the release is above is durable and before the lapse: at the restart the release lapses with
+/// `dist:above-ceiling`. A PEP reconciling a commit with its runtime withdrawn is cut the same way: at the restart its
+/// held release falls with `dist:above-ceiling` at the tests of C10 and is never installed.
+#[test]
+fn case_306_a_power_loss_between_a_narrower_ceiling_and_its_lapse_still_lapses_the_release() {
+    for run in ["active", "reconciling"] {
+        let mut rig = Rig::installing(&format!("306_{run}"));
+        rig.send(&installs::ceiling_set(&[&old(), &new()], &installs::SetArgs { widens: false, ..installs::seq(1) }));
+        rig.commit_at(&old(), 1);
+        if run == "reconciling" {
+            rig.stage(&ppt(&new(), &at(2)), &new());
+            rig.switches.set(true, false);
+            rig.pep.commit(STREAM, 2, &h(&new()), 0).unwrap();
+            assert_eq!(rig.pep.state(), "reconciling");
+        }
+        rig.pep.drain();
+        let dir = rig.scratch.join("host");
+        let before = files_of(&dir);
+        let narrower = installs::SetArgs {
+            widens: false,
+            replaces: rig.pep.installed.held(installs_kind()).map(|set| set.policy_sha256().clone()),
+            ..installs::seq(2)
+        };
+        let keep = if run == "reconciling" { old() } else { new() }; // the held release is not on the new list
+        assert_eq!(rig.send(&installs::ceiling_set(&[&keep], &narrower)).event, "install-applied");
+        cut_after_the_ceiling(&dir, &before);
+        rig.switches.set(false, false); // the runtime would now take the release
+        let activations = rig.switches.tries().0;
+        rig.reopen();
+        let records = rig.records();
+        let lapsed: Vec<_> = records.iter().filter(|record| record.event == "lapsed").collect();
+        assert_eq!(lapsed.len(), 1, "{run}: {:?}", records.iter().map(|record| (record.event, record.cause.clone())).collect::<Vec<_>>());
+        assert_eq!((lapsed[0].cause.as_deref(), lapsed[0].active_seq), (Some("dist:above-ceiling"), 0), "{run}");
+        assert!(records.iter().all(|record| record.event != "committed"), "{run}");
+        assert_eq!((rig.pep.state(), rig.host_active()), ("no-policy", json!(null)), "{run}");
+        if run == "reconciling" {
+            assert_eq!(rig.switches.tries().0, activations, "never installed");
+        }
+    }
+}

@@ -10,14 +10,20 @@
  *
  * The script's lines, each printing "records <hex of each state record the step made>" and then
  * "step <hold began> <hold ended> <provisioned> <locked> <floor at minimum> <table cause> <table busy> <dropped>
- * <answered> <answer allow>", and after a step that applied an operator's answer "answered <envelope id> <receipt>":
+ * <answered> <answer allow>", and after a step that applied an operator's answer "answered <envelope id> <receipt>
+ * <operator case written> <record error> <its receipt index> <the request it carries out, hex> <enact> <not enacted>
+ * <message id hex> <function code> <size>", the command an answer `allow` sends, or "-" for each of the three:
  *
  *   authority <public hex> | instance <seed hex> | anchor <document hex> | stale <seconds>
  *   bring <statement file hex> | boot_release <statement file hex>     what the next start is provisioned with
  *   start <expiry 0|1> <lost floor 0 lock|1 minimum> <min seq> <now>   as the app's init: the stores as they are
  *   frame <hex> <now ms> <now> | control <frame hex> <image sig hex> <now ms> <now>
  *   tick <now ms> <now> | rollback <now> | beat <now>
- *   propose <payload hex> <monitor ok 0|1> <monitor age or -> <now>   also prints "decision <kind> <cause> <rule>
+ *   propose <payload hex> <monitor ok 0|1> <monitor age or -> <now> [<function code> [<size>]]   proposed as
+ *                                                                      command code 0, or the one given, on
+ *                                                                      PROPOSED_MID, with the size its header gives,
+ *                                                                      8 and the payload's unless given; also prints
+ *                                                                      "decision <kind> <cause> <rule>
  *                                                                      <basis> <held> <receipted> <receipt>
  *                                                                      <not enacted> <record error> <escalated>",
  *                                                                      and "escalation <receipt hash hex>" for an
@@ -25,6 +31,8 @@
  *   reset                    a processor reset: memory is lost, the store images and the files are kept
  *   power                    a power on reset: the store images are lost, the files are kept
  *   lose record | lose copy  that store image no longer reads
+ *   older                    the rates part in both copies written again as a build before an escalation kept its
+ *                            command wrote it, the open escalations in the older layout
  *   unlink <file>            a file of DIST_DIR is gone
  *   tblfail <n>              the next n table loads are refused by the table service for its own reason
  *   groundload <table hex>   a table loaded by the ground from a file: prints "validation <cause>"
@@ -251,8 +259,56 @@ static void PrintStep(void)
         {
             printf("%02x", s->AnswerReceipt[j]);
         }
-        printf("\n");
+        printf(" %d %d %llu ", s->AnswerReceipted, s->AnswerRecordError, (unsigned long long)s->AnswerIndex);
+        for (j = 0; j < s->AnswerRequestLen; j++)
+        {
+            printf("%02x", s->AnswerRequest[j]);
+        }
+        printf("%s %d %d ", s->AnswerRequestLen ? "" : "-", s->AnswerEnact, s->AnswerNotEnacted);
+        if (s->AnswerEnact)
+        {
+            printf("%08x %u %u\n", (unsigned)s->AnswerCommand.MsgId, (unsigned)s->AnswerCommand.FcnCode,
+                   (unsigned)s->AnswerCommand.Size);
+        }
+        else
+        {
+            printf("- - -\n");
+        }
     }
+}
+
+#define PROPOSED_MID 0x1882u /* the proposals' message id the script's commands are proposed on */
+#define COMMAND_MAX  18u     /* the app's command struct: a command header and its ten bytes of payload */
+
+/* the size of an escalation in the layout before it kept its command: the members up to its cause, padded to the
+ * escalation's alignment */
+typedef struct
+{
+    char          c;
+    pp_escalation e;
+} Aligned_t;
+#define OLDER_ESCALATION                                                                                               \
+    ((offsetof(pp_escalation, command_len) + offsetof(Aligned_t, e) - 1) / offsetof(Aligned_t, e) *                    \
+     offsetof(Aligned_t, e))
+
+/* the rates part as an older build packs it: the same part with each open escalation cut to the older layout */
+static void Older(void)
+{
+    static uint8_t now[PP_APP_RATES_BYTES], then[PP_APP_RATES_BYTES];
+    size_t         n    = pp_durable_pack(&Dist.Pep.d, PP_PART_RATES, now, sizeof(now));
+    size_t         open = Dist.Pep.d.n_open;
+    size_t         head = n - open * sizeof(pp_escalation);
+    size_t         k, len;
+
+    memcpy(then, now, head);
+    for (k = 0; k < open; k++)
+    {
+        memcpy(then + head + k * OLDER_ESCALATION, now + head + k * sizeof(pp_escalation), OLDER_ESCALATION);
+    }
+    len = head + open * OLDER_ESCALATION;
+    memcpy(SavedCopy.Bytes + CopyAt(PP_APP_COPY_RATES), then, len);
+    SavedCopy.Len[PP_APP_COPY_RATES] = (uint32_t)len;
+    (void)WriteFile(NULL, PP_AppDistFiles[3 + PP_APP_COPY_RATES], then, len);
 }
 
 static PP_AppDistConfig_t Config;
@@ -336,6 +392,7 @@ int main(int argc, char **argv)
                 return 2;
             }
             Dist.Store = (PP_AppStore_t){NULL, SaveRecord, SaveCopy, WriteFile, ReadFile, LoadTable};
+            Dist.Io    = &Io; /* a new run's files are begun by the start, which writes install.jsonl */
             if (record != PP_APP_STORE_ABSENT)
             {
                 memcpy(&Dist.Record, &SavedRecord, sizeof(SavedRecord));
@@ -354,6 +411,9 @@ int main(int argc, char **argv)
                     copy = PP_APP_STORE_LOST;
                 }
             }
+            Config.CommandMid = PROPOSED_MID; /* as the app gives it: its proposals' id, a header to its struct */
+            Config.CommandMin = 8u;
+            Config.CommandMax = COMMAND_MAX;
             if (PP_AppDist_Start(&Dist, &Config, record, copy, 0, now) != 0)
             {
                 printf("refused-start\n");
@@ -365,7 +425,6 @@ int main(int argc, char **argv)
             }
             else
             {
-                (void)PP_Run_Begin(&Io);
                 (void)PP_AppDist_SaveRun(&Dist);
             }
             (void)PP_AppDist_LoadActive(&Dist);
@@ -417,7 +476,10 @@ int main(int argc, char **argv)
         {
             PP_AppDecision_t d;
             int              ok = 1;
-            if (sscanf(rest, "%s %d %s %lld", a, &ok, b, &now) != 4)
+            unsigned         fc = 0;
+            PP_AppCommand_t  command;
+            unsigned         size = 0;
+            if (sscanf(rest, "%s %d %s %lld %u %u", a, &ok, b, &now, &fc, &size) < 4 || fc > 127 || size > 0xFFFFu)
             {
                 return 2;
             }
@@ -427,8 +489,11 @@ int main(int argc, char **argv)
             {
                 bytes[6] = (uint8_t)ok; /* the app writes its own reading of the monitor into the byte it decides */
             }
-            PP_AppDist_Propose(&Dist, &Io, bytes, n, strcmp(b, "-") == 0 ? PP_AGE_NONE : (uint32_t)strtoul(b, NULL, 10),
-                               now, &d);
+            command.MsgId   = PROPOSED_MID;
+            command.FcnCode = (uint8_t)fc;
+            command.Size    = (uint16_t)(size ? size : 8u + n); /* a command header, then the payload */
+            PP_AppDist_Propose(&Dist, &Io, bytes, n, &command,
+                               strcmp(b, "-") == 0 ? PP_AGE_NONE : (uint32_t)strtoul(b, NULL, 10), now, &d);
             PrintStep();
             printf("decision %u %u %d %u %d %d %llu %d %d %d\n", d.Kind, d.Cause, d.Rule, d.Basis, d.Held, d.Receipted,
                    (unsigned long long)d.Receipt, d.NotEnacted, d.RecordError, d.Escalated);
@@ -468,6 +533,11 @@ int main(int argc, char **argv)
             {
                 SavedCopy.Magic ^= 1u;
             }
+            printf("records\nstep 0 0 0 0 0 0 0 0 0 0\n");
+        }
+        else if (strcmp(word, "older") == 0)
+        {
+            Older();
             printf("records\nstep 0 0 0 0 0 0 0 0 0 0\n");
         }
         else if (strcmp(word, "unlink") == 0)

@@ -225,3 +225,16 @@ def test_a_hold_opens_a_case_of_its_own_and_the_run_still_verifies(run_check, tm
         assert line == reference.receipt_line(policy, idx, case_id, case_reading, payload)
     summary = downlink.verify(out, keys)
     assert summary["cases"] == 3 and summary["disagree"] == 0 and summary["receipts"] == len(payloads)
+
+
+def test_the_apps_cause_registry_is_what_the_generator_writes_now():
+    """OP3: the app names an operator's refusal by the registry it is built with (fsw/inc/prismpath_app_causes.h),
+    generated from prismpath/kernel/causes.py, so a refusal it receipts is spelled as the verifier reads it."""
+    import importlib.util
+    path = Path(__file__).resolve().parents[3] / "prismpath" / "portable" / "gen_causes_rs.py"
+    spec = importlib.util.spec_from_file_location("gen_causes_rs", path)
+    generator = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(generator)
+    header = Path(__file__).resolve().parents[1] / "prismpath_app" / "fsw" / "inc" / "prismpath_app_causes.h"
+    assert header.read_text(encoding="utf-8") == generator.build_c(), (
+        "prismpath_app_causes.h is stale; run prismpath/portable/gen_causes_rs.py and commit the result")

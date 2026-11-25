@@ -148,12 +148,12 @@ fn case_043_another_policy_at_the_staged_seq_is_incomplete() {
     assert_eq!(point.pep.staged().unwrap().policy_sha256, h(&old()));
 }
 
-/// case_306: C2, E10, the `host` half. A release whose signed release id covers a `policy.ppt` and a `policy.spiral`
+/// case_308: C2, E10, the `host` half. A release whose signed release id covers a `policy.ppt` and a `policy.spiral`
 /// is committed with only its `policy.ppt` staged: `dist:incomplete`, and the release active before stays active. The
 /// same table with a release id over what is staged then commits.
 #[test]
-fn case_306_a_withheld_artifact_at_commit_on_host_is_incomplete() {
-    let mut point = Point::new("306");
+fn case_308_a_withheld_artifact_at_commit_on_host_is_incomplete() {
+    let mut point = Point::new("308");
     point.commit_at(&old(), 1);
     let release = env::release_id(&[(ArtifactKind::PolicyPpt, h(&new())), (ArtifactKind::PolicySpiral, h(b"a withheld spiral"))]).unwrap();
     let record = point.commit(&new(), &Args { release: Some(release), ..at(2) });

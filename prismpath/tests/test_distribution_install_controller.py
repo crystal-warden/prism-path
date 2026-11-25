@@ -1016,7 +1016,10 @@ def test_case_215_a_lost_ceiling_holds_everything_until_a_ceiling_comes_again(tm
     assert lost(point.stage(image(7), 3)) == "dist:install-lost"
     assert lost(point.pep.rollback()) == "dist:install-lost"
     assert point.send(_table_floor(point, floor_table, 1))[-1].cause == "dist:install-lost"
-    assert point.send(listed(2, image(6), image(7)))[-1].event == "install-applied"
+    # IS12: after a lost ceiling only a byte for byte resend is no widening, so a narrower list stands out too
+    assert point.send(listed(2, image(6), image(7)))[-1].cause == "dist:widening-unsigned"
+    narrower = point.install_set(CEILING, {kinds.POLICY_LIST: install.ceiling_body([image(6), image(7)])}, 2, widens=True)
+    assert point.send(narrower)[-1].event == "install-widened"
     assert state_record.read(point.stage(image(7), 3), point.key.public_raw).event == "staged"
     second = _host_point(tmp_path, "second")
     second.send(second.install_set(CEILING, {kinds.POLICY_LIST: install.ceiling_body([image(5)])}, 1))

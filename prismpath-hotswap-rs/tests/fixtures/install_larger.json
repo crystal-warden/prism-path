@@ -1,0 +1,1388 @@
+{
+ "format": "prismpath.install-larger-corpus/1",
+ "note": "IS12 as a table. Each row is what the PEP holds before, the set it is sent, the signer's widens and replaces, and the event and cause of the PEP's answer. Every implementation replays every row on each kind of `kinds` it has.",
+ "rows": [
+  {
+   "before": "none",
+   "expect": {
+    "cause": null,
+    "event": "install-applied"
+   },
+   "held": null,
+   "kinds": [
+    "host",
+    "mesh"
+   ],
+   "name": "ceiling_first",
+   "new": {
+    "list": [
+     "T1"
+    ]
+   },
+   "replaces": "",
+   "set": "ceiling",
+   "widens": false
+  },
+  {
+   "before": "none",
+   "expect": {
+    "cause": "dist:widening-unsigned",
+    "event": "refused"
+   },
+   "held": null,
+   "kinds": [
+    "host",
+    "mesh"
+   ],
+   "name": "ceiling_first_replacing_another",
+   "new": {
+    "list": [
+     "T1"
+    ]
+   },
+   "replaces": "other",
+   "set": "ceiling",
+   "widens": false
+  },
+  {
+   "before": "none",
+   "expect": {
+    "cause": "dist:install-widened",
+    "event": "install-widened"
+   },
+   "held": null,
+   "kinds": [
+    "host",
+    "mesh"
+   ],
+   "name": "ceiling_first_said_to_widen",
+   "new": {
+    "list": [
+     "T1"
+    ]
+   },
+   "replaces": "",
+   "set": "ceiling",
+   "widens": true
+  },
+  {
+   "before": "none",
+   "expect": {
+    "cause": null,
+    "event": "install-applied"
+   },
+   "held": null,
+   "kinds": [
+    "host",
+    "mesh"
+   ],
+   "name": "ceiling_empty_with_none_held",
+   "new": "empty",
+   "replaces": "",
+   "set": "ceiling",
+   "widens": false
+  },
+  {
+   "before": "held",
+   "expect": {
+    "cause": null,
+    "event": "install-applied"
+   },
+   "held": {
+    "list": [
+     "T1",
+     "T2"
+    ]
+   },
+   "kinds": [
+    "host",
+    "mesh"
+   ],
+   "name": "ceiling_narrower",
+   "new": {
+    "list": [
+     "T1"
+    ]
+   },
+   "replaces": "held",
+   "set": "ceiling",
+   "widens": false
+  },
+  {
+   "before": "held",
+   "expect": {
+    "cause": null,
+    "event": "install-applied"
+   },
+   "held": {
+    "list": [
+     "T1",
+     "T2"
+    ]
+   },
+   "kinds": [
+    "host",
+    "mesh"
+   ],
+   "name": "ceiling_the_same_list",
+   "new": {
+    "list": [
+     "T1",
+     "T2"
+    ]
+   },
+   "replaces": "held",
+   "set": "ceiling",
+   "widens": false
+  },
+  {
+   "before": "held",
+   "expect": {
+    "cause": "dist:widening-unsigned",
+    "event": "refused"
+   },
+   "held": {
+    "list": [
+     "T1",
+     "T2"
+    ]
+   },
+   "kinds": [
+    "host",
+    "mesh"
+   ],
+   "name": "ceiling_wider",
+   "new": {
+    "list": [
+     "T1",
+     "T2",
+     "T3"
+    ]
+   },
+   "replaces": "held",
+   "set": "ceiling",
+   "widens": false
+  },
+  {
+   "before": "held",
+   "expect": {
+    "cause": "dist:install-widened",
+    "event": "install-widened"
+   },
+   "held": {
+    "list": [
+     "T1",
+     "T2"
+    ]
+   },
+   "kinds": [
+    "host",
+    "mesh"
+   ],
+   "name": "ceiling_wider_said_to_widen",
+   "new": {
+    "list": [
+     "T1",
+     "T2",
+     "T3"
+    ]
+   },
+   "replaces": "held",
+   "set": "ceiling",
+   "widens": true
+  },
+  {
+   "before": "held",
+   "expect": {
+    "cause": "dist:widening-unsigned",
+    "event": "refused"
+   },
+   "held": {
+    "list": [
+     "T1",
+     "T2"
+    ]
+   },
+   "kinds": [
+    "host",
+    "mesh"
+   ],
+   "name": "ceiling_another_hash",
+   "new": {
+    "list": [
+     "T3"
+    ]
+   },
+   "replaces": "held",
+   "set": "ceiling",
+   "widens": false
+  },
+  {
+   "before": "held",
+   "expect": {
+    "cause": "dist:widening-unsigned",
+    "event": "refused"
+   },
+   "held": {
+    "list": [
+     "T1",
+     "T2"
+    ]
+   },
+   "kinds": [
+    "host",
+    "mesh"
+   ],
+   "name": "ceiling_empty_removes_the_bound",
+   "new": "empty",
+   "replaces": "held",
+   "set": "ceiling",
+   "widens": false
+  },
+  {
+   "before": "held",
+   "expect": {
+    "cause": "dist:install-widened",
+    "event": "install-widened"
+   },
+   "held": {
+    "list": [
+     "T1",
+     "T2"
+    ]
+   },
+   "kinds": [
+    "host",
+    "mesh"
+   ],
+   "name": "ceiling_empty_said_to_widen",
+   "new": "empty",
+   "replaces": "held",
+   "set": "ceiling",
+   "widens": true
+  },
+  {
+   "before": "held",
+   "expect": {
+    "cause": "dist:widening-unsigned",
+    "event": "refused"
+   },
+   "held": {
+    "list": [
+     "T1",
+     "T2"
+    ]
+   },
+   "kinds": [
+    "host",
+    "mesh"
+   ],
+   "name": "ceiling_narrower_replacing_none",
+   "new": {
+    "list": [
+     "T1"
+    ]
+   },
+   "replaces": "",
+   "set": "ceiling",
+   "widens": false
+  },
+  {
+   "before": "held",
+   "expect": {
+    "cause": "dist:install-widened",
+    "event": "install-widened"
+   },
+   "held": {
+    "list": [
+     "T1",
+     "T2"
+    ]
+   },
+   "kinds": [
+    "host",
+    "mesh"
+   ],
+   "name": "ceiling_narrower_said_to_widen",
+   "new": {
+    "list": [
+     "T1"
+    ]
+   },
+   "replaces": "held",
+   "set": "ceiling",
+   "widens": true
+  },
+  {
+   "before": "lost",
+   "expect": {
+    "cause": null,
+    "event": "install-applied"
+   },
+   "held": {
+    "list": [
+     "T1",
+     "T2"
+    ]
+   },
+   "kinds": [
+    "host",
+    "mesh"
+   ],
+   "name": "ceiling_lost_resent",
+   "new": {
+    "list": [
+     "T1",
+     "T2"
+    ]
+   },
+   "replaces": "held",
+   "set": "ceiling",
+   "widens": false
+  },
+  {
+   "before": "lost",
+   "expect": {
+    "cause": "dist:widening-unsigned",
+    "event": "refused"
+   },
+   "held": {
+    "list": [
+     "T1",
+     "T2"
+    ]
+   },
+   "kinds": [
+    "host",
+    "mesh"
+   ],
+   "name": "ceiling_lost_resent_replacing_none",
+   "new": {
+    "list": [
+     "T1",
+     "T2"
+    ]
+   },
+   "replaces": "",
+   "set": "ceiling",
+   "widens": false
+  },
+  {
+   "before": "lost",
+   "expect": {
+    "cause": "dist:widening-unsigned",
+    "event": "refused"
+   },
+   "held": {
+    "list": [
+     "T1",
+     "T2"
+    ]
+   },
+   "kinds": [
+    "host",
+    "mesh"
+   ],
+   "name": "ceiling_lost_resent_replacing_another",
+   "new": {
+    "list": [
+     "T1",
+     "T2"
+    ]
+   },
+   "replaces": "other",
+   "set": "ceiling",
+   "widens": false
+  },
+  {
+   "before": "lost",
+   "expect": {
+    "cause": "dist:widening-unsigned",
+    "event": "refused"
+   },
+   "held": {
+    "list": [
+     "T1",
+     "T2"
+    ]
+   },
+   "kinds": [
+    "host",
+    "mesh"
+   ],
+   "name": "ceiling_lost_then_narrower",
+   "new": {
+    "list": [
+     "T1"
+    ]
+   },
+   "replaces": "held",
+   "set": "ceiling",
+   "widens": false
+  },
+  {
+   "before": "lost",
+   "expect": {
+    "cause": "dist:widening-unsigned",
+    "event": "refused"
+   },
+   "held": {
+    "list": [
+     "T1",
+     "T2"
+    ]
+   },
+   "kinds": [
+    "host",
+    "mesh"
+   ],
+   "name": "ceiling_lost_then_narrower_replacing_none",
+   "new": {
+    "list": [
+     "T1"
+    ]
+   },
+   "replaces": "",
+   "set": "ceiling",
+   "widens": false
+  },
+  {
+   "before": "lost",
+   "expect": {
+    "cause": "dist:widening-unsigned",
+    "event": "refused"
+   },
+   "held": {
+    "list": [
+     "T1",
+     "T2"
+    ]
+   },
+   "kinds": [
+    "host",
+    "mesh"
+   ],
+   "name": "ceiling_lost_then_wider",
+   "new": {
+    "list": [
+     "T1",
+     "T2",
+     "T3"
+    ]
+   },
+   "replaces": "held",
+   "set": "ceiling",
+   "widens": false
+  },
+  {
+   "before": "lost",
+   "expect": {
+    "cause": "dist:widening-unsigned",
+    "event": "refused"
+   },
+   "held": {
+    "list": [
+     "T1",
+     "T2"
+    ]
+   },
+   "kinds": [
+    "host",
+    "mesh"
+   ],
+   "name": "ceiling_lost_then_empty",
+   "new": "empty",
+   "replaces": "held",
+   "set": "ceiling",
+   "widens": false
+  },
+  {
+   "before": "lost",
+   "expect": {
+    "cause": "dist:widening-unsigned",
+    "event": "refused"
+   },
+   "held": {
+    "list": [
+     "T1",
+     "T2"
+    ]
+   },
+   "kinds": [
+    "host",
+    "mesh"
+   ],
+   "name": "ceiling_lost_then_empty_replacing_none",
+   "new": "empty",
+   "replaces": "",
+   "set": "ceiling",
+   "widens": false
+  },
+  {
+   "before": "lost",
+   "expect": {
+    "cause": "dist:install-widened",
+    "event": "install-widened"
+   },
+   "held": {
+    "list": [
+     "T1",
+     "T2"
+    ]
+   },
+   "kinds": [
+    "host",
+    "mesh"
+   ],
+   "name": "ceiling_lost_then_empty_said_to_widen",
+   "new": "empty",
+   "replaces": "",
+   "set": "ceiling",
+   "widens": true
+  },
+  {
+   "before": "lost",
+   "expect": {
+    "cause": "dist:install-widened",
+    "event": "install-widened"
+   },
+   "held": {
+    "list": [
+     "T1",
+     "T2"
+    ]
+   },
+   "kinds": [
+    "host",
+    "mesh"
+   ],
+   "name": "ceiling_lost_then_narrower_said_to_widen",
+   "new": {
+    "list": [
+     "T1"
+    ]
+   },
+   "replaces": "",
+   "set": "ceiling",
+   "widens": true
+  },
+  {
+   "before": "lost",
+   "expect": {
+    "cause": "dist:install-widened",
+    "event": "install-widened"
+   },
+   "held": {
+    "list": [
+     "T1",
+     "T2"
+    ]
+   },
+   "kinds": [
+    "host",
+    "mesh"
+   ],
+   "name": "ceiling_lost_resent_said_to_widen",
+   "new": {
+    "list": [
+     "T1",
+     "T2"
+    ]
+   },
+   "replaces": "held",
+   "set": "ceiling",
+   "widens": true
+  },
+  {
+   "before": "withdrawn",
+   "expect": {
+    "cause": null,
+    "event": "install-applied"
+   },
+   "held": {
+    "list": [
+     "T1",
+     "T2"
+    ]
+   },
+   "kinds": [
+    "host",
+    "mesh"
+   ],
+   "name": "ceiling_withdrawn_then_first",
+   "new": {
+    "list": [
+     "T1"
+    ]
+   },
+   "replaces": "",
+   "set": "ceiling",
+   "widens": false
+  },
+  {
+   "before": "withdrawn",
+   "expect": {
+    "cause": "dist:widening-unsigned",
+    "event": "refused"
+   },
+   "held": {
+    "list": [
+     "T1",
+     "T2"
+    ]
+   },
+   "kinds": [
+    "host",
+    "mesh"
+   ],
+   "name": "ceiling_withdrawn_then_replacing_the_withdrawn",
+   "new": {
+    "list": [
+     "T1"
+    ]
+   },
+   "replaces": "held",
+   "set": "ceiling",
+   "widens": false
+  },
+  {
+   "before": "withdrawn",
+   "expect": {
+    "cause": "dist:install-widened",
+    "event": "install-widened"
+   },
+   "held": {
+    "list": [
+     "T1",
+     "T2"
+    ]
+   },
+   "kinds": [
+    "host",
+    "mesh"
+   ],
+   "name": "ceiling_withdrawn_then_said_to_widen",
+   "new": {
+    "list": [
+     "T1"
+    ]
+   },
+   "replaces": "",
+   "set": "ceiling",
+   "widens": true
+  },
+  {
+   "before": "none",
+   "expect": {
+    "cause": "dist:widening-unsigned",
+    "event": "refused"
+   },
+   "held": null,
+   "kinds": [
+    "host",
+    "mesh"
+   ],
+   "name": "floor_first",
+   "new": {
+    "answer_rate": [
+     5,
+     60
+    ],
+    "rate": [
+     5,
+     60
+    ],
+    "table": "F1"
+   },
+   "replaces": "",
+   "set": "floor",
+   "widens": false
+  },
+  {
+   "before": "none",
+   "expect": {
+    "cause": "dist:install-widened",
+    "event": "install-widened"
+   },
+   "held": null,
+   "kinds": [
+    "host",
+    "mesh"
+   ],
+   "name": "floor_first_said_to_widen",
+   "new": {
+    "answer_rate": [
+     5,
+     60
+    ],
+    "rate": [
+     5,
+     60
+    ],
+    "table": "F1"
+   },
+   "replaces": "",
+   "set": "floor",
+   "widens": true
+  },
+  {
+   "before": "held",
+   "expect": {
+    "cause": null,
+    "event": "install-applied"
+   },
+   "held": {
+    "answer_rate": [
+     5,
+     60
+    ],
+    "rate": [
+     5,
+     60
+    ],
+    "table": "F1"
+   },
+   "kinds": [
+    "host",
+    "mesh"
+   ],
+   "name": "floor_the_same",
+   "new": {
+    "answer_rate": [
+     5,
+     60
+    ],
+    "rate": [
+     5,
+     60
+    ],
+    "table": "F1"
+   },
+   "replaces": "held",
+   "set": "floor",
+   "widens": false
+  },
+  {
+   "before": "held",
+   "expect": {
+    "cause": "dist:widening-unsigned",
+    "event": "refused"
+   },
+   "held": {
+    "answer_rate": [
+     5,
+     60
+    ],
+    "rate": [
+     5,
+     60
+    ],
+    "table": "F1"
+   },
+   "kinds": [
+    "host",
+    "mesh"
+   ],
+   "name": "floor_the_same_replacing_none",
+   "new": {
+    "answer_rate": [
+     5,
+     60
+    ],
+    "rate": [
+     5,
+     60
+    ],
+    "table": "F1"
+   },
+   "replaces": "",
+   "set": "floor",
+   "widens": false
+  },
+  {
+   "before": "held",
+   "expect": {
+    "cause": "dist:widening-unsigned",
+    "event": "refused"
+   },
+   "held": {
+    "answer_rate": [
+     5,
+     60
+    ],
+    "rate": [
+     5,
+     60
+    ],
+    "table": "F1"
+   },
+   "kinds": [
+    "host",
+    "mesh"
+   ],
+   "name": "floor_another_table",
+   "new": {
+    "answer_rate": [
+     5,
+     60
+    ],
+    "rate": [
+     5,
+     60
+    ],
+    "table": "F2"
+   },
+   "replaces": "held",
+   "set": "floor",
+   "widens": false
+  },
+  {
+   "before": "held",
+   "expect": {
+    "cause": "dist:install-widened",
+    "event": "install-widened"
+   },
+   "held": {
+    "answer_rate": [
+     5,
+     60
+    ],
+    "rate": [
+     5,
+     60
+    ],
+    "table": "F1"
+   },
+   "kinds": [
+    "host",
+    "mesh"
+   ],
+   "name": "floor_another_table_said_to_widen",
+   "new": {
+    "answer_rate": [
+     5,
+     60
+    ],
+    "rate": [
+     5,
+     60
+    ],
+    "table": "F2"
+   },
+   "replaces": "held",
+   "set": "floor",
+   "widens": true
+  },
+  {
+   "before": "held",
+   "expect": {
+    "cause": null,
+    "event": "install-applied"
+   },
+   "held": {
+    "answer_rate": [
+     5,
+     60
+    ],
+    "rate": [
+     5,
+     60
+    ],
+    "table": "F1"
+   },
+   "kinds": [
+    "host",
+    "mesh"
+   ],
+   "name": "floor_empty",
+   "new": "empty",
+   "replaces": "held",
+   "set": "floor",
+   "widens": false
+  },
+  {
+   "before": "held",
+   "expect": {
+    "cause": "dist:widening-unsigned",
+    "event": "refused"
+   },
+   "held": {
+    "answer_rate": [
+     5,
+     60
+    ],
+    "rate": [
+     5,
+     60
+    ],
+    "table": "F1"
+   },
+   "kinds": [
+    "host",
+    "mesh"
+   ],
+   "name": "floor_rate_allows_more",
+   "new": {
+    "answer_rate": [
+     5,
+     60
+    ],
+    "rate": [
+     9,
+     60
+    ],
+    "table": "F1"
+   },
+   "replaces": "held",
+   "set": "floor",
+   "widens": false
+  },
+  {
+   "before": "held",
+   "expect": {
+    "cause": "dist:widening-unsigned",
+    "event": "refused"
+   },
+   "held": {
+    "answer_rate": [
+     5,
+     60
+    ],
+    "rate": [
+     5,
+     60
+    ],
+    "table": "F1"
+   },
+   "kinds": [
+    "host",
+    "mesh"
+   ],
+   "name": "floor_rate_shorter_window",
+   "new": {
+    "answer_rate": [
+     5,
+     60
+    ],
+    "rate": [
+     5,
+     30
+    ],
+    "table": "F1"
+   },
+   "replaces": "held",
+   "set": "floor",
+   "widens": false
+  },
+  {
+   "before": "held",
+   "expect": {
+    "cause": "dist:widening-unsigned",
+    "event": "refused"
+   },
+   "held": {
+    "answer_rate": [
+     5,
+     60
+    ],
+    "rate": [
+     5,
+     60
+    ],
+    "table": "F1"
+   },
+   "kinds": [
+    "host",
+    "mesh"
+   ],
+   "name": "floor_rate_removed",
+   "new": {
+    "answer_rate": [
+     5,
+     60
+    ],
+    "rate": null,
+    "table": "F1"
+   },
+   "replaces": "held",
+   "set": "floor",
+   "widens": false
+  },
+  {
+   "before": "held",
+   "expect": {
+    "cause": null,
+    "event": "install-applied"
+   },
+   "held": {
+    "answer_rate": [
+     5,
+     60
+    ],
+    "rate": [
+     5,
+     60
+    ],
+    "table": "F1"
+   },
+   "kinds": [
+    "host",
+    "mesh"
+   ],
+   "name": "floor_rate_tighter",
+   "new": {
+    "answer_rate": [
+     5,
+     60
+    ],
+    "rate": [
+     3,
+     60
+    ],
+    "table": "F1"
+   },
+   "replaces": "held",
+   "set": "floor",
+   "widens": false
+  },
+  {
+   "before": "held",
+   "expect": {
+    "cause": "dist:widening-unsigned",
+    "event": "refused"
+   },
+   "held": {
+    "answer_rate": [
+     5,
+     60
+    ],
+    "rate": [
+     5,
+     60
+    ],
+    "table": "F1"
+   },
+   "kinds": [
+    "host",
+    "mesh"
+   ],
+   "name": "floor_answer_rate_allows_more",
+   "new": {
+    "answer_rate": [
+     9,
+     60
+    ],
+    "rate": [
+     5,
+     60
+    ],
+    "table": "F1"
+   },
+   "replaces": "held",
+   "set": "floor",
+   "widens": false
+  },
+  {
+   "before": "held",
+   "expect": {
+    "cause": "dist:widening-unsigned",
+    "event": "refused"
+   },
+   "held": {
+    "answer_rate": [
+     5,
+     60
+    ],
+    "rate": [
+     5,
+     60
+    ],
+    "table": "F1"
+   },
+   "kinds": [
+    "host",
+    "mesh"
+   ],
+   "name": "floor_answer_rate_shorter_window",
+   "new": {
+    "answer_rate": [
+     5,
+     30
+    ],
+    "rate": [
+     5,
+     60
+    ],
+    "table": "F1"
+   },
+   "replaces": "held",
+   "set": "floor",
+   "widens": false
+  },
+  {
+   "before": "held",
+   "expect": {
+    "cause": "dist:widening-unsigned",
+    "event": "refused"
+   },
+   "held": {
+    "answer_rate": [
+     5,
+     60
+    ],
+    "rate": [
+     5,
+     60
+    ],
+    "table": "F1"
+   },
+   "kinds": [
+    "host",
+    "mesh"
+   ],
+   "name": "floor_answer_rate_removed",
+   "new": {
+    "answer_rate": null,
+    "rate": [
+     5,
+     60
+    ],
+    "table": "F1"
+   },
+   "replaces": "held",
+   "set": "floor",
+   "widens": false
+  },
+  {
+   "before": "held",
+   "expect": {
+    "cause": null,
+    "event": "install-applied"
+   },
+   "held": {
+    "answer_rate": [
+     5,
+     60
+    ],
+    "rate": [
+     5,
+     60
+    ],
+    "table": "F1"
+   },
+   "kinds": [
+    "host",
+    "mesh"
+   ],
+   "name": "floor_answer_rate_tighter",
+   "new": {
+    "answer_rate": [
+     3,
+     60
+    ],
+    "rate": [
+     5,
+     60
+    ],
+    "table": "F1"
+   },
+   "replaces": "held",
+   "set": "floor",
+   "widens": false
+  },
+  {
+   "before": "held",
+   "expect": {
+    "cause": "dist:install-widened",
+    "event": "install-widened"
+   },
+   "held": {
+    "answer_rate": [
+     5,
+     60
+    ],
+    "rate": [
+     5,
+     60
+    ],
+    "table": "F1"
+   },
+   "kinds": [
+    "host",
+    "mesh"
+   ],
+   "name": "floor_answer_rate_looser_said_to_widen",
+   "new": {
+    "answer_rate": [
+     9,
+     60
+    ],
+    "rate": [
+     5,
+     60
+    ],
+    "table": "F1"
+   },
+   "replaces": "held",
+   "set": "floor",
+   "widens": true
+  },
+  {
+   "before": "withdrawn",
+   "expect": {
+    "cause": "dist:widening-unsigned",
+    "event": "refused"
+   },
+   "held": {
+    "answer_rate": [
+     5,
+     60
+    ],
+    "rate": [
+     5,
+     60
+    ],
+    "table": "F1"
+   },
+   "kinds": [
+    "host",
+    "mesh"
+   ],
+   "name": "floor_withdrawn_then_first",
+   "new": {
+    "answer_rate": [
+     5,
+     60
+    ],
+    "rate": [
+     5,
+     60
+    ],
+    "table": "F1"
+   },
+   "replaces": "",
+   "set": "floor",
+   "widens": false
+  },
+  {
+   "before": "withdrawn",
+   "expect": {
+    "cause": "dist:install-widened",
+    "event": "install-widened"
+   },
+   "held": {
+    "answer_rate": [
+     5,
+     60
+    ],
+    "rate": [
+     5,
+     60
+    ],
+    "table": "F1"
+   },
+   "kinds": [
+    "host",
+    "mesh"
+   ],
+   "name": "floor_withdrawn_then_said_to_widen",
+   "new": {
+    "answer_rate": [
+     5,
+     60
+    ],
+    "rate": [
+     5,
+     60
+    ],
+    "table": "F1"
+   },
+   "replaces": "",
+   "set": "floor",
+   "widens": true
+  },
+  {
+   "before": "lost",
+   "expect": {
+    "cause": "dist:widening-unsigned",
+    "event": "refused"
+   },
+   "held": {
+    "answer_rate": [
+     5,
+     60
+    ],
+    "rate": [
+     5,
+     60
+    ],
+    "table": "F1"
+   },
+   "kinds": [
+    "host",
+    "mesh"
+   ],
+   "name": "floor_lost_then_the_same",
+   "new": {
+    "answer_rate": [
+     5,
+     60
+    ],
+    "rate": [
+     5,
+     60
+    ],
+    "table": "F1"
+   },
+   "replaces": "held",
+   "set": "floor",
+   "widens": false
+  },
+  {
+   "before": "lost",
+   "expect": {
+    "cause": "dist:install-widened",
+    "event": "install-widened"
+   },
+   "held": {
+    "answer_rate": [
+     5,
+     60
+    ],
+    "rate": [
+     5,
+     60
+    ],
+    "table": "F1"
+   },
+   "kinds": [
+    "host",
+    "mesh"
+   ],
+   "name": "floor_lost_then_said_to_widen",
+   "new": {
+    "answer_rate": [
+     5,
+     60
+    ],
+    "rate": [
+     5,
+     60
+    ],
+    "table": "F1"
+   },
+   "replaces": "held",
+   "set": "floor",
+   "widens": true
+  }
+ ],
+ "rules": [
+  "IS6",
+  "IS10",
+  "IS12",
+  "AF8",
+  "OP4",
+  "CL3"
+ ],
+ "spec": "docs/design/spec-policy-distribution.md"
+}
