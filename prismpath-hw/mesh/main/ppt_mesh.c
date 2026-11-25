@@ -4,7 +4,7 @@
  * (docs/design/spec-policy-distribution.md). mesh_node.c holds the node's logic over the C core in
  * prismpath-hw/dist/, and the host runs the same file in prismpath-hw/mesh/host/mesh_sim.c. This file only wires it
  * to the board: two NVS partitions keep the durable parts (`nvs`, and `nvs_copy` for the second copy IS10 asks
- * of the install parts), esp_timer is the monotonic clock, ESP-NOW and UART0 carry frames, and every decision is
+ * of the install parts, and of the anchor part with its marks), esp_timer is the monotonic clock, ESP-NOW and UART0 carry frames, and every decision is
  * the core's (pp_pep_ask).
  *
  * The node has no real time clock (T2). Its time is its time floor at boot plus the seconds it has run, and every

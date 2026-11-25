@@ -22,11 +22,15 @@ signatures are checked before the scanner reads a byte (V3 before V4). The machi
 durably in one `pp_durable` struct in parts (the anchor, the counter, the trust store, the floor, each release slot
 and a pending intent named by release id and seq), and the caller's `persist` is told which parts changed and
 writes each whole, so a state record writes its 12 byte counter and no more, and it reports every
-transition in a state record signed by the instance key.
+transition in a state record signed by the instance key. `persist` answers whether every write took, and the
+machine does not act on an override or an operator's `allow` whose count it could not save first (AF8, OP3, OP4).
 
 Section 21 is built for `mesh`. The install record, the rate counts and the held and staged statement of each install
 kind are five more parts, each written to two media by `persist` and read back from the first copy that reads, the
-record before the set it names (IS10). `pp_pep_ask` decides one request: the action floor first, which on this kind
+record before the set it names (IS10). The anchor part, which holds the marks of IS9 and IS10, is written to both
+media too, and an anchor part neither medium holds beside another part is a lost anchor (`pp_durable_held`): the PEP
+is locked and reports `dist:install-lost`, and is never taken for one never provisioned (P1). Rate counts no copy
+holds start every window spent, and a clock set back keeps each window and its count. `pp_pep_ask` decides one request: the action floor first, which on this kind
 only allows and is held narrow by one bounded postfix pass at staging (AF9), then the active release, the fallback
 policy or the refusal of X3, with the basis and the policy hash of the set that decided (RC1). The ceiling is a list
 of body hashes. The layout and the reading domain the PEP was built with are in its `pp_config`.

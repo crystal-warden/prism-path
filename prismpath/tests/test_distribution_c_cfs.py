@@ -1225,3 +1225,131 @@ def test_case_232_a_cfs_app_holds_operator_answers_to_the_signed_answer_rate(app
     assert events == [("answered", None, 5), ("answered", None, 5), ("refused", "dist:floor-rate", 5),
                       ("answered", None, 5)]
     assert [one[0] for one in _answered(out)] and len(_answered(out)) == 3
+
+
+# ------------------------------------------------------------------ the durable state of the core (P1, IS9, IS10, AF8, OP3, OP4)
+def test_an_anchor_part_no_copy_holds_locks_the_pep_and_keeps_what_it_holds(hc):
+    """P1, IS9, IS10 on the core. The anchor part, which holds the marks of IS9 and IS10, is kept in two copies: with
+    its first copy unreadable the PEP reads the second and reports nothing. With no copy of it while its other parts
+    are held, the PEP is not one never provisioned, which would believe nothing it held: it is locked, reports
+    dist:install-lost, keeps its floor, its release and its install record, and the older forms stay refused."""
+    floor = install("install.floor", floors()["one"])
+    out = run(hc, [*node(), *base._anchor(bring=[floor]), f"provision {S} {N}", *release(release_body(), 1),
+                   "lose anchor", f"restart {N}", "held", f"ask {N} {regs(3)} -", "drop anchor", f"restart {N + 1}",
+                   "held", f"ask {N + 1} {regs(3)} -", f"legacy {S}"])
+    held = f"held {base._envelope_id(floor[0])} - -"
+    assert out[4] == "records" and out[5] == held and ask(out[6])["basis"] == "floor"     # the second copy read
+    restarted = _recs(out[7])
+    assert [(one["event"], one["cause"]) for one in restarted] == [("refused", "dist:install-lost")]
+    assert restarted[0]["state"] == "locked" and restarted[0]["active_seq"] == 1          # kept, deciding nothing
+    assert restarted[0]["floor"] == 1
+    assert out[8] == held and ask(out[9])["basis"] == "floor"                             # the floor it holds decides
+    assert out[10] == f"legacy {causes.code('dist:legacy-refused')}"
+
+
+def test_rates_no_copy_holds_start_every_window_spent(hc):
+    """AF8, OP4, IS10 on the core. With neither copy of the rates part readable, a restart starts each window spent:
+    the override the floor would allow escalates with dist:floor-rate instead of a fresh allowance, an operator's
+    `allow` is refused with dist:floor-rate until the answer window ends, and the next windows allow again."""
+    out = run(hc, [*escalating(answer_rate={"allows": 1, "window": 600}), "lose rates", "lose2 rates",
+                   f"restart {N + 1}", f"ask {N + 1} {regs(3)} -", f"escalated {H[0]} 0301", answer(H[0], now=N + 2),
+                   f"ask {N + 61} {regs(3)} -", f"ask {N + 62} {regs(3)} -", f"escalated {H[1]} 0301",
+                   answer(H[1], now=N + 602)])
+    first, spent = ask(out[4]), ask(out[6])
+    assert (first["outcome"], first["cause"], first["count"]) == (ALLOW, "dist:floor-allowed", 1)   # before the loss
+    assert (spent["outcome"], spent["cause"], spent["rate_escalated"], spent["count"]) == (
+        ESCALATE, "dist:floor-rate", True, 1)                                # spent, never a fresh allowance
+    assert _refused(out[8]) == ("dist:floor-rate", 5)                        # the answer window is spent too
+    again = ask(out[9])
+    assert (again["outcome"], again["counted"], again["window"]) == (ALLOW, True, N + 61)
+    assert ask(out[10])["cause"] == "dist:floor-rate"
+    assert _last(out[12])["event"] == "answered"                             # the next answer window allows again
+
+
+def test_a_save_that_did_not_take_refuses_the_override_and_the_answer_it_was_for(hc):
+    """AF8, OP3, OP4 on the core. The count of an override and the answered mark of an operator's `allow` are written
+    before the PEP acts on them. When that write does not take, the override is one past the rate (dist:floor-rate,
+    escalated on cfs) and the `allow` is refused with dist:floor-rate, its escalation still open, so the same answer
+    applies once the store takes writes again."""
+    out = run(hc, [*escalating(), f"ask {N + 1} {regs(3)} -", f"escalated {H[0]} 0301", "wfail 1",
+                   f"ask {N + 61} {regs(3)} -", answer(H[0], now=N + 61), "answer", "wfail 0",
+                   answer(H[0], now=N + 62), "answer"])
+    lost = ask(out[7])
+    assert (lost["outcome"], lost["cause"], lost["counted"], lost["rate_escalated"]) == (
+        ESCALATE, "dist:floor-rate", False, True)                            # a fresh window, but its count not saved
+    assert _refused(out[8]) == ("dist:floor-rate", 5) and out[9] == "answer 0"
+    assert _last(out[10])["event"] == "answered" and out[11].startswith("answer 1 1 ")
+
+
+def test_a_clock_set_back_keeps_each_window_and_its_count(hc):
+    """AF8, OP4, T1 on the core. A cfs PEP has a real time clock the ground can set. A time set back before the start
+    of a window keeps the window and its count, so the override spent at N is not granted again at N - 100, nor the
+    operator `allow` spent at N, and the windows end where they would have."""
+    out = run(hc, [*escalating(answer_rate={"allows": 1, "window": 600}), f"ask {N} {regs(3)} -",
+                   f"escalated {H[0]} 0301", answer(H[0]), f"ask {N - 100} {regs(3)} -", f"escalated {H[1]} 0301",
+                   answer(H[1], now=N - 100), f"ask {N + 60} {regs(3)} -"])
+    assert _last(out[7])["event"] == "answered"
+    back = ask(out[8])
+    assert (back["outcome"], back["cause"], back["window"], back["count"]) == (ESCALATE, "dist:floor-rate", N, 1)
+    assert _refused(out[10]) == ("dist:floor-rate", 5)
+    assert (ask(out[11])["outcome"], ask(out[11])["window"]) == (ALLOW, N + 60)
+
+
+# ------------------------------------------------------------------ the durable state of the cFS app (P1, IS9, IS10, Q5, OP3)
+def _app_installed():
+    floor = install("install.floor", floors()["one"])
+    fallback = install("install.fallback", floors()["fallback"])
+    brought = [(bytes.fromhex(sealed), bytes.fromhex(body_hex)) for sealed, body_hex in (floor, fallback)]
+    ids = f"held {base._envelope_id(floor[0])} {base._envelope_id(fallback[0])} -"
+    return app_head(install=("J", "K"), bring=brought, stale=5), ids
+
+
+def test_a_power_on_reset_of_a_provisioned_cfs_app_loses_its_record_and_is_never_a_first_start(app, tmp_path):
+    """P1, Q5, IS9, IS10 in the cFS app. A power on reset clears both Critical Data Store areas and keeps the files,
+    where the anchor part is now kept with the install parts. A provisioned app that starts so is one whose record is
+    lost, never a first start that provisions itself again with its floor at 0: under LOCK it is locked, admits
+    nothing (so the release it committed is not taken again), keeps its install sets and its floor decides; under
+    MINIMUM it provisions itself again with the floor one below the minimum and keeps its sets. With the anchor's file
+    gone as well it is locked and reports dist:install-lost."""
+    head, ids = _app_installed()
+    first = app_table(version=1)
+    prefix = [*head, f"start 0 0 1 {N}", *release_lines(first, 1, 10), "power"]
+    skip = len(app_run(app, tmp_path / "prefix", prefix))
+
+    def after(name: str, lines: list) -> list:
+        return app_run(app, tmp_path / name, [*prefix, *lines])[skip:]
+
+    out = after("lock", [f"start 0 0 1 {N + 1}", "held", "state", *release_lines(first, 1, 20, now=N + 1), "state",
+                         f"propose {payload(3, slew=15, thrust=20)} 1 - {N + 1}"])
+    records, flags = steps(out)[0]
+    assert all(one["event"] != "provisioned" for one in records) and flags[2:4] == [0, 1]   # not provisioned, locked
+    states = [line for line in out if line.startswith("state")]
+    assert out[2] == ids and states[0] == states[1] == "state 0 0 0 1 0 0"  # the replay of seq 1 is not taken
+    assert decisions(out)[-1]["basis"] == 2                                 # the floor it kept decides (AF1)
+    out = after("minimum", [f"start 0 1 5 {N + 1}", "held", "state"])
+    flags = steps(out)[0][1]
+    assert flags[2] == 1 and flags[4] == 1 and out[2] == ids               # provisioned again, at the minimum
+    assert out[3].split()[3:5] == ["4", "0"]                                # floor one below the minimum, unlocked
+    out = after("anchor", ["unlink anchor.ppd", f"start 0 0 1 {N + 1}", "held"])
+    records, flags = steps(out)[1]
+    assert ("refused", "dist:install-lost") in [(one["event"], one["cause"]) for one in records]
+    assert all(one["event"] != "provisioned" for one in records) and flags[2:4] == [0, 1]
+
+
+def test_a_cfs_app_whose_store_write_did_not_take_acts_on_no_override_and_no_answer(app, tmp_path):
+    """AF8, OP3, OP4 in the cFS app. The core saves an override's count and an answered escalation before it acts,
+    and the app now says when that write did not take. A floor override then escalates with dist:floor-rate rather
+    than being allowed, and an operator's `allow` is refused with dist:floor-rate, its escalation still open, so the
+    same answer applies once the store takes writes again."""
+    out = app_run(app, tmp_path / "a", [*_app_escalating()])
+    receipt = [line.split()[1] for line in out if line.startswith("escalation")][0]
+    out = app_run(app, tmp_path / "b", [*_app_escalating(), "wfail 1",
+                                        f"propose {payload(3, slew=15, thrust=20)} 1 - {N + 61}",
+                                        *_app_answer(receipt, now=N + 61), "wfail 0",
+                                        *_app_answer(receipt, transfer=41, now=N + 62)])
+    last = decisions(out)[-1]
+    assert (last["basis"], last["escalated"]) == (2, 1)                    # a fresh window, its count not saved
+    events = [(one["event"], one["cause"], one.get("subject")) for records, _flags in steps(out) for one in records
+              if one["event"] in ("answered", "refused")]
+    assert events == [("refused", "dist:floor-rate", 5), ("answered", None, 5)]
+    assert len(_answered(out)) == 1

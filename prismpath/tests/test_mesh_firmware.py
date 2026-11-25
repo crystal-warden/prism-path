@@ -201,19 +201,61 @@ def test_the_install_parts_are_read_from_their_second_copy(binary):
         fleet.close()
 
 
+def test_a_node_that_lost_its_anchor_part_is_locked_and_never_provisioned_again(binary):
+    """P1, IS9, IS10, the review's reproduction. The anchor part holds the marks of IS9 and IS10 and is kept on both
+    NVS partitions. Node 0 loses its whole `nvs` partition and node 1 its anchor part on both: neither is provisioned
+    again from the anchor baked into the build, which would have made a new PEP over what it holds. Both are locked,
+    node 1 reports dist:install-lost, the second copy of the install record is not written over, and the floor
+    each holds still decides (AF1)."""
+    signer = _signer(install=[GEN.test_key("J"), GEN.test_key("K")])
+    fleet = _fleet(binary, install=("J", "K"))
+    try:
+        fleet.deliver(*signer.floor(tables.floor_table()))
+        fleet.lines(["erase 0 0", "drop 1 0 0", "drop 1 1 0"])
+        copies = [line.split()[3] for line in fleet.lines(["nvs 0", "nvs 1"])]
+        restarted = fleet.reset()
+        assert all(record.event != "provisioned" for records in restarted.values() for record in records)
+        assert [(record.event, record.cause) for record in restarted["node1"]] == [("refused", "dist:install-lost")]
+        assert [fleet.statuses[node][0] for node in fleet.ids] == ["locked", "locked", "no-policy"]
+        assert [line.split()[3] for line in fleet.lines(["nvs 0", "nvs 1"])] == copies    # nothing on `nvs_copy`
+        floor_allowed = causes.NAMES["dist:floor-allowed"]
+        assert set(fleet.ask(tables.regs(2, 15, 1), "-,-,1").values()) == {(ALLOW, floor_allowed, BASIS_FLOOR, 0)}
+    finally:
+        fleet.close()
+
+
+def test_a_node_whose_write_did_not_take_does_not_act_on_the_override(binary):
+    """AF8 on the firmware. An override's count is written to NVS before the node acts on it. On node 0, whose NVS
+    writes fail, the floor does not allow it and the release decides, here none (dist:policy-lapsed); the others
+    allow it under the floor, and node 0 does once its writes take again."""
+    signer = _signer(install=[GEN.test_key("J"), GEN.test_key("K")])
+    fleet = _fleet(binary, install=("J", "K"))
+    try:
+        fleet.deliver(*signer.floor(tables.floor_table(), rate={"allows": 3, "window": 60}))
+        floor_allowed, lapsed = causes.NAMES["dist:floor-allowed"], causes.NAMES["dist:policy-lapsed"]
+        fleet.lines(["wfail 0 1"])
+        answers = fleet.ask(tables.regs(2, 15, 1), "-,-,1")
+        assert answers["node0"] == (REFUSE, lapsed, 0, 0)
+        assert answers["node1"] == answers["node2"] == (ALLOW, floor_allowed, BASIS_FLOOR, 0)
+        fleet.lines(["wfail 0 0"])
+        assert fleet.ask(tables.regs(2, 15, 1), "-,-,1")["node0"] == (ALLOW, floor_allowed, BASIS_FLOOR, 0)
+    finally:
+        fleet.close()
+
+
 def test_the_nvs_partitions_hold_the_largest_durable_state_the_core_allows(binary):
     """The review's finding: the default NVS partition of 24 kB is too small. partitions.csv gives `nvs` 128 kB and
     `nvs_copy` 64 kB. At the bounds of pp_dist.h every part takes 69,930 bytes with the instance key's seed, and the
-    install parts 28,484 bytes on the second medium. Each partition holds them, PHY calibration (1,904 bytes, on
+    anchor part and the install parts 28,641 bytes on the second medium. Each partition holds them, PHY calibration (1,904 bytes, on
     `nvs`), room to write its largest part again and the one free page NVS keeps."""
     fleet = _fleet(binary)
     try:
         sizes = {int(words[1]): int(words[2]) for words in (line.split() for line in fleet.lines(["bounds"]))}
     finally:
         fleet.close()
-    copied = [sizes[part] for part in (256, 512, 1024, 2048, 4096)]
+    copied = [sizes[part] for part in (1, 256, 512, 1024, 2048, 4096)]      # PP_PART_COPIED
     main = [*sizes.values(), 32]
-    assert (len(sizes), sum(main), sum(copied), sizes[2]) == (14, 69930, 28484, 20)
+    assert (len(sizes), sum(main), sum(copied), sizes[2]) == (14, 69930, 28641, 20)
     table = sim.partitions(MESH / "partitions.csv")
     assert table["nvs"][3] == 0x20000 and table["nvs_copy"][3] == 0x10000
     assert sim.nvs_pages(main, extra_entries=sim.nvs_entries(1904) + 1) <= table["nvs"][3] // sim.NVS_PAGE

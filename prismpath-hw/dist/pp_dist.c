@@ -1753,8 +1753,9 @@ static int pp_state(const pp_pep_machine *pep) {
 
 static int pp_set_part(int kind) { return PP_PART_SET_FLOOR << kind; }
 
-static void pp_persist(pp_pep_machine *pep, int parts) {
-    if (pep->config.persist) pep->config.persist(pep->config.context, &pep->d, parts);
+/* 0 when every write of `parts` took (AF8, OP3, H3). */
+static int pp_persist(pp_pep_machine *pep, int parts) {
+    return pep->config.persist ? pep->config.persist(pep->config.context, &pep->d, parts) : 0;
 }
 
 /* The install record the PEP decides with: held and read (IS10). */
@@ -2157,6 +2158,19 @@ int pp_pep_open(pp_pep_machine *pep, const pp_config *config, const pp_durable *
     }
     pep->n_out = 0;
     pep->message = 1;
+    if (!pep->d.rates_reads) { /* AF8, OP4: counts no copy holds start every window spent, never a fresh allowance */
+        long long time = pp_time(pep);
+        for (int k = 0; k < PP_FLOOR_RULES; k++) {
+            pep->d.rate_start[k] = time;
+            pep->d.rate_count[k] = PP_RATE_SPENT;
+        }
+        pep->d.answer_start = time;
+        pep->d.answer_count = PP_RATE_SPENT;
+        pep->d.rates_reads = pp_persist(pep, PP_PART_RATES) == 0;
+    }
+    /* P1, IS9, IS10: an anchor part that does not read locked the PEP above and keeps its marks; it is reported here,
+     * or by pp_open_install when the install record is lost with it */
+    if (!pep->d.setting_reads && pep->d.install_reads) pp_emit(pep, PP_EV_REFUSED, PP_CAUSE_INSTALL_LOST);
     pp_open_install(pep);
     pp_drop_fallen_staged(pep); /* R5 and X1 before the runtime, so a release that fell while down never runs */
     int was_active = pep->d.has_active;
@@ -2894,12 +2908,15 @@ void pp_pep_id(const pp_pep_machine *pep, uint8_t out[16]) {
     memcpy(out, digest, 16);
 }
 
-/* A fixed window of the PEP's own time (AF8, OP4): a new one starts once `window` seconds passed since its start. */
-static void pp_window(long long *start, uint32_t *count, long long window, long long time) {
-    if (*count == 0 || time >= *start + window || time < *start) {
+/* A fixed window of the PEP's own time (AF8, OP4): a new one starts once `window` seconds passed since its start.
+ * A time before the start, a clock set back, keeps the window and its count, so it never grants a fresh allowance.
+ * A spent count (PP_RATE_SPENT, from a lost part) reads as `allows`. */
+static void pp_window(long long *start, uint32_t *count, long long window, long long allows, long long time) {
+    if (*count == 0 || time >= *start + window) {
         *start = time;
         *count = 0;
     }
+    if (*count > (uint32_t)allows) *count = (uint32_t)allows;
 }
 
 /* OP2 to OP4 (pep._apply_answer): an answer that verified names this PEP's id and an open escalation the action floor
@@ -2930,7 +2947,8 @@ static uint8_t pp_apply_answer(pp_pep_machine *pep, const pp_envelope *e, const 
     }
     if (allow) {
         const pp_envelope *fe = &floor->envelope;
-        if (fe->has_answer_rate) pp_window(&d->answer_start, &d->answer_count, fe->answer_window, time);
+        if (fe->has_answer_rate)
+            pp_window(&d->answer_start, &d->answer_count, fe->answer_window, fe->answer_allows, time);
         if (!fe->has_answer_rate || d->answer_count >= (uint32_t)fe->answer_allows) {
             pp_emit_about(pep, PP_EV_REFUSED, PP_CAUSE_FLOOR_RATE, PP_SUBJECT_ANSWER); /* OP4: it stays open */
             return PP_CAUSE_FLOOR_RATE;
@@ -2938,7 +2956,13 @@ static uint8_t pp_apply_answer(pp_pep_machine *pep, const pp_envelope *e, const 
         d->answer_count++;
     }
     one->answered = 1;
-    pp_persist(pep, PP_PART_RATES); /* OP3: before the PEP acts on it */
+    if (pp_persist(pep, PP_PART_RATES) != 0 && allow) { /* OP3, OP4: before the PEP acts on it */
+        /* an allow whose count and answered mark are not durable is not acted on: it is refused as one past the
+           rate, the count stays spent and the escalation stays open. A refuse acted on twice lets nothing through */
+        one->answered = 0;
+        pp_emit_about(pep, PP_EV_REFUSED, PP_CAUSE_FLOOR_RATE, PP_SUBJECT_ANSWER);
+        return PP_CAUSE_FLOOR_RATE;
+    }
     pep->answer.applied = 1;
     pep->answer.allow = allow;
     memcpy(pep->answer.envelope_id, e->envelope_id, 32);
@@ -3455,8 +3479,14 @@ void pp_pep_ask(pp_pep_machine *pep, const uint8_t *regs, size_t regs_len, const
         const pp_envelope *fe = &floor->envelope;
         if (floor_outcome == PP_OUT_ALLOW && override && fe->has_rate && k < PP_FLOOR_RULES) {
             /* AF8: overrides counted per rule in fixed windows of the PEP's time */
-            pp_window(&d->rate_start[k], &d->rate_count[k], fe->rate_window, pp_time(pep));
-            if (d->rate_count[k] >= (uint32_t)fe->rate_allows) {
+            pp_window(&d->rate_start[k], &d->rate_count[k], fe->rate_window, fe->rate_allows, pp_time(pep));
+            int spent = d->rate_count[k] >= (uint32_t)fe->rate_allows;
+            if (!spent) {
+                d->rate_count[k]++;
+                /* saved before the PEP acts on it: an override whose count is not durable is one past the rate */
+                spent = pp_persist(pep, PP_PART_RATES) != 0;
+            }
+            if (spent) {
                 /* past the rate: escalated with dist:floor-rate where the kind escalates, else the release decides */
                 if (kind == PP_TGT_CFS) {
                     floor_outcome = PP_OUT_ESCALATE;
@@ -3469,8 +3499,6 @@ void pp_pep_ask(pp_pep_machine *pep, const uint8_t *regs, size_t regs_len, const
                     answers = 0;
                 }
             } else {
-                d->rate_count[k]++;
-                pp_persist(pep, PP_PART_RATES); /* saved before the PEP acts on it */
                 out->counted = 1;
                 out->rule = k;
                 out->window = d->rate_start[k];
@@ -3734,7 +3762,15 @@ size_t pp_durable_pack(const pp_durable *d, int part, uint8_t *out, size_t room)
 /* What a part that is absent or does not read leaves: a part that must read for the PEP to decide reads as lost. */
 static void pp_part_lost(pp_durable *d, int part, int absent) {
     switch (part) {
-    case PP_PART_ANCHOR: d->provisioned = !absent; d->setting_reads = 0; break; /* no anchor: never provisioned */
+    case PP_PART_ANCHOR:
+        d->provisioned = !absent; /* no anchor: never provisioned (P1) */
+        d->setting_reads = 0;
+        if (!absent) { /* one that does not read: locked, and every mark it held kept set (IS9, IS10) */
+            d->install_mark = d->ceiling_mark = d->legacy_all = 1;
+            d->n_legacy = 0;
+            d->stream[0] = 0;
+        }
+        break;
     case PP_PART_COUNTER: d->counter_reads = 0; break;
     case PP_PART_TRUST: d->trust_reads = 0; break;
     case PP_PART_FLOOR: d->floor_reads = 0; break;
@@ -3778,4 +3814,8 @@ int pp_durable_unpack(pp_durable *out, int part, const uint8_t *bytes, size_t le
     case PP_PART_RATES: out->rates_reads = 1; break;
     }
     return 0;
+}
+
+void pp_durable_held(pp_durable *d, int held) {
+    if (!(held & PP_PART_ANCHOR) && (held & PP_PARTS & ~PP_PART_ANCHOR)) pp_part_lost(d, PP_PART_ANCHOR, 0);
 }

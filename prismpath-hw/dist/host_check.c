@@ -39,6 +39,8 @@
  *   lose anchor | setting | counter | trust | floor | active | previous | staged | pending | fresh   (that part's bytes
  *                 do not read)
  *   stop <n>  after n more part writes nothing reaches the store, as a power loss; a restart restores the power
+ *   wfail <0|1>  every write from now on is answered as one that did not take, and keeps nothing (1), or takes (0)
+ *   drop <part>  the part is gone from both copies, as a store that never held it
  *   state     the durable state as read back: active, previous and staged, each its seq or "-"
  *   written   the bytes the durable writes took since the last "written": total, writes, the largest
  *   sizes     sizeof the durable state, a release and the machine
@@ -95,10 +97,12 @@ static int part_kept[N_PARTS][2];
 static size_t written, writes, largest_write;
 static pp_durable saved;
 static long stop_after = -1; /* the writes that still reach the store before a power loss, or -1 for no loss */
+static int fail_writes;      /* the store answers that no write took, and keeps nothing */
 
-static void persist(void *context, const pp_durable *durable, int changed) {
+static int persist(void *context, const pp_durable *durable, int changed) {
     (void)context;
     size_t bytes = 0;
+    if (fail_writes) return -1;
     for (int k = 0; k < N_PARTS; k++) { /* a store writes the parts it is given one after another */
         if (!(changed & (1 << k))) continue;
         if (stop_after == 0) break;      /* the power is gone: nothing more is written */
@@ -120,17 +124,21 @@ static void persist(void *context, const pp_durable *durable, int changed) {
     written += bytes;
     writes++;
     if (bytes > largest_write) largest_write = bytes;
+    return 0; /* a power loss is no answer: the PEP that wrote is gone */
 }
 
 /* Read every part back into `saved`, as a restart does, a copied part from its first copy that reads. */
 static const pp_durable *reread(void) {
+    int held = 0;
     memset(&saved, 0, sizeof saved);
     for (int k = 0; k < N_PARTS; k++) {
         int copies = ((1 << k) & PP_PART_COPIED) ? 2 : 1, read = 0;
         for (int c = 0; c < copies && !read; c++)
             if (part_kept[k][c]) read = pp_durable_unpack(&saved, 1 << k, parts[k][c], part_len[k][c]) == 0;
         if (!read && !part_kept[k][0] && !(copies == 2 && part_kept[k][1])) pp_durable_unpack(&saved, 1 << k, NULL, 0);
+        if (part_kept[k][0] || (copies == 2 && part_kept[k][1])) held |= 1 << k;
     }
+    pp_durable_held(&saved, held);
     return saved.provisioned ? &saved : NULL;
 }
 
@@ -217,6 +225,7 @@ static int machine(const char *args, pp_trust *anchor) {
     config.persist = persist;
     memset(part_kept, 0, sizeof part_kept);
     written = writes = largest_write = 0;
+    fail_writes = 0;
     int started = pp_pep_open(&pep, &config, NULL, 0) == 0;
     while (fgets(line, sizeof line, stdin)) {
         line[strcspn(line, "\n")] = 0;
@@ -431,6 +440,14 @@ static int machine(const char *args, pp_trust *anchor) {
             int mark = 0;
             uint8_t cause = pp_pep_decide(&pep, &mark, strtoll(rest, NULL, 10));
             printf("decide %u %d\n", cause, mark);
+        } else if (strcmp(word, "wfail") == 0) {
+            fail_writes = atoi(rest);
+            continue;
+        } else if (strcmp(word, "drop") == 0) {
+            int k = part_index(rest);
+            if (k < 0) return 2;
+            part_kept[k][0] = part_kept[k][1] = 0;
+            continue;
         } else if (strcmp(word, "stop") == 0) {
             stop_after = strtol(rest, NULL, 10);
             printf("records\n");

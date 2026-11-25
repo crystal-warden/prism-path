@@ -53,17 +53,17 @@ enum
     PP_APP_STORE_LOST   = 2  /**< present and not readable */
 };
 
-/** The parts of the core kept in the Critical Data Store record, and the bytes each may take packed. */
+/** The parts of the core kept in the Critical Data Store record, and the bytes each may take packed. The anchor part
+ *  is not one of them: it holds the marks of IS9 and IS10 and is kept in two copies with the install parts. */
 enum
 {
-    PP_APP_SMALL_ANCHOR,
     PP_APP_SMALL_COUNTER,
     PP_APP_SMALL_TRUST,
     PP_APP_SMALL_FLOOR,
     PP_APP_SMALL_PENDING,
     PP_APP_SMALL_PARTS
 };
-#define PP_APP_SMALL_BYTES 9216 /* the five packed, the trust store's 8,372 the largest (K5, R7) */
+#define PP_APP_SMALL_BYTES 8960 /* the four packed, the trust store's 8,372 the largest (K5, R7) */
 
 /** The parts kept in two copies (IS10), and the bytes each may take packed. */
 enum
@@ -73,11 +73,13 @@ enum
     PP_APP_COPY_FLOOR,
     PP_APP_COPY_FALLBACK,
     PP_APP_COPY_CEILING,
+    PP_APP_COPY_ANCHOR, /**< P2, X10, IS9, IS10: provisioned, the stream, the expiry response and the marks */
     PP_APP_COPY_PARTS
 };
 #define PP_APP_SET_BYTES  (12 + 2 * (8 + PP_MAX_SEALED + PP_INSTALL_BODY_MAX)) /* a set, held and staged */
 #define PP_APP_RATES_BYTES 1536 /* the rate counts of AF8 and OP4 and the eight open escalations of OP3 */
-#define PP_APP_COPY_BYTES (1024 + PP_APP_RATES_BYTES + 3 * PP_APP_SET_BYTES)
+#define PP_APP_ANCHOR_BYTES 256
+#define PP_APP_COPY_BYTES (1024 + PP_APP_RATES_BYTES + 3 * PP_APP_SET_BYTES + PP_APP_ANCHOR_BYTES)
 
 /** The Critical Data Store record: the run, and the core's parts the store Q5 can lose. Plain data. */
 typedef struct
@@ -215,9 +217,11 @@ typedef struct
 
 /**
  * Start the enforcement point. Record and Copy are what the two Critical Data Store areas held, with what each was
- * (PP_APP_STORE_*), already copied into D->Record and D->Copy by the caller. A record that is absent is a first start
- * or a power on reset: a new run begins and the app provisions itself from its anchor and the statements brought
- * with it (P2, P4). A record that is lost loses the floor: under PP_LOST_FLOOR_LOCK the core is locked until ground
+ * (PP_APP_STORE_*), already copied into D->Record and D->Copy by the caller. A record that is absent beside no part
+ * of the core on file or in the copy area is a first start: a new run begins and the app provisions itself from its
+ * anchor and the statements brought with it (P2, P4). A record that is absent beside the app's files, as a power on
+ * reset of a provisioned app leaves it, is a record that is lost, and an anchor part neither copy holds beside
+ * another part locks the core (P1, IS9, IS10). A record that is lost loses the floor: under PP_LOST_FLOOR_LOCK the core is locked until ground
  * deletes the store and restarts the app, and under PP_LOST_FLOOR_MINIMUM the app provisions itself again from its
  * anchor with the floor one below MinSeq. A record that reads restores the run and the core. When no release is
  * active the boot release is staged and committed as if offered. Returns 0, or -1 when the core refused to start.
