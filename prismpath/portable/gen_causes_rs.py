@@ -3,11 +3,15 @@
 """Generate the Rust cause registry from the Python one, so the two cannot drift.
 
     python prismpath/portable/gen_causes_rs.py          writes prismpath-rs/src/causes.rs,
-                                                        conformance/causes.json and
-                                                        formal/Core/Causes.lean
+                                                        conformance/causes.json,
+                                                        formal/Core/Causes.lean and the cFS
+                                                        app's prismpath_app_causes.h
     python prismpath/portable/gen_causes_rs.py --check  exits 1 if either file is not what the
                                                         registry in prismpath/kernel/causes.py
                                                         produces now
+
+`integrations/cfs/prismpath_app/fsw/inc/prismpath_app_causes.h` holds every (code, name) pair for the cFS app, which
+spells the cause of an operator's refusal in its receipt by name (spec-policy-distribution.md OP3, RC4).
 
 `formal/Core/Causes.lean` holds every (code, name) pair for the verified core's Lean semantics, whose
 theorem `Core.refusal_registered` proves that every refusal the core can produce carries one of them.
@@ -35,6 +39,7 @@ from prismpath.kernel import causes  # noqa: E402
 RUST_OUT = REPO / "prismpath-rs" / "src" / "causes.rs"
 LEAN_OUT = REPO / "formal" / "Core" / "Causes.lean"
 CORPUS_OUT = HERE / "conformance" / "causes.json"
+C_OUT = REPO / "integrations" / "cfs" / "prismpath_app" / "fsw" / "inc" / "prismpath_app_causes.h"
 CLASSES = ("authority", "envelope", "routing", "wire", "state")
 
 
@@ -183,6 +188,41 @@ def build_lean() -> str:
     return "\n".join(out)
 
 
+def build_c() -> str:
+    rows = causes._REGISTRY
+    out = ["/* SPDX-License-Identifier: Apache-2.0 */",
+           "/* Copyright 2026 Crystal Warden Supply Chain Labs LLC */",
+           "",
+           "/**",
+           " * @file",
+           " *   The cause registry, for the cFS app: every registered (code, canonical name), in registry order.",
+           " *",
+           " * GENERATED from `prismpath/kernel/causes.py` by `prismpath/portable/gen_causes_rs.py`. Do not edit by hand:",
+           " * `gen_causes_rs.py --check` and integrations/cfs/tests/test_cfs_run.py fail when this file is not what the",
+           " * generator writes now. The app names the cause of an operator's refusal by it (OP3), the escalation's own cause.",
+           " */",
+           "#ifndef PRISMPATH_APP_CAUSES_H",
+           "#define PRISMPATH_APP_CAUSES_H",
+           "",
+           "#include <stdint.h>",
+           "",
+           f"#define PP_CAUSE_REGISTRY_SHA256 \"{causes.registry_sha256()}\"",
+           f"#define PP_CAUSE_REGISTRY_COUNT {len(rows)}",
+           "",
+           "typedef struct",
+           "{",
+           "    uint8_t     Code;",
+           "    const char *Name;",
+           "} PP_CauseRow_t;",
+           "",
+           "static const PP_CauseRow_t k_CauseRegistry[PP_CAUSE_REGISTRY_COUNT] = {"]
+    for cause_code, cause_name, _class, _description in rows:
+        assert cause_name.isascii() and '"' not in cause_name and "\\" not in cause_name and 0 < cause_code < 256
+        out.append(f"    {{{cause_code}, \"{cause_name}\"}},")
+    out += ["};", "", "#endif", ""]
+    return "\n".join(out)
+
+
 def build_corpus() -> dict:
     return {
         "version": 1,
@@ -212,6 +252,8 @@ def main(argv=None) -> int:
     outputs = [(RUST_OUT, build_rust()), (CORPUS_OUT, corpus_text())]
     if LEAN_OUT.parent.is_dir():       # the Lean development is research only; the product has no formal/ to keep in step
         outputs.append((LEAN_OUT, build_lean()))
+    if C_OUT.parent.is_dir():          # the cFS app is research only too
+        outputs.append((C_OUT, build_c()))
     if args.check:
         stale = [str(path.relative_to(REPO)) for path, text in outputs if not path.exists() or path.read_text(encoding="utf-8") != text]
         for path in stale:
