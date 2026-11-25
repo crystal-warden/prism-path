@@ -182,3 +182,38 @@ An overlay that keeps coming back is a policy change waiting to be made. Hand th
 rows that would have caught it (`prismpath test` reads the same table you would write) and the
 receipts that show the pattern. The owner's change then goes through `validate` and `test`, the
 engineer's `contract` says whether the interface moved, and your next swap carries it.
+
+## 7. Fleets of enforcement points
+
+When a controller sends the policy to many machines, `swap` is not the path. The signed release arrives in a
+distribution envelope, each machine verifies it itself, and you read the result in the fleet view. The owner's
+side is in [`policy-distribution.md`](policy-distribution.md). Yours is these.
+
+```bash
+prismpath dist fleet --dir ctl --key controller/instance.key                  # who runs which policy, and what is open
+prismpath dist fleet --dir ctl --key controller/instance.key --export otel    # or ocsf, or intoto
+prismpath dist pep status --state pep-state --key pep/instance.key            # one machine's own view
+```
+
+The fleet view shows the policy each machine runs against the one the controller expects, and each finding
+with its cause. `--export` writes the same records as OpenTelemetry events, OCSF 1.10.0 or in-toto statements,
+one JSON document per line, each carrying the signed record it came from, so a log pipeline or an assessor
+can check it. Only the controller exports.
+
+A machine with no release does not stop deciding if the engineer installed a fallback policy and an action floor.
+It decides by the fallback policy, and the floor still comes first. A ceiling the engineer signed lapses a
+release that allows more than it, and the machine falls back the same way. The lapse is in the machine's record
+as `dist:above-ceiling`.
+
+An escalation the action floor makes is put to you. If the engineer enrolled you as an operator, you sign
+an answer, `allow` or `refuse`, for that one request and that one machine. It lives at most 600 seconds and is
+used once, and the engineer's floor limits how many `allow` answers a machine takes in a window. On the cFS
+app the ground tool seals it:
+
+```bash
+python -m integrations.cfs.ground.answer seal --key operator1.key --pep <pep id> --receipt <receipt hash> \
+    --policy <floor policy hash> -o answer.stmt
+```
+
+Add `--refuse` to refuse. Every answer a machine applies shows in the fleet view beside it. A `host`, a `mesh`
+node and an `xdp` edge take no answer, since their floors never escalate.

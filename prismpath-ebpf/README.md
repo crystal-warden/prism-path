@@ -318,6 +318,14 @@ latency via `BPF_PROG_TEST_RUN`), `netupdate <new.ppt> <iface>` (live policy hot
   call). This is the eBPF layer of the secure-hot-swap composition; the full four-property mechanism
   (authorized / envelope bounded / attested / audited-atomic) and its software reference tier are
   specified in [`../docs/design/spec-secure-hotswap.md`](../docs/design/spec-secure-hotswap.md).
+- **Policy distribution (`net_dist.py`):** the `xdp` kind of [`../docs/design/spec-policy-distribution.md`](../docs/design/spec-policy-distribution.md)
+  takes its table and its destination table from one signed release, through the same verifier, floor, revocation and
+  widening rule as every other enforcement point. `net_dist.py` loads the committed table, loads a closed table
+  that drops every governed packet when the edge holds no release or its release lapses, and ends in the one loader
+  call `net_swap.py` also uses. Built, with `net_from_policy.py sign-dests` and `sign` writing the envelopes (PR 130).
+  Section 21 on this kind (the action floor loaded as a floor node reached first, floor passes counted from the
+  kernel histogram with no `would` and no override, a floor with a `rate` refused) is built (PR 154), and an `xdp` PEP
+  enacts an install set. Section 19.1 of the spec lists what else is open.
 - **Loader-side hardenings (landed, smoked on a live attach):** three fixes, now spread across the
   three loader files by the split above. A `MAX_*` capacity check in `parse_image_buf`
   (`ppt_image.c`): an oversized image used to partial-populate instead of being rejected. Checked

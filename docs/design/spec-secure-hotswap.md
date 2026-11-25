@@ -41,7 +41,7 @@ Defend against:
 Trusted: the signing **authority** (its private key) and the verification path in the runtime.
 Authorization attaches to the **policy artifact** (a signature over its manifest), not to a user
 session, consistent with the control plane's posture that session auth is a non goal
-(`SECURITY.md`). Out of scope: a compromised authority key (key management is a named follow on),
+(`SECURITY.md`). Out of scope here: a compromised authority key (rotation and revocation are in `spec-policy-distribution.md`),
 a fully compromised runtime (attestation detects, it does not prevent), and worker content safety
 (the guard onion's job, not the swap's).
 
@@ -210,7 +210,9 @@ flag and stamps `unsigned: true` into the audit event.
 6. FPGA signed attestation path + version register. *(follow on: hardware retest)*
 7. MCU pre loader. *(follow on: hardware availability)*
 8. Key management hardening: rotation, revocation distribution, secure element storage.
-   *(follow on. Rotation and revocation distribution are specified in `spec-policy-distribution.md`)*
+   *(rotation and revocation distribution delivered: signed rotation and revocation statements in
+   `spec-policy-distribution.md`, built per implementation as its section 19.1 lists. Secure element
+   storage is not built)*
 
 ## 7. Honest caveats
 
@@ -220,4 +222,8 @@ flag and stamps `unsigned: true` into the audit event.
   concurrent swap storm on both architectures. The atomicity rests on aligned word load/store
   atomicity (x86_64 and aarch64 both provide it).
 - Attestation detects a compromised runtime after the fact; it does not prevent one.
-- Key compromise is out of scope here and named as its own workstream.
+- A compromised authority key is handled by `prismpath dist rotate`, `revoke` and `rekey`, which
+  distribute a signed rotation and a signed revocation list to every enforcement point (spec-policy-distribution.md
+  sections 10 and 11). A key in the wrong hands can still sign a sequence number so high that the stream cannot
+  advance, and the recovery is a new provisioning of the enforcement point (section 14, P3). The software key
+  stays a file. A secure element is not built.

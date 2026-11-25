@@ -8,6 +8,12 @@ spec stable.
 
 ## [Unreleased]
 
+### Added: one release decided by a host, a proxy and a cFS table, shown by one policy hash (2026-11-25)
+
+- **Case 105 runs one release on a host, an agent and a cFS table end to end (#155).** Each decides under it and names the same policy hash.
+- **Case 104 replays one corpus in Python, Rust and the C core (#156).** The parity test passes in all three.
+- **The spec's status table (section 19.1) says what each implementation built, with the pull request.** The guides, the roadmap and the `xdp` README say the same.
+- **The trace lists are down to two owner decisions.** Case 206, whether a ceiling can narrow a category's values (CL4), and case 272, whether to build a host floor runtime step or restate the case for `xdp`.
 ### Fixed: the durable state holds through a lost part, a failed write and a clock set back (2026-11-25)
 
 - **The C core keeps its anchor part on both media and locks when no copy holds it (P1, IS9, IS10).** A PEP whose anchor part is gone beside parts it holds is locked with every mark set and reports `dist:install-lost`, keeps its floor, release and install record, and is never provisioned again as if it never was. A provisioning then holds what it brings to what the locked PEP keeps.

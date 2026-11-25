@@ -119,7 +119,8 @@ build, in rough order of reach:
 - [ ] **Field-provenance story for constrained emitters**: `@emits`/`@field_only` map naturally to
   devices whose workers are ADCs and comparators, not LLMs; the port contract already anticipates
   a hardware target driving it.
-- [ ] **Policy distribution ([spec](docs/design/spec-policy-distribution.md))**: D1 the spec and its causes, D2 the envelope, verifier, enforcement point and controller for hosts, D3 the heartbeat and fleet view, D4 revocation, D5 rotation, D6 the widening rule, D7 the agent home, gateway and XDP edge, D8 the ESP32 mesh, D9 the cFS app, D10 one policy on every target.
+- [x] **Policy distribution ([spec](docs/design/spec-policy-distribution.md))**: built and listed per implementation in the spec's status table (section 19.1). The envelope, verifier, trust store, revocation, rotation, the widening rule and the reconciling state; the reference controller with the heartbeat and fleet view, and its exports to OpenTelemetry, OCSF and in-toto; the agent home, the gateway with workload identity, and the XDP edge; the Rust host; the C core for the ESP32 mesh and the cFS app; and section 21, the action floor, the fallback policy, the ceiling, the operator's answer and the change statements, on Python, Rust, the C core and the cFS app.
+- [ ] **Policy distribution, what is left**: everything else is built (PRs 147 to 156). Two cases wait on owner decisions. Case 206 asks whether a ceiling can narrow the values of a category (CL4), and case 272 asks whether to build a runtime step for a floor on a host or to restate the case for `xdp`. Board validation of the mesh firmware on the ESP32 boards follows.
 
 What made this credible before it existed was that every prerequisite was already load-bearing
 elsewhere: decidability (the model checker), per-edge Level M membership reporting
