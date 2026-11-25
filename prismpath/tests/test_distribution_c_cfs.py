@@ -608,6 +608,37 @@ def test_case_161_an_anchor_with_install_keys_and_two_sets_is_provisioned_and_bo
     assert out[1] == out[3] == f"held {base._envelope_id(mesh_floor[0])} {base._envelope_id(mesh_fallback[0])} -"
 
 
+def test_case_281_the_identity_kinds_are_artifacts_a_cfs_pep_reads_and_does_not_use(hc):
+    """case_281: E8, ID8, the `cfs` half. An envelope of `identity.bundle` and one of `identity.map` for target
+    `gateway` is dist:target-mismatch on a cfs PEP and not dist:bad-format, and an artifact name the list does not hold
+    is still dist:bad-format, with the install id unchanged."""
+    out = run(hc, [*node(), *base._anchor(None), f"provision {S} {N}", "installid", *base._identity_stages(),
+                   "installid"])
+    assert [(_last(line)["event"], _last(line)["cause"]) for line in out[2:5]] == [
+        ("refused", "dist:target-mismatch"), ("refused", "dist:target-mismatch"), ("refused", "dist:bad-format")]
+    assert out[1] == out[5]
+
+
+def test_case_269_a_cfs_pep_with_hold_cut_off_past_its_fresh_statement_is_held(hc):
+    """case_269: H16, X1, X7, the `cfs` half. With `fresh` 3600 and HOLD, a cfs PEP that took a fresh statement and is
+    cut off for 3901 seconds is held with bit 5 set and stays active, and it is not held a second sooner. A cfs PEP
+    built to refuse lapses at the same moment with dist:expired."""
+    public = base._pub("C")
+    for hold in (True, False):
+        out = run(hc, [*node(hold=hold), *base._anchor(None), f"ckey {base._kid('C')} {public.hex()}", "fresh 3600",
+                       f"provision {S} {N}", *release(release_body(), 1), f"statement {base._fresh(1, N + 3600)} {N}",
+                       f"tick 0 {N + 3900}", f"tick 0 {N + 3901}"])
+        assert out[4] == "statement 1 1", out[4]
+        assert _recs(out[5]) == []
+        record = _last(out[6])
+        if hold:
+            assert (record["event"], record["cause"], record["state"], record["held"]) == (
+                "held", "dist:held", "active", True)
+        else:
+            assert (record["event"], record["cause"], record["state"], record["held"]) == (
+                "lapsed", "dist:expired", "no-policy", False)
+
+
 def test_the_core_reads_a_trust_anchor_document_and_refuses_one_out_of_its_form(hc):
     """P2, P4, K4: a /1 anchor and a /2 anchor read, and a /2 anchor whose controller key is an install key, one with
     `fresh` other than 0, one whose key is in another role and one written in another spelling are refused."""
