@@ -382,6 +382,6 @@ change statement from the active policy. The
 mesh and the cFS app use the frame binding of section 8.3, which the controller drives as a broadcast to
 the whole group.
 
-Section 21 is built on Python, on the Rust host and on the C core and the cFS app. It is not yet enacted on the
-`xdp` edge. That part is in review, and until it merges an `xdp` PEP records an install set and loads none of it.
-The status table in section 19.1 of the spec lists every open case.
+Section 21 is built on Python, on the Rust host, on the C core and the cFS app, and on the `xdp` edge (#154). Two
+cases are open and wait on owner decisions, case 206 (can a ceiling narrow a category's values) and case 272
+(a floor with a runtime step on a host). The status table in section 19.1 of the spec lists them.

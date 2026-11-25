@@ -324,9 +324,8 @@ latency via `BPF_PROG_TEST_RUN`), `netupdate <new.ppt> <iface>` (live policy hot
   that drops every governed packet when the edge holds no release or its release lapses, and ends in the one loader
   call `net_swap.py` also uses. Built, with `net_from_policy.py sign-dests` and `sign` writing the envelopes (PR 130).
   Section 21 on this kind (the action floor loaded as a floor node reached first, floor passes counted from the
-  kernel histogram with no `would` and no override, a floor with a `rate` refused) is **in review** on branch
-  `dist-xdp-s21` and is not merged. Until it is, an `xdp` PEP applies an install set as a record and enacts none
-  of it. Section 19.1 of the spec lists what else is open.
+  kernel histogram with no `would` and no override, a floor with a `rate` refused) is built (PR 154), and an `xdp` PEP
+  enacts an install set. Section 19.1 of the spec lists what else is open.
 - **Loader-side hardenings (landed, smoked on a live attach):** three fixes, now spread across the
   three loader files by the split above. A `MAX_*` capacity check in `parse_image_buf`
   (`ppt_image.c`): an oversized image used to partial-populate instead of being rejected. Checked

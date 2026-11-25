@@ -1564,44 +1564,51 @@ H16, K7).
 ### 19.1 Status
 
 Each row is one part of this spec and where it stands in each implementation. `#N` is the pull request that
-built it. `review` means the work is on a branch that is not merged. `none` means no implementation was
-planned, and a dash means the part does not apply. The `xdp` column is the Python enforcement point of the
-`xdp` kind in `prismpath-ebpf/`, which has its own loader. `PENDING` and `PARTIAL` in
-`prismpath/tests/test_distribution_trace.py` list the cases still open, and the last column follows them.
+built it. `none` means no implementation was planned, and a dash means the part does not apply. The `xdp` column is the Python enforcement point of the
+`xdp` kind in `prismpath-ebpf/`, which has its own loader. `PENDING` in
+`prismpath/tests/test_distribution_trace.py` lists the cases still open, and the last column follows it. Every
+pull request this table once listed as in review is merged. Two cases are open and both wait on owner decisions,
+stated under the table.
 
 | Part | P | R | C | xdp | Still open |
 |---|---|---|---|---|---|
 | 4 to 7, the envelope, trust store, sequence floor and clocks | #109 | #112 | #117, #120 | #130 | none |
 | 8.1 and 8.2, messages and the HTTP binding | #123 | the offered epoch only | - | - | none. The Rust crate has no binding (DIVERGENCES.md) |
-| 8.3, the frame binding | #115 | - | #117, #143 | - | case 122 in C, the ordered link, has no test |
+| 8.3, the frame binding | #115 | - | #117, #143 | - | none. Case 122 in C is tested (#153) |
 | 9.1 to 9.4, the PEP machine and the widening rule | #113, #124 | #131, #124 | #117, #124 | #130 | none |
-| 9.5, reconciling | #134 | #131 | - (C6) | review (dist-xdp-s21) | case 273 is in review with the `xdp` branch |
+| 9.5, reconciling | #134 | #131 | - (C6) | #154 | none. Case 273 is tested on `xdp` |
 | 10 and 11, revocation and rotation | #114, #121 | #114, #121 | #114, #121 | #130 | none |
-| 12, expiry and the HOLD choice | #113 | #131 | #117, #143 | #130 | case 269, the cFS half in C, has no test |
+| 12, expiry and the HOLD choice | #113 | #131 | #117, #143 | #130 | none. Case 269 in C is tested (#153) |
 | 13, grants | #127 | - | - | - | none |
-| 13.1, workload identity (ID1 to ID8) | #135 | review (dist-pr19-wp1) | open | - | case 281 names the kinds in R and C |
+| 13.1, workload identity (ID1 to ID8) | #135 | #151 | #153 | - | none. Case 281 is tested in all three (#151, #153) |
 | 14, first key provisioning | #113 | #131 | #117 | #130 | none |
 | 15, state record and fleet view | #125 | #131 | #117 | #130 | none |
 | 15.3, the controller | #123, #139 | - | - | - | the controller is Python's alone |
 | 15 exports, OpenTelemetry, OCSF, in-toto | #145 | - | - | - | none |
-| 16, escape hatches | #122 | #122 | #117 | #122 | case 97 has no C test, the build with and without `PPT_DEV_BUILD` |
+| 16, escape hatches | #122 | #122 | #117 | #122 | none. Case 97 in C is tested (#153) |
 | 17, the older signed forms | #132 | - | - | - | none |
-| 21.1, install statements and install trust | #136, #139 | #141 | #133 | review (dist-xdp-s21) | case 164 is in review with the `xdp` branch |
+| 21.1, install statements and install trust | #136, #139 | #141 | #133 | #154 | none. Case 164 is tested on `xdp` (#154) |
 | 21.1, install change statement (IS14, IS15) | #144 | #144 | #144 | - | none |
-| 21.2, action floor | #138 | #141 | #133, #146 | review (dist-xdp-s21) | the `xdp` parts of cases 187, 193, 194 and 223 are in review with the `xdp` branch. Case 272, a floor with a runtime step on `host`, needs an owner decision and no one is building it (DIVERGENCES.md) |
-| 21.3, fallback policy | #136 | #141 | #133, #146 | review (dist-xdp-s21) | case 202 has no C test |
-| 21.4, ceiling | #136, #147 | #141, #147 | #133, #147 | review (dist-xdp-s21) | case 206, the ceiling's fields narrowing the domain of an `agent` PEP, is not built |
+| 21.2, action floor | #138 | #141 | #133, #146 | #154 | Case 272, a floor with a runtime step on `host`, waits on an owner decision and no one is building it (DIVERGENCES.md). The `xdp` parts of cases 187, 193, 194 and 223 are built (#154) |
+| 21.3, fallback policy | #136 | #141 | #133, #146 | #154 | none. Case 202 in C is tested (#153) |
+| 21.4, ceiling | #136, #147 | #141, #147 | #133, #147 | #154 | Case 206, the ceiling's fields narrowing the domain of an `agent` PEP, waits on an owner decision (CL4, below) and is not built |
 | 21.4, lapse preview, warning and staged rollout (CL5 to CL7) | #144 | - | - | - | none |
-| 21.5, operator role and answers | #138 | refuses (OP1) | #140, #146 on `cfs` | review (dist-xdp-s21) | the `xdp` part of case 225 is in review with the `xdp` branch. Cases 230 and 235, the install and operator keys in an anchor, have no C test |
-| 21.6, receipts | #138 | #141 | #133, #146 | review (dist-xdp-s21) | none beyond the cases above |
-| Case 104, one corpus replayed in three implementations | review (dist-pr19-parity) | built | review (dist-pr19-parity) | - | Python and C name the case when the parity test merges |
-| Case 105, one policy on a host, an agent and a cFS table | open | - | open | - | the end to end test is not written |
-| Cases 137 and 138, a release id that names an artifact not staged | built | review (dist-pr19-wp1) | built | - | the Rust tests |
-| C durable state, an unsaved floor override and a failed save | - | - | review (dist-arch-durable) | - | no case number |
+| 21.5, operator role and answers | #138 | refuses (OP1) | #140, #146 on `cfs` | #154 | none. The `xdp` part of case 225 is built (#154) and cases 230 and 235 in C are tested (#153) |
+| 21.6, receipts | #138 | #141 | #133, #146 | #154 | none beyond the cases above |
+| Case 104, one corpus replayed in three implementations | #156 | #156 | #156 | - | none |
+| Case 105, one policy on a host, an agent and a cFS table | #155 | - | #155 | - | none |
+| Cases 137 and 138, a release id that names an artifact not staged | built | #151 | built | - | none |
+| C durable state, an unsaved floor override and a failed save | - | - | #152 | - | none. It has no case number |
 
-Also in review, with the `xdp` branch: the edge loads its action floor in every table it loads, as a floor
+Built with the `xdp` section (#154): the edge loads its action floor in every table it loads, as a floor
 node reached first, and counts the floor's passes as floor answers with no `would` and no override (AF7).
-The C columns above for the cFS app, the mesh firmware and the cFS ground tools follow #137, #143 and #146.
+The divergence fixes of cases 306 to 308 are #149, cases 191 and 266 in Python are #148, and the install
+command fix is #150. The C columns above for the cFS app, the mesh firmware and the cFS ground tools follow #137, #143 and #146.
+
+Two cases are open, the two `PENDING` lists in the trace test name: Python 206 and 272, Rust 272, and C none.
+Case 206 waits on an owner decision, whether a ceiling can narrow the values of a category (CL4). Case 272 waits
+on an owner decision, whether to build a runtime step for a floor on a `host`, or to restate the case for `xdp`.
+No one is building either until the owner decides.
 
 The part of this section that said section 21 was built in no implementation was written before pull
 requests 136 to 147, and it is gone. The cFS app admits a policy table by its envelope (#137), decides under
