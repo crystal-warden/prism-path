@@ -292,6 +292,21 @@ def test_case_269_a_pep_cut_off_past_its_fresh_statement_lapses(tmp_path):
         assert (lapsed.event, lapsed.cause, lapsed.state) == ("lapsed", "dist:expired", "no-policy")
 
 
+def test_a_fresh_statement_past_what_canon2_holds_gives_no_freshness_and_no_time(tmp_path):
+    """H16, T1: a statement whose `expires` is past the largest integer a canon/2 document holds exactly gives no
+    freshness and, on a PEP with no clock, no time floor, as in Rust and the C core. Its epoch id is still taken, and the
+    next good statement is still the one of this start that raises the time floor."""
+    from prismpath.distribution import kinds
+    point = _dist.HostPep(tmp_path / "host", controller="C", fresh=3600, has_clock=False)
+    point.commit(OLD)
+    floor, now = point.pep.trust.time_floor, point.clock.now
+    good = {"fresh": True, "trust_seq": 0, "stream_seq": 1}
+    assert point.pep.take_statement(signed(epoch=1, expires=kinds.MAX_SEQ + 1, **good))
+    assert point.pep.kept is None and point.pep.trust.time_floor == floor and not point.pep.time_taken
+    assert point.pep.take_statement(signed(epoch=2, expires=now + 3600, **good))
+    assert point.pep.kept is not None and point.pep.trust.time_floor == max(floor, now)
+
+
 def test_case_270_what_gives_freshness(tmp_path):
     """case_270: H16, H9, T1. With `fresh` 3600, a statement for another stream changes nothing, one whose trust
     sequence is below the PEP's, one whose stream seq is below its floor and one 3901 seconds ahead give no

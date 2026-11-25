@@ -58,7 +58,9 @@ opened with `pp_pep_escalated` under the hash of the receipt the caller wrote fo
 600 seconds and kept with the rate counts in both copies. An `operator.answer` signed by one operator key of the install
 record, on a PEP whose install threshold is 2 or more, is applied once when it names the PEP's id, an open escalation
 and the floor that made it, inside the floor's signed `answer_rate`, durably before the `answered` record (OP1 to OP4).
-The answer and the request of its escalation are then the caller's in `pep->answer`. An answer never raises the time
+The answer and the request of its escalation, with the command the caller kept beside it (a cFS command's message id,
+function code and size, which the core never reads), are then the caller's in `pep->answer`. An escalation kept in the
+older layout, before the command was kept, reads with none, and the cFS app does not carry it out. An answer never raises the time
 floor, and on `mesh` it is `dist:target-mismatch`.
 
 `prismpath/tests/test_distribution_c.py` and `test_distribution_c_cfs.py` build `host_check.c` with the host `cc` and

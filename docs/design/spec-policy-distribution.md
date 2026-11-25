@@ -1876,6 +1876,9 @@ are the change statement on every PEP that takes it.
 | 303 | The tool is given a ceiling with no controller state, with a directory that holds none, and with a controller that serves no PEP of the target on the stream, then with `--yes` | the fleet is shown as unknown each time with nothing written, then the ceiling sealed with the unknown preview | CL5 | P |
 | 304 | The tool is given a ceiling that lapses two `mesh` nodes with no fallback policy, then once they hold one, then with a release inside it stored at the controller, then offered to them | a warning that they refuse everything, then a warning that names their fallback policy by install `seq` and set id, then no warning and the release named as stored, then as offered | CL6, FB1 | P |
 | 305 | `prismpath dist install --kind ceiling --staged` seals a ceiling for a canary node and another node, and its rollout option reaches the controller's inbox with it. Then a staged ceiling lapses the canary node where the controller did not expect it, and `--staged` is given for a fallback policy | the canary node alone is offered it, the other node is offered it once the canary node reports it applied and a record after, then the rollout stops and the other node is never offered it, then a usage error | CL7, CL5, F3 | P |
+| 306 | A `host` and a `mesh` PEP commit a release inside their ceiling and apply a narrower ceiling the release is above, and the power is lost after the ceiling is durable and before the lapse. Each restarts, and on Python another is not restarted and ticks. A `host` PEP reconciling a commit with its runtime withdrawn is cut the same way and restarts | the release lapses with `dist:above-ceiling` at the start and at the tick, and the reconciling PEP's held release falls with `dist:above-ceiling` at the tests of C10 and is never installed. No cut leaves a release under a ceiling it is above | CL3, C10, IS12 | P R C |
+| 307 | A `host` and a `mesh` PEP whose ceiling no copy holds are sent, with `widens` false, the empty ceiling, a wider list, a narrower list whose `replaces` is the lost list's policy hash, and the lost list with `replaces` empty, then restart, then are sent the lost list naming the lost hash. Another such PEP is sent a narrower list with `widens` true. A PEP whose ceiling is lost is provisioned with an anchor that shares its install keys and restarts. The IS12 table of `install_larger.json` is replayed | `dist:widening-unsigned` four times with the ceiling still lost after the restart, then `install-applied`, then `install-widened` with `dist:install-widened`. The provisioned PEP refuses a release with `dist:install-lost` before and after the restart. Every row answers with its event and cause | IS10, IS12, AF8, OP4 | P R C |
+| 308 | A withheld artifact at commit on host. A `host` PEP with a release active, and in the C core a `mesh` PEP, is offered a release whose signed release id covers a `policy.ppt` and a `policy.spiral`, and only the `policy.ppt` is staged and committed. The same table is then sent with a release id over what is staged | `dist:incomplete` and the release active before stays active, then `committed` | C2, E10 | P R C |
 
 ## 21. The action floor, the fallback policy and the ceiling
 
@@ -2094,7 +2097,13 @@ enlarges what the PEP allows, and only that. A set that widens is applied on its
 So a narrower ceiling is no widening, a ceiling that holds a hash the one before did not is one, and so is the
 empty set of the ceiling, which removes the bound. A ceiling that the PEP's active release is above narrows, and
 it is applied with event `install-applied` whatever lapses after it. The release then lapses as CL3 says, and the
-`lapsed` or `fallback` record that follows names `dist:above-ceiling`, so the lapse stands out on its own. A held PEP
+`lapsed` or `fallback` record that follows names `dist:above-ceiling`, so the lapse stands out on its own. A PEP
+whose ceiling is lost (IS10) cannot tell what the lost one allowed. Every ceiling it is sent then counts as
+larger, the empty one and a narrower one too, except a resend whose bodies are byte for byte the ones the install
+record names for the lost set. That resend is taken with `widens` `false` only when its `replaces` is the policy
+hash the record names for the lost set, on every kind. Any other ceiling needs `widens` `true` and stands out. The
+PEP keeps the lost set named in its record until a ceiling replaces it, and a provisioning that keeps the install
+sequences keeps it lost (P4, IS6). A held PEP
 takes a set that widens as any PEP does (X9), and the widening waits for its acknowledgement all the same (H13).
 
 **IS13.** An install provisioning brings install statements and no anchor. It is how the engineer
@@ -2382,7 +2391,10 @@ same check before a release is sealed or offered, on every kind.
 is not inside the held ceiling is refused with `dist:above-ceiling` (IS5), and so is a ceiling that the
 held action floor or fallback policy would be above. The engineer narrows those first. A ceiling that the
 active release is above is applied, and the release then lapses with `dist:above-ceiling` as it would
-under R5. A staged or a kept release is left for CL2, and a staged install set is held to the ceiling
+under R5. The checks every entry point, every tick and every start run hold the active release to the held
+ceiling as they hold it to R5, so a power loss after the ceiling is durable and before the lapse still lapses
+the release at the next start. A lost ceiling bounds nothing there, since the PEP keeps the release it has
+(IS10). A staged or a kept release is left for CL2, and a staged install set is held to the ceiling
 again when it is applied (IS4). The fallback policy is bounded by the ceiling
 and not by the release, because it has to stand when there is no release, and because a process owner's
 release is not what bounds the engineer.

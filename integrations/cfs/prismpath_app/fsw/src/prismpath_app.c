@@ -326,6 +326,42 @@ static void PRISMPATH_APP_SendRecord(const uint8 *Record, size_t Len)
     PRISMPATH_APP_SendHk();
 }
 
+static void PRISMPATH_APP_Forward(PRISMPATH_APP_ProposedCmd_t *Proposed, uint32 Seq);
+
+/* OP3: an answer `allow` whose operator case is written carries out the request it answers as it was asked: the
+ * payload the escalation kept, with the function code and size its command was proposed with, on the vehicle message
+ * id as an allowed proposal is. A kept command this app cannot send as it was asked, proposed on another message id
+ * or with a size the command does not hold, is not carried out: the enforcement point decides that before it writes
+ * the operator case, which it then marks `enacted` false (PRISMPATH_APP_CommandLimits), and the check here is a
+ * second guard. */
+static void PRISMPATH_APP_NotEnacted(const char *Why)
+{
+    PRISMPATH_APP_Data.HkTlm.Payload.NotEnacted++;
+    CFE_EVS_SendEvent(PRISMPATH_APP_NOT_ENACTED_EID, CFE_EVS_EventType_ERROR,
+                      "PRISMPATH_APP NOT ENACTED basis=operator: %s, so the answer allow is not carried out", Why);
+}
+
+static void PRISMPATH_APP_Enact(const PP_AppStep_t *Step)
+{
+    PRISMPATH_APP_ProposedCmd_t Request;
+    const PP_AppCommand_t      *Command = &Step->AnswerCommand;
+    size_t                      Room    = sizeof(Request) - sizeof(CFE_MSG_CommandHeader_t);
+
+    if (!CFE_SB_MsgId_Equal(CFE_SB_ValueToMsgId((CFE_SB_MsgId_Atom_t)Command->MsgId), PRISMPATH_APP_Data.ProposedMid) ||
+        Command->Size < sizeof(CFE_MSG_CommandHeader_t) || Command->Size > sizeof(Request))
+    {
+        PRISMPATH_APP_NotEnacted("the command its escalation kept is not one this app was proposed");
+        return;
+    }
+    memset(&Request, 0, sizeof(Request));
+    CFE_MSG_Init(CFE_MSG_PTR(Request.CommandHeader), PRISMPATH_APP_Data.ProposedMid, Command->Size);
+    (void)CFE_MSG_SetFcnCode(CFE_MSG_PTR(Request.CommandHeader), Command->FcnCode);
+    memcpy(&((uint8 *)&Request)[sizeof(CFE_MSG_CommandHeader_t)], Step->AnswerRequest,
+           Step->AnswerRequestLen < Room ? Step->AnswerRequestLen : Room);
+    PRISMPATH_APP_Data.HkTlm.Payload.Allowed++;
+    PRISMPATH_APP_Forward(&Request, PRISMPATH_APP_Data.HkTlm.Payload.Proposed);
+}
+
 /* Every state record a step made, each in a housekeeping packet with an event, then the events of what it did. */
 static void PRISMPATH_APP_Report(void)
 {
@@ -399,15 +435,35 @@ static void PRISMPATH_APP_Report(void)
         {
             snprintf(&hex[2 * i], 3, "%02x", Step->AnswerReceipt[i]);
         }
-        /* OP3, OP4: the answered record is in housekeeping; the request is not republished, since an operator receipt
-         * has no case in a core run yet (RC4) */
-        if (Step->AnswerAllow)
+        /* OP3, OP4, RC4: the answered record is in housekeeping, and the request is receipted in a case of basis
+         * operator before an answer `allow` carries it out */
+        if (Step->AnswerRecordError)
         {
-            PRISMPATH_APP_Data.HkTlm.Payload.NotEnacted++;
+            PRISMPATH_APP_Data.HkTlm.Payload.RecordErrors++;
         }
         CFE_EVS_SendEvent(PRISMPATH_APP_ANSWERED_EID, CFE_EVS_EventType_CRITICAL,
-                          "PRISMPATH_APP ANSWERED %s receipt=%s: not enacted, the request is not republished",
-                          Step->AnswerAllow ? "allow" : "refuse", hex);
+                          "PRISMPATH_APP ANSWERED %s receipt=%s operator receipt=%u%s",
+                          Step->AnswerAllow ? "allow" : "refuse", hex, (unsigned int)Step->AnswerIndex,
+                          Step->AnswerReceipted ? "" : ": not receipted, so the request is not carried out");
+        if (Step->AnswerEnact)
+        {
+            PRISMPATH_APP_Enact(Step);
+        }
+        else if (Step->AnswerNotEnacted == PP_APP_NOT_SENT_NONE)
+        {
+            PRISMPATH_APP_NotEnacted("its escalation kept no command to carry it out as it was asked, as one kept by "
+                                     "an older build, and no function code is guessed");
+        }
+        else if (Step->AnswerNotEnacted)
+        {
+            PRISMPATH_APP_NotEnacted("the command its escalation kept is not one this app was proposed");
+        }
+    }
+    if (Step->RunError && DIST->Started)
+    {
+        CFE_EVS_SendEvent(PRISMPATH_APP_STATE_ERR_EID, CFE_EVS_EventType_ERROR,
+                          "PRISMPATH_APP an install statement could not be written to %s/install.jsonl; the run will "
+                          "not verify", PRISMPATH_APP_PLATFORM_RUN_DIR);
     }
     if (Step->Dropped != 0)
     {
@@ -513,6 +569,14 @@ static int PRISMPATH_APP_Restore(CFE_ES_CDSHandle_t *Handle, bool *Have, void *D
     return PP_APP_STORE_ABSENT;
 }
 
+/* OP3: what a kept command must be for an answer `allow` to send it, the same as PRISMPATH_APP_Enact holds it to */
+static void PRISMPATH_APP_CommandLimits(PP_AppDistConfig_t *Cfg)
+{
+    Cfg->CommandMid = (uint32_t)CFE_SB_MsgIdToValue(PRISMPATH_APP_Data.ProposedMid);
+    Cfg->CommandMin = (uint16_t)sizeof(CFE_MSG_CommandHeader_t);
+    Cfg->CommandMax = (uint16_t)sizeof(PRISMPATH_APP_ProposedCmd_t);
+}
+
 static void PRISMPATH_APP_InitState(void)
 {
     int record, copy;
@@ -544,6 +608,7 @@ static void PRISMPATH_APP_InitState(void)
     s_Config.LostFloor      = PRISMPATH_APP_PLATFORM_LOST_FLOOR;
     s_Config.MinSeq         = PRISMPATH_APP_PLATFORM_LOST_FLOOR_MIN_SEQ;
     s_Config.MonitorStale   = PRISMPATH_APP_MONITOR_STALE_SECS;
+    PRISMPATH_APP_CommandLimits(&s_Config);
     n                       = PP_ReadPath(PRISMPATH_APP_PLATFORM_ANCHOR_FILE, s_Anchor, sizeof(s_Anchor));
     s_Config.Anchor         = n > 0 ? s_Anchor : NULL;
     s_Config.AnchorLen      = n > 0 ? (size_t)n : 0u;
@@ -553,6 +618,7 @@ static void PRISMPATH_APP_InitState(void)
                                                   PP_APP_BOOT_MAX);
     PRISMPATH_APP_LoadKeys();
 
+    DIST->Io                       = &PP_Io; /* a new run's files are begun by the start, which writes install.jsonl */
     PRISMPATH_APP_Data.DistStarted = PP_AppDist_Start(DIST, &s_Config, record, copy, PP_NowMs(), PP_Now()) == 0;
     if (!PRISMPATH_APP_Data.DistStarted)
     {
@@ -574,7 +640,7 @@ static void PRISMPATH_APP_InitState(void)
     }
     else
     {
-        if (PP_Run_Begin(&PP_Io) != 0)
+        if (DIST->Step.RunError)
         {
             CFE_EVS_SendEvent(PRISMPATH_APP_STATE_ERR_EID, CFE_EVS_EventType_ERROR,
                               "PRISMPATH_APP could not create the run files under %s", PRISMPATH_APP_PLATFORM_RUN_DIR);
@@ -681,8 +747,17 @@ static void PRISMPATH_APP_Proposal(const CFE_SB_Buffer_t *SBBufPtr)
     size_t                      PayloadLen;
     uint32                      Seq;
     char                        Rcpt[24];
+    PP_AppCommand_t             Command;
+    CFE_SB_MsgId_t              MsgId = CFE_SB_INVALID_MSG_ID;
+    CFE_MSG_FcnCode_t           Fc    = 0;
 
     (void)CFE_MSG_GetSize(&SBBufPtr->Msg, &Size);
+    (void)CFE_MSG_GetMsgId(&SBBufPtr->Msg, &MsgId);
+    (void)CFE_MSG_GetFcnCode(&SBBufPtr->Msg, &Fc);
+    /* OP3: how it was asked, kept with an escalation so an answer `allow` sends this command and no other */
+    Command.MsgId   = (uint32_t)CFE_SB_MsgIdToValue(MsgId);
+    Command.FcnCode = (uint8_t)Fc;
+    Command.Size    = (uint16_t)(Size > 0xFFFFu ? 0xFFFFu : Size);
     PayloadLen = (Size > sizeof(CFE_MSG_CommandHeader_t)) ? (Size - sizeof(CFE_MSG_CommandHeader_t)) : 0;
     memset(&Proposed, 0, sizeof(Proposed));
     memcpy(&Proposed, SBBufPtr, (Size < sizeof(Proposed)) ? Size : sizeof(Proposed));
@@ -698,29 +773,30 @@ static void PRISMPATH_APP_Proposal(const CFE_SB_Buffer_t *SBBufPtr)
         PayloadLen = PRISMPATH_APP_PAYLOAD_LEN;
     }
     CFE_ES_PerfLogEntry(PRISMPATH_APP_DECIDE_PERF_ID);
-    PP_AppDist_Propose(DIST, &PP_Io, Payload, PayloadLen, PRISMPATH_APP_MonitorAge(), PP_Now(), &Decision);
+    PP_AppDist_Propose(DIST, &PP_Io, Payload, PayloadLen, &Command, PRISMPATH_APP_MonitorAge(), PP_Now(), &Decision);
     CFE_ES_PerfLogExit(PRISMPATH_APP_DECIDE_PERF_ID);
     PRISMPATH_APP_Report();
 
+    if (Decision.Escalated)
+    {
+        char hex[65];
+        int  i;
+        for (i = 0; i < 32; i++)
+        {
+            snprintf(&hex[2 * i], 3, "%02x", Decision.EscalationReceipt[i]);
+        }
+        /* OP3: the receipt hash the ground seals an operator's answer to, beside the PEP id of the state record */
+        CFE_EVS_SendEvent(PRISMPATH_APP_ESCALATION_EID, CFE_EVS_EventType_CRITICAL,
+                          "PRISMPATH_APP ESCALATION seq=%u receipt=%s", (unsigned int)Seq, hex);
+    }
     if (Decision.NotEnacted)
     {
         PRISMPATH_APP_Data.HkTlm.Payload.NotEnacted++;
         PRISMPATH_APP_Data.HkTlm.Payload.Refused++;
         CFE_EVS_SendEvent(PRISMPATH_APP_NOT_ENACTED_EID, CFE_EVS_EventType_ERROR,
-                          "PRISMPATH_APP NOT ENACTED seq=%u basis=%s: a core run cannot attest this set's case yet, so "
-                          "the decision is refused", (unsigned int)Seq, Decision.Basis == PP_BASIS_FLOOR ? "floor" : "fallback");
-        if (Decision.Escalated)
-        {
-            char hex[65];
-            int  i;
-            for (i = 0; i < 32; i++)
-            {
-                snprintf(&hex[2 * i], 3, "%02x", Decision.EscalationReceipt[i]);
-            }
-            /* OP3: the receipt hash the ground seals an operator's answer to, beside the PEP id of the state record */
-            CFE_EVS_SendEvent(PRISMPATH_APP_ESCALATION_EID, CFE_EVS_EventType_CRITICAL,
-                              "PRISMPATH_APP ESCALATION seq=%u receipt=%s", (unsigned int)Seq, hex);
-        }
+                          "PRISMPATH_APP NOT ENACTED seq=%u basis=floor cause=%u: an escalation past the floor's "
+                          "rate has no line in a core run, so the request is refused unreceipted", (unsigned int)Seq,
+                          (unsigned int)Decision.Cause);
         return;
     }
     if (Decision.RecordError)

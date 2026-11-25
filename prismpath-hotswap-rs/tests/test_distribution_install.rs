@@ -17,7 +17,7 @@ use dist::*;
 use installs::*;
 use prismpath_hotswap_rs::dist::envelope as env;
 use prismpath_hotswap_rs::dist::floor;
-use prismpath_hotswap_rs::dist::install::{self, SetKind};
+use prismpath_hotswap_rs::dist::install::{self, AsName, SetKind};
 use prismpath_hotswap_rs::dist::pep::PepError;
 use prismpath_hotswap_rs::dist::state_record;
 use prismpath_hotswap_rs::dist::trust::{anchor_bytes, Role};
@@ -523,6 +523,85 @@ fn case_225_a_host_takes_no_operator_answer() {
     assert_eq!(point.pep.trust().time_floor, time_floor);
 }
 
+/// K4, V5: the role an answer needs is checked before the kind it is for, as Python and the C core check it. An
+/// answer signed only by an authority key passes V3 under that role and is `dist:unknown-key` at V5, not
+/// `dist:target-mismatch`; one signed by an operator key, by no key the PEP holds or by one install key below the
+/// threshold is `dist:target-mismatch`.
+#[test]
+fn an_authority_signed_answer_on_host_is_unknown_key() {
+    let mut point = Installer::with("answer-role", &anchor2(&INSTALL_KEYS, 2, &["O1"], 0), &[], false);
+    for (signer, cause) in [("A", "dist:unknown-key"), ("O1", "dist:target-mismatch"), ("O9", "dist:target-mismatch"), ("N1", "dist:target-mismatch")] {
+        assert_eq!(point.send(&[answer(signer)]).cause.as_deref(), Some(cause), "{signer}");
+    }
+}
+
+/// IS11: an install trust body is read in the order of its rule, as Python and the C core read it. No install key
+/// is `dist:bad-format` before either list is held to its bound, so 0 keys and 5 operators is `dist:bad-format`;
+/// 5 keys, or 1 key and 5 operators, is `dist:too-large`.
+#[test]
+fn an_install_trust_body_with_no_key_is_bad_format_before_too_large() {
+    let body = |keys: &[&str], operators: &[&str]| {
+        let mut keys: Vec<String> = keys.iter().map(|name| hex::encode(public(name))).collect();
+        let mut operators: Vec<String> = operators.iter().map(|name| hex::encode(public(name))).collect();
+        keys.sort();
+        operators.sort();
+        prismpath_rs::canon2::write_json(&json!({"encoding": "canon/2", "format": "prismpath.dist-install-trust/1",
+                                                 "keys": keys, "operators": operators, "threshold": 1}))
+        .unwrap()
+    };
+    let five = ["O1", "O2", "O3", "O4", "O5"];
+    let cause = |keys: &[&str], operators: &[&str]| install::read_install_trust(&body(keys, operators)).err().map(|refused| refused.cause);
+    assert_eq!(cause(&[], &five), Some("dist:bad-format"));
+    assert_eq!(cause(&[], &[]), Some("dist:bad-format"));
+    assert_eq!(cause(&["N1"], &five), Some("dist:too-large"));
+    assert_eq!(cause(&["N1", "N2", "N3", "N4", "N5"], &[]), Some("dist:too-large"));
+    assert_eq!(cause(&["N1"], &["O1"]), None);
+}
+
+/// P2 step 3, CL3, V10: a statement brought with an anchor is held, before anything changes, to what staging it meets
+/// in order: the ceiling the provisioning leaves or one brought before it, and the statements of its set staged before
+/// it. A fallback policy outside the held ceiling, one outside a ceiling brought first, and a second statement of one
+/// set that disagrees with the first each refuse the provisioning and leave the PEP as it was. A set below the held
+/// `seq` is `dist:seq-replay` and the provisioning goes on (case 170), and that refusal is reported beside the
+/// `provisioned` record, as Python's `confirm` reports it.
+#[test]
+fn a_provisioning_refuses_a_brought_set_its_staging_would_refuse_and_keeps_a_seq_replay_record() {
+    let anchor = anchor2(&INSTALL_KEYS, 2, &[], 0);
+    let mut point = Installer::with("brought", &anchor, &[], false);
+    let listed = install::ceiling_body(&[&image(5)]).unwrap();
+    point.send(&ceiling_set(&[&image(5)], &SetArgs { widens: false, ..seq(1) }));
+    let record = point.pep.installed.record.clone();
+    let refused = |point: &mut Installer, brought: Vec<(Vec<u8>, Vec<u8>)>| {
+        let error = provision(point, &anchor, &brought).unwrap_err();
+        assert_eq!(point.pep.installed.record, record);
+        assert_eq!(point.held(FALLBACK), None);
+        error
+    };
+    assert!(refused(&mut point, fallback_set(&image(9), &seq(1))).contains("dist:above-ceiling"));
+    let narrower = ceiling_set(&[], &SetArgs { widens: false, replaces: Some(h(&listed)), ..seq(2) });
+    assert!(refused(&mut point, [narrower, fallback_set(&image(5), &seq(1))].concat()).contains("dist:above-ceiling"));
+    let spiral = b"a spiral sidecar".to_vec();
+    let first = set(FALLBACK, &[(PPT, image(5)), (AsName::Artifact(ArtifactKind::PolicySpiral), spiral.clone())], &seq(1));
+    let first: Vec<_> = first.into_iter().filter(|(_, body)| *body == spiral).collect();
+    assert!(refused(&mut point, [first, fallback_set(&image(5), &seq(1))].concat()).contains("dist:incomplete"));
+    point.send(&fallback_set(&image(5), &seq(2)));
+    point.pep.drain();
+    provision(&mut point, &anchor, &fallback_set(&image(5), &seq(1))).unwrap();
+    let sent: Vec<_> = point.pep.drain().iter().map(|one| point.read(one)).collect();
+    let sent: Vec<_> = sent.iter().map(about).collect();
+    assert_eq!(sent, [("refused", Some("dist:seq-replay")), ("provisioned", None)]);
+    assert_eq!(point.seq_of(FALLBACK), 2);
+}
+
+/// D5: a view of the install part built from the default takes a statement as one in a message, as Python's
+/// `InstallView` does, so a provisioning is always said so and never taken for the default.
+#[test]
+fn the_default_install_view_is_a_message() {
+    let view = prismpath_hotswap_rs::dist::verify::InstallView::default();
+    assert!(view.message);
+    assert!(view.record.is_none() && view.staged.is_empty() && view.ceiling.is_none() && view.layout.is_none());
+}
+
 /// case_233: IS13, IS11. On an install threshold of 1 with two operator keys, an install provisioning that carries an
 /// `install.trust` dropping one of them is applied with the key retired, the trust state and the floor of section 6
 /// unchanged, and an answer that key signs is `dist:target-mismatch`.
@@ -795,7 +874,10 @@ fn case_215_a_lost_ceiling_never_fails_open() {
     let rolled = point.pep.rollback().unwrap();
     assert_eq!(point.read(&rolled).cause.as_deref(), Some("dist:install-lost"));
     assert_eq!(point.send(&floor_set(&good_table(), &seq(1))).cause.as_deref(), Some("dist:install-lost"));
-    assert_eq!(point.send(&ceiling_set(&tables, &SetArgs { widens: false, ..seq(2) })).event, "install-applied");
+    // IS12: the resend follows the lost set, so it names that set's policy hash and not the empty string
+    assert_eq!(point.send(&ceiling_set(&tables, &SetArgs { widens: false, ..seq(2) })).cause.as_deref(), Some("dist:widening-unsigned"));
+    let lost = h(&install::ceiling_body(&tables).unwrap());
+    assert_eq!(point.send(&ceiling_set(&tables, &SetArgs { widens: false, replaces: Some(lost), ..seq(2) })).event, "install-applied");
     let sealed = ppt(&image(5), &Args { widens: false, replaces: Some(h(&image(7))), ..at(3) });
     assert_eq!(point.send(&[(sealed, image(5))]).cause.as_deref(), Some("dist:widening-unsigned"));
     assert_eq!(point.send(&[covering_statement(&ppt(&image(5), &at(3))).unwrap(), (ppt(&image(5), &at(3)), image(5))]).event, "staged");
@@ -1321,4 +1403,99 @@ fn case_299_a_staged_change_statement_survives_a_restart() {
     point.reopen();
     assert!(point.pep.installed.staged.get(&SetKind::Floor).is_some_and(|set| set.change_body.is_some()));
     assert_eq!(about(&point.send(&floor_set(&narrow, &args))), ("install-applied", None));
+}
+
+// ------------------------------------------------------------------ IS10, IS12: a ceiling after a lost one
+
+fn lose_ceiling(point: &mut Installer, tables: &[&[u8]]) {
+    let list = h(&install::ceiling_body(tables).unwrap()).to_string();
+    for dir in ["install/blobs", "install-copy/blobs"] {
+        std::fs::write(point.dist().join(dir).join(&list), b"unreadable").unwrap();
+    }
+    point.reopen();
+    assert!(point.pep.installed.ceiling_lost, "lost at the start");
+}
+
+/// case_307: IS10, IS12, the `host` half. A PEP whose ceiling no copy holds is sent, with `widens` false, the empty
+/// ceiling, a wider list, a narrower list whose `replaces` is the lost list's policy hash and the lost list again with
+/// `replaces` empty, each `dist:widening-unsigned` with the ceiling still lost, also after a restart; then the lost
+/// list again naming the lost hash is `install-applied`. On another such PEP a narrower list with `widens` true is
+/// `install-widened`. A PEP whose ceiling is lost and that is provisioned with an anchor sharing its install keys
+/// stays lost, before and after a restart, and refuses a release with `dist:install-lost`.
+#[test]
+fn case_307_a_ceiling_after_a_lost_one_stands_out_unless_it_is_the_lost_one_again() {
+    let tables: [&[u8]; 2] = [&image(5), &image(7)];
+    let lost = h(&install::ceiling_body(&tables).unwrap());
+    let mut point = Installer::new("307", 2);
+    point.send(&ceiling_set(&tables, &SetArgs { widens: false, ..seq(1) }));
+    point.commit(&image(5), &at(1));
+    lose_ceiling(&mut point, &tables);
+    let quiet = |replaces: Option<Hex64>| SetArgs { widens: false, replaces, ..seq(2) };
+    let unsigned = Some("dist:widening-unsigned");
+    assert_eq!(point.send(&empty_set(ArtifactKind::InstallCeiling, &quiet(Some(lost.clone())))).cause.as_deref(), unsigned);
+    assert_eq!(point.send(&ceiling_set(&[&image(5), &image(7), &image(9)], &quiet(Some(lost.clone())))).cause.as_deref(), unsigned);
+    assert_eq!(point.send(&ceiling_set(&[&image(5)], &quiet(Some(lost.clone())))).cause.as_deref(), unsigned);
+    assert_eq!(point.send(&ceiling_set(&tables, &quiet(None))).cause.as_deref(), unsigned);
+    assert!(point.pep.installed.ceiling_lost);
+    point.reopen();
+    assert!(point.pep.installed.ceiling_lost, "still named, still lost after a restart");
+    assert_eq!(point.pep.installed.lost_ceiling.as_ref().map(|doc| doc.policy_sha256.clone()), Some(lost.clone()));
+    assert_eq!(about(&point.send(&ceiling_set(&tables, &quiet(Some(lost.clone()))))), ("install-applied", None));
+    assert!(!point.pep.installed.ceiling_lost);
+
+    let mut other = Installer::new("307b", 2);
+    other.send(&ceiling_set(&tables, &SetArgs { widens: false, ..seq(1) }));
+    lose_ceiling(&mut other, &tables);
+    let widened = other.send(&ceiling_set(&[&image(5)], &SetArgs { widens: true, ..seq(2) }));
+    assert_eq!(about(&widened), ("install-widened", Some("dist:install-widened")));
+
+    let mut kept = Installer::new("307c", 2);
+    kept.send(&ceiling_set(&tables, &SetArgs { widens: false, ..seq(1) }));
+    kept.commit(&image(5), &at(1));
+    lose_ceiling(&mut kept, &tables);
+    provision(&mut kept, &anchor2(&INSTALL_KEYS, 2, &[], 1), &[]).unwrap(); // IS6: a higher install trust seq, the same keys
+    assert!(kept.pep.installed.ceiling_lost && kept.pep.installed.marks.ceiling);
+    let release = ppt(&image(7), &at(2));
+    let staged = |point: &mut Installer| {
+        let statement = covering_statement(&release).unwrap();
+        point.send(&[statement, (release.clone(), image(7))])
+    };
+    assert_eq!(staged(&mut kept).cause.as_deref(), Some("dist:install-lost"));
+    kept.reopen();
+    assert!(kept.pep.installed.ceiling_lost, "the mark is kept, so the restart knows a ceiling was held");
+    assert_eq!(staged(&mut kept).cause.as_deref(), Some("dist:install-lost"));
+}
+
+/// IS10: a crash between the first ceiling's mark and its record leaves the mark set and the record's ceiling
+/// sequence at 0, which no ceiling ever reached, so the PEP is not frozen as one whose ceiling is lost (Python's
+/// `seqs[CEILING]` test).
+#[test]
+fn a_first_ceiling_cut_between_its_mark_and_its_record_is_no_lost_ceiling() {
+    let mut point = Installer::new("first_mark", 2);
+    point.send(&floor_set(&good_table(), &seq(1)));
+    let marks = std::fs::read_to_string(point.dist().join("marks.json")).unwrap();
+    std::fs::write(point.dist().join("marks.json"), marks.replace("\"ceiling\":false", "\"ceiling\":true")).unwrap();
+    point.reopen();
+    assert!(point.pep.installed.marks.ceiling && !point.pep.installed.ceiling_lost);
+    let release = ppt(&image(5), &at(1));
+    let statement = covering_statement(&release).unwrap();
+    assert_eq!(point.send(&[statement, (release, image(5))]).event, "staged");
+}
+
+/// IS12, OP4: a looser `answer_rate` is larger, as a looser `rate` is, so with `widens` false it is
+/// `dist:widening-unsigned`, and a tighter one is applied.
+#[test]
+fn a_looser_answer_rate_widens_an_action_floor() {
+    let mut point = Installer::new("answer_rate", 2);
+    let meta = |allows: i64, window: i64| {
+        let mut meta = table_meta(&good_table());
+        meta["answer_rate"] = json!({"allows": allows, "window": window});
+        meta
+    };
+    point.send(&floor_set(&good_table(), &SetArgs { meta: Some(meta(5, 60)), ..seq(1) }));
+    let held = Some(h(&good_table()));
+    let quiet = |seq_: i64, meta_: serde_json::Value| SetArgs { meta: Some(meta_), widens: false, replaces: held.clone(), ..seq(seq_) };
+    assert_eq!(point.send(&floor_set(&good_table(), &quiet(2, meta(9, 60)))).cause.as_deref(), Some("dist:widening-unsigned"));
+    assert_eq!(point.send(&floor_set(&good_table(), &quiet(2, meta(5, 30)))).cause.as_deref(), Some("dist:widening-unsigned"));
+    assert_eq!(about(&point.send(&floor_set(&good_table(), &quiet(2, meta(3, 60))))), ("install-applied", None));
 }
