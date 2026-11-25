@@ -1334,3 +1334,15 @@ def test_case_305_a_staged_ceiling_goes_to_the_canary_group_first_and_to_the_res
     assert fleet.run("install", "--kind", "fallback", "--set", f"policy.ppt={tmp_path / 't9.ppt'}", "--seq", "1",
                      "--widens", "--staged", "--yes", *fleet.common, "--out", str(tmp_path / "fb")) == 2
     assert not (tmp_path / "fb").exists()
+
+
+def test_dist_install_keeps_the_subcommand_whether_or_not_a_command_register_is_given():
+    """`prismpath dist install` dispatches on `args.command`; the floor's `--command` register (AF9) has its own
+    destination, so it never overwrites the subcommand and the top level CLI reaches `dist`."""
+    from prismpath import cli
+    base = ["dist", "install", "--kind", "floor", "--stream", STREAM, "--target", "mesh", "--key", "k", "--seq", "1",
+            "--out", "o"]
+    for extra in ([], ["--command", "7"]):
+        args = cli.build_parser().parse_args(base + extra)
+        assert args.command == "dist"
+        assert args.command_register == (7 if extra else None)
