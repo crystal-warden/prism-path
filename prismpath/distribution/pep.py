@@ -656,7 +656,8 @@ class Pep:
                        has_clock=self.has_clock, instance_key_id=self.instance_key.key_id,
                        install=InstallView(record=self.installed.record, staged=dict(self.installed.staged),
                                            ceiling=self.installed.ceiling, message=message,
-                                           layout=getattr(self.adapter, "floor_layout", None)))
+                                           layout=getattr(self.adapter, "floor_layout", None),
+                                           lost=self.installed.lost_ids()))
 
     def record(self, event: str, cause: Optional[str] = None) -> bytes:
         """A signed state record of the PEP as it is now (H1), after the expiry check every report comes

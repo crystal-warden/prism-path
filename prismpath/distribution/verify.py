@@ -304,6 +304,7 @@ class InstallView:
     ceiling: Any = None
     message: bool = True
     layout: Optional[bytes] = None                 # AF10: the layout document a table kind was built with
+    lost: Mapping[str, Any] = field(default_factory=dict)   # IS6: {kind: (seq, envelope ids)} of a set lost at start
 
 
 def _verify_install(envelope, entries, message: bytes, body: bytes, trust: TrustStore, pep: PepView, now: int,
@@ -351,8 +352,10 @@ def _verify_install(envelope, entries, message: bytes, body: bytes, trust: Trust
             return Verdict("dist:trust-replay", envelope)
     elif artifact != install.CHANGE:                # an install change statement's set is in its body, read after V9
         held, held_seq = record.sets[artifact], record.seqs[artifact]
-        if envelope.seq == held_seq and held is not None and envelope_id in held.envelope_ids:
-            return Verdict(None, envelope, unchanged=True)
+        lost_seq, lost_ids = view.lost.get(artifact, (None, frozenset()))
+        if envelope.seq == held_seq and ((held is not None and envelope_id in held.envelope_ids)
+                                         or (lost_seq == held_seq and envelope_id in lost_ids)):
+            return Verdict(None, envelope, unchanged=True)            # IS6: the same statement, held or lost (IS10)
         if envelope.seq <= held_seq:
             return Verdict("dist:seq-replay", envelope)
         staged = view.staged.get(artifact)
