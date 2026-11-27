@@ -87,9 +87,9 @@ Two tiers, kept distinct so nobody infers that a model backed route compiles to 
 describe how much of a flow the general engine can run without a model; Level M is the decidable fragment
 inside P0 that the images and every hardware target execute.
 
-## 7. Decision sufficient execution: Figueroa quantization and Facet
+## 7. Decision sufficient execution: decision sufficient quantization and Facet
 
-A policy depends on only some distinctions in its input. Figueroa quantization derives, from the policy
+A policy depends on only some distinctions in its input. Decision sufficient quantization (also called Figueroa quantization) derives, from the policy
 text, the partition of each field into the cells that can change a decision, and a reading is sent as one
 symbol per cell. Any representative of a cell routes identically; that property is proven in Lean 4,
 thirteen theorems with zero sorry on the standard axioms, within a declared domain of well typed integer
