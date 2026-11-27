@@ -2,12 +2,14 @@
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """The readable source of a `prismpath.core/1` policy image, its compiler, and a classifier skeleton.
 
-A core policy image (docs/design/spec-verified-core.md, section 2) is nested JSON. Its readable source is
-not a new language: it is the flow text the image already renders to (`core_render.render`, the canonical
-rendering a core run stores and the evidence verifier recomputes), the Markdown flow format of SPEC.md with
-the field definitions of section 4.5 in its front matter and the Level M conditions of section 4.3 on its
-rules. The one change is how a rule names what it decides: a cause by its registered name instead of its
-number.
+A core policy image (docs/design/spec-verified-core.md, section 2) is nested JSON. Its readable source, a
+rules source, is a dialect of the Markdown flow format of SPEC.md and is specified in SPEC.md section 9. It
+starts from the flow text the image already renders to (`core_render.render`, the canonical rendering a core
+run stores and the evidence verifier recomputes), with the field definitions of section 4.5 in its front
+matter and the Level M conditions of section 4.3 on its rules. It differs from a flow in how a rule names what
+it decides: a cause by its registered name instead of its number, so `refuse agent:network` has a space where
+a flow edge target cannot. The flow parser therefore refuses a rules source (`kernel/parser.RulesSourceError`)
+rather than read its refusals as prose, and only this module reads one.
 
     ---
     name: agent_rules

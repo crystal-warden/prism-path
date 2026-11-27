@@ -21,18 +21,31 @@ A flow is one UTF-8 Markdown file.
 
 ```markdown
 ---
-name: bugfix          # optional; default "flow"
-start: triage         # optional; default = the first node defined
+name: bugfix
+start: triage
 ---
 
-## triage                                    ← a NODE
-Read the bug report and decide what to do.   ← the node's INSTRUCTION (prose)
-@emits(action)                               ← an ANNOTATION (optional)
--> implement: when action == "fix"           ← an EDGE
+## triage
+Read the bug report and decide what to do.
+@emits(action)
+-> implement: when action == "fix"
 -> close: it is a duplicate or invalid
 
-## done                                      ← a node with no edges is TERMINAL
+## implement
+Fix the bug.
+-> done: always
+
+## close
+Close the report.
+
+## done
+Summarize and finish.
 ```
+
+Here `## triage` is a node, the prose under it is its instruction, `@emits(action)` is an annotation and each
+`->` line is an edge. `name` and `start` are both optional (`name` defaults to `"flow"`, `start` to the first
+node defined). A node with no edges, like `done`, is terminal. The front matter has no comment syntax: text
+after a `#` is part of the value.
 
 Normatively:
 

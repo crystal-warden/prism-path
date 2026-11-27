@@ -76,12 +76,18 @@ prismpath policy compile agent_rules.rules.md -o agent_rules.core.json
 ```
 
 This writes the policy image the agent loads, and it checks the rules the way the verified core does.
-A problem is named with its line. In the small example above, a misspelled cause on line 11 and
-`tool == 1` on line 12 give
+A problem is named with its line. The compiler reads the whole file first and then checks the rules,
+so a mistake in how a line is written is reported before a mistake in what it means. In the small example
+above, a misspelled cause on line 11 gives
 
 ```
-my_rules.rules.md:11: agent:kill-by-patern is not a registered cause name; did you mean agent:kill-by-pattern?
-my_rules.rules.md:12: the rule compares a field with a value of another kind (policy:kind-mismatch: field tool)
+prismpath policy compile: my_rules.rules.md:11: agent:kill-by-patern is not a registered cause name; did you mean agent:kill-by-pattern?
+```
+
+With that fixed, `tool == 1` on line 12 gives
+
+```
+prismpath policy compile: my_rules.rules.md:12: the rule compares a field with a value of another kind (policy:kind-mismatch: field tool)
 ```
 
 Nothing is written until the file compiles. The compiler also warns about a rule that no call can
