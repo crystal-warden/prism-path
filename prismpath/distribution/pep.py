@@ -585,7 +585,7 @@ class Pep:
     @staticmethod
     def _state(owed: Tuple[str, Optional[str]], running: Optional[Release], withdrawn: bool) -> dict:
         return {"owed": owed[0], "cause": owed[1], "running": None if withdrawn else running,
-                "withdrawn": withdrawn, "running_fell": None}
+                "withdrawn": withdrawn, "running_fell": None, "running_floor": None}
 
     def _step(self, cause: Optional[str] = None) -> None:
         """The runtime step: run the held release, or the fallback set or nothing when none is held or the PEP is
@@ -726,8 +726,9 @@ class Pep:
 
     def reconciling_entry(self) -> Optional[state_record.ReconcilingEntry]:
         """H14: the reconciling entry, or None outside the state. A locked PEP names `dist:floor-lost` and no
-        running release (C13). The floor field is the set id of the action floor the PEP holds, which in the Python
-        machine is the one it asks, zeros for none."""
+        running release (C13). The floor field is the set id of the action floor the runtime holds, zeros for none.
+        That is the floor the PEP holds and asks, except on a runtime that loads the floor (`xdp`) after a step that
+        installs a new floor fails and the withdrawal fails too. The runtime may still hold the floor before (C10)."""
         state = self.reconciling
         if state is None:
             return None
@@ -737,8 +738,15 @@ class Pep:
             owed=state["owed"], cause=cause,
             running_policy=state_record.prefix(running.policy_sha256 if running else None),
             running_release=state_record.prefix(running.release if running else None),
-            running_seq=running.seq if running else 0,
-            floor=bytes.fromhex(held.set_id)[:16] if (held := self.floor_set()) is not None else b"\x00" * 16)
+            running_seq=running.seq if running else 0, floor=self._runtime_floor(state))
+
+    def _runtime_floor(self, state: dict) -> bytes:
+        """H14, C10: the first 16 bytes of the set id of the action floor the runtime holds, zeros for none."""
+        floor_id = state["running_floor"]
+        if floor_id is None:
+            held = self.floor_set()
+            floor_id = held.set_id if held is not None else ""
+        return bytes.fromhex(floor_id)[:16] if floor_id else b"\x00" * 16
 
     def _keep(self, image: bytes, reading: Any) -> bool:
         """H5: put `reading` in the ring when the Facet codec of `image` encodes it, as `decide` and the readings
@@ -1008,6 +1016,8 @@ class Pep:
             return refuse(cause)
         bodies = {name: body for name, body in staged.bodies.items() if name != kinds.NONE}
         new = staged.held()
+        floor_before = self._held_in(record, install.FLOOR)
+        floor_before = floor_before.set_id if floor_before is not None else ""
         # CL3: a ceiling that narrows below the active release is no widening; the release lapses and says so itself
         lapses = (kind == install.CEILING and self.active is not None and bodies
                   and not install.inside(target, new, self.active.bodies))
@@ -1038,16 +1048,19 @@ class Pep:
         in_runtime = kind == install.FALLBACK or (kind == install.FLOOR
                                                   and getattr(self.adapter, "floor_in_runtime", False))
         if in_runtime and self.reconciling is not None:
-            if self.reconciling["withdrawn"]:                        # C8: the withdrawn runtime runs the new set
+            state = self.reconciling
+            if state["withdrawn"]:                                   # C8: the withdrawn runtime runs the new set
                 try:
                     self._withdraw(self._withdraw_cause())
                 except Exception:  # noqa: BLE001 - not withdrawn after all; the next tick tries again (C9)
-                    self.reconciling["withdrawn"] = False
+                    state["withdrawn"] = False
+            if kind == install.FLOOR and not state["withdrawn"] and state["running_floor"] is None:
+                state["running_floor"] = floor_before                # C10, H14: the runtime may hold the floor before
             return self._record(*owed)
         if kind == install.FALLBACK and (before or self.fallback_decides()):
             return self._runtime_step(owed, None)                    # FB8: the new fallback set decides at once
         if in_runtime and kind == install.FLOOR:
-            return self._runtime_step(owed, self.active)             # C6, AF1: a runtime that holds the floor loads it
+            return self._runtime_step(owed, self.active, floor_before=floor_before)   # C6, AF1: the runtime loads it
         return self._record(*owed)
 
     @staticmethod
@@ -1311,15 +1324,17 @@ class Pep:
             self.staged = None
         return self._runtime_step((event, None), running)
 
-    def _runtime_step(self, owed: Tuple[str, Optional[str]], running: Optional[Release]) -> bytes:
+    def _runtime_step(self, owed: Tuple[str, Optional[str]], running: Optional[Release], *,
+                      floor_before: Optional[str] = None) -> bytes:
         """The runtime step of a transition whose record is durable. When it works the state record goes, then the
         clean up. When it fails between two releases whose bodies are the same the PEP stays as it is and each tick
-        tries again, and otherwise it is reconciling (C6, C10)."""
+        tries again, and otherwise it is reconciling (C6, C10). A step that loads a new action floor, `floor_before`
+        the set id of the one before, changes what the runtime decides with, so it is never such a switch."""
         try:
             self._step(owed[1])
         except Exception as error:  # noqa: BLE001 - any failure of the runtime is a failed runtime step (C6)
-            if not self._same_bodies(running):
-                return self._enter(owed, running, error)
+            if floor_before is not None or not self._same_bodies(running):   # a new floor is no renewal (C10)
+                return self._enter(owed, running, error, floor_before=floor_before)
             self.audit.append("distribution", "runtime_failed", {"error": str(error),
                                                                  "result": "tried again at the next tick"})
             self.retry_runtime = True
@@ -1368,12 +1383,15 @@ class Pep:
                 else RECONCILING)
 
     def _enter(self, owed: Tuple[str, Optional[str]], running: Optional[Release], error: Exception, *,
-               withdrawn: bool = False) -> bytes:
+               withdrawn: bool = False, floor_before: Optional[str] = None) -> bytes:
         """C6, C10, C12: the runtime step failed. The PEP withdraws the runtime at once, unless the step that failed
         was the withdrawal itself, writes `reconciling` with the runtime's error and sends a record with that
-        event. When the withdrawal works the intent record notes it and only the held release is tracked."""
+        event. When the withdrawal works the intent record notes it and only the held release is tracked. A step that
+        installed a new action floor names the set id of the floor before, `floor_before`, as the one the runtime
+        holds until the withdrawal works (C10, H14)."""
         stepped_withdrawal = self.own_refusal() is not None
         self.reconciling = self._state(owed, running, withdrawn)
+        self.reconciling["running_floor"] = floor_before
         if not withdrawn and not stepped_withdrawal:
             try:
                 self._withdraw(self._withdraw_cause())
@@ -1388,7 +1406,7 @@ class Pep:
     def _note_withdrawn(self) -> None:
         """C10: the withdrawal worked. The runtime runs no release, and the intent record says so."""
         state = self.reconciling
-        state["withdrawn"], state["running"], state["running_fell"] = True, None, None
+        state["withdrawn"], state["running"], state["running_fell"], state["running_floor"] = True, None, None, None
         if self.store.exists("pending.json"):
             try:
                 intent = self.store.read("pending.json", _PENDING)

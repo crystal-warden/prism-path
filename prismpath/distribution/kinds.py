@@ -218,10 +218,11 @@ def check_policy_spiral(_envelope, _body: bytes, _pep) -> Optional[str]:
     return None
 
 
-def check_policy_core(envelope, body: bytes, _pep) -> Optional[str]:
+def check_policy_core(envelope, body: bytes, pep) -> Optional[str]:
     """`policy.core` (V11): the image loads as the core reads it, with the core's own cause when it does not,
     the harness knows every target it names, every value a rule names is inside its field's reading domain
-    (`policy:out-of-domain`, 9.4), and its SHA-256 is the envelope's `policy_sha256`."""
+    (`policy:out-of-domain`, 9.4), its SHA-256 is the envelope's `policy_sha256`, and on a PEP with an install part
+    its grammar is inside the scope the held ceiling states, or a ceiling's own inside the built domain (CL4)."""
     from prismpath.kernel import core_policy
     refusal = core_policy.load_policy(bytes(body))
     if refusal is not None:
@@ -233,7 +234,13 @@ def check_policy_core(envelope, body: bytes, _pep) -> Optional[str]:
         return "policy:out-of-domain"
     except ValueError:
         return "policy:unreadable"
-    return None if hashlib.sha256(bytes(body)).hexdigest() == envelope.policy_sha256 else "image:sha256-mismatch"
+    if hashlib.sha256(bytes(body)).hexdigest() != envelope.policy_sha256:
+        return "image:sha256-mismatch"
+    view = getattr(pep, "install", None)
+    if view is None:
+        return None
+    from prismpath.distribution import install
+    return install.out_of_scope(pep.kind, envelope.artifact, body, view.ceiling)
 
 
 def read_hosts(body: bytes) -> list:
