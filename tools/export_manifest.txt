@@ -411,6 +411,7 @@ prismpath/ledgers/ledger_ots.py
 prismpath/ledgers/ledger_runner.py
 prismpath/ledgers/otel.py
 prismpath/ledgers/root_statement.py
+prismpath/ledgers/witness.py
 prismpath/level_m.py
 prismpath/lint.py
 prismpath/llm_local.py
@@ -942,6 +943,7 @@ prismpath/tests/test_swarm_exporter.py
 prismpath/tests/test_swarm_runner.py
 prismpath/tests/test_trail.py
 prismpath/tests/test_wait_event.py
+prismpath/tests/test_witness.py
 prismpath/tests/test_workflows_parse.py
 prismpath/tests/test_zone_index_protected.py
 prismpath/tests/test_zones.py

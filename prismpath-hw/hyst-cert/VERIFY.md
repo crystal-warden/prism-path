@@ -141,3 +141,11 @@ The button presses in the video line up with the stateful flag flips in the rece
 shake lines up with the quantized field values; the parked knife edge holds one band while the
 field jitters. The receipt was written by the fabric while the camera rolled. If the video and the
 receipt tell the same story, everything above says neither could have been quietly rewritten.
+
+## What these steps do not prove
+
+Every step above shows that nothing was altered after it was hashed, signed or anchored. None of them shows that
+nothing was left out. A receipt that was never written leaves no hash to check, so a signed root, an anchor and an
+outside witness all prove integrity of what was recorded and say nothing about completeness. What the board
+recorded is complete only as far as the receipt stream itself is, and the take receipt is the one place you can
+compare it with what the camera saw.

@@ -120,6 +120,60 @@ Connected v1 (1 to 3) is ~a week; the defensible IP is item 4.
 - Not "proof the AI's verdict was correct" (C1).
 - Not "instant tamper proof" before the confirmation window closes (C2): say pending vs confirmed.
 - Not "cryptographically provable" until §5's gate passes.
+- Not "the receipts are complete". A signed root, an anchor and a witness each show that nothing under the root
+  was altered after it was stated. None of them shows that nothing was left out before it was stated.
+
+## 9. Outside witness (optional)
+
+An anchor shows a hash existed by a time. It does not stop the holder of the instance key from cutting the tail
+of a log and its statements, or from signing a second chain. A witness closes part of that gap. It is a second
+party with its own Ed25519 key, implemented in `prismpath/ledgers/witness.py`.
+
+### 9.1 What the witness checks
+
+The witness pins the signer keys it accepts. For each signer and log it keeps the last statement it cosigned in a
+canon/2 state file (`prismpath-witness-state/1`), written atomically, so it resumes after a restart. It cosigns a
+`prismpath-root-statement/3` statement only when all of these hold.
+
+1. The statement is well formed and its signature verifies under a pinned signer key.
+2. Its `seq` is after the last cosigned one. A different statement at the same `seq` is refused as `fork`.
+3. When `seq` is the next one, `prev` names the last cosigned statement.
+4. It covers no fewer leaves (`truncated` otherwise), and the same count of leaves only under the same root.
+5. When it covers more leaves, an RFC 6962 consistency proof from the last cosigned root to the new one verifies
+   (`root_statement.verify_consistency`).
+
+A core run root (`prismpath.core-run-root/2`) has no chain. The witness checks its signature and cosigns it once
+per hash. The witness key must not be a signer key.
+
+### 9.2 The cosignature
+
+One canon/2 line per cosignature in `<statements>.witness.jsonl`, beside the statements file
+(`witness_path_for`). Format `prismpath-root-witness/1`. The members are `format`, `encoding`, `statement_format`,
+`statement_sha256`, `log`, `seq` (null for a core run), `leaves`, `root`, `signer_key_id`, `witness_key_id`,
+`witness_public_key`, `time_us` and `sig`. The signature is Ed25519 over `prismpath-root-witness/1\0` followed by
+the canon/2 bytes of every member but `sig`. `statement_sha256` is `root_statement.statement_hash` for a chained
+statement and the SHA-256 of the canon/2 line for a core run root. The domain prefix keeps a cosignature from
+being read as any other signed document.
+
+### 9.3 Reading cosignatures
+
+`witness.verify(statements, cosignatures, pinned_witnesses)` counts a cosignature only under a pinned witness key
+and only when it names a statement in the chain by hash, with the same log, seq, leaves, root and signer. A
+cosignature whose statement is not in the chain is the finding `statement_missing`. That is the case a witness
+exists for. The chain was cut or replaced after the witness saw it, even when the chain alone still verifies. The
+status is `witnessed` when the last statement is cosigned, `unwitnessed` when it is not, and `invalid` on any
+finding. A cosignature under a key the reader did not pin is ignored. No witness file means `unwitnessed`, never a
+failure, unless the reader requires a witness.
+
+### 9.4 What does not change
+
+Receipts, root statements, core run roots and every frozen corpus keep their bytes. The witness reads them and
+writes only its own file. A reader that ignores the witness file reads the log exactly as before.
+
+### 9.5 What a witness does not prove
+
+A cosignature proves the witness saw a statement with that hash, signed by that key, extending what it saw before.
+It does not prove the receipts are complete. A deployment can leave a decision out before it signs a root.
 
 ---
 ## CONNECTED V1: DELIVERED + VALIDATED (2026-07-21, #36)
