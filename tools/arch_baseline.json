@@ -36,7 +36,8 @@
     "gateway/proxy.py -> distribution/adapters/gateway.py (adapter -> adapter, another package)",
     "kernel/analysis.py -> routing/lockfile.py (kernel -> adapter)",
     "kernel/engine.py -> routing/router.py (kernel -> adapter)",
-    "kernel/model_check.py -> cli.py (kernel -> surface)"
+    "kernel/model_check.py -> cli.py (kernel -> surface)",
+    "kernel/policy_source.py -> agent/target.py (kernel -> adapter)"
   ],
   "private_use": [
     "agent/claude_code.py -> agent/classifier.py :: _FIND_EFFECTS #1",
@@ -154,6 +155,7 @@
     "kernel/model_check.py -> kernel/level_m.py :: _desugar_chains #1",
     "kernel/model_check.py -> kernel/level_m.py :: _scalar_const #1",
     "kernel/policy_source.py -> kernel/causes.py :: _REGISTRY #1",
+    "kernel/policy_source.py -> kernel/causes.py :: _REGISTRY #2",
     "kernel/ppt_compile.py -> kernel/analysis.py :: _reachable #1",
     "kernel/ppt_compile.py -> kernel/model_check.py :: _classify #1",
     "kernel/ppt_compile.py -> kernel/model_check.py :: _desugar_chains #1",
