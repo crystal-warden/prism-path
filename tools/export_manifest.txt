@@ -852,6 +852,7 @@ prismpath/tests/test_gateway_any_worker.py
 prismpath/tests/test_gateway_grants.py
 prismpath/tests/test_gotchas_py_kernel.py
 prismpath/tests/test_governed_agent_guide.py
+prismpath/tests/test_grant_narrowing.py
 prismpath/tests/test_graph_export.py
 prismpath/tests/test_guard.py
 prismpath/tests/test_guard_ledger.py
