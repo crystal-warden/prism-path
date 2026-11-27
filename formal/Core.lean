@@ -9,6 +9,7 @@ import Core.Eval
 import Core.Theorems
 import Core.Boundary
 import Core.Codes
+import Core.Grant
 import Core.Order
 import Core.Bridge
 import Core.Scope
