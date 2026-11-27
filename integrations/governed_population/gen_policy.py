@@ -2,14 +2,15 @@
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Write the population's two policy images from the caps in `limits.py`.
 
-    python -m integrations.governed_population.gen_policy          writes policy/*.src.json and *.core.json
+    python -m integrations.governed_population.gen_policy          writes policy/*.rules.md and *.core.json
     python -m integrations.governed_population.gen_policy --check  exits 1 if any file is stale
 
 The admission image decides every request a member, the controller or the operator makes of the
 population: replicate, evolve, restart, protect, stop and review. The evaluation image decides whether a
 canary of a proposed version passed its evaluation against the adversary set. Both are `prismpath.core/1`
-images; the `.core.json` file is the canonical canon/2 bytes of the `.src.json` file, the bytes that are
-signed and decided.
+images; the `.core.json` file holds the canonical canon/2 bytes that are signed and decided, and the
+`.rules.md` file beside it is the same image as readable rules (`prismpath policy render`), which the tests
+compile back to those bytes.
 
 The core compares a field with a constant, never two fields, so the caps on a sum (the population after
 the request, the lineage after the request) are written as one disjunct per count a request may name: the
@@ -29,14 +30,17 @@ import json
 import sys
 from pathlib import Path
 
-from prismpath.kernel import canon2
+from prismpath.kernel import canon2, policy_source
+
+_GENERATED = ("Written by `python -m integrations.governed_population.gen_policy` from the caps in limits.py.",
+              "Edit those and run it again, not this file. The tests hold it to the image byte for byte.")
 
 from .limits import CAP, EVAL_CASES, LINE_REFUSALS, MAX_GENERATION, PER_REQUEST, QUOTA, RIGHTS
 
 HERE = Path(__file__).resolve().parent
-ADMISSION_SRC = HERE / "policy" / "admission.src.json"
+ADMISSION_SRC = HERE / "policy" / "admission.rules.md"
 ADMISSION_CORE = HERE / "policy" / "admission.core.json"
-EVALUATION_SRC = HERE / "policy" / "evaluation.src.json"
+EVALUATION_SRC = HERE / "policy" / "evaluation.rules.md"
 EVALUATION_CORE = HERE / "policy" / "evaluation.core.json"
 LEAN_IMAGE = HERE.parents[1] / "formal" / "Core" / "PopulationImage.lean"
 
@@ -186,11 +190,13 @@ def lean_image(admission_core: bytes, evaluation_core: bytes) -> bytes:
 
 def files():
     out = {}
-    for src, core, image in ((ADMISSION_SRC, ADMISSION_CORE, admission_image()),
-                             (EVALUATION_SRC, EVALUATION_CORE, evaluation_image())):
-        text = json.dumps(image, indent=1) + "\n"
-        out[src] = text.encode()
-        out[core] = canon2.canonicalize(text.encode()) + b"\n"
+    for src, core, image, about in (
+            (ADMISSION_SRC, ADMISSION_CORE, admission_image(), "the population's admission of a member's request"),
+            (EVALUATION_SRC, EVALUATION_CORE, evaluation_image(), "whether a canary passed its evaluation")):
+        canonical = canon2.canonicalize((json.dumps(image, indent=1) + "\n").encode())
+        out[src] = policy_source.render_source(canonical, name=core.name[:-len(".core.json")], description=about,
+                                               notes=_GENERATED).encode("utf-8")
+        out[core] = canonical + b"\n"
     out[LEAN_IMAGE] = lean_image(out[ADMISSION_CORE], out[EVALUATION_CORE])
     return out
 

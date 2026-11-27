@@ -225,12 +225,10 @@ prismpath/agent/observe.py
 prismpath/agent/policy.py
 prismpath/agent/policy/agent_default.core.json
 prismpath/agent/policy/agent_default.rules.md
-prismpath/agent/policy/agent_default.src.json
 prismpath/agent/policy/agent_review.core.json
 prismpath/agent/policy/agent_review.rules.md
 prismpath/agent/policy/agent_rules.core.json
 prismpath/agent/policy/agent_rules.rules.md
-prismpath/agent/policy/agent_rules.src.json
 prismpath/agent/policy/agent_session.core.json
 prismpath/agent/policy/agent_session.rules.md
 prismpath/agent/profile.py

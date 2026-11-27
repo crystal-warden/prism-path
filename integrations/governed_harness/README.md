@@ -16,7 +16,7 @@ model reply -> proposed call -> classifier (trusted, tested) -> reading (canon/2
 
 | File | What it is |
 |------|------------|
-| `../../prismpath/agent/policy/agent_rules.src.json` | the owner's rules as a `prismpath.core/1` image, as written |
+| `../../prismpath/agent/policy/agent_rules.rules.md` | the owner's rules as written, which compile to the image |
 | `../../prismpath/agent/policy/agent_rules.core.json` | the same image in its canonical canon/2 bytes (`prismpath canonicalize`), the policy that is decided and signed |
 | `classifier.py` | a re-export of `prismpath.agent.classifier`: a raw call to the eleven fields the policy routes on; trusted code outside the verified core |
 | `owner_rules.py` | the owner's rules read a second time in plain Python, the reference the policy and the scorer are held to |

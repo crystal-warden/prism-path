@@ -520,9 +520,18 @@ def read_image(raw) -> Dict[str, Any]:
     return canon2.loads(raw)
 
 
-def render_source(image) -> str:
+def read_image_bytes(raw: bytes) -> bytes:
+    """An image file's bytes without the one line feed a file may end with."""
+    return raw[:-1] if raw.endswith(b"\n") and not raw.endswith(b"\n\n") else raw
+
+
+def render_source(image, name: Optional[str] = None, description: Optional[str] = None,
+                  notes: Tuple[str, ...] = ()) -> str:
     """The source of an image: its canonical flow rendering (`core_render.render`) with each rule's cause
-    named by its registered name. Raises core_render.Unrenderable for an image the source cannot carry."""
+    named by its registered name. Raises core_render.Unrenderable for an image the source cannot carry.
+    `name`, `description` and `notes` (lines put under the heading, before the rules) are for the reader and
+    change nothing in the image, so a generator can write a source that says where it came from."""
+    title = name
     doc = read_image(image)
     fields = doc.get("fields") if isinstance(doc, dict) else None
     for name, text in (fields.items() if isinstance(fields, dict) else ()):
@@ -537,6 +546,18 @@ def render_source(image) -> str:
         prefix = f"-> {rule['target']}: "
         assert text.startswith(prefix), text
         out.append(f"-> {readable_target(rule['target'])}: {text[len(prefix):]}")
+    for note in notes:
+        if _EDGE.match(note) or _HEAD.match(note) or _ANNO.match(note) or "\n" in note:
+            raise ValueError(f"a note must be one line that is not a rule, a heading or an annotation: {note!r}")
+    if notes:
+        out[head + 1:head + 1] = list(notes) + [""]
+    if title is not None or description is not None:
+        for text in (title, description):
+            if text is not None and ("\n" in text or text != text.strip()):
+                raise ValueError("a name or a description is one trimmed line")
+        meta = ([f"name: {title}"] if title is not None else [out[1]]) + (
+            [f"description: {description}"] if description is not None else [])
+        out[1:2] = meta
     return "\n".join(out) + "\n"
 
 
@@ -693,7 +714,7 @@ def test_the_unknown_reading_is_never_allowed():
 
 # ----------------------------------------------------------------- command line
 def add_parser(subparsers) -> None:
-    """`prismpath policy compile | render | skeleton | causes`."""
+    """`prismpath policy compile | render | skeleton | check | causes`."""
     policy_parser = subparsers.add_parser(
         'policy', help='Write a core policy as readable rules: compile the rules to the signed image\'s '
                        'canonical bytes, render an image back to rules, start a classifier for the fields')
@@ -714,6 +735,10 @@ def add_parser(subparsers) -> None:
     skeleton_parser.add_argument('-o', '--out', required=True, help='the module to write (module.py)')
     skeleton_parser.add_argument('--test', default=None, help='the test to write (default test_<module>.py beside it)')
     skeleton_parser.add_argument('--force', action='store_true', help='overwrite files that exist')
+    check_parser = actions.add_parser('check', help='check that a rules source compiles to an image byte for byte, '
+                                                    'for CI: exit 1 when the image is stale')
+    check_parser.add_argument('source', help='the rules source (.rules.md)')
+    check_parser.add_argument('image', help='the image it must compile to (.core.json)')
     causes_parser = actions.add_parser('causes', help='list the registered causes a rule can name, with their codes '
                                                       'and meanings')
     causes_parser.add_argument('--all', action='store_true', help='list every registered cause, not only the ones a '
@@ -771,13 +796,16 @@ def policy_cmd(args) -> int:
             sys.stdout.write(text)
         return 0
 
+    import hashlib
     try:
-        with open(args.source, encoding="utf-8") as handle:
-            text = handle.read()
+        with open(args.source, "rb") as handle:
+            source_bytes = handle.read()
+        text = source_bytes.decode("utf-8")
     except (OSError, UnicodeDecodeError) as error:
         return refuse([f"{args.source}: {getattr(error, 'strerror', None) or error}"])
+    source_sha256 = hashlib.sha256(source_bytes).hexdigest()
     try:
-        if args.policy_action == 'compile':
+        if args.policy_action in ('compile', 'check'):
             compiled = compile_full(text, args.source)
         else:
             module = os.path.splitext(os.path.basename(args.out))[0]
@@ -798,7 +826,22 @@ def policy_cmd(args) -> int:
     except SourceError as error:
         return refuse(error.lines())
     for line, message in compiled.warnings:
-        print(f"prismpath policy compile: {args.source}:{line}: warning: {message}", file=sys.stderr)
+        print(f"prismpath policy {args.policy_action}: {args.source}:{line}: warning: {message}", file=sys.stderr)
+    image_sha256 = hashlib.sha256(compiled.image).hexdigest()
+    if args.policy_action == 'check':
+        try:
+            with open(args.image, "rb") as handle:
+                held = handle.read()
+        except OSError as error:
+            return refuse([f"{args.image}: {error.strerror}"])
+        if held in (compiled.image, compiled.image + b"\n"):
+            print(f"{args.source} compiles to {args.image}, image sha256 {image_sha256}, source sha256 {source_sha256}")
+            return 0
+        held_sha256 = hashlib.sha256(read_image_bytes(held)).hexdigest()
+        print(f"prismpath policy check: {args.source} compiles to image sha256 {image_sha256}, but {args.image} is "
+              f"sha256 {held_sha256}. Compile it again with `prismpath policy compile {args.source} -o {args.image}`",
+              file=sys.stderr)
+        return 1
     if args.target:
         from prismpath.agent import target as agent_target      # the agent's own checks, read lazily
         found = agent_target.TARGETS[args.target](compiled.image)
@@ -807,6 +850,8 @@ def policy_cmd(args) -> int:
                                        for where, message in found], args.source).lines())
     if args.out:
         _write(args.out, compiled.image + b"\n")
+        print(f"prismpath policy compile: wrote {args.out}, image sha256 {image_sha256}, source sha256 "
+              f"{source_sha256}", file=sys.stderr)
     else:
         sys.stdout.buffer.write(compiled.image + b"\n")
         sys.stdout.flush()

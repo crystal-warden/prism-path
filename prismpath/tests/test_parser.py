@@ -167,7 +167,11 @@ def test_every_shipped_rules_source_is_refused():
     assert len(sources) >= 6
     for path in sources:
         with pytest.raises(ParseError, match="rules source"):
-            parse(path.read_text(encoding="utf-8"))
+            parse_file(str(path))
+        text = path.read_text(encoding="utf-8")
+        if any(_parser.RULES_LINE_RE.match(line) for line in text.splitlines()):
+            with pytest.raises(ParseError, match="rules source"):      # by its text too, whatever its name
+                parse(text)
 
 
 def test_a_rendered_core_image_still_parses_as_a_flow():

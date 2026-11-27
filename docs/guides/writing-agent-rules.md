@@ -127,7 +127,17 @@ To read an existing image as rules:
 prismpath policy render agent_rules.core.json
 ```
 
-Compiling what `render` prints gives the same image, byte for byte. The rules files shipped with the
+Compiling what `render` prints gives the same image, byte for byte. `render` does not keep the name, the
+description or the notes, so keep your `.rules.md` file as the source and the image as what it compiles to.
+
+`compile -o` prints the SHA-256 of the image and of the source together. To check in CI that an image is
+still what its source compiles to, run
+
+```
+prismpath policy check my_rules.rules.md my_rules.core.json
+```
+
+It exits 0 when they match and 1, with the command that fixes it, when the image is stale. The rules files shipped with the
 agent compile to the shipped images byte for byte, and a test holds them to that.
 
 ## Use your rules
