@@ -731,6 +731,7 @@ prismpath/tests/fixtures/core_evidence/cases.jsonl
 prismpath/tests/fixtures/kappa_dataset.jsonl
 prismpath/tests/fixtures/mcp_fake_server.py
 prismpath/tests/fixtures/ocsf/ocsf-1.10.0-subset.json
+prismpath/tests/fixtures/refactor_golden.json
 prismpath/tests/fixtures/reference_hashes.json
 prismpath/tests/test__sandbox_child.py
 prismpath/tests/test_agent_adversary.py
@@ -864,6 +865,7 @@ prismpath/tests/test_intoto.py
 prismpath/tests/test_kappa.py
 prismpath/tests/test_landlock_backend.py
 prismpath/tests/test_langgraph_import.py
+prismpath/tests/test_lazy_connector_import.py
 prismpath/tests/test_ledger.py
 prismpath/tests/test_ledger_ots_exit_codes.py
 prismpath/tests/test_ledger_resume_kg.py
@@ -920,6 +922,7 @@ prismpath/tests/test_queue_event.py
 prismpath/tests/test_reach_conformance.py
 prismpath/tests/test_read_only_runs.py
 prismpath/tests/test_receipt_vectors.py
+prismpath/tests/test_refactor_golden.py
 prismpath/tests/test_regulatory_mapping.py
 prismpath/tests/test_review_fixes.py
 prismpath/tests/test_root_statement.py

@@ -42,6 +42,18 @@ runs, swaps, attests, and reads the trail; the assessor anchors and verifies the
 This module re exports the connector SDK, which is what an adapter imports to plug a domain in behind the
 six ports (adapters/ADAPTER_GUIDE.md).
 """
-from prismpath.workers.connector import BaseConnector, node, PayloadFlattener
-
 __all__ = ["BaseConnector", "node", "PayloadFlattener"]
+
+
+def __getattr__(name):
+    """The connector SDK loads when it is first asked for, so importing the kernel does not load a worker."""
+    if name in __all__:
+        from prismpath.workers import connector
+        value = getattr(connector, name)
+        globals()[name] = value
+        return value
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def __dir__():
+    return sorted(set(globals()) | set(__all__))
