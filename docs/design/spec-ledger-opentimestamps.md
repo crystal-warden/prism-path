@@ -208,3 +208,34 @@ validated end to end with **zero internet** (the exact air gapped condition):
 stronger claim language is unlocked for connected deployments; air gapped sites use "RFC-3161
 trusted timestamp (immediate) + OTS when a window opens (trustless)"; state the tier actually in use,
 never imply Bitcoin strength on a site that only has the internal TSA.
+
+## 10. The instance key in a signer daemon (optional)
+
+A root statement is only as good as its instance key, and a key file the deployment reads is a key every process of
+that deployment can read. `prismpath/ledgers/signer_daemon.py` holds the key in a process of its own and answers on
+a Unix socket created mode 0600. A deployment points at it with `PRISMPATH_INSTANCE_KEY=unix:<socket>`, and
+`root_statement.key_from_env` then returns a `DaemonKey`, which has the face of an `InstanceKey` and holds no key.
+
+**Who may ask.** The daemon reads the caller's pid and user from the kernel with `SO_PEERCRED`, recorded when the
+caller connected. A caller must run as an allowed user, the daemon's own by default. A caller with `NoNewPrivs` set
+or a seccomp filter in `/proc/<pid>/status` is refused as `confined_caller`. Every worker PrismPath confines with
+the Landlock backend has both, and it cannot open a socket at all. A status that cannot be read counts as confined.
+
+**What it signs.** Only bytes that begin with `prismpath-root-statement/3\0` or `prismpath.core-run-root/2\0` and
+then read as that format's canon/2 body under the daemon's own key. Nothing else, so the daemon cannot be used to
+sign a manifest, an envelope or an image. For a chained statement the daemon keeps the head of each log (seq,
+leaves, root, statement hash and the statement) in a canon/2 state file, written atomically before it answers.
+It refuses a statement that is not the next seq or does not name the last one as `prev` (`chain_broken`), that
+covers fewer leaves (`truncated`), or that covers the same leaves under another root (`fork`).
+
+**Resuming.** A restarted daemon continues from its state file. A daemon with no state file refuses to start
+unless it is told this is a new deployment, since one that forgot its heads would sign a second chain from seq 0.
+When a caller stopped after the daemon signed and before the line reached the file, `RootSigner` asks the daemon
+for its head when it opens the file and appends that statement, so the chain resumes without a gap.
+
+**Bytes.** A statement signed through the daemon is byte for byte the statement the key file signs, because
+Ed25519 is deterministic and the daemon signs exactly `root_statement.signed_bytes`. No format changes.
+
+**Limits.** The daemon never sees the log, so an allowed caller can still sign a root over leaves it invented.
+The witness's consistency proofs, or an anchor held elsewhere, cover that. The peer check trusts the pid the
+kernel reported at connect time. The daemon runs on Linux only.

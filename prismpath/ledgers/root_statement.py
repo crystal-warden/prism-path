@@ -176,9 +176,14 @@ def load_public(path: str) -> bytes:
 
 
 def key_from_env(environ=None) -> Optional[InstanceKey]:
-    """The instance key named by PRISMPATH_INSTANCE_KEY, or None when it is unset or empty."""
+    """The instance key named by PRISMPATH_INSTANCE_KEY, or None when it is unset or empty. A value `unix:PATH`
+    names a signer daemon's socket (`prismpath.ledgers.signer_daemon`): the key stays in the daemon and each
+    signature is asked of it."""
     environ = os.environ if environ is None else environ
     path = environ.get(INSTANCE_KEY_ENV, "").strip()
+    if path.startswith("unix:"):
+        from prismpath.ledgers import signer_daemon
+        return signer_daemon.DaemonKey(path[len("unix:"):])
     return InstanceKey.load(path) if path else None
 
 
@@ -480,6 +485,24 @@ class RootSigner:
             canon.atomic_write(path, "".join(line + "\n" for line in kept))
         self._seq = len(statements)
         self._prev = _link_hash(statements[-1]) if statements else ""
+        self._resume(statements)
+
+    def _resume(self, statements: List[dict]) -> None:
+        """With a key held by a signer daemon: when the daemon signed the next statement and the file does not hold
+        it (the writer stopped between the signature and the write, or the line was deleted), append that
+        statement, so the chain goes on from what was signed and not from a gap the daemon would refuse."""
+        head = getattr(self.key, "head", None)
+        if head is None:
+            return
+        held = head(self.log)
+        if not held or held.get("seq") != self._seq or held.get("prev") != self._prev                 or held.get("key_id") != self.key.key_id or not _well_formed(held, self.log) or not _verify_signature(held):
+            return
+        with open(self.path, "a", encoding="utf-8") as handle:
+            handle.write(canon.canon2_bytes(held).decode("utf-8") + "\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        self._seq += 1
+        self._prev = statement_hash(held)
 
     def sign(self, root: str, leaves: int, trigger: str, policy: Optional[dict] = None) -> dict:
         statement = make_statement(self.key, log=self.log, seq=self._seq, root=root, leaves=leaves,
