@@ -91,5 +91,6 @@ def test_vocabulary_drift_fails_when_the_dictionary_lacks_the_term_or_the_domain
 
 def test_the_real_tree_passes():
     root = repo_file("tools", "arch_guard.config.json").parent.parent
-    result, failures = arch_guard.run(str(root), str(root / "tools" / "arch_guard.config.json"))
+    # The frozen paths need main's history, which a shallow CI checkout lacks. The docs job and the gate hold them.
+    result, failures = arch_guard.run(str(root), str(root / "tools" / "arch_guard.config.json"), branch="main")
     assert failures == 0, {key: value for key, value in result.items() if isinstance(value, dict) and not value.get("PASS", True)}

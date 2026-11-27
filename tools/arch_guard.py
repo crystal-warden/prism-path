@@ -550,7 +550,10 @@ def run(root, config_path, baseline=None, branch=None):
     found, layer_issues = layer_findings(root, config)
     baseline = read_baseline(os.path.join(root, config.get("baseline", "tools/arch_baseline.json")))
     new_lines, stale_lines = compare_baseline(found, baseline)
-    frozen, frozen_note = frozen_findings(root, os.path.join(root, config.get("frozen_paths", "tools/frozen_paths.txt")), branch=branch)
+    if "frozen_paths" in config:
+        frozen, frozen_note = frozen_findings(root, os.path.join(root, config["frozen_paths"]), branch=branch)
+    else:                                            # a config that names no frozen list holds no frozen paths
+        frozen, frozen_note = [], "the config names no frozen paths"
     ratchet_failures = sum(len(lines) for lines in new_lines.values()) + sum(len(lines) for lines in stale_lines.values())
 
     hard_failures = len(violations) + len(missing) + len(deprecated) + len(drift) + len(layer_issues) + ratchet_failures + len(frozen)
