@@ -948,6 +948,47 @@ def test_case_203_no_release_above_the_ceiling_is_staged_or_offered(tmp_path):
     assert refused.value.cause == "dist:above-ceiling"
 
 
+def _core_of(definitions: dict, *rules) -> bytes:
+    """A `policy.core` with the field definitions `definitions`, {name: text}, and `rules`."""
+    head = "".join(f"field.{name}: {text}\n" for name, text in definitions.items())
+    return compile_source("---\nname: scope\nstart: core_decision\n" + head + "---\n## core_decision\n"
+                          + "".join(rule + "\n" for rule in rules))
+
+
+def test_case_206_a_ceiling_states_the_grammar_a_release_or_an_install_set_may_use(tmp_path):
+    """case_206: CL4. An `agent` PEP holds a ceiling whose `policy.core` states each field it may be sent, with
+    `classifier_version` an int from 3 to 3. A release that adds a field the ceiling does not define, one that gives
+    `classifier_version` a `max` past the ceiling's, one that makes the bool `path_control` a category, and a fallback
+    policy that adds a field are each `policy:out-of-domain`. A ceiling that defines a category the PEP was not built
+    with, and one whose int states no `max`, are refused the same way and the held ceiling stays. A release that uses
+    the ceiling's grammar is judged by CL1, so one that leaves out a field the ceiling defines is above it and one with
+    the ceiling's fields is staged. An `agent` PEP with no ceiling stages the release with the added field, judged by
+    the domain it was built with."""
+    stated = {**{name: "bool" if name == "path_control" else "category" for name in FIELDS},
+              "classifier_version": "int min=3 max=3"}
+    point = _agent(tmp_path, "p1")
+    assert point.send(_set(point, CEILING, _core_of(stated, LIST, READ)))[-1].event == "install-applied"
+    held = point.pep.installed.held(CEILING)
+    added = _core_of({**stated, "git_op": "category"}, LIST)
+    outside = [added, _core_of({**stated, "classifier_version": "int min=3 max=4"}, LIST),
+               _core_of({**stated, "path_control": "category"}, LIST)]
+    for seq, policy in enumerate(outside, 1):
+        assert "policy:out-of-domain" in [one.cause for one in point.send(_release(point, policy, seq))]
+    assert "policy.core" not in point.pep.staged.held
+    assert point.send(_set(point, FALLBACK, added))[-1].cause == "policy:out-of-domain"
+    assert point.pep.installed.held(FALLBACK) is None
+    for seq, policy in ((2, _core_of({**stated, "colour": "category"}, LIST)),
+                        (3, _core_of({**stated, "classifier_version": "int min=3"}, LIST))):
+        sent = point.send(_set(point, CEILING, policy, seq, replaces=held.policy_sha256))
+        assert [one.cause for one in sent if one.event == "refused"] == ["policy:out-of-domain"]
+        assert point.pep.installed.held(CEILING).set_id == held.set_id
+    fewer = _core_of({name: text for name, text in stated.items() if name != "classifier_version"}, LIST)
+    assert "dist:above-ceiling" in [one.cause for one in point.send(_release(point, fewer, 4))]
+    assert point.send(_release(point, _core_of(stated, LIST), 5))[-1].event == "staged"
+    bare = _agent(tmp_path, "p2")
+    assert bare.send(_release(bare, added, 1))[-1].event == "staged"
+
+
 # ------------------------------------------------------------------ the PEP halves left from parts one and two
 
 def _host_point(tmp_path, name):
