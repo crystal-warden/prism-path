@@ -367,12 +367,14 @@ def _add_operator_commands(subparsers) -> None:
     agent_init.add_argument('--anchor', default=None, metavar='FILE', help='with --follow: the stream\'s trust anchor')
     agent_init.add_argument('--confirm', default=None, metavar='FINGERPRINT',
                             help='with --follow: the anchor\'s fingerprint, as the owner gave it')
-    agent_init.add_argument('--policy', choices=('strict', 'default', 'review', 'session'), default=None,
-                            help='the starter policy to record: strict refuses what it cannot read and shell '
-                                 'commands that change files, default asks about those, review also asks about '
-                                 'every change inside the project, session is default and also asks about later calls when '
-                                 'the session already changed protected code or ran many shell commands '
-                                 '(default: the one recorded, else default)')
+    agent_init.add_argument('--policy', default=None, metavar='STARTER|FILE',
+                            help='the policy to record. A starter is strict (refuses what it cannot read and shell '
+                                 'commands that change files), default (asks about those), review (also asks about '
+                                 'every change inside the project) or session (default, and also asks about later calls '
+                                 'when the session already changed protected code or ran many shell commands). A FILE '
+                                 'is your own rules source (.rules.md) or image (.core.json), compiled and checked as '
+                                 '`prismpath policy compile --target agent` checks it (default: the one recorded, else '
+                                 'default)')
     agent_hook = agent_sub.add_parser(
         'hook', help='what Claude Code runs: the hook JSON on stdin, the answer on stdout; any failure is a deny '
                      'with cause agent:hook-error, never an allow')
@@ -1095,6 +1097,7 @@ def validate_flow(args) -> int:
     graph = parse_file(args.flow_md)
     findings = list(analysis.analyze(graph))
     findings += analysis.analyze_composition(graph, args.flow_md)   # cross-flow @spawn checks (item #4)
+    findings += analysis.analyze_authoring(graph)                     # typos the parser keeps as meta or prose
     return _report(findings, args.json)
 
 

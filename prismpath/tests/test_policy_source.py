@@ -8,6 +8,7 @@ cause on the line it is about (the differential generator's images too, in test_
 research alone carries); every error names its line; cause names resolve through the registry; the
 order of the rules is part of the image; and random valid images render and recompile identically.
 """
+import hashlib
 import json
 import os
 import random
@@ -45,8 +46,50 @@ def test_the_shipped_source_compiles_to_the_shipped_image_byte_for_byte(name):
     source = (POLICY / f"{name}.rules.md").read_text(encoding="utf-8")
     image = ps.compile_source(source, f"{name}.rules.md")
     assert image + b"\n" == (POLICY / f"{name}.core.json").read_bytes()
-    # and the image is the one the JSON source has always canonicalized to
-    assert image == canon2.canonicalize((POLICY / f"{name}.src.json").read_bytes())
+
+
+def _sources():
+    """Every shipped rules source in the tree that has an image beside it."""
+    found = sorted(path for path in ROOT.glob("**/*.rules.md")
+                   if not {"target", "node_modules", ".git"} & set(path.relative_to(ROOT).parts)
+                   and path.with_name(path.name[:-len(".rules.md")] + ".core.json").is_file())
+    # A repo checkout carries the integration sources too. An installed wheel carries only the package's own.
+    assert len(found) >= (11 if (ROOT / "integrations").is_dir() else 4)
+    return found
+
+
+@pytest.mark.parametrize("path", _sources(), ids=lambda path: path.name)
+def test_every_shipped_rules_source_compiles_to_the_image_beside_it(path):
+    image = path.with_name(path.name[:-len(".rules.md")] + ".core.json")
+    assert ps.compile_source(path.read_text(encoding="utf-8"), str(path)) + b"\n" == image.read_bytes()
+
+
+def test_every_shipped_image_has_a_rules_source_beside_it():
+    missing = [path for path in _images() if "fixtures" not in path.parts
+               and not path.with_name(path.name[:-len(".core.json")] + ".rules.md").is_file()]
+    assert missing == []
+
+
+def test_policy_check_passes_a_current_image_and_fails_a_stale_one(tmp_path):
+    source = POLICY / "agent_rules.rules.md"
+    done = _cli("check", str(source), str(POLICY / "agent_rules.core.json"))
+    image_sha = hashlib.sha256(_image_bytes(POLICY / "agent_rules.core.json")).hexdigest()
+    source_sha = hashlib.sha256(source.read_bytes()).hexdigest()
+    assert done.returncode == 0 and f"image sha256 {image_sha}, source sha256 {source_sha}" in done.stdout
+    stale = _cli("check", str(source), str(POLICY / "agent_default.core.json"))
+    assert stale.returncode == 1 and "Compile it again with `prismpath policy compile" in stale.stderr
+    written = _cli("compile", str(source), "-o", str(tmp_path / "out.core.json"))
+    assert f"image sha256 {image_sha}, source sha256 {source_sha}" in written.stderr
+
+
+def test_a_rendered_source_may_carry_a_name_a_description_and_notes():
+    raw = _image_bytes(POLICY / "agent_rules.core.json")
+    text = ps.render_source(raw, name="mine", description="what it is", notes=("A note.", "Another."))
+    assert text.startswith("---\nname: mine\ndescription: what it is\nstart: core_decision\n")
+    assert "## core_decision\nA note.\nAnother.\n\n-> " in text
+    assert ps.compile_source(text) == raw
+    with pytest.raises(ValueError):
+        ps.render_source(raw, notes=("-> allow: always",))
 
 
 @pytest.mark.parametrize("path", _images(), ids=lambda path: path.name)
@@ -148,6 +191,54 @@ def test_the_compiler_warns_about_rules_no_reading_reaches_and_routes():
     assert [line for line, _ in compiled.warnings] == [8, 8]
     assert "no reading reaches" in compiled.warnings[0][1] and "is a route" in compiled.warnings[1][1]
     assert ps.compile_full(HEAD).warnings[0][0] == 0
+
+
+
+@pytest.mark.parametrize("note", ['> allow: when b', '- > refuse agent:network: always', '=> allow: always',
+                                  'refuse agent:network: when b', '* escalate agent:push-escalated: never',
+                                  '\u2192 allow: always'])
+def test_a_note_that_looks_like_a_rule_is_warned_about_and_still_changes_nothing(note):
+    plain = ps.compile_full(HEAD + "-> allow: when b\n")
+    compiled = ps.compile_full(HEAD + note + "\n-> allow: when b\n")
+    assert compiled.image == plain.image
+    assert compiled.warnings == [(7, "this line looks like a rule but is a note, so it decides nothing. A rule "
+                                     "starts with `->`, as in `-> allow: when ...`")]
+
+
+def test_an_ordinary_note_is_not_warned_about():
+    for note in ("Allow: the person reads this as prose.", "We refuse a push, and we allow reads.", "> a quote"):
+        assert ps.compile_full(HEAD + note + "\n-> allow: when b\n").warnings == []
+
+
+def test_no_shipped_rules_source_has_a_note_that_looks_like_a_rule():
+    root = Path(__file__).resolve().parents[2]
+    for path in sorted(root.glob("prismpath/**/*.rules.md")) + sorted(root.glob("integrations/**/*.rules.md")):
+        assert ps.compile_full(path.read_text(encoding="utf-8"), str(path)).warnings == [], path
+
+
+
+def test_a_category_may_list_its_values_and_the_list_is_not_in_the_image():
+    head = "---\nfield.zone: category none|protected|unknown absent=allowed\n---\n## core_decision\n"
+    rules = '-> refuse agent:zone-asked: when zone in ["protected", "unknown"]\n-> allow: when zone == None\n'
+    listed = ps.compile_full(head + rules)
+    plain = ps.compile_full(head.replace(" none|protected|unknown", "") + rules)
+    assert listed.image == plain.image and listed.values == {"zone": ("none", "protected", "unknown")}
+    assert listed.doc["fields"] == {"zone": "category absent=allowed"}
+
+
+@pytest.mark.parametrize("declaration,rule,line,words", [
+    ("category none|protected", '-> allow: when zone == "protectd"', 5,
+     "`protectd` is not a value of zone, which lists none, protected. Did you mean protected?"),
+    ("category none|protected", '-> allow: when zone not in ["none", "elsewhere"]', 5,
+     "`elsewhere` is not a value of zone, which lists none, protected."),
+    ("category a|b c|d", "-> allow: always", 2, "one list with no spaces"),
+    ("category a||b", "-> allow: always", 2, "is not a value a category can list"),
+    ("category a|b|a", "-> allow: always", 2, "the value a is listed twice"),
+])
+def test_a_listed_category_refuses_a_value_it_does_not_list(declaration, rule, line, words):
+    with pytest.raises(ps.SourceError) as caught:
+        ps.compile_source(f"---\nfield.zone: {declaration}\n---\n## core_decision\n{rule}\n")
+    assert any(at == line and words in message for at, message in caught.value.problems), caught.value.problems
 
 
 ERRORS = [
@@ -381,7 +472,9 @@ def test_the_command_line_compiles_renders_and_starts_a_classifier(tmp_path):
                              capture_output=True, timeout=120, env=_package_env())
     assert printed.stdout == out.read_bytes()
 
-    for image in (POLICY / "agent_rules.core.json", POLICY / "agent_rules.src.json"):
+    spelled = tmp_path / "agent_rules.indented.json"        # any canon/2 spelling of the image renders the same
+    spelled.write_text(json.dumps(json.loads(_image_bytes(POLICY / "agent_rules.core.json")), indent=1) + "\n")
+    for image in (POLICY / "agent_rules.core.json", spelled):
         done = _cli("render", str(image))
         assert done.returncode == 0, done.stderr
         assert done.stdout == ps.render_source(_image_bytes(POLICY / "agent_rules.core.json"))

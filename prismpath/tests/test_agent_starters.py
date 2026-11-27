@@ -304,4 +304,77 @@ def test_init_without_policy_on_a_fresh_setup_records_default(tmp_path):
     report = json.loads(_cli(home, "agent", "init", "--project", str(ws), "--yes", "--json").stdout)
     assert report["policy"]["name"] == "default" and report["policy"]["image"] == "agent_default"
     unknown = _cli(home, "agent", "init", "--project", str(ws), "--yes", "--policy", "lenient")
-    assert unknown.returncode != 0 and b"invalid choice" in unknown.stderr
+    assert unknown.returncode != 0 and b"no starter policy named 'lenient'" in unknown.stderr
+    assert b"your own policy is a file ending in .rules.md or .core.json" in unknown.stderr
+
+
+_MINE = """---
+name: mine
+field.tool: category
+field.path_scope: category
+field.command_class: category
+field.git_op: category
+field.path_control: bool
+field.net_dest: category
+---
+## core_decision
+-> refuse agent:control-write: when path_control
+-> refuse agent:net-refused: when tool == "connect" or net_dest != "none"
+-> allow: when tool == "read_file" and path_scope == "workspace"
+"""
+
+
+def test_init_records_the_owners_own_rules_and_the_hook_decides_under_them(tmp_path):
+    pytest.importorskip("cryptography")
+    home, ws = tmp_path / "home", tmp_path / "ws"
+    home.mkdir()
+    ws.mkdir()
+    source = tmp_path / "mine.rules.md"
+    source.write_text(_MINE, encoding="utf-8")
+    run = _cli(home, "agent", "init", "--project", str(ws), "--yes", "--policy", str(source), "--json")
+    assert run.returncode == 0, run.stderr
+    report = json.loads(run.stdout)
+    image = ps.compile_source(_MINE)
+    assert report["policy"] == {"name": "custom", "image": "mine.rules.md", "sha256": hashlib.sha256(image).hexdigest(),
+                                "state": "recorded", "warnings": []}
+    agent_dir = home / ".config" / "prismpath" / "agent"
+    assert (agent_dir / "policy.core.json").read_bytes() == image
+    (ws / "notes.txt").write_text("x\n")
+    read = {"session_id": "s1", "cwd": str(ws), "hook_event_name": "PreToolUse", "tool_name": "Read",
+            "tool_input": {"file_path": str(ws / "notes.txt")}}
+    assert json.loads(_cli(home, "agent", "hook", stdin=json.dumps(read).encode()).stdout)[
+        "hookSpecificOutput"]["permissionDecision"] == "allow"
+    write = dict(read, tool_name="Write", tool_input={"file_path": str(ws / "notes.txt"), "content": "y\n"})
+    assert json.loads(_cli(home, "agent", "hook", stdin=json.dumps(write).encode()).stdout)[
+        "hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert json.loads(_cli(home, "agent", "status", "--project", str(ws), "--json").stdout)["policy"]["name"] == "custom"
+    # init again without --policy keeps the owner's policy rather than putting a starter in its place
+    again = json.loads(_cli(home, "agent", "init", "--project", str(ws), "--yes", "--json").stdout)
+    assert again["policy"]["name"] == "custom" and again["policy"]["state"] == "kept"
+    assert (agent_dir / "policy.core.json").read_bytes() == image
+    # the compiled image itself records the same policy
+    compiled = tmp_path / "mine.core.json"
+    compiled.write_bytes(image + b"\n")
+    same = json.loads(_cli(home, "agent", "init", "--project", str(ws), "--yes", "--policy", str(compiled),
+                           "--json").stdout)
+    assert same["policy"]["state"] == "kept" and same["policy"]["image"] == "mine.core.json"
+
+
+def test_init_refuses_rules_the_agent_cannot_run_and_leaves_the_home_alone(tmp_path):
+    pytest.importorskip("cryptography")
+    home, ws = tmp_path / "home", tmp_path / "ws"
+    home.mkdir()
+    ws.mkdir()
+    source = tmp_path / "loose.rules.md"
+    source.write_text(_MINE.replace('-> refuse agent:control-write: when path_control\n', '')
+                      .replace('tool == "read_file"', 'tool == "readfile"'), encoding="utf-8")
+    run = _cli(home, "agent", "init", "--project", str(ws), "--yes", "--policy", str(source))
+    assert run.returncode != 0
+    err = run.stderr.decode()
+    assert "is not a policy the governed agent can run" in err
+    assert f"{source}:12: a rule names tool 'readfile'" in err
+    assert not (home / ".config" / "prismpath" / "agent").exists()
+    broken = tmp_path / "broken.rules.md"
+    broken.write_text(_MINE.replace("agent:net-refused", "agent:net-refuse"), encoding="utf-8")
+    run = _cli(home, "agent", "init", "--project", str(ws), "--yes", "--policy", str(broken))
+    assert run.returncode != 0 and b"the rules do not compile" in run.stderr and b"broken.rules.md:12:" in run.stderr

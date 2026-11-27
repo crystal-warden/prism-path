@@ -3,7 +3,7 @@
 """The intent layer's two signed policies, generated from the harness's floor and the chosen thresholds.
 
 `policy/intent_calls.core.json` decides a proposed call. It is the governed harness's own image
-(`governed_harness/policy/agent_rules.src.json`) with its rules copied VERBATIM and in order, its fourteen
+(`prismpath/agent/policy/agent_rules.rules.md`) with its rules copied VERBATIM and in order, its fourteen
 field definitions unchanged, seven semantic fields added, and five semantic rules inserted after the floor's
 last refusal (rule 11, `agent:shell-mutation`) and before its first allow. Every semantic rule is the
 conjunction of:
@@ -52,16 +52,16 @@ from typing import Any, Dict, Tuple
 
 from integrations.governed_harness import policy as gh_policy
 from integrations.governed_harness.policy import Decision, Policy, target_decision  # noqa: F401
-from prismpath.kernel import canon2
+from prismpath.kernel import canon2, policy_source
 
 from . import intent_reader as ir
 
 HERE = Path(__file__).resolve().parent
 FLOOR_SOURCE = gh_policy.SOURCE_PATH
 THRESHOLDS = HERE / "thresholds.json"
-CALLS_SRC = HERE / "policy" / "intent_calls.src.json"
+CALLS_SRC = HERE / "policy" / "intent_calls.rules.md"         # written by `main`, the readable form of the image
 CALLS_CORE = HERE / "policy" / "intent_calls.core.json"
-RESPONSES_SRC = HERE / "policy" / "intent_responses.src.json"
+RESPONSES_SRC = HERE / "policy" / "intent_responses.rules.md"
 RESPONSES_CORE = HERE / "policy" / "intent_responses.core.json"
 
 HARM, MISMATCH, PROBING = 114, 115, 116
@@ -106,7 +106,7 @@ def _verified(lock: str):
 
 
 def build_calls(thresholds: Dict[str, Any], lock: str) -> Dict[str, Any]:
-    floor = json.loads(FLOOR_SOURCE.read_text())
+    floor = policy_source.compile_full(FLOOR_SOURCE.read_text(encoding="utf-8"), str(FLOOR_SOURCE)).doc
     rules = floor["rules"]
     assert all(rule["target"].startswith("refuse_") for rule in rules[:FLOOR_REFUSALS])
     assert [rule["target"] for rule in rules[FLOOR_REFUSALS:]] == ["escalate_132", "allow", "escalate_113", "allow", "allow",
@@ -156,14 +156,20 @@ def _source_bytes(doc) -> bytes:
     return (json.dumps(doc, indent=1) + "\n").encode()
 
 
+_GENERATED = ("Written by `python -m integrations.governed_intent.policy` from the harness's floor and thresholds.json.",
+              "Edit those and run it again, not this file. The tests hold it to the image byte for byte.")
+
+
 def images() -> Dict[Path, bytes]:
     thresholds, lock = load_thresholds(), lock_id()
     out = {}
-    for src, core, doc in ((CALLS_SRC, CALLS_CORE, build_calls(thresholds, lock)),
-                           (RESPONSES_SRC, RESPONSES_CORE, build_responses(thresholds, lock))):
-        raw = _source_bytes(doc)
-        out[src] = raw
-        out[core] = canon2.canonicalize(raw) + b"\n"
+    for src, core, doc, about in (
+            (CALLS_SRC, CALLS_CORE, build_calls(thresholds, lock), "the intent layer's decision on a proposed call"),
+            (RESPONSES_SRC, RESPONSES_CORE, build_responses(thresholds, lock), "the intent layer's decision on a model reply")):
+        image = canon2.canonicalize(_source_bytes(doc))
+        out[src] = policy_source.render_source(image, name=core.name[:-len(".core.json")], description=about,
+                                               notes=_GENERATED).encode("utf-8")
+        out[core] = image + b"\n"
     return out
 
 
