@@ -11,13 +11,13 @@ The agent's own rules are in `prismpath/agent/policy/agent_rules.rules.md`. A sm
 ```
 ---
 name: my_rules
-field.tool: category
-field.path_scope: category
-field.command_class: category
-field.git_op: category
+field.tool: category list_dir|read_file|write_file|delete_path|run_command|git|connect|unknown
+field.path_scope: category none|workspace|outside|unknown
+field.command_class: category none|read_only|mutating|network|git|unknown
+field.git_op: category none|local_read|local_write|mutating|push|network|unknown
 field.kill_by_pattern: bool
 field.path_control: bool
-field.net_dest: category
+field.net_dest: category none|model_api|allowed_host|other|unknown
 ---
 ## core_decision
 Rules are read from the top. The first one that holds decides.
@@ -38,9 +38,15 @@ off a call, and each has a kind.
 | kind | holds | example |
 |---|---|---|
 | `bool` | true or false | `field.path_glob: bool` |
-| `category` | one word from a set | `field.tool: category` |
+| `category` | one word from a set | `field.zone_reach: category none\|protected\|unknown` |
 | `int` | a whole number, with bounds if you want them | `field.classifier_version: int min=1 max=1` |
 | `fixed` | a decimal on a fixed grid | `field.cost: fixed scale=100 rounding=exact` |
+
+A category may list its words after the kind, joined by `|` with no spaces. The list is optional. When it
+is there, a rule that compares the field with a word not on it does not compile, and the error names the
+line and the word you probably meant. The list is checked by the compiler and is not part of the image, so
+adding it to a file changes nothing the agent runs. `--target agent` also checks that a list is the one the
+classifier gives (see the field table below). Every starter lists its words.
 
 Add `absent=allowed` when a reading may leave a field out. A rule must then test that field for
 `None`, so the case of a missing value is decided on purpose.

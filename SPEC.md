@@ -513,7 +513,11 @@ Normatively, as follows.
 - **Front matter** is required. The file starts with a line `---` and the block ends at the next line
   `---`. Each non blank line is `key: value`. The keys are `name`, `start`, `description` and
   `field.<name>`, and no other key is accepted. A key written twice is an error. `field.<name>` is a field
-  definition as §4.5 writes it. `name`, `description` and `start` are for the reader and are not part of
+  definition as §4.5 writes it. A `category` definition may also list its values as one word after the kind,
+  joined by `|` (`category none|protected|unknown`, each value of `[A-Za-z0-9_.:-]`, none twice). A rule that
+  compares the field with a string the list does not hold is an error. The list is a check of the compiler
+  only. The image carries the definition without it, so a source with a list and the same source without
+  it compile to the same bytes. `name`, `description` and `start` are for the reader and are not part of
   the image.
 - **Sections** are lines matching `^\s*##\s+(.+?)\s*$`, normalized as §1 normalizes a node name. The start
   section is `start` when given, else the first section. It is `core_decision` in every shipped source. A

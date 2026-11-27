@@ -101,3 +101,13 @@ def test_the_command_line_writes_nothing_when_a_check_fails(tmp_path):
     plain = subprocess.run([sys.executable, "-m", "prismpath", "policy", "compile", str(source), "-o", str(out)],
                            capture_output=True, text=True, cwd=ROOT)
     assert plain.returncode == 0 and out.exists()
+
+
+def test_a_listed_category_that_is_not_the_classifiers_is_named(tmp_path):
+    source = tmp_path / "listed.rules.md"
+    source.write_text(FIELDS.replace("field.tool: category", "field.tool: category read_file|connect") + SAFE +
+                      '-> allow: when tool == "read_file" and path_scope == "workspace"\n', encoding="utf-8")
+    run = subprocess.run([sys.executable, "-m", "prismpath", "policy", "compile", "--target", "agent", str(source),
+                          "-o", str(tmp_path / "out.json")], capture_output=True, text=True, cwd=ROOT)
+    assert run.returncode == 2
+    assert f"{source}:2: tool lists read_file|connect, but the agent's classifier gives list_dir|read_file" in run.stderr

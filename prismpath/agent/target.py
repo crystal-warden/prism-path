@@ -16,6 +16,7 @@ on the image the compiler just made, so the author learns it with the line it is
   control files        `policy.control_gap`, every change to a control file refused
   connections          `policy.net_gap`, every connection but the model's API refused
   the sandbox          `profile.compile_profile` for both roles
+  listed values        `check_listed`, on the source, a category whose `a|b|c` list is not the classifier's values
 
 A finding is (field or rule index, message), and the compiler turns a field into its declaration line and a rule into
 its rule line. Nothing here reads the distribution side (prismpath/distribution/kinds.py).
@@ -79,7 +80,20 @@ def check(image: bytes) -> List[Tuple[Where, str]]:
     return found
 
 
+def check_listed(values) -> List[Tuple[Where, str]]:
+    """A category whose source lists values other than the ones the agent's classifier produces, named on its
+    declaration. The list never reaches the image, so this runs on the source (`Compiled.values`)."""
+    found: List[Tuple[Where, str]] = []
+    for name, listed in values.items():
+        known = agent_fields.values(name)
+        if known and tuple(listed) != known:
+            found.append((name, f"{name} lists {'|'.join(listed)}, but the agent's classifier gives "
+                                f"{'|'.join(known)}"))
+    return found
+
+
 TARGETS = {"agent": check}
+LISTED = {"agent": check_listed}
 
 
 def line_of(where: Where, field_lines, rule_lines) -> int:

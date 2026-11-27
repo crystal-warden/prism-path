@@ -111,3 +111,12 @@ def test_the_guide_tables_are_the_code():
     spec.loader.exec_module(gen)
     text = Path(gen.GUIDE).read_text(encoding="utf-8")
     assert gen.build(text) == text, "run: python tools/gen_rules_reference.py"
+
+
+def test_every_category_a_starter_declares_lists_the_classifiers_values():
+    for path in STARTERS:
+        compiled = ps.compile_full(path.read_text(encoding="utf-8"), str(path))
+        categories = {name for name, text in compiled.doc["fields"].items() if text.split()[0] == "category"}
+        assert set(compiled.values) == categories, path.name
+        for name, listed in compiled.values.items():
+            assert listed == profile.KNOWN_CATEGORIES[name] == fields.values(name), (path.name, name)

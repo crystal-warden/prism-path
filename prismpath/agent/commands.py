@@ -460,6 +460,11 @@ def custom_image(path: Path) -> Tuple[bytes, List[str]]:
             raise AgentError("the rules do not compile\n" + "\n".join(error.lines()))
         image, field_lines, rule_lines = compiled.image, compiled.field_lines, compiled.rule_lines
         warnings = [f"{path}:{line}: warning: {message}" for line, message in compiled.warnings]
+        listed = target.check_listed(compiled.values)
+        if listed:
+            raise AgentError(f"{path} is not a policy the governed agent can run\n" + "\n".join(
+                policy_source.SourceError([(target.line_of(where, field_lines, rule_lines), message)
+                                           for where, message in listed], str(path)).lines()))
     else:
         image = raw[:-1] if raw.endswith(b"\n") else raw
         refusal = core_policy.load_policy(image)

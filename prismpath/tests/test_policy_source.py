@@ -215,6 +215,31 @@ def test_no_shipped_rules_source_has_a_note_that_looks_like_a_rule():
         assert ps.compile_full(path.read_text(encoding="utf-8"), str(path)).warnings == [], path
 
 
+
+def test_a_category_may_list_its_values_and_the_list_is_not_in_the_image():
+    head = "---\nfield.zone: category none|protected|unknown absent=allowed\n---\n## core_decision\n"
+    rules = '-> refuse agent:zone-asked: when zone in ["protected", "unknown"]\n-> allow: when zone == None\n'
+    listed = ps.compile_full(head + rules)
+    plain = ps.compile_full(head.replace(" none|protected|unknown", "") + rules)
+    assert listed.image == plain.image and listed.values == {"zone": ("none", "protected", "unknown")}
+    assert listed.doc["fields"] == {"zone": "category absent=allowed"}
+
+
+@pytest.mark.parametrize("declaration,rule,line,words", [
+    ("category none|protected", '-> allow: when zone == "protectd"', 5,
+     "`protectd` is not a value of zone, which lists none, protected. Did you mean protected?"),
+    ("category none|protected", '-> allow: when zone not in ["none", "elsewhere"]', 5,
+     "`elsewhere` is not a value of zone, which lists none, protected."),
+    ("category a|b c|d", "-> allow: always", 2, "one list with no spaces"),
+    ("category a||b", "-> allow: always", 2, "is not a value a category can list"),
+    ("category a|b|a", "-> allow: always", 2, "the value a is listed twice"),
+])
+def test_a_listed_category_refuses_a_value_it_does_not_list(declaration, rule, line, words):
+    with pytest.raises(ps.SourceError) as caught:
+        ps.compile_source(f"---\nfield.zone: {declaration}\n---\n## core_decision\n{rule}\n")
+    assert any(at == line and words in message for at, message in caught.value.problems), caught.value.problems
+
+
 ERRORS = [
     # (source, line, words the message holds)
     ("## core_decision\n-> allow: always\n", 1, "front matter block"),

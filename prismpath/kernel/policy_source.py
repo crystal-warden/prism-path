@@ -23,6 +23,8 @@ rather than read its refusals as prose, and only this module reads one.
 
   * `field.<name>: <definition>` declares a field, as SPEC.md section 4.5 writes it (`bool`, `category`,
     `int min=1 max=1`, `fixed scale=100 rounding=floor`, with `absent=allowed` where a reading may omit it).
+    A category may list its values (`category none|protected|unknown`), and then a rule that compares it
+    with another string does not compile. The list is checked here and is not part of the image.
   * Every `-> <target>: <condition>` line under the start section is one rule, in order; the first rule
     whose condition holds decides. The target is `allow`, `refuse <cause name>` or `escalate <cause name>`
     (the name resolves to its code in `prismpath.kernel.causes`, so `refuse agent:kill-by-pattern` is the
@@ -146,6 +148,7 @@ class Compiled:
     field_lines: Dict[str, int]
     rule_lines: List[int]
     warnings: List[Tuple[int, str]] = field(default_factory=list)
+    values: Dict[str, Tuple[str, ...]] = field(default_factory=dict)     # the values a category lists, never in the image
 
 
 # ----------------------------------------------------------------- targets
@@ -321,8 +324,71 @@ def _target(raw: str, line: int, problems) -> Tuple[Optional[str], Optional[str]
     return target, cond
 
 
-def _front(lines: List[str], problems) -> Tuple[Dict[str, Tuple[str, int]], Dict[str, Tuple[str, int]], int]:
-    """(front matter keys, field definitions, index of the first body line), each with its line."""
+_VALUE = re.compile(r"[A-Za-z0-9_.:\-]+")
+
+
+def _value_list(value: str, line: int, problems) -> Tuple[str, Optional[Tuple[str, ...]]]:
+    """(the definition the image carries, the values listed) of a field declaration. A category may list its
+    values as one word `a|b|c` after the kind (`category none|protected|unknown`). The list is a check of the
+    compiler's only and never reaches the image: the definition without it is what the image carries, so a
+    source with a list compiles to the same bytes as the source without it. Any other declaration is returned
+    as written, with no list."""
+    words = value.split()
+    if len(words) < 2 or words[0] != "category":
+        return value, None
+    listed = [word for word in words[1:] if "=" not in word]
+    if not listed:
+        return value, None
+    if len(listed) > 1:
+        problems.append((line, "write a category's values as one list with no spaces, like none|protected|unknown"))
+        return value, None
+    names = listed[0].split("|")
+    bad = [name for name in names if not _VALUE.fullmatch(name)]
+    if bad:
+        problems.append((line, f"`{bad[0] or listed[0]}` is not a value a category can list. A value is letters, "
+                               f"digits and _ . : -, and the values are joined by |"))
+        return value, None
+    repeated = sorted({name for name in names if names.count(name) > 1})
+    if repeated:
+        problems.append((line, f"the value {repeated[0]} is listed twice"))
+    return " ".join(word for word in words if word != listed[0]), tuple(names)
+
+
+def _listed_value_problems(rules, rule_lines, values) -> List[Tuple[int, str]]:
+    """A rule that compares a field with a string its declaration does not list, named on its line."""
+    out = []
+
+    def walk(cond, line):
+        if not isinstance(cond, list) or not cond:
+            return
+        if cond[0] == "cmp" and len(cond) == 4:
+            check(cond[1], [cond[3]], line)
+        elif cond[0] in ("in", "not in") and len(cond) == 3:
+            check(cond[1], cond[2], line)
+        else:
+            for part in cond[1:]:
+                walk(part, line)
+
+    def check(name, constants, line):
+        if name not in values:
+            return
+        for constant in constants:
+            if isinstance(constant, list) and len(constant) == 2 and constant[0] == "str" \
+                    and constant[1] not in values[name]:
+                near = difflib.get_close_matches(constant[1], values[name], n=1, cutoff=0.6)
+                hint = f" Did you mean {near[0]}?" if near else ""
+                out.append((line, f"`{constant[1]}` is not a value of {name}, which lists "
+                                  f"{', '.join(values[name])}.{hint}"))
+
+    for rule, line in zip(rules, rule_lines):
+        walk(rule["when"], line)
+    return out
+
+
+def _front(lines: List[str], problems, values=None) -> Tuple[Dict[str, Tuple[str, int]], Dict[str, Tuple[str, int]], int]:
+    """(front matter keys, field definitions, index of the first body line), each with its line. The values a
+    category declaration lists go into `values`."""
+    values = {} if values is None else values
     if not lines or lines[0].strip() != "---":
         problems.append((1, "the source starts with a front matter block between two `---` lines"))
         return {}, {}, 0
@@ -346,7 +412,10 @@ def _front(lines: List[str], problems) -> Tuple[Dict[str, Tuple[str, int]], Dict
             elif name in fields:
                 problems.append((line, f"the field {name} is declared twice (first on line {fields[name][1]})"))
             else:
+                value, listed = _value_list(value, line, problems)
                 fields[name] = (value, line)
+                if listed is not None:
+                    values[name] = listed
         elif key in FRONT_KEYS:
             if key in meta:
                 problems.append((line, f"`{key}` is written twice"))
@@ -361,7 +430,8 @@ def parse_source(text: str, path: str = "<source>") -> Compiled:
     """The image a source writes, before the core checks it. SourceError names every line it cannot read."""
     problems: List[Tuple[int, str]] = []
     lines = text.replace("\r\n", "\n").split("\n")     # a file saved with Windows line ends reads the same
-    meta, fields, body = _front(lines, problems)
+    values: Dict[str, Tuple[str, ...]] = {}
+    meta, fields, body = _front(lines, problems, values)
     start = meta.get("start", (None, 0))[0]
     if start is not None:
         start = start.lower().replace(" ", "_")
@@ -420,6 +490,7 @@ def parse_source(text: str, path: str = "<source>") -> Compiled:
         problems.append((meta.get("start", (None, 1))[1] or 1, f"there is no ## {start} section to hold the rules"))
     if not rules and not problems:
         warnings.append((0, "the source has no rules: the core refuses every reading (route:no-matching-edge)"))
+    problems += _listed_value_problems(rules, rule_lines, values)
     if problems:
         raise SourceError(problems, path)
     doc = {"format": FORMAT, "fields": {name: value for name, (value, _line) in fields.items()}, "rules": rules}
@@ -431,7 +502,7 @@ def parse_source(text: str, path: str = "<source>") -> Compiled:
                  else f"the rule has no canon/2 form ({error.rule})")
         raise SourceError([(line, words)], path) from None
     return Compiled(doc, image, meta.get("name", ("", 0))[0], {name: line for name, (_v, line) in fields.items()},
-                    rule_lines, warnings)
+                    rule_lines, warnings, values)
 
 
 def _writable(value) -> bool:
@@ -844,7 +915,7 @@ def policy_cmd(args) -> int:
         return 1
     if args.target:
         from prismpath.agent import target as agent_target      # the agent's own checks, read lazily
-        found = agent_target.TARGETS[args.target](compiled.image)
+        found = agent_target.LISTED[args.target](compiled.values) + agent_target.TARGETS[args.target](compiled.image)
         if found:
             return refuse(SourceError([(agent_target.line_of(where, compiled.field_lines, compiled.rule_lines), message)
                                        for where, message in found], args.source).lines())
