@@ -214,6 +214,7 @@ prismpath/agent/doctor.py
 prismpath/agent/egress.py
 prismpath/agent/egress_policy.py
 prismpath/agent/evidence.py
+prismpath/agent/fields.py
 prismpath/agent/hook_client.py
 prismpath/agent/landlock.py
 prismpath/agent/launcher.py
@@ -742,6 +743,7 @@ prismpath/tests/test_agent_control_files.py
 prismpath/tests/test_agent_decider.py
 prismpath/tests/test_agent_doctor.py
 prismpath/tests/test_agent_egress.py
+prismpath/tests/test_agent_fields.py
 prismpath/tests/test_agent_launcher.py
 prismpath/tests/test_agent_mcp_proxy.py
 prismpath/tests/test_agent_nested.py

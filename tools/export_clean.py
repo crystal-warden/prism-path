@@ -133,6 +133,7 @@ EXCLUDE_PREFIXES = [
     "tools/mirror/", "tools/mirror_readme.md", "tools/tests/test_export.py", "tools/mirror_publish.yml", "tools/mirror_crates_publish.yml", "tools/export_clean.py",
     "tools/arch_guard.", "tools/arch_scorecard.json", "tools/arith_lint.py", "tools/docs_health.py",
     "tools/evidence_check.py", "tools/ledger_lint.py", "tools/run_corpora.py", "tools/fq_redundancy.py", "tools/gen_mission_control_guide.py",
+    "tools/gen_rules_reference.py",
     "tools/reproduce.sh",
     "tools/dev_build.py",      # writes the dev build marker of a research checkout (spec-policy-distribution.md, D2)
 ]

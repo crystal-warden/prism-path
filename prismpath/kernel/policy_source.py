@@ -26,7 +26,8 @@ rather than read its refusals as prose, and only this module reads one.
   * Every `-> <target>: <condition>` line under the start section is one rule, in order; the first rule
     whose condition holds decides. The target is `allow`, `refuse <cause name>` or `escalate <cause name>`
     (the name resolves to its code in `prismpath.kernel.causes`, so `refuse agent:kill-by-pattern` is the
-    image's `refuse_105`), or another route name for an image that is not an agent's.
+    image's `refuse_105`), or another route name for an image that is not an agent's. A cause outside the
+    routing class (`RULE_CLASSES`) compiles with a warning, and `prismpath policy causes` lists the routing ones.
   * The condition is `always`, `never`, or `when` and one Level M expression over the declared fields: a
     field alone (true), `==` `!=` `<` `<=` `>` `>=` against a constant, `in` and `not in` a list of
     constants, joined by `and`, `or`, `not` and parentheses. Constants are numbers, strings, `True`,
@@ -55,6 +56,10 @@ FORMAT = core_policy.FORMAT_TAG
 ALWAYS = core_render.ALWAYS
 NEVER = core_render.NEVER
 DECISIONS = ("refuse", "escalate")
+# The cause classes a rule names: a policy decides a call (routing). The other classes are the refusals of a
+# check outside the policy (a signature, an envelope, the wire, resident state), so naming one in a rule compiles
+# with a warning.
+RULE_CLASSES = ("routing",)
 FRONT_KEYS = ("name", "start", "description")
 _CODED = re.compile(r"^(refuse|escalate)_(\d+)$")
 _READABLE = re.compile(r"^\s*(refuse|escalate)\s+(\S+?):(?:\s+(.*?))?\s*$")
@@ -163,6 +168,12 @@ def readable_target(target: str) -> str:
     if target in DECISIONS:
         raise core_render.Unrenderable(f"target {target} reads as a decision with no cause")
     return target
+
+
+def cause_rows(include_all: bool = False) -> List[Tuple[int, str, str, str]]:
+    """(code, name, class, description) of every registered cause a rule names, in code order; with
+    `include_all`, every registered cause."""
+    return [entry for entry in sorted(causes._REGISTRY) if include_all or entry[2] in RULE_CLASSES]
 
 
 def _cause_hint(name: str) -> str:
@@ -397,6 +408,12 @@ def parse_source(text: str, path: str = "<source>") -> Compiled:
         if target != "allow" and not _CODED.match(target):
             warnings.append((line, f"`{target}` is a route, not allow, refuse or escalate; the agent harness "
                                    f"refuses a policy that names it"))
+        coded = _CODED.match(target)
+        if coded and causes.cause_class(int(coded.group(2))) not in RULE_CLASSES:
+            name = causes.name(int(coded.group(2)))
+            warnings.append((line, f"{name} is a cause of the {causes.cause_class(name)} class, not one a policy "
+                                   f"decides, so a receipt would name a check that never ran. "
+                                   f"`prismpath policy causes` lists the causes a rule names"))
         rules.append({"target": target, "when": cond})
         rule_lines.append(line)
     if start is not None and start not in seen and not problems:
@@ -676,7 +693,7 @@ def test_the_unknown_reading_is_never_allowed():
 
 # ----------------------------------------------------------------- command line
 def add_parser(subparsers) -> None:
-    """`prismpath policy compile | render | skeleton`."""
+    """`prismpath policy compile | render | skeleton | causes`."""
     policy_parser = subparsers.add_parser(
         'policy', help='Write a core policy as readable rules: compile the rules to the signed image\'s '
                        'canonical bytes, render an image back to rules, start a classifier for the fields')
@@ -694,6 +711,11 @@ def add_parser(subparsers) -> None:
     skeleton_parser.add_argument('-o', '--out', required=True, help='the module to write (module.py)')
     skeleton_parser.add_argument('--test', default=None, help='the test to write (default test_<module>.py beside it)')
     skeleton_parser.add_argument('--force', action='store_true', help='overwrite files that exist')
+    causes_parser = actions.add_parser('causes', help='list the registered causes a rule can name, with their codes '
+                                                      'and meanings')
+    causes_parser.add_argument('--all', action='store_true', help='list every registered cause, not only the ones a '
+                                                                   'policy decides')
+    causes_parser.add_argument('--json', action='store_true', help='print JSON')
     policy_parser.set_defaults(func=policy_cmd)
 
 
@@ -710,6 +732,17 @@ def policy_cmd(args) -> int:
         for text in lines:
             print(f"prismpath policy {args.policy_action}: {text}", file=sys.stderr)
         return 2
+
+    if args.policy_action == 'causes':
+        rows = cause_rows(include_all=args.all)
+        if args.json:
+            import json
+            print(json.dumps([{"code": c, "name": n, "class": k, "description": d} for c, n, k, d in rows], indent=2))
+        else:
+            width = max(len(n) for _c, n, _k, _d in rows)
+            for code, name, klass, description in rows:
+                print(f"{code:>4}  {name:<{width}}  {klass:<9}  {description}")
+        return 0
 
     if args.policy_action == 'render':
         try:
