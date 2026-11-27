@@ -40,6 +40,9 @@ MIN = ["-DPP_DIST_PROFILE_MIN"]
 S, N, E, H, BODIES = full.S, full.N, full.E, full.H, full.BODIES
 INVALID = f"dropped {causes.NAMES['dist:frame-invalid']}"
 
+if not (DIST / "pp_dist.c").exists():
+    pytest.skip("the C core is in prismpath-hw, which this tree does not carry", allow_module_level=True)
+
 
 def _build(tmp_path_factory, name: str, sources: list, flags: list) -> Path:
     if not (DIST / "pp_dist.c").exists():
