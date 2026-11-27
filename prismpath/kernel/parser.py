@@ -34,6 +34,11 @@ HEAD_RE = re.compile(r"^\s*##\s+(.+?)\s*$")
 # Node annotation, e.g. `@checkpoint(unit=alert.id, proof=verdict, gate=staged_ok)` — an extension
 # slot on a node (the control plane reads it; the kernel just parses it). Keeps the heading clean.
 ANNO_RE = re.compile(r"^\s*@(\w+)\s*\((.*)\)\s*$")
+# A rule of a rules source (prismpath/kernel/policy_source.py): `-> refuse <cause name>: ...` or `-> escalate
+# <cause name>: ...`. The space after the decision means EDGE_RE never reads it, so without this check a rules
+# source would parse as a flow whose refusals are prose. The parser refuses the file instead.
+RULES_LINE_RE = re.compile(r"^\s*-?\s*->\s*(refuse|escalate)\s+\S+?:(\s|$)")
+RULES_SUFFIX = ".rules.md"
 
 # Input bounds. A flow is human-authored routing config, not a data payload: real ones are a handful
 # of nodes and a few KiB. These caps keep an untrusted or accidental oversized document from
@@ -48,6 +53,17 @@ class ParseError(ValueError):
     """A flow document could not be parsed within its input bounds. Subclasses ValueError so callers
     that already funnel bad input to a client error (e.g. Mission Control's 400 envelope) route it
     without special-casing."""
+
+
+class RulesSourceError(ParseError):
+    """The document is a rules source, not a flow. Its rules are compiled by `prismpath policy compile`, and
+    reading them as flow edges would drop every refusal and escalation."""
+
+
+def _rules_source(line_number: int) -> RulesSourceError:
+    return RulesSourceError(
+        f"line {line_number} is a rule of a rules source, not a flow edge. A rules source is compiled with "
+        f"`prismpath policy compile` and read back with `prismpath policy render`")
 
 
 def _parse_anno_args(argstr: str) -> dict:
@@ -117,7 +133,10 @@ def parse(text: str) -> Graph:
         if cur is not None:
             cur.instruction = "\n".join(instr_lines).strip()
 
-    for line in body.splitlines():
+    body_offset = text[:len(text) - len(body)].count("\n")
+    for line_number, line in enumerate(body.splitlines(), start=body_offset + 1):
+        if RULES_LINE_RE.match(line):
+            raise _rules_source(line_number)
         head_match = HEAD_RE.match(line)
         if head_match:
             flush()
@@ -164,6 +183,10 @@ def parse_file(path: str) -> Graph:
         raise ParseError(
             f"flow file {os.path.basename(path)!r} is {sz} bytes, exceeds "
             f"PRISMPATH_MAX_FLOW_BYTES ({MAX_FLOW_BYTES})")
+    if os.path.basename(path).endswith(RULES_SUFFIX):
+        raise RulesSourceError(
+            f"{os.path.basename(path)} is a rules source, not a flow. A rules source is compiled with "
+            f"`prismpath policy compile` and read back with `prismpath policy render`")
     with open(path, encoding="utf-8") as file_handle:
         return parse(file_handle.read())
 

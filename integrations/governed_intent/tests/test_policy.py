@@ -32,7 +32,8 @@ def test_the_images_are_current_and_canonical():
 
 def test_the_floor_is_copied_verbatim(images):
     calls, _responses = images
-    floor = json.loads(harness_policy.SOURCE_PATH.read_text())
+    from prismpath.kernel import policy_source
+    floor = policy_source.compile_full(harness_policy.SOURCE_PATH.read_text(encoding="utf-8")).doc
     rules = calls.doc["rules"]
     floor_rules = canon2.loads(canon2.canonicalize(json.dumps(floor).encode()))["rules"]
     assert rules[:11] == floor_rules[:11] and rules[16:] == floor_rules[11:]

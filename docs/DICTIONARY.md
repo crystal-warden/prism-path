@@ -128,6 +128,10 @@ control plane, GRC. A term with no `Also called (deprecated)` line has no losing
 
 **canon/2**: the integer only profile of RFC 8785 (JCS) in which every document PrismPath hashes or signs is written: no whitespace, members in UTF-16 code unit order, strings raw UTF-8, integers within plus or minus 2^53 minus 1, no float (`prismpath.kernel.canon2`, `prismpath_rs::canon2`, vectors `prismpath/portable/conformance/canon2.json`). A document written in it says so with `"encoding": "canon/2"` (or with a format whose definition includes it, as `prismpath.core/1` and `prismpath.core-run-root/2` do), its hash is sha256 over its canon/2 bytes, and a signature over it covers the domain `prismpath.canon/2` and a zero byte before those bytes unless its format has a domain of its own. A time is an integer of microseconds (`ts_us`, `time_us`), and a float in content PrismPath hashes but did not write is refused, never converted: the caller supplies an integer of a stated unit or a decimal string (`canon.content_bytes`, `canon.FloatRefused`). JSON that is not hashed or signed (a durable run checkpoint, a sink line, the version floor file) is plain JSON (`canon.plain_loads`), and a document read that way is refused by every hashing helper. Every reader is strict: a hashed or signed document and a reading are accepted only as their exact canonical bytes (a file or a line may end with one line feed), and any other spelling is refused as not canonical (see not canonical). Layer: evidence and receipts. Not to be confused with: canon/1; the canonical reading, which is about the values a decision reads.
 
+**enforcement point**: any place that decides under a signed policy, written PEP for policy enforcement point. A governed agent's home, a gateway home, a host, a mesh node and a cFS app are each one, of a target kind named in docs/design/spec-policy-distribution.md section 3. It verifies, stages and commits releases and reports its state. Layer: control plane. Not to be confused with: the controller, which offers releases and files state records and decides nothing; the substrate, which executes what a PEP allowed.
+
+**grant**: a sealed envelope a client carries to a gateway, naming the method and path classes it covers, under one policy hash, for at most 30 days (spec-policy-distribution.md section 13). A reading holds `grant` valid only when it verifies. Layer: control plane. Not to be confused with: an attestation, which records a policy and grants nothing.
+
 **not canonical**: the refusal of a document that reads as canon/2 but is not its exact canonical bytes: whitespace, members out of key order, a needless escape, a carriage return. It is never re-canonicalized on the way in. Registered causes: `policy:not-canonical` (101) for the core's policy image, `reading:not-canonical` (102) for a reading, `document:not-canonical` (103) for every other hashed or signed document (`canon.NotCanonical`, `durable::NOT_CANONICAL_CAUSE`); the canon/2 rule name is `not-canonical`, and the Lean cause is `Core.DocErr.notCanonical`, returned only by the strict reader `Core.readCanonical`. Layer: evidence and receipts. Not to be confused with: unreadable (a text that breaks one of the eight canon/2 rules, which is refused for that rule first).
 
 **canonicalize**: the writer's step that turns a document a person wrote, in any legal spelling, into its canonical canon/2 bytes, keeping every other canon/2 rule (a float, a duplicate key, an integer out of range, a lone surrogate, nesting past 128 are still refused): `prismpath canonicalize FILE` (`--out`, `--in-place`, `--check`), `canon.canonicalize_document`, `canon2.canonicalize`, and their Rust, JavaScript, Go and Lean twins (`Core.canonicalize`). No reader calls it. Layer: evidence and receipts. Not to be confused with: the strict reader, which only accepts canonical bytes.
@@ -288,6 +292,8 @@ control plane, GRC. A term with no `Also called (deprecated)` line has no losing
 
 **park**: to hold on the signed fail safe rather than decide, because the state the policy needs is stale, absent or in flight. Always leaves a cause in the `state` class. Layer: substrate execution. Not to be confused with: abstain, refuse, deny. Also called (deprecated): hold.
 
+**PEP**: see enforcement point.
+
 **persona**: one of the four people a deployment is organised around: process owner, engineer, operator, assessor. The CLI groups its commands by them and the docs are indexed by them. Layer: control plane.
 
 **policy delivery assessment**: the compliance adapter's assessment of a signed pack as a host received it (`python -m adapters.compliance.assess_policy_delivery`, run from a clone of the repository: the compliance adapter is not in the pip package), against NIST SSDF and the Cyber Resilience Act's Annex I. It runs every check itself on the deployed directory, never writes to it, and maps the checks to a short curated list of requirements with the boundary set to the policy artifact. A requirement the checks reach in part is partially met with the unreached part written out, one they do not reach is not assessed, and a failed check makes every requirement resting on it not met. Layer: GRC. Not to be confused with: a conformity assessment under the Regulation, or an attestation of the organization's SSDF conformance, neither of which it is.
@@ -326,13 +332,21 @@ control plane, GRC. A term with no `Also called (deprecated)` line has no losing
 
 **relay**: a device that forwards records between links without aggregating them. Always qualified when more than one exists: the air relay, the host relay. Layer: wire and transport. Not to be confused with: the concentrator (which aggregates), the air gap courier (which should be named courier).
 
+**release**: every sealed envelope that shares one stream, one `seq` and one policy hash. A PEP commits a release whole or not at all. Layer: control plane. Not to be confused with: a product release (a published version of PrismPath, the owner's decision after acceptance), a candidate.
+
 **resident node**: the node a selector is currently sitting on, persisted across evaluations so the next decision starts from where the system already is. The identifier is `resident_node`, and the state that holds it is the resident state. Layer: substrate execution. Not to be confused with: posture (the GRC term, which is an assessed state of a boundary and never this), a start node (what an image declares), the fail safe (where a selector parks when it cannot decide). Also called (deprecated): posture, which the eBPF selector no longer says; the RTL and the certified corpora still carry it and do not move for a rename.
 
 **root statement**: a deployment's signed statement of a log's Merkle root (the RFC 6962 tree, `prismpath-root-statement/3`; a `/2` statement, over the retired tree, is refused as `old_merkle_scheme`), giving the root, how many leaves it covers, the hash of the statement before it, the time, the instance key's identity and the policy in force, signed with the instance key and kept one per line beside the log (`run.audit.jsonl` beside `run.audit.roots.jsonl`). A receipt verifies offline through its inclusion path to the root a statement signed (alone, from a bundle the reader was handed, by `trail --verify-bundle`), and a chain of statements shows a shortened log, a rewritten receipt, a removed statement or a foreign key. It attests and does not timestamp; anchoring the statement's hash adds the time a third party saw it. Layer: evidence and receipts. Not to be confused with: seal, closing an epoch, which a journal with an instance key follows with a root statement; anchor; a checkpoint, the saved state of a resumable run; the bare Merkle root, which says nothing about who computed it.
 
 **route**: the outcome of routing, the one target node a decision picked for one reading. Layer: kernel evaluation. Not to be confused with: target (the destination an edge declares, which is the same node named as a part of the flow rather than as the result of deciding), band (the spiral range whose members all take one route), path (the sequence of routes a run walks). A struct field that stores an edge's declared destination is `target`; a value that holds what routing produced is `route`. Also called (deprecated): band verdict, next_node, verdict, chosen.
 
+**route table**: the gateway owner's ordered list of path patterns and the class each names (`gateway.routes`, prismpath/gateway/reading.py). The gateway's classifier reads a request's `path_class` through it, and a path no entry matches reads `other`. Any change to it is a widening. Layer: control plane. Not to be confused with: a route (an edge a decision takes), the routing class of causes.
+
 **row**: one numbered claim in the evidence ledger, with its method, result, scope and provenance. Layer: evidence and receipts. Not to be confused with: a conformance case (a vector), a sensor line (a reading), a ledger entry, an atom.
+
+**rule**: one line `-> <target>: <condition>` of a rules source, compiled to one `{target, when}` entry of a `prismpath.core/1` image. The target is allow, refuse with a registered cause, or escalate with one, and the first rule whose condition holds decides. Layer: flow authoring. Not to be confused with: an edge of a flow (the same line shape, but its target names a node), a naming rule of this dictionary, the widening rule.
+
+**rules source**: the readable Markdown form of a core policy image, a `.rules.md` file (SPEC.md section 9). `prismpath policy compile` turns it into the image's canonical bytes and `prismpath policy render` writes it back. The flow parser refuses one. Layer: flow authoring. Not to be confused with: a flow, whose nodes and edges the engine walks; the image, which is what is signed and decided.
 
 **run**: one traversal of a flow from its start node to a terminal, a refusal, a suspension or the step bound. Layer: kernel evaluation.
 
@@ -347,6 +361,8 @@ control plane, GRC. A term with no `Also called (deprecated)` line has no losing
 **spawn**: fan out from one node to child runs, with a declared join policy and deterministic child identity. Layer: flow authoring. Not to be confused with: `spawn` the process primitive.
 
 **spiral**: the layout that packs a multi field reading onto one index whose contiguous ranges are the routes, so the wire carries one band identifier. Proven a bijection over the cell space in Lean. Layer: wire and transport.
+
+**starter**: one of the four agent policies PrismPath ships, `strict`, `default`, `review` and `session`, each a rules source beside the image it compiles to (prismpath/agent/policy). `prismpath agent init --policy` records one and attests it with the owner's authority key. A recorded policy that is none of them is custom. Layer: control plane. Not to be confused with: a template (`prismpath init --template`), which starts a flow.
 
 **stop state**: what ended a run: `terminal`, `stuck`, `max_steps`, `needs_human`, `waiting`, `contract_violation`. The `stopped` field. Layer: kernel evaluation. Not to be confused with: cause (finer, and registered), outcome. Also called (deprecated): stop reason, outcome (in `prismpath-hw/TABLE_FORMAT.md:23`).
 
@@ -374,6 +390,8 @@ control plane, GRC. A term with no `Also called (deprecated)` line has no losing
 
 **WCET bound**: the signed worst case execution bound that travels with an image, derived from the table counts alone and recomputed at verify. Layer: substrate execution. Not to be confused with: a timeout, a step bound, a staleness bound.
 
+**widening**: a release that treats some request more permissively than the one it replaces, by the order refuse, escalate, allow over the whole reading domain (spec-policy-distribution.md section 9.4). A PEP commits one only with a covering signed widening statement. Layer: control plane. Not to be confused with: an install widening of an action floor or fallback policy, which is filed rather than refused.
+
 **wire**: the Facet encoding, a transport agnostic bitstream format. Layer: wire and transport. Not to be confused with: a link or a transport (Facet is explicitly not one), the vision bench's whole record catalogue (which is "the bench links"), the `wire[]` byte array inside a record.
 
 **witness**: something that makes a claim checkable by observation: a concrete path for reachability, a pin measurement for a timing bound, a second sensor for a fused reading. Always qualified. Layer: varies.
@@ -383,6 +401,8 @@ control plane, GRC. A term with no `Also called (deprecated)` line has no losing
 **Zeckendorf coding**: the self delimiting Fibonacci integer code the wire uses, where every code ends in a unique `11` so a stream needs no header and no length field. Prior art, used here and not claimed. Layer: wire and transport.
 
 ---
+**zone**: a function, class or module of the owner's code that the owner names as protected (`prismpath agent zones set`). A change that reaches one, read through Context Cloud, makes the reading's `zone_reach` `protected`, and the starters ask about it. Layer: control plane. Not to be confused with: a firewall zone of addresses, which the name borrows the idea from; a control file, which the agent may never change.
+
 
 ## Naming rules
 

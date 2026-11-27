@@ -34,7 +34,7 @@ enforcement host are in [`SETUP.md`](SETUP.md), and what was run and what it sho
 | File | What it is |
 |------|------------|
 | `protocol.py` | the datagram, its encoder, and its strict reader |
-| `policy/net_rules.src.json`, `.core.json` | the signed `prismpath.core/1` image over the protocol's seven fields |
+| `policy/net_rules.rules.md`, `.core.json` | the readable rules and the signed `prismpath.core/1` image they compile to, over the protocol's seven fields |
 | `policy.py` | the image decided by the Python kernel (`governed_harness.policy`) and compiled to the XDP program's table and action file |
 | `owner_rules.py` | the rules read a second time in plain Python |
 | `../../prismpath-ebpf/gnet/gn_xdp.h` | the frame parse, the strict reading, the register fill and the action: one text for the kernel and its test path |

@@ -2,12 +2,14 @@
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """The readable source of a `prismpath.core/1` policy image, its compiler, and a classifier skeleton.
 
-A core policy image (docs/design/spec-verified-core.md, section 2) is nested JSON. Its readable source is
-not a new language: it is the flow text the image already renders to (`core_render.render`, the canonical
-rendering a core run stores and the evidence verifier recomputes), the Markdown flow format of SPEC.md with
-the field definitions of section 4.5 in its front matter and the Level M conditions of section 4.3 on its
-rules. The one change is how a rule names what it decides: a cause by its registered name instead of its
-number.
+A core policy image (docs/design/spec-verified-core.md, section 2) is nested JSON. Its readable source, a
+rules source, is a dialect of the Markdown flow format of SPEC.md and is specified in SPEC.md section 9. It
+starts from the flow text the image already renders to (`core_render.render`, the canonical rendering a core
+run stores and the evidence verifier recomputes), with the field definitions of section 4.5 in its front
+matter and the Level M conditions of section 4.3 on its rules. It differs from a flow in how a rule names what
+it decides: a cause by its registered name instead of its number, so `refuse agent:network` has a space where
+a flow edge target cannot. The flow parser therefore refuses a rules source (`kernel/parser.RulesSourceError`)
+rather than read its refusals as prose, and only this module reads one.
 
     ---
     name: agent_rules
@@ -21,15 +23,20 @@ number.
 
   * `field.<name>: <definition>` declares a field, as SPEC.md section 4.5 writes it (`bool`, `category`,
     `int min=1 max=1`, `fixed scale=100 rounding=floor`, with `absent=allowed` where a reading may omit it).
+    A category may list its values (`category none|protected|unknown`), and then a rule that compares it
+    with another string does not compile. The list is checked here and is not part of the image.
   * Every `-> <target>: <condition>` line under the start section is one rule, in order; the first rule
     whose condition holds decides. The target is `allow`, `refuse <cause name>` or `escalate <cause name>`
     (the name resolves to its code in `prismpath.kernel.causes`, so `refuse agent:kill-by-pattern` is the
-    image's `refuse_105`), or another route name for an image that is not an agent's.
+    image's `refuse_105`), or another route name for an image that is not an agent's. A cause outside the
+    routing class (`RULE_CLASSES`) compiles with a warning, and `prismpath policy causes` lists the routing ones.
   * The condition is `always`, `never`, or `when` and one Level M expression over the declared fields: a
     field alone (true), `==` `!=` `<` `<=` `>` `>=` against a constant, `in` and `not in` a list of
     constants, joined by `and`, `or`, `not` and parentheses. Constants are numbers, strings, `True`,
     `False` and `None`.
-  * Any other line under a heading is a note for the reader and is not part of the image.
+  * Any other line under a heading is a note for the reader and is not part of the image. A note that looks
+    like a rule (an arrow spelled `>`, `=>` or `- >`, or `allow: when ...` with no arrow) is compiled with a
+    warning, since the rule its author meant is not in the image.
 
 `compile_source` turns the text into the image's canonical canon/2 bytes and has the image checked by the
 port of the Lean oracle (`core_policy`), naming the line of the first problem; `render_source` writes the
@@ -51,6 +58,10 @@ FORMAT = core_policy.FORMAT_TAG
 ALWAYS = core_render.ALWAYS
 NEVER = core_render.NEVER
 DECISIONS = ("refuse", "escalate")
+# The cause classes a rule names: a policy decides a call (routing). The other classes are the refusals of a
+# check outside the policy (a signature, an envelope, the wire, resident state), so naming one in a rule compiles
+# with a warning.
+RULE_CLASSES = ("routing",)
 FRONT_KEYS = ("name", "start", "description")
 _CODED = re.compile(r"^(refuse|escalate)_(\d+)$")
 _READABLE = re.compile(r"^\s*(refuse|escalate)\s+(\S+?):(?:\s+(.*?))?\s*$")
@@ -58,6 +69,12 @@ _PLAIN = re.compile(r"^\s*([A-Za-z0-9_\-]+)\s*:\s*(.*?)\s*$")
 _EDGE = re.compile(r"^\s*-?\s*->(.*)$")
 _HEAD = re.compile(r"^\s*##\s+(.+?)\s*$")
 _ANNO = re.compile(r"^\s*@(\w+)\s*\(")
+# A note line that looks like a rule someone meant to write: an arrow spelled another way (`>`, `=>`, `- >`,
+# `→`) followed by allow, refuse or escalate, or a rule's target and condition with no arrow (`allow: when ...`, `refuse <cause>: always`).
+# Any other line is a note, so without this warning a mistyped refusal vanishes and a later allow decides.
+_LOOKS_LIKE_ARROW = re.compile(r"^\s*(?:[-*+]\s*)?(?:=>|-+\s+>|>|\u2192)\s*(?:allow|refuse|escalate)\b", re.IGNORECASE)
+_LOOKS_LIKE_RULE = re.compile(r"^\s*(?:[-*+>]\s*)?(?:allow|refuse\s+\S+?|escalate\s+\S+?)\s*:\s*(?:when\b|always\b|never\b)",
+                              re.IGNORECASE)
 _INT_TEXT = re.compile(r"[0-9]+")
 _DEC_TEXT = re.compile(r"(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?")
 _OPS = {ast.Eq: "==", ast.NotEq: "!=", ast.Lt: "<", ast.LtE: "<=", ast.Gt: ">", ast.GtE: ">="}
@@ -131,6 +148,7 @@ class Compiled:
     field_lines: Dict[str, int]
     rule_lines: List[int]
     warnings: List[Tuple[int, str]] = field(default_factory=list)
+    values: Dict[str, Tuple[str, ...]] = field(default_factory=dict)     # the values a category lists, never in the image
 
 
 # ----------------------------------------------------------------- targets
@@ -153,6 +171,12 @@ def readable_target(target: str) -> str:
     if target in DECISIONS:
         raise core_render.Unrenderable(f"target {target} reads as a decision with no cause")
     return target
+
+
+def cause_rows(include_all: bool = False) -> List[Tuple[int, str, str, str]]:
+    """(code, name, class, description) of every registered cause a rule names, in code order; with
+    `include_all`, every registered cause."""
+    return [entry for entry in sorted(causes._REGISTRY) if include_all or entry[2] in RULE_CLASSES]
 
 
 def _cause_hint(name: str) -> str:
@@ -300,8 +324,71 @@ def _target(raw: str, line: int, problems) -> Tuple[Optional[str], Optional[str]
     return target, cond
 
 
-def _front(lines: List[str], problems) -> Tuple[Dict[str, Tuple[str, int]], Dict[str, Tuple[str, int]], int]:
-    """(front matter keys, field definitions, index of the first body line), each with its line."""
+_VALUE = re.compile(r"[A-Za-z0-9_.:\-]+")
+
+
+def _value_list(value: str, line: int, problems) -> Tuple[str, Optional[Tuple[str, ...]]]:
+    """(the definition the image carries, the values listed) of a field declaration. A category may list its
+    values as one word `a|b|c` after the kind (`category none|protected|unknown`). The list is a check of the
+    compiler's only and never reaches the image: the definition without it is what the image carries, so a
+    source with a list compiles to the same bytes as the source without it. Any other declaration is returned
+    as written, with no list."""
+    words = value.split()
+    if len(words) < 2 or words[0] != "category":
+        return value, None
+    listed = [word for word in words[1:] if "=" not in word]
+    if not listed:
+        return value, None
+    if len(listed) > 1:
+        problems.append((line, "write a category's values as one list with no spaces, like none|protected|unknown"))
+        return value, None
+    names = listed[0].split("|")
+    bad = [name for name in names if not _VALUE.fullmatch(name)]
+    if bad:
+        problems.append((line, f"`{bad[0] or listed[0]}` is not a value a category can list. A value is letters, "
+                               f"digits and _ . : -, and the values are joined by |"))
+        return value, None
+    repeated = sorted({name for name in names if names.count(name) > 1})
+    if repeated:
+        problems.append((line, f"the value {repeated[0]} is listed twice"))
+    return " ".join(word for word in words if word != listed[0]), tuple(names)
+
+
+def _listed_value_problems(rules, rule_lines, values) -> List[Tuple[int, str]]:
+    """A rule that compares a field with a string its declaration does not list, named on its line."""
+    out = []
+
+    def walk(cond, line):
+        if not isinstance(cond, list) or not cond:
+            return
+        if cond[0] == "cmp" and len(cond) == 4:
+            check(cond[1], [cond[3]], line)
+        elif cond[0] in ("in", "not in") and len(cond) == 3:
+            check(cond[1], cond[2], line)
+        else:
+            for part in cond[1:]:
+                walk(part, line)
+
+    def check(name, constants, line):
+        if name not in values:
+            return
+        for constant in constants:
+            if isinstance(constant, list) and len(constant) == 2 and constant[0] == "str" \
+                    and constant[1] not in values[name]:
+                near = difflib.get_close_matches(constant[1], values[name], n=1, cutoff=0.6)
+                hint = f" Did you mean {near[0]}?" if near else ""
+                out.append((line, f"`{constant[1]}` is not a value of {name}, which lists "
+                                  f"{', '.join(values[name])}.{hint}"))
+
+    for rule, line in zip(rules, rule_lines):
+        walk(rule["when"], line)
+    return out
+
+
+def _front(lines: List[str], problems, values=None) -> Tuple[Dict[str, Tuple[str, int]], Dict[str, Tuple[str, int]], int]:
+    """(front matter keys, field definitions, index of the first body line), each with its line. The values a
+    category declaration lists go into `values`."""
+    values = {} if values is None else values
     if not lines or lines[0].strip() != "---":
         problems.append((1, "the source starts with a front matter block between two `---` lines"))
         return {}, {}, 0
@@ -325,7 +412,10 @@ def _front(lines: List[str], problems) -> Tuple[Dict[str, Tuple[str, int]], Dict
             elif name in fields:
                 problems.append((line, f"the field {name} is declared twice (first on line {fields[name][1]})"))
             else:
+                value, listed = _value_list(value, line, problems)
                 fields[name] = (value, line)
+                if listed is not None:
+                    values[name] = listed
         elif key in FRONT_KEYS:
             if key in meta:
                 problems.append((line, f"`{key}` is written twice"))
@@ -340,7 +430,8 @@ def parse_source(text: str, path: str = "<source>") -> Compiled:
     """The image a source writes, before the core checks it. SourceError names every line it cannot read."""
     problems: List[Tuple[int, str]] = []
     lines = text.replace("\r\n", "\n").split("\n")     # a file saved with Windows line ends reads the same
-    meta, fields, body = _front(lines, problems)
+    values: Dict[str, Tuple[str, ...]] = {}
+    meta, fields, body = _front(lines, problems, values)
     start = meta.get("start", (None, 0))[0]
     if start is not None:
         start = start.lower().replace(" ", "_")
@@ -363,6 +454,9 @@ def parse_source(text: str, path: str = "<source>") -> Compiled:
             continue
         edge = _EDGE.match(raw)
         if not edge:
+            if _LOOKS_LIKE_ARROW.match(raw) or _LOOKS_LIKE_RULE.match(raw):
+                warnings.append((line, "this line looks like a rule but is a note, so it decides nothing. A rule "
+                                       "starts with `->`, as in `-> allow: when ...`"))
             continue                              # a note for the reader
         if section is None or section != start:
             where = f"under ## {section}" if section else "before any section"
@@ -384,12 +478,19 @@ def parse_source(text: str, path: str = "<source>") -> Compiled:
         if target != "allow" and not _CODED.match(target):
             warnings.append((line, f"`{target}` is a route, not allow, refuse or escalate; the agent harness "
                                    f"refuses a policy that names it"))
+        coded = _CODED.match(target)
+        if coded and causes.cause_class(int(coded.group(2))) not in RULE_CLASSES:
+            name = causes.name(int(coded.group(2)))
+            warnings.append((line, f"{name} is a cause of the {causes.cause_class(name)} class, not one a policy "
+                                   f"decides, so a receipt would name a check that never ran. "
+                                   f"`prismpath policy causes` lists the causes a rule names"))
         rules.append({"target": target, "when": cond})
         rule_lines.append(line)
     if start is not None and start not in seen and not problems:
         problems.append((meta.get("start", (None, 1))[1] or 1, f"there is no ## {start} section to hold the rules"))
     if not rules and not problems:
         warnings.append((0, "the source has no rules: the core refuses every reading (route:no-matching-edge)"))
+    problems += _listed_value_problems(rules, rule_lines, values)
     if problems:
         raise SourceError(problems, path)
     doc = {"format": FORMAT, "fields": {name: value for name, (value, _line) in fields.items()}, "rules": rules}
@@ -401,7 +502,7 @@ def parse_source(text: str, path: str = "<source>") -> Compiled:
                  else f"the rule has no canon/2 form ({error.rule})")
         raise SourceError([(line, words)], path) from None
     return Compiled(doc, image, meta.get("name", ("", 0))[0], {name: line for name, (_v, line) in fields.items()},
-                    rule_lines, warnings)
+                    rule_lines, warnings, values)
 
 
 def _writable(value) -> bool:
@@ -490,9 +591,18 @@ def read_image(raw) -> Dict[str, Any]:
     return canon2.loads(raw)
 
 
-def render_source(image) -> str:
+def read_image_bytes(raw: bytes) -> bytes:
+    """An image file's bytes without the one line feed a file may end with."""
+    return raw[:-1] if raw.endswith(b"\n") and not raw.endswith(b"\n\n") else raw
+
+
+def render_source(image, name: Optional[str] = None, description: Optional[str] = None,
+                  notes: Tuple[str, ...] = ()) -> str:
     """The source of an image: its canonical flow rendering (`core_render.render`) with each rule's cause
-    named by its registered name. Raises core_render.Unrenderable for an image the source cannot carry."""
+    named by its registered name. Raises core_render.Unrenderable for an image the source cannot carry.
+    `name`, `description` and `notes` (lines put under the heading, before the rules) are for the reader and
+    change nothing in the image, so a generator can write a source that says where it came from."""
+    title = name
     doc = read_image(image)
     fields = doc.get("fields") if isinstance(doc, dict) else None
     for name, text in (fields.items() if isinstance(fields, dict) else ()):
@@ -507,6 +617,18 @@ def render_source(image) -> str:
         prefix = f"-> {rule['target']}: "
         assert text.startswith(prefix), text
         out.append(f"-> {readable_target(rule['target'])}: {text[len(prefix):]}")
+    for note in notes:
+        if _EDGE.match(note) or _HEAD.match(note) or _ANNO.match(note) or "\n" in note:
+            raise ValueError(f"a note must be one line that is not a rule, a heading or an annotation: {note!r}")
+    if notes:
+        out[head + 1:head + 1] = list(notes) + [""]
+    if title is not None or description is not None:
+        for text in (title, description):
+            if text is not None and ("\n" in text or text != text.strip()):
+                raise ValueError("a name or a description is one trimmed line")
+        meta = ([f"name: {title}"] if title is not None else [out[1]]) + (
+            [f"description: {description}"] if description is not None else [])
+        out[1:2] = meta
     return "\n".join(out) + "\n"
 
 
@@ -663,7 +785,7 @@ def test_the_unknown_reading_is_never_allowed():
 
 # ----------------------------------------------------------------- command line
 def add_parser(subparsers) -> None:
-    """`prismpath policy compile | render | skeleton`."""
+    """`prismpath policy compile | render | skeleton | check | causes`."""
     policy_parser = subparsers.add_parser(
         'policy', help='Write a core policy as readable rules: compile the rules to the signed image\'s '
                        'canonical bytes, render an image back to rules, start a classifier for the fields')
@@ -672,6 +794,9 @@ def add_parser(subparsers) -> None:
                                                         'checked by the core, in canonical canon/2 bytes')
     compile_parser.add_argument('source', help='the rules source (.rules.md)')
     compile_parser.add_argument('-o', '--out', default=None, help='write the image here (default standard output)')
+    compile_parser.add_argument('--target', choices=('agent',), default=None,
+                                help='also run the checks of what will enforce the image: agent is the governed agent '
+                                     '(reading domain, fields, control files, connections, sandbox profile)')
     render_parser = actions.add_parser('render', help='write the rules source of a prismpath.core/1 image')
     render_parser.add_argument('image', help='the image (.core.json, or any canon/2 spelling of it)')
     render_parser.add_argument('-o', '--out', default=None, help='write the source here (default standard output)')
@@ -681,6 +806,15 @@ def add_parser(subparsers) -> None:
     skeleton_parser.add_argument('-o', '--out', required=True, help='the module to write (module.py)')
     skeleton_parser.add_argument('--test', default=None, help='the test to write (default test_<module>.py beside it)')
     skeleton_parser.add_argument('--force', action='store_true', help='overwrite files that exist')
+    check_parser = actions.add_parser('check', help='check that a rules source compiles to an image byte for byte, '
+                                                    'for CI: exit 1 when the image is stale')
+    check_parser.add_argument('source', help='the rules source (.rules.md)')
+    check_parser.add_argument('image', help='the image it must compile to (.core.json)')
+    causes_parser = actions.add_parser('causes', help='list the registered causes a rule can name, with their codes '
+                                                      'and meanings')
+    causes_parser.add_argument('--all', action='store_true', help='list every registered cause, not only the ones a '
+                                                                   'policy decides')
+    causes_parser.add_argument('--json', action='store_true', help='print JSON')
     policy_parser.set_defaults(func=policy_cmd)
 
 
@@ -697,6 +831,17 @@ def policy_cmd(args) -> int:
         for text in lines:
             print(f"prismpath policy {args.policy_action}: {text}", file=sys.stderr)
         return 2
+
+    if args.policy_action == 'causes':
+        rows = cause_rows(include_all=args.all)
+        if args.json:
+            import json
+            print(json.dumps([{"code": c, "name": n, "class": k, "description": d} for c, n, k, d in rows], indent=2))
+        else:
+            width = max(len(n) for _c, n, _k, _d in rows)
+            for code, name, klass, description in rows:
+                print(f"{code:>4}  {name:<{width}}  {klass:<9}  {description}")
+        return 0
 
     if args.policy_action == 'render':
         try:
@@ -722,13 +867,16 @@ def policy_cmd(args) -> int:
             sys.stdout.write(text)
         return 0
 
+    import hashlib
     try:
-        with open(args.source, encoding="utf-8") as handle:
-            text = handle.read()
+        with open(args.source, "rb") as handle:
+            source_bytes = handle.read()
+        text = source_bytes.decode("utf-8")
     except (OSError, UnicodeDecodeError) as error:
         return refuse([f"{args.source}: {getattr(error, 'strerror', None) or error}"])
+    source_sha256 = hashlib.sha256(source_bytes).hexdigest()
     try:
-        if args.policy_action == 'compile':
+        if args.policy_action in ('compile', 'check'):
             compiled = compile_full(text, args.source)
         else:
             module = os.path.splitext(os.path.basename(args.out))[0]
@@ -749,9 +897,32 @@ def policy_cmd(args) -> int:
     except SourceError as error:
         return refuse(error.lines())
     for line, message in compiled.warnings:
-        print(f"prismpath policy compile: {args.source}:{line}: warning: {message}", file=sys.stderr)
+        print(f"prismpath policy {args.policy_action}: {args.source}:{line}: warning: {message}", file=sys.stderr)
+    image_sha256 = hashlib.sha256(compiled.image).hexdigest()
+    if args.policy_action == 'check':
+        try:
+            with open(args.image, "rb") as handle:
+                held = handle.read()
+        except OSError as error:
+            return refuse([f"{args.image}: {error.strerror}"])
+        if held in (compiled.image, compiled.image + b"\n"):
+            print(f"{args.source} compiles to {args.image}, image sha256 {image_sha256}, source sha256 {source_sha256}")
+            return 0
+        held_sha256 = hashlib.sha256(read_image_bytes(held)).hexdigest()
+        print(f"prismpath policy check: {args.source} compiles to image sha256 {image_sha256}, but {args.image} is "
+              f"sha256 {held_sha256}. Compile it again with `prismpath policy compile {args.source} -o {args.image}`",
+              file=sys.stderr)
+        return 1
+    if args.target:
+        from prismpath.agent import target as agent_target      # the agent's own checks, read lazily
+        found = agent_target.LISTED[args.target](compiled.values) + agent_target.TARGETS[args.target](compiled.image)
+        if found:
+            return refuse(SourceError([(agent_target.line_of(where, compiled.field_lines, compiled.rule_lines), message)
+                                       for where, message in found], args.source).lines())
     if args.out:
         _write(args.out, compiled.image + b"\n")
+        print(f"prismpath policy compile: wrote {args.out}, image sha256 {image_sha256}, source sha256 "
+              f"{source_sha256}", file=sys.stderr)
     else:
         sys.stdout.buffer.write(compiled.image + b"\n")
         sys.stdout.flush()

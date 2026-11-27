@@ -3,20 +3,20 @@ name: agent_default
 description: agent_rules, except that a call it cannot read or a shell command that changes files asks the person
 start: core_decision
 field.classifier_version: int min=3 max=3
-field.command_class: category
-field.git_op: category
+field.command_class: category none|read_only|mutating|network|git|unknown
+field.git_op: category none|local_read|local_write|mutating|push|network|unknown
 field.kill_by_pattern: bool
-field.net_dest: category
+field.net_dest: category none|model_api|allowed_host|other|unknown
 field.path_control: bool
 field.path_glob: bool
 field.path_in_toolchain: bool
-field.path_scope: category
+field.path_scope: category none|workspace|outside|unknown
 field.path_symlink: bool
 field.path_traversal: bool
-field.proc_class: category
-field.remote_class: category
-field.tool: category
-field.zone_reach: category
+field.proc_class: category none|single|tree|unknown
+field.remote_class: category none|allowed|other
+field.tool: category list_dir|read_file|write_file|delete_path|run_command|git|connect|unknown
+field.zone_reach: category none|protected|unknown
 ---
 ## core_decision
 The default starter, what `prismpath agent init` records. A call it cannot read and a shell command that changes files inside the workspace ask the person.
