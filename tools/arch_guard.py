@@ -399,6 +399,8 @@ def decides_outside_onion(tree):
 
 def layer_findings(root, config):
     """({section: sorted lines}, [layer problems]) for the tree. Each line is one offending pair or site."""
+    if "layers" not in config:                       # a config with no layer table has no layer contract to hold
+        return {section: [] for section in BASELINE_SECTIONS}, []
     package_directory = os.path.join(root, config["package_dir"])
     table, problems = layer_problems(package_directory, config)
     resolver = Resolver(package_directory, table)
