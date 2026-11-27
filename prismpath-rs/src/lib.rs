@@ -48,7 +48,7 @@ pub use engine::{
 };
 pub use contract::{derive_contract, ContractError};
 pub use level_m::{capability_report, flow_level_m, is_level_m, level_m_atoms, LevelMAtom, NonMemberEdge};
-pub use parser::{parse, parse_checked, parse_with_limits, Graph, Limits, Node};
+pub use parser::{parse, parse_checked, parse_file, parse_named, parse_with_limits, Graph, Limits, Node, RULES_SUFFIX};
 pub use field_definitions::{accept_canonical, canonical_value, CanonicalRefusal, DefinedKind, FieldDefinition, Rounding};
 pub use reach::check_reach;
 pub use value::{PredicateError, Value, V, CMP_DEPTH, MAX_DEPTH};

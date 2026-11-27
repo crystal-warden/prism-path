@@ -1,0 +1,334 @@
+{
+ "cases": [
+  {
+   "expect": {
+    "error": "line 7 is a rule of a rules source, not a flow edge. A rules source is compiled with `prismpath policy compile` and read back with `prismpath policy render`",
+    "error_class": "RulesSourceError"
+   },
+   "filename": null,
+   "flow": "---\nname: r\nstart: core_decision\nfield.tool: category\n---\n## core_decision\n-> refuse agent:network: when tool == \"connect\"\n-> allow: always\n",
+   "name": "refuse-rule-with-frontmatter"
+  },
+  {
+   "expect": {
+    "error": "line 2 is a rule of a rules source, not a flow edge. A rules source is compiled with `prismpath policy compile` and read back with `prismpath policy render`",
+    "error_class": "RulesSourceError"
+   },
+   "filename": null,
+   "flow": "## core_decision\n-> refuse agent:network: when tool == \"connect\"\n-> allow: always\n",
+   "name": "refuse-rule-without-frontmatter"
+  },
+  {
+   "expect": {
+    "error": "line 2 is a rule of a rules source, not a flow edge. A rules source is compiled with `prismpath policy compile` and read back with `prismpath policy render`",
+    "error_class": "RulesSourceError"
+   },
+   "filename": null,
+   "flow": "## core_decision\n  - -> escalate agent:push-escalated: when git_op == \"push\"\n",
+   "name": "escalate-rule-bulleted-and-indented"
+  },
+  {
+   "expect": {
+    "error": "line 2 is a rule of a rules source, not a flow edge. A rules source is compiled with `prismpath policy compile` and read back with `prismpath policy render`",
+    "error_class": "RulesSourceError"
+   },
+   "filename": null,
+   "flow": "## core_decision\n-> escalate agent:review:\n",
+   "name": "escalate-rule-at-end-of-line"
+  },
+  {
+   "expect": {
+    "error": "line 2 is a rule of a rules source, not a flow edge. A rules source is compiled with `prismpath policy compile` and read back with `prismpath policy render`",
+    "error_class": "RulesSourceError"
+   },
+   "filename": null,
+   "flow": "## s\n-> refuse policy: when x == 1\n",
+   "name": "refuse-rule-simple-cause"
+  },
+  {
+   "expect": {
+    "error": "line 1 is a rule of a rules source, not a flow edge. A rules source is compiled with `prismpath policy compile` and read back with `prismpath policy render`",
+    "error_class": "RulesSourceError"
+   },
+   "filename": null,
+   "flow": "-> refuse agent:network: when tool == \"connect\"\n## core_decision\n-> allow: always\n",
+   "name": "refuse-rule-before-any-heading"
+  },
+  {
+   "expect": {
+    "error": "line 2 is a rule of a rules source, not a flow edge. A rules source is compiled with `prismpath policy compile` and read back with `prismpath policy render`",
+    "error_class": "RulesSourceError"
+   },
+   "filename": null,
+   "flow": "## s\n--> refuse agent:network: when x == 1\n",
+   "name": "refuse-rule-double-dash-arrow"
+  },
+  {
+   "expect": {
+    "error": "line 3 is a rule of a rules source, not a flow edge. A rules source is compiled with `prismpath policy compile` and read back with `prismpath policy render`",
+    "error_class": "RulesSourceError"
+   },
+   "filename": null,
+   "flow": "## core_decision\n-> allow: when safe == True\n-> refuse agent:network: when tool == \"connect\"\n",
+   "name": "refuse-rule-after-valid-edge"
+  },
+  {
+   "expect": {
+    "error": "only_allow.rules.md is a rules source, not a flow. A rules source is compiled with `prismpath policy compile` and read back with `prismpath policy render`",
+    "error_class": "RulesSourceError"
+   },
+   "filename": "only_allow.rules.md",
+   "flow": "---\nstart: core_decision\n---\n## core_decision\n-> allow: always\n",
+   "name": "rules-md-filename-with-allow-only"
+  },
+  {
+   "expect": {
+    "error": "agent.rules.md is a rules source, not a flow. A rules source is compiled with `prismpath policy compile` and read back with `prismpath policy render`",
+    "error_class": "RulesSourceError"
+   },
+   "filename": "policies/agent.rules.md",
+   "flow": "## s\n-> allow: always\n",
+   "name": "rules-md-filename-in-subdirectory"
+  },
+  {
+   "expect": {
+    "error": "both.rules.md is a rules source, not a flow. A rules source is compiled with `prismpath policy compile` and read back with `prismpath policy render`",
+    "error_class": "RulesSourceError"
+   },
+   "filename": "both.rules.md",
+   "flow": "## s\n-> refuse agent:network: when x == 1\n",
+   "name": "rules-md-filename-takes-precedence-over-rules-line"
+  },
+  {
+   "expect": {
+    "nodes": [
+     [
+      "core_decision",
+      [
+       [
+        "refuse_106",
+        "when tool == \"connect\""
+       ],
+       [
+        "allow",
+        "always"
+       ]
+      ]
+     ]
+    ],
+    "ok": true,
+    "start": "core_decision"
+   },
+   "filename": null,
+   "flow": "---\nstart: core_decision\n---\n## core_decision\n-> refuse_106: when tool == \"connect\"\n-> allow: always\n",
+   "name": "rendered-refuse-code-edge"
+  },
+  {
+   "expect": {
+    "nodes": [
+     [
+      "core_decision",
+      [
+       [
+        "escalate_107",
+        "when git_op == \"push\""
+       ],
+       [
+        "allow",
+        "always"
+       ]
+      ]
+     ]
+    ],
+    "ok": true,
+    "start": "core_decision"
+   },
+   "filename": null,
+   "flow": "---\nstart: core_decision\n---\n## core_decision\n-> escalate_107: when git_op == \"push\"\n-> allow: always\n",
+   "name": "rendered-escalate-code-edge"
+  },
+  {
+   "expect": {
+    "nodes": [
+     [
+      "s",
+      [
+       [
+        "next",
+        "when x"
+       ]
+      ]
+     ],
+     [
+      "next",
+      []
+     ]
+    ],
+    "ok": true,
+    "start": "s"
+   },
+   "filename": null,
+   "flow": "---\nname: tiny\nstart: s\n---\n## s\n-> next: when x\n## next\nDone.\n",
+   "name": "normal-when-edge"
+  },
+  {
+   "expect": {
+    "nodes": [
+     [
+      "s",
+      [
+       [
+        "refuse",
+        "when bad"
+       ]
+      ]
+     ],
+     [
+      "refuse",
+      []
+     ]
+    ],
+    "ok": true,
+    "start": "s"
+   },
+   "filename": null,
+   "flow": "## s\n-> refuse: when bad\n## refuse\nStopped.\n",
+   "name": "edge-named-refuse-directly"
+  },
+  {
+   "expect": {
+    "nodes": [
+     [
+      "s",
+      [
+       [
+        "escalate",
+        "when urgent"
+       ]
+      ]
+     ],
+     [
+      "escalate",
+      []
+     ]
+    ],
+    "ok": true,
+    "start": "s"
+   },
+   "filename": null,
+   "flow": "## s\n-> escalate: when urgent\n## escalate\nHuman.\n",
+   "name": "edge-named-escalate-directly"
+  },
+  {
+   "expect": {
+    "nodes": [
+     [
+      "a",
+      []
+     ]
+    ],
+    "ok": true,
+    "start": "a"
+   },
+   "filename": null,
+   "flow": "## a\nWe refuse -> nothing here.\n-> refuse later on, then stop\nDo not escalate this line.\n",
+   "name": "prose-mentioning-refuse"
+  },
+  {
+   "expect": {
+    "nodes": [
+     [
+      "a",
+      [
+       [
+        "refuse",
+        "when x == 1"
+       ]
+      ]
+     ]
+    ],
+    "ok": true,
+    "start": "a"
+   },
+   "filename": null,
+   "flow": "## a\n-> refuse : when x == 1\n",
+   "name": "edge-refuse-with-space-before-colon"
+  },
+  {
+   "expect": {
+    "nodes": [
+     [
+      "a",
+      []
+     ]
+    ],
+    "ok": true,
+    "start": "a"
+   },
+   "filename": null,
+   "flow": "## a\n-> refuse agent:network when tool == \"connect\"\n",
+   "name": "prose-refuse-colon-inside-token-no-trailing-colon"
+  },
+  {
+   "expect": {
+    "nodes": [
+     [
+      "a",
+      []
+     ]
+    ],
+    "ok": true,
+    "start": "a"
+   },
+   "filename": null,
+   "flow": "## a\n-> REFUSE agent:network: when tool == \"connect\"\n",
+   "name": "uppercase-refuse-is-not-a-rule"
+  },
+  {
+   "expect": {
+    "nodes": [
+     [
+      "core_decision",
+      [
+       [
+        "refuse_106",
+        "when tool == \"connect\""
+       ],
+       [
+        "next",
+        "when x"
+       ]
+      ]
+     ]
+    ],
+    "ok": true,
+    "start": "core_decision"
+   },
+   "filename": "ordinary.md",
+   "flow": "---\nstart: core_decision\n---\n## core_decision\n-> refuse_106: when tool == \"connect\"\n-> next: when x\n",
+   "name": "ordinary-md-filename"
+  },
+  {
+   "expect": {
+    "nodes": [
+     [
+      "s",
+      [
+       [
+        "next",
+        "when x"
+       ]
+      ]
+     ]
+    ],
+    "ok": true,
+    "start": "s"
+   },
+   "filename": "my.rules.md.bak",
+   "flow": "## s\n-> next: when x\n",
+   "name": "rules-md-substring-not-suffix"
+  }
+ ],
+ "note": "kernel/parser.py rules-source refusal. Rules sources (a `.rules.md` filename or any line matching `-> refuse|escalate <cause>:`) are refused with RulesSourceError (a ParseError subclass) pointing to `prismpath policy compile`. Rendered code edges (`refuse_106:`), normal edges (`-> next: when x`) and prose mentioning refuse keep parsing as ordinary flows.",
+ "version": 1
+}

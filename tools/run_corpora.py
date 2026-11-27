@@ -184,6 +184,12 @@ CONSUMERS: dict[str, dict[str, list[tuple]]] = {
                cargo("prismpath-telemetry-rs", "test_receipts", "prismpath-telemetry-rs/tests/test_receipts.rs")],
         # the merkle and bundle cases, through merkle.mjs and Mission Control's verify.mjs; the rest are skipped
         "js": [("node", "run_vectors.mjs", "prismpath/portable/run_vectors.mjs")], "go": [NONE_GO], "hw": [NONE_HW]},
+    "portable/rules_source": {
+        "py": [pytest("prismpath/tests/test_rules_source_conformance.py")],
+        "rs": [cargo("prismpath-rs", "test_rules_source", "prismpath-rs/tests/test_rules_source.rs")],
+        "js": [("node", "run_vectors.mjs", "prismpath/portable/run_vectors.mjs")],
+        "go": [("go", "prismpath-go/conformance_test.go")],
+        "hw": [NONE_HW]},
     "portable/safety": {
         "py": [pytest("prismpath/tests/test_safety_vectors.py")],
         "rs": [("none", "the content guard is outside the kernel by design (prismpath-rs/CONFORMANCE.md, scope boundary)")],
