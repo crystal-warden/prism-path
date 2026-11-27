@@ -1,10 +1,29 @@
 package prismpath
 
 import (
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 )
+
+// RulesSuffix is the filename suffix of a rules source rather than a workflow document.
+const RulesSuffix = ".rules.md"
+
+// ParseError reports why a flow document could not be parsed. RulesSource is true when the document
+// is a rules source rather than a flow (Python's RulesSourceError, a subclass of ParseError).
+type ParseError struct {
+	Message     string
+	RulesSource bool
+}
+
+func (parseErr *ParseError) Error() string {
+	return parseErr.Message
+}
 
 // Edge represents a flow edge.
 type Edge struct {
@@ -42,6 +61,7 @@ type Graph struct {
 	// has every edge disabled and Run refuses it; FieldError names the first problem, with its registered
 	// cause, and every other problem in the core's order.
 	Refused    string                `json:"refused,omitempty"`
+	ParseError *ParseError           `json:"-"`
 	FieldError *FieldDefinitionError `json:"-"`
 }
 
@@ -86,6 +106,90 @@ func utf8DecodeRune(text string) (rune, int) {
 	return char, size
 }
 
+func isPySpace(char rune) bool {
+	return unicode.IsSpace(char) || char == 0x85 || (char >= 0x1c && char <= 0x1f)
+}
+
+// matchRulesLine reports whether line is a rule of a rules source (`-> refuse <cause>:` or
+// `-> escalate <cause>:`), matching Python's RULES_LINE_RE.
+func matchRulesLine(line string) bool {
+	runes := []rune(line)
+	pos := 0
+	for pos < len(runes) && isPySpace(runes[pos]) {
+		pos++
+	}
+	if pos < len(runes) && runes[pos] == '-' && !(pos+1 < len(runes) && runes[pos+1] == '>') {
+		pos++
+		for pos < len(runes) && isPySpace(runes[pos]) {
+			pos++
+		}
+	}
+	if !(pos+1 < len(runes) && runes[pos] == '-' && runes[pos+1] == '>') {
+		return false
+	}
+	pos += 2
+	for pos < len(runes) && isPySpace(runes[pos]) {
+		pos++
+	}
+	rest := string(runes[pos:])
+	var tail string
+	switch {
+	case strings.HasPrefix(rest, "refuse"):
+		tail = rest[len("refuse"):]
+	case strings.HasPrefix(rest, "escalate"):
+		tail = rest[len("escalate"):]
+	default:
+		return false
+	}
+	tailRunes := []rune(tail)
+	tpos := 0
+	for tpos < len(tailRunes) && isPySpace(tailRunes[tpos]) {
+		tpos++
+	}
+	if tpos == 0 {
+		return false
+	}
+	tokStart := tpos
+	for tpos < len(tailRunes) && !isPySpace(tailRunes[tpos]) {
+		tpos++
+	}
+	return tpos-tokStart >= 2 && tailRunes[tpos-1] == ':'
+}
+
+func rulesSourceLineMessage(lineNumber int) string {
+	return fmt.Sprintf(
+		"line %d is a rule of a rules source, not a flow edge. A rules source is compiled with "+
+			"`prismpath policy compile` and read back with `prismpath policy render`",
+		lineNumber,
+	)
+}
+
+func rulesSourceFileMessage(basename string) string {
+	return fmt.Sprintf(
+		"%s is a rules source, not a flow. A rules source is compiled with "+
+			"`prismpath policy compile` and read back with `prismpath policy render`",
+		basename,
+	)
+}
+
+func refusedRulesSource(message string) Graph {
+	return Graph{
+		Nodes:      map[string]Node{},
+		NodeOrder:  []string{},
+		Terminals:  []string{},
+		Refused:    message,
+		ParseError: &ParseError{Message: message, RulesSource: true},
+	}
+}
+
+func basenameOf(path string) string {
+	idx := strings.LastIndexAny(path, `/\`)
+	if idx >= 0 {
+		return path[idx+1:]
+	}
+	return path
+}
+
 // Parse parses a Markdown flow document into a Graph.
 func Parse(markdown string) Graph {
 	lines := splitLines(markdown)
@@ -96,6 +200,7 @@ func Parse(markdown string) Graph {
 	fmDone := false
 	meta := map[string]string{}
 	bodyLines := []string{}
+	bodyOffset := 0
 
 	if len(lines) > 0 && pyTrim(lines[0]) == "---" {
 		inFrontmatter = true
@@ -104,6 +209,7 @@ func Parse(markdown string) Graph {
 			if pyTrim(line) == "---" {
 				fmDone = true
 				bodyLines = lines[lineIndex+1:]
+				bodyOffset = lineIndex + 1
 				break
 			}
 			parts := strings.SplitN(line, ":", 2)
@@ -122,6 +228,7 @@ func Parse(markdown string) Graph {
 
 	if !inFrontmatter || !fmDone {
 		bodyLines = lines
+		bodyOffset = 0
 	}
 
 	if name == "" {
@@ -140,7 +247,10 @@ func Parse(markdown string) Graph {
 		}
 	}
 
-	for _, line := range bodyLines {
+	for idx, line := range bodyLines {
+		if matchRulesLine(line) {
+			return refusedRulesSource(rulesSourceLineMessage(bodyOffset + idx + 1))
+		}
 		if match := nodeHeadingRe.FindStringSubmatch(line); len(match) > 1 {
 			flushNode()
 			normName := strings.ReplaceAll(strings.ToLower(strings.TrimSpace(match[1])), " ", "_")
@@ -201,4 +311,43 @@ func Parse(markdown string) Graph {
 		applyDefinitions(&graph, meta)
 	}
 	return graph
+}
+
+// ParseNamed parses a Markdown flow document, also refusing a filename ending in `.rules.md`.
+func ParseNamed(markdown string, filename string) Graph {
+	if filename != "" {
+		base := basenameOf(filename)
+		if strings.HasSuffix(base, RulesSuffix) {
+			return refusedRulesSource(rulesSourceFileMessage(base))
+		}
+	}
+	return Parse(markdown)
+}
+
+// ParseChecked parses a Markdown flow document, returning a ParseError or FieldDefinitionError on refusal.
+func ParseChecked(markdown string) (Graph, error) {
+	graph := Parse(markdown)
+	if graph.ParseError != nil {
+		return Graph{}, graph.ParseError
+	}
+	if graph.FieldError != nil {
+		return Graph{}, graph.FieldError
+	}
+	if graph.Refused != "" {
+		return Graph{}, errors.New(graph.Refused)
+	}
+	return graph, nil
+}
+
+// ParseFile reads and parses a flow file on disk, refusing `.rules.md` rules sources before parsing.
+func ParseFile(path string) (Graph, error) {
+	base := filepath.Base(path)
+	if strings.HasSuffix(base, RulesSuffix) {
+		return Graph{}, &ParseError{Message: rulesSourceFileMessage(base), RulesSource: true}
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return Graph{}, err
+	}
+	return ParseChecked(string(raw))
 }

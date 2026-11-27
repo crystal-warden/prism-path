@@ -10,6 +10,7 @@ import assert from "node:assert/strict";
 import {
   parse, run, evalCondition, checkPredicate, portabilityViolations, eventTarget,
   isDeterministic, isError, isEvent, isSemantic, eventName, pyTruthy, PredicateError,
+  ParseError, RulesSourceError,
   lockedRoute, decodeVec, firstDeterministic, FieldDefinitionError, routedFields, systemBoundary, policyCheck,
   canon2Read, canon2Write, canon2Canonicalize, documentString, registryHash,
 } from "./prismpath.mjs";
@@ -486,4 +487,23 @@ test("front matter is read with Python's whitespace, so U+FEFF is not stripped f
   assert.doesNotThrow(() => parse(flow("\u001fint\u001f")));
   assert.throws(() => parse(flow("\ufeffint")), (err) => err.cause === "policy:definition" && err.reason === "unknown-kind");
   assert.throws(() => parse(flow("\ufeff")), (err) => err.reason === "unknown-kind");
+});
+
+test("parse refuses rules sources and still parses rendered code edges and prose", () => {
+  assert.throws(
+    () => parse("---\nname: r\nstart: core_decision\nfield.tool: category\n---\n## core_decision\n-> refuse agent:network: when tool == \"connect\"\n-> allow: always\n"),
+    (err) => err instanceof RulesSourceError && err instanceof ParseError && err.message.includes("line 7") && err.message.includes("prismpath policy compile"),
+  );
+  assert.throws(
+    () => parse("## core_decision\n  - -> escalate agent:push-escalated: when git_op == \"push\"\n"),
+    (err) => err instanceof RulesSourceError && err instanceof ParseError && err.message.includes("prismpath policy compile"),
+  );
+  assert.throws(
+    () => parse("## core_decision\n-> allow: always\n", { filename: "policies/only_allow.rules.md" }),
+    (err) => err instanceof RulesSourceError && err instanceof ParseError && err.message.includes("only_allow.rules.md is a rules source") && err.message.includes("prismpath policy compile"),
+  );
+  const rendered = parse("---\nstart: core_decision\n---\n## core_decision\n-> refuse_106: when tool == \"connect\"\n");
+  assert.deepEqual(rendered.nodes.core_decision.edges, [["refuse_106", 'when tool == "connect"']]);
+  const prose = parse("## a\nWe refuse -> nothing here.\n-> refuse later on, then stop\n");
+  assert.deepEqual(prose.nodes.a.edges, []);
 });

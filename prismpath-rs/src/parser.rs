@@ -5,7 +5,10 @@
 use std::collections::HashMap;
 use std::sync::OnceLock;
 
-use crate::condition::{is_js_ws, js_trim, py_trim, split_lines_py};
+use crate::condition::{is_js_ws, is_py_ws, js_trim, py_trim, split_lines_py};
+
+/// File suffix that identifies a rules source rather than a workflow document.
+pub const RULES_SUFFIX: &str = ".rules.md";
 
 /// The input bounds of the reference parser (`kernel/parser.py`): a flow is human authored routing config, not
 /// a data payload, and these keep an untrusted or accidental oversized document from exhausting memory or
@@ -103,9 +106,13 @@ pub struct Graph {
     /// The registered cause of every problem in `field_error`, in the order of the core's checks
     /// (docs/design/spec-verified-core.md, section 4): the first is `field_error_cause`.
     pub field_error_causes: Vec<&'static str>,
-    /// Why the document could not be parsed at all, when it could not: it is over one of the `Limits`. Such a
-    /// graph is empty, and the reference raises `ParseError` with this message instead of returning one.
+    /// Why the document could not be parsed at all, when it could not: it is over one of the `Limits`, or it
+    /// is a rules source rather than a flow. Such a graph is empty, and the reference raises `ParseError` (or
+    /// its subclass `RulesSourceError`) with this message instead of returning one.
     pub parse_error: Option<String>,
+    /// True when `parse_error` was raised because the document is a rules source (Python's `RulesSourceError`,
+    /// a subclass of `ParseError`).
+    pub rules_source_error: bool,
 }
 
 impl Graph {
@@ -268,17 +275,128 @@ fn split_frontmatter(text: &str) -> Option<(String, String)> {
     None
 }
 
+/// A rule of a rules source (`-> refuse <cause>:` or `-> escalate <cause>:`): RULES_LINE_RE.
+fn match_rules_line(line: &str) -> bool {
+    let line_chars: Vec<char> = line.chars().collect();
+    let mut pos = 0;
+    while pos < line_chars.len() && is_py_ws(line_chars[pos]) {
+        pos += 1;
+    }
+    if pos < line_chars.len()
+        && line_chars[pos] == '-'
+        && !(pos + 1 < line_chars.len() && line_chars[pos + 1] == '>')
+    {
+        pos += 1;
+        while pos < line_chars.len() && is_py_ws(line_chars[pos]) {
+            pos += 1;
+        }
+    }
+    if !(pos + 1 < line_chars.len() && line_chars[pos] == '-' && line_chars[pos + 1] == '>') {
+        return false;
+    }
+    pos += 2;
+    while pos < line_chars.len() && is_py_ws(line_chars[pos]) {
+        pos += 1;
+    }
+    let rest: String = line_chars[pos..].iter().collect();
+    let after_kw = if let Some(tail) = rest.strip_prefix("refuse") {
+        tail
+    } else if let Some(tail) = rest.strip_prefix("escalate") {
+        tail
+    } else {
+        return false;
+    };
+    let tail_chars: Vec<char> = after_kw.chars().collect();
+    let mut tpos = 0;
+    while tpos < tail_chars.len() && is_py_ws(tail_chars[tpos]) {
+        tpos += 1;
+    }
+    if tpos == 0 {
+        return false;
+    }
+    let tok_start = tpos;
+    while tpos < tail_chars.len() && !is_py_ws(tail_chars[tpos]) {
+        tpos += 1;
+    }
+    tpos - tok_start >= 2 && tail_chars[tpos - 1] == ':'
+}
+
+fn rules_source_line_message(line_number: usize) -> String {
+    format!(
+        "line {line_number} is a rule of a rules source, not a flow edge. A rules source is compiled with \
+         `prismpath policy compile` and read back with `prismpath policy render`"
+    )
+}
+
+fn rules_source_file_message(basename: &str) -> String {
+    format!(
+        "{basename} is a rules source, not a flow. A rules source is compiled with \
+         `prismpath policy compile` and read back with `prismpath policy render`"
+    )
+}
+
+fn basename_of(path: &str) -> &str {
+    path.rsplit(['/', '\\']).next().unwrap_or(path)
+}
+
 /// The graph of a document that is over a bound: empty, with the reason.
 fn refused(reason: String) -> Graph {
     Graph { parse_error: Some(reason), ..Default::default() }
 }
 
+/// The graph of a document refused as a rules source: empty, with `parse_error` and `rules_source_error` set.
+fn refused_rules_source(reason: String) -> Graph {
+    Graph { parse_error: Some(reason), rules_source_error: true, ..Default::default() }
+}
+
 /// Markdown -> Graph: a faithful port of the reference parse, within the bounds of `Limits::from_env`. A node
-/// with no edges is terminal. A document over a bound has `parse_error` set and no nodes (see `parse_checked`).
+/// with no edges is terminal. A document over a bound or a rules source has `parse_error` set and no nodes
+/// (see `parse_checked`).
 pub fn parse(text: &str) -> Graph {
     match env_limits() {
         Ok(limits) => parse_with_limits(text, limits),
         Err(reason) => refused(reason.clone()),
+    }
+}
+
+/// `parse`, also refusing a document whose filename ends with `.rules.md` as a rules source.
+pub fn parse_named(text: &str, filename: Option<&str>) -> Graph {
+    if let Some(name) = filename {
+        let base = basename_of(name);
+        if base.ends_with(RULES_SUFFIX) {
+            return refused_rules_source(rules_source_file_message(base));
+        }
+    }
+    parse(text)
+}
+
+/// Read and parse a flow file on disk, refusing oversized files and `.rules.md` rules sources before parsing.
+pub fn parse_file(path: impl AsRef<std::path::Path>) -> Result<Graph, String> {
+    let path = path.as_ref();
+    let limits = match env_limits() {
+        Ok(limits) => limits,
+        Err(reason) => return Err(reason.clone()),
+    };
+    let basename = path.file_name().and_then(|name| name.to_str()).unwrap_or("");
+    let metadata = std::fs::metadata(path)
+        .map_err(|err| format!("failed to stat flow file {basename:?}: {err}"))?;
+    if metadata.len() as i128 > limits.max_flow_bytes as i128 {
+        return Err(format!(
+            "flow file '{}' is {} bytes, exceeds PRISMPATH_MAX_FLOW_BYTES ({})",
+            basename,
+            metadata.len(),
+            limits.max_flow_bytes
+        ));
+    }
+    if basename.ends_with(RULES_SUFFIX) {
+        return Err(rules_source_file_message(basename));
+    }
+    let text = std::fs::read_to_string(path)
+        .map_err(|err| format!("failed to read flow file {basename:?}: {err}"))?;
+    let graph = parse_with_limits(&text, limits);
+    match graph.refusal() {
+        Some(reason) => Err(reason.to_string()),
+        None => Ok(graph),
     }
 }
 
@@ -327,7 +445,11 @@ pub fn parse_with_limits(text: &str, limits: &Limits) -> Graph {
         }
     }
 
-    for line in split_lines_py(&body) {
+    let body_offset = text[..text.len() - body.len()].bytes().filter(|&b| b == b'\n').count();
+    for (idx, line) in split_lines_py(&body).into_iter().enumerate() {
+        if match_rules_line(line) {
+            return refused_rules_source(rules_source_line_message(body_offset + idx + 1));
+        }
         if let Some(heading_text) = match_head(line) {
             flush(&current_node, &instructions, &mut nodes);
             let name = heading_text.to_lowercase().replace(' ', "_");

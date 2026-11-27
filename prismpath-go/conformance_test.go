@@ -451,3 +451,131 @@ func TestDefinitionWhitespaceIsPythons(test *testing.T) {
 		}
 	}
 }
+
+// Rules sources (a `.rules.md` filename or any `-> refuse|escalate <cause>:` line) are refused with a
+// ParseError pointing to `prismpath policy compile`, while rendered code edges (`refuse_106:`), normal edges
+// and prose mentioning refuse continue to parse as ordinary flows.
+func TestRulesSourceConformance(test *testing.T) {
+	var corpus struct {
+		Version int `json:"version"`
+		Cases   []struct {
+			Name     string  `json:"name"`
+			Filename *string `json:"filename"`
+			Flow     string  `json:"flow"`
+			Expect   struct {
+				OK         bool              `json:"ok"`
+				Start      string            `json:"start"`
+				Nodes      [][]interface{}   `json:"nodes"`
+				Error      string            `json:"error"`
+				ErrorClass string            `json:"error_class"`
+			} `json:"expect"`
+		} `json:"cases"`
+	}
+	readCorpus(test, "rules_source.json", &corpus)
+	if corpus.Version != 1 {
+		test.Fatalf("rules_source.json version %d, want 1", corpus.Version)
+	}
+	tempRoot := test.TempDir()
+	passed := 0
+	for idx, tc := range corpus.Cases {
+		filename := ""
+		if tc.Filename != nil {
+			filename = *tc.Filename
+		}
+		var graph Graph
+		if filename != "" {
+			graph = ParseNamed(tc.Flow, filename)
+		} else {
+			graph = Parse(tc.Flow)
+		}
+
+		if tc.Expect.Error != "" {
+			if graph.ParseError == nil || !graph.ParseError.RulesSource {
+				test.Errorf("[%s] parsed although reference refuses it as %s", tc.Name, tc.Expect.ErrorClass)
+				continue
+			}
+			if graph.ParseError.Error() != tc.Expect.Error || graph.Refused != tc.Expect.Error {
+				test.Errorf("[%s] error %q (refused=%q), want %q", tc.Name, graph.ParseError.Error(), graph.Refused, tc.Expect.Error)
+				continue
+			}
+			if !strings.Contains(graph.ParseError.Error(), "prismpath policy compile") {
+				test.Errorf("[%s] error message does not name prismpath policy compile: %q", tc.Name, graph.ParseError.Error())
+				continue
+			}
+			_, runErr := Run(graph, func(node string, instruction string, state map[string]interface{}) (interface{}, error) {
+				return nil, nil
+			}, RunOptions{})
+			var runParseErr *ParseError
+			if !errors.As(runErr, &runParseErr) || !runParseErr.RulesSource {
+				test.Errorf("[%s] Run did not return a rules-source ParseError: %v", tc.Name, runErr)
+				continue
+			}
+			if filename != "" {
+				filePath := filepath.Join(tempRoot, fmt.Sprintf("case_%d", idx), filepath.FromSlash(filename))
+				if err := os.MkdirAll(filepath.Dir(filePath), 0o755); err != nil {
+					test.Fatalf("[%s] mkdir: %v", tc.Name, err)
+				}
+				if err := os.WriteFile(filePath, []byte(tc.Flow), 0o644); err != nil {
+					test.Fatalf("[%s] write: %v", tc.Name, err)
+				}
+				_, fileErr := ParseFile(filePath)
+				var fileParseErr *ParseError
+				if !errors.As(fileErr, &fileParseErr) || !fileParseErr.RulesSource || fileParseErr.Error() != tc.Expect.Error {
+					test.Errorf("[%s] ParseFile got err=%v, want ParseError(%q)", tc.Name, fileErr, tc.Expect.Error)
+					continue
+				}
+			} else {
+				_, chkErr := ParseChecked(tc.Flow)
+				var chkParseErr *ParseError
+				if !errors.As(chkErr, &chkParseErr) || !chkParseErr.RulesSource || chkParseErr.Error() != tc.Expect.Error {
+					test.Errorf("[%s] ParseChecked got err=%v, want ParseError(%q)", tc.Name, chkErr, tc.Expect.Error)
+					continue
+				}
+			}
+			passed++
+			continue
+		}
+
+		if graph.ParseError != nil || graph.Refused != "" {
+			test.Errorf("[%s] unexpectedly refused: %q (%v)", tc.Name, graph.Refused, graph.ParseError)
+			continue
+		}
+		if graph.Start != tc.Expect.Start {
+			test.Errorf("[%s] start=%q, want %q", tc.Name, graph.Start, tc.Expect.Start)
+			continue
+		}
+		gotNodes := make([][]interface{}, 0, len(graph.NodeOrder))
+		for _, nodeName := range graph.NodeOrder {
+			edges := make([]interface{}, 0, len(graph.Nodes[nodeName].Edges))
+			for _, edge := range graph.Nodes[nodeName].Edges {
+				edges = append(edges, []interface{}{edge.Target, edge.Condition})
+			}
+			gotNodes = append(gotNodes, []interface{}{nodeName, edges})
+		}
+		if !reflect.DeepEqual(gotNodes, tc.Expect.Nodes) {
+			test.Errorf("[%s] nodes=%v, want %v", tc.Name, gotNodes, tc.Expect.Nodes)
+			continue
+		}
+		if filename != "" {
+			filePath := filepath.Join(tempRoot, fmt.Sprintf("case_%d", idx), filepath.FromSlash(filename))
+			if err := os.MkdirAll(filepath.Dir(filePath), 0o755); err != nil {
+				test.Fatalf("[%s] mkdir: %v", tc.Name, err)
+			}
+			if err := os.WriteFile(filePath, []byte(tc.Flow), 0o644); err != nil {
+				test.Fatalf("[%s] write: %v", tc.Name, err)
+			}
+			fileGraph, fileErr := ParseFile(filePath)
+			if fileErr != nil || fileGraph.Start != tc.Expect.Start {
+				test.Errorf("[%s] ParseFile got start=%q err=%v, want %q", tc.Name, fileGraph.Start, fileErr, tc.Expect.Start)
+				continue
+			}
+		} else {
+			if _, chkErr := ParseChecked(tc.Flow); chkErr != nil {
+				test.Errorf("[%s] ParseChecked unexpectedly refused: %v", tc.Name, chkErr)
+				continue
+			}
+		}
+		passed++
+	}
+	test.Logf("rules_source: %d/%d passed", passed, len(corpus.Cases))
+}
