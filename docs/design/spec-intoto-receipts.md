@@ -172,3 +172,65 @@ returns a SCITT Receipt (a `COSE_Sign1` signed by the service's key whose unprot
 headers carry the RFC 9162 / COSE Merkle inclusion proof). Storing that receipt beside
 `receipts.roots.jsonl` allows offline verification of both the run's internal decision tree and the
 external transparency log inclusion proof.
+
+## 4. Root statement chains
+
+An audit log's and an epoch chain's signed roots (`prismpath-root-statement/3`, `prismpath/ledgers/root_statement.py`)
+export too. `intoto.export_root_statements(statements_path, instance_key)` gives one DSSE envelope per statement
+of the file, in order.
+
+```json
+{
+  "_type": "https://in-toto.io/Statement/v1",
+  "subject": [{"name": "audit-log/3", "digest": {"sha256": "<statement_hash of the statement>"}}],
+  "predicateType": "https://prismpath.dev/attestations/root-statement/v1",
+  "predicate": {"format": "prismpath-root-statement/3", "encoding": "canon/2", "log": "audit-log", "seq": 3, "...": "..."}
+}
+```
+
+The predicate is the statement verbatim, its own signature included. The subject names it `<log>/<seq>` and
+gives its content address, the SHA-256 of its canon/2 bytes, which is what the next statement names as `prev`
+and what `ledger anchor` stamps. The envelope is signed by the instance key that signed the statement, so it is a
+second signature by the same key and claims nothing the statement does not. Export refuses a file whose
+statements do not read, are signed by another key, or whose own signatures do not verify.
+
+`intoto.verify_root_statements(envelopes, statements_path, pinned)` checks that there is one envelope per
+statement, that each opens under the key its statement names (pinned when `pinned` is given), that its predicate
+is byte for byte in canon/2 the statement at that position, that its subject names that statement by hash, and
+that the statement's own signature verifies. The chain itself and the log it covers are checked by
+`root_statement.verify_chain` as before.
+
+## 5. Sigstore bundle v0.3
+
+`intoto.to_bundle(envelope)` wraps one envelope as a Sigstore bundle, so tools that read bundles can read it.
+
+```json
+{
+  "mediaType": "application/vnd.dev.sigstore.bundle.v0.3+json",
+  "verificationMaterial": {"publicKey": {"hint": "<keyid>"}, "tlogEntries": []},
+  "dsseEnvelope": {"payload": "<base64>", "payloadType": "application/vnd.in-toto+json",
+                   "signatures": [{"sig": "<base64>", "keyid": "<keyid>"}]}
+}
+```
+
+The key is named by its hint, the same 64 character key id as the DSSE `keyid`, and is never carried in the
+bundle. A reader pins it out of band. `tlogEntries` is empty because no log entry is claimed. Submitting the
+envelope to Rekor (section 3.1) is a deployment's step. `intoto.from_bundle(bundle)` gives the envelope back and
+refuses a bundle with another media type, a certificate, a log entry, more than one signature, or a hint that is
+not the signature's key id, because this reader checks none of those. The envelope then verifies with `verify` or
+`verify_root_statements`.
+
+## 6. Domain separation
+
+Each hash and signature in an export has its own domain, so no value can be presented as another.
+
+| what | domain |
+|---|---|
+| a receipt leaf, a tree node | RFC 6962 prefixes `0x00` and `0x01` (`ledger_ots.MERKLE_SCHEME`) |
+| a root statement signature | `prismpath-root-statement/3\0` |
+| a run root signature | `prismpath.core-run-root/2\0` |
+| an image attestation | `prismpath.core-image/1\0` |
+| a DSSE signature | the PAE, which binds the payload type and the payload length |
+
+Subject digests are plain SHA-256 of the bytes they name, as in-toto readers expect. The export changes no
+receipt, root statement or run root. They stay the source, and every envelope and bundle is made from them.
