@@ -85,7 +85,52 @@ def espressif(path: str, run: Callable[[str, str], Optional[str]] = run_esptool)
     return Board(family=family, board_id=mac.group(1), path=path, chip=name, crystal=crystal.group(1) if crystal else "")
 
 
-PROBERS: List[Callable[[str], Optional[Board]]] = [espressif]
+def run_avrdude(path: str, timeout: int = 30) -> Optional[str]:
+    """avrdude's reading of the signature bytes of the AVR behind the Uno's bootloader at `path`, or None."""
+    tool = shutil.which("avrdude")
+    if tool is None:
+        return None
+    try:
+        done = subprocess.run([tool, "-q", "-c", "arduino", "-p", "m328p", "-P", path, "-b", "115200",
+                               "-U", "signature:r:-:h"], capture_output=True, text=True, timeout=timeout)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return done.stdout if done.returncode == 0 else None
+
+
+def serial_number(path: str, by_id: str = "/dev/serial/by-id") -> str:
+    """The USB serial number of the bridge behind `path`, from its /dev/serial/by-id name, or "" for none. The Uno
+    R3's ATmega16U2 bridge has one per board, and the ATmega328P has no id of its own that avrdude reads."""
+    if not os.path.isdir(by_id):
+        return ""
+    real = os.path.realpath(path)
+    for name in sorted(os.listdir(by_id)):
+        if os.path.realpath(os.path.join(by_id, name)) == real:
+            match = re.search(r"_([0-9A-Za-z]+)-if\d+", name)
+            if match:
+                return match.group(1)
+    return ""
+
+
+_SIGNATURES = {"0x1e,0x95,0xf": ("atmega328p", "ATmega328P")}
+
+
+def avr(path: str, run: Callable[[str], Optional[str]] = run_avrdude,
+        serial: Callable[[str], str] = serial_number) -> Optional[Board]:
+    """An AVR behind an Arduino bootloader, by its signature bytes. The id is the bridge's USB serial number."""
+    out = run(path)
+    if not out:
+        return None
+    known = _SIGNATURES.get(out.strip().lower())
+    if known is None:
+        return None
+    board_id = serial(path)
+    if not board_id:
+        return None   # no stable id, so it cannot be keyed and is listed as unknown
+    return Board(family=known[0], board_id=board_id, path=path, chip=known[1])
+
+
+PROBERS: List[Callable[[str], Optional[Board]]] = [espressif, avr]
 
 
 def probe(paths: Optional[List[str]] = None, probers=None) -> List[Board]:

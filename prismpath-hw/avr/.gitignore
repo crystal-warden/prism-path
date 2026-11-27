@@ -1,3 +1,6 @@
 *.elf
 *.hex
 cert_uno.json
+uno_instance.key
+uno_anchor.eep
+*.su

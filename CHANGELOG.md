@@ -8,6 +8,13 @@ spec stable.
 
 ## [Unreleased]
 
+### Added: a one pass verifier for the smallest enforcement points, and a radio relay that holds no key (2026-11-27)
+
+- **`pp_dist.c` built with `PP_DIST_PROFILE_MIN` is the constrained profile of B12.** It is a `mesh` PEP on one stream behind an ordered link (B11). It checks one Ed25519 signature in one pass as the sealed envelope arrives, with Monocypher's `crypto_sha512_update`, `crypto_eddsa_reduce` and `crypto_eddsa_check_equation`, reads the envelope with a streaming scanner whose answer waits for V3, and reads a trust body as it arrives. It keeps one authority key, the trust sequence, the time floor, the floor and the active and staged releases by their hashes, and sends signed state records with no Facet body. The default build is unchanged byte for byte.
+- **Case 122 runs on the profile.** A release on an ordered link is staged with its sealed envelope never held whole, and a chunk out of order drops the transfer with `dist:frame-invalid`. Every corpus case in the profile's reach answers as recorded but four, which answer as B12 says, and the full core's machine scripts in its reach sign the Python machine's records byte for byte.
+- **`prismpath-hw/esp-relay-c6/` is a relay of B10 for an ESP32-C6**, ESP-NOW on one side and a UART on the other, with no key in the image. Its forwarding code runs case 121 on the host, and it builds with ESP-IDF 5.4.4.
+- **`prismpath-hw/avr/ppt_uno_dist.c` and `make dist` build the profile for the Uno.** The build estimate of avr-size is in `prismpath-hw/avr/uno_dist_build_estimate.json`. It is not a measurement on the board. The flashing, the measurement and the PR 17c decision wait for the board pass of the week of 2026-11-30.
+- **The fleet harness has entries for the ESP32-C6 (`full`), its relay image (`cannot`) and the ATmega328P (`one-pass`)**, an AVR prober, and a run that never runs a `cannot` board as a PEP (owner decision 13).
 ### Added: every case of the distribution spec has its tests, and the trace lists are gone (2026-11-27)
 
 - **A ceiling states the grammar a release or an install set may use (CL4, case 206).** On the owner's ruling, the ceiling's `policy.core` defines each field a set may use, with `min` and `max` for an int, and never narrows a category's values. A set that uses a field the ceiling does not define, or defines one another way, is `policy:out-of-domain`, and so is a ceiling with a category the PEP was not built with or an int with no bounds.
