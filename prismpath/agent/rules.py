@@ -440,8 +440,9 @@ def render_approvals(data: Dict[str, Any]) -> str:
         lines.append(f"  approved and ran {c['approved']} of {c['asked']} asked ({c['asked_failed']} failed or interrupted, "
                      f"{c['asked_no_outcome']} with no outcome: declined, or approved and not run)")
         lines += [f"  e.g. {e['reading']}  ({e['approved']}x)" for e in c["examples"]]
-    lines.append("To adopt one, write an allow rule for that class of call in the policy source and sign it with the authority "
-                 "key (docs/guides/writing-agent-rules.md). This command never does.")
+    lines.append("To adopt one, write an allow rule for that class of call in the policy source and record it with "
+                 "`prismpath agent init --policy FILE.rules.md`, which attests it with the authority key "
+                 "(docs/guides/writing-agent-rules.md). This command never does.")
     return "\n".join(lines) + "\n"
 
 

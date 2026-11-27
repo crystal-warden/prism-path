@@ -112,7 +112,7 @@ Outcomes are records and never decisions. They cannot block anything, since the 
 prismpath agent approvals --min 3
 ```
 
-Lists the rules that ask you whose questions you approved, and that then ran (a call that failed or was interrupted is shown apart and not counted), at least `--min` times (3 by default). Each shows the counts and up to three example readings. A reading is classes only, for example `command_class=mutating path_scope=workspace proc_class=single tool=run_command`, never a path or a command. The output is headed candidates for the owner to sign, nothing is changed. An approval you give over and over is a hint that an allow rule for that class of call may be what you want. To adopt one, write the rule in your policy source and sign it with your authority key as in [writing-agent-rules.md](writing-agent-rules.md). The command never edits a policy and nothing adopts a rule on its own. Only receipts of runs that verify are counted.
+Lists the rules that ask you whose questions you approved, and that then ran (a call that failed or was interrupted is shown apart and not counted), at least `--min` times (3 by default). Each shows the counts and up to three example readings. A reading is classes only, for example `command_class=mutating path_scope=workspace proc_class=single tool=run_command`, never a path or a command. The output is headed candidates for the owner to sign, nothing is changed. An approval you give over and over is a hint that an allow rule for that class of call may be what you want. To adopt one, write the rule in your policy source and record it with `prismpath agent init --policy FILE.rules.md`, which attests it with your authority key, as in [writing-agent-rules.md](writing-agent-rules.md). The command never edits a policy and nothing adopts a rule on its own. Only receipts of runs that verify are counted.
 
 ## See which rules fire
 
@@ -140,7 +140,7 @@ Only receipts of runs that verify are counted, and the output says how many rece
 
 ## Pick a policy
 
-`init` records `default` unless you name another starter with `--policy`, as in `prismpath agent init --policy review`. Running `init` again without `--policy` keeps the one you picked. A session already running stays on the policy it began with, so start a new Claude Code session after you switch.
+`init` records `default` unless you name another starter with `--policy`, as in `prismpath agent init --policy review`, or your own rules file, as in `prismpath agent init --policy my_rules.rules.md`. Running `init` again without `--policy` keeps the one you picked. A session already running stays on the policy it began with, so start a new Claude Code session after you switch.
 
 | starter | allows | asks | refuses |
 |---|---|---|---|
@@ -153,7 +153,7 @@ The `session` starter reads the session's own receipts, never anything the agent
 
 All four starters also refuse, with cause 128, every change to the agent's own controls and to the files that shape how it behaves: everything under `.claude/`, `.mcp.json`, `.git/config`, everything under `.git/hooks/`, `CLAUDE.md`, `CLAUDE.local.md` and `AGENTS.md` at any depth, the program the installed hook runs when it is inside the project, and, for a removal or a move only, the project root or a directory that holds one of these (`rm -r .`; writing into them is decided as before). A path is matched after it resolves and without regard to case, and a hard link to a control file is one too. A shell command that redirects onto one (`echo x > .claude/settings.json`) is refused as well. The agent cannot take its own hook out. Reading these files still runs as before.
 
-The hazards are refused by all four. They are a path outside the project, a `..` in a path, a path through a symbolic link, a path that is a pattern, a write into a toolchain, a kill by name pattern and the network. `status` names the starter in use. To write your own rules instead, see [writing-agent-rules.md](writing-agent-rules.md).
+The hazards are refused by all four. They are a path outside the project, a `..` in a path, a path through a symbolic link, a path that is a pattern, a write into a toolchain, a kill by name pattern and the network. `status` names the starter in use. To write your own rules instead, see [writing-agent-rules.md](writing-agent-rules.md), which ends with the `init` command that records them.
 
 ## Check your setup
 

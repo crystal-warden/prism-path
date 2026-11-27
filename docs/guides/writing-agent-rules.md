@@ -89,7 +89,8 @@ it.
 prismpath policy compile agent_rules.rules.md -o agent_rules.core.json
 ```
 
-This writes the policy image the agent loads, and it checks the rules the way the verified core does.
+This writes the policy image, and it checks the rules the way the verified core does. The agent runs the
+image once you record it, as [Use your rules](#use-your-rules) shows.
 A problem is named with its line. The compiler reads the whole file first and then checks the rules,
 so a mistake in how a line is written is reported before a mistake in what it means. In the small example
 above, a misspelled cause on line 15 gives
@@ -128,6 +129,25 @@ prismpath policy render agent_rules.core.json
 
 Compiling what `render` prints gives the same image, byte for byte. The rules files shipped with the
 agent compile to the shipped images byte for byte, and a test holds them to that.
+
+## Use your rules
+
+Record the rules as the policy your agent runs under with
+
+```
+prismpath agent init --policy my_rules.rules.md --project .
+```
+
+`init` compiles the file, runs the same checks as `--target agent`, and refuses the file with each problem
+on its line if one fails. Nothing in your setup changes until it passes. Then it records the image and
+attests it with the authority key in your PrismPath directory, as it does for a starter. A compiled
+`.core.json` works the same way. `prismpath agent status` names the policy `custom`, `prismpath agent rules`
+shows what it decides, and running `init` again without `--policy` keeps it. A session already running stays
+on the policy it began with, so start a new Claude Code session after you switch.
+
+To hand the same policy to several machines, seal it into a policy stream instead
+([policy-distribution.md](policy-distribution.md)) and have each one follow the stream with
+`prismpath agent init --follow`.
 
 ## The classifier
 

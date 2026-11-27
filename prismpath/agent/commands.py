@@ -34,7 +34,7 @@ import os
 import sys
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional
+from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 AGENT_DIR = ("prismpath", "agent")
 POLICY_FILE = "policy.core.json"
@@ -436,27 +436,93 @@ def follow(project: Path, stream: str, anchor: Optional[Path], fingerprint: Opti
     return 0
 
 
+CUSTOM = "custom"                     # the name `init` and `status` give a recorded image that is no starter
+POLICY_SUFFIXES = (".rules.md", ".core.json")
+
+
+def custom_image(path: Path) -> Tuple[bytes, List[str]]:
+    """(image, warnings) of the owner's own policy, a rules source compiled here or an image read as it is, after
+    the governed agent's checks (`prismpath policy compile --target agent`, prismpath/agent/target.py). AgentError
+    naming each problem, with its line in a rules source, otherwise."""
+    from prismpath.agent import target
+    from prismpath.kernel import canon2, core_policy, policy_source
+    try:
+        raw = path.read_bytes()
+    except OSError as error:
+        raise AgentError(f"{path}: {error.strerror}")
+    warnings: List[str] = []
+    if path.name.endswith(".rules.md"):
+        try:
+            compiled = policy_source.compile_full(raw.decode("utf-8"), str(path))
+        except UnicodeDecodeError:
+            raise AgentError(f"{path} is not UTF-8 text")
+        except policy_source.SourceError as error:
+            raise AgentError("the rules do not compile\n" + "\n".join(error.lines()))
+        image, field_lines, rule_lines = compiled.image, compiled.field_lines, compiled.rule_lines
+        warnings = [f"{path}:{line}: warning: {message}" for line, message in compiled.warnings]
+    else:
+        image = raw[:-1] if raw.endswith(b"\n") else raw
+        refusal = core_policy.load_policy(image)
+        if refusal is not None:
+            raise AgentError(f"{path} is not a policy image the core reads ({refusal[0]})")
+        doc = canon2.loads(image)
+        field_lines, rule_lines = {}, []
+        found = target.check(image)
+        if found:
+            raise AgentError(f"{path} is not a policy the governed agent can run\n" + "\n".join(
+                f"{path}: {_where(where, doc)}{message}" for where, message in found))
+        return image, warnings
+    found = target.check(image)
+    if found:
+        raise AgentError(f"{path} is not a policy the governed agent can run\n" + "\n".join(
+            policy_source.SourceError([(target.line_of(where, field_lines, rule_lines), message)
+                                       for where, message in found], str(path)).lines()))
+    return image, warnings
+
+
+def _where(where, doc) -> str:
+    if isinstance(where, str):
+        return f"field {where}, "
+    if isinstance(where, int):
+        return f"rule {where + 1} of {len(doc['rules'])}, "
+    return ""
+
+
 def init(project: Path, yes: bool, as_json: bool, confirm=None, out=None, policy: Optional[str] = None) -> int:
     """Keys, policy and the project's hook entries. `confirm(prompt) -> bool` asks the person; None means
     ask on a terminal and otherwise take no for an answer. `policy` names the starter to record (`strict`,
-    `default`, `review`, `session`); None keeps the starter already recorded, and records `default` where there is none."""
+    `default`, `review`, `session`) or the path of the owner's own rules source or image (`custom_image`); None
+    keeps the policy already recorded, starter or not, and records `default` where there is none."""
     out = out or sys.stdout
     home = config_dir()
+    from prismpath.agent.policy import DEFAULT_STARTER, STARTERS, Policy, older_starter_of, starter_of, starter_path
+    custom: Optional[bytes] = None
+    warnings: List[str] = []
+    label = None
+    if policy is not None and policy not in STARTERS:
+        if not policy.endswith(POLICY_SUFFIXES):
+            raise AgentError(f"no starter policy named {policy!r}. The starters are {', '.join(STARTERS)}, and your "
+                             f"own policy is a file ending in .rules.md or .core.json")
+        custom, warnings = custom_image(Path(policy))          # checked before the home is touched
+        label = Path(policy).name
     _make_dir(home)
     keys = {role: _ensure_key(home, role) for role in KEY_ROLES}
-    from prismpath.agent.policy import DEFAULT_STARTER, STARTERS, Policy, older_starter_of, starter_of, starter_path
     from prismpath.ledgers import root_statement
     root_statement.check_separation(root_statement.InstanceKey.load(str(_key_paths(home, "instance")[0])),
                                     [_key_id(home, "authority")])
-    if policy is not None and policy not in STARTERS:
-        raise AgentError(f"no starter policy named {policy!r}; the starters are {', '.join(STARTERS)}")
     try:
         recorded: Optional[bytes] = load_checked(home)[0].image
     except Exception:  # noqa: BLE001 - absent or not verifying: record it again
         recorded = None
-    kept = recorded is not None and (starter_of(recorded) or (older_starter_of(recorded) or (None,))[0])
-    starter = policy or kept or DEFAULT_STARTER
-    image = Policy.load(starter_path(starter)).image
+    kept = recorded is not None and (starter_of(recorded) or (older_starter_of(recorded) or (None,))[0] or CUSTOM)
+    starter = CUSTOM if custom is not None else (policy or kept or DEFAULT_STARTER)
+    if custom is not None:
+        image = custom
+    elif starter == CUSTOM:
+        image = recorded                 # the owner's own policy, recorded before, is kept as it is
+    else:
+        image = Policy.load(starter_path(starter)).image
+    label = label or STARTERS.get(starter, POLICY_FILE)
     if recorded is None:
         policy_state = "recorded"
     else:
@@ -464,7 +530,7 @@ def init(project: Path, yes: bool, as_json: bool, confirm=None, out=None, policy
     # a home recorded before 0.3.0 keeps its policy and has its older attestation sealed again as an envelope (L1)
     older = (home / ATTESTATION_FILE).is_file() and not _is_sealed((home / ATTESTATION_FILE).read_bytes())
     if policy_state != "kept" or older:
-        for name, data in ((POLICY_FILE, image), (ATTESTATION_FILE, _attestation(home, image, STARTERS[starter]))):
+        for name, data in ((POLICY_FILE, image), (ATTESTATION_FILE, _attestation(home, image, label))):
             tmp = home / (name + ".tmp")
             fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
             with os.fdopen(fd, "wb") as handle:
@@ -482,8 +548,8 @@ def init(project: Path, yes: bool, as_json: bool, confirm=None, out=None, policy
     path, settings_state, diff = _write_hook_entries(project, yes, as_json, confirm, out)
     report = {"config_dir": str(home),
               "keys": {role: {"id": _key_id(home, role), "state": keys[role]} for role in KEY_ROLES},
-              "policy": {"name": starter, "image": STARTERS[starter], "sha256": _sha256_hex(image),
-                         "state": policy_state},
+              "policy": {"name": starter, "image": label, "sha256": _sha256_hex(image),
+                         "state": policy_state, "warnings": warnings},
               "settings": {"path": str(path), "state": settings_state, "diff": diff, "command": hook_command()},
               "sandbox": {"problem": sandbox_problem}}
     if as_json:
@@ -491,8 +557,13 @@ def init(project: Path, yes: bool, as_json: bool, confirm=None, out=None, policy
     else:
         for role in KEY_ROLES:
             print(f"{role} key {report['keys'][role]['id']} ({keys[role]}) in {home}", file=out)
-        print(f"policy {starter} ({STARTERS[starter]}) sha256 {report['policy']['sha256']} ({policy_state}), "
+        for warning in warnings:
+            print(warning, file=out)
+        print(f"policy {starter} ({label}) sha256 {report['policy']['sha256']} ({policy_state}), "
               f"attested by the authority key", file=out)
+        if custom is not None:
+            print("the policy passed the governed agent's checks (reading domain, fields, control files, connections, "
+                  "sandbox profile); `prismpath agent rules` shows what it decides", file=out)
         if settings_state == "not written":
             print(f"{path} was not changed; run again with --yes to write the hook entries", file=out)
         else:
