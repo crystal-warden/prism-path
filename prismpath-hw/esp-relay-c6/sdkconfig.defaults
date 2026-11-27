@@ -1,0 +1,5 @@
+CONFIG_IDF_TARGET="esp32c6"
+# UART0 carries the link to the PEP, so the console and every log are off it.
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
+CONFIG_BOOTLOADER_LOG_LEVEL_NONE=y
+CONFIG_LOG_DEFAULT_LEVEL_NONE=y

@@ -485,6 +485,30 @@ an install statement (H10).
 offset order without repeats, and the PEP drops a transfer whose chunk is out of order with
 `dist:frame-invalid`. This lets a PEP that cannot hold a sealed envelope check it as it arrives.
 
+**B12.** A PEP may be built to the constrained profile, for a board that cannot hold a sealed envelope. It is a
+`mesh` PEP on one stream behind an ordered link (B11). It checks the one signature entry whose key id names its key
+in a single pass as the sealed envelope arrives, hashing the signed bytes of S1 into that check and the envelope
+into its id. Its scanner reads each envelope byte as it arrives and keeps only the members, and its answer waits
+until V3 has passed, so the cause is still the one V1 gives. It reads a trust body as it arrives and never holds it,
+so its trust bound is the one of E6. The table is the only body it holds. A table whose `seq` is below the staged
+release is refused by G2 without being kept, and any other table that arrives takes the place of a staged table, so
+a refused one drops the staged table with it.
+
+What it keeps is one authority key, the trust sequence, the time floor, the floor of its stream with the two
+envelope ids committed at it, and the active and the staged release by their hashes. It takes `policy.ppt`,
+`trust.widening`, `trust.revocation`, `trust.rotation` and `trust.controller`, and every other kind is
+`dist:target-mismatch`. From a revocation list it keeps whether the list names its key, the floor the list raises
+for its stream, and whether the list names its floor's envelopes, its floor's policy or its staged release (R2, R4,
+R5). It keeps no list, so V7 refuses only what it holds, and the authority reaches the rest by raising the stream's
+floor past them in the same list (R4). It cannot see a list drop a key it does not hold (R6). It keeps no key a
+rotation adds, so it checks no signature by one (O2) and has no bound of K5 to reach, and a rotation that retires
+its key leaves it with no key that counts until it is provisioned again (section 14). It holds no controller key, so
+a `trust.controller` moves its trust sequence and nothing more, and it takes no controller statement (H9). Its
+expiry response is REFUSE. It has no section 21, no rollback and no Facet body (H5). Its scanner reads canonical
+bytes only, so where the reference says `document:not-canonical` it says `dist:bad-format`, and a member name of
+`meta` longer than 32 bytes or outside ASCII is `dist:bad-format` too. A board that cannot hold even this profile is
+not a PEP (owner decision 13).
+
 **B8.** A `commit` with a delay makes the release active at the PEP's own monotonic time plus the delay, so
 a group flips together without a shared clock, as the mesh does today with `FLIP_DELAY`.
 
@@ -1574,7 +1598,7 @@ stated under the table.
 |---|---|---|---|---|---|
 | 4 to 7, the envelope, trust store, sequence floor and clocks | #109 | #112 | #117, #120 | #130 | none |
 | 8.1 and 8.2, messages and the HTTP binding | #123 | the offered epoch only | - | - | none. The Rust crate has no binding (DIVERGENCES.md) |
-| 8.3, the frame binding | #115 | - | #117, #143 | - | none. Case 122 in C is tested (#153) |
+| 8.3, the frame binding | #115 | - | #117, #143 | - | none. Case 122 in C is tested (#153), and on the constrained profile of B12 (PR 17b) on the host. The Uno and the C6 relay wait for the board pass of the week of 2026-11-30 |
 | 9.1 to 9.4, the PEP machine and the widening rule | #113, #124 | #131, #124 | #117, #124 | #130 | none |
 | 9.5, reconciling | #134 | #131 | - (C6) | #154 | none. Case 273 is tested on `xdp` |
 | 10 and 11, revocation and rotation | #114, #121 | #114, #121 | #114, #121 | #130 | none |

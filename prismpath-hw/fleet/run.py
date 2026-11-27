@@ -7,7 +7,7 @@ The report lists the families and board ids it covered, each check's result on e
 the harness has an entry for that were not attached, and the devices it skipped as unknown. A check that needs a
 group (two boards of one radio or more) is reported as not run when fewer are attached.
 
-    . ~/cwprojects/esp-idf/export.sh && cd prismpath-hw && python -m fleet.run [--skip-flash] [--report PATH]
+    . ~/cwprojects/esp-idf/export.sh && cd prismpath-hw && python -m fleet.run [--skip-flash] [--report PATH] [--relay ID]
 """
 from __future__ import annotations
 
@@ -27,7 +27,7 @@ if str(HW) not in sys.path:
     sys.path.insert(0, str(HW))
 
 from fleet import probe as probe_module  # noqa: E402
-from fleet.families import FAMILIES, Family  # noqa: E402
+from fleet.families import CANNOT, FAMILIES, Family  # noqa: E402
 
 Runner = Callable[[List[str], Path], int]
 
@@ -50,6 +50,10 @@ def build(family: Family, variant: str = "", run: Runner = _run) -> Path:
     """Build `family` (and `variant`) in its own build directory from sdkconfig.defaults and the family's
     settings, then hold the built sdkconfig to those settings: a board of the family must never run a build
     that lacks one (the ESP32 classic's crystal is the reason)."""
+    if family.tool == "make":   # the AVR image and the EEPROM anchor its flash command writes
+        if run(["make", "-C", str(family.project), "dist", "anchor"], family.project) != 0:
+            raise RuntimeError(f"the {family.name} build failed")
+        return family.project
     build_dir = family.build_dir(variant)
     stale = family.project / "sdkconfig"
     if stale.exists():
@@ -94,12 +98,37 @@ def report(boards: List[probe_module.Board], results: Dict[str, Dict[str, dict]]
             "results": results}
 
 
+def assign(boards: List[probe_module.Board], relays: List[str]) -> List[probe_module.Board]:
+    """Each board under the entry it runs as: a board whose id is in `relays` runs its chip's relay entry, which a
+    chip with no relay entry cannot do."""
+    out = []
+    for board in boards:
+        if board.board_id in relays:
+            entry = next((family for family in FAMILIES.values()
+                          if family.probed == board.family and family.capability == CANNOT), None)
+            if entry is None:
+                raise RuntimeError(f"{board.board_id} is named as a relay, and {board.family} has no relay entry")
+            board = probe_module.Board(entry.name, board.board_id, board.path, board.chip, board.crystal)
+        out.append(board)
+    return out
+
+
+def checks_for(family: Family, module):
+    """The checks module of `family`. Owner decision 13: a board that cannot check a signature is never run as a PEP,
+    so a family of capability `cannot` takes only a module that says it does not (RUNS_AS_PEP False)."""
+    if family.capability == CANNOT and getattr(module, "RUNS_AS_PEP", True):
+        raise RuntimeError(f"{family.name} cannot check a signature and is never run as a PEP")
+    return module
+
+
 def main(argv: Optional[List[str]] = None, *, probers=None, run: Runner = _run, checks_module=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--skip-flash", action="store_true", help="run the checks on the firmware already flashed")
     parser.add_argument("--report", default=str(HW / "evidence" / "fleet-report.json"))
+    parser.add_argument("--relay", action="append", default=[], metavar="ID",
+                        help="run the board with this id as its chip's relay (B10), never as a PEP")
     args = parser.parse_args(argv)
-    boards = probe_module.probe(probers=probers)
+    boards = assign(probe_module.probe(probers=probers), args.relay)
     for board in boards:
         if board.family not in FAMILIES:
             print(f"skipped {board.path}: no prober or family knows it")
@@ -107,7 +136,7 @@ def main(argv: Optional[List[str]] = None, *, probers=None, run: Runner = _run, 
     for name in sorted({board.family for board in boards if board.family in FAMILIES}):
         family = FAMILIES[name]
         members = [board for board in boards if board.family == name]
-        module = checks_module or importlib.import_module(family.checks)
+        module = checks_for(family, checks_module or importlib.import_module(family.checks))
         builds = {variant: (None if args.skip_flash else build(family, variant, run)) for variant in ("", *family.variants)}
         if not args.skip_flash:
             for board in members:

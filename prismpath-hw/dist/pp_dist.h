@@ -152,6 +152,7 @@ typedef enum { PP_TGT_AGENT, PP_TGT_CFS, PP_TGT_GATEWAY, PP_TGT_HOST, PP_TGT_MES
 const char *pp_artifact_name(pp_artifact artifact);
 const char *pp_target_name(pp_target target);
 
+#ifndef PP_DIST_PROFILE_MIN /* the full core: everything to the constrained profile below but the shared parts */
 /* ------------------------------------------------------------------ the parts */
 typedef struct {
     uint8_t key_id[32];
@@ -367,6 +368,8 @@ uint8_t pp_counting(const pp_trust *trust, const pp_entry *entries, size_t n_ent
 void pp_verify(const uint8_t *sealed, size_t sealed_len, const uint8_t *body, size_t body_len,
                const pp_trust *trust, const pp_pep *pep, long long now, pp_verdict *out);
 
+#endif /* !PP_DIST_PROFILE_MIN */
+
 /* The image check of a `policy.ppt` body on a mesh node (policy_pack.validate_image with no caps): 0, or the
  * cause of the first problem in the reference's order. */
 uint8_t pp_validate_image(const uint8_t *image, size_t len);
@@ -388,6 +391,7 @@ void pp_sha256(const uint8_t *data, size_t len, uint8_t out[32]);
 #define PP_ASSEMBLER_BODY_MAX PP_TRUST_BOUND /* the largest body this build assembles: a trust body (E6) */
 #endif
 
+#ifndef PP_DIST_PROFILE_MIN
 /* The enforcement point's check of a whole sealed envelope through V8 (B9): 0 and the signed body_size and
  * body_sha256, or the verifier's cause. */
 typedef uint8_t (*pp_admit_fn)(void *context, const uint8_t *sealed, size_t len, long long *body_size,
@@ -435,6 +439,8 @@ uint16_t pp_frame_delay(const uint8_t *frame, size_t len);
 /* One frame's bytes at the PEP's monotonic time `now_ms`. Answers PP_ASM_* with the cause of a drop. */
 int pp_assembler_receive(pp_assembler *a, const uint8_t *frame, size_t len, uint32_t now_ms, uint8_t *cause);
 
+#endif /* !PP_DIST_PROFILE_MIN */
+
 /* ------------------------------------------------------------------ the enforcement point machine (section 9) */
 
 #define PP_RELEASE_BODY_MAX PP_TABLE_MAX /* every body of a release is within its kind's table bound */
@@ -455,6 +461,7 @@ enum { PP_SUBJECT_NONE, PP_SUBJECT_FLOOR, PP_SUBJECT_FALLBACK, PP_SUBJECT_CEILIN
        PP_SUBJECT_ANSWER };
 enum { PP_ST_NO_POLICY, PP_ST_ACTIVE, PP_ST_LOCKED };
 
+#ifndef PP_DIST_PROFILE_MIN
 typedef struct {
     pp_envelope envelope;
     size_t sealed_len;
@@ -868,5 +875,190 @@ void pp_pep_id(const pp_pep_machine *pep, uint8_t out[16]);
  * dist:floor-broad. One pass over each edge's postfix program with a bounded stack (PP_FLOOR_WALK). */
 #define PP_FLOOR_WALK 64
 uint8_t pp_floor_narrow(const uint8_t *image, size_t len, const pp_layout *layout, int command);
+
+#endif /* !PP_DIST_PROFILE_MIN */
+
+#ifdef PP_DIST_PROFILE_MIN
+/* ------------------------------------------------------------------ the constrained profile (B12) */
+/* A build with PP_DIST_PROFILE_MIN is the PEP of B12 alone, for a board that cannot hold a sealed envelope. It is a
+ * `mesh` PEP on one stream behind an ordered link (B11). It checks the one signature entry whose key id names its one
+ * key in a single pass as the sealed envelope arrives, with Monocypher's crypto_sha512_update, crypto_eddsa_reduce
+ * and crypto_eddsa_check_equation. It hashes the envelope into its id and reads it with a streaming scanner whose
+ * answer is held until V3 passes, so the cause is the one V1 gives. A trust body is read as it arrives and never held.
+ * The only body it holds is the table, in the caller's buffer. Everything above this section is the full core and is
+ * not built here. */
+#include "monocypher-ed25519.h"
+
+#define PP_ASM_NONE 0    /* as the full core's assembler answers */
+#define PP_ASM_WHOLE 1
+#define PP_ASM_DROPPED 2
+#define PP_ASM_CONTROL 3
+#define PP_MIN_META_KEY 32 /* B12: the longest member name of `meta` its scanner orders */
+#define PP_MIN_FLOOR_IDS 2 /* Q1: the table and the widening statement committed at the floor */
+
+typedef struct {
+    uint32_t h[8];
+    uint8_t block[64];
+    uint64_t bytes;
+} pp_sha256_ctx;
+
+void pp_sha256_init(pp_sha256_ctx *c);
+void pp_sha256_update(pp_sha256_ctx *c, const uint8_t *data, size_t len);
+void pp_sha256_final(pp_sha256_ctx *c, uint8_t out[32]);
+
+/* The key it holds counts, was retired by a rotation (O3), or is on the revocation list (R2). None is held before
+ * provisioning. */
+enum { PP_MIN_KEY_NONE, PP_MIN_KEY_COUNTS, PP_MIN_KEY_RETIRED, PP_MIN_KEY_REVOKED };
+
+/* One envelope it holds, by its id and its times, which C3 and R5 hold it to again. */
+typedef struct {
+    uint8_t id[32];
+    long long expires, not_before;
+} pp_min_held;
+
+/* A release by its hashes: the table's envelope and the widening statement's, if staged (W3). */
+typedef struct {
+    long long seq;
+    uint8_t policy_sha256[32], release[32], replaces[32], table_sha256[32];
+    uint8_t has_replaces, widens, has_table, has_widening;
+    uint8_t widening_any, widening_covers; /* W4: `from` is empty, or holds the policy active when it was read */
+    uint8_t widening_first;                /* the statement was staged before the table, the order C3 reads them in */
+    pp_min_held table, widening;
+} pp_min_release;
+
+/* What it keeps durably, in one part the caller writes whole. */
+typedef struct {
+    uint8_t provisioned;
+    uint8_t key_state; /* PP_MIN_KEY_* */
+    uint8_t key_id[32], key[32];
+    char stream[PP_STREAM_MAX + 1];
+    long long trust_seq, time_floor, floor_seq, raised; /* R1, T1, Q1, R4 for its own stream */
+    uint8_t has_trust_id, trust_id[32];
+    uint8_t n_floor_ids, floor_ids[PP_MIN_FLOOR_IDS][32], floor_policy[32];
+    uint8_t listed; /* V7, R5: bit k when the latest list names floor id k, bit 2 when it names the floor's policy */
+    uint64_t counter; /* H3 */
+    uint8_t has_active, has_staged;
+    pp_min_release active, staged;
+} pp_min_durable;
+
+#define PP_MIN_SAVE 1  /* the durable state changed */
+#define PP_MIN_TABLE 2 /* the staged table in the caller's buffer is the active table now (C4) */
+
+/* Write what `what` names, durably, before the call returns. 0 when it took. */
+typedef int (*pp_min_persist_fn)(void *context, const pp_min_durable *d, int what);
+/* Send one signed state record of PP_RECORD_PLAIN bytes (H1, H4). */
+typedef void (*pp_min_send_fn)(void *context, const uint8_t *record, size_t len);
+
+typedef struct {
+    int has_clock;            /* T2, T3 */
+    uint8_t instance_seed[32];
+    uint8_t *table;           /* where a table body arrives and is staged */
+    size_t table_room;        /* its size, the PEP's own artifact bound, at most PP_MESH_TABLE_MAX (E6) */
+    pp_min_persist_fn persist;
+    pp_min_send_fn send;
+    void *context;
+} pp_min_config;
+
+/* The streaming reader of canonical canon/2 in a fixed member order. */
+typedef struct {
+    const uint8_t *prog;
+    uint16_t prog_len, pc;
+    uint8_t sub, failed, isub, ineg, idigits;
+    uint64_t num;
+    uint8_t hash[32], last[32];
+    uint16_t count;
+    uint8_t name_len;
+    char name[PP_STREAM_MAX + 1];
+    int8_t last_target;
+    /* meta (E9) */
+    uint8_t depth, mstate, kinds[3], key_len[3], has_key[3], cur_len, need, lo, hi, esc;
+    union {
+        uint8_t keys[3][PP_MIN_META_KEY + 1];
+        struct {
+            uint8_t len;
+            char text[PP_STREAM_MAX + 1];
+        } last_name; /* the floors of a revocation list are in order (R7) */
+    } u;
+    uint8_t cur[PP_MIN_META_KEY + 1];
+} pp_min_reader;
+
+/* The envelope as the scanner reads it (E1). */
+typedef struct {
+    uint8_t artifact; /* a pp_artifact */
+    uint8_t body_sha256[32], policy_sha256[32], release[32], replaces[32];
+    uint8_t has_replaces, widens, targets;
+    long long body_size, expires, not_before, seq;
+    char stream[PP_STREAM_MAX + 1];
+} pp_min_envelope;
+
+/* One sealed envelope and its body in one pass (V2 to V11). */
+typedef struct {
+    uint8_t phase; /* sealed, body, done */
+    uint16_t sealed_len, at, n;
+    uint8_t k, matched, cause, too_large;
+    uint32_t body_len, body_at;
+    uint8_t sig[64], entry_id[32], last_id[32];
+    crypto_sha512_ctx h512;
+    pp_sha256_ctx h256;
+    pp_min_reader r;
+    pp_min_envelope e;
+    uint8_t envelope_id[32];
+    uint8_t has_envelope, unchanged, has_time_floor, container_bad, want_prefix, table_written, table_skipped,
+        body_hashed;
+    uint8_t prefix[16], body_hash[32];
+    long long time_floor;
+    /* what a trust body said, applied only when it verifies (B2) */
+    uint16_t n_envelopes, n_keys, n_policies, n_floors, n_from;
+    uint8_t key_listed, staged_listed, active_listed, from_covers, retires_mine, names_mine;
+    long long floor_raised;
+} pp_min_verify;
+
+typedef struct {
+    pp_min_config config;
+    pp_min_durable d;
+    uint8_t instance_secret[64], instance_public[32];
+    long long now;
+    int locked; /* Q5: the durable state did not read */
+    /* the one transfer on the ordered link (B6, B7, B11) */
+    uint8_t t_active, t_body_open;
+    uint16_t transfer;
+    uint8_t prefix[16];
+    uint32_t started_ms;
+    /* a commit with a delay (B8) */
+    uint8_t commit_due;
+    uint32_t commit_due_ms;
+    long long due_seq;
+    uint8_t due_policy[32];
+    pp_min_verify v;
+} pp_min;
+
+/* Open from the durable state, NULL for none, `reads` 0 for a state that did not read (Q5). It sends the records a
+ * start makes. -1 when the instance key is the held key (K2). */
+int pp_min_open(pp_min *pep, const pp_min_config *config, const pp_min_durable *durable, int reads, long long now);
+/* P1: provision the one authority key and the stream. 0, or the cause it refuses with. */
+uint8_t pp_min_provision(pp_min *pep, const uint8_t public_key[32], const char *stream, long long now);
+
+/* One frame from the ordered link at monotonic `now_ms` and time `now` (B6, B7, B9, B11). Answers PP_ASM_NONE,
+ * PP_ASM_WHOLE when a transfer was staged or refused with a record, PP_ASM_DROPPED with `cause`, or PP_ASM_CONTROL
+ * for a state or epoch frame, which it does not read. A commit or abort frame is carried out. */
+int pp_min_frame(pp_min *pep, const uint8_t *frame, size_t len, uint32_t now_ms, long long now, uint8_t *cause);
+
+/* The same steps with the bytes handed over directly, in pieces of any size: begin, the sealed envelope, then the
+ * body once pp_min_sealed answered 1 (it passed V2 to V8), then pp_min_stage, which sends the record. */
+void pp_min_begin(pp_min *pep, size_t sealed_len, size_t body_len, long long now);
+int pp_min_sealed(pp_min *pep, const uint8_t *data, size_t len);
+void pp_min_body(pp_min *pep, const uint8_t *data, size_t len);
+void pp_min_stage(pp_min *pep);
+/* V2 to V11 alone, for the corpus: the cause, with nothing staged and no record sent. */
+uint8_t pp_min_verdict(pp_min *pep);
+
+void pp_min_commit(pp_min *pep, long long seq, const uint8_t policy_sha256[32], uint16_t delay_ms, uint32_t now_ms,
+                   long long now);
+void pp_min_abort(pp_min *pep, long long seq, const uint8_t policy_sha256[32], long long now);
+void pp_min_tick(pp_min *pep, uint32_t now_ms, long long now);
+void pp_min_record(pp_min *pep, uint8_t event, long long now);
+/* T2: a PEP with no clock saves its time at least once an hour. */
+void pp_min_save_time(pp_min *pep, long long now);
+#endif /* PP_DIST_PROFILE_MIN */
 
 #endif /* PP_DIST_H */

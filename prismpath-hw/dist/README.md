@@ -10,6 +10,8 @@ Ed25519, vendored in `prismpath-hw/mesh/main`.
 | `pp_canon2.h` | The canon/2 reader. It tells canonical bytes from canon/2 in another spelling and from bytes that are not canon/2, and then reads canonical bytes member by member |
 | `pp_dist.h`, `pp_dist.c` | The sealed container, the envelope scanner, the trust store, the verifier (V2 to V11), the frame reassembly, the enforcement point machine with revocation applied, and the signed state record |
 | `host_check.c` | A stdio harness the Python tests drive |
+| `host_check_min.c` | The same harness for the constrained profile, the build with `PP_DIST_PROFILE_MIN` |
+| `pp_link.h` | The frames on a serial line behind a relay (B10), each framed as SLIP |
 
 A revocation is applied as soon as it verifies. The PEP holds the latest list and no other, refuses a list that
 drops a key the current one holds with `dist:trust-replay` (R6), keeps the floor a list raises for its own stream,
@@ -77,6 +79,16 @@ cc -std=c11 -Wall -Wextra -Werror -I prismpath-hw/dist -I prismpath-hw/mesh/main
    prismpath-hw/dist/host_check.c prismpath-hw/dist/pp_dist.c \
    prismpath-hw/mesh/main/monocypher.c prismpath-hw/mesh/main/monocypher-ed25519.c
 ```
+
+`PP_DIST_PROFILE_MIN` builds the constrained profile of spec B12 from `pp_dist.c` and nothing of the full core, for
+the Uno (`prismpath-hw/avr/ppt_uno_dist.c`, `make dist`). It is a `mesh` PEP on one stream behind an ordered link. It
+checks the one signature entry that names its key in one pass as the sealed envelope arrives, with
+`crypto_sha512_update`, `crypto_eddsa_reduce` and `crypto_eddsa_check_equation`, scans the envelope as it arrives and
+holds the scanner's answer until V3 passes, and reads a trust body as it arrives. It keeps one authority key, the
+trust sequence, the time floor, the floor and the active and staged releases by their hashes in one `pp_min_durable`,
+and holds only the table body, in the caller's buffer. `prismpath/tests/test_distribution_c_min.py` builds it with
+`host_check_min.c` and holds it to the corpus, to the Python machine's records and to case 122. The default build is
+the same object byte for byte as before the profile was added.
 
 `PPT_DEV_BUILD` sets bit 6 of every state record's status (D3). The `mesh` and `cfs` targets have no
 escape hatch in any build.
