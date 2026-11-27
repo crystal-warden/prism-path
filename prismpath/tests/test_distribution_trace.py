@@ -10,9 +10,8 @@ prismpath/tests/test_distribution_*.py, integrations/cfs/tests/test_cfs_dist.py 
 tools/tests/test_export.py, the C core's are
 prismpath/tests/test_distribution_c.py, test_distribution_c_cfs.py (its `cfs` kind and the cFS app) and test_distribution_end_to_end.py (the C harness beside the Python PEPs) and Rust's are prismpath-hotswap-rs/tests/test_distribution_*.rs.
 
-`PENDING` lists, per implementation, the cases whose pull request has not landed. Each pull request
-shortens it, and a case still listed that has a test fails here, so the list never hides a landed case.
-The list goes when every case has its tests."""
+Every case has its tests, so no list of open cases is kept, and a case that loses its test in an implementation its
+row names fails here."""
 import importlib.util
 import json
 import re
@@ -40,29 +39,6 @@ REPLAYERS = {"P": REPO / "tests" / "test_distribution_corpus.py",
 # carry; the product's own boundary check covers its packages.
 RESEARCH_ONLY = {99: ROOT / "tools" / "tests" / "test_export.py"}
 C_KINDS = frozenset({"mesh", "cfs"})
-# Cases one half of which an implementation runs, by its replay of the corpus or by a test that names the case,
-# while another half waits for a later pull request. Neither claims them, and they stay in PENDING until that half
-# has its test. 100: Python's grant writer emits an envelope, and the other older forms' writers wait for PRs 11 and 12.
-# 243: the Rust PEP stages, aborts and applies trust statements while reconciling, and taking a controller statement
-# waits for the controller key in Rust. 246: the Rust PEP lapses a held release that expires or is revoked while
-# reconciling, and the ceiling and fallback runs wait for section 21 in Rust.
-PARTIAL = {"P": frozenset(), "R": frozenset(), "C": frozenset()}
-# The `xdp` halves of 187, 193, 194, 223 and 225 and the whole of 164 and 273 are in test_distribution_xdp.py: the edge
-# loads its action floor in every table, counts the floor's passes with no `would`, and refuses a floor with a `rate`
-# and an operator's answer.
-PENDING = {
-    "P": "206 272",
-    "R": "272",
-    "C": "",
-}
-
-
-def _expand(ranges: str) -> set:
-    out = set()
-    for part in ranges.split():
-        low, _, high = part.partition("-")
-        out.update(range(int(low), int(high or low) + 1))
-    return out
 
 
 def _spec_cases():
@@ -92,7 +68,7 @@ def _covered(impl: str) -> set:
     if REPLAYERS[impl].exists():
         covered |= {case["case"] for case in CORPUS["cases"] if impl in case["runs_on"]
                     and (impl != "C" or case["pep"]["kind"] in C_KINDS)}
-    return covered - PARTIAL[impl]
+    return covered
 
 
 def test_the_spec_has_287_numbered_cases_each_naming_rules_and_implementations():
@@ -105,10 +81,10 @@ def test_the_spec_has_287_numbered_cases_each_naming_rules_and_implementations()
     assert all(case["rules"].strip() and case["runs_on"] for case in SPEC.values())
 
 
-def test_every_case_has_a_test_in_each_implementation_it_names_unless_its_pull_request_is_pending():
+def test_every_case_has_a_test_in_each_implementation_it_names():
     held = {number for number, path in RESEARCH_ONLY.items() if not path.exists()}
     missing = {impl: sorted(number for number, case in SPEC.items() if impl in case["runs_on"]
-                            and number not in _expand(PENDING[impl]) | held and number not in _covered(impl))
+                            and number not in held and number not in _covered(impl))
                for impl in "PRC"}
     assert missing == {"P": [], "R": [], "C": []}
 
@@ -117,14 +93,6 @@ def test_no_test_names_a_case_that_does_not_exist_or_does_not_run_there():
     stray = {impl: {number: files for number, files in _named(impl).items()
                     if number not in SPEC or impl not in SPEC[number]["runs_on"]} for impl in "PRC"}
     assert stray == {"P": {}, "R": {}, "C": {}}
-
-
-def test_the_pending_list_names_only_cases_still_without_a_test():
-    stale = {impl: sorted(_expand(PENDING[impl]) & _covered(impl)) for impl in "PRC"}
-    assert stale == {"P": [], "R": [], "C": []}
-    outside = {impl: sorted(number for number in _expand(PENDING[impl])
-                            if impl not in SPEC.get(number, {"runs_on": []})["runs_on"]) for impl in "PRC"}
-    assert outside == {"P": [], "R": [], "C": []}
 
 
 def test_only_case_099_is_research_only():
@@ -158,6 +126,3 @@ def test_a_replay_that_exists_has_no_not_yet_built_marker():
         assert not (REPLAYERS[impl].exists() and marked), (impl, column)
         assert REPLAYERS[impl].exists() or marked, (impl, column)
 
-
-def test_a_case_a_replay_does_not_claim_stays_pending_until_its_other_half_has_a_test():
-    assert all(PARTIAL[impl] <= _expand(PENDING[impl]) for impl in "PRC")
