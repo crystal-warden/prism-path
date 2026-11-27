@@ -239,6 +239,7 @@ prismpath/agent/run.py
 prismpath/agent/sandbox_exec.py
 prismpath/agent/sandbox_hook.py
 prismpath/agent/session_state.py
+prismpath/agent/target.py
 prismpath/agent/zones.py
 prismpath/analysis.py
 prismpath/annotate.py
@@ -754,6 +755,7 @@ prismpath/tests/test_agent_rerecord_warning.py
 prismpath/tests/test_agent_rules.py
 prismpath/tests/test_agent_run.py
 prismpath/tests/test_agent_starters.py
+prismpath/tests/test_agent_target.py
 prismpath/tests/test_analysis.py
 prismpath/tests/test_analysis_spawn.py
 prismpath/tests/test_audit_log.py

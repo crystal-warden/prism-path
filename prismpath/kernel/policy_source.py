@@ -702,6 +702,9 @@ def add_parser(subparsers) -> None:
                                                         'checked by the core, in canonical canon/2 bytes')
     compile_parser.add_argument('source', help='the rules source (.rules.md)')
     compile_parser.add_argument('-o', '--out', default=None, help='write the image here (default standard output)')
+    compile_parser.add_argument('--target', choices=('agent',), default=None,
+                                help='also run the checks of what will enforce the image: agent is the governed agent '
+                                     '(reading domain, fields, control files, connections, sandbox profile)')
     render_parser = actions.add_parser('render', help='write the rules source of a prismpath.core/1 image')
     render_parser.add_argument('image', help='the image (.core.json, or any canon/2 spelling of it)')
     render_parser.add_argument('-o', '--out', default=None, help='write the source here (default standard output)')
@@ -796,6 +799,12 @@ def policy_cmd(args) -> int:
         return refuse(error.lines())
     for line, message in compiled.warnings:
         print(f"prismpath policy compile: {args.source}:{line}: warning: {message}", file=sys.stderr)
+    if args.target:
+        from prismpath.agent import target as agent_target      # the agent's own checks, read lazily
+        found = agent_target.TARGETS[args.target](compiled.image)
+        if found:
+            return refuse(SourceError([(agent_target.line_of(where, compiled.field_lines, compiled.rule_lines), message)
+                                       for where, message in found], args.source).lines())
     if args.out:
         _write(args.out, compiled.image + b"\n")
     else:

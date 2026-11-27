@@ -12,7 +12,8 @@ the entry says where that lives.
 
 `REQUIRED` names the fields the agent needs to do more than decide a call. A policy without them still loads and
 decides, but the sandbox cannot be built for one without the first three, and `agent status` and `agent doctor`
-report one without `path_control`.
+report one without `path_control`. `prismpath policy compile --target agent` (prismpath/agent/target.py) refuses
+any of them missing.
 """
 from __future__ import annotations
 
@@ -43,7 +44,7 @@ FIELDS: Tuple[Tuple[str, str, str], ...] = (
 
 # The fields `compile_profile` projects a sandbox from, then the two the control and connection checks read.
 REQUIRED: Tuple[Tuple[str, str], ...] = tuple(
-    [(name, "since the sandbox profile is projected from it (cause 129 without it)") for name in profile.REQUIRED_FIELDS]
+    [(name, "since the sandbox profile is projected from it, and an allowed shell call is refused without one (cause 129)") for name in profile.REQUIRED_FIELDS]
     + [("path_control", "since without it no rule can refuse a change to a control file (cause 128)"),
        ("net_dest", "since without it no rule can refuse a connection (cause 130)")])
 
