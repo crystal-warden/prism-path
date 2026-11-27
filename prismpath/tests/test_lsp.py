@@ -213,3 +213,75 @@ def test_unknown_method_gets_method_not_found():
     req = {"jsonrpc": "2.0", "id": 9, "method": "workspace/executeCommand", "params": {}}
     replies = run_server(_init(), req)
     assert by_id(replies, 9)["error"]["code"] == -32601
+
+
+# ------------------------------------------------------------------ authoring warnings
+
+TYPO_FLOW = """---
+name: typo
+strat: a
+start: a
+---
+
+## a
+Read it.
+-> fix when kind == "x"
+-> b: always
+
+## b
+Done.
+"""
+
+RULES_SOURCE = """---
+name: r
+start: core_decision
+field.tool: category
+---
+## core_decision
+-> refuse agent:network: when tool == "connect"
+-> allow: always
+-> refuse agent:network: when tool == "ssh"
+"""
+
+
+def _diagnostics(text, uri="untitled:doc.md"):
+    replies = run_server(_init(), _open(uri, text))
+    return notifications(replies, "textDocument/publishDiagnostics")[-1]["params"]["diagnostics"]
+
+
+def test_authoring_warnings_are_shown_as_warnings_on_their_lines():
+    diags = _diagnostics(TYPO_FLOW)
+    key = next(d for d in diags if d["code"] == "unknown-front-matter-key")
+    assert key["severity"] == 2 and key["source"] == "prismpath-authoring" and "Did you mean `start`?" in key["message"]
+    assert key["range"]["start"]["line"] == 2
+    arrow = next(d for d in diags if d["code"] == "arrow-in-prose")
+    assert arrow["severity"] == 2 and arrow["range"]["start"]["line"] == 8
+
+
+def test_authoring_warnings_stay_out_of_the_analyze_findings():
+    from prismpath.kernel import analysis
+    from prismpath.kernel.parser import parse
+    codes = {finding.code for finding in analysis.analyze(parse(TYPO_FLOW))}
+    assert not codes & {"unknown-front-matter-key", "arrow-in-prose"}
+    assert {d["source"] for d in _diagnostics(TYPO_FLOW) if d["code"] in codes} <= {"prismpath"}
+
+
+def test_a_clean_flow_has_no_authoring_warnings():
+    assert not [d for d in _diagnostics(GOOD_FLOW) if d["source"] == "prismpath-authoring"]
+
+
+def test_a_rules_source_gets_the_refusal_and_the_compile_warnings():
+    diags = _diagnostics(RULES_SOURCE)
+    refusal = next(d for d in diags if d["code"] == "rules-source")
+    assert refusal["severity"] == 1 and "prismpath policy compile" in refusal["message"]
+    assert refusal["range"]["start"]["line"] == 6
+    unreachable = [d for d in diags if d["source"] == "prismpath-policy"]
+    assert len(unreachable) == 1 and unreachable[0]["severity"] == 2
+    assert "no reading reaches this rule" in unreachable[0]["message"] and unreachable[0]["range"]["start"]["line"] == 8
+
+
+def test_a_rules_source_that_does_not_compile_shows_its_problems_as_errors():
+    diags = _diagnostics(RULES_SOURCE.replace('"connect"', '"connect" and'))
+    problems = [d for d in diags if d["source"] == "prismpath-policy"]
+    assert problems and all(d["severity"] == 1 for d in problems)
+    assert any(d["code"] == "rules-source" for d in diags)

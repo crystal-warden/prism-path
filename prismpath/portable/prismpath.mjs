@@ -1113,10 +1113,40 @@ export function checkReach(graph, targets, opts = {}) {
 }
 
 // ---------------------------------------------------------------------------- parsing
+export class ParseError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "ParseError";
+  }
+}
+
+export class RulesSourceError extends ParseError {
+  constructor(message) {
+    super(message);
+    this.name = "RulesSourceError";
+  }
+}
+
 const EDGE_RE = /^\s*-?\s*->\s*([A-Za-z0-9_\-]+)\s*:\s*(.+?)\s*$/;
 const HEAD_RE = /^\s*##\s+(.+?)\s*$/;
 const ANNO_RE = /^\s*@([\p{L}\p{N}_]+)\s*\((.*)\)\s*$/u;
+const RULES_LINE_RE = new RegExp(`^${PY_WS}*-?${PY_WS}*->${PY_WS}*(?:refuse|escalate)${PY_WS}+[^${PY_SPACE_CLASS}]+?:(?:${PY_WS}|$)`, "u");
+export const RULES_SUFFIX = ".rules.md";
 const LINE_SPLIT_RE = /\r\n|[\n\r\v\f\x1c\x1d\x1e\x85\u2028\u2029]/;
+
+function rulesSourceLineError(lineNumber) {
+  return new RulesSourceError(
+    `line ${lineNumber} is a rule of a rules source, not a flow edge. A rules source is compiled with ` +
+    "`prismpath policy compile` and read back with `prismpath policy render`",
+  );
+}
+
+function rulesSourceFileError(basename) {
+  return new RulesSourceError(
+    `${basename} is a rules source, not a flow. A rules source is compiled with ` +
+    "`prismpath policy compile` and read back with `prismpath policy render`",
+  );
+}
 
 function parseAnnoArgs(argString) {
   const parsedArgs = {};
@@ -1136,9 +1166,19 @@ function parseAnnoArgs(argString) {
 
 const FRONTMATTER_RE = new RegExp(`^---${PY_WS}*\\n([\\s\\S]*?)\\n---${PY_WS}*\\n([\\s\\S]*)$`);
 
-export function parse(sourceText) {
+export function parse(sourceText, options = null) {
+  if (options && typeof options === "object") {
+    const rawName = options.filename ?? options.path ?? null;
+    if (typeof rawName === "string") {
+      const baseName = rawName.split(/[\\/]/).pop();
+      if (baseName && baseName.endsWith(RULES_SUFFIX)) {
+        throw rulesSourceFileError(baseName);
+      }
+    }
+  }
   const frontmatterMeta = {};
   let flowBody = sourceText;
+  let bodyOffset = 0;
   const frontmatterMatch = sourceText.match(FRONTMATTER_RE);
   if (frontmatterMatch) {
     for (const lineText of frontmatterMatch[1].split(LINE_SPLIT_RE)) {
@@ -1146,6 +1186,8 @@ export function parse(sourceText) {
       if (colonPos >= 0) frontmatterMeta[pyTrim(lineText.slice(0, colonPos))] = pyTrim(lineText.slice(colonPos + 1));
     }
     flowBody = frontmatterMatch[2];
+    const prefix = sourceText.slice(0, sourceText.length - flowBody.length);
+    bodyOffset = (prefix.match(/\n/g) || []).length;
   }
   const nodesMap = {};
   const nodeOrder = [];
@@ -1154,7 +1196,12 @@ export function parse(sourceText) {
   const flushInstruction = () => {
     if (currentNodeRec) currentNodeRec.instruction = instructionLines.join("\n").trim();
   };
-  for (const lineText of flowBody.split(LINE_SPLIT_RE)) {
+  const bodyLines = flowBody.split(LINE_SPLIT_RE);
+  for (let lineIndex = 0; lineIndex < bodyLines.length; lineIndex++) {
+    const lineText = bodyLines[lineIndex];
+    if (RULES_LINE_RE.test(lineText)) {
+      throw rulesSourceLineError(bodyOffset + lineIndex + 1);
+    }
     const headerMatch = lineText.match(HEAD_RE);
     if (headerMatch) {
       flushInstruction();

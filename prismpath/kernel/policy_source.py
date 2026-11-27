@@ -581,6 +581,16 @@ def compile_full(text: str, path: str = "<source>") -> Compiled:
     return compiled
 
 
+def editor_notes(text: str, path: str = "<source>") -> List[Tuple[int, str, str]]:
+    """What `policy compile` says about a source, as (line, severity, message) for an editor to show. A source
+    that does not compile gives its problems as errors, one that compiles gives its warnings. Line 0 is the
+    whole source. It reads the same code `policy compile` does and writes nothing."""
+    try:
+        compiled = compile_full(text, path)
+    except SourceError as error:
+        return [(line, "error", message) for line, message in error.problems]
+    return [(line, "warning", message) for line, message in compiled.warnings]
+
 # ----------------------------------------------------------------- rendering
 def read_image(raw) -> Dict[str, Any]:
     """An image document from its bytes (canonical, with or without the file's final line feed) or a dict."""

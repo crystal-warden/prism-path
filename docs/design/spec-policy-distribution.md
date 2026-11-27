@@ -1093,6 +1093,75 @@ release, so the owner writes the policy so that it does not. Going from no bundl
 refuses their envelopes with `dist:target-mismatch` and not `dist:bad-format`. Only the gateway, which is
 Python, reads their bodies.
 
+### 13.2 The grant format (draft)
+
+This section states the grant in full, so a second implementation can issue and read one without reading
+`prismpath/gateway/grants.py`. It adds no rule to GR1 to GR3. It writes them out and names the property
+they give.
+
+**The envelope.** A grant is an envelope of section 2 with these members fixed.
+
+| member | value |
+|---|---|
+| `artifact` | `grant` |
+| `targets` | `["gateway"]` |
+| `stream` | the gateway's stream, never the trust stream |
+| `seq` | `1` |
+| `policy_sha256` | the SHA-256 of the policy image the grant was issued under |
+| `not_before`, `expires` | integer seconds, `not_before < expires <= not_before + 2592000` (30 days) |
+| `release` | the release id over the one entry `("grant", SHA-256 of the body)` |
+
+It is sealed with the owner's authority key, the same key that signs the policy. A grant has no holder. It
+names what it allows, not who may use it, and the party that carries it cannot sign a narrower grant from
+it. Only the owner issues grants.
+
+**The body.** A canon/2 object with exactly four members, as `kinds.read_grant` reads it.
+
+| member | value |
+|---|---|
+| `encoding` | `canon/2` |
+| `format` | `prismpath.dist-grant/1` |
+| `path_classes` | route classes of the gateway's table, sorted, no repeats, at least one, never `other` or `unknown` |
+| `method_classes` | a sorted subset of `delete`, `other`, `read`, `write` without repeats, at least one |
+
+A class is a lower case letter followed by up to 31 lower case letters, digits or underscores.
+
+**The header.** `X-PrismPath-Grant` carries the sealed envelope and the body, each base64url without padding
+in its canonical spelling, joined by one dot, at most 4096 characters (GR1).
+
+**GR4. The reading.** For one request with route class `p` and method class `m`, at gateway time `now`
+(raised to the trust store's time floor), the gateway reads the `grant` field as follows.
+
+1. No header is `none`. More than one header, or a value that is too long or not of the form, is `invalid`.
+2. The envelope is verified with V2 to V7 and V9 under the gateway's trust store and its own kind and
+   stream (GR2). A revocation list that cannot be read makes every grant `invalid` (GR3).
+3. When the envelope verifies, the reading is `valid` when the body reads, `seq` is 1, the lifetime holds,
+   `policy_sha256` is the policy the gateway runs, `not_before <= now`, `p` is in `path_classes` and `m` is
+   in `method_classes`. Otherwise it is `invalid`.
+4. When the envelope fails only because its time has ended, the reading is `expired` when the grant would
+   have read `valid` one second before `expires`, and `invalid` otherwise.
+5. Anything else is `invalid`.
+
+The policy then decides the request on its reading, `grant` included. The grant reaches the decision through
+this one field and changes no other.
+
+**GR5. A grant only narrows.** Call a policy grant monotone when, for every reading, `grant` set to `invalid`
+or `expired` is allowed only where `grant` set to `none` is allowed. The shipped gateway policy is grant
+monotone, because it refuses `invalid` before any other rule and no allow rule reads `expired`. For a grant
+monotone policy, a request allowed with a grant is allowed without one, or the grant reads `valid` for it,
+which puts it inside the grant's classes, lifetime and policy, and the policy allows it with a valid grant.
+So a grant opens at most the part of the policy's own grant rules that the grant covers, and a grant whose
+classes and lifetime lie inside another's opens no more than that one. The owner writes the policy grant
+monotone. A policy that allows more for a bad grant than for none gains nothing from GR5.
+
+`formal/Core/Grant.lean` proves GR4's `valid` condition (`read_valid_iff`), that the decision depends on
+the grant only through its state (`decision_through_state`), the narrowing (`grant_only_narrows`,
+`grant_adds_only_its_scope`), attenuation (`attenuate_valid`, `attenuate_allowed`), and that a grant for
+another policy, a revoked grant, a grant not yet in force, an expired one and one that does not cover the
+request never read `valid`. The policy in those theorems is any function from a reading to a verdict, so
+they hold for the core's evaluator. `prismpath/tests/test_grant_narrowing.py` checks that the shipped
+gateway policy is grant monotone over every reading it can be given.
+
 ## 14. First key provisioning
 
 The first authority key cannot arrive over the transport, because nothing yet says whom to believe.

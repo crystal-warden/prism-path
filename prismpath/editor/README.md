@@ -4,7 +4,8 @@ Two complementary surfaces, both thin wrappers over the repo's own tooling:
 
 1. **`prismpath lsp`**: a Language Server (stdlib only, ships with the pip package) for any
    LSP-capable editor: live diagnostics (the full `validate` check set, anchored to the
-   offending edge line), completion (edge targets, predicate fields derived from the flow's own
+   offending edge line, with the authoring warnings of `validate` shown as warnings, and
+   a rules source shown its refusal and the `prismpath policy compile` notes), completion (edge targets, predicate fields derived from the flow's own
    `when` edges, tier keywords, annotations), hover (node/edge tier summaries), document
    symbols, and a custom `prismpath/graph` request returning Mermaid for graph previews.
 2. **The VS Code extension** (`vscode/`); tier-aware TextMate highlighting injected into plain
