@@ -127,3 +127,55 @@ def test_parse_error_is_value_error():
 
 if __name__ == "__main__":
     pytest.main()
+
+
+# A rules source (prismpath/kernel/policy_source.py) is not a flow: its `-> refuse <cause>:` lines would read as
+# prose, so the flow tools would see an allow only graph. The parser refuses it and points at `prismpath policy`.
+_RULES = """---
+name: r
+start: core_decision
+field.tool: category
+---
+## core_decision
+-> refuse agent:network: when tool == "connect"
+-> allow: always
+"""
+
+
+def test_a_rules_source_is_refused_with_its_line():
+    from prismpath.kernel.parser import RulesSourceError
+    with pytest.raises(RulesSourceError, match=r"line 7 is a rule of a rules source.*prismpath policy compile"):
+        parse(_RULES)
+
+
+def test_an_escalate_rule_is_refused_too():
+    with pytest.raises(ParseError, match="rules source"):
+        parse("## core_decision\n  - -> escalate agent:push-escalated: when git_op == \"push\"\n")
+
+
+def test_a_rules_file_is_refused_by_its_name(tmp_path):
+    path = tmp_path / "only_allow.rules.md"
+    path.write_text("---\nstart: core_decision\n---\n## core_decision\n-> allow: always\n")
+    with pytest.raises(ParseError, match="only_allow.rules.md is a rules source"):
+        parse_file(str(path))
+
+
+def test_every_shipped_rules_source_is_refused():
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[2]
+    sources = sorted(root.glob("prismpath/**/*.rules.md")) + sorted(root.glob("integrations/**/*.rules.md"))
+    assert len(sources) >= 6
+    for path in sources:
+        with pytest.raises(ParseError, match="rules source"):
+            parse(path.read_text(encoding="utf-8"))
+
+
+def test_a_rendered_core_image_still_parses_as_a_flow():
+    # the canonical rendering of an image names causes by code (`refuse_106`), which is a flow edge
+    graph = parse("---\nstart: core_decision\n---\n## core_decision\n-> refuse_106: when tool == \"connect\"\n")
+    assert graph.nodes["core_decision"].edges == [("refuse_106", 'when tool == "connect"')]
+
+
+def test_prose_that_mentions_refusing_is_still_prose():
+    graph = parse("## a\nWe refuse -> nothing here.\n-> refuse later on, then stop\n")
+    assert graph.nodes["a"].edges == []

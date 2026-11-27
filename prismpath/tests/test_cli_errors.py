@@ -351,3 +351,10 @@ def test_init_refuses_to_overwrite_the_md_it_would_write(tmp_path, monkeypatch, 
     code, out, _err = _main(capsys, "init", "demo")
     assert code == 1 and "demo.md already exists" in out
     assert (tmp_path / "demo.md").read_text() == "mine\n"
+
+
+def test_a_rules_source_given_to_validate_names_prismpath_policy(tmp_path, capsys):
+    rules = tmp_path / "mine.rules.md"
+    rules.write_text("---\nstart: core_decision\n---\n## core_decision\n-> refuse agent:network: always\n")
+    code, _out, err = _main(capsys, "validate", str(rules))
+    assert code == 2 and "is a rules source" in err and "prismpath policy compile" in err
