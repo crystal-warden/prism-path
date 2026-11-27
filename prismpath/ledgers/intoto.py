@@ -8,6 +8,10 @@ An exported envelope has `payloadType` `application/vnd.in-toto+json`, a base64-
 digest and whose `predicate` (`https://prismpath.dev/attestations/core-run/v1`) carries the sealed root
 statement fields alongside the manifest's image and key digests, and an Ed25519 signature made by the
 run's instance key over the DSSE Pre-Authentication Encoding (PAE).
+
+A signed root statement chain (`prismpath-root-statement/3`) exports statement by statement with
+`export_root_statements`, and any one signature envelope wraps as a Sigstore bundle v0.3 with `to_bundle`
+(sections 4 and 5 of the spec). The receipts and the signed roots stay the source.
 """
 from __future__ import annotations
 
@@ -506,3 +510,128 @@ def import_envelopes(
                 target.unlink(missing_ok=True)
                 raise
     return verify(env_list, run_dir, pinned_keys, **kwargs)
+
+
+# ----------------------------------------------------------------- root statement chains
+# A signed root statement chain (`prismpath-root-statement/3`: an audit log's or an epoch chain's) exported
+# statement by statement. The statement stays the source. It is carried verbatim as the predicate, its own
+# signature over its own domain prefix included, and the subject names it by its content address, the
+# SHA-256 of its canon/2 bytes, which the next statement names as `prev` and `ledger anchor` stamps.
+ROOT_STATEMENT_PREDICATE_TYPE = "https://prismpath.dev/attestations/root-statement/v1"
+
+
+def _statement_subject_name(statement: Dict[str, Any]) -> str:
+    return f"{statement['log']}/{statement['seq']}"
+
+
+def export_root_statements(statements_path: Union[Path, str], instance_key: Any) -> List[Dict[str, Any]]:
+    """One DSSE envelope per statement of a root statement file, each an in-toto Statement v1 whose subject is
+    the statement by its hash and whose predicate is the statement itself. `instance_key` (an InstanceKey or the
+    path of one) is the key that signed the statements, and it signs the envelopes too: an envelope is a second
+    signature by the same key over the PAE, so it adds a reader and claims nothing the statement does not."""
+    signer = _load_key_arg(instance_key)
+    statements, findings = root_statement.read_statements(str(statements_path))
+    bad = [f for f in findings if f["finding"] != "interrupted_statement"]
+    if bad or any(not s for s in statements):
+        raise Bad(f"{statements_path} holds a statement that does not read")
+    out = []
+    for statement in statements:
+        if not root_statement._well_formed(statement, statement.get("log")):
+            raise Bad(f"statement {statement.get('seq')!r} is not a well formed {root_statement.STATEMENT_FORMAT}")
+        if statement["key_id"] != signer.key_id:
+            raise Bad(f"statement {statement['seq']} is signed by another key than the one given")
+        if not root_statement._verify_signature(statement):
+            raise Bad(f"statement {statement['seq']}'s own signature does not verify")
+        envelope_statement = {
+            "_type": STATEMENT_TYPE,
+            "subject": [{"name": _statement_subject_name(statement),
+                         "digest": {"sha256": root_statement.statement_hash(statement)}}],
+            "predicateType": ROOT_STATEMENT_PREDICATE_TYPE,
+            "predicate": statement,
+        }
+        out.append(sign_statement(envelope_statement, signer))
+    return out
+
+
+def verify_root_statements(envelopes: List[Dict[str, Any]], statements_path: Union[Path, str],
+                           pinned: Optional[Iterable[Any]] = None) -> Dict[str, Any]:
+    """Check envelopes from `export_root_statements` against the statements file, or Bad.
+
+    Each envelope must open under the key its predicate names (and that key must be pinned when `pinned` is
+    given), carry exactly one subject naming its predicate by hash, and hold as its predicate, byte for byte in
+    canon/2, the statement at that position of the file, whose own signature verifies. The envelopes must cover
+    the file's statements in order. The chain and the log it covers are `root_statement.verify_chain`'s to check."""
+    statements, _findings = root_statement.read_statements(str(statements_path))
+    if not isinstance(envelopes, list) or not envelopes:
+        raise Bad("no DSSE envelopes given")
+    if len(envelopes) != len(statements):
+        raise Bad(f"{len(envelopes)} envelope(s) for {len(statements)} statement(s)")
+    pinned_ids = {core_evidence.sha256_hex(_read_pub_bytes(p, "instance")) for p in pinned} if pinned else set()
+    for index, (envelope, held) in enumerate(zip(envelopes, statements)):
+        if not held or not root_statement._well_formed(held, held.get("log")):
+            raise Bad(f"statement {index} of the file does not read")
+        public_raw = bytes.fromhex(held["public_key"])
+        if pinned_ids and held["key_id"] not in pinned_ids:
+            raise Bad(f"statement {index} is signed by a key that is not pinned")
+        opened = open_statement(envelope, public_raw, ROOT_STATEMENT_PREDICATE_TYPE)
+        predicate = opened["predicate"]
+        if not isinstance(predicate, dict) or canon2.dumps(predicate) != canon2.dumps(held):
+            raise Bad(f"envelope {index}'s predicate is not statement {index} of the file")
+        subject = opened["subject"]
+        want = [{"name": _statement_subject_name(held), "digest": {"sha256": root_statement.statement_hash(held)}}]
+        if subject != want:
+            raise Bad(f"envelope {index}'s subject does not name statement {index} by its hash")
+        if root_statement.key_id_of(public_raw) != held["key_id"] or not root_statement._verify_signature(held):
+            raise Bad(f"statement {index}'s own signature does not verify")
+    return {"statements": len(statements), "pinned": bool(pinned_ids),
+            "last_statement_sha256": root_statement.statement_hash(statements[-1])}
+
+
+# ----------------------------------------------------------------- Sigstore bundle v0.3
+# A DSSE envelope wrapped as a Sigstore bundle, so tools that read bundles (cosign, sigstore-python, policy
+# controllers) can read our evidence. The key is named by its hint, the same key id as the DSSE `keyid`, and is
+# never put in the bundle: a reader pins it out of band, as for the envelope. No transparency log entry is
+# claimed. `tlogEntries` is empty until a deployment submits the envelope to a log (section 3 of the spec).
+BUNDLE_MEDIA_TYPE = "application/vnd.dev.sigstore.bundle.v0.3+json"
+
+
+def to_bundle(envelope: Dict[str, Any]) -> Dict[str, Any]:
+    """The Sigstore bundle v0.3 (JSON) of one DSSE envelope with one signature."""
+    if not isinstance(envelope, dict) or set(envelope) != {"payloadType", "payload", "signatures"}:
+        raise Bad("the DSSE envelope must be an object with payloadType, payload and signatures")
+    sigs = envelope["signatures"]
+    if not isinstance(sigs, list) or len(sigs) != 1 or not isinstance(sigs[0], dict) \
+            or set(sigs[0]) != {"keyid", "sig"} or not core_evidence._hex_of(sigs[0]["keyid"], 32):
+        raise Bad("a bundle carries a DSSE envelope with exactly one signature and a key id")
+    return {
+        "mediaType": BUNDLE_MEDIA_TYPE,
+        "verificationMaterial": {"publicKey": {"hint": sigs[0]["keyid"]}, "tlogEntries": []},
+        "dsseEnvelope": {"payload": envelope["payload"], "payloadType": envelope["payloadType"],
+                         "signatures": [{"sig": sigs[0]["sig"], "keyid": sigs[0]["keyid"]}]},
+    }
+
+
+def from_bundle(bundle: Any) -> Dict[str, Any]:
+    """The DSSE envelope a bundle from `to_bundle` carries, or Bad. The hint must be the signature's key id. A
+    bundle with transparency log entries or a certificate is refused, because this reader checks neither."""
+    if not isinstance(bundle, dict) or set(bundle) != {"mediaType", "verificationMaterial", "dsseEnvelope"}:
+        raise Bad("a bundle has mediaType, verificationMaterial and dsseEnvelope")
+    if bundle["mediaType"] != BUNDLE_MEDIA_TYPE:
+        raise Bad(f"the bundle mediaType is not {BUNDLE_MEDIA_TYPE}")
+    material = bundle["verificationMaterial"]
+    if not isinstance(material, dict) or set(material) - {"publicKey", "tlogEntries"} \
+            or not isinstance(material.get("publicKey"), dict) or set(material["publicKey"]) != {"hint"}:
+        raise Bad("the bundle's verification material is not a public key hint")
+    if material.get("tlogEntries", []) != []:
+        raise Bad("the bundle carries transparency log entries, which this reader does not check")
+    dsse = bundle["dsseEnvelope"]
+    if not isinstance(dsse, dict) or set(dsse) != {"payload", "payloadType", "signatures"}:
+        raise Bad("the bundle's dsseEnvelope must have payload, payloadType and signatures")
+    sigs = dsse["signatures"]
+    if not isinstance(sigs, list) or len(sigs) != 1 or not isinstance(sigs[0], dict) \
+            or set(sigs[0]) != {"keyid", "sig"}:
+        raise Bad("the bundle's envelope carries exactly one signature with a key id")
+    if sigs[0]["keyid"] != material["publicKey"]["hint"]:
+        raise Bad("the bundle's key hint is not the signature's key id")
+    return {"payloadType": dsse["payloadType"], "payload": dsse["payload"],
+            "signatures": [{"keyid": sigs[0]["keyid"], "sig": sigs[0]["sig"]}]}

@@ -867,6 +867,7 @@ prismpath/tests/test_host_trace_corpus.py
 prismpath/tests/test_import_layers.py
 prismpath/tests/test_installed_package.py
 prismpath/tests/test_intoto.py
+prismpath/tests/test_intoto_bundle.py
 prismpath/tests/test_kappa.py
 prismpath/tests/test_landlock_backend.py
 prismpath/tests/test_langgraph_import.py
