@@ -43,9 +43,9 @@ def readings():
 
 
 def test_image_is_canonical_and_from_its_source(policy):
-    done = subprocess.run([sys.executable, "-m", "prismpath.cli", "canonicalize", str(SOURCE_PATH)], capture_output=True,
-                          check=True, cwd=REPO)
-    assert done.stdout.rstrip(b"\n") == policy.image
+    done = subprocess.run([sys.executable, "-m", "prismpath", "policy", "check", str(SOURCE_PATH), str(POLICY_PATH)],
+                          capture_output=True, check=True, cwd=REPO)
+    assert done.returncode == 0
     assert POLICY_PATH.read_bytes().rstrip(b"\n") == policy.image
 
 

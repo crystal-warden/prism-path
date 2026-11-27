@@ -16,7 +16,9 @@ def test_policy_files_sit_beside_the_package_and_agree():
     from prismpath.kernel import canon2
     image = policy.POLICY_PATH.read_bytes()
     assert policy.SOURCE_PATH.parent == policy.POLICY_PATH.parent == Path(policy.__file__).parent / "policy"
-    assert canon2.canonicalize(policy.SOURCE_PATH.read_bytes()) + b"\n" == image
+    from prismpath.kernel import policy_source
+    assert policy_source.compile_source(policy.SOURCE_PATH.read_text(encoding="utf-8")) + b"\n" == image
+    assert canon2.canonicalize(image) == image.rstrip(b"\n")
 
 
 def test_the_core_modules_need_no_research_path():

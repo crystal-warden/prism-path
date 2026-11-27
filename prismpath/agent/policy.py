@@ -4,8 +4,8 @@
 
 The policy is `policy/agent_rules.core.json`, a `prismpath.core/1` image in its canonical canon/2 bytes,
 compiled from the readable rules `agent_rules.rules.md` by `prismpath policy compile`
-(`prismpath.kernel.policy_source`); `agent_rules.src.json` is the same image as written JSON, and both
-compile to these bytes exactly (tests/test_policy_source.py). It is decided by the repository's
+(`prismpath.kernel.policy_source`), and the tests hold the two to each other byte for byte
+(tests/test_policy_source.py). It is decided by the repository's
 own code, nothing reimplemented here:
 
   * the image is checked by the port of the Lean oracle's `loadPolicy` (`prismpath.kernel.core_policy`),
@@ -45,7 +45,7 @@ from prismpath.kernel import canon2, causes, core_policy, core_reference, core_r
 from prismpath.kernel.parser import parse  # noqa: E402
 
 POLICY_PATH = HERE / "policy" / "agent_rules.core.json"
-SOURCE_PATH = HERE / "policy" / "agent_rules.src.json"
+SOURCE_PATH = HERE / "policy" / "agent_rules.rules.md"   # the readable rules the image compiles from
 DEFAULT_POLICY_PATH = HERE / "policy" / "agent_default.core.json"   # agent_rules, but an unreadable call asks
 
 # The starter policies `prismpath agent init --policy` offers, each a readable source `<image>.rules.md` beside

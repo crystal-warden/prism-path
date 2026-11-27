@@ -22,13 +22,10 @@ capability is switched on only if some allowed reading needs it:
 
 Nothing here decides a reading itself: the allow set is the set of readings the reference decides `allow`.
 
-The domain walk is the one `prismpath agent rules` uses for its unreachable finding (`_domain` and
-`_names_read` in prismpath/agent/rules.py, branch rule-table) and the one control-files adds a bool field to
-(`path_control`): the same domains and the same constant for a field no rule reads. It is written out here
-rather than imported so this file does not depend on code that is not merged yet. Once both are merged,
-rules.py should keep the walker and this module should import `_domain`, `_names_read` and KNOWN_CATEGORIES
-from it (or all three move to one `prismpath/agent/domain.py`), and `path_control` needs no change here
-because a bool is enumerated by its definition, not by name.
+The domain walk is the one `prismpath agent rules` uses for its unreachable finding (`_domain` and `_names_read` in
+prismpath/agent/rules.py): the same domains and the same constant for a field no rule reads. The two modules each
+keep a copy of the walk, and a bool field such as `path_control` needs no entry here because a bool is enumerated
+by its definition, not by name.
 
 Fail closed. An image that does not define the three fields a profile is projected from (`path_scope`,
 `command_class`, `git_op`), or one with a field that has no finite domain (a category the classifier does not

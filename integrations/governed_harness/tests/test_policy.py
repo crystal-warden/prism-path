@@ -46,7 +46,8 @@ def agent_policy():
 def test_the_image_is_its_canonical_bytes_and_the_source_canonicalizes_to_it():
     image = policy.POLICY_PATH.read_bytes()
     assert image.endswith(b"\n") and canon2.dumps(canon2.loads(image[:-1])) == image[:-1]
-    assert canon2.canonicalize(policy.SOURCE_PATH.read_bytes()) + b"\n" == image
+    from prismpath.kernel import policy_source
+    assert policy_source.compile_source(policy.SOURCE_PATH.read_text(encoding="utf-8")) + b"\n" == image
 
 
 def test_the_lean_port_accepts_the_image_and_every_target_names_a_registered_cause(agent_policy):

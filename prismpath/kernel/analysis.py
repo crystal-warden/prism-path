@@ -27,6 +27,7 @@ positives** on real flows.
 from __future__ import annotations
 
 import ast
+import re
 from dataclasses import dataclass
 from typing import Dict, List, Optional
 
@@ -993,3 +994,38 @@ def errors(graph) -> list:
     parser stopped importing the analyzer: `node 'x': message` or the bare message."""
     return [f"node '{finding.node}': {finding.message}" if finding.node else finding.message
             for finding in analyze(graph) if finding.severity == "error"]
+
+
+# --------------------------------------------------------------------------------------
+# Authoring slips the parser accepts silently (`validate` only). A front matter key no reader knows is kept
+# in `graph.meta` and changes nothing, and a line that starts with `->` but is not an edge is prose. Both
+# are usually a typo (`strat: x`, `-> fix when ...` with no colon), so validate warns. They are kept out of
+# `analyze` because its findings are the cross language conformance surface.
+# --------------------------------------------------------------------------------------
+
+# The front matter keys a reader of a flow acts on: the parser (`name`, `start`, `field.<name>`), the
+# profiles checked above (`packing`, `refresh_*`, `stateful`, `safe`, `migration`), and two labels that
+# shipped flows carry for the reader (`description`, `version`).
+KNOWN_FRONT_KEYS = ("name", "start", "description", "version", "packing", "stateful", "safe", "migration",
+                    "refresh_keyframe_ms", "refresh_stale_ms")
+_ARROW_PROSE = re.compile(r"^\s*-?\s*->")
+
+
+def analyze_authoring(graph) -> List[Finding]:
+    """Warnings for a front matter key no reader acts on and for prose that starts like an edge."""
+    import difflib
+    out: List[Finding] = []
+    for key in graph.meta:
+        if key in KNOWN_FRONT_KEYS or key.startswith("field."):
+            continue
+        near = difflib.get_close_matches(key, KNOWN_FRONT_KEYS, n=1, cutoff=0.7)
+        hint = f" Did you mean `{near[0]}`?" if near else ""
+        out.append(Finding("warning", "unknown-front-matter-key", None,
+                           f"`{key}` is not a front matter key PrismPath reads, so it changes nothing.{hint}"))
+    for node_name, node in graph.nodes.items():
+        for line in node.instruction.splitlines():
+            if _ARROW_PROSE.match(line):
+                out.append(Finding("warning", "arrow-in-prose", node_name,
+                                   f"`{line.strip()}` starts like an edge but is not one, so it is prose. An edge "
+                                   f"is `-> target: condition` with a colon after the target."))
+    return out

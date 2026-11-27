@@ -252,11 +252,11 @@ def test_default_policy_differs_from_rules_only_in_unreadable_and_shell_mutation
 
 
 def test_default_core_is_the_canonical_form_of_its_source():
-    import subprocess, sys
+    from prismpath.kernel import canon2, policy_source
     root = Path(__file__).resolve().parent.parent / "agent" / "policy"
-    done = subprocess.run([sys.executable, "-m", "prismpath", "canonicalize", str(root / "agent_default.src.json")],
-                          capture_output=True, text=True, check=True)
-    assert done.stdout.encode() == (root / "agent_default.core.json").read_bytes()
+    image = (root / "agent_default.core.json").read_bytes()
+    assert policy_source.compile_source((root / "agent_default.rules.md").read_text(encoding="utf-8")) + b"\n" == image
+    assert canon2.canonicalize(image) + b"\n" == image
 
 
 def test_unreadable_cause_is_registered():
