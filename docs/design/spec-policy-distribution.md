@@ -747,13 +747,15 @@ It uses two terms. The **held release** is the one the active record names, or n
 
 **C6.** A PEP is `reconciling` when a runtime step fails after the record it switches to is durable. A
 runtime step makes the runtime run what the PEP now holds. It is the last step of a commit, of a
-rollback, of a lapse at expiry, by a revocation (R5) or by a ceiling (CL3), of applying an action floor
-or a fallback policy that changes what the runtime runs (IS4, FB8), and of a start, which makes the
+rollback, of a lapse at expiry, by a revocation (R5) or by a ceiling (CL3), of applying a fallback policy
+that changes what the runtime runs (FB8), of applying an action floor where the runtime loads the floor,
+which is `xdp` (IS4), and of a start, which makes the
 runtime run what the active record names. A start never refuses to run because that step failed. The
 state lasts until a try succeeds (C9) or the PEP is provisioned (P5). A PEP whose switch cannot fail
 never enters it, and a renewal never does (C10). The C core switches by an assignment in memory, so its
 `mesh` and `cfs` targets never have the state. A `gateway` home reads its active record at each request,
 so it has no runtime step and never has the state. The `host` runtime and the `xdp` loader do have one.
+The `host` machine asks the action floor before its runtime (AF1), so applying a floor there has no runtime step.
 An `agent` home's commit and rollback have no runtime step. Its hook, decider, egress proxy and MCP proxy
 read the active record at their next decision, so the durable record is the switch, and a session that
 is already running keeps its sandbox profile while the hook decides each of its calls under the new
@@ -796,19 +798,21 @@ the try fails nothing changes and the next tick tries again.
 **C10.** A PEP that enters the state withdraws the runtime at once, so a failed switch fails closed. To
 withdraw is to make the runtime run the action floor the PEP holds, with the fallback set where it holds
 one (FB1), and no release. The runtime is never left with nothing while the PEP holds a floor, so the
-floor answers in every state, also on `host` and `xdp`, where it lives in the runtime (AF1, AF3). Only a
+floor answers in every state (AF1, AF3). On `xdp` the floor lives in the runtime. On `host` the machine
+asks it before the runtime. Only a
 PEP with neither has the runtime run nothing. When the withdrawal works the runtime runs no release, the
 PEP notes it in the intent record, and the PEP holds one release, the held one. When it fails the PEP
 also holds the running release, names it in every record (H14) and tries the withdrawal again at every
-tick. Only then does it track two releases. When the step that failed was the one that installs a new
-action floor and the withdrawal fails too, the runtime may still hold the floor before it, and every
-record names the floor the runtime holds (H14).
+tick. Only then does it track two releases. When the step that failed was the one that loads a new
+action floor, which only a runtime that loads the floor has (C6), and the withdrawal fails too, the runtime
+may still hold the floor before it, and every record names the floor the runtime holds (H14).
 
 A switch between two releases whose bodies are byte for byte the same, as a renewal's are (X5), changes
 nothing the runtime decides with. When its runtime step fails the PEP does not withdraw and does not
 enter the state. It stays `active` under the held release with the runtime running, sends its
 `committed` record, writes the failure to its audit log and tries the step again at every tick. It
-withdraws only when the policy differs.
+withdraws only when the policy differs. A step that loads a new action floor is never such a switch, even
+when the release stays the same, since the floor changes what the runtime decides with.
 
 The PEP holds each release it holds to the test of R5, to expiry (X1) and to the ceiling (CL3). It runs
 the tests before every try and whenever it applies a trust statement or an install set. HOLD is for
@@ -1565,10 +1569,9 @@ H16, K7).
 
 Each row is one part of this spec and where it stands in each implementation. `#N` is the pull request that
 built it. `none` means no implementation was planned, and a dash means the part does not apply. The `xdp` column is the Python enforcement point of the
-`xdp` kind in `prismpath-ebpf/`, which has its own loader. `PENDING` in
-`prismpath/tests/test_distribution_trace.py` lists the cases still open, and the last column follows it. Every
-pull request this table once listed as in review is merged. Two cases are open and both wait on owner decisions,
-stated under the table.
+`xdp` kind in `prismpath-ebpf/`, which has its own loader. Every case of section 20 has its tests in each
+implementation its row names, and `prismpath/tests/test_distribution_trace.py` holds them to that with no list
+of open cases. Every pull request this table once listed as in review is merged.
 
 | Part | P | R | C | xdp | Still open |
 |---|---|---|---|---|---|
@@ -1589,9 +1592,9 @@ stated under the table.
 | 17, the older signed forms | #132 | - | - | - | none |
 | 21.1, install statements and install trust | #136, #139 | #141 | #133 | #154 | none. Case 164 is tested on `xdp` (#154) |
 | 21.1, install change statement (IS14, IS15) | #144 | #144 | #144 | - | none |
-| 21.2, action floor | #138 | #141 | #133, #146 | #154 | Case 272, a floor with a runtime step on `host`, waits on an owner decision and no one is building it (DIVERGENCES.md). The `xdp` parts of cases 187, 193, 194 and 223 are built (#154) |
+| 21.2, action floor | #138 | #141 | #133, #146 | #154 | none. On the owner's ruling of 2026-11-25 case 272 is an `xdp` case, since a `host` floor has no runtime step (C6), and it is tested there. The `xdp` parts of cases 187, 193, 194 and 223 are built (#154) |
 | 21.3, fallback policy | #136 | #141 | #133, #146 | #154 | none. Case 202 in C is tested (#153) |
-| 21.4, ceiling | #136, #147 | #141, #147 | #133, #147 | #154 | Case 206, the ceiling's fields narrowing the domain of an `agent` PEP, waits on an owner decision (CL4, below) and is not built |
+| 21.4, ceiling | #136, #147 | #141, #147 | #133, #147 | #154 | none. Case 206 is built on the owner's ruling of 2026-11-25. The ceiling states the grammar a set may use, and it never narrows a category's values (CL4) |
 | 21.4, lapse preview, warning and staged rollout (CL5 to CL7) | #144 | - | - | - | none |
 | 21.5, operator role and answers | #138 | refuses (OP1) | #140, #146 on `cfs` | #154 | none. The `xdp` part of case 225 is built (#154) and cases 230 and 235 in C are tested (#153) |
 | 21.6, receipts | #138 | #141 | #133, #146 | #154 | none beyond the cases above |
@@ -1605,10 +1608,8 @@ node reached first, and counts the floor's passes as floor answers with no `woul
 The divergence fixes of cases 306 to 308 are #149, cases 191 and 266 in Python are #148, and the install
 command fix is #150. The C columns above for the cFS app, the mesh firmware and the cFS ground tools follow #137, #143 and #146.
 
-Two cases are open, the two `PENDING` lists in the trace test name: Python 206 and 272, Rust 272, and C none.
-Case 206 waits on an owner decision, whether a ceiling can narrow the values of a category (CL4). Case 272 waits
-on an owner decision, whether to build a runtime step for a floor on a `host`, or to restate the case for `xdp`.
-No one is building either until the owner decides.
+No case is open. The last two waited on owner rulings of 2026-11-25. Case 206 is built as CL4 now reads,
+and case 272 is restated for `xdp`, where a new floor loads into the runtime.
 
 The part of this section that said section 21 was built in no implementation was written before pull
 requests 136 to 147, and it is gone. The cFS app admits a policy table by its envelope (#137), decides under
@@ -1819,7 +1820,7 @@ are the change statement on every PEP that takes it.
 | 203 | An `agent` PEP with a ceiling is offered a release whose policy allows a reading the ceiling refuses, one with a host the ceiling's `egress.hosts` lacks, one that drops a name the ceiling's `agent.zones` protects, and one inside the ceiling. A `gateway` PEP with a ceiling is offered a route table that gives one path another class than the ceiling's, and one that names fewer routes. A `mesh` and a `cfs` PEP with a list are each offered a table whose body hash is on it and one off it, the `cfs` one with the listed core image and other rules, then a floor table off the list, then a list that adds that floor's hash with `widens` false and with `widens` true, then the floor again. A controller that holds each ceiling is given the same releases | `dist:above-ceiling` three times, staged, `dist:above-ceiling`, staged, then staged and `dist:above-ceiling` on each, `dist:above-ceiling` for the floor, `dist:widening-unsigned` and `install-widened` for the lists, then the floor is applied, and the controller refuses to offer the releases above | CL1, CL2, IS12 | P C |
 | 204 | A release inside the ceiling is staged, a narrower ceiling it is above is applied, and the release is committed. The same with a kept release and a rollback | the staged and the kept release are still held after the ceiling is applied, then `dist:above-ceiling` at the commit and at the rollback and each is dropped | CL2, C3, RB2 | P R C |
 | 205 | A PEP with a ceiling is sent an action floor above it, a fallback policy above it, and a ceiling its held floor is above. Then it is sent a ceiling its active release is above with `widens` false, once with a fallback policy and once without. An `agent` PEP whose ceiling protects a name is asked for a call on that name that a floor rule testing `zone_reach` allows | `dist:above-ceiling` three times with nothing changed, then the ceiling is applied with event `install-applied` and no cause and the release lapses with `dist:above-ceiling`, to the fallback policy and to `no-policy`, and the floor is silent for the call | CL3, IS12, AF1 | P R C |
-| 206 | An `agent` PEP with a ceiling is offered a release whose rule names a tool the ceiling's fields do not define, a ceiling whose fields define a tool the PEP was not built with, and an `agent` PEP with no ceiling the first release | `policy:out-of-domain` twice, then judged by the domain the PEP was built with | CL4 | P |
+| 206 | An `agent` PEP holds a ceiling whose `policy.core` defines its fields, among them an int with `min` 3 and `max` 3. It is offered a release that adds a field the ceiling does not define, one that gives the int a `max` of 4, one that makes a bool field a category, and a fallback policy that adds a field. It is sent a ceiling with a category the PEP was not built with and one whose int has no `max`. Then it is offered a release that leaves out one of the ceiling's fields and one with the ceiling's fields, and an `agent` PEP with no ceiling is offered the release with the added field | `policy:out-of-domain` six times with the held sets unchanged, then `dist:above-ceiling` and staged, and the PEP with no ceiling stages the release, judged by the domain it was built with | CL4 | P |
 | 207 | One PEP writes a receipt for a request its release allows, one its release refuses, one the action floor allows, one the fallback policy allows and one it refuses, and a PEP with no fallback policy writes one for a request it refuses in `no-policy` | basis `release` twice, `floor`, `fallback` twice, each with the policy hash of the set that decided, then no basis and `dist:policy-lapsed` | RC1 | P R C |
 | 208 | A held PEP writes a receipt for a request its release allows and for one the action floor allows, in a receipt format with a cause field | `release` with the hold mark, then `floor` with the hold mark and `dist:floor-allowed` | RC2, RC3 | P C |
 | 209 | A cFS core run with a case for each basis, its not enacted lines and its `rates.jsonl`, whose floor changed across an `install.trust` that dropped a key, at an install threshold of 2, is verified with the authority key and the starting install key set pinned. Then with a floor receipt moved to the release's case, with a `would` line whose outcome is changed, with a rate count that skips a number, with the `install.trust` left out, with a floor case that has one signature, and with no install key pinned | verified, then refused six times | RC4, RC3, AF7 | P |
@@ -1885,7 +1886,7 @@ are the change statement on every PEP that takes it.
 | 269 | A `host` and a `mesh` PEP with `fresh` 3600 take a fresh statement and are then cut off for 3901 seconds, and a `cfs` PEP with HOLD and the same setting is cut off as long | `lapsed` with `dist:expired` on both, and the `cfs` PEP is held with bit 5 set | H16, X1, X7 | P R C |
 | 270 | A PEP with `fresh` 3600 is sent a controller statement for another stream, one whose trust sequence is below its own, one whose stream seq is below its floor, one whose `expires` is 3901 seconds ahead, one whose `expires` is 3900 seconds ahead, and one with `fresh` 0 | the first changes nothing, the next three give no freshness, the fifth gives freshness, the last gives none, the epoch ids of all but the first are taken, and the time floor does not move | H16, H9, T1 | P R C |
 | 271 | A PEP with `fresh` 0 is cut off for a year with a release that expires in two, and a PEP with `fresh` 3600 is restarted after it took a fresh statement | the first decides under its release the whole year, and the second still holds its fresh statement after the restart | H16, P4 | P R C |
-| 272 | A `host` PEP applies a new action floor whose runtime step fails and whose withdrawal fails too, then the withdrawal works | every record names the set id of the floor before as the floor the runtime holds and the controller files `dist:reconciling` at once, then the entry names the new floor and no running release | C10, H14, AF3 | P R |
+| 272 | An `xdp` PEP with a release and an action floor applies a new action floor whose load fails and whose withdrawal fails too. Then the withdrawal works while the load of the release still fails, and then the load works | every record names the set id of the floor before as the floor the runtime holds and the controller files `dist:reconciling` at once, then the entry names the new floor and no running release, then the PEP is `active` and sends `install-applied` | C10, H14, AF3 | P |
 | 273 | An `xdp` PEP with an action floor and a fallback policy has a loader swap that fails and a withdrawal that works, and another `xdp` PEP's withdrawal fails too | the first loads the floor's and the fallback's edge tables and a packet the floor allows passes, the second keeps passing packets under the running release while every record names it and the controller files `dist:reconciling` at once | C8, C10, C6 | P |
 | 274 | A `host` PEP commits a renewal whose bodies are byte for byte the active release's, and its runtime step fails | the PEP stays `active` with the runtime running, sends `committed`, writes the failure to its audit log, tries again at the next tick, and never withdraws | C10, X5 | P R |
 | 275 | A controller holds a PEP's last counter at 40 and receives a `refused` record with `dist:install-lost`, counter 41 and an epoch three epochs old, then a record with counter 40 | `fleet:state-replay` is filed and the install lost event is taken, marked unverified for freshness, then the second record is dropped | H6 | P |
@@ -2444,12 +2445,22 @@ release is not what bounds the engineer.
 
 **CL4.** The ceiling carries the reading domain. Section 9.4 gives every PEP the domain it was built
 with, and the anchor holds the hash of that domain, which the PEP checks at provisioning (P4). So the
-domain a PEP decides in is the one the engineer installed it with. On a kind that can decide, the field definitions of the ceiling's `policy.core` narrow that domain
-for the PEP, for its releases and for its install sets, and they never widen it. A policy whose rule
-names a value outside them is refused at V11 with `policy:out-of-domain`, the cause of section 9.4, and
-so is a ceiling whose own fields go outside the built domain. On a kind that cannot decide, the domain
-is the layout the PEP was built for, and the list names the tables qualified for it. A PEP with no
-ceiling keeps the domain it was built with.
+domain a PEP decides in is the one the engineer installed it with. On a kind that can decide, the
+engineer writes the ceiling's `policy.core` with the grammar the PEP may be sent, and the owner decided
+on 2026-11-25 that it states that grammar explicitly. Its `fields` define every field a release or an
+install set may use. Each one is in the built domain, a category the PEP reads, a bool, or an int or a
+fixed field that states its floor and its ceiling as `min` and `max`. A category's values are the ones
+the PEP was built with, and a ceiling never narrows them. A release or an install set whose `policy.core`
+uses a field the ceiling does not define, or defines one in another way, is refused at V11 with
+`policy:out-of-domain`, the cause of section 9.4. The one other way that is allowed is an int or a fixed
+field whose `min` and `max` lie inside the ceiling's. A ceiling with a category the PEP was not built
+with, or with an int or a fixed field that does not state both bounds, is refused with the same cause.
+This check comes before CL1, so a set that uses grammar outside the ceiling is out of domain and not
+above it. A set inside that grammar is then held to CL1, under which a policy whose fields are not the
+ceiling's is larger (9.4). On `agent` and `xdp` the categories the PEP reads are the ones the classifier
+produces and `zone_name` (AF1), and on `gateway` the fields its reading gives. On a kind that cannot
+decide, the domain is the layout the PEP was built for, and the list names the tables qualified for it.
+A PEP with no ceiling keeps the domain it was built with.
 
 The owner decided the next three rules on 2026-11-24. Ceilings come from the engineers. A narrower ceiling is
 never a widening, so the controller offers it at once and it stays an emergency brake (IS12, H13). The check
