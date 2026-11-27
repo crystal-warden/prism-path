@@ -17,8 +17,8 @@ ValueError, which the app's error handler turns into a clean client error rather
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from . import core
-from prismpath.kernel.parser import parse_file
+from . import authoring, core
+from prismpath.kernel.parser import RulesSourceError, parse_file
 from prismpath.kernel import analysis
 
 router = APIRouter(prefix="/inspect", tags=["authoring", "inspect"])
@@ -80,13 +80,19 @@ def inspect_validate(req: FlowReq):
     finding is an error, matching the CLI's non-zero exit contract."""
     proj = core.current_project()                 # one project for the whole request
     flow_path = _resolve(req.flow_md, proj)
-    graph = _parse(flow_path)
+    try:
+        graph = parse_file(flow_path)
+    except RulesSourceError as refusal:           # not a flow: say so, and what `policy compile` says of it
+        return authoring.with_notes({"ok": True, "errors": 0, "warnings": 0, "findings": []},
+                                    authoring.rules_source_notes(flow_path, refusal))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"could not parse flow: {e}")
     findings = list(analysis.analyze(graph))
     findings += analysis.analyze_composition(graph, flow_path)
     errors = [f for f in findings if f.severity == "error"]
     warnings = [f for f in findings if f.severity == "warning"]
-    return {"ok": not errors, "errors": len(errors), "warnings": len(warnings),
-            "findings": [f.as_dict() for f in findings]}
+    return authoring.with_notes({"ok": not errors, "errors": len(errors), "warnings": len(warnings),
+                                 "findings": [f.as_dict() for f in findings]}, authoring.flow_notes(graph))
 
 
 @router.post("/lint")
@@ -96,7 +102,13 @@ def inspect_lint(req: FlowReq):
     heavier call. Findings are sorted errors first, then by code, as the CLI presents them."""
     proj = core.current_project()                 # one project for the whole request
     flow_path = _resolve(req.flow_md, proj)
-    graph = _parse(flow_path)
+    try:
+        graph = parse_file(flow_path)
+    except RulesSourceError as refusal:
+        return authoring.with_notes({"ok": True, "errors": 0, "warnings": 0, "findings": []},
+                                    authoring.rules_source_notes(flow_path, refusal))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"could not parse flow: {e}")
     findings = list(analysis.analyze(graph))
     findings += analysis.analyze_composition(graph, flow_path)
     # The non decidable checks that require the embedder, the same two the CLI folds in.
@@ -106,8 +118,8 @@ def inspect_lint(req: FlowReq):
     findings.sort(key=lambda f: (f.severity != "error", f.code, f.node or ""))
     errors = [f for f in findings if f.severity == "error"]
     warnings = [f for f in findings if f.severity == "warning"]
-    return {"ok": not errors, "errors": len(errors), "warnings": len(warnings),
-            "findings": [f.as_dict() for f in findings]}
+    return authoring.with_notes({"ok": not errors, "errors": len(errors), "warnings": len(warnings),
+                                 "findings": [f.as_dict() for f in findings]}, authoring.flow_notes(graph))
 
 
 @router.post("/contract")

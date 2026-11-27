@@ -87,6 +87,9 @@ func pyRepr(value interface{}) string {
 
 // Run executes a P0 portable flow graph against a worker function.
 func Run(graph Graph, worker WorkerFn, opts RunOptions) (RunResult, error) {
+	if graph.ParseError != nil {
+		return RunResult{}, graph.ParseError
+	}
 	if graph.Refused != "" {
 		return RunResult{}, errors.New(graph.Refused)
 	}

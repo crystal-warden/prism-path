@@ -120,6 +120,60 @@ Connected v1 (1 to 3) is ~a week; the defensible IP is item 4.
 - Not "proof the AI's verdict was correct" (C1).
 - Not "instant tamper proof" before the confirmation window closes (C2): say pending vs confirmed.
 - Not "cryptographically provable" until §5's gate passes.
+- Not "the receipts are complete". A signed root, an anchor and a witness each show that nothing under the root
+  was altered after it was stated. None of them shows that nothing was left out before it was stated.
+
+## 9. Outside witness (optional)
+
+An anchor shows a hash existed by a time. It does not stop the holder of the instance key from cutting the tail
+of a log and its statements, or from signing a second chain. A witness closes part of that gap. It is a second
+party with its own Ed25519 key, implemented in `prismpath/ledgers/witness.py`.
+
+### 9.1 What the witness checks
+
+The witness pins the signer keys it accepts. For each signer and log it keeps the last statement it cosigned in a
+canon/2 state file (`prismpath-witness-state/1`), written atomically, so it resumes after a restart. It cosigns a
+`prismpath-root-statement/3` statement only when all of these hold.
+
+1. The statement is well formed and its signature verifies under a pinned signer key.
+2. Its `seq` is after the last cosigned one. A different statement at the same `seq` is refused as `fork`.
+3. When `seq` is the next one, `prev` names the last cosigned statement.
+4. It covers no fewer leaves (`truncated` otherwise), and the same count of leaves only under the same root.
+5. When it covers more leaves, an RFC 6962 consistency proof from the last cosigned root to the new one verifies
+   (`root_statement.verify_consistency`).
+
+A core run root (`prismpath.core-run-root/2`) has no chain. The witness checks its signature and cosigns it once
+per hash. The witness key must not be a signer key.
+
+### 9.2 The cosignature
+
+One canon/2 line per cosignature in `<statements>.witness.jsonl`, beside the statements file
+(`witness_path_for`). Format `prismpath-root-witness/1`. The members are `format`, `encoding`, `statement_format`,
+`statement_sha256`, `log`, `seq` (null for a core run), `leaves`, `root`, `signer_key_id`, `witness_key_id`,
+`witness_public_key`, `time_us` and `sig`. The signature is Ed25519 over `prismpath-root-witness/1\0` followed by
+the canon/2 bytes of every member but `sig`. `statement_sha256` is `root_statement.statement_hash` for a chained
+statement and the SHA-256 of the canon/2 line for a core run root. The domain prefix keeps a cosignature from
+being read as any other signed document.
+
+### 9.3 Reading cosignatures
+
+`witness.verify(statements, cosignatures, pinned_witnesses)` counts a cosignature only under a pinned witness key
+and only when it names a statement in the chain by hash, with the same log, seq, leaves, root and signer. A
+cosignature whose statement is not in the chain is the finding `statement_missing`. That is the case a witness
+exists for. The chain was cut or replaced after the witness saw it, even when the chain alone still verifies. The
+status is `witnessed` when the last statement is cosigned, `unwitnessed` when it is not, and `invalid` on any
+finding. A cosignature under a key the reader did not pin is ignored. No witness file means `unwitnessed`, never a
+failure, unless the reader requires a witness.
+
+### 9.4 What does not change
+
+Receipts, root statements, core run roots and every frozen corpus keep their bytes. The witness reads them and
+writes only its own file. A reader that ignores the witness file reads the log exactly as before.
+
+### 9.5 What a witness does not prove
+
+A cosignature proves the witness saw a statement with that hash, signed by that key, extending what it saw before.
+It does not prove the receipts are complete. A deployment can leave a decision out before it signs a root.
 
 ---
 ## CONNECTED V1: DELIVERED + VALIDATED (2026-07-21, #36)
@@ -154,3 +208,34 @@ validated end to end with **zero internet** (the exact air gapped condition):
 stronger claim language is unlocked for connected deployments; air gapped sites use "RFC-3161
 trusted timestamp (immediate) + OTS when a window opens (trustless)"; state the tier actually in use,
 never imply Bitcoin strength on a site that only has the internal TSA.
+
+## 10. The instance key in a signer daemon (optional)
+
+A root statement is only as good as its instance key, and a key file the deployment reads is a key every process of
+that deployment can read. `prismpath/ledgers/signer_daemon.py` holds the key in a process of its own and answers on
+a Unix socket created mode 0600. A deployment points at it with `PRISMPATH_INSTANCE_KEY=unix:<socket>`, and
+`root_statement.key_from_env` then returns a `DaemonKey`, which has the face of an `InstanceKey` and holds no key.
+
+**Who may ask.** The daemon reads the caller's pid and user from the kernel with `SO_PEERCRED`, recorded when the
+caller connected. A caller must run as an allowed user, the daemon's own by default. A caller with `NoNewPrivs` set
+or a seccomp filter in `/proc/<pid>/status` is refused as `confined_caller`. Every worker PrismPath confines with
+the Landlock backend has both, and it cannot open a socket at all. A status that cannot be read counts as confined.
+
+**What it signs.** Only bytes that begin with `prismpath-root-statement/3\0` or `prismpath.core-run-root/2\0` and
+then read as that format's canon/2 body under the daemon's own key. Nothing else, so the daemon cannot be used to
+sign a manifest, an envelope or an image. For a chained statement the daemon keeps the head of each log (seq,
+leaves, root, statement hash and the statement) in a canon/2 state file, written atomically before it answers.
+It refuses a statement that is not the next seq or does not name the last one as `prev` (`chain_broken`), that
+covers fewer leaves (`truncated`), or that covers the same leaves under another root (`fork`).
+
+**Resuming.** A restarted daemon continues from its state file. A daemon with no state file refuses to start
+unless it is told this is a new deployment, since one that forgot its heads would sign a second chain from seq 0.
+When a caller stopped after the daemon signed and before the line reached the file, `RootSigner` asks the daemon
+for its head when it opens the file and appends that statement, so the chain resumes without a gap.
+
+**Bytes.** A statement signed through the daemon is byte for byte the statement the key file signs, because
+Ed25519 is deterministic and the daemon signs exactly `root_statement.signed_bytes`. No format changes.
+
+**Limits.** The daemon never sees the log, so an allowed caller can still sign a root over leaves it invented.
+The witness's consistency proofs, or an anchor held elsewhere, cover that. The peer check trusts the pid the
+kernel reported at connect time. The daemon runs on Linux only.

@@ -16,6 +16,10 @@ signed, stale, invalid, unsigned or unchecked), and, given a policy host state d
 project or an evidence root, what that deployment is running: the active image, whether the pack it came
 from records this text's sha256, and whether the last attestation names the active image.
 
+`/inspect/validate` and `/inspect/lint` carry the authoring warnings (`flow_notes`) under `authoring`, apart from
+`findings`, which are `analyze`'s and stay as they were. A rules source named for a flow gets the parser's
+refusal, which points at `prismpath policy compile`, and the warnings or problems that command gives it.
+
 Authoring changes reach a running policy only through the signed path (plan section 3.4). The console never
 signs, packs, swaps or attests, and holds no authority key: the status names the commands of that path, to
 be run off the console by the people who hold the keys. Pinned authority keys are named as public key
@@ -57,6 +61,38 @@ class StatusReq(BaseModel):
                                                               "project or an evidence root.")
     state_dir: Optional[str] = Field(None, description="A policy host state directory under the followed "
                                                        "project or an evidence root.")
+
+
+# --------------------------------------------------------------------------- authoring warnings
+def _note(severity: str, code: str, message: str, node: Optional[str] = None, line: Optional[int] = None) -> dict:
+    return {"severity": severity, "code": code, "node": node, "line": line, "message": message}
+
+
+def flow_notes(graph) -> List[Dict[str, Any]]:
+    """The authoring warnings of a parsed flow, kept apart from `analyze`'s findings."""
+    from prismpath.kernel import analysis
+    return [_note(f.severity, f.code, f.message, f.node) for f in analysis.analyze_authoring(graph)]
+
+
+def rules_source_notes(flow_path: str, refusal: Exception) -> List[Dict[str, Any]]:
+    """A rules source opened as a flow: the parser's refusal, then what `prismpath policy compile` says about
+    the text when it can be read here, each with its line."""
+    from prismpath.kernel import parser, policy_source
+    notes = [_note("error", "rules-source", str(refusal))]
+    if os.path.getsize(flow_path) <= parser.MAX_FLOW_BYTES:
+        with open(flow_path, encoding="utf-8") as handle:
+            text = handle.read()
+        notes += [_note(severity, "policy-compile", message, None, line or None)
+                  for line, severity, message in policy_source.editor_notes(text, os.path.basename(flow_path))]
+    return notes
+
+
+def with_notes(report: Dict[str, Any], notes: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """`report` with the authoring notes added beside its findings. An error among them fails `ok`."""
+    errors = sum(1 for note in notes if note["severity"] == "error")
+    report.update({"authoring": notes, "authoring_errors": errors,
+                   "authoring_warnings": len(notes) - errors, "ok": report["ok"] and not errors})
+    return report
 
 
 # --------------------------------------------------------------------------- templates

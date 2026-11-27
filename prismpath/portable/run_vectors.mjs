@@ -12,7 +12,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import {
-  parse, run, evalCondition, PredicateError, scriptedAgent, firstDeterministic, FieldDefinitionError,
+  parse, run, evalCondition, PredicateError, ParseError, RulesSourceError, scriptedAgent, firstDeterministic, FieldDefinitionError,
   canon2Read, canon2Write, canon2Canonicalize, Canon2Error, parseDefinition, canonicalValue, systemBoundary, coreCauseCode,
 } from "./prismpath.mjs";
 import * as canon2Module from "./canon2.mjs";
@@ -177,6 +177,31 @@ for (const policy of fieldDefs.policies) {
   else fieldFail(policy.name, problem);
 }
 console.log(`field defs: ${fieldPass}/${fieldTotal}`);
+
+// ---- rules-source refusal -------------------------------------------------------------------
+const rulesSource = JSON.parse(readFileSync(join(dir, "rules_source.json"), "utf-8"));
+let rulesPass = 0;
+for (const entry of rulesSource.cases) {
+  let got;
+  try {
+    const graph = parse(entry.flow, entry.filename ? { filename: entry.filename } : null);
+    got = {
+      ok: true,
+      start: graph.start,
+      nodes: graph.order.map((nodeName) => [nodeName, graph.nodes[nodeName].edges]),
+    };
+  } catch (err) {
+    if (err instanceof RulesSourceError && err instanceof ParseError) {
+      got = { error: err.message, error_class: err.name };
+    } else {
+      got = { crash: `${err?.name}: ${err?.message ?? err}` };
+    }
+  }
+  if (JSON.stringify(sortedKeys(got)) === JSON.stringify(sortedKeys(entry.expect))) { rulesPass++; continue; }
+  failures++;
+  console.error(`RULES SOURCE MISMATCH  ${entry.name}\n  expect=${JSON.stringify(entry.expect)}\n  got=   ${JSON.stringify(got)}`);
+}
+console.log(`rules src:  ${rulesPass}/${rulesSource.cases.length}`);
 
 // ---- the RFC 6962 tree (merkle.mjs) ----------------------------------------------------------------
 // merkle_stream.json: the root over every prefix of three leaf sets, from the batch tree and from the
