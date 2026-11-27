@@ -399,3 +399,53 @@ def test_the_console_never_signs_packs_or_swaps():
     called = {node.func.attr for node in ast.walk(ast.parse(source))
               if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)}
     assert not called & {"sign_flow", "build_pack", "swap", "attest", "keygen", "build_envelope"}, called
+
+
+# ── the authoring warnings reach the inspect routes, apart from analyze's findings ─────────
+TYPO_FLOW = "---\nname: t\nstrat: a\nstart: a\n---\n## a\nRead it.\n-> fix when kind == \"x\"\n-> b: always\n## b\nDone.\n"
+RULES = ("---\nname: r\nstart: core_decision\nfield.tool: category\n---\n## core_decision\n"
+         "-> refuse agent:network: when tool == \"connect\"\n-> allow: always\n"
+         "-> refuse agent:network: when tool == \"ssh\"\n")
+
+
+def test_validate_shows_authoring_warnings_apart_from_the_findings(client, proj):
+    (proj / "flows" / "typo.md").write_text(TYPO_FLOW, encoding="utf-8")
+    body = client.post(API_V1 + "/inspect/validate", json={"flow_md": "flows/typo.md"}).json()
+    codes = {note["code"] for note in body["authoring"]}
+    assert codes == {"unknown-front-matter-key", "arrow-in-prose"}
+    assert all(note["severity"] == "warning" for note in body["authoring"])
+    assert body["authoring_warnings"] == 2 and body["authoring_errors"] == 0 and body["ok"] is True
+    assert not codes & {finding["code"] for finding in body["findings"]}
+    assert "Did you mean `start`?" in next(n for n in body["authoring"] if n["code"] == "unknown-front-matter-key")["message"]
+    assert client.post(API_V1 + "/inspect/lint", json={"flow_md": "flows/typo.md"}).json()["authoring"] == body["authoring"]
+
+
+def test_validate_of_a_clean_flow_has_no_authoring_notes(client, proj):
+    body = client.post(API_V1 + "/inspect/validate", json={"flow_md": "flows/f.md"}).json()
+    assert body["authoring"] == [] and body["ok"] is True
+
+
+def test_validate_of_a_rules_source_points_at_policy_compile(client, proj):
+    (proj / "flows" / "p.rules.md").write_text(RULES, encoding="utf-8")
+    response = client.post(API_V1 + "/inspect/validate", json={"flow_md": "flows/p.rules.md"})
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["ok"] is False and body["findings"] == []
+    refusal, compile_note = body["authoring"]
+    assert refusal["code"] == "rules-source" and refusal["severity"] == "error"
+    assert "prismpath policy compile" in refusal["message"]
+    assert compile_note["severity"] == "warning" and compile_note["line"] == 9
+    assert "no reading reaches this rule" in compile_note["message"]
+
+
+def test_validate_of_a_rules_source_that_does_not_compile_shows_the_problems(client, proj):
+    (proj / "flows" / "bad.rules.md").write_text(RULES.replace('"connect"', '"connect" and'), encoding="utf-8")
+    body = client.post(API_V1 + "/inspect/validate", json={"flow_md": "flows/bad.rules.md"}).json()
+    assert body["ok"] is False and body["authoring_errors"] >= 2
+    assert [n["code"] for n in body["authoring"]][:2] == ["rules-source", "policy-compile"]
+
+
+def test_another_inspect_route_refuses_a_rules_source_with_the_pointer(client, proj):
+    (proj / "flows" / "p.rules.md").write_text(RULES, encoding="utf-8")
+    response = client.post(API_V1 + "/inspect/graph", json={"flow_md": "flows/p.rules.md"})
+    assert response.status_code == 400 and "prismpath policy compile" in response.text

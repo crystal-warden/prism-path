@@ -172,6 +172,14 @@ A sprint that runs `flows/sprint_loop.md` (`SPRINT_FLOW=1`) is refused, with the
 flow manifest under the `PRISMPATH_AUTHORITY_PUB` keys. `/sprint/start` accepts `{unbuffered: bool =
 true}` (the `-u` launch toggle, where `false` batches) beside the usual sprint config.
 
+### Authoring warnings
+
+`/api/v1/inspect/validate` and `/api/v1/inspect/lint` return the authoring warnings of `prismpath validate`
+under `authoring`, apart from `findings`. Each is `{severity, code, node, line, message}`. A front matter key
+nothing reads and prose that starts with `->` are warnings. A rules source named as a flow is not refused with
+an error status. The response is `ok: false` with a `rules-source` error that points at `prismpath policy compile`,
+followed by the warnings or problems that command gives the text, with their lines.
+
 ### Reading and writing files
 
 `GET /api/v1/files`, `GET /api/v1/file?path=` and `POST /api/v1/file {path, content}` are the authoring

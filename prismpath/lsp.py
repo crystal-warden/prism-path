@@ -8,6 +8,10 @@ Neovim's built-in client, JetBrains via LSP4IJ, VS Code, Helix, Zed — gets, on
   * **diagnostics** — the full `analysis.analyze` check set (+ composition checks when the
     document is on disk), mapped to the offending edge line where the finding names one,
     else the node's heading line;
+  * **authoring warnings** — `analysis.analyze_authoring` (an unread front matter key, prose that starts
+    with `->`), shown as warnings with the source `prismpath-authoring` and kept apart from the findings
+    above. A rules source gets the parser's refusal and the warnings or problems `prismpath policy compile`
+    gives it, with the source `prismpath-policy`;
   * **completion** — edge targets after `-> `, predicate fields (derived from the flow's own
     `when` edges via `contract.derive_contract`) + tier keywords in condition position, and
     annotation names after `@`;
@@ -24,12 +28,14 @@ embedder extra) is opt-in via `initializationOptions: {"semantic": true}`.
 from __future__ import annotations
 
 import json
+import re
 import sys
 from typing import Dict, List, Optional
 
 from prismpath.kernel import analysis
 from prismpath.kernel import predicates
-from prismpath.kernel.parser import ANNO_RE, EDGE_RE, HEAD_RE, parse
+from prismpath.kernel import policy_source
+from prismpath.kernel.parser import ANNO_RE, EDGE_RE, HEAD_RE, RulesSourceError, parse
 
 # ------------------------------------------------------------------ framing
 
@@ -96,6 +102,38 @@ def _finding_range(finding, scan: dict, lines: List[str]) -> dict:
         index = scan["nodes"][finding.node]
         return _line_range(index, lines[index] if index < len(lines) else "")
     return _line_range(0, lines[0] if lines else "")
+
+
+def _authoring_range(finding, scan: dict, lines: List[str]) -> dict:
+    """The line an authoring warning is about: the front matter key it names, the prose line it quotes, else
+    where a finding would go."""
+    quoted = re.match(r"`([^`]+)`", finding.message)
+    if quoted:
+        start = scan["nodes"].get(finding.node, 0) if finding.node else 0
+        stop = len(lines) if finding.node else next((i for i, line in enumerate(lines[1:], 1)
+                                                      if line.strip() == "---"), len(lines))
+        for index in range(start, stop):
+            text = lines[index].strip()
+            if (finding.node and text.lstrip("- ").startswith(quoted.group(1).lstrip("- "))) or \
+                    (not finding.node and re.match(re.escape(quoted.group(1)) + r"\s*:", text)):
+                return _line_range(index, lines[index])
+    return _finding_range(finding, scan, lines)
+
+
+def _rules_source_diagnostics(text: str, uri: str, error: RulesSourceError, lines: List[str]) -> List[dict]:
+    """A rules source opened as a flow: the parser's message, which names `prismpath policy compile`, and
+    what that command says about the text, each on its own line."""
+    named = re.match(r"line (\d+) ", str(error))
+    at = int(named.group(1)) - 1 if named else 0
+    diags = [{"range": _line_range(at, lines[at] if at < len(lines) else ""), "severity": 1,
+              "code": "rules-source", "source": "prismpath", "message": str(error)}]
+    path = _uri_to_path(uri) or "<source>"
+    for line, severity, message in policy_source.editor_notes(text, path):
+        index = max(line - 1, 0)
+        diags.append({"range": _line_range(index, lines[index] if index < len(lines) else ""),
+                      "severity": 1 if severity == "error" else 2, "code": "policy-compile",
+                      "source": "prismpath-policy", "message": message})
+    return diags
 
 
 def _tier(cond: str) -> str:
@@ -255,6 +293,11 @@ class Server:
                     "source": "prismpath",
                     "message": finding.message,
                 })
+            for finding in analysis.analyze_authoring(graph):       # kept apart: analyze is the conformance surface
+                diags.append({"range": _authoring_range(finding, scan, lines), "severity": 2,
+                              "code": finding.code, "source": "prismpath-authoring", "message": finding.message})
+        except RulesSourceError as error:
+            diags = _rules_source_diagnostics(text, uri, error, lines)
         except Exception as error:                          # noqa: BLE001 - unparseable mid-edit
             diags.append({"range": _line_range(0, lines[0] if lines else ""),
                           "severity": 1, "code": "parse-error", "source": "prismpath",
