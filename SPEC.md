@@ -487,6 +487,82 @@ unit or a decimal string, and the implementation writes no spelling of a float o
 hashed and not signed (a durable run checkpoint, the connector's JSONL sink lines, the flow authority's
 version floor file) stays plain JSON and is never an input to a hash or a signature.
 
+
+## 9. Rules sources
+
+A rules source is the readable form of a `prismpath.core/1` policy image (docs/design/spec-verified-core.md
+section 2). It is a dialect of the flow format of §1 with one decision node, and only
+`prismpath/kernel/policy_source.py` (`prismpath policy compile`) reads it. A rules source file is named
+`<name>.rules.md`, and its image `<name>.core.json`.
+
+```markdown
+---
+name: my_rules
+field.tool: category
+field.path_scope: category
+field.kill_by_pattern: bool
+---
+## core_decision
+Rules are read from the top. The first one that holds decides.
+-> refuse agent:kill-by-pattern: when kill_by_pattern
+-> allow: when tool == "read_file" and path_scope == "workspace"
+```
+
+Normatively, as follows.
+
+- **Front matter** is required. The file starts with a line `---` and the block ends at the next line
+  `---`. Each non blank line is `key: value`. The keys are `name`, `start`, `description` and
+  `field.<name>`, and no other key is accepted. A key written twice is an error. `field.<name>` is a field
+  definition as §4.5 writes it. `name`, `description` and `start` are for the reader and are not part of
+  the image.
+- **Sections** are lines matching `^\s*##\s+(.+?)\s*$`, normalized as §1 normalizes a node name. The start
+  section is `start` when given, else the first section. It is `core_decision` in every shipped source. A
+  section name may appear once.
+- **A rule** is a line matching `^\s*-?\s*->(.*)$` under the start section. A rule anywhere else is an
+  error. The text after the arrow takes one of two forms.
+  - `refuse <cause>: <condition>` or `escalate <cause>: <condition>`, matching
+    `^\s*(refuse|escalate)\s+(\S+?):(?:\s+(.*?))?\s*$`. The cause is a registered name of
+    `prismpath/kernel/causes.py`, and the image's target is `refuse_<code>` or `escalate_<code>`. A name
+    that is not registered is an error. A cause outside the routing class compiles with a warning, since a
+    policy decides calls and the other classes are the refusals of checks outside it.
+    `prismpath policy causes` lists the routing causes.
+  - `<target>: <condition>`, matching `^\s*([A-Za-z0-9_\-]+)\s*:\s*(.*?)\s*$`. The target `allow` allows.
+    A target written as a code (`refuse_105`) or a bare `refuse` or `escalate` is an error. Any other
+    target is a route, which compiles with a warning because the agent and the gateway refuse an image that
+    names one.
+- **A condition** is `always`, `never`, or `when` followed by one expression of the Level M fragment (§4.3)
+  over the declared fields. That is a field alone, a comparison of a field with a constant, `in` or `not in` a list
+  of constants, joined by `and`, `or`, `not` and parentheses. Constants are numbers, strings, `True`,
+  `False` and `None`. A chained comparison is the conjunction of its pairs.
+- **Order** is significant. The image's rules are the source's rules in order, and the first rule whose
+  condition holds decides. A reading no rule holds for is refused (`route:no-matching-edge`).
+- **Notes.** Every other line is a note for the reader and is not part of the image. A note that looks
+  like a rule (an arrow spelled `>`, `=>`, `- >` or `→` before allow, refuse or escalate, or a target and
+  condition with no arrow) compiles with a warning. An annotation (`@name(...)`) is an error.
+- **Line ends.** A file with `\r\n` line ends reads as one with `\n`.
+
+**The image.** Compiling writes the canonical canon/2 bytes of
+`{"format": "prismpath.core/1", "fields": {...}, "rules": [{"target": ..., "when": ...}, ...]}` and
+checks them with the port of the Lean oracle's `loadPolicy` (`core_policy`). A source the oracle refuses
+does not compile, and the error names the line of the rule or the field definition it is about. Two
+compiles of one source give the same bytes. Whitespace, notes and the order of the field definitions do
+not change the image. The order of the rules and of the constants in a list do. `prismpath policy render`
+writes the source of an image, and compiling it gives the same bytes again. Rendering keeps no name,
+description or note, so the `.rules.md` file is the source of record and `prismpath policy check SOURCE
+IMAGE` checks that an image is still what its source compiles to.
+
+**The flow tools.** A rules source is not a flow. Its rule targets have a space the edge grammar of §1
+does not allow, so a flow parser would read every refusal as prose. The reference parser refuses a file
+named `*.rules.md` and any document with a line matching `^\s*-?\s*->\s*(refuse|escalate)\s+\S+?:(\s|$)`,
+naming `prismpath policy compile`. The canonical rendering of an image (`core_render.render`, targets
+written `refuse_<code>`) is a flow and parses as one.
+
+**Targets.** `prismpath policy compile --target agent` also runs the governed agent's checks on the image
+(`prismpath/agent/target.py`): every value a rule names is inside its field's reading domain, every
+declared field is one the agent's classifier reads with the kind it gives it, the required fields are
+declared, every change to a control file and every connection but the model's API is refused, and a
+sandbox profile can be built. docs/guides/writing-agent-rules.md lists the fields and their values.
+
 ---
 
 *This spec follows the reference implementation in this repository. Where prose and vectors
