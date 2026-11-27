@@ -8,6 +8,12 @@ spec stable.
 
 ## [Unreleased]
 
+### Added: every case of the distribution spec has its tests, and the trace lists are gone (2026-11-27)
+
+- **A ceiling states the grammar a release or an install set may use (CL4, case 206).** On the owner's ruling, the ceiling's `policy.core` defines each field a set may use, with `min` and `max` for an int, and never narrows a category's values. A set that uses a field the ceiling does not define, or defines one another way, is `policy:out-of-domain`, and so is a ceiling with a category the PEP was not built with or an int with no bounds.
+- **Case 272 is an `xdp` case (C6, C10, H14).** On the owner's ruling, a `host` floor has no runtime step, so the case runs where a new floor loads into the runtime. An `xdp` PEP whose floor load and withdrawal both fail names the floor before in every record until the withdrawal works, and a floor load that fails is never taken as a renewal.
+- **The trace test keeps no `PENDING` or `PARTIAL` lists.** Every case has its tests in each implementation its row names.
+
 ### Added: one release decided by a host, a proxy and a cFS table, shown by one policy hash (2026-11-25)
 
 - **Case 105 runs one release on a host, an agent and a cFS table end to end (#155).** Each decides under it and names the same policy hash.

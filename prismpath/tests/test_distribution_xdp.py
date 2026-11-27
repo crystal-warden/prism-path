@@ -590,6 +590,55 @@ def test_case_273_an_xdp_swap_that_fails_withdraws_to_the_floor_and_the_fallback
     assert "dist:reconciling" in controller.members[pep_id].findings
 
 
+def test_case_272_an_xdp_floor_whose_load_and_withdrawal_fail_is_named_by_the_floor_before(tmp_path, monkeypatch):
+    """case_272: C10, H14, AF3. An xdp PEP with a release and an action floor applies a new floor whose load fails and
+    whose withdrawal fails too. The kernel keeps the table it had, with the floor before, so every record names the
+    set id of that floor as the floor the runtime holds and the controller files `dist:reconciling` at once. Then the
+    withdrawal works and the load of the release still fails: the entry names the new floor and no running release.
+    When the load works the PEP is active again and sends the `install-applied` record it owed."""
+    from prismpath.distribution.controller import Controller
+    point = EdgePep(tmp_path / "edge", controller="C", **INSTALL)
+    controller = Controller(str(tmp_path / "controller"), _dist.instance_key("C"), clock=point.clock)
+    controller.add_anchor(point.anchor())
+    pep_id = controller.enroll(point.key.public_raw, "xdp", STREAM, "fleet")
+    point.release(DEFAULT, 1)
+    point.send(_set(point, "install.floor", FLOOR_CORE, FLOOR_DESTS))
+    before, kernel = point.pep.floor_set().set_id, point.loader.kernel
+    narrower = nf.Destinations.from_object({"format": nf.DEST_FORMAT, "model_api": {},
+                                            "allowed_host": {"a.floor.example.com": [FLOOR_A]}}).canonical()
+    point.loader.rc = 2
+    record = point.send(_set(point, "install.floor", FLOOR_CORE, narrower, 2, widens=False))[-1]
+    after = point.pep.floor_set().set_id
+    assert (record.event, point.pep.reconciling["withdrawn"], after != before) == ("reconciling", False, True)
+    assert point.loader.kernel == kernel
+    point.pep.tick()
+    point.pep.take_statement(controller.statement(STREAM))
+    point.pep.record("beat")
+    entries = [one.reconciling for one in (_read(point, signed) for signed in point.pep.outbox)
+               if one.state == "reconciling"]
+    assert len(entries) >= 2
+    assert all((entry.floor, entry.running_policy, entry.running_seq)
+               == (bytes.fromhex(before)[:16], state_record.prefix(H(DEFAULT)), 1) for entry in entries)
+    for signed in point.pep.drain():
+        controller.receive(signed)
+    assert "dist:reconciling" in controller.members[pep_id].findings
+    point.loader.rc = 0
+    activate = point.pep.adapter.activate
+
+    def refuses(release):
+        raise net_dist.LoaderFailed("the kernel refused")
+    monkeypatch.setattr(point.pep.adapter, "activate", refuses)
+    assert point.pep.tick() is None and point.pep.reconciling["withdrawn"]
+    entry = _read(point, point.pep.record("beat")).reconciling
+    assert (entry.floor, entry.running_policy, entry.running_seq) == (bytes.fromhex(after)[:16], b"\x00" * 16, 0)
+    assert point.loader.kernel == net_dist.edge_table(None, net_dist.floor_addresses(point.pep.floor_set().bodies,
+                                                                                     GOVERNED), GOVERNED)
+    monkeypatch.setattr(point.pep.adapter, "activate", activate)
+    point.pep.tick()
+    assert point.pep.state() == "active"
+    assert [one.event for one in (_read(point, signed) for signed in point.pep.drain())][-1] == "install-applied"
+
+
 def test_case_164_each_kind_takes_its_three_sets_in_its_own_form(tmp_path, monkeypatch):
     """case_164: IS1, IS3, IS5, CL1. A PEP of each of the six kinds is sent an action floor, a fallback policy and a
     ceiling in the form of its kind, a table for `host` and `mesh`, a `cfs.table` for `cfs` and a policy list as the
