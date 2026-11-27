@@ -358,3 +358,20 @@ def test_a_rules_source_given_to_validate_names_prismpath_policy(tmp_path, capsy
     rules.write_text("---\nstart: core_decision\n---\n## core_decision\n-> refuse agent:network: always\n")
     code, _out, err = _main(capsys, "validate", str(rules))
     assert code == 2 and "is a rules source" in err and "prismpath policy compile" in err
+
+
+def test_validate_warns_on_an_unknown_front_matter_key_and_on_arrow_prose(tmp_path, capsys):
+    flow = tmp_path / "flow.md"
+    flow.write_text("---\nstrat: a\nexpires: tomorrow\n---\n## a\n-> b when action == \"fix\"\n-> b: always\n## b\nEnd.\n")
+    code, out, _err = _main(capsys, "validate", str(flow))
+    assert code == 0
+    assert "`strat` is not a front matter key PrismPath reads, so it changes nothing. Did you mean `start`?" in out
+    assert "`expires` is not a front matter key" in out and "(unknown-front-matter-key)" in out
+    assert "[a] `-> b when action == \"fix\"` starts like an edge but is not one" in out and "(arrow-in-prose)" in out
+
+
+def test_validate_is_quiet_about_the_keys_shipped_flows_use(tmp_path, capsys):
+    flow = tmp_path / "flow.md"
+    flow.write_text("---\nname: n\nstart: a\ndescription: d\nversion: 1\nfield.x: bool\n---\n## a\n-> b: when x\n-> b: always\n## b\nEnd.\n")
+    code, out, _err = _main(capsys, "validate", str(flow))
+    assert code == 0 and "unknown-front-matter-key" not in out and "arrow-in-prose" not in out

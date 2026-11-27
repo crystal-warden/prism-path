@@ -150,6 +150,29 @@ def test_the_compiler_warns_about_rules_no_reading_reaches_and_routes():
     assert ps.compile_full(HEAD).warnings[0][0] == 0
 
 
+
+@pytest.mark.parametrize("note", ['> allow: when b', '- > refuse agent:network: always', '=> allow: always',
+                                  'refuse agent:network: when b', '* escalate agent:push-escalated: never',
+                                  '\u2192 allow: always'])
+def test_a_note_that_looks_like_a_rule_is_warned_about_and_still_changes_nothing(note):
+    plain = ps.compile_full(HEAD + "-> allow: when b\n")
+    compiled = ps.compile_full(HEAD + note + "\n-> allow: when b\n")
+    assert compiled.image == plain.image
+    assert compiled.warnings == [(7, "this line looks like a rule but is a note, so it decides nothing. A rule "
+                                     "starts with `->`, as in `-> allow: when ...`")]
+
+
+def test_an_ordinary_note_is_not_warned_about():
+    for note in ("Allow: the person reads this as prose.", "We refuse a push, and we allow reads.", "> a quote"):
+        assert ps.compile_full(HEAD + note + "\n-> allow: when b\n").warnings == []
+
+
+def test_no_shipped_rules_source_has_a_note_that_looks_like_a_rule():
+    root = Path(__file__).resolve().parents[2]
+    for path in sorted(root.glob("prismpath/**/*.rules.md")) + sorted(root.glob("integrations/**/*.rules.md")):
+        assert ps.compile_full(path.read_text(encoding="utf-8"), str(path)).warnings == [], path
+
+
 ERRORS = [
     # (source, line, words the message holds)
     ("## core_decision\n-> allow: always\n", 1, "front matter block"),

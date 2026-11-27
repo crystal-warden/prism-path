@@ -31,7 +31,9 @@ rather than read its refusals as prose, and only this module reads one.
     field alone (true), `==` `!=` `<` `<=` `>` `>=` against a constant, `in` and `not in` a list of
     constants, joined by `and`, `or`, `not` and parentheses. Constants are numbers, strings, `True`,
     `False` and `None`.
-  * Any other line under a heading is a note for the reader and is not part of the image.
+  * Any other line under a heading is a note for the reader and is not part of the image. A note that looks
+    like a rule (an arrow spelled `>`, `=>` or `- >`, or `allow: when ...` with no arrow) is compiled with a
+    warning, since the rule its author meant is not in the image.
 
 `compile_source` turns the text into the image's canonical canon/2 bytes and has the image checked by the
 port of the Lean oracle (`core_policy`), naming the line of the first problem; `render_source` writes the
@@ -60,6 +62,12 @@ _PLAIN = re.compile(r"^\s*([A-Za-z0-9_\-]+)\s*:\s*(.*?)\s*$")
 _EDGE = re.compile(r"^\s*-?\s*->(.*)$")
 _HEAD = re.compile(r"^\s*##\s+(.+?)\s*$")
 _ANNO = re.compile(r"^\s*@(\w+)\s*\(")
+# A note line that looks like a rule someone meant to write: an arrow spelled another way (`>`, `=>`, `- >`,
+# `→`) followed by allow, refuse or escalate, or a rule's target and condition with no arrow (`allow: when ...`, `refuse <cause>: always`).
+# Any other line is a note, so without this warning a mistyped refusal vanishes and a later allow decides.
+_LOOKS_LIKE_ARROW = re.compile(r"^\s*(?:[-*+]\s*)?(?:=>|-+\s+>|>|\u2192)\s*(?:allow|refuse|escalate)\b", re.IGNORECASE)
+_LOOKS_LIKE_RULE = re.compile(r"^\s*(?:[-*+>]\s*)?(?:allow|refuse\s+\S+?|escalate\s+\S+?)\s*:\s*(?:when\b|always\b|never\b)",
+                              re.IGNORECASE)
 _INT_TEXT = re.compile(r"[0-9]+")
 _DEC_TEXT = re.compile(r"(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?")
 _OPS = {ast.Eq: "==", ast.NotEq: "!=", ast.Lt: "<", ast.LtE: "<=", ast.Gt: ">", ast.GtE: ">="}
@@ -365,6 +373,9 @@ def parse_source(text: str, path: str = "<source>") -> Compiled:
             continue
         edge = _EDGE.match(raw)
         if not edge:
+            if _LOOKS_LIKE_ARROW.match(raw) or _LOOKS_LIKE_RULE.match(raw):
+                warnings.append((line, "this line looks like a rule but is a note, so it decides nothing. A rule "
+                                       "starts with `->`, as in `-> allow: when ...`"))
             continue                              # a note for the reader
         if section is None or section != start:
             where = f"under ## {section}" if section else "before any section"

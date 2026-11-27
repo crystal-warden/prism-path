@@ -37,7 +37,9 @@ Add `absent=allowed` when a reading may leave a field out. A rule must then test
 `None`, so the case of a missing value is decided on purpose.
 
 Under `## core_decision` each line that starts with `->` is one rule. Any other line is a note for the
-reader and changes nothing.
+reader and changes nothing. A note that looks like a rule, such as `> refuse agent:network: always` or
+`allow: when ...` with no arrow, compiles with a warning on its line, because the refusal you meant to
+write is not in the policy.
 
 ## A rule
 

@@ -1095,6 +1095,7 @@ def validate_flow(args) -> int:
     graph = parse_file(args.flow_md)
     findings = list(analysis.analyze(graph))
     findings += analysis.analyze_composition(graph, args.flow_md)   # cross-flow @spawn checks (item #4)
+    findings += analysis.analyze_authoring(graph)                     # typos the parser keeps as meta or prose
     return _report(findings, args.json)
 
 
