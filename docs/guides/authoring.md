@@ -12,24 +12,36 @@ definition lives in [SPEC.md](../../SPEC.md); read both before extending.
 
 ```markdown
 ---
-name: bugfix          # optional label
-start: triage         # optional; defaults to the first node
+name: bugfix
+start: triage
 ---
 
-## triage                                   # a NODE (heading -> node name, lowercased,
-Read the bug report and decide what to do.  # spaces->underscores). Prose = the node's
--> implement: the root cause is clear       # INSTRUCTION handed to the worker.
--> gather_info: more information is needed   # EDGES: `-> target: condition`
+## triage
+Read the bug report and decide what to do.
+-> implement: the root cause is clear
+-> gather_info: more information is needed
 -> close: it is a duplicate or invalid
 
-## done                # a node with NO edges is TERMINAL (the run ends here)
+## implement
+Fix the bug.
+-> done: always
+
+## gather_info
+Ask the reporter for the missing details, then stop until they answer.
+
+## close
+Close the report.
+
+## done
 Summarize and finish.
 ```
 
+- **Front matter** = the block between the two `---` lines. `name` is an optional label and `start`
+  defaults to the first node. There are no comments here, so text after a `#` is part of the value.
 - **Node** = `## Heading`. Name is normalized (`Write Code` → `write_code`). Body until the next
-  heading (minus edge lines) is the instruction.
+  heading (minus edge lines) is the instruction, the prose handed to the worker.
 - **Edge** = a line `-> target: condition`. `target` must be a defined node.
-- **Terminal node** = a node with zero edges. Reaching one stops the run (`stopped="terminal"`).
+- **Terminal node** = a node with zero edges, like `done`. Reaching one stops the run (`stopped="terminal"`).
 
 ---
 

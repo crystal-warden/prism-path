@@ -8,7 +8,7 @@ of the corpus and the corpus holds the case for that implementation. The C core 
 `cfs` kinds (I1), so a corpus case counts for C only when its PEP is one of those. Python's tests are
 prismpath/tests/test_distribution_*.py, integrations/cfs/tests/test_cfs_dist.py (the `cfs` kind's halves) and
 tools/tests/test_export.py, the C core's are
-prismpath/tests/test_distribution_c.py, test_distribution_c_cfs.py (its `cfs` kind and the cFS app) and test_distribution_end_to_end.py (the C harness beside the Python PEPs) and Rust's are prismpath-hotswap-rs/tests/test_distribution_*.rs.
+prismpath/tests/test_distribution_c.py, test_distribution_c_cfs.py (its `cfs` kind and the cFS app), test_distribution_c_min.py (its constrained profile, B12) and test_distribution_end_to_end.py (the C harness beside the Python PEPs) and Rust's are prismpath-hotswap-rs/tests/test_distribution_*.rs.
 
 Every case has its tests, so no list of open cases is kept, and a case that loses its test in an implementation its
 row names fails here."""
@@ -26,12 +26,13 @@ SOURCES = {
     "P": [*sorted((REPO / "tests").glob("test_distribution_*.py")), ROOT / "integrations" / "cfs" / "tests" / "test_cfs_dist.py",
           ROOT / "tools" / "tests" / "test_export.py"],
     "C": [REPO / "tests" / "test_distribution_c.py", REPO / "tests" / "test_distribution_c_cfs.py",
+          REPO / "tests" / "test_distribution_c_min.py",
           REPO / "tests" / "test_distribution_parity.py", REPO / "tests" / "test_distribution_end_to_end.py"],
     "R": [*sorted((ROOT / "prismpath-hotswap-rs" / "tests").glob("test_distribution_*.rs")),
           REPO / "tests" / "test_distribution_parity.py"],
 }
 EXCLUDED = {REPO / "tests" / "test_distribution_trace.py", REPO / "tests" / "test_distribution_c.py",
-            REPO / "tests" / "test_distribution_c_cfs.py"}
+            REPO / "tests" / "test_distribution_c_cfs.py", REPO / "tests" / "test_distribution_c_min.py"}
 REPLAYERS = {"P": REPO / "tests" / "test_distribution_corpus.py",
              "R": ROOT / "prismpath-hotswap-rs" / "tests" / "test_distribution_conformance.rs",
              "C": REPO / "tests" / "test_distribution_c.py"}

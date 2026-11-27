@@ -7,11 +7,26 @@
 #include <string.h>
 
 #include "monocypher-ed25519.h"
+#ifndef PP_DIST_PROFILE_MIN
 #include "pp_canon2.h"
+#endif
+
+/* Constant tables live in flash on an AVR (the constrained profile's Uno build) and are read with pgm_read. On every
+ * other target the two macros are nothing. */
+#ifdef __AVR__
+#include <avr/pgmspace.h>
+#define PP_ROM PROGMEM
+#define pp_rom(p) pgm_read_byte(p)
+#define PP_K256(t) pgm_read_dword(&pp_k256[t])
+#else
+#define PP_ROM
+#define pp_rom(p) (*(const uint8_t *)(p))
+#define PP_K256(t) pp_k256[t]
+#endif
 
 /* ------------------------------------------------------------------ SHA-256 (FIPS 180-4) */
 
-static const uint32_t pp_k256[64] = {
+static const uint32_t pp_k256[64] PP_ROM = {
     0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5, 0xd807aa98,
     0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174, 0xe49b69c1, 0xefbe4786,
     0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da, 0x983e5152, 0xa831c66d, 0xb00327c8,
@@ -35,7 +50,7 @@ static void pp_sha256_block(uint32_t h[8], const uint8_t block[64]) {
     }
     a = h[0]; b = h[1]; c = h[2]; d = h[3]; e = h[4]; f = h[5]; g = h[6]; k = h[7];
     for (int t = 0; t < 64; t++) {
-        uint32_t t1 = k + (PP_ROR(e, 6) ^ PP_ROR(e, 11) ^ PP_ROR(e, 25)) + ((e & f) ^ (~e & g)) + pp_k256[t] + w[t];
+        uint32_t t1 = k + (PP_ROR(e, 6) ^ PP_ROR(e, 11) ^ PP_ROR(e, 25)) + ((e & f) ^ (~e & g)) + PP_K256(t) + w[t];
         uint32_t t2 = (PP_ROR(a, 2) ^ PP_ROR(a, 13) ^ PP_ROR(a, 22)) + ((a & b) ^ (a & c) ^ (b & c));
         k = g; g = f; f = e; e = d + t1; d = c; c = b; b = a; a = t1 + t2;
     }
@@ -66,6 +81,7 @@ void pp_sha256(const uint8_t *data, size_t len, uint8_t out[32]) {
     }
 }
 
+#ifndef PP_DIST_PROFILE_MIN /* the full core, to the image check, which both builds share */
 /* ------------------------------------------------------------------ the kind table */
 
 static const char *const pp_artifact_names[PP_ART_COUNT] = {
@@ -788,7 +804,7 @@ static int pp_key_list(pp_c2 *c, uint8_t (*out)[32], size_t max, size_t *n) {
     for (;;) {
         if (!pp_scan_hash(c, key) || (*n && memcmp(last, key, 32) >= 0)) return 0;
         memcpy(last, key, 32);
-        if (*n < max) memcpy(out[*n], key, 32);
+        if (out && *n < max) memcpy(out[*n], key, 32); /* NULL `out` reads the list and keeps none */
         (*n)++;
         if (pp_c2_lit(c, "]")) return 1;
         if (!pp_c2_lit(c, ",")) return 0;
@@ -917,6 +933,8 @@ static uint8_t pp_read_ceiling(const uint8_t *body, size_t len, uint8_t (*out)[3
 }
 
 /* The canonical body of a policy list of `n` hashes, written into `out` (room for 64), and its length. */
+static const char pp_ceiling_tail[] = "],\"encoding\":\"canon/2\",\"format\":\"prismpath.dist-ceiling/1\"}";
+
 static size_t pp_ceiling_body(const uint8_t (*hashes)[32], size_t n, uint8_t *out) {
     static const char hex[] = "0123456789abcdef";
     size_t at = 0;
@@ -931,11 +949,32 @@ static size_t pp_ceiling_body(const uint8_t (*hashes)[32], size_t n, uint8_t *ou
         }
         out[at++] = '"';
     }
-    static const char tail[] = "],\"encoding\":\"canon/2\",\"format\":\"prismpath.dist-ceiling/1\"}";
-    memcpy(out + at, tail, sizeof tail - 1);
-    return at + sizeof tail - 1;
+    memcpy(out + at, pp_ceiling_tail, sizeof pp_ceiling_tail - 1);
+    return at + sizeof pp_ceiling_tail - 1;
 }
 #define PP_CEILING_BODY_MAX (11 + PP_CEILING_BODIES * 67 + 64)
+
+/* B-0020: a policy list read in place from the canonical body V11 checked, with no copy of its hashes. That body
+ * is the one pp_ceiling_body writes, so hash `k` is the 64 hex digits at 12 + 67k and the length gives the count.
+ * Only a body that pp_read_ceiling took is read this way. */
+static size_t pp_list_count(size_t len) {
+    size_t fixed = 11 + sizeof pp_ceiling_tail - 1;
+    return len > fixed ? (len - fixed + 1) / 67 : 0;
+}
+
+static void pp_list_hash(const uint8_t *body, size_t k, uint8_t out[32]) {
+    const uint8_t *s = body + 12 + 67 * k;
+    for (size_t b = 0; b < 32; b++) out[b] = (uint8_t)(pp_hex_nibble(s[2 * b]) << 4 | pp_hex_nibble(s[2 * b + 1]));
+}
+
+static int pp_list_holds(const uint8_t *body, size_t len, const uint8_t id[32]) {
+    for (size_t k = 0, n = pp_list_count(len); k < n; k++) {
+        uint8_t hash[32];
+        pp_list_hash(body, k, hash);
+        if (memcmp(hash, id, 32) == 0) return 1;
+    }
+    return 0;
+}
 
 /* IS11 beyond its signatures (install.check_trust): no key in both lists; no key it adds is the PEP's instance key,
  * a key the trust store holds, has retired or revoked, a retired install or operator id, an operator key added to
@@ -972,6 +1011,8 @@ static uint8_t pp_check_install_trust(const pp_install *r, const pp_install_trus
     if (!widens && *widened) return PP_CAUSE_WIDENING_UNSIGNED;
     return PP_CAUSE_NONE;
 }
+
+#endif /* !PP_DIST_PROFILE_MIN */
 
 /* ------------------------------------------------------------------ the image check */
 
@@ -1018,6 +1059,7 @@ uint8_t pp_validate_image(const uint8_t *im, size_t len) {
     return first;
 }
 
+#ifndef PP_DIST_PROFILE_MIN
 /* ------------------------------------------------------------------ the table, read for a decision and for AF9 */
 
 /* The parts of a `.ppt` image pp_validate_image passed (policy_pack.read_ppt_header). */
@@ -1312,7 +1354,9 @@ static int pp_same(const uint8_t a[32], int has_a, const uint8_t b[32], int has_
 
 /* CL1: a table whose body hash is on the held ceiling's list, or any table when no ceiling is held. */
 static int pp_inside(const pp_install_view *view, const uint8_t body_sha256[32]) {
-    return view == NULL || !view->has_ceiling || pp_listed(view->ceiling, view->n_ceiling, body_sha256);
+    if (view == NULL || !view->has_ceiling) return 1;
+    if (view->has_ceiling == 2) return pp_list_holds((const uint8_t *)view->ceiling, view->n_ceiling, body_sha256);
+    return pp_listed(view->ceiling, view->n_ceiling, body_sha256);
 }
 
 /* IS5 (verify._verify_install): an install statement through V5 to V11 with the differences section 21 gives
@@ -1420,9 +1464,8 @@ static void pp_verify_install(const pp_envelope *e, const pp_entry *entries, siz
     }
     if (e->as == PP_AS_NONE) return;
     if (e->as == PP_AS_POLICY_LIST) {
-        static uint8_t hashes[PP_CEILING_BODIES][32];
-        size_t n = 0;
-        out->cause = pp_read_ceiling(body, body_len, hashes, &n);
+        size_t n = 0; /* read as it comes, no hash kept (B-0020) */
+        out->cause = pp_read_ceiling(body, body_len, NULL, &n);
         return;
     }
     int cfs = pep->kind == PP_TGT_CFS;
@@ -2327,76 +2370,123 @@ static uint8_t pp_next_record(const pp_pep_machine *pep, const pp_install_anchor
 static const char *pp_as_name(uint8_t as);
 static void pp_install_take_trust(pp_install *r, const pp_envelope *e, const uint8_t *body, size_t len);
 static uint8_t pp_read_ceiling(const uint8_t *body, size_t len, uint8_t (*out)[32], size_t *n);
-static uint8_t pp_set_refusal(const pp_pep_machine *pep, const pp_install *r, const pp_statement *const held_sets[PP_SETS],
-                              const pp_change *change, const pp_statement *st, int kind, int ceiling_lost, int *larger_out);
+
+/* An install set as pp_set_refusal reads it: its envelope and its body, a table's bytes or a policy list. A held set
+ * keeps a list as its hashes, 32 bytes each. A set a provisioning brings is read in place, the caller's body, and a
+ * list there is the canonical body V11 checked (`canonical`), so the precheck copies no body (B-0020). */
+typedef struct {
+    const pp_envelope *envelope;
+    const uint8_t *body;
+    size_t body_len;
+    int canonical;
+} pp_set_ref;
+
+static pp_set_ref pp_ref_of(const pp_statement *st) {
+    pp_set_ref ref = {&st->envelope, st->body, st->body_len, 0};
+    return ref;
+}
+
+static size_t pp_ref_count(const pp_set_ref *list) {
+    return list->canonical ? pp_list_count(list->body_len) : list->body_len / 32;
+}
+
+static void pp_ref_hash(const pp_set_ref *list, size_t k, uint8_t out[32]) {
+    if (list->canonical) pp_list_hash(list->body, k, out);
+    else memcpy(out, list->body + 32 * k, 32);
+}
+
+/* A table on the list of a ceiling, or any table for none, as pp_on_list. */
+static int pp_ref_on_list(const pp_set_ref *ceiling, const uint8_t body_sha256[32]) {
+    if (ceiling == NULL) return 1;
+    if (ceiling->canonical) return pp_list_holds(ceiling->body, ceiling->body_len, body_sha256);
+    return pp_listed((const uint8_t (*)[32])ceiling->body, ceiling->body_len / 32, body_sha256);
+}
+
+static uint8_t pp_set_refusal(const pp_pep_machine *pep, const pp_install *r, const pp_set_ref *const held_sets[PP_SETS],
+                              const pp_change *change, const pp_set_ref *st, int kind, int ceiling_lost, int *larger_out);
+
+/* The verifier's view and verdict, which the precheck and pp_stage_one take in turn and never at once (B-0020). */
+static pp_pep pp_check_view;
+static pp_verdict pp_check_verdict;
+
+/* B-0020: what the precheck keeps between the statements it brings, and nothing more. A set it has checked is read
+ * again from the caller's bytes, so of each it keeps only the envelope. */
+static struct {
+    pp_envelope made[PP_SETS];    /* the envelope of each set the statements before it applied */
+    pp_envelope pending[PP_SETS]; /* each set staged and not yet whole (IS4, G2) */
+    pp_change changes[PP_SETS];   /* each install change statement staged (IS15) */
+    pp_install_view iview;
+} pp_precheck_scratch;
+_Static_assert(sizeof pp_precheck_scratch < sizeof(pp_statement), "B-0020: the precheck holds no statement buffer");
 
 /* P2 step 3 (pep._precheck): every install statement the engineer brings verifies under the install record the
- * provisioning leaves (`next`, *has and *keeps as pp_next_record left them) and the anchor's store, whose time floor
+ * provisioning leaves (`record`, *has and *keeps as pp_next_record left them) and the anchor's store, whose time floor
  * is its own, before anything changes. The statements are taken in order as pp_stage_one then stages them: each
  * against the record as the ones before it leave it, the sets staged so far (V10) and the ceiling then held (CL3),
  * and a set that is whole is held to pp_set_refusal, as pp_apply_set holds it. Any refusal refuses the provisioning
  * but dist:seq-replay, a set the PEP already holds at or above its `seq`, which is refused and leaves the
- * provisioning to go on (case 170, IS6). */
-static uint8_t pp_precheck(const pp_pep_machine *pep, const pp_trust *anchor, const char *stream, const pp_install *next,
+ * provisioning to go on (case 170, IS6). The record is walked in place, so the caller builds it again after. Each
+ * statement is read from the caller's bytes as it comes and only envelopes are kept (B-0020). */
+static uint8_t pp_precheck(const pp_pep_machine *pep, const pp_trust *anchor, const char *stream, pp_install *record,
                            int has, int keeps, const pp_brought *brought, size_t n_brought, long long now) {
-    static pp_install record;
-    static pp_pep view;
-    static pp_install_view iview;
-    static pp_verdict verdict;
-    static pp_statement one, made[PP_SETS]; /* the set being checked, and each set the statements before it applied */
-    static pp_envelope pending[PP_SETS];    /* each set staged and not yet whole (IS4, G2) */
-    static pp_change changes[PP_SETS];      /* each install change statement staged (IS15) */
+    pp_pep *view = &pp_check_view;
+    pp_verdict *verdict = &pp_check_verdict;
+    pp_envelope *made = pp_precheck_scratch.made, *pending = pp_precheck_scratch.pending;
+    pp_change *changes = pp_precheck_scratch.changes;
+    pp_install_view *iview = &pp_precheck_scratch.iview;
     if (n_brought == 0) return PP_CAUSE_NONE;
     if (!has) return PP_CAUSE_BAD_FORMAT; /* install statements with an anchor that holds no install keys */
-    record = *next;
-    const pp_statement *held_sets[PP_SETS];
+    pp_set_ref sets[PP_SETS];
+    const pp_set_ref *held_sets[PP_SETS];
     int has_pending[PP_SETS], has_change[PP_SETS];
     for (int k = 0; k < PP_SETS; k++) {
-        held_sets[k] = keeps && record.sets[k].held && !pep->set_lost[k] && pep->d.sets[k].has_held
-                           ? &pep->d.sets[k].held : NULL;
+        int held = keeps && record->sets[k].held && !pep->set_lost[k] && pep->d.sets[k].has_held;
+        if (held) sets[k] = pp_ref_of(&pep->d.sets[k].held);
+        held_sets[k] = held ? &sets[k] : NULL;
         has_pending[k] = has_change[k] = 0;
     }
     /* IS10: the provisioning keeps a lost ceiling lost while the record it leaves still names it */
-    int ceiling_lost = keeps && pep->set_lost[PP_SET_CEILING] && record.sets[PP_SET_CEILING].held;
+    int ceiling_lost = keeps && pep->set_lost[PP_SET_CEILING] && record->sets[PP_SET_CEILING].held;
     for (size_t k = 0; k < n_brought; k++) {
-        memset(&view, 0, sizeof view);
-        memset(&iview, 0, sizeof iview);
-        view.kind = pep->config.kind;
-        pp_copy_stream(view.stream, stream);
-        view.body_bound = PP_MAX_BODY;
-        view.has_clock = pep->config.has_clock;
-        view.has_instance_key_id = 1;
-        pp_sha256(pep->instance_public, 32, view.instance_key_id);
-        view.table_check = pep->config.table_check;
-        view.table_context = pep->config.context;
-        iview.record = &record;
+        memset(view, 0, sizeof *view);
+        memset(iview, 0, sizeof *iview);
+        view->kind = pep->config.kind;
+        pp_copy_stream(view->stream, stream);
+        view->body_bound = PP_MAX_BODY;
+        view->has_clock = pep->config.has_clock;
+        view->has_instance_key_id = 1;
+        pp_sha256(pep->instance_public, 32, view->instance_key_id);
+        view->table_check = pep->config.table_check;
+        view->table_context = pep->config.context;
+        iview->record = record;
         for (int j = 0; j < PP_SETS; j++) {
-            iview.staged[j] = has_pending[j] ? &pending[j] : NULL;
-            iview.change[j] = has_change[j] ? &changes[j] : NULL;
+            iview->staged[j] = has_pending[j] ? &pending[j] : NULL;
+            iview->change[j] = has_change[j] ? &changes[j] : NULL;
         }
-        if (held_sets[PP_SET_CEILING]) {
-            iview.has_ceiling = 1;
-            iview.ceiling = (const uint8_t (*)[32])held_sets[PP_SET_CEILING]->body;
-            iview.n_ceiling = held_sets[PP_SET_CEILING]->body_len / 32;
+        const pp_set_ref *ceiling = held_sets[PP_SET_CEILING];
+        if (ceiling) { /* a held list by its hashes, a brought one as its body (B-0020) */
+            iview->has_ceiling = ceiling->canonical ? 2 : 1;
+            iview->ceiling = (const uint8_t (*)[32])ceiling->body;
+            iview->n_ceiling = ceiling->canonical ? ceiling->body_len : ceiling->body_len / 32;
         }
-        iview.layout = pep->config.layout;
-        iview.trust = anchor;
-        view.install = &iview;
-        pp_verify(brought[k].sealed, brought[k].sealed_len, brought[k].body, brought[k].body_len, anchor, &view, now,
-                  &verdict);
-        const pp_envelope *e = &verdict.envelope;
-        if (!verdict.has_envelope || !pp_is_install(e->artifact)) return PP_CAUSE_BAD_FORMAT;
-        if (verdict.cause == PP_CAUSE_SEQ_REPLAY) continue; /* case 170: refused, the provisioning goes on */
-        if (verdict.cause) return verdict.cause;
-        if (verdict.unchanged) continue;
+        iview->layout = pep->config.layout;
+        iview->trust = anchor;
+        view->install = iview;
+        pp_verify(brought[k].sealed, brought[k].sealed_len, brought[k].body, brought[k].body_len, anchor, view, now,
+                  verdict);
+        const pp_envelope *e = &verdict->envelope;
+        if (!verdict->has_envelope || !pp_is_install(e->artifact)) return PP_CAUSE_BAD_FORMAT;
+        if (verdict->cause == PP_CAUSE_SEQ_REPLAY) continue; /* case 170: refused, the provisioning goes on */
+        if (verdict->cause) return verdict->cause;
+        if (verdict->unchanged) continue;
         if (e->artifact == PP_ART_INSTALL_TRUST) { /* IS11: the statements after it verify under it */
-            pp_install_take_trust(&record, e, brought[k].body, brought[k].body_len);
+            pp_install_take_trust(record, e, brought[k].body, brought[k].body_len);
             continue;
         }
         if (e->artifact == PP_ART_INSTALL_CHANGE) { /* IS15, as pp_stage_change holds it */
-            int kind = verdict.change_set;
-            const pp_statement *held = held_sets[kind];
-            if (held == NULL || memcmp(verdict.change_from, held->envelope.policy_sha256, 32) != 0)
+            int kind = verdict->change_set;
+            const pp_set_ref *held = held_sets[kind];
+            if (held == NULL || memcmp(verdict->change_from, held->envelope->policy_sha256, 32) != 0)
                 return PP_CAUSE_WIDENING_UNSIGNED;
             if (has_pending[kind] && pending[kind].seq != e->seq) has_pending[kind] = 0; /* G2 */
             has_change[kind] = 1;
@@ -2404,22 +2494,14 @@ static uint8_t pp_precheck(const pp_pep_machine *pep, const pp_trust *anchor, co
             changes[kind].seq = e->seq;
             memcpy(changes[kind].policy_sha256, e->policy_sha256, 32);
             memcpy(changes[kind].release, e->release, 32);
-            memcpy(changes[kind].from, verdict.change_from, 32);
+            memcpy(changes[kind].from, verdict->change_from, 32);
             memcpy(changes[kind].envelope_id, e->envelope_id, 32);
             continue;
         }
         int kind = pp_set_of(e->artifact);
         if (has_change[kind] && changes[kind].seq != e->seq) has_change[kind] = 0; /* G2 */
-        memset(&one, 0, sizeof one);
-        one.envelope = *e;
-        if (e->as == PP_AS_POLICY_LIST) {
-            size_t n = 0;
-            pp_read_ceiling(brought[k].body, brought[k].body_len, (uint8_t (*)[32])one.body, &n);
-            one.body_len = 32 * n;
-        } else {
-            one.body_len = brought[k].body_len;
-            memcpy(one.body, brought[k].body, brought[k].body_len);
-        }
+        /* the set as it came: a table's bytes, or a policy list read in place from the body V11 checked */
+        pp_set_ref one = {e, brought[k].body, brought[k].body_len, e->as == PP_AS_POLICY_LIST};
         uint8_t release[32];
         pp_release_of_one(pp_as_name(e->as), e->body_sha256, release);
         if (memcmp(release, e->release, 32) != 0) { /* not whole: staged, and applied by nothing here */
@@ -2428,20 +2510,22 @@ static uint8_t pp_precheck(const pp_pep_machine *pep, const pp_trust *anchor, co
             continue;
         }
         int larger = 0;
-        uint8_t cause = pp_set_refusal(pep, &record, held_sets, has_change[kind] ? &changes[kind] : NULL, &one, kind,
+        uint8_t cause = pp_set_refusal(pep, record, held_sets, has_change[kind] ? &changes[kind] : NULL, &one, kind,
                                        ceiling_lost, &larger);
         if (cause == PP_CAUSE_SEQ_REPLAY) continue;
         if (cause) return cause;
         int empty = e->as == PP_AS_NONE;
-        pp_install_slot *slot = &record.sets[kind]; /* as pp_apply_set leaves the record */
+        pp_install_slot *slot = &record->sets[kind]; /* as pp_apply_set leaves the record */
         slot->seq = e->seq;
         slot->held = !empty;
         memcpy(slot->envelope_id, e->envelope_id, 32);
         pp_sha256(e->envelope_id, 32, slot->set_id);
         memcpy(slot->policy_sha256, e->policy_sha256, 32);
         memcpy(slot->body_sha256, e->body_sha256, 32);
-        made[kind] = one;
-        held_sets[kind] = empty ? NULL : &made[kind];
+        made[kind] = *e;
+        one.envelope = &made[kind];
+        sets[kind] = one;
+        held_sets[kind] = empty ? NULL : &sets[kind];
         has_pending[kind] = has_change[kind] = 0;
         if (kind == PP_SET_CEILING) ceiling_lost = 0;
     }
@@ -2460,6 +2544,7 @@ uint8_t pp_pep_provision_install(pp_pep_machine *pep, const pp_trust *anchor, co
     if (cause) return cause;
     cause = pp_precheck(pep, anchor, stream, &next, has, keeps, brought, n_brought, now);
     if (cause) return cause;
+    if (n_brought) (void)pp_next_record(pep, install, &next, &has, &keeps); /* the precheck walked it: built again */
     pp_durable *d = &pep->d;
     uint64_t counter = d->counter;
     /* what no provisioning clears: the marks of the anchor part, the counts of H10 and AF8, and the held sets the
@@ -2809,46 +2894,49 @@ static void pp_lapse(pp_pep_machine *pep, uint8_t cause);
  * `widens` false only when `replaces` is the policy hash of the set it holds, and a ceiling after a lost one,
  * `ceiling_lost`, is larger unless it is the lost one sent again byte for byte (IS10). pp_apply_set and the
  * provisioning precheck both ask it. */
-static uint8_t pp_set_refusal(const pp_pep_machine *pep, const pp_install *r, const pp_statement *const held_sets[PP_SETS],
-                              const pp_change *change, const pp_statement *st, int kind, int ceiling_lost, int *larger_out) {
-    const pp_envelope *e = &st->envelope;
+static uint8_t pp_set_refusal(const pp_pep_machine *pep, const pp_install *r, const pp_set_ref *const held_sets[PP_SETS],
+                              const pp_change *change, const pp_set_ref *st, int kind, int ceiling_lost, int *larger_out) {
+    const pp_envelope *e = st->envelope;
     uint8_t cause = PP_CAUSE_NONE;
     int empty = e->as == PP_AS_NONE;
-    const pp_statement *held = held_sets[kind], *ceiling = held_sets[PP_SET_CEILING];
+    const pp_set_ref *held = held_sets[kind], *ceiling = held_sets[PP_SET_CEILING];
     int lost = kind == PP_SET_CEILING && ceiling_lost; /* IS10: a ceiling after a lost one */
     *larger_out = 0;
     if (e->seq <= r->sets[kind].seq) cause = PP_CAUSE_SEQ_REPLAY;
-    else if (kind != PP_SET_CEILING && !empty && !pp_on_list(ceiling, e->body_sha256)) cause = PP_CAUSE_ABOVE_CEILING;
+    else if (kind != PP_SET_CEILING && !empty && !pp_ref_on_list(ceiling, e->body_sha256)) cause = PP_CAUSE_ABOVE_CEILING;
     else if (kind == PP_SET_CEILING && !empty) {
         for (int other = 0; other < PP_SET_CEILING; other++) {
-            const pp_statement *one = held_sets[other];
-            if (one && !pp_on_list(st, one->envelope.body_sha256)) cause = PP_CAUSE_ABOVE_CEILING; /* narrow those first */
+            const pp_set_ref *one = held_sets[other];
+            if (one && !pp_ref_on_list(st, one->envelope->body_sha256)) cause = PP_CAUSE_ABOVE_CEILING; /* narrow those first */
         }
     }
     int larger = 0;
     /* IS15: a change statement staged for this set, from the held set's policy hash, stands for its table */
     int carried = !cause && kind != PP_SET_CEILING && !empty && held != NULL && change != NULL &&
                   change->seq == e->seq && !e->widens && e->has_replaces &&
-                  memcmp(e->replaces, held->envelope.policy_sha256, 32) == 0 &&
-                  memcmp(change->from, held->envelope.policy_sha256, 32) == 0;
+                  memcmp(e->replaces, held->envelope->policy_sha256, 32) == 0 &&
+                  memcmp(change->from, held->envelope->policy_sha256, 32) == 0;
     if (!cause) {
         if (lost) /* IS10, IS12: all but a byte for byte resend of the set the record names, the empty one too */
             larger = !(r->sets[kind].held && !empty && memcmp(e->body_sha256, r->sets[kind].body_sha256, 32) == 0);
         else if (kind == PP_SET_CEILING) {
             if (empty) larger = held != NULL;
             else if (held != NULL)
-                for (size_t k = 0; k < st->body_len / 32; k++)
-                    larger |= !pp_on_list(held, st->body + 32 * k); /* a hash the list before did not hold */
+                for (size_t k = 0, n = pp_ref_count(st); k < n; k++) {
+                    uint8_t hash[32];
+                    pp_ref_hash(st, k, hash);
+                    larger |= !pp_ref_on_list(held, hash); /* a hash the list before did not hold */
+                }
         } else if (!empty) {
             /* IS12: a mesh PEP compares bytes, and a cfs PEP takes the signers' word beyond the replaces test */
             larger = held == NULL || (pep->config.kind == PP_TGT_MESH && !carried &&
                                       (held->body_len != st->body_len || memcmp(held->body, st->body, st->body_len) != 0));
             if (carried && kind == PP_SET_FLOOR &&
-                (held->envelope.has_layout != e->has_layout || held->envelope.has_command != e->has_command ||
-                 (e->has_layout && memcmp(held->envelope.layout, e->layout, 32) != 0) ||
-                 (e->has_command && held->envelope.command != e->command)))
+                (held->envelope->has_layout != e->has_layout || held->envelope->has_command != e->has_command ||
+                 (e->has_layout && memcmp(held->envelope->layout, e->layout, 32) != 0) ||
+                 (e->has_command && held->envelope->command != e->command)))
                 larger = 1; /* IS15: the table read with another layout or command register (AF9, AF10) */
-            const pp_envelope *before = held ? &held->envelope : NULL;
+            const pp_envelope *before = held ? held->envelope : NULL;
             if (kind == PP_SET_FLOOR && before && before->has_rate &&
                 (!e->has_rate || e->rate_allows > before->rate_allows || e->rate_window < before->rate_window))
                 larger = 1; /* AF8, IS12: a looser rate, or one removed */
@@ -2877,9 +2965,14 @@ static uint8_t pp_apply_set(pp_pep_machine *pep, int kind) {
     const pp_envelope *e = &st->envelope;
     uint8_t subject = (uint8_t)(kind + 1);
     int empty = e->as == PP_AS_NONE, larger = 0;
-    const pp_statement *held_sets[PP_SETS];
-    for (int k = 0; k < PP_SETS; k++) held_sets[k] = pp_held_set(pep, k);
-    uint8_t cause = pp_set_refusal(pep, r, held_sets, set->has_change ? &set->change : NULL, st, kind,
+    pp_set_ref sets[PP_SETS], whole = pp_ref_of(st);
+    const pp_set_ref *held_sets[PP_SETS];
+    for (int k = 0; k < PP_SETS; k++) {
+        const pp_statement *held = pp_held_set(pep, k);
+        if (held) sets[k] = pp_ref_of(held);
+        held_sets[k] = held ? &sets[k] : NULL;
+    }
+    uint8_t cause = pp_set_refusal(pep, r, held_sets, set->has_change ? &set->change : NULL, &whole, kind,
                                    pp_ceiling_lost(pep), &larger);
     if (cause) {
         set->has_staged = set->has_change = 0;
@@ -3165,14 +3258,14 @@ static uint8_t pp_stage_one(pp_pep_machine *pep, const uint8_t *sealed, size_t s
         pp_refuse(pep, PP_CAUSE_FLOOR_LOST);
         return PP_CAUSE_FLOOR_LOST;
     }
-    static pp_pep view;
-    static pp_verdict verdict;
-    pp_pep_view(pep, &view);
-    pp_verify(sealed, sealed_len, body, body_len, &d->trust, &view, pep->now, &verdict);
-    const pp_envelope *e = verdict.has_envelope ? &verdict.envelope : NULL;
+    pp_pep *view = &pp_check_view; /* shared with the precheck (B-0020) */
+    pp_verdict *verdict = &pp_check_verdict;
+    pp_pep_view(pep, view);
+    pp_verify(sealed, sealed_len, body, body_len, &d->trust, view, pep->now, verdict);
+    const pp_envelope *e = verdict->has_envelope ? &verdict->envelope : NULL;
     int installing = e && pp_is_install(e->artifact);
     int answer = e && e->artifact == PP_ART_OPERATOR_ANSWER;
-    uint8_t subject = e ? pp_subject_of(e) : 0, cause = verdict.cause;
+    uint8_t subject = e ? pp_subject_of(e) : 0, cause = verdict->cause;
     if (e && e->artifact == PP_ART_INSTALL_CHANGE) { /* H10: the set an install change statement carries, or none */
         int k;
         uint8_t from[32];
@@ -3184,13 +3277,13 @@ static uint8_t pp_stage_one(pp_pep_machine *pep, const uint8_t *sealed, size_t s
     else if (pp_ceiling_lost(pep) && e && !pp_on_trust_stream(e->artifact) && e->artifact != PP_ART_INSTALL_CEILING &&
              e->artifact != PP_ART_INSTALL_TRUST && e->artifact != PP_ART_OPERATOR_ANSWER)
         cause = PP_CAUSE_INSTALL_LOST; /* IS10: frozen until a ceiling is held again */
-    else if (verdict.has_time_floor && d->trust_reads && verdict.time_floor > d->trust.time_floor) {
-        d->trust.time_floor = verdict.time_floor; /* V13, T1 */
+    else if (verdict->has_time_floor && d->trust_reads && verdict->time_floor > d->trust.time_floor) {
+        d->trust.time_floor = verdict->time_floor; /* V13, T1 */
         pp_persist(pep, PP_PART_TRUST);
     }
     if (cause) { pp_emit_about(pep, PP_EV_REFUSED, cause, subject); return cause; }
-    if (verdict.unchanged) { pp_emit(pep, PP_EV_BEAT, 0); return PP_CAUSE_NONE; } /* Q3, R1, IS6 */
-    if (installing) return pp_stage_install(pep, &verdict, sealed, sealed_len, body, body_len);
+    if (verdict->unchanged) { pp_emit(pep, PP_EV_BEAT, 0); return PP_CAUSE_NONE; } /* Q3, R1, IS6 */
+    if (installing) return pp_stage_install(pep, verdict, sealed, sealed_len, body, body_len);
     if (answer) return pp_apply_answer(pep, e, body, body_len);
     if (e->artifact == PP_ART_TRUST_REVOCATION) {
         uint8_t cause = pp_apply_revocation(pep, e, body, body_len); /* B2: applied when it verifies, durable before reported (R3) */
@@ -4026,3 +4119,1272 @@ int pp_durable_unpack(pp_durable *out, int part, const uint8_t *bytes, size_t le
 void pp_durable_held(pp_durable *d, int held) {
     if (!(held & PP_PART_ANCHOR) && (held & PP_PARTS & ~PP_PART_ANCHOR)) pp_part_lost(d, PP_PART_ANCHOR, 0);
 }
+
+#else /* PP_DIST_PROFILE_MIN */
+/* ------------------------------------------------------------------ the constrained profile (B12) */
+/* What follows is the whole PEP of a PP_DIST_PROFILE_MIN build. It shares the SHA-256 and the image check above with
+ * the full core and nothing else. Constant text lives in flash on an AVR, so the programs below cost no RAM there. */
+
+static uint32_t pp_u32(const uint8_t *p) { return (uint32_t)p[0] | (uint32_t)p[1] << 8 | (uint32_t)p[2] << 16 | (uint32_t)p[3] << 24; }
+
+void pp_sha256_init(pp_sha256_ctx *c) {
+    static const uint32_t iv[8] = {0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
+                                   0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19};
+    memcpy(c->h, iv, sizeof iv);
+    c->bytes = 0;
+}
+
+void pp_sha256_update(pp_sha256_ctx *c, const uint8_t *data, size_t len) {
+    while (len) {
+        size_t fill = (size_t)(c->bytes % 64), take = 64 - fill;
+        if (take > len) take = len;
+        memcpy(c->block + fill, data, take);
+        c->bytes += take;
+        data += take;
+        len -= take;
+        if (c->bytes % 64 == 0) pp_sha256_block(c->h, c->block);
+    }
+}
+
+void pp_sha256_final(pp_sha256_ctx *c, uint8_t out[32]) {
+    uint64_t bits = c->bytes * 8;
+    size_t fill = (size_t)(c->bytes % 64);
+    c->block[fill++] = 0x80;
+    if (fill > 56) {
+        memset(c->block + fill, 0, 64 - fill);
+        pp_sha256_block(c->h, c->block);
+        fill = 0;
+    }
+    memset(c->block + fill, 0, 56 - fill);
+    for (int b = 0; b < 8; b++) c->block[63 - b] = (uint8_t)(bits >> (8 * b));
+    pp_sha256_block(c->h, c->block);
+    for (int b = 0; b < 8; b++) {
+        out[4 * b] = (uint8_t)(c->h[b] >> 24);
+        out[4 * b + 1] = (uint8_t)(c->h[b] >> 16);
+        out[4 * b + 2] = (uint8_t)(c->h[b] >> 8);
+        out[4 * b + 3] = (uint8_t)c->h[b];
+    }
+}
+
+/* The kind names in the order of pp_artifact and pp_target, each ended by a zero byte, the list by two. */
+static const char pp_min_artifacts[] PP_ROM =
+    "policy.core\0policy.ppt\0policy.spiral\0sandbox.profile\0egress.hosts\0agent.zones\0gateway.routes\0net.dests\0"
+    "net.edge\0cfs.table\0grant\0trust.widening\0trust.revocation\0trust.rotation\0install.floor\0install.fallback\0"
+    "install.ceiling\0install.trust\0operator.answer\0trust.controller\0trust.change\0install.change\0identity.bundle\0"
+    "identity.map\0";
+static const char pp_min_targets[] PP_ROM = "agent\0cfs\0gateway\0host\0mesh\0xdp\0";
+
+/* The index of `name` in a list above, or -1 (E8). */
+static int pp_min_name(const char *list, const char *name) {
+    int index = 0;
+    const char *p = list;
+    while (pp_rom(p)) {
+        size_t k = 0;
+        while (pp_rom(p + k) && pp_rom(p + k) == (uint8_t)name[k]) k++;
+        if (pp_rom(p + k) == 0 && name[k] == 0) return index;
+        while (pp_rom(p)) p++;
+        p++;
+        index++;
+    }
+    return -1;
+}
+
+static int pp_min_is_stream(const char *s) {
+    size_t n = strlen(s);
+    if (n < 1 || n > PP_STREAM_MAX) return 0;
+    for (size_t k = 0; k < n; k++) {
+        char b = s[k];
+        if (!((b >= 'a' && b <= 'z') || (b >= '0' && b <= '9') || b == '.' || b == '_' || b == '/' || b == '-')) return 0;
+    }
+    return 1;
+}
+
+static int pp_min_hex(uint8_t c) {
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+    return -1;
+}
+
+/* Byte order of two names, the shorter first when one begins the other. */
+static int pp_min_cmp(const uint8_t *a, size_t an, const uint8_t *b, size_t bn) {
+    int c = memcmp(a, b, an < bn ? an : bn);
+    return c ? c : (an > bn) - (an < bn);
+}
+
+/* ------------------------------------------------------------------ the streaming reader */
+
+/* A program is the canonical bytes of a document with each value replaced by an op byte and a field byte. Literal
+ * bytes match one for one, so the reader accepts the canonical spelling and nothing else (B12). */
+enum { PP_RD_NAME = 1, PP_RD_HASH, PP_RD_HASH_OR_EMPTY, PP_RD_INT, PP_RD_BOOL, PP_RD_META, PP_RD_TARGETS, PP_RD_HASHES,
+       PP_RD_FLOORS };
+enum { PP_F_ARTIFACT = 1, PP_F_BODY_SHA256, PP_F_BODY_SIZE, PP_F_EXPIRES, PP_F_META, PP_F_NOT_BEFORE, PP_F_POLICY,
+       PP_F_RELEASE, PP_F_REPLACES, PP_F_SEQ, PP_F_STREAM, PP_F_TARGETS, PP_F_WIDENS, PP_F_FROM, PP_F_ENVELOPES,
+       PP_F_FLOORS, PP_F_KEYS, PP_F_POLICIES, PP_F_ADD, PP_F_RETIRE, PP_F_CONTROLLER };
+
+/* E1, E9: the fifteen members in canonical order. */
+static const uint8_t pp_min_envelope_prog[] PP_ROM =
+    "{\"artifact\":" "\x01\x01" ",\"body_sha256\":" "\x02\x02" ",\"body_size\":" "\x04\x03"
+    ",\"encoding\":\"canon/2\",\"expires\":" "\x04\x04" ",\"format\":\"prismpath.dist/1\",\"meta\":" "\x06\x05"
+    ",\"not_before\":" "\x04\x06" ",\"policy_sha256\":" "\x02\x07" ",\"release\":" "\x02\x08" ",\"replaces\":" "\x03\x09"
+    ",\"seq\":" "\x04\x0a" ",\"stream\":" "\x01\x0b" ",\"targets\":" "\x07\x0c" ",\"widens\":" "\x05\x0d" "}";
+/* W4 */
+static const uint8_t pp_min_widening_prog[] PP_ROM =
+    "{\"encoding\":\"canon/2\",\"format\":\"prismpath.dist-widening/1\",\"from\":" "\x08\x0e" "}";
+/* Section 10 */
+static const uint8_t pp_min_revocation_prog[] PP_ROM =
+    "{\"encoding\":\"canon/2\",\"envelopes\":" "\x08\x0f" ",\"floors\":" "\x09\x10"
+    ",\"format\":\"prismpath.dist-revocation/1\",\"keys\":" "\x08\x11" ",\"policies\":" "\x08\x12" "}";
+/* Section 11 */
+static const uint8_t pp_min_rotation_prog[] PP_ROM =
+    "{\"add\":" "\x02\x13" ",\"encoding\":\"canon/2\",\"format\":\"prismpath.dist-rotation/1\",\"retire\":" "\x03\x14" "}";
+/* K7 */
+static const uint8_t pp_min_controller_prog[] PP_ROM =
+    "{\"encoding\":\"canon/2\",\"format\":\"prismpath.dist-controller/1\",\"key\":" "\x02\x15" "}";
+
+static void pp_rd_start(pp_min_reader *r, const uint8_t *prog, uint16_t len) {
+    memset(r, 0, sizeof *r);
+    r->prog = prog;
+    r->prog_len = len;
+}
+
+/* A canonical integer, at most 2^53 - 1 either way: 1 taken, 0 ended before this byte, -1 not one. */
+static int pp_rd_int(pp_min_reader *r, uint8_t b) {
+    int digit = b >= '0' && b <= '9';
+    if (r->isub == 0) {
+        r->num = 0;
+        r->ineg = 0;
+        r->isub = 1;
+        if (b == '-') { r->ineg = 1; return 1; }
+    }
+    if (r->isub == 1) {
+        if (b == '0' && !r->ineg) { r->isub = 3; return 1; }
+        if (b < '1' || b > '9') return -1;
+        r->num = (uint64_t)(b - '0');
+        r->isub = 2;
+        return 1;
+    }
+    if (r->isub == 2) {
+        if (!digit) return 0;
+        r->num = r->num * 10 + (uint64_t)(b - '0');
+        return r->num > (uint64_t)PP_MAX_SEQ ? -1 : 1;
+    }
+    return digit ? -1 : 0; /* a zero ends at once */
+}
+
+/* The meta object (E9): an object nesting at most three levels, read for canonical form and skipped. Member names
+ * are ASCII of at most PP_MIN_META_KEY bytes, which B12 allows the profile. */
+enum { PP_M_START, PP_M_VALUE, PP_M_VALUE_OR_END, PP_M_KEY_OR_END, PP_M_KEY_START, PP_M_KEY, PP_M_COLON, PP_M_AFTER,
+       PP_M_STRING, PP_M_UTF8, PP_M_ESC, PP_M_UESC, PP_M_INT, PP_M_LIT };
+
+static int pp_rd_push(pp_min_reader *r, uint8_t kind) {
+    if (r->depth >= PP_META_MAX_DEPTH) return -1;
+    r->kinds[r->depth] = kind;
+    r->has_key[r->depth] = 0;
+    r->depth++;
+    r->mstate = kind == '{' ? PP_M_KEY_OR_END : PP_M_VALUE_OR_END;
+    return 1;
+}
+
+static int pp_rd_pop(pp_min_reader *r) {
+    if (--r->depth == 0) return 2; /* meta ends */
+    r->mstate = PP_M_AFTER;
+    return 1;
+}
+
+static const char *const pp_rd_lits[3] = {"true", "false", "null"};
+
+static int pp_rd_value(pp_min_reader *r, uint8_t b) {
+    if (b == '{' || b == '[') return pp_rd_push(r, b);
+    if (b == '"') { r->mstate = PP_M_STRING; return 1; }
+    if (b == '-' || (b >= '0' && b <= '9')) {
+        r->isub = 0;
+        r->mstate = PP_M_INT;
+        return pp_rd_int(r, b) < 0 ? -1 : 1;
+    }
+    if (b == 't' || b == 'f' || b == 'n') {
+        r->esc = b == 't' ? 0 : b == 'f' ? 1 : 2;
+        r->cur_len = 1;
+        r->mstate = PP_M_LIT;
+        return 1;
+    }
+    return -1;
+}
+
+/* 1 taken, 2 taken and meta is whole, -1 not canonical or past the profile's bounds. */
+static int pp_rd_meta(pp_min_reader *r, uint8_t b) {
+    int n;
+    switch (r->mstate) {
+    case PP_M_START: return b == '{' ? pp_rd_push(r, '{') : -1;
+    case PP_M_VALUE: return pp_rd_value(r, b);
+    case PP_M_VALUE_OR_END: return b == ']' ? pp_rd_pop(r) : pp_rd_value(r, b);
+    case PP_M_KEY_OR_END:
+        if (b == '}') return pp_rd_pop(r);
+        if (b != '"') return -1;
+        r->mstate = PP_M_KEY;
+        r->cur_len = 0;
+        return 1;
+    case PP_M_KEY_START:
+        if (b != '"') return -1;
+        r->mstate = PP_M_KEY;
+        r->cur_len = 0;
+        return 1;
+    case PP_M_KEY: {
+        uint8_t d = (uint8_t)(r->depth - 1);
+        if (b == '"') { /* members in order, no name twice */
+            if (r->has_key[d] && pp_min_cmp(r->cur, r->cur_len, r->u.keys[d], r->key_len[d]) <= 0) return -1;
+            memcpy(r->u.keys[d], r->cur, r->cur_len);
+            r->key_len[d] = r->cur_len;
+            r->has_key[d] = 1;
+            r->mstate = PP_M_COLON;
+            return 1;
+        }
+        if (b < 0x20 || b >= 0x80 || b == '\\' || r->cur_len >= PP_MIN_META_KEY) return -1;
+        r->cur[r->cur_len++] = b;
+        return 1;
+    }
+    case PP_M_COLON:
+        if (b != ':') return -1;
+        r->mstate = PP_M_VALUE;
+        return 1;
+    case PP_M_AFTER: {
+        uint8_t kind = r->kinds[r->depth - 1];
+        if (b == ',') {
+            r->mstate = kind == '{' ? PP_M_KEY_START : PP_M_VALUE;
+            return 1;
+        }
+        return b == (kind == '{' ? '}' : ']') ? pp_rd_pop(r) : -1;
+    }
+    case PP_M_STRING:
+        if (b == '"') { r->mstate = PP_M_AFTER; return 1; }
+        if (b == '\\') { r->mstate = PP_M_ESC; return 1; }
+        if (b < 0x20) return -1;
+        if (b < 0x80) return 1;
+        /* strict UTF-8: no overlong form, no surrogate, at most U+10FFFF */
+        r->lo = 0x80;
+        r->hi = 0xBF;
+        if (b >= 0xC2 && b <= 0xDF) r->need = 1;
+        else if (b >= 0xE0 && b <= 0xEF) {
+            r->need = 2;
+            if (b == 0xE0) r->lo = 0xA0;
+            if (b == 0xED) r->hi = 0x9F;
+        } else if (b >= 0xF0 && b <= 0xF4) {
+            r->need = 3;
+            if (b == 0xF0) r->lo = 0x90;
+            if (b == 0xF4) r->hi = 0x8F;
+        } else return -1;
+        r->mstate = PP_M_UTF8;
+        return 1;
+    case PP_M_UTF8:
+        if (b < r->lo || b > r->hi) return -1;
+        r->lo = 0x80;
+        r->hi = 0xBF;
+        if (--r->need == 0) r->mstate = PP_M_STRING;
+        return 1;
+    case PP_M_ESC: /* the escapes the canonical writer writes */
+        if (b == '"' || b == '\\' || b == 'b' || b == 'f' || b == 'n' || b == 'r' || b == 't') {
+            r->mstate = PP_M_STRING;
+            return 1;
+        }
+        if (b != 'u') return -1;
+        r->mstate = PP_M_UESC;
+        r->esc = 0;
+        return 1;
+    case PP_M_UESC: /* \u00xx in lower case, for a control with no short escape */
+        if (r->esc < 2) {
+            if (b != '0') return -1;
+            r->esc++;
+            return 1;
+        }
+        if ((n = pp_min_hex(b)) < 0) return -1;
+        if (r->esc == 2) {
+            if (n > 1) return -1;
+            r->num = (uint64_t)n;
+            r->esc++;
+            return 1;
+        }
+        n += (int)(r->num * 16);
+        if (n == 0x08 || n == 0x09 || n == 0x0A || n == 0x0C || n == 0x0D) return -1;
+        r->mstate = PP_M_STRING;
+        return 1;
+    case PP_M_INT: {
+        int k = pp_rd_int(r, b);
+        if (k) return k;
+        r->mstate = PP_M_AFTER; /* the byte that ended the integer is the next one read */
+        return pp_rd_meta(r, b);
+    }
+    default: { /* PP_M_LIT */
+        const char *word = pp_rd_lits[r->esc];
+        if (b != (uint8_t)word[r->cur_len]) return -1;
+        if (word[++r->cur_len] == 0) r->mstate = PP_M_AFTER;
+        return 1;
+    }
+    }
+}
+
+static void pp_min_take(pp_min *pep, uint8_t field);
+static void pp_min_item(pp_min *pep, uint8_t field);
+
+/* Read one byte. 1 when it was taken, 0 when the op ended before it and it is read again by the next op. */
+static int pp_rd_step(pp_min *pep, pp_min_reader *r, uint8_t b) {
+    if (r->pc >= r->prog_len) { r->failed = 1; return 1; } /* bytes past the end */
+    uint8_t op = pp_rom(r->prog + r->pc);
+    if (op >= 0x20) {
+        if (b != op) r->failed = 1;
+        r->pc++;
+        return 1;
+    }
+    uint8_t field = pp_rom(r->prog + r->pc + 1);
+    int taken = 1, done = 0, n;
+    switch (op) {
+    case PP_RD_NAME:
+        if (r->sub == 0) {
+            if (b != '"') goto bad;
+            r->sub = 1;
+            r->name_len = 0;
+        } else if (b == '"') {
+            r->name[r->name_len] = 0;
+            done = 1;
+        } else {
+            if (b < 0x21 || b > 0x7E || b == '\\' || r->name_len >= PP_STREAM_MAX) goto bad;
+            r->name[r->name_len++] = (char)b;
+        }
+        break;
+    case PP_RD_HASH:
+    case PP_RD_HASH_OR_EMPTY:
+        if (r->sub == 0) {
+            if (b != '"') goto bad;
+            r->sub = 1;
+        } else if (r->sub == 1 && op == PP_RD_HASH_OR_EMPTY && b == '"') {
+            r->count = 0;
+            done = 1;
+        } else if (r->sub <= 64) {
+            if ((n = pp_min_hex(b)) < 0) goto bad;
+            uint8_t at = (uint8_t)((r->sub - 1) / 2);
+            r->hash[at] = (r->sub & 1) ? (uint8_t)(n << 4) : (uint8_t)(r->hash[at] | n);
+            r->sub++;
+        } else {
+            if (b != '"') goto bad;
+            r->count = 1;
+            done = 1;
+        }
+        break;
+    case PP_RD_INT:
+        if ((n = pp_rd_int(r, b)) < 0) goto bad;
+        if (n == 0) { taken = 0; done = 1; }
+        break;
+    case PP_RD_BOOL: {
+        const char *word = r->sub == 0 ? (b == 't' ? "true" : "false") : r->count ? "true" : "false";
+        if (r->sub == 0) r->count = b == 't';
+        if (b != (uint8_t)word[r->sub]) goto bad;
+        if (word[++r->sub] == 0) done = 1;
+        break;
+    }
+    case PP_RD_META:
+        if ((n = pp_rd_meta(r, b)) < 0) goto bad;
+        done = n == 2;
+        break;
+    case PP_RD_TARGETS:
+        if (r->sub == 0) {
+            if (b != '[') goto bad;
+            r->sub = 1;
+            r->last_target = -1;
+        } else if (r->sub == 1) {
+            if (b != '"') goto bad;
+            r->sub = 2;
+            r->name_len = 0;
+        } else if (r->sub == 2) {
+            if (b == '"') {
+                r->name[r->name_len] = 0;
+                int target = pp_min_name(pp_min_targets, r->name);
+                if (target <= r->last_target) goto bad; /* unknown (E8), out of order or twice */
+                r->last_target = (int8_t)target;
+                pep->v.e.targets |= (uint8_t)(1u << target);
+                r->sub = 3;
+            } else {
+                if (b < 0x21 || b > 0x7E || b == '\\' || r->name_len >= 16) goto bad;
+                r->name[r->name_len++] = (char)b;
+            }
+        } else if (b == ',') {
+            r->sub = 1;
+        } else if (b == ']') {
+            done = 1;
+        } else goto bad;
+        break;
+    case PP_RD_HASHES: /* sorted, no repeats */
+        if (r->sub == 0) {
+            if (b != '[') goto bad;
+            r->sub = 1;
+            r->count = 0;
+        } else if (r->sub == 1 && b == ']') {
+            done = 1;
+        } else if (r->sub <= 2) {
+            if (b != '"') goto bad;
+            r->sub = 3;
+        } else if (r->sub < 67) {
+            if ((n = pp_min_hex(b)) < 0) goto bad;
+            uint8_t at = (uint8_t)((r->sub - 3) / 2);
+            r->hash[at] = ((r->sub - 3) & 1) ? (uint8_t)(r->hash[at] | n) : (uint8_t)(n << 4);
+            r->sub++;
+        } else if (r->sub == 67) {
+            if (b != '"' || (r->count && memcmp(r->last, r->hash, 32) >= 0)) goto bad;
+            memcpy(r->last, r->hash, 32);
+            if (r->count < 0xFFFF) r->count++;
+            pp_min_item(pep, field);
+            r->sub = 68;
+        } else if (b == ',') {
+            r->sub = 2;
+        } else if (b == ']') {
+            done = 1;
+        } else goto bad;
+        break;
+    default: /* PP_RD_FLOORS: stream names in order, each to a seq of 1 or more */
+        if (r->sub == 0) {
+            if (b != '{') goto bad;
+            r->sub = 1;
+            r->count = 0;
+        } else if (r->sub == 1 && b == '}') {
+            done = 1;
+        } else if (r->sub <= 2) {
+            if (b != '"') goto bad;
+            r->sub = 3;
+            r->name_len = 0;
+        } else if (r->sub == 3) {
+            if (b == '"') {
+                r->name[r->name_len] = 0;
+                if (!pp_min_is_stream(r->name) ||
+                    (r->count && pp_min_cmp((const uint8_t *)r->name, r->name_len, (const uint8_t *)r->u.last_name.text,
+                                            r->u.last_name.len) <= 0))
+                    goto bad;
+                memcpy(r->u.last_name.text, r->name, r->name_len);
+                r->u.last_name.len = r->name_len;
+                r->sub = 4;
+            } else {
+                if (b < 0x21 || b > 0x7E || b == '\\' || r->name_len >= PP_STREAM_MAX) goto bad;
+                r->name[r->name_len++] = (char)b;
+            }
+        } else if (r->sub == 4) {
+            if (b != ':') goto bad;
+            r->sub = 5;
+            r->isub = 0;
+        } else if (r->sub == 5) {
+            if ((n = pp_rd_int(r, b)) < 0) goto bad;
+            if (n == 0) {
+                if (r->ineg || r->num < 1) goto bad;
+                if (r->count < 0xFFFF) r->count++;
+                pp_min_item(pep, field);
+                r->sub = 6;
+                taken = 0;
+            }
+        } else if (b == ',') {
+            r->sub = 2;
+        } else if (b == '}') {
+            done = 1;
+        } else goto bad;
+        break;
+    }
+    if (done) {
+        pp_min_take(pep, field);
+        r->pc = (uint16_t)(r->pc + 2);
+        r->sub = r->isub = 0;
+    }
+    return taken;
+bad:
+    r->failed = 1;
+    return 1;
+}
+
+static void pp_rd_feed(pp_min *pep, pp_min_reader *r, const uint8_t *p, size_t n) {
+    for (size_t i = 0; i < n && !r->failed; i++)
+        while (!pp_rd_step(pep, r, p[i]) && !r->failed) {}
+}
+
+static int pp_rd_whole(const pp_min_reader *r) { return !r->failed && r->pc == r->prog_len; }
+
+/* ------------------------------------------------------------------ what the reader reads */
+
+#define PP_MIN_ON_TRUST(a) ((a) == PP_ART_TRUST_REVOCATION || (a) == PP_ART_TRUST_ROTATION || (a) == PP_ART_TRUST_CONTROLLER)
+#define PP_MIN_TRUST(a) (PP_MIN_ON_TRUST(a) || (a) == PP_ART_TRUST_WIDENING || (a) == PP_ART_TRUST_CHANGE)
+#define PP_MIN_INSTALL(a) (((a) >= PP_ART_INSTALL_FLOOR && (a) <= PP_ART_INSTALL_TRUST) || (a) == PP_ART_INSTALL_CHANGE)
+
+static long long pp_rd_signed(const pp_min_reader *r) { return r->ineg ? -(long long)r->num : (long long)r->num; }
+
+/* A key id that is the PEP's own instance key or, once retired, its authority key (O4, K7). */
+static int pp_min_bad_key(const pp_min *pep, const uint8_t public_key[32]) {
+    uint8_t id[32], own[32];
+    pp_sha256(public_key, 32, id);
+    pp_sha256(pep->instance_public, 32, own);
+    return memcmp(id, own, 32) == 0 ||
+           (pep->d.key_state == PP_MIN_KEY_RETIRED && memcmp(id, pep->d.key_id, 32) == 0);
+}
+
+static void pp_min_take(pp_min *pep, uint8_t field) {
+    pp_min_verify *v = &pep->v;
+    pp_min_envelope *e = &v->e;
+    pp_min_reader *r = &v->r;
+    long long n = pp_rd_signed(r);
+    int a;
+    switch (field) {
+    case PP_F_ARTIFACT:
+        if ((a = pp_min_name(pp_min_artifacts, r->name)) < 0) r->failed = 1;
+        else e->artifact = (uint8_t)a;
+        break;
+    case PP_F_BODY_SHA256: memcpy(e->body_sha256, r->hash, 32); break;
+    case PP_F_BODY_SIZE: if (n < 0 || n > PP_MAX_BODY) r->failed = 1; e->body_size = n; break;
+    case PP_F_EXPIRES: if (n < 0) r->failed = 1; e->expires = n; break;
+    case PP_F_NOT_BEFORE: if (n < 0) r->failed = 1; e->not_before = n; break;
+    case PP_F_SEQ: if (n < 1) r->failed = 1; e->seq = n; break;
+    case PP_F_POLICY: memcpy(e->policy_sha256, r->hash, 32); break;
+    case PP_F_RELEASE: memcpy(e->release, r->hash, 32); break;
+    case PP_F_REPLACES:
+        e->has_replaces = r->count != 0;
+        if (e->has_replaces) memcpy(e->replaces, r->hash, 32);
+        break;
+    case PP_F_STREAM:
+        if (!pp_min_is_stream(r->name) && strcmp(r->name, "@trust") != 0) r->failed = 1;
+        else memcpy(e->stream, r->name, (size_t)r->name_len + 1);
+        break;
+    case PP_F_WIDENS: e->widens = r->count != 0; break;
+    case PP_F_FROM: v->n_from = r->count; break;
+    case PP_F_ENVELOPES: v->n_envelopes = r->count; break;
+    case PP_F_FLOORS: v->n_floors = r->count; break;
+    case PP_F_KEYS: v->n_keys = r->count; break;
+    case PP_F_POLICIES: v->n_policies = r->count; break;
+    case PP_F_ADD:
+        if (pp_min_bad_key(pep, r->hash)) v->names_mine = 1;
+        break;
+    case PP_F_RETIRE:
+        if (r->count && memcmp(r->hash, pep->d.key_id, 32) == 0) v->retires_mine = 1;
+        break;
+    case PP_F_CONTROLLER: { /* K7: never its authority key, held or retired, and never its instance key */
+        uint8_t id[32];
+        pp_sha256(r->hash, 32, id);
+        if (pp_min_bad_key(pep, r->hash) || memcmp(id, pep->d.key_id, 32) == 0) v->names_mine = 1;
+        break;
+    }
+    default: break; /* meta and targets are kept as they are read */
+    }
+}
+
+/* One entry of a list, held against what the PEP holds: the policy it has active (W4), its floor's envelopes and
+ * policy and its staged release (R2, R5), its key (R2) and its stream's floor (R4). */
+static void pp_min_item(pp_min *pep, uint8_t field) {
+    pp_min_verify *v = &pep->v;
+    const pp_min_durable *d = &pep->d;
+    const uint8_t *h = v->r.hash;
+    switch (field) {
+    case PP_F_FROM:
+        if (d->has_active && memcmp(h, d->active.policy_sha256, 32) == 0) v->from_covers = 1;
+        break;
+    case PP_F_ENVELOPES:
+        for (uint8_t k = 0; k < d->n_floor_ids; k++)
+            if (memcmp(h, d->floor_ids[k], 32) == 0) v->active_listed |= (uint8_t)(1u << k);
+        if (d->has_staged && ((d->staged.has_table && memcmp(h, d->staged.table.id, 32) == 0) ||
+                              (d->staged.has_widening && memcmp(h, d->staged.widening.id, 32) == 0)))
+            v->staged_listed = 1;
+        break;
+    case PP_F_POLICIES:
+        if (d->n_floor_ids && memcmp(h, d->floor_policy, 32) == 0) v->active_listed |= 4;
+        if (d->has_staged && memcmp(h, d->staged.policy_sha256, 32) == 0) v->staged_listed = 1;
+        break;
+    case PP_F_KEYS:
+        if (d->key_state != PP_MIN_KEY_NONE && memcmp(h, d->key_id, 32) == 0) v->key_listed = 1;
+        break;
+    case PP_F_FLOORS:
+        if (strcmp(v->r.name, d->stream) == 0) v->floor_raised = pp_rd_signed(&v->r);
+        break;
+    default: break;
+    }
+}
+
+/* ------------------------------------------------------------------ one pass over the sealed envelope (V2 to V8) */
+
+enum { PP_PHASE_SEALED, PP_PHASE_BODY, PP_PHASE_DONE };
+
+static int pp_min_fail(pp_min *pep, uint8_t cause, int container) {
+    pep->v.cause = cause;
+    pep->v.container_bad = (uint8_t)container;
+    pep->v.phase = PP_PHASE_DONE;
+    return -1;
+}
+
+static long long pp_min_time(const pp_min *pep) {
+    return pep->now > pep->d.time_floor ? pep->now : pep->d.time_floor; /* T1 */
+}
+
+void pp_min_begin(pp_min *pep, size_t sealed_len, size_t body_len, long long now) {
+    memset(&pep->v, 0, sizeof pep->v);
+    pep->now = now;
+    pep->v.sealed_len = (uint16_t)(sealed_len > PP_MAX_SEALED ? PP_MAX_SEALED + 1 : sealed_len);
+    pep->v.body_len = (uint32_t)body_len;
+    pep->v.too_large = body_len > PP_TRUST_BOUND; /* E6: past the larger of the two bounds, never read */
+    if (sealed_len < 6 || sealed_len > PP_MAX_SEALED) pp_min_fail(pep, PP_CAUSE_BAD_FORMAT, 1);
+}
+
+static const uint8_t pp_min_pae[] PP_ROM = "DSSEv1 35 application/vnd.prismpath.dist+json ";
+
+/* The sealed container is read (S2): the hashes start, the signed bytes of S1 open the SHA-512 of the one entry that
+ * names the key, and the scanner opens. */
+static int pp_min_open_envelope(pp_min *pep) {
+    pp_min_verify *v = &pep->v;
+    uint16_t start = (uint16_t)(6 + PP_ENTRY_SIZE * v->k);
+    if (v->n < 1 || v->n > PP_MAX_ENVELOPE || v->sealed_len != start + 2 + v->n)
+        return pp_min_fail(pep, PP_CAUSE_BAD_FORMAT, 1);
+    if (v->too_large) return pp_min_fail(pep, PP_CAUSE_TOO_LARGE, 0);
+    pp_sha256_init(&v->h256);
+    if (v->matched) {
+        uint8_t text[8];
+        crypto_sha512_init(&v->h512);
+        crypto_sha512_update(&v->h512, v->sig, 32);
+        crypto_sha512_update(&v->h512, pep->d.key, 32);
+        for (size_t k = 0; k + 1 < sizeof pp_min_pae; k++) {
+            text[0] = pp_rom(pp_min_pae + k);
+            crypto_sha512_update(&v->h512, text, 1);
+        }
+        size_t at = 0, value = v->n;
+        char digits[6];
+        do { digits[at++] = (char)('0' + value % 10); value /= 10; } while (value);
+        for (size_t k = 0; k < at; k++) text[k] = (uint8_t)digits[at - 1 - k];
+        text[at++] = ' ';
+        crypto_sha512_update(&v->h512, text, at);
+    }
+    pp_rd_start(&v->r, pp_min_envelope_prog, (uint16_t)(sizeof pp_min_envelope_prog - 1));
+    return 0;
+}
+
+/* The whole envelope is in: the id, then V3 to V8 in order. */
+static int pp_min_close_envelope(pp_min *pep) {
+    pp_min_verify *v = &pep->v;
+    pp_min_durable *d = &pep->d;
+    pp_min_envelope *e = &v->e;
+    pp_sha256_final(&v->h256, v->envelope_id);
+    if (v->want_prefix && memcmp(v->envelope_id, v->prefix, 16) != 0) /* B6: the part has the offered hash */
+        return pp_min_fail(pep, PP_CAUSE_FRAME_INVALID, 1);
+    /* V3: one entry counts at most, the one whose key id names the key (S3 to S5) */
+    if (!v->matched) return pp_min_fail(pep, PP_CAUSE_UNKNOWN_KEY, 0);
+    uint8_t hash[64], h_ram[32];
+    crypto_sha512_final(&v->h512, hash);
+    crypto_eddsa_reduce(h_ram, hash);
+    if (crypto_eddsa_check_equation(v->sig, d->key, h_ram) != 0) return pp_min_fail(pep, PP_CAUSE_SIG_INVALID, 0);
+    if (d->key_state != PP_MIN_KEY_COUNTS) return pp_min_fail(pep, PP_CAUSE_SIG_REVOKED_KEY, 0);
+    /* V4: the scanner's answer, held to here so V3 is the cause it gives for bytes no key signed (E9, V1) */
+    if (!pp_rd_whole(&v->r)) return pp_min_fail(pep, PP_CAUSE_BAD_FORMAT, 0);
+    static const uint8_t zero[32];
+    if (strcmp(e->stream, "@trust") == 0 && (memcmp(e->policy_sha256, zero, 32) != 0 || memcmp(e->release, zero, 32) != 0))
+        return pp_min_fail(pep, PP_CAUSE_BAD_FORMAT, 0);
+    if (PP_MIN_TRUST(e->artifact) || PP_MIN_INSTALL(e->artifact) ? e->expires != 0 : e->expires <= e->not_before)
+        return pp_min_fail(pep, PP_CAUSE_BAD_FORMAT, 0); /* E5, X4 */
+    v->has_envelope = 1;
+    /* V5: a table on its stream for `mesh`, a widening statement of a release, or a trust statement on @trust. It takes
+     * no install kind, no change statement and no answer (B12) */
+    int on_trust = PP_MIN_ON_TRUST(e->artifact);
+    int known = e->artifact == PP_ART_POLICY_PPT || e->artifact == PP_ART_TRUST_WIDENING || on_trust;
+    if (!known || !(on_trust || (e->targets & (1u << PP_TGT_MESH))) || strcmp(e->stream, on_trust ? "@trust" : d->stream) != 0)
+        return pp_min_fail(pep, PP_CAUSE_TARGET_MISMATCH, 0);
+    long long bound = PP_MESH_TABLE_MAX < pep->config.table_room ? PP_MESH_TABLE_MAX : (long long)pep->config.table_room;
+    if (e->body_size > (PP_MIN_TRUST(e->artifact) ? PP_TRUST_BOUND : bound)) return pp_min_fail(pep, PP_CAUSE_TOO_LARGE, 0);
+    /* V6 and V13 */
+    long long time = pp_min_time(pep);
+    if (pep->config.has_clock && e->not_before - time > PP_SKEW) return pp_min_fail(pep, PP_CAUSE_NOT_YET_VALID, 0);
+    if (e->expires && time >= e->expires) return pp_min_fail(pep, PP_CAUSE_EXPIRED, 0);
+    v->has_time_floor = 1;
+    v->time_floor = d->time_floor > e->not_before ? d->time_floor : e->not_before;
+    /* V7: what the latest list names of what the PEP holds, its floor's envelopes and policy (B12) */
+    for (uint8_t k = 0; k < d->n_floor_ids; k++)
+        if ((d->listed & (1u << k)) && memcmp(v->envelope_id, d->floor_ids[k], 32) == 0)
+            return pp_min_fail(pep, PP_CAUSE_REVOKED, 0);
+    if ((d->listed & 4) && memcmp(e->policy_sha256, d->floor_policy, 32) == 0) return pp_min_fail(pep, PP_CAUSE_REVOKED, 0);
+    /* V8 */
+    if (on_trust) {
+        if (e->seq == d->trust_seq && d->has_trust_id && memcmp(d->trust_id, v->envelope_id, 32) == 0) v->unchanged = 1;
+        else if (e->seq != d->trust_seq + 1) return pp_min_fail(pep, PP_CAUSE_TRUST_REPLAY, 0);
+    } else {
+        long long floor = d->floor_seq > d->raised ? d->floor_seq : d->raised;
+        if (e->seq <= floor) {
+            int at_floor = 0;
+            for (uint8_t k = 0; k < d->n_floor_ids; k++) at_floor |= memcmp(v->envelope_id, d->floor_ids[k], 32) == 0;
+            if (!(e->seq == d->floor_seq && d->floor_seq == floor && at_floor)) return pp_min_fail(pep, PP_CAUSE_SEQ_REPLAY, 0);
+            v->unchanged = 1;
+        }
+    }
+    /* B9: the body is read only now */
+    v->phase = PP_PHASE_BODY;
+    pp_sha256_init(&v->h256);
+    const uint8_t *prog = NULL;
+    uint16_t prog_len = 0;
+    switch (e->artifact) {
+    case PP_ART_TRUST_WIDENING: prog = pp_min_widening_prog; prog_len = sizeof pp_min_widening_prog - 1; break;
+    case PP_ART_TRUST_REVOCATION: prog = pp_min_revocation_prog; prog_len = sizeof pp_min_revocation_prog - 1; break;
+    case PP_ART_TRUST_ROTATION: prog = pp_min_rotation_prog; prog_len = sizeof pp_min_rotation_prog - 1; break;
+    case PP_ART_TRUST_CONTROLLER: prog = pp_min_controller_prog; prog_len = sizeof pp_min_controller_prog - 1; break;
+    default: break;
+    }
+    if (prog) pp_rd_start(&v->r, prog, prog_len);
+    return 1;
+}
+
+int pp_min_sealed(pp_min *pep, const uint8_t *data, size_t len) {
+    pp_min_verify *v = &pep->v;
+    pp_min_durable *d = &pep->d;
+    size_t i = 0;
+    while (i < len && v->phase == PP_PHASE_SEALED) {
+        if (v->at >= v->sealed_len) return pp_min_fail(pep, PP_CAUSE_BAD_FORMAT, 1);
+        uint16_t entries_end = (uint16_t)(6 + PP_ENTRY_SIZE * v->k);
+        uint8_t b = data[i];
+        if (v->at < 6 || v->at < entries_end + 2) { /* the container, one byte at a time */
+            if (v->at < 4) {
+                if (b != (uint8_t)"PPDE"[v->at]) return pp_min_fail(pep, PP_CAUSE_BAD_FORMAT, 1);
+            } else if (v->at == 4) {
+                if (b != 1) return pp_min_fail(pep, PP_CAUSE_BAD_FORMAT, 1);
+            } else if (v->at == 5) {
+                if (b < 1 || b > PP_MAX_ENTRIES) return pp_min_fail(pep, PP_CAUSE_BAD_FORMAT, 1);
+                v->k = b;
+            } else if (v->at < entries_end) {
+                uint16_t entry = (uint16_t)((v->at - 6) / PP_ENTRY_SIZE), off = (uint16_t)((v->at - 6) % PP_ENTRY_SIZE);
+                if (off < 32) {
+                    v->entry_id[off] = b;
+                    if (off == 31) { /* entries sorted by key id, none twice */
+                        if (entry > 0 && memcmp(v->last_id, v->entry_id, 32) >= 0)
+                            return pp_min_fail(pep, PP_CAUSE_BAD_FORMAT, 1);
+                        memcpy(v->last_id, v->entry_id, 32);
+                        if (d->key_state != PP_MIN_KEY_NONE && memcmp(v->entry_id, d->key_id, 32) == 0)
+                            v->matched = (uint8_t)(entry + 1);
+                    }
+                } else if (v->matched == entry + 1) {
+                    v->sig[off - 32] = b;
+                }
+            } else if (v->at == entries_end) {
+                v->n = b;
+            } else {
+                v->n = (uint16_t)(v->n | b << 8);
+                v->at++;
+                i++;
+                if (pp_min_open_envelope(pep) < 0) return -1;
+                continue;
+            }
+            v->at++;
+            i++;
+            if (v->at >= v->sealed_len) return pp_min_fail(pep, PP_CAUSE_BAD_FORMAT, 1);
+            continue;
+        }
+        size_t take = len - i, left = (size_t)(v->sealed_len - v->at);
+        if (take > left) take = left;
+        pp_sha256_update(&v->h256, data + i, take);
+        if (v->matched) crypto_sha512_update(&v->h512, data + i, take);
+        pp_rd_feed(pep, &v->r, data + i, take);
+        v->at = (uint16_t)(v->at + take);
+        i += take;
+        if (v->at == v->sealed_len) return pp_min_close_envelope(pep);
+    }
+    return v->phase == PP_PHASE_BODY ? 1 : v->phase == PP_PHASE_DONE ? -1 : 0;
+}
+
+void pp_min_body(pp_min *pep, const uint8_t *data, size_t len) {
+    pp_min_verify *v = &pep->v;
+    if (v->phase != PP_PHASE_BODY) return;
+    pp_sha256_update(&v->h256, data, len);
+    if (!v->unchanged) {
+        if (v->e.artifact == PP_ART_POLICY_PPT && pep->d.has_staged && pep->d.staged.has_table &&
+            v->e.seq < pep->d.staged.seq) {
+            v->table_skipped = 1; /* G2 refuses it, so the staged table is not written over (B12) */
+        } else if (v->e.artifact == PP_ART_POLICY_PPT) {
+            for (size_t k = 0; k < len; k++)
+                if (v->body_at + k < pep->config.table_room) pep->config.table[v->body_at + k] = data[k];
+            v->table_written = 1;
+        } else {
+            pp_rd_feed(pep, &v->r, data, len);
+        }
+    }
+    v->body_at += (uint32_t)len;
+}
+
+/* The body's SHA-256, once the body is in (B6, V9). */
+static const uint8_t *pp_min_body_hash(pp_min *pep) {
+    pp_min_verify *v = &pep->v;
+    if (!v->body_hashed) {
+        pp_sha256_final(&v->h256, v->body_hash);
+        v->body_hashed = 1;
+    }
+    return v->body_hash;
+}
+
+/* ------------------------------------------------------------------ V9 to V11 */
+
+uint8_t pp_min_verdict(pp_min *pep) {
+    pp_min_verify *v = &pep->v;
+    const pp_min_durable *d = &pep->d;
+    const pp_min_envelope *e = &v->e;
+    if (v->phase == PP_PHASE_SEALED) pp_min_fail(pep, PP_CAUSE_BAD_FORMAT, 1); /* the container ended early */
+    if (v->phase == PP_PHASE_DONE) return v->cause;
+    v->phase = PP_PHASE_DONE;
+    if (v->unchanged) return v->cause = PP_CAUSE_NONE;
+    /* V9 */
+    if ((long long)v->body_at != e->body_size || memcmp(pp_min_body_hash(pep), e->body_sha256, 32) != 0)
+        return v->cause = PP_CAUSE_BODY_MISMATCH;
+    /* V10 */
+    if (!PP_MIN_ON_TRUST(e->artifact) && d->has_staged && d->staged.seq == e->seq &&
+        !(memcmp(d->staged.policy_sha256, e->policy_sha256, 32) == 0 && memcmp(d->staged.release, e->release, 32) == 0 &&
+          d->staged.has_replaces == e->has_replaces && (!e->has_replaces || memcmp(d->staged.replaces, e->replaces, 32) == 0) &&
+          d->staged.widens == e->widens))
+        return v->cause = PP_CAUSE_INCOMPLETE;
+    /* V11 */
+    if (e->artifact == PP_ART_POLICY_PPT)
+        return v->cause = v->table_skipped ? PP_CAUSE_NONE : pp_validate_image(pep->config.table, v->body_at);
+    if (!pp_rd_whole(&v->r)) return v->cause = PP_CAUSE_BAD_FORMAT;
+    switch (e->artifact) {
+    case PP_ART_TRUST_WIDENING: v->cause = v->n_from > PP_WIDENING_HASHES ? PP_CAUSE_TOO_LARGE : PP_CAUSE_NONE; break;
+    case PP_ART_TRUST_REVOCATION: /* R7 */
+        v->cause = v->n_envelopes > PP_REVOCATION_ENTRIES || v->n_keys > PP_REVOCATION_ENTRIES ||
+                           v->n_policies > PP_REVOCATION_ENTRIES || v->n_floors > PP_REVOCATION_FLOORS
+                       ? PP_CAUSE_TOO_LARGE : PP_CAUSE_NONE;
+        break;
+    default: v->cause = v->names_mine ? PP_CAUSE_ROTATION_INVALID : PP_CAUSE_NONE; break; /* O4, K7 */
+    }
+    return v->cause;
+}
+
+/* ------------------------------------------------------------------ the state record (H1) */
+
+static void pp_min_le64(uint8_t *p, uint64_t v) {
+    for (int k = 0; k < 8; k++) p[k] = (uint8_t)(v >> (8 * k));
+}
+
+static void pp_min_save(pp_min *pep, int what) {
+    if (pep->config.persist) (void)pep->config.persist(pep->config.context, &pep->d, what);
+}
+
+static void pp_min_emit(pp_min *pep, uint8_t event, uint8_t cause) {
+    static const char head[] = "DSSEv1 36 application/vnd.prismpath.dist-state 148 ";
+    uint8_t r[PP_RECORD_PLAIN], message[sizeof head - 1 + 148];
+    pp_min_durable *d = &pep->d;
+    d->counter++;
+    if (d->provisioned) pp_min_save(pep, PP_MIN_SAVE); /* H3: the counter is durable before the record leaves */
+    memcpy(r, "PPSR", 4);
+    r[4] = 1;
+    r[5] = event;
+    int state = pep->locked ? PP_ST_LOCKED : d->has_active && d->provisioned ? PP_ST_ACTIVE : PP_ST_NO_POLICY;
+    r[6] = (uint8_t)(state | (d->has_staged ? 0x80 : 0)
+#ifdef PPT_DEV_BUILD
+                     | 0x40
+#endif
+    );
+    r[7] = cause;
+    uint8_t hash[32];
+    pp_sha256(pep->instance_public, 32, hash);
+    memcpy(r + 8, hash, 16);
+    pp_min_le64(r + 24, d->counter);
+    pp_min_le64(r + 32, (uint64_t)pp_min_time(pep));
+    pp_min_le64(r + 40, 0); /* it takes no controller statement (B12, H9) */
+    pp_sha256((const uint8_t *)d->stream, strlen(d->stream), hash);
+    memcpy(r + 48, hash, 16);
+    if (d->has_active) memcpy(r + 64, d->active.policy_sha256, 16); else memset(r + 64, 0, 16);
+    if (d->has_active) memcpy(r + 80, d->active.release, 16); else memset(r + 80, 0, 16);
+    pp_min_le64(r + 96, (uint64_t)(d->has_active ? d->active.seq : 0));
+    pp_min_le64(r + 104, (uint64_t)(d->floor_seq > d->raised ? d->floor_seq : d->raised));
+    if (d->has_staged) memcpy(r + 112, d->staged.release, 16); else memset(r + 112, 0, 16);
+    pp_min_le64(r + 128, (uint64_t)(d->has_staged ? d->staged.seq : 0));
+    pp_min_le64(r + 136, (uint64_t)d->trust_seq);
+    r[144] = r[145] = r[146] = r[147] = 0; /* no Facet body (H5) and no extension */
+    memcpy(message, head, sizeof head - 1);
+    memcpy(message + sizeof head - 1, r, 148);
+    crypto_ed25519_sign(r + 148, pep->instance_secret, message, sizeof message);
+    if (pep->config.send) pep->config.send(pep->config.context, r, sizeof r);
+}
+
+/* ------------------------------------------------------------------ the machine */
+
+static int pp_min_held_valid(const pp_min *pep, const pp_min_held *held, int early) {
+    long long time = pp_min_time(pep);
+    if (early && pep->config.has_clock && held->not_before - time > PP_SKEW) return PP_CAUSE_NOT_YET_VALID;
+    if (held->expires && time >= held->expires) return PP_CAUSE_EXPIRED;
+    return PP_CAUSE_NONE;
+}
+
+/* C3 and R5 for the envelopes of `r`, in the order they were staged. */
+static uint8_t pp_min_still_valid(const pp_min *pep, const pp_min_release *r, int early) {
+    const pp_min_held *order[2];
+    size_t n = 0;
+    if (r->widening_first && r->has_widening) order[n++] = &r->widening;
+    if (r->has_table) order[n++] = &r->table;
+    if (!r->widening_first && r->has_widening) order[n++] = &r->widening;
+    for (size_t k = 0; k < n; k++) {
+        if (early && pep->d.key_state != PP_MIN_KEY_COUNTS) return PP_CAUSE_SIG_REVOKED_KEY; /* S5 again at commit */
+        uint8_t cause = (uint8_t)pp_min_held_valid(pep, order[k], early);
+        if (cause) return cause;
+    }
+    return PP_CAUSE_NONE;
+}
+
+/* R5: the active release still stands, which is its floor's envelopes and policy unlisted, its seq not below a raised
+ * floor and its key not revoked. A retired key still holds it up (O3). */
+static int pp_min_active_stands(const pp_min *pep) {
+    const pp_min_durable *d = &pep->d;
+    return d->active.seq >= d->raised && !(d->listed & 7) && d->key_state != PP_MIN_KEY_REVOKED;
+}
+
+static void pp_min_lapse(pp_min *pep, uint8_t cause) {
+    pep->d.has_active = 0;
+    pp_min_save(pep, PP_MIN_SAVE);
+    pp_min_emit(pep, PP_EV_LAPSED, cause);
+}
+
+static void pp_min_check_expiry(pp_min *pep) {
+    if (!pep->d.has_active || pep->locked || !pep->d.provisioned) return;
+    if (!pp_min_active_stands(pep)) pp_min_lapse(pep, PP_CAUSE_REVOKED);
+    else if (pp_min_still_valid(pep, &pep->d.active, 0) == PP_CAUSE_EXPIRED) pp_min_lapse(pep, PP_CAUSE_EXPIRED);
+}
+
+static void pp_min_drop_fallen_staged(pp_min *pep, int listed) {
+    pp_min_durable *d = &pep->d;
+    if (d->has_staged && (listed || d->staged.seq < d->raised || d->key_state != PP_MIN_KEY_COUNTS)) {
+        d->has_staged = 0;
+        pp_min_save(pep, PP_MIN_SAVE);
+    }
+}
+
+static void pp_min_begin_call(pp_min *pep, long long now) {
+    pep->now = now;
+    pp_min_check_expiry(pep);
+}
+
+/* V12 on `mesh` (W2, W3, W6): a table that is not the active one, a first install, `widens` or another `replaces` is
+ * larger, and a larger release needs a widening statement of its release, staged before it, that covers the node. */
+static uint8_t pp_min_widening(const pp_min *pep, int widens, const uint8_t replaces[32], int has_replaces,
+                               const pp_min_release *with, const uint8_t table_sha256[32]) {
+    const pp_min_durable *d = &pep->d;
+    int changed = !d->has_active || memcmp(table_sha256, d->active.table_sha256, 32) != 0;
+    int larger = changed || widens || !has_replaces || memcmp(replaces, d->active.policy_sha256, 32) != 0;
+    if (!larger) return PP_CAUSE_NONE;
+    if (changed && !widens) return PP_CAUSE_WIDENING_UNSIGNED;
+    int covers = with && with->has_widening && (with->widening_any || (d->has_active && with->widening_covers));
+    return covers ? PP_CAUSE_NONE : PP_CAUSE_WIDENING_UNSIGNED;
+}
+
+static void pp_min_refuse(pp_min *pep, uint8_t cause) { pp_min_emit(pep, PP_EV_REFUSED, cause); }
+
+void pp_min_stage(pp_min *pep) {
+    pp_min_durable *d = &pep->d;
+    pp_min_verify *v = &pep->v;
+    const pp_min_envelope *e = &v->e;
+    pp_min_begin_call(pep, pep->now);
+    uint8_t cause = pp_min_verdict(pep);
+    /* a table that arrived went into the one staging buffer, so a staged table it did not replace is gone (B12) */
+    if (v->table_written && (cause || !d->has_staged || d->staged.seq != e->seq) && d->has_staged && d->staged.has_table) {
+        d->staged.has_table = 0;
+        if (!d->staged.has_widening) d->has_staged = 0;
+        pp_min_save(pep, PP_MIN_SAVE);
+    }
+    if (!d->provisioned) { pp_min_refuse(pep, PP_CAUSE_UNKNOWN_KEY); return; }
+    if (pep->locked) { pp_min_refuse(pep, PP_CAUSE_FLOOR_LOST); return; }
+    if (v->has_time_floor && v->time_floor > d->time_floor) { /* V13, T1 */
+        d->time_floor = v->time_floor;
+        pp_min_save(pep, PP_MIN_SAVE);
+    }
+    if (cause) { pp_min_refuse(pep, cause); return; }
+    if (v->unchanged) { pp_min_emit(pep, PP_EV_BEAT, 0); return; } /* Q3, R1 */
+    if (PP_MIN_ON_TRUST(e->artifact)) { /* B2: applied when it verifies, durable before it is reported */
+        d->trust_seq = e->seq;
+        memcpy(d->trust_id, v->envelope_id, 32);
+        d->has_trust_id = 1;
+        int listed = 0;
+        if (e->artifact == PP_ART_TRUST_REVOCATION) { /* R2, R4, R6: the latest list, as far as it names what it holds */
+            if (v->key_listed) d->key_state = PP_MIN_KEY_REVOKED;
+            if (v->floor_raised > d->raised) d->raised = v->floor_raised;
+            d->listed = v->active_listed;
+            listed = v->staged_listed;
+        } else if (e->artifact == PP_ART_TRUST_ROTATION) { /* O3: it keeps no key the rotation adds */
+            if (v->retires_mine && d->key_state == PP_MIN_KEY_COUNTS) d->key_state = PP_MIN_KEY_RETIRED;
+        }
+        pp_min_save(pep, PP_MIN_SAVE);
+        pp_min_drop_fallen_staged(pep, listed);
+        if (e->artifact != PP_ART_TRUST_ROTATION) pp_min_check_expiry(pep);
+        pp_min_emit(pep, PP_EV_TRUST_APPLIED, 0);
+        return;
+    }
+    if (d->has_staged && e->seq < d->staged.seq) { pp_min_refuse(pep, PP_CAUSE_SEQ_REPLAY); return; } /* G2 */
+    int same = d->has_staged && d->staged.seq == e->seq;
+    if (e->artifact == PP_ART_POLICY_PPT) {
+        cause = pp_min_widening(pep, e->widens, e->replaces, e->has_replaces, same ? &d->staged : NULL, e->body_sha256);
+        if (cause) {
+            if (same && d->staged.has_table) { /* the staged table was overwritten by this one */
+                d->staged.has_table = 0;
+                if (!d->staged.has_widening) d->has_staged = 0;
+                pp_min_save(pep, PP_MIN_SAVE);
+            }
+            pp_min_refuse(pep, cause);
+            return;
+        }
+    }
+    if (!same) {
+        memset(&d->staged, 0, sizeof d->staged);
+        d->staged.seq = e->seq;
+        memcpy(d->staged.policy_sha256, e->policy_sha256, 32);
+        memcpy(d->staged.release, e->release, 32);
+        memcpy(d->staged.replaces, e->replaces, 32);
+        d->staged.has_replaces = e->has_replaces;
+        d->staged.widens = e->widens;
+        d->has_staged = 1;
+    }
+    pp_min_held *held = e->artifact == PP_ART_POLICY_PPT ? &d->staged.table : &d->staged.widening;
+    memcpy(held->id, v->envelope_id, 32);
+    held->expires = e->expires;
+    held->not_before = e->not_before;
+    if (e->artifact == PP_ART_POLICY_PPT) {
+        if (!d->staged.has_widening) d->staged.widening_first = 0;
+        d->staged.has_table = 1;
+        memcpy(d->staged.table_sha256, e->body_sha256, 32);
+    } else {
+        if (!d->staged.has_table) d->staged.widening_first = 1;
+        d->staged.has_widening = 1;
+        d->staged.widening_any = v->n_from == 0;
+        d->staged.widening_covers = v->from_covers;
+    }
+    pp_min_save(pep, PP_MIN_SAVE);
+    pp_min_emit(pep, PP_EV_STAGED, 0);
+}
+
+/* C2, E10: the release id of the one table staged is the signed `release`. */
+static int pp_min_whole(const pp_min_release *r) {
+    static const char hex[] = "0123456789abcdef";
+    uint8_t text[2 + 2 + 1 + 10 + 3 + 64 + 3], id[32];
+    size_t at = 0;
+    memcpy(text, "[[\"policy.ppt\",\"", 16);
+    at = 16;
+    for (int b = 0; b < 32; b++) {
+        text[at++] = (uint8_t)hex[r->table_sha256[b] >> 4];
+        text[at++] = (uint8_t)hex[r->table_sha256[b] & 15];
+    }
+    memcpy(text + at, "\"]]", 3);
+    at += 3;
+    pp_sha256(text, at, id);
+    return memcmp(id, r->release, 32) == 0;
+}
+
+static void pp_min_commit_now(pp_min *pep, long long seq, const uint8_t policy[32]) {
+    pp_min_durable *d = &pep->d;
+    uint8_t cause = PP_CAUSE_NONE;
+    int drops = 0;
+    if (pep->locked) cause = PP_CAUSE_FLOOR_LOST;
+    else if (!d->provisioned) cause = PP_CAUSE_UNKNOWN_KEY;
+    else if (!d->has_staged || d->staged.seq != seq || memcmp(d->staged.policy_sha256, policy, 32) != 0)
+        cause = PP_CAUSE_NOT_STAGED; /* C1 */
+    else if (!d->staged.has_table || !pp_min_whole(&d->staged)) cause = PP_CAUSE_INCOMPLETE; /* C2 */
+    else if ((cause = pp_min_still_valid(pep, &d->staged, 1))) drops = 1; /* C3 */
+    else cause = pp_min_widening(pep, d->staged.widens, d->staged.replaces, d->staged.has_replaces, &d->staged,
+                                 d->staged.table_sha256); /* V12 against what is active now */
+    if (cause) {
+        if (drops) {
+            d->has_staged = 0;
+            pp_min_save(pep, PP_MIN_SAVE);
+        }
+        pp_min_refuse(pep, cause);
+        return;
+    }
+    /* C4: the caller writes the table and the state as one step, with the floor in it */
+    const pp_min_release *s = &d->staged;
+    d->floor_seq = s->seq;
+    d->n_floor_ids = 0;
+    if (s->widening_first && s->has_widening) memcpy(d->floor_ids[d->n_floor_ids++], s->widening.id, 32);
+    memcpy(d->floor_ids[d->n_floor_ids++], s->table.id, 32);
+    if (!s->widening_first && s->has_widening) memcpy(d->floor_ids[d->n_floor_ids++], s->widening.id, 32);
+    memcpy(d->floor_policy, s->policy_sha256, 32);
+    d->listed = 0;
+    d->active = d->staged;
+    d->has_active = 1;
+    d->has_staged = 0;
+    pp_min_save(pep, PP_MIN_SAVE | PP_MIN_TABLE);
+    pp_min_emit(pep, PP_EV_COMMITTED, 0);
+}
+
+void pp_min_commit(pp_min *pep, long long seq, const uint8_t policy_sha256[32], uint16_t delay_ms, uint32_t now_ms,
+                   long long now) {
+    pp_min_begin_call(pep, now);
+    if (delay_ms == 0) {
+        pp_min_commit_now(pep, seq, policy_sha256);
+        return;
+    }
+    pep->commit_due = 1; /* B8 */
+    pep->commit_due_ms = now_ms + delay_ms;
+    pep->due_seq = seq;
+    memcpy(pep->due_policy, policy_sha256, 32);
+}
+
+void pp_min_tick(pp_min *pep, uint32_t now_ms, long long now) {
+    pp_min_begin_call(pep, now);
+    if (pep->commit_due && (int32_t)(now_ms - pep->commit_due_ms) >= 0) {
+        pep->commit_due = 0;
+        pp_min_commit_now(pep, pep->due_seq, pep->due_policy);
+    }
+}
+
+void pp_min_abort(pp_min *pep, long long seq, const uint8_t policy_sha256[32], long long now) {
+    pp_min_begin_call(pep, now);
+    pp_min_durable *d = &pep->d;
+    if (!d->has_staged || d->staged.seq != seq || memcmp(d->staged.policy_sha256, policy_sha256, 32) != 0) {
+        pp_min_emit(pep, PP_EV_BEAT, 0);
+        return;
+    }
+    d->has_staged = 0;
+    pp_min_save(pep, PP_MIN_SAVE);
+    pp_min_emit(pep, PP_EV_ABORTED, 0);
+}
+
+void pp_min_record(pp_min *pep, uint8_t event, long long now) {
+    pp_min_begin_call(pep, now);
+    pp_min_emit(pep, event, 0);
+}
+
+void pp_min_save_time(pp_min *pep, long long now) {
+    if (!pep->d.provisioned || now <= pep->d.time_floor) return;
+    pep->d.time_floor = now;
+    pp_min_save(pep, PP_MIN_SAVE);
+}
+
+int pp_min_open(pp_min *pep, const pp_min_config *config, const pp_min_durable *durable, int reads, long long now) {
+    uint8_t seed[32];
+    memset(pep, 0, sizeof *pep);
+    pep->config = *config;
+    pep->now = now;
+    memcpy(seed, config->instance_seed, 32);
+    crypto_ed25519_key_pair(pep->instance_secret, pep->instance_public, seed);
+    if (!reads) { /* Q5, H3: what it held is gone, so it is locked and counts on from its time in microseconds */
+        pep->locked = 1;
+        pep->d.provisioned = 1;
+        pep->d.counter = (uint64_t)now * 1000000u;
+        return 0;
+    }
+    if (durable == NULL || !durable->provisioned) return 0; /* P1 */
+    pep->d = *durable;
+    uint8_t id[32];
+    pp_sha256(pep->instance_public, 32, id);
+    if (pep->d.key_state != PP_MIN_KEY_NONE && memcmp(id, pep->d.key_id, 32) == 0) return -1; /* K2 */
+    if (pep->d.has_staged && pep->d.has_active && pep->d.staged.seq <= pep->d.active.seq) {
+        pep->d.has_staged = 0;
+        pp_min_save(pep, PP_MIN_SAVE);
+    }
+    pp_min_drop_fallen_staged(pep, 0);
+    pp_min_check_expiry(pep);
+    return 0;
+}
+
+uint8_t pp_min_provision(pp_min *pep, const uint8_t public_key[32], const char *stream, long long now) {
+    uint8_t id[32], own[32];
+    pep->now = now;
+    pp_sha256(public_key, 32, id);
+    pp_sha256(pep->instance_public, 32, own);
+    if (memcmp(id, own, 32) == 0 || !pp_min_is_stream(stream)) return PP_CAUSE_BAD_FORMAT; /* K2 */
+    uint64_t counter = pep->d.counter;
+    memset(&pep->d, 0, sizeof pep->d);
+    pep->d.provisioned = 1;
+    pep->d.key_state = PP_MIN_KEY_COUNTS;
+    memcpy(pep->d.key_id, id, 32);
+    memcpy(pep->d.key, public_key, 32);
+    memcpy(pep->d.stream, stream, strlen(stream) + 1);
+    pep->d.counter = counter;
+    pep->locked = 0;
+    pep->commit_due = 0;
+    pp_min_save(pep, PP_MIN_SAVE);
+    pp_min_emit(pep, PP_EV_PROVISIONED, 0);
+    return PP_CAUSE_NONE;
+}
+
+/* ------------------------------------------------------------------ the ordered link (B6, B7, B9, B11) */
+
+static uint8_t pp_min_frame_reads(const uint8_t *f, size_t len) {
+    if (len < 4 || len > PP_FRAME_LIMIT || f[1] != 1) return PP_CAUSE_FRAME_INVALID;
+    switch (f[0]) {
+    case PP_FRAME_OFFER: return len == 26 ? 0 : PP_CAUSE_FRAME_INVALID;
+    case PP_FRAME_CHUNK:
+        return len >= 11 && (f[4] == 0 || f[4] == 1) && len == 11u + pp_u16(f + 9) ? 0 : PP_CAUSE_FRAME_INVALID;
+    case PP_FRAME_STATE: return 0;
+    case PP_FRAME_COMMIT:
+    case PP_FRAME_ABORT: {
+        if (len != (f[0] == PP_FRAME_COMMIT ? 46u : 44u)) return PP_CAUSE_FRAME_INVALID;
+        uint64_t seq = 0;
+        for (int k = 7; k >= 0; k--) seq = seq << 8 | f[20 + k];
+        return seq <= (uint64_t)PP_MAX_SEQ ? 0 : PP_CAUSE_FRAME_INVALID;
+    }
+    case PP_FRAME_EPOCH: return len == 4 + 102 || len == 4 + 126 ? 0 : PP_CAUSE_FRAME_INVALID; /* H9 */
+    default: return PP_CAUSE_FRAME_INVALID;
+    }
+}
+
+static int pp_min_drop(pp_min *pep, uint16_t transfer, uint8_t why, uint8_t *cause) {
+    if (pep->t_active && pep->transfer == transfer) pep->t_active = 0;
+    *cause = why;
+    return PP_ASM_DROPPED;
+}
+
+/* The body is whole: its hash is the signed one (B6), then the stage step sends its record. */
+static int pp_min_whole_body(pp_min *pep, uint8_t *cause) {
+    if (memcmp(pp_min_body_hash(pep), pep->v.e.body_sha256, 32) != 0)
+        return pp_min_drop(pep, pep->transfer, PP_CAUSE_FRAME_INVALID, cause);
+    pep->t_active = 0;
+    pp_min_stage(pep);
+    return PP_ASM_WHOLE;
+}
+
+int pp_min_frame(pp_min *pep, const uint8_t *f, size_t len, uint32_t now_ms, long long now, uint8_t *cause) {
+    *cause = 0;
+    if ((*cause = pp_min_frame_reads(f, len))) return PP_ASM_DROPPED;
+    if (pep->t_active && now_ms - pep->started_ms > PP_TRANSFER_TIMEOUT_MS) pep->t_active = 0; /* B7 */
+    uint16_t transfer = pp_u16(f + 2);
+    pp_min_verify *v = &pep->v;
+    pp_min_durable *d = &pep->d;
+    if (f[0] == PP_FRAME_OFFER) {
+        size_t sealed_len = pp_u16(f + 20), body_len = pp_u32(f + 22);
+        if (pep->t_active && pep->transfer == transfer && memcmp(pep->prefix, f + 4, 16) == 0 &&
+            v->sealed_len == sealed_len && v->body_len == body_len)
+            return PP_ASM_NONE; /* a repeated offer */
+        if (sealed_len < 1 || sealed_len > PP_MAX_SEALED) return pp_min_drop(pep, transfer, PP_CAUSE_FRAME_INVALID, cause);
+        if (body_len > PP_TRUST_BOUND) return pp_min_drop(pep, transfer, PP_CAUSE_TOO_LARGE, cause); /* E6 */
+        pp_min_begin(pep, sealed_len, body_len, now);
+        v->want_prefix = 1;
+        memcpy(v->prefix, f + 4, 16);
+        memcpy(pep->prefix, f + 4, 16);
+        pep->t_active = 1;
+        pep->t_body_open = 0;
+        pep->transfer = transfer;
+        pep->started_ms = now_ms;
+        return PP_ASM_NONE;
+    }
+    if (f[0] == PP_FRAME_COMMIT || f[0] == PP_FRAME_ABORT) { /* carried out on the staged release it names */
+        uint8_t hash[32], policy[32];
+        uint64_t seq = 0;
+        for (int k = 7; k >= 0; k--) seq = seq << 8 | f[20 + k];
+        pp_sha256((const uint8_t *)d->stream, strlen(d->stream), hash);
+        int names = d->has_staged && memcmp(f + 4, hash, 16) == 0 && memcmp(f + 28, d->staged.policy_sha256, 16) == 0;
+        if (names) memcpy(policy, d->staged.policy_sha256, 32);
+        else memset(policy, 0, 32);
+        if (!names) seq = 0; /* names nothing staged */
+        if (f[0] == PP_FRAME_COMMIT) pp_min_commit(pep, (long long)seq, policy, pp_u16(f + 44), now_ms, now);
+        else pp_min_abort(pep, (long long)seq, policy, now);
+        return PP_ASM_CONTROL;
+    }
+    if (f[0] != PP_FRAME_CHUNK) return PP_ASM_CONTROL;
+    if (!pep->t_active || pep->transfer != transfer) { *cause = PP_CAUSE_FRAME_INVALID; return PP_ASM_DROPPED; }
+    pep->now = now;
+    size_t offset = pp_u32(f + 5), n = pp_u16(f + 9);
+    const uint8_t *data = f + 11;
+    if (f[4] == 1) {
+        if (!pep->t_body_open) return PP_ASM_NONE; /* B9: no body before the envelope passed V8 */
+        if (offset + n > v->body_len || offset != v->body_at) /* B6, B11 */
+            return pp_min_drop(pep, transfer, PP_CAUSE_FRAME_INVALID, cause);
+        pp_min_body(pep, data, n);
+        return v->body_at == v->body_len ? pp_min_whole_body(pep, cause) : PP_ASM_NONE;
+    }
+    if (pep->t_body_open) return PP_ASM_NONE; /* a repeat of a part already read */
+    if (offset + n > v->sealed_len || offset != v->at) return pp_min_drop(pep, transfer, PP_CAUSE_FRAME_INVALID, cause);
+    int read = pp_min_sealed(pep, data, n);
+    if (read == 0) return PP_ASM_NONE;
+    if (read < 0) {
+        if (v->container_bad) /* the part does not read */
+            return pp_min_drop(pep, transfer, PP_CAUSE_FRAME_INVALID, cause);
+        uint8_t why = v->cause;
+        pp_min_stage(pep); /* G1: the refusal is sent */
+        return pp_min_drop(pep, transfer, why, cause);
+    }
+    if ((long long)v->body_len != v->e.body_size) return pp_min_drop(pep, transfer, PP_CAUSE_FRAME_INVALID, cause);
+    pep->t_body_open = 1;
+    return v->body_len == 0 ? pp_min_whole_body(pep, cause) : PP_ASM_NONE;
+}
+#endif /* PP_DIST_PROFILE_MIN */

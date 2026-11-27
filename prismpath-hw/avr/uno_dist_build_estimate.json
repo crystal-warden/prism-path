@@ -1,0 +1,23 @@
+{
+ "what": "ppt_uno_dist.elf, the constrained enforcement point of spec-policy-distribution.md B12 for the ATmega328P (Arduino Uno R3), built by `make dist`",
+ "measured_on_board": false,
+ "note": "A build time estimate from avr-size, recorded 2026-11-27 for PR 17b. It is not a measurement on the board. The board validation pass of the week of 2026-11-30 flashes the Uno, measures the time of one signature check and decides between one-pass and PR 17c.",
+ "compiler": "avr-gcc 7.3.0",
+ "flags": "-mmcu=atmega328p -Os -DPP_DIST_PROFILE_MIN -ffunction-sections -fdata-sections -Wl,--gc-sections",
+ "sections": {"text": 77024, "data": 4006, "bss": 3875},
+ "flash_bytes": 81030,
+ "flash_of_chip": 32768,
+ "static_ram_bytes": 7881,
+ "ram_of_chip": 2048,
+ "fits": false,
+ "where_it_goes": {
+  "flash_monocypher_and_libgcc": 50796,
+  "flash_profile_and_sketch": 26096,
+  "data_monocypher_tables": 3905,
+  "bss_pep_state": 2111,
+  "bss_durable_copy_read_at_start": 782,
+  "bss_table_buffer": 640,
+  "bss_link_frame": 254
+ },
+ "stack_not_counted": "avr-gcc -fstack-usage gives crypto_eddsa_check_equation a frame of 1068 bytes and pp_min_emit 471, on top of the static RAM above"
+}

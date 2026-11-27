@@ -232,7 +232,8 @@ def test_receipts_are_in_the_run_and_it_verifies_with_both_keys_pinned(tmp_path)
 def test_concurrent_requests_with_interleaved_ids_keep_their_ids(tmp_path):
     allow_all = tmp_path / "allow.core.json"
     from prismpath.kernel import canon2
-    src = json.loads(policymod.SOURCE_PATH.read_text())
+    from prismpath.kernel import policy_source
+    src = policy_source.compile_full(policymod.SOURCE_PATH.read_text(encoding="utf-8")).doc
     src["rules"] = [{"target": "allow", "when": ["cmp", "tool", "==", ["str", "unknown"]]}] + src["rules"]
     allow_all.write_bytes(canon2.canonicalize(json.dumps(src).encode()) + b"\n")
     c = Client(tmp_path, policy=allow_all)

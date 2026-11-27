@@ -3,7 +3,7 @@
 """The network policy: one signed core image decided two ways, by the Python kernel and by the XDP table.
 
 `policy/net_rules.core.json` is a `prismpath.core/1` image over the protocol's seven header fields, all
-integers. The Python decision is the governed harness's own (`governed_harness.policy.Policy`: the image
+integers, compiled from the readable rules `policy/net_rules.rules.md` by `prismpath policy compile`. The Python decision is the governed harness's own (`governed_harness.policy.Policy`: the image
 checked by the port of the Lean `loadPolicy`, rendered, parsed and decided by the reference kernel).
 
 The table for the kernel is compiled from the same image the way the core differential's table leg does
@@ -40,7 +40,7 @@ from prismpath.kernel.parser import Node, parse  # noqa: E402
 from . import protocol  # noqa: E402
 
 POLICY_PATH = HERE / "policy" / "net_rules.core.json"
-SOURCE_PATH = HERE / "policy" / "net_rules.src.json"
+SOURCE_PATH = HERE / "policy" / "net_rules.rules.md"      # the readable rules the image compiles from
 ACTIONS_MAGIC = 0x474E4143            # "GNAC"
 NO_MATCH_CODE = causes.code("route:no-matching-edge")
 

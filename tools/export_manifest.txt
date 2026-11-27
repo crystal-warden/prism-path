@@ -214,6 +214,7 @@ prismpath/agent/doctor.py
 prismpath/agent/egress.py
 prismpath/agent/egress_policy.py
 prismpath/agent/evidence.py
+prismpath/agent/fields.py
 prismpath/agent/hook_client.py
 prismpath/agent/landlock.py
 prismpath/agent/launcher.py
@@ -224,12 +225,10 @@ prismpath/agent/observe.py
 prismpath/agent/policy.py
 prismpath/agent/policy/agent_default.core.json
 prismpath/agent/policy/agent_default.rules.md
-prismpath/agent/policy/agent_default.src.json
 prismpath/agent/policy/agent_review.core.json
 prismpath/agent/policy/agent_review.rules.md
 prismpath/agent/policy/agent_rules.core.json
 prismpath/agent/policy/agent_rules.rules.md
-prismpath/agent/policy/agent_rules.src.json
 prismpath/agent/policy/agent_session.core.json
 prismpath/agent/policy/agent_session.rules.md
 prismpath/agent/profile.py
@@ -238,6 +237,7 @@ prismpath/agent/run.py
 prismpath/agent/sandbox_exec.py
 prismpath/agent/sandbox_hook.py
 prismpath/agent/session_state.py
+prismpath/agent/target.py
 prismpath/agent/zones.py
 prismpath/analysis.py
 prismpath/annotate.py
@@ -743,6 +743,7 @@ prismpath/tests/test_agent_control_files.py
 prismpath/tests/test_agent_decider.py
 prismpath/tests/test_agent_doctor.py
 prismpath/tests/test_agent_egress.py
+prismpath/tests/test_agent_fields.py
 prismpath/tests/test_agent_launcher.py
 prismpath/tests/test_agent_mcp_proxy.py
 prismpath/tests/test_agent_nested.py
@@ -753,6 +754,7 @@ prismpath/tests/test_agent_rerecord_warning.py
 prismpath/tests/test_agent_rules.py
 prismpath/tests/test_agent_run.py
 prismpath/tests/test_agent_starters.py
+prismpath/tests/test_agent_target.py
 prismpath/tests/test_analysis.py
 prismpath/tests/test_analysis_spawn.py
 prismpath/tests/test_audit_log.py
@@ -798,6 +800,7 @@ prismpath/tests/test_deferral.py
 prismpath/tests/test_distribution_agent_home.py
 prismpath/tests/test_distribution_c.py
 prismpath/tests/test_distribution_c_cfs.py
+prismpath/tests/test_distribution_c_min.py
 prismpath/tests/test_distribution_controller.py
 prismpath/tests/test_distribution_corpus.py
 prismpath/tests/test_distribution_crash.py
@@ -829,6 +832,7 @@ prismpath/tests/test_distribution_verify.py
 prismpath/tests/test_distribution_widening.py
 prismpath/tests/test_distribution_xdp.py
 prismpath/tests/test_doc_references.py
+prismpath/tests/test_doc_snippets.py
 prismpath/tests/test_egress_policy.py
 prismpath/tests/test_emits_types.py
 prismpath/tests/test_engine.py
