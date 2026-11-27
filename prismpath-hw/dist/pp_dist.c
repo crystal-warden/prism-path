@@ -804,7 +804,7 @@ static int pp_key_list(pp_c2 *c, uint8_t (*out)[32], size_t max, size_t *n) {
     for (;;) {
         if (!pp_scan_hash(c, key) || (*n && memcmp(last, key, 32) >= 0)) return 0;
         memcpy(last, key, 32);
-        if (*n < max) memcpy(out[*n], key, 32);
+        if (out && *n < max) memcpy(out[*n], key, 32); /* NULL `out` reads the list and keeps none */
         (*n)++;
         if (pp_c2_lit(c, "]")) return 1;
         if (!pp_c2_lit(c, ",")) return 0;
@@ -933,6 +933,8 @@ static uint8_t pp_read_ceiling(const uint8_t *body, size_t len, uint8_t (*out)[3
 }
 
 /* The canonical body of a policy list of `n` hashes, written into `out` (room for 64), and its length. */
+static const char pp_ceiling_tail[] = "],\"encoding\":\"canon/2\",\"format\":\"prismpath.dist-ceiling/1\"}";
+
 static size_t pp_ceiling_body(const uint8_t (*hashes)[32], size_t n, uint8_t *out) {
     static const char hex[] = "0123456789abcdef";
     size_t at = 0;
@@ -947,11 +949,32 @@ static size_t pp_ceiling_body(const uint8_t (*hashes)[32], size_t n, uint8_t *ou
         }
         out[at++] = '"';
     }
-    static const char tail[] = "],\"encoding\":\"canon/2\",\"format\":\"prismpath.dist-ceiling/1\"}";
-    memcpy(out + at, tail, sizeof tail - 1);
-    return at + sizeof tail - 1;
+    memcpy(out + at, pp_ceiling_tail, sizeof pp_ceiling_tail - 1);
+    return at + sizeof pp_ceiling_tail - 1;
 }
 #define PP_CEILING_BODY_MAX (11 + PP_CEILING_BODIES * 67 + 64)
+
+/* B-0020: a policy list read in place from the canonical body V11 checked, with no copy of its hashes. That body
+ * is the one pp_ceiling_body writes, so hash `k` is the 64 hex digits at 12 + 67k and the length gives the count.
+ * Only a body that pp_read_ceiling took is read this way. */
+static size_t pp_list_count(size_t len) {
+    size_t fixed = 11 + sizeof pp_ceiling_tail - 1;
+    return len > fixed ? (len - fixed + 1) / 67 : 0;
+}
+
+static void pp_list_hash(const uint8_t *body, size_t k, uint8_t out[32]) {
+    const uint8_t *s = body + 12 + 67 * k;
+    for (size_t b = 0; b < 32; b++) out[b] = (uint8_t)(pp_hex_nibble(s[2 * b]) << 4 | pp_hex_nibble(s[2 * b + 1]));
+}
+
+static int pp_list_holds(const uint8_t *body, size_t len, const uint8_t id[32]) {
+    for (size_t k = 0, n = pp_list_count(len); k < n; k++) {
+        uint8_t hash[32];
+        pp_list_hash(body, k, hash);
+        if (memcmp(hash, id, 32) == 0) return 1;
+    }
+    return 0;
+}
 
 /* IS11 beyond its signatures (install.check_trust): no key in both lists; no key it adds is the PEP's instance key,
  * a key the trust store holds, has retired or revoked, a retired install or operator id, an operator key added to
@@ -1331,7 +1354,9 @@ static int pp_same(const uint8_t a[32], int has_a, const uint8_t b[32], int has_
 
 /* CL1: a table whose body hash is on the held ceiling's list, or any table when no ceiling is held. */
 static int pp_inside(const pp_install_view *view, const uint8_t body_sha256[32]) {
-    return view == NULL || !view->has_ceiling || pp_listed(view->ceiling, view->n_ceiling, body_sha256);
+    if (view == NULL || !view->has_ceiling) return 1;
+    if (view->has_ceiling == 2) return pp_list_holds((const uint8_t *)view->ceiling, view->n_ceiling, body_sha256);
+    return pp_listed(view->ceiling, view->n_ceiling, body_sha256);
 }
 
 /* IS5 (verify._verify_install): an install statement through V5 to V11 with the differences section 21 gives
@@ -1439,9 +1464,8 @@ static void pp_verify_install(const pp_envelope *e, const pp_entry *entries, siz
     }
     if (e->as == PP_AS_NONE) return;
     if (e->as == PP_AS_POLICY_LIST) {
-        static uint8_t hashes[PP_CEILING_BODIES][32];
-        size_t n = 0;
-        out->cause = pp_read_ceiling(body, body_len, hashes, &n);
+        size_t n = 0; /* read as it comes, no hash kept (B-0020) */
+        out->cause = pp_read_ceiling(body, body_len, NULL, &n);
         return;
     }
     int cfs = pep->kind == PP_TGT_CFS;
@@ -2346,76 +2370,123 @@ static uint8_t pp_next_record(const pp_pep_machine *pep, const pp_install_anchor
 static const char *pp_as_name(uint8_t as);
 static void pp_install_take_trust(pp_install *r, const pp_envelope *e, const uint8_t *body, size_t len);
 static uint8_t pp_read_ceiling(const uint8_t *body, size_t len, uint8_t (*out)[32], size_t *n);
-static uint8_t pp_set_refusal(const pp_pep_machine *pep, const pp_install *r, const pp_statement *const held_sets[PP_SETS],
-                              const pp_change *change, const pp_statement *st, int kind, int ceiling_lost, int *larger_out);
+
+/* An install set as pp_set_refusal reads it: its envelope and its body, a table's bytes or a policy list. A held set
+ * keeps a list as its hashes, 32 bytes each. A set a provisioning brings is read in place, the caller's body, and a
+ * list there is the canonical body V11 checked (`canonical`), so the precheck copies no body (B-0020). */
+typedef struct {
+    const pp_envelope *envelope;
+    const uint8_t *body;
+    size_t body_len;
+    int canonical;
+} pp_set_ref;
+
+static pp_set_ref pp_ref_of(const pp_statement *st) {
+    pp_set_ref ref = {&st->envelope, st->body, st->body_len, 0};
+    return ref;
+}
+
+static size_t pp_ref_count(const pp_set_ref *list) {
+    return list->canonical ? pp_list_count(list->body_len) : list->body_len / 32;
+}
+
+static void pp_ref_hash(const pp_set_ref *list, size_t k, uint8_t out[32]) {
+    if (list->canonical) pp_list_hash(list->body, k, out);
+    else memcpy(out, list->body + 32 * k, 32);
+}
+
+/* A table on the list of a ceiling, or any table for none, as pp_on_list. */
+static int pp_ref_on_list(const pp_set_ref *ceiling, const uint8_t body_sha256[32]) {
+    if (ceiling == NULL) return 1;
+    if (ceiling->canonical) return pp_list_holds(ceiling->body, ceiling->body_len, body_sha256);
+    return pp_listed((const uint8_t (*)[32])ceiling->body, ceiling->body_len / 32, body_sha256);
+}
+
+static uint8_t pp_set_refusal(const pp_pep_machine *pep, const pp_install *r, const pp_set_ref *const held_sets[PP_SETS],
+                              const pp_change *change, const pp_set_ref *st, int kind, int ceiling_lost, int *larger_out);
+
+/* The verifier's view and verdict, which the precheck and pp_stage_one take in turn and never at once (B-0020). */
+static pp_pep pp_check_view;
+static pp_verdict pp_check_verdict;
+
+/* B-0020: what the precheck keeps between the statements it brings, and nothing more. A set it has checked is read
+ * again from the caller's bytes, so of each it keeps only the envelope. */
+static struct {
+    pp_envelope made[PP_SETS];    /* the envelope of each set the statements before it applied */
+    pp_envelope pending[PP_SETS]; /* each set staged and not yet whole (IS4, G2) */
+    pp_change changes[PP_SETS];   /* each install change statement staged (IS15) */
+    pp_install_view iview;
+} pp_precheck_scratch;
+_Static_assert(sizeof pp_precheck_scratch < sizeof(pp_statement), "B-0020: the precheck holds no statement buffer");
 
 /* P2 step 3 (pep._precheck): every install statement the engineer brings verifies under the install record the
- * provisioning leaves (`next`, *has and *keeps as pp_next_record left them) and the anchor's store, whose time floor
+ * provisioning leaves (`record`, *has and *keeps as pp_next_record left them) and the anchor's store, whose time floor
  * is its own, before anything changes. The statements are taken in order as pp_stage_one then stages them: each
  * against the record as the ones before it leave it, the sets staged so far (V10) and the ceiling then held (CL3),
  * and a set that is whole is held to pp_set_refusal, as pp_apply_set holds it. Any refusal refuses the provisioning
  * but dist:seq-replay, a set the PEP already holds at or above its `seq`, which is refused and leaves the
- * provisioning to go on (case 170, IS6). */
-static uint8_t pp_precheck(const pp_pep_machine *pep, const pp_trust *anchor, const char *stream, const pp_install *next,
+ * provisioning to go on (case 170, IS6). The record is walked in place, so the caller builds it again after. Each
+ * statement is read from the caller's bytes as it comes and only envelopes are kept (B-0020). */
+static uint8_t pp_precheck(const pp_pep_machine *pep, const pp_trust *anchor, const char *stream, pp_install *record,
                            int has, int keeps, const pp_brought *brought, size_t n_brought, long long now) {
-    static pp_install record;
-    static pp_pep view;
-    static pp_install_view iview;
-    static pp_verdict verdict;
-    static pp_statement one, made[PP_SETS]; /* the set being checked, and each set the statements before it applied */
-    static pp_envelope pending[PP_SETS];    /* each set staged and not yet whole (IS4, G2) */
-    static pp_change changes[PP_SETS];      /* each install change statement staged (IS15) */
+    pp_pep *view = &pp_check_view;
+    pp_verdict *verdict = &pp_check_verdict;
+    pp_envelope *made = pp_precheck_scratch.made, *pending = pp_precheck_scratch.pending;
+    pp_change *changes = pp_precheck_scratch.changes;
+    pp_install_view *iview = &pp_precheck_scratch.iview;
     if (n_brought == 0) return PP_CAUSE_NONE;
     if (!has) return PP_CAUSE_BAD_FORMAT; /* install statements with an anchor that holds no install keys */
-    record = *next;
-    const pp_statement *held_sets[PP_SETS];
+    pp_set_ref sets[PP_SETS];
+    const pp_set_ref *held_sets[PP_SETS];
     int has_pending[PP_SETS], has_change[PP_SETS];
     for (int k = 0; k < PP_SETS; k++) {
-        held_sets[k] = keeps && record.sets[k].held && !pep->set_lost[k] && pep->d.sets[k].has_held
-                           ? &pep->d.sets[k].held : NULL;
+        int held = keeps && record->sets[k].held && !pep->set_lost[k] && pep->d.sets[k].has_held;
+        if (held) sets[k] = pp_ref_of(&pep->d.sets[k].held);
+        held_sets[k] = held ? &sets[k] : NULL;
         has_pending[k] = has_change[k] = 0;
     }
     /* IS10: the provisioning keeps a lost ceiling lost while the record it leaves still names it */
-    int ceiling_lost = keeps && pep->set_lost[PP_SET_CEILING] && record.sets[PP_SET_CEILING].held;
+    int ceiling_lost = keeps && pep->set_lost[PP_SET_CEILING] && record->sets[PP_SET_CEILING].held;
     for (size_t k = 0; k < n_brought; k++) {
-        memset(&view, 0, sizeof view);
-        memset(&iview, 0, sizeof iview);
-        view.kind = pep->config.kind;
-        pp_copy_stream(view.stream, stream);
-        view.body_bound = PP_MAX_BODY;
-        view.has_clock = pep->config.has_clock;
-        view.has_instance_key_id = 1;
-        pp_sha256(pep->instance_public, 32, view.instance_key_id);
-        view.table_check = pep->config.table_check;
-        view.table_context = pep->config.context;
-        iview.record = &record;
+        memset(view, 0, sizeof *view);
+        memset(iview, 0, sizeof *iview);
+        view->kind = pep->config.kind;
+        pp_copy_stream(view->stream, stream);
+        view->body_bound = PP_MAX_BODY;
+        view->has_clock = pep->config.has_clock;
+        view->has_instance_key_id = 1;
+        pp_sha256(pep->instance_public, 32, view->instance_key_id);
+        view->table_check = pep->config.table_check;
+        view->table_context = pep->config.context;
+        iview->record = record;
         for (int j = 0; j < PP_SETS; j++) {
-            iview.staged[j] = has_pending[j] ? &pending[j] : NULL;
-            iview.change[j] = has_change[j] ? &changes[j] : NULL;
+            iview->staged[j] = has_pending[j] ? &pending[j] : NULL;
+            iview->change[j] = has_change[j] ? &changes[j] : NULL;
         }
-        if (held_sets[PP_SET_CEILING]) {
-            iview.has_ceiling = 1;
-            iview.ceiling = (const uint8_t (*)[32])held_sets[PP_SET_CEILING]->body;
-            iview.n_ceiling = held_sets[PP_SET_CEILING]->body_len / 32;
+        const pp_set_ref *ceiling = held_sets[PP_SET_CEILING];
+        if (ceiling) { /* a held list by its hashes, a brought one as its body (B-0020) */
+            iview->has_ceiling = ceiling->canonical ? 2 : 1;
+            iview->ceiling = (const uint8_t (*)[32])ceiling->body;
+            iview->n_ceiling = ceiling->canonical ? ceiling->body_len : ceiling->body_len / 32;
         }
-        iview.layout = pep->config.layout;
-        iview.trust = anchor;
-        view.install = &iview;
-        pp_verify(brought[k].sealed, brought[k].sealed_len, brought[k].body, brought[k].body_len, anchor, &view, now,
-                  &verdict);
-        const pp_envelope *e = &verdict.envelope;
-        if (!verdict.has_envelope || !pp_is_install(e->artifact)) return PP_CAUSE_BAD_FORMAT;
-        if (verdict.cause == PP_CAUSE_SEQ_REPLAY) continue; /* case 170: refused, the provisioning goes on */
-        if (verdict.cause) return verdict.cause;
-        if (verdict.unchanged) continue;
+        iview->layout = pep->config.layout;
+        iview->trust = anchor;
+        view->install = iview;
+        pp_verify(brought[k].sealed, brought[k].sealed_len, brought[k].body, brought[k].body_len, anchor, view, now,
+                  verdict);
+        const pp_envelope *e = &verdict->envelope;
+        if (!verdict->has_envelope || !pp_is_install(e->artifact)) return PP_CAUSE_BAD_FORMAT;
+        if (verdict->cause == PP_CAUSE_SEQ_REPLAY) continue; /* case 170: refused, the provisioning goes on */
+        if (verdict->cause) return verdict->cause;
+        if (verdict->unchanged) continue;
         if (e->artifact == PP_ART_INSTALL_TRUST) { /* IS11: the statements after it verify under it */
-            pp_install_take_trust(&record, e, brought[k].body, brought[k].body_len);
+            pp_install_take_trust(record, e, brought[k].body, brought[k].body_len);
             continue;
         }
         if (e->artifact == PP_ART_INSTALL_CHANGE) { /* IS15, as pp_stage_change holds it */
-            int kind = verdict.change_set;
-            const pp_statement *held = held_sets[kind];
-            if (held == NULL || memcmp(verdict.change_from, held->envelope.policy_sha256, 32) != 0)
+            int kind = verdict->change_set;
+            const pp_set_ref *held = held_sets[kind];
+            if (held == NULL || memcmp(verdict->change_from, held->envelope->policy_sha256, 32) != 0)
                 return PP_CAUSE_WIDENING_UNSIGNED;
             if (has_pending[kind] && pending[kind].seq != e->seq) has_pending[kind] = 0; /* G2 */
             has_change[kind] = 1;
@@ -2423,22 +2494,14 @@ static uint8_t pp_precheck(const pp_pep_machine *pep, const pp_trust *anchor, co
             changes[kind].seq = e->seq;
             memcpy(changes[kind].policy_sha256, e->policy_sha256, 32);
             memcpy(changes[kind].release, e->release, 32);
-            memcpy(changes[kind].from, verdict.change_from, 32);
+            memcpy(changes[kind].from, verdict->change_from, 32);
             memcpy(changes[kind].envelope_id, e->envelope_id, 32);
             continue;
         }
         int kind = pp_set_of(e->artifact);
         if (has_change[kind] && changes[kind].seq != e->seq) has_change[kind] = 0; /* G2 */
-        memset(&one, 0, sizeof one);
-        one.envelope = *e;
-        if (e->as == PP_AS_POLICY_LIST) {
-            size_t n = 0;
-            pp_read_ceiling(brought[k].body, brought[k].body_len, (uint8_t (*)[32])one.body, &n);
-            one.body_len = 32 * n;
-        } else {
-            one.body_len = brought[k].body_len;
-            memcpy(one.body, brought[k].body, brought[k].body_len);
-        }
+        /* the set as it came: a table's bytes, or a policy list read in place from the body V11 checked */
+        pp_set_ref one = {e, brought[k].body, brought[k].body_len, e->as == PP_AS_POLICY_LIST};
         uint8_t release[32];
         pp_release_of_one(pp_as_name(e->as), e->body_sha256, release);
         if (memcmp(release, e->release, 32) != 0) { /* not whole: staged, and applied by nothing here */
@@ -2447,20 +2510,22 @@ static uint8_t pp_precheck(const pp_pep_machine *pep, const pp_trust *anchor, co
             continue;
         }
         int larger = 0;
-        uint8_t cause = pp_set_refusal(pep, &record, held_sets, has_change[kind] ? &changes[kind] : NULL, &one, kind,
+        uint8_t cause = pp_set_refusal(pep, record, held_sets, has_change[kind] ? &changes[kind] : NULL, &one, kind,
                                        ceiling_lost, &larger);
         if (cause == PP_CAUSE_SEQ_REPLAY) continue;
         if (cause) return cause;
         int empty = e->as == PP_AS_NONE;
-        pp_install_slot *slot = &record.sets[kind]; /* as pp_apply_set leaves the record */
+        pp_install_slot *slot = &record->sets[kind]; /* as pp_apply_set leaves the record */
         slot->seq = e->seq;
         slot->held = !empty;
         memcpy(slot->envelope_id, e->envelope_id, 32);
         pp_sha256(e->envelope_id, 32, slot->set_id);
         memcpy(slot->policy_sha256, e->policy_sha256, 32);
         memcpy(slot->body_sha256, e->body_sha256, 32);
-        made[kind] = one;
-        held_sets[kind] = empty ? NULL : &made[kind];
+        made[kind] = *e;
+        one.envelope = &made[kind];
+        sets[kind] = one;
+        held_sets[kind] = empty ? NULL : &sets[kind];
         has_pending[kind] = has_change[kind] = 0;
         if (kind == PP_SET_CEILING) ceiling_lost = 0;
     }
@@ -2479,6 +2544,7 @@ uint8_t pp_pep_provision_install(pp_pep_machine *pep, const pp_trust *anchor, co
     if (cause) return cause;
     cause = pp_precheck(pep, anchor, stream, &next, has, keeps, brought, n_brought, now);
     if (cause) return cause;
+    if (n_brought) (void)pp_next_record(pep, install, &next, &has, &keeps); /* the precheck walked it: built again */
     pp_durable *d = &pep->d;
     uint64_t counter = d->counter;
     /* what no provisioning clears: the marks of the anchor part, the counts of H10 and AF8, and the held sets the
@@ -2828,46 +2894,49 @@ static void pp_lapse(pp_pep_machine *pep, uint8_t cause);
  * `widens` false only when `replaces` is the policy hash of the set it holds, and a ceiling after a lost one,
  * `ceiling_lost`, is larger unless it is the lost one sent again byte for byte (IS10). pp_apply_set and the
  * provisioning precheck both ask it. */
-static uint8_t pp_set_refusal(const pp_pep_machine *pep, const pp_install *r, const pp_statement *const held_sets[PP_SETS],
-                              const pp_change *change, const pp_statement *st, int kind, int ceiling_lost, int *larger_out) {
-    const pp_envelope *e = &st->envelope;
+static uint8_t pp_set_refusal(const pp_pep_machine *pep, const pp_install *r, const pp_set_ref *const held_sets[PP_SETS],
+                              const pp_change *change, const pp_set_ref *st, int kind, int ceiling_lost, int *larger_out) {
+    const pp_envelope *e = st->envelope;
     uint8_t cause = PP_CAUSE_NONE;
     int empty = e->as == PP_AS_NONE;
-    const pp_statement *held = held_sets[kind], *ceiling = held_sets[PP_SET_CEILING];
+    const pp_set_ref *held = held_sets[kind], *ceiling = held_sets[PP_SET_CEILING];
     int lost = kind == PP_SET_CEILING && ceiling_lost; /* IS10: a ceiling after a lost one */
     *larger_out = 0;
     if (e->seq <= r->sets[kind].seq) cause = PP_CAUSE_SEQ_REPLAY;
-    else if (kind != PP_SET_CEILING && !empty && !pp_on_list(ceiling, e->body_sha256)) cause = PP_CAUSE_ABOVE_CEILING;
+    else if (kind != PP_SET_CEILING && !empty && !pp_ref_on_list(ceiling, e->body_sha256)) cause = PP_CAUSE_ABOVE_CEILING;
     else if (kind == PP_SET_CEILING && !empty) {
         for (int other = 0; other < PP_SET_CEILING; other++) {
-            const pp_statement *one = held_sets[other];
-            if (one && !pp_on_list(st, one->envelope.body_sha256)) cause = PP_CAUSE_ABOVE_CEILING; /* narrow those first */
+            const pp_set_ref *one = held_sets[other];
+            if (one && !pp_ref_on_list(st, one->envelope->body_sha256)) cause = PP_CAUSE_ABOVE_CEILING; /* narrow those first */
         }
     }
     int larger = 0;
     /* IS15: a change statement staged for this set, from the held set's policy hash, stands for its table */
     int carried = !cause && kind != PP_SET_CEILING && !empty && held != NULL && change != NULL &&
                   change->seq == e->seq && !e->widens && e->has_replaces &&
-                  memcmp(e->replaces, held->envelope.policy_sha256, 32) == 0 &&
-                  memcmp(change->from, held->envelope.policy_sha256, 32) == 0;
+                  memcmp(e->replaces, held->envelope->policy_sha256, 32) == 0 &&
+                  memcmp(change->from, held->envelope->policy_sha256, 32) == 0;
     if (!cause) {
         if (lost) /* IS10, IS12: all but a byte for byte resend of the set the record names, the empty one too */
             larger = !(r->sets[kind].held && !empty && memcmp(e->body_sha256, r->sets[kind].body_sha256, 32) == 0);
         else if (kind == PP_SET_CEILING) {
             if (empty) larger = held != NULL;
             else if (held != NULL)
-                for (size_t k = 0; k < st->body_len / 32; k++)
-                    larger |= !pp_on_list(held, st->body + 32 * k); /* a hash the list before did not hold */
+                for (size_t k = 0, n = pp_ref_count(st); k < n; k++) {
+                    uint8_t hash[32];
+                    pp_ref_hash(st, k, hash);
+                    larger |= !pp_ref_on_list(held, hash); /* a hash the list before did not hold */
+                }
         } else if (!empty) {
             /* IS12: a mesh PEP compares bytes, and a cfs PEP takes the signers' word beyond the replaces test */
             larger = held == NULL || (pep->config.kind == PP_TGT_MESH && !carried &&
                                       (held->body_len != st->body_len || memcmp(held->body, st->body, st->body_len) != 0));
             if (carried && kind == PP_SET_FLOOR &&
-                (held->envelope.has_layout != e->has_layout || held->envelope.has_command != e->has_command ||
-                 (e->has_layout && memcmp(held->envelope.layout, e->layout, 32) != 0) ||
-                 (e->has_command && held->envelope.command != e->command)))
+                (held->envelope->has_layout != e->has_layout || held->envelope->has_command != e->has_command ||
+                 (e->has_layout && memcmp(held->envelope->layout, e->layout, 32) != 0) ||
+                 (e->has_command && held->envelope->command != e->command)))
                 larger = 1; /* IS15: the table read with another layout or command register (AF9, AF10) */
-            const pp_envelope *before = held ? &held->envelope : NULL;
+            const pp_envelope *before = held ? held->envelope : NULL;
             if (kind == PP_SET_FLOOR && before && before->has_rate &&
                 (!e->has_rate || e->rate_allows > before->rate_allows || e->rate_window < before->rate_window))
                 larger = 1; /* AF8, IS12: a looser rate, or one removed */
@@ -2896,9 +2965,14 @@ static uint8_t pp_apply_set(pp_pep_machine *pep, int kind) {
     const pp_envelope *e = &st->envelope;
     uint8_t subject = (uint8_t)(kind + 1);
     int empty = e->as == PP_AS_NONE, larger = 0;
-    const pp_statement *held_sets[PP_SETS];
-    for (int k = 0; k < PP_SETS; k++) held_sets[k] = pp_held_set(pep, k);
-    uint8_t cause = pp_set_refusal(pep, r, held_sets, set->has_change ? &set->change : NULL, st, kind,
+    pp_set_ref sets[PP_SETS], whole = pp_ref_of(st);
+    const pp_set_ref *held_sets[PP_SETS];
+    for (int k = 0; k < PP_SETS; k++) {
+        const pp_statement *held = pp_held_set(pep, k);
+        if (held) sets[k] = pp_ref_of(held);
+        held_sets[k] = held ? &sets[k] : NULL;
+    }
+    uint8_t cause = pp_set_refusal(pep, r, held_sets, set->has_change ? &set->change : NULL, &whole, kind,
                                    pp_ceiling_lost(pep), &larger);
     if (cause) {
         set->has_staged = set->has_change = 0;
@@ -3184,14 +3258,14 @@ static uint8_t pp_stage_one(pp_pep_machine *pep, const uint8_t *sealed, size_t s
         pp_refuse(pep, PP_CAUSE_FLOOR_LOST);
         return PP_CAUSE_FLOOR_LOST;
     }
-    static pp_pep view;
-    static pp_verdict verdict;
-    pp_pep_view(pep, &view);
-    pp_verify(sealed, sealed_len, body, body_len, &d->trust, &view, pep->now, &verdict);
-    const pp_envelope *e = verdict.has_envelope ? &verdict.envelope : NULL;
+    pp_pep *view = &pp_check_view; /* shared with the precheck (B-0020) */
+    pp_verdict *verdict = &pp_check_verdict;
+    pp_pep_view(pep, view);
+    pp_verify(sealed, sealed_len, body, body_len, &d->trust, view, pep->now, verdict);
+    const pp_envelope *e = verdict->has_envelope ? &verdict->envelope : NULL;
     int installing = e && pp_is_install(e->artifact);
     int answer = e && e->artifact == PP_ART_OPERATOR_ANSWER;
-    uint8_t subject = e ? pp_subject_of(e) : 0, cause = verdict.cause;
+    uint8_t subject = e ? pp_subject_of(e) : 0, cause = verdict->cause;
     if (e && e->artifact == PP_ART_INSTALL_CHANGE) { /* H10: the set an install change statement carries, or none */
         int k;
         uint8_t from[32];
@@ -3203,13 +3277,13 @@ static uint8_t pp_stage_one(pp_pep_machine *pep, const uint8_t *sealed, size_t s
     else if (pp_ceiling_lost(pep) && e && !pp_on_trust_stream(e->artifact) && e->artifact != PP_ART_INSTALL_CEILING &&
              e->artifact != PP_ART_INSTALL_TRUST && e->artifact != PP_ART_OPERATOR_ANSWER)
         cause = PP_CAUSE_INSTALL_LOST; /* IS10: frozen until a ceiling is held again */
-    else if (verdict.has_time_floor && d->trust_reads && verdict.time_floor > d->trust.time_floor) {
-        d->trust.time_floor = verdict.time_floor; /* V13, T1 */
+    else if (verdict->has_time_floor && d->trust_reads && verdict->time_floor > d->trust.time_floor) {
+        d->trust.time_floor = verdict->time_floor; /* V13, T1 */
         pp_persist(pep, PP_PART_TRUST);
     }
     if (cause) { pp_emit_about(pep, PP_EV_REFUSED, cause, subject); return cause; }
-    if (verdict.unchanged) { pp_emit(pep, PP_EV_BEAT, 0); return PP_CAUSE_NONE; } /* Q3, R1, IS6 */
-    if (installing) return pp_stage_install(pep, &verdict, sealed, sealed_len, body, body_len);
+    if (verdict->unchanged) { pp_emit(pep, PP_EV_BEAT, 0); return PP_CAUSE_NONE; } /* Q3, R1, IS6 */
+    if (installing) return pp_stage_install(pep, verdict, sealed, sealed_len, body, body_len);
     if (answer) return pp_apply_answer(pep, e, body, body_len);
     if (e->artifact == PP_ART_TRUST_REVOCATION) {
         uint8_t cause = pp_apply_revocation(pep, e, body, body_len); /* B2: applied when it verifies, durable before reported (R3) */

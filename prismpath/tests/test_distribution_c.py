@@ -1726,6 +1726,71 @@ def test_a_provisioning_refuses_a_brought_set_its_staging_would_refuse_and_keeps
     assert out[3] == f"installid {_install_id(fallback=(fallback2[0], 2))}"
 
 
+def test_a_provisioning_reads_a_brought_ceiling_in_place_at_every_hash_it_lists(host_check):
+    """B-0020. The precheck reads a policy list it brings from the canonical body V11 checked and copies none of it.
+    A brought list of 64 hashes holds a fallback policy listed at its first, a middle and its last hash, and refuses
+    one it does not list. A second list brought after it, with widens false and replacing it, is applied when it is
+    narrower and refused with dist:widening-unsigned when it adds a hash, so the lists are read against each other."""
+    fallback_hash = hashlib.sha256(FALLBACK).hexdigest()
+    pool = sorted(hashlib.sha256(b"other %d" % k).hexdigest() for k in range(1000))
+    below, above = [one for one in pool if one < fallback_hash], [one for one in pool if one > fallback_hash]
+    others = below[-31:] + above[:32]
+    for at in (0, 31, 63):
+        listed = below[len(below) - at:] + [fallback_hash] + above[:63 - at]
+        assert len(listed) == 64 and sorted(listed) == listed and listed[at] == fallback_hash
+        body = _ceiling(hashes=listed)
+        wide = _install("install.ceiling", body, seq=1)
+        fallback = _install("install.fallback", FALLBACK, seq=1)
+        out = _run21(host_check, [*_node(), *_anchor(bring=[wide, fallback]), f"provision {S} {N}", "installid"])
+        assert [(one["event"], one["cause"]) for one in _recs(out[0])] == [("provisioned", "dist:install-widened")], at
+        assert out[1] == f"installid {_install_id(ceiling=(wide[0], 1), fallback=(fallback[0], 1))}", at
+    wide = _install("install.ceiling", _ceiling(hashes=others), seq=1)
+    out = _run21(host_check, [*_node(), *_anchor(bring=[wide, _install("install.fallback", FALLBACK, seq=1)]),
+                              f"provision {S} {N}", "installid"])
+    assert out[0] == f"provision-refused {causes.NAMES['dist:above-ceiling']}"
+    wide_body = _ceiling(hashes=others[:10])
+    wide = _install("install.ceiling", wide_body, seq=1)
+    narrower = _install("install.ceiling", _ceiling(hashes=others[3:5]), seq=2, widens=False,
+                        replaces=canon.sha256_hex(wide_body))
+    out = _run21(host_check, [*_node(), *_anchor(bring=[wide, narrower]), f"provision {S} {N}", "installid"])
+    assert [(one["event"], one["cause"]) for one in _recs(out[0])] == [("provisioned", None)]
+    assert out[1] == f"installid {_install_id(ceiling=(narrower[0], 2))}"
+    larger = _install("install.ceiling", _ceiling(hashes=others[:11]), seq=2, widens=False,
+                      replaces=canon.sha256_hex(wide_body))
+    out = _run21(host_check, [*_node(), *_anchor(bring=[wide, larger]), f"provision {S} {N}", "installid"])
+    assert out[0] == f"provision-refused {causes.NAMES['dist:widening-unsigned']}"
+
+
+PRECHECK_SCRATCH_MAX = 2760  # B-0020: the envelopes, changes and view of pp_precheck_scratch on a 64 bit host
+DIST_BSS_MAX = 30720         # B-0020: pp_dist.o at -O2 on a 64 bit host, 52,632 bytes before the precheck streamed
+
+
+def test_the_precheck_keeps_its_static_memory_down(tmp_path):
+    """B-0020. The provisioning precheck reads each statement it brings in place and keeps only envelopes, so its
+    static memory is pp_precheck_scratch and the verifier's view and verdict it shares with pp_stage_one. A static
+    statement buffer added back to the full core, about 4.9 KB each, fails this pin. Raise it only on purpose."""
+    nm, size = shutil.which("nm"), shutil.which("size")
+    if not (DIST / "pp_dist.c").exists():
+        pytest.skip("the C core is in prismpath-hw, which this tree does not carry")
+    if CC is None or nm is None or size is None:
+        pytest.skip("no C compiler, nm or size on this host, so the static memory of the C core is not measured here")
+    import struct
+    if struct.calcsize("P") != 8:
+        pytest.skip("the pins are for a 64 bit host build")
+    obj = tmp_path / "pp_dist.o"
+    subprocess.run([CC, "-std=c11", "-O2", "-c", f"-I{DIST}", f"-I{MONOCYPHER}", "-o", str(obj), str(DIST / "pp_dist.c")],
+                   check=True, capture_output=True, text=True)
+    symbols = {}
+    for line in subprocess.run([nm, "-S", str(obj)], check=True, capture_output=True, text=True).stdout.splitlines():
+        parts = line.split()
+        if len(parts) == 4 and parts[2] in "bBdD":
+            symbols[parts[3]] = int(parts[1], 16)
+    assert 0 < symbols["pp_precheck_scratch"] <= PRECHECK_SCRATCH_MAX, symbols["pp_precheck_scratch"]
+    assert "pp_check_view" in symbols and "pp_check_verdict" in symbols
+    bss = int(subprocess.run([size, str(obj)], check=True, capture_output=True, text=True).stdout.splitlines()[1].split()[2])
+    assert bss <= DIST_BSS_MAX, bss
+
+
 def test_a_pep_locked_by_a_lost_anchor_part_holds_a_provisioning_to_what_it_keeps(host_check):
     """P1, P2 step 3, IS9, CL3 in the C core. A PEP with no copy of its anchor part is locked and keeps its install
     record. A provisioning then holds what it brings to the ceiling that record keeps, as staging would after it: a
