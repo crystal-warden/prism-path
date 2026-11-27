@@ -53,7 +53,8 @@ def _sources():
     found = sorted(path for path in ROOT.glob("**/*.rules.md")
                    if not {"target", "node_modules", ".git"} & set(path.relative_to(ROOT).parts)
                    and path.with_name(path.name[:-len(".rules.md")] + ".core.json").is_file())
-    assert len(found) >= 11
+    # A repo checkout carries the integration sources too. An installed wheel carries only the package's own.
+    assert len(found) >= (11 if (ROOT / "integrations").is_dir() else 4)
     return found
 
 
