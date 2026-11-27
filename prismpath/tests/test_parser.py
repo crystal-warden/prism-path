@@ -164,7 +164,8 @@ def test_every_shipped_rules_source_is_refused():
     from pathlib import Path
     root = Path(__file__).resolve().parents[2]
     sources = sorted(root.glob("prismpath/**/*.rules.md")) + sorted(root.glob("integrations/**/*.rules.md"))
-    assert len(sources) >= 6
+    # A repo checkout carries the integration sources too. An installed wheel carries only the package's own.
+    assert len(sources) >= (6 if (root / "integrations").is_dir() else 4)
     for path in sources:
         with pytest.raises(ParseError, match="rules source"):
             parse_file(str(path))

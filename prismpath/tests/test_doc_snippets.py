@@ -62,6 +62,8 @@ EXAMPLES = _examples()
 
 
 def test_the_docs_hold_examples_of_both_kinds():
+    if not (ROOT / "docs" / "guides").is_dir():
+        pytest.skip("the guides are only in a repo checkout")
     kinds = [kind for _where, kind, _text in EXAMPLES]
     assert kinds.count("flow") >= 10 and kinds.count("rules") >= 2
 
