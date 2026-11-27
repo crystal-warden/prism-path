@@ -357,6 +357,71 @@ def domain_sha256(adapter) -> str:
     return canon.sha256_hex(domain_document(adapter))
 
 
+# ------------------------------------------------------------------ CL4: the grammar the ceiling states
+
+OUT_OF_DOMAIN = "policy:out-of-domain"
+BOUNDED = ("int", "fixed")                         # the field kinds whose floor and ceiling are `min` and `max`
+
+
+def built_categories(kind: str) -> FrozenSet[str]:
+    """CL4, P4: the category fields of the domain a PEP of `kind` was built with, as `domain_document` names them. On
+    `gateway` the fields its reading gives, and on `agent` and `xdp` the categories the classifier produces and
+    `zone_name`, the one category of the reading whose values are the names of the zones (AF1)."""
+    if kind == "gateway":
+        from prismpath.gateway import reading
+        return frozenset(reading.FIELDS)
+    from prismpath.agent import profile
+    return frozenset(profile.KNOWN_CATEGORIES) | {profile.ZONE_NAME}
+
+
+def _definitions(body: bytes) -> Dict[str, Tuple[dict, Dict[str, str]]]:
+    """{field: (the core's reading of its definition, its options as written)} of a `policy.core` that loads."""
+    from prismpath.kernel import canon2, core_policy
+    out = {}
+    for name, text in canon2.loads(bytes(body))["fields"].items():
+        words = core_policy.split_words(text)
+        out[name] = (core_policy.parse_def(name, text), dict(word.split("=", 1) for word in words[1:]))
+    return out
+
+
+def _within(stated: Tuple[dict, Dict[str, str]], used: Tuple[dict, Dict[str, str]]) -> bool:
+    """CL4: a field the set uses is in the grammar the ceiling states for it. The definitions are the same but for an
+    int or a fixed field, whose `min` and `max` may lie inside the ceiling's."""
+    (ceiling, ceiling_options), (field_def, options) = stated, used
+    same = lambda key: field_def[key] == ceiling[key]  # noqa: E731
+    if not all(same(key) for key in ("kind", "scale", "rounding", "absent_ok")):
+        return False
+    if options.get("unit") != ceiling_options.get("unit"):
+        return False
+    if field_def["kind"] in BOUNDED:
+        return ceiling["lo"] <= field_def["lo"] <= field_def["hi"] <= ceiling["hi"]
+    return True
+
+
+def out_of_scope(kind: str, artifact: str, body: bytes, ceiling: Optional[HeldSet]) -> Optional[str]:
+    """CL4: `policy:out-of-domain` when the `policy.core` `body` of `artifact` uses grammar outside its scope, or None.
+    A ceiling states the grammar its PEP may be sent. Each of its fields is in the domain the PEP was built with, a
+    category the PEP reads, and an int or a fixed field states its `min` and `max`. A release or an install set under a
+    held ceiling uses only fields the ceiling's `policy.core` defines, each defined as the ceiling defines it, and an
+    int or a fixed field within the ceiling's bounds. A category's values are the built ones, and no ceiling narrows
+    them. With no ceiling, or a ceiling in another form, the built domain alone is the scope (9.4)."""
+    used = _definitions(body)
+    if artifact == CEILING:
+        categories = built_categories(kind)
+        for name, (definition, options) in sorted(used.items()):
+            if definition["kind"] == "category" and name not in categories:
+                return OUT_OF_DOMAIN
+            if definition["kind"] in BOUNDED and not {"min", "max"} <= set(options):
+                return OUT_OF_DOMAIN
+        return None
+    if ceiling is None or ceiling.empty or "policy.core" not in ceiling.bodies:
+        return None
+    stated = _definitions(ceiling.bodies["policy.core"])
+    if any(name not in stated or not _within(stated[name], one) for name, one in sorted(used.items())):
+        return OUT_OF_DOMAIN
+    return None
+
+
 # ------------------------------------------------------------------ CL1: inside the ceiling
 
 def _routes_inside(ceiling: bytes, staged: bytes) -> bool:
@@ -1065,5 +1130,6 @@ def ceiling_body(tables: Iterable[bytes]) -> bytes:
 
 __all__ = ["Record", "HeldSet", "Staged", "Installed", "check_trust", "trust_widens", "read_anchor_part",
            "change_body", "seal_change", "changes_set",
-           "anchor_part", "domain_sha256", "inside", "resends", "set_larger", "widens_ok", "protected_names", "seal_set",
+           "anchor_part", "domain_sha256", "built_categories", "out_of_scope", "inside", "resends", "set_larger",
+           "widens_ok", "protected_names", "seal_set",
            "trust_body", "seal_trust", "ceiling_body", "CANNOT_DECIDE", "LARGER"]

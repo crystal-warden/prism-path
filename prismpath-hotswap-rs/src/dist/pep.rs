@@ -53,7 +53,7 @@
 //! whenever no release does, handed to the runtime in place of a withdrawn release (FB1 to FB9), a ceiling list
 //! every release and install set is held inside (CL1 to CL3), and an action floor the machine asks first on every
 //! request in every state (AF1 to AF10, `floor`). The floor of a `host` lives in the machine and not in its runtime,
-//! so applying one has no runtime step, and DIVERGENCES.md says so.
+//! so applying one has no runtime step, as C6 of the spec says.
 //!
 //! The controller key is held in its own role, apart from every other (K4, K6), named by a `/2` anchor or by a
 //! `trust.controller` (K7). The epoch id (H9) is taken only from a controller statement that verifies under that
