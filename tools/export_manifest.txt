@@ -128,6 +128,7 @@ prismpath-rs/tests/fixtures/merkle_stream.json
 prismpath-rs/tests/fixtures/parse_limits.json
 prismpath-rs/tests/fixtures/predicates.json
 prismpath-rs/tests/fixtures/reach.json
+prismpath-rs/tests/fixtures/rules_source.json
 prismpath-rs/tests/support/engine_oracle.py
 prismpath-rs/tests/test_canon2.rs
 prismpath-rs/tests/test_canonical.rs
@@ -145,6 +146,7 @@ prismpath-rs/tests/test_merkle_stream.rs
 prismpath-rs/tests/test_overflow_refused.rs
 prismpath-rs/tests/test_parse_limits.rs
 prismpath-rs/tests/test_proof.rs
+prismpath-rs/tests/test_rules_source.rs
 prismpath-telemetry-rs/Cargo.toml
 prismpath-telemetry-rs/PORT_SPEC.md
 prismpath-telemetry-rs/README.md
@@ -530,6 +532,7 @@ prismpath/portable/conformance/parse_limits.json
 prismpath/portable/conformance/predicates.json
 prismpath/portable/conformance/reach.json
 prismpath/portable/conformance/receipts.json
+prismpath/portable/conformance/rules_source.json
 prismpath/portable/conformance/safety.json
 prismpath/portable/engine_surface_fixtures.py
 prismpath/portable/flow_fixtures.py
@@ -555,6 +558,7 @@ prismpath/portable/gen_p1_conformance.py
 prismpath/portable/gen_parse_limits_fixtures.py
 prismpath/portable/gen_reach.py
 prismpath/portable/gen_receipt_fixtures.py
+prismpath/portable/gen_rules_source_fixtures.py
 prismpath/portable/gen_safety_conformance.py
 prismpath/portable/merkle.mjs
 prismpath/portable/transparency_dev_consistency.json
@@ -934,6 +938,7 @@ prismpath/tests/test_root_statement.py
 prismpath/tests/test_routelog.py
 prismpath/tests/test_router.py
 prismpath/tests/test_router_cache_bound.py
+prismpath/tests/test_rules_source_conformance.py
 prismpath/tests/test_rust_conformance.py
 prismpath/tests/test_safety_vectors.py
 prismpath/tests/test_sandbox.py
