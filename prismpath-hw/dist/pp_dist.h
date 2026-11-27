@@ -300,9 +300,9 @@ typedef struct {
     const pp_envelope *staged[PP_SETS]; /* the statement staged of each kind, NULL for none (IS4, G2, V10) */
     const pp_change *change[PP_SETS];   /* the install change statement staged of each kind, NULL for none (IS15) */
     int message;                    /* 1 in a message, where a threshold of 1 takes no install statement (IS4) */
-    int has_ceiling;                /* a policy list is held (CL1) */
-    const uint8_t (*ceiling)[32];
-    size_t n_ceiling;
+    int has_ceiling;                /* a policy list is held (CL1): 1 its hashes in `ceiling`, `n_ceiling` of them, */
+    const uint8_t (*ceiling)[32];   /* or 2 for one a provisioning brings, `ceiling` its canonical body read in place */
+    size_t n_ceiling;               /* and `n_ceiling` that body's length (B-0020) */
     const pp_layout *layout;        /* the layout the PEP was built with, NULL for none (AF10) */
     const pp_trust *trust;          /* the trust store an install.trust's keys are held apart from (IS11, K4) */
 } pp_install_view;
