@@ -6,7 +6,14 @@ to it (`touches_protected` and `adds_protected_reference` of gate/escalate.py in
   touches_protected         a changed line of the edit lies inside a protected function, in the old file or the new.
                             Restrictive value true.
   adds_protected_reference  the edit adds a reference that resolves to a protected function, or to one on a call path
-                            with the protected set in either direction. Restrictive value true.
+                            with the protected set in either direction. Restrictive value true. It is false only when
+                            every added reference is on a closed safe list (`adds_protected_reference`): an unresolved or
+                            outside reference, a resolved one with no target and a class with no `__init__` all read
+                            true. The tracer was safe on these because an unresolved added reference made its
+                            `reaches_protected` `unknown` with `unknown_reason == "new_reference"`, and every delegate
+                            rule needed that reason; `unknown_reason` is not ported, so the closed list does that job and
+                            a policy should also require `zone_reach == "none"`. The fact was proven only together with
+                            those.
 
 Both are true whenever the point cannot tell (doubt is true): no edit, a file that does not parse before or after, no
 module name for the file, no way to list the added references, and any exception. `touches_protected` is also true,
@@ -25,12 +32,15 @@ from __future__ import annotations
 
 import ast
 import difflib
+import time
 from typing import Any, Callable, Iterable, List, Mapping, Optional, Protocol, Sequence, Set, Tuple
 
+from prismpath.information.parsefacts import too_big, utf8_declared
 from prismpath.ports.information import Change, Evidence
 
 NAME = "cc_graph"
 RESOLVED = ("function", "class", "methods")
+SAFE_RESOLVED = ("builtin",)     # the closed list: a reference an adapter proves reaches no project code
 
 
 class CallGraph(Protocol):
@@ -82,38 +92,70 @@ def _enclosing(found: List[Tuple[int, int, str]], line: int) -> Optional[str]:
     return best[2] if best else None
 
 
+def _span_texts(tree: ast.AST, text: str, module: str, protected: Sequence[str]) -> dict:
+    lines = text.splitlines()
+    return {name: "\n".join(lines[start - 1:end]) for start, end, name in spans(tree, module)
+            if _covered(name, protected)}
+
+
 def touches_protected(old: str, new: str, module: str, protected: Sequence[str]) -> Optional[bool]:
-    """True when a changed line is inside a protected function or class, or the module is protected; None for a text
-    that does not parse, which the point reads as true."""
+    """True when the edit may change protected code: a changed line inside a protected function or class, the text of
+    any protected span differing by name between the two versions (or present in only one), a changed line outside
+    every function and class of a module that is protected or that defines a protected name (module code can rebind
+    it), or either text declaring an encoding but utf-8. None for a text that does not parse, which the point reads as
+    true."""
+    if not utf8_declared(old, new):
+        return True
     try:
         old_tree, new_tree = ast.parse(old), ast.parse(new)
     except (SyntaxError, ValueError, RecursionError):
         return None
     if _covered(module, protected):
         return True
+    if _span_texts(old_tree, old, module, protected) != _span_texts(new_tree, new, module, protected):
+        return True
+    defines = any(p.startswith(module + ".") for p in protected)
     old_lines, new_lines = changed_lines(old, new)
     for tree, lines in ((old_tree, old_lines), (new_tree, new_lines)):
         found = spans(tree, module)
         for line in lines:
             name = _enclosing(found, line)
-            if name is not None and _covered(name, protected):
+            if name is None:
+                if defines:
+                    return True
+            elif _covered(name, protected):
                 return True
     return False
 
 
 def adds_protected_reference(refs: Iterable[Mapping[str, Any]], graph: Optional[CallGraph]) -> bool:
-    """True when an added reference resolves to a protected function or to one on a call path with the protected set,
-    in either direction, at any certainty. Without the graph, true when any reference resolved."""
+    """True unless every added reference is on the closed safe list. A reference is safe only when its `resolved` is in
+    `SAFE_RESOLVED`, or it resolved to a function, class or methods with at least one target and a graph that finds no
+    target protected or on a call path with the protected set (a class: no `__init__` found for it reads true). Any
+    other value (unresolved, outside, a name the list does not hold), a resolved reference with no targets, and
+    anything that is not a mapping read true. Without the graph, any resolved reference reads true."""
     for ref in refs:
-        if ref.get("resolved") not in RESOLVED:
+        resolved = ref.get("resolved")
+        if resolved in SAFE_RESOLVED:
             continue
-        if graph is None:
+        if resolved not in RESOLVED:
             return True
-        for target in ref.get("targets") or []:
-            dsts = list(graph.class_inits(target)) if ref["resolved"] == "class" else [target]
-            for dst in dsts:
-                if graph.is_protected(dst) or graph.on_protected_path(dst):
+        targets = ref.get("targets")
+        if graph is None or not isinstance(targets, (list, tuple)) or not targets \
+                or not all(isinstance(t, str) for t in targets):
+            return True
+        for target in targets:
+            if graph.is_protected(target) or graph.on_protected_path(target):
+                return True
+            if resolved == "class":
+                inits = list(graph.class_inits(target))
+                if not inits:
                     return True
+                dsts = inits
+            else:
+                dsts = [target]
+            if any(graph.is_protected(d) or graph.on_protected_path(d) for d in dsts):
+                return True
     return False
 
 
@@ -132,7 +174,8 @@ class ProtectedFacts:
         self._module_of, self._references, self._graph = module_of, references, graph
 
     def facts(self, change: Change, budget_s: float) -> Evidence:
-        why = []
+        started = time.monotonic()
+        why: List[str] = []
         try:
             touches = self._touches(change, why)
         except Exception as exc:   # noqa: BLE001
@@ -143,6 +186,9 @@ class ProtectedFacts:
         except Exception as exc:   # noqa: BLE001
             adds = True
             why.append(f"adds_protected_reference could not be read ({type(exc).__name__})")
+        if time.monotonic() - started > budget_s:
+            touches = adds = True
+            why.append("the reading took longer than its budget")
         return Evidence({"touches_protected": touches, "adds_protected_reference": adds}, frozenset(),
                         "; ".join(why), {})
 
@@ -150,6 +196,12 @@ class ProtectedFacts:
         edit = getattr(change, "edit", None)
         if edit is None or not isinstance(edit.old, str) or not isinstance(edit.new, str):
             why.append("the edit cannot be applied to the file")
+            return True
+        if not isinstance(edit.relative, str) or not edit.relative.endswith(".py"):
+            why.append("not a Python file, which this point cannot analyse")
+            return True
+        if too_big(edit.old, edit.new):
+            why.append("the file is too big to read")
             return True
         module = self._module_of(edit.relative) if self._module_of is not None else None
         if not isinstance(module, str) or not module:
@@ -169,6 +221,11 @@ class ProtectedFacts:
             return True
         if self._references is None:
             why.append("no reading of the references the edit adds")
+            return True
+        try:
+            ast.parse(change.edit.new)
+        except (SyntaxError, ValueError, RecursionError):
+            why.append("the edited file does not parse, so its references are not known")
             return True
         refs = self._references(change)
         if refs is None:

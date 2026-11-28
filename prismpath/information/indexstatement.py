@@ -28,6 +28,7 @@ import json
 import os
 import sqlite3
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Iterable, Mapping, Optional, Tuple
 
 FORMAT = "prismpath.cc-index/1"
@@ -95,7 +96,7 @@ def schema_ok(index_path: str) -> bool:
     """The index has the tables and columns the point reads (nothing is written; the file is opened read only)."""
     needs = {"files": {"file", "module", "sha256", "tier"}, "symbols": {"file", "symbol", "symbol_kind", "tier"}}
     try:
-        db = sqlite3.connect(f"file:{index_path}?mode=ro", uri=True, timeout=0.05)
+        db = sqlite3.connect(Path(os.path.abspath(index_path)).as_uri() + "?mode=ro", uri=True, timeout=0.05)
         try:
             for table, columns in needs.items():
                 have = {row[1] for row in db.execute(f"PRAGMA table_info({table})")}

@@ -5,6 +5,10 @@ the model. Two reading fields, both supplied by the `parse` information point (`
 
   edit_kind             `comment` (the two parses are identical), `docstring` (identical once docstrings are dropped),
                         `annotation` (identical once annotations are dropped too), or `code`. Restrictive value `code`.
+                        The point reads `docstring` or `annotation` only when `behaviour_preserving` is also true for the
+                        edit (an annotation is evaluated, a docstring may be read), else `code`. Both facts read `code`
+                        and false when any version has a coding line for an encoding but utf-8, or a byte order mark: Python honours a coding line when it imports the file
+                        from bytes and a parse of the text does not, so `# coding: utf-7` hides code in a "comment".
   behaviour_preserving  the edit changes no behaviour of the file, decided as the text below says. Restrictive value
                         false. This is gate/nochange.py of the Context Cloud gate tracer, which is stricter about
                         docstrings and annotations than `edit_kind` is (it keeps them whenever the file reads them) and
@@ -58,12 +62,37 @@ from __future__ import annotations
 
 import ast
 import copy
+import io
+import time
+import tokenize
 from typing import Dict, Iterable, List, Optional, Set, Tuple
 
 from prismpath.ports.information import Change, Evidence
 
 NAME = "parse"
 EDIT_KINDS = ("comment", "docstring", "annotation", "code")
+MAX_CHARS = 2_000_000          # a text longer than this is read at the restrictive values, not parsed
+MAX_LINES = 20_000
+
+
+def declared_encoding(text: str) -> Optional[str]:
+    """The source encoding Python would use for `text` written to a file as UTF-8: a PEP 263 coding line in its first
+    two lines, or a BOM, are honoured when the file is imported from bytes and ignored when `ast.parse` gets a str, so
+    a text that declares anything but plain `utf-8` is read by the interpreter differently from how it is read here.
+    None when the declaration cannot be read."""
+    try:
+        return tokenize.detect_encoding(io.BytesIO(text.encode("utf-8")).readline)[0]
+    except (SyntaxError, UnicodeError, ValueError):
+        return None
+
+
+def utf8_declared(*texts: str) -> bool:
+    """Every text declares plain utf-8 (no other coding line, no BOM)."""
+    return all(declared_encoding(t) == "utf-8" for t in texts)
+
+
+def too_big(*texts: str) -> bool:
+    return any(len(t) > MAX_CHARS or t.count("\n") > MAX_LINES for t in texts)
 
 
 def _drop_docstrings(tree: ast.AST) -> ast.AST:
@@ -103,6 +132,8 @@ def edit_kind(old: str, new: str) -> str:
     """The kind of an edit from the file text before and after. A file that does not parse, or a text that cannot be
     read as one, is `code`."""
     try:
+        if not utf8_declared(old, new) or too_big(old, new):
+            return "code"
         a, b = ast.parse(old), ast.parse(new)
         if _dump(a) == _dump(b):
             return "comment"
@@ -347,6 +378,10 @@ def _normalize(tree: ast.Module, words: Optional[Set[str]] = None, modules: Opti
 
 def behaviour_preserving(old: str, new: str) -> Tuple[bool, str]:
     """(value, why). True only when both texts parse and their normalized trees are equal."""
+    if not utf8_declared(old, new):
+        return False, "a version declares an encoding but utf-8, or has a byte order mark"
+    if too_big(old, new):
+        return False, "a version is too big to read"
     try:
         old_tree, new_tree = ast.parse(old), ast.parse(new)
     except (SyntaxError, ValueError, RecursionError) as exc:
@@ -376,6 +411,7 @@ class ParseFacts:
     control_paths: Tuple[str, ...] = ()
 
     def facts(self, change: Change, budget_s: float) -> Evidence:
+        started = time.monotonic()
         try:
             edit = getattr(change, "edit", None)
             if edit is None:
@@ -384,9 +420,15 @@ class ParseFacts:
                 return self._none("not a Python file")
             if not (isinstance(edit.old, str) and isinstance(edit.new, str)):
                 return self._none("the file text is not text")
+            if too_big(edit.old, edit.new):
+                return self._none("the file is too big to read")
             kind = edit_kind(edit.old, edit.new)
             value, why = behaviour_preserving(edit.old, edit.new)
             value = bool(value) is True
+            if kind in ("docstring", "annotation") and not value:
+                kind = "code"          # a value that sounds inert is read only for an edit that is
+            if time.monotonic() - started > budget_s:
+                return self._none("the reading took longer than its budget")
             return Evidence({"edit_kind": kind, "behaviour_preserving": value}, frozenset(),
                             "" if value or why == "the syntax trees differ" else why, {"behaviour": why})
         except Exception as exc:   # noqa: BLE001 - a point that fails says nothing, which is its restrictive value

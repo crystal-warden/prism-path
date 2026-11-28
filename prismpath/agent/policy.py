@@ -302,6 +302,13 @@ class Policy(decision.Policy):
         """`points` are the names of the information points the policy is built with (`profile.agent_domain`); none for
         a policy that reads the classifier's fields only."""
         super().__init__(image, agent_domain(points))
+        from prismpath.information import catalog
+        unbound = sorted(n for n, e in catalog.evidence_fields().items()
+                         if n in self.doc["fields"] and e.point not in tuple(points))
+        if unbound:
+            raise decision.OutsideDomain(f"policy:out-of-domain: the policy reads {unbound[0]}, which only the "
+                                         f"information point {catalog.evidence_fields()[unbound[0]].point} supplies, "
+                                         f"and that point is not bound")
 
     @classmethod
     def load(cls, path: Path = POLICY_PATH, points=()) -> "Policy":

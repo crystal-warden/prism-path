@@ -111,7 +111,9 @@ def agent_domain(points=()) -> ReadingDomain:
     from dataclasses import replace
     from prismpath.information import catalog
     found = catalog.fields_of(names)
-    clash = sorted(set(found) & set(AGENT_DOMAIN.categories) | set(found) & set(AGENT_DOMAIN.defaults))
+    from prismpath.agent import fields as _agent_fields
+    clash = sorted(set(found) & (set(AGENT_DOMAIN.categories) | set(AGENT_DOMAIN.defaults)
+                                 | set(_agent_fields.by_name())))
     if clash:
         raise ValueError(f"the evidence field {clash[0]} is also a field of the classifier")
     categories = {**AGENT_DOMAIN.categories, **{n: f.values for n, f in found.items() if f.kind == "category"}}

@@ -29,6 +29,7 @@ class EvidenceField(NamedTuple):
     kind: str                       # "bool" or "category"
     values: Tuple[Any, ...]
     restrictive: Any
+    no_evidence: Tuple[Any, ...] = ()    # values that say the point gave no evidence (`not_run`), never better than restrictive
 
 
 def _kind(values: Tuple[Any, ...]) -> str:
@@ -40,7 +41,8 @@ def evidence_fields() -> Dict[str, EvidenceField]:
     found: Dict[str, EvidenceField] = {}
     for point_name, cls in POINTS.items():
         for field, values in cls.fields.items():
-            found[field] = EvidenceField(field, point_name, _kind(tuple(values)), tuple(values), cls.restrictive[field])
+            found[field] = EvidenceField(field, point_name, _kind(tuple(values)), tuple(values), cls.restrictive[field],
+                                         tuple(getattr(cls, "no_evidence", {}).get(field, ())))
     return found
 
 

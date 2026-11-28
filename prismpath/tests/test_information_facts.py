@@ -20,7 +20,7 @@ from prismpath.information.protectedfacts import ProtectedFacts
 from prismpath.kernel import policy_source as ps
 from prismpath.ports.information import Change, Edit, InformationPoint
 
-POINTS = [ParseFacts(), ProjectTests(Path("."), None), ProtectedFacts(["pkg.core"])]
+POINTS = [ParseFacts(), ProjectTests(Path("."), None, lambda c: False), ProtectedFacts(["pkg.core"])]
 
 
 def _edit(old, new, relative="pkg/mod.py"):
@@ -66,7 +66,7 @@ def test_a_name_that_is_no_point_is_refused():
     ("def f(a):\n    return a\n", "def f(a):\n    return a + 1\n", "code", False),
     ("def f():\n    t = 1\n    return t\n", "def f():\n    u = 1\n    return u\n", "code", True),   # a local renamed
     ("def f(a):\n    return a\n", "def f(b):\n    return b\n", "code", False),                      # a parameter renamed
-    ("import doctest\ndef f():\n    '''a'''\n", "import doctest\ndef f():\n    '''b'''\n", "docstring", False),
+    ("import doctest\ndef f():\n    '''a'''\n", "import doctest\ndef f():\n    '''b'''\n", "code", False),
 ])
 def test_the_parse_facts_read_the_two_texts(old, new, kind, preserved):
     evidence = ParseFacts().facts(_edit(old, new), 0.1)
@@ -100,6 +100,9 @@ def test_the_parse_point_never_raises():
 
 
 # ----------------------------------------------------------------------------------- the tests point
+OK_LINE = "print('1 passed in 0.01s')\n"
+
+
 def _project(tmp_path, body):
     root = tmp_path / "proj"
     (root / "pkg").mkdir(parents=True)
@@ -108,40 +111,100 @@ def _project(tmp_path, body):
     return root
 
 
-def _config(timeout=30):
-    return TestConfig(command=[sys.executable, "check.py"], timeout=timeout)
+def _config(timeout=30, **kwargs):
+    return TestConfig(command=[sys.executable, "check.py"], timeout=timeout, **kwargs)
 
 
-def test_a_point_with_no_gate_runs_nothing_and_reads_not_run(tmp_path):
+def _never(change):
+    return False
+
+
+def _always(change):
+    return True
+
+
+def test_a_point_that_is_not_asked_runs_nothing_and_reads_not_run(tmp_path):
     root = _project(tmp_path, "raise SystemExit(1)\n")
-    evidence = ProjectTests(root, _config()).facts(_edit("a\n", "b\n"), 0.1)
-    assert evidence.readings == {"tests_pass": "not_run"}
+    assert ProjectTests(root, _config(), _never).facts(_edit("a\n", "b\n"), 0.1).readings == {"tests_pass": "not_run"}
+
+
+def test_should_run_is_required():
+    with pytest.raises(TypeError):
+        ProjectTests(Path("."), None)
 
 
 def test_the_tests_run_on_a_copy_with_the_edit_applied(tmp_path):
-    root = _project(tmp_path, "import sys\nsys.path.insert(0, '.')\nfrom pkg import mod\nraise SystemExit(0 if mod.VALUE == 2 else 1)\n")
-    point = ProjectTests(root, _config(), should_run=lambda change: True)
+    root = _project(tmp_path, "import sys\nsys.path.insert(0, '.')\nfrom pkg import mod\n"
+                              "if mod.VALUE == 2:\n    print('1 passed in 0.01s')\nelse:\n    raise SystemExit(1)\n")
+    point = ProjectTests(root, _config(), _always)
     assert point.facts(_edit("VALUE = 1\n", "VALUE = 2\n"), 0.1).readings == {"tests_pass": "true"}
     assert point.facts(_edit("VALUE = 1\n", "VALUE = 3\n"), 0.1).readings == {"tests_pass": "false"}
     assert (root / "pkg" / "mod.py").read_text() == "VALUE = 1\n"       # the project itself is never touched
 
 
+def test_an_exit_of_zero_without_a_pass_summary_is_false(tmp_path):
+    for number, body in enumerate(("pass\n", "print('0 passed in 0.01s')\n", "print('1 passed, 1 failed in 0.01s')\n",
+                 "print('1 passed, 1 error in 0.01s')\n", "import os\nprint('1 passed')\nprint('done')\n")):
+        root = _project(tmp_path / str(number), body)
+        assert ProjectTests(root, _config(), _always).facts(_edit("a", "b"), 0.1).readings == {"tests_pass": "false"}
+
+
+@pytest.mark.parametrize("relative", ["conftest.py", "pkg/conftest.py", "tests/test_a.py", "pkg/test_x.py", "pkg/x_test.py",
+                                      "pytest.ini", "pyproject.toml", "sitecustomize.py", ".hidden.py"])
+def test_an_edit_to_a_test_file_or_configuration_is_not_run(tmp_path, relative):
+    root = _project(tmp_path, OK_LINE)
+    evidence = ProjectTests(root, _config(), _always).facts(_edit("a", "b", relative=relative), 0.1)
+    assert evidence.readings == {"tests_pass": "false"} and "test file" in evidence.why
+
+
 def test_every_way_the_tests_cannot_be_run_reads_false(tmp_path):
     root = _project(tmp_path, "import time\ntime.sleep(30)\n")
-    gate = lambda change: True      # noqa: E731
+    gate = _always
     cases = [
-        ProjectTests(root, _config(timeout=1), should_run=gate).facts(_edit("a", "b"), 0.1),            # a timeout
-        ProjectTests(root, TestConfig(command=["/no/such/program"]), should_run=gate).facts(_edit("a", "b"), 0.1),
-        ProjectTests(root, None, should_run=gate).facts(_edit("a", "b"), 0.1),                           # no command
-        ProjectTests(root, _config(), should_run=gate).facts(Change("a.py", None), 0.1),                 # no edit
-        ProjectTests(root, _config(), should_run=gate).facts(_edit("a", "b", relative="../escape.py"), 0.1),
-        ProjectTests(root, _config(), should_run=gate).facts(_edit("a", "b", relative="/abs.py"), 0.1),
-        ProjectTests(tmp_path / "missing", _config(), should_run=gate).facts(_edit("a", "b"), 0.1),       # no project
-        ProjectTests(root, _config(), should_run=lambda change: 1 / 0).facts(_edit("a", "b"), 0.1),      # the gate fails
-        ProjectTests(root, _config(), should_run=gate, run=lambda *a: 1 / 0).facts(_edit("a", "b"), 0.1),  # the run fails
+        ProjectTests(root, _config(timeout=1), gate).facts(_edit("a", "b"), 0.1),            # a timeout
+        ProjectTests(root, TestConfig(command=["/no/such/program"]), gate).facts(_edit("a", "b"), 0.1),
+        ProjectTests(root, None, gate).facts(_edit("a", "b"), 0.1),                           # no command
+        ProjectTests(root, _config(), gate).facts(Change("a.py", None), 0.1),                 # no edit
+        ProjectTests(root, _config(), gate).facts(_edit("a", "b", relative="../escape.py"), 0.1),
+        ProjectTests(root, _config(), gate).facts(_edit("a", "b", relative="/abs.py"), 0.1),
+        ProjectTests(root, _config(), gate).facts(_edit("a", "b", relative="nodir/x.py"), 0.1),
+        ProjectTests(tmp_path / "missing", _config(), gate).facts(_edit("a", "b"), 0.1),       # no project
+        ProjectTests(root, _config(), lambda change: 1 / 0).facts(_edit("a", "b"), 0.1),      # the gate fails
+        ProjectTests(root, _config(), gate, run=lambda *a: 1 / 0).facts(_edit("a", "b"), 0.1),  # the run fails
     ]
     assert [c.readings for c in cases] == [{"tests_pass": "false"}] * len(cases)
     assert not (tmp_path / "escape.py").exists()
+
+
+def test_an_edit_cannot_be_written_through_a_link_into_the_project_or_outside_it(tmp_path):
+    root = _project(tmp_path, OK_LINE)
+    (root / ".venv" / "lib").mkdir(parents=True)
+    (root / ".venv" / "lib" / "site.py").write_text("ORIGINAL\n")
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "t.py").write_text("ORIGINAL\n")
+    (root / "abslink").symlink_to(outside)
+    (root / "pkg" / "filelink.py").symlink_to(outside / "t.py")
+    point = ProjectTests(root, _config(link=(".venv",)), _always)
+    for relative in (".venv/lib/site.py", "abslink/t.py", "pkg/filelink.py"):
+        assert point.facts(_edit("a", "PWNED\n", relative=relative), 0.1).readings == {"tests_pass": "false"}
+    assert (root / ".venv" / "lib" / "site.py").read_text() == "ORIGINAL\n"
+    assert (outside / "t.py").read_text() == "ORIGINAL\n"
+
+
+def test_the_command_gets_a_minimal_environment(tmp_path, monkeypatch):
+    monkeypatch.setenv("A5_SECRET_MARKER", "leak")
+    body = "import os\nprint('1 passed in 0.01s' if 'A5_SECRET_MARKER' not in os.environ else 'leaked')\n"
+    root = _project(tmp_path, body)
+    assert ProjectTests(root, _config(), _always).facts(_edit("a", "b"), 0.1).readings == {"tests_pass": "true"}
+    assert ProjectTests(root, _config(inherit_env=True), _always).facts(_edit("a", "b"), 0.1).readings == {"tests_pass": "false"}
+
+
+def test_a_project_too_big_to_copy_reads_false(tmp_path, monkeypatch):
+    from prismpath.information import projecttests as pt
+    monkeypatch.setattr(pt, "MAX_COPY_FILES", 1)
+    root = _project(tmp_path, OK_LINE)
+    assert ProjectTests(root, _config(), _always).facts(_edit("a", "b"), 0.1).readings == {"tests_pass": "false"}
 
 
 def test_a_run_that_says_ok_with_anything_but_true_is_false(tmp_path):
@@ -150,13 +213,13 @@ def test_a_run_that_says_ok_with_anything_but_true_is_false(tmp_path):
         summary = "x"
         seconds = 0.0
 
-    point = ProjectTests(tmp_path, _config(), should_run=lambda c: True, run=lambda *a: Odd())
+    point = ProjectTests(tmp_path, _config(), _always, run=lambda *a: Odd())
     assert point.facts(_edit("a", "b"), 0.1).readings == {"tests_pass": "false"}
 
 
 def test_a_gate_that_answers_anything_but_true_does_not_run_the_tests(tmp_path):
     ran = []
-    point = ProjectTests(tmp_path, _config(), should_run=lambda c: "yes", run=lambda *a: ran.append(1))
+    point = ProjectTests(tmp_path, _config(), lambda c: "yes", run=lambda *a: ran.append(1))
     assert point.facts(_edit("a", "b"), 0.1).readings == {"tests_pass": "not_run"} and not ran
 
 
@@ -187,7 +250,7 @@ def _cc(protected=("pkg.mod.guarded", "pkg.mod.K"), refs=lambda change: [], grap
     (OLD.replace("return 2", "return 20"), True),                   # a protected function
     (OLD.replace("    x = 1\n", "    x = 9\n"), True),                # a line of a protected class outside its functions
     (OLD.replace("return 3", "return 30"), True),                   # a method under a protected class
-    (OLD + "\nOTHER = 1\n", False),                                  # a new module level line
+    (OLD + "\nOTHER = 1\n", True),                                   # module code can rebind a protected name
     (OLD.replace("def guarded", "def renamed"), True),             # the old side holds the protected function
 ])
 def test_touches_protected_reads_the_changed_lines_against_the_protected_names(new, touches):
@@ -222,8 +285,9 @@ def test_adds_protected_reference_follows_the_graph_in_both_directions():
     refs2 = lambda change: [{"resolved": "class", "targets": ["lib.C"]}]            # noqa: E731
     assert _cc(refs=refs2, graph=Graph(protected=["lib.C.__init__"], inits={"lib.C": ["lib.C.__init__"]})
                ).facts(_edit(OLD, OLD), 0.1).readings["adds_protected_reference"] is True
-    assert _cc(refs=lambda c: [{"resolved": "unresolved", "targets": ["x"]}], graph=None
+    assert _cc(refs=lambda c: [{"resolved": "builtin", "targets": []}], graph=None
                ).facts(_edit(OLD, OLD), 0.1).readings["adds_protected_reference"] is False
+    assert _cc(refs=lambda c: [], graph=None).facts(_edit(OLD, OLD), 0.1).readings["adds_protected_reference"] is False
 
 
 def test_every_failure_to_read_the_added_references_reads_true():
@@ -426,3 +490,128 @@ def test_a_manifest_without_evidence_fields_is_unchanged_by_the_check():
     rules = _source("", '-> allow: when tool == "read_file"\n')
     manifest, signature, read = _manifest(None, rules)
     assert pm.check(manifest, signature, read, point_findings=target.evidence_findings) == pm.check(manifest, signature, read) == []
+
+
+# ------------------------------------------------------------------------------------ the review's probes
+UTF7_NEW = "# coding: utf-7\nx = 1  # +AAo-print(+ACI-PWNED+ACI-)\n"
+
+
+@pytest.mark.parametrize("old,new", [
+    ("x = 1\n", UTF7_NEW),
+    (UTF7_NEW, "x = 1\n"),
+    ("x = 1\n", "﻿x = 1\n"),
+    ("x = 1\n", "# coding: latin-1\nx = 1\n"),
+    ("# coding: utf-8\nx = 1\n", "# coding: cp1252\nx = 1\n"),
+])
+def test_a_changed_source_encoding_reads_code_false_and_touching(old, new):
+    evidence = ParseFacts().facts(_edit(old, new), 0.1)
+    assert evidence.readings == {"edit_kind": "code", "behaviour_preserving": False}
+    assert _cc().facts(_edit(old, new), 0.1).readings["touches_protected"] is True
+
+
+def test_the_utf7_example_really_does_run_a_statement_from_disk(tmp_path):
+    import subprocess
+    path = tmp_path / "m7.py"
+    path.write_bytes(UTF7_NEW.encode("utf-8"))
+    done = subprocess.run([sys.executable, "-I", str(path)], capture_output=True, text=True)
+    assert "PWNED" in done.stdout
+
+
+def test_a_plain_utf8_declaration_is_still_a_comment_edit():
+    old, new = "# coding: utf-8\nx = 1\n", "# coding: utf-8\nx = 1  # note\n"
+    assert ParseFacts().facts(_edit(old, new), 0.1).readings == {"edit_kind": "comment", "behaviour_preserving": True}
+
+
+@pytest.mark.parametrize("old,new", [
+    ("def f(x: int):\n    return x\n", "def f(x: __import__('os').getcwd()):\n    return x\n"),
+    ("class M(BaseModel):\n    x: int = 0\n", "class M(BaseModel):\n    x: str = 0\n"),
+    ("import ply\ndef t(t):\n    '''a'''\n", "import ply\ndef t(t):\n    '''b'''\n"),
+    ("def f():\n    '''a'''\n    return __doc__\n", "def f():\n    '''b'''\n    return __doc__\n"),
+])
+def test_an_annotation_or_docstring_is_named_only_when_the_edit_is_behaviour_preserving(old, new):
+    evidence = ParseFacts().facts(_edit(old, new), 0.1)
+    assert evidence.readings == {"edit_kind": "code", "behaviour_preserving": False}
+
+
+@pytest.mark.parametrize("ref", [
+    {"resolved": "unresolved", "targets": ["pkg.core.f"]}, {"resolved": "outside", "targets": ["x"]},
+    {"resolved": "function", "targets": []}, {"resolved": "function"}, {"resolved": "function", "targets": "pkg.core.f"},
+    {"resolved": "function", "targets": [1]}, {"resolved": "class", "targets": ["m.C"]}, {"targets": ["m.f"]}, {}])
+def test_a_reference_off_the_closed_safe_list_reads_true(ref):
+    point = _cc(refs=lambda c: [ref], graph=Graph(protected=["pkg.core.f"]))
+    assert point.facts(_edit(OLD, OLD), 0.1).readings["adds_protected_reference"] is True
+
+
+def test_unparseable_new_text_reads_true_whatever_the_adapter_says():
+    assert _cc(refs=lambda c: []).facts(_edit(OLD, "def (:\n"), 0.1).readings["adds_protected_reference"] is True
+
+
+def test_module_level_rebinding_of_a_protected_name_touches():
+    for tail in ("\nguarded = lambda: 2\n", "\nglobals()['guarded'] = print\n"):
+        assert _cc().facts(_edit(OLD, OLD + tail), 0.1).readings["touches_protected"] is True
+    other = _cc(protected=("pkg.elsewhere.f",))
+    assert other.facts(_edit(OLD, OLD + "\nOTHER = 1\n"), 0.1).readings["touches_protected"] is False
+
+
+def test_a_file_that_is_not_python_touches():
+    point = _cc()
+    for relative in ("pkg/core_settings.toml", "pkg/mod.PY", "pkg/mod.pyi", "pkg/run.sh"):
+        assert point.facts(_edit("", "", relative=relative), 0.1).readings["touches_protected"] is True
+
+
+def test_a_protected_span_that_changed_is_found_by_its_text_by_name():
+    old = "def a():\n    return 1\n\n\ndef guarded():\n    return 1\n"
+    new = "def a():\n    return 1\n\n\ndef guarded():\n    return 2\n"
+    assert _cc().facts(_edit(old, new), 0.1).readings["touches_protected"] is True
+    gone = "def a():\n    return 1\n"
+    assert _cc().facts(_edit(old, gone), 0.1).readings["touches_protected"] is True
+
+
+def test_a_big_text_or_a_spent_budget_reads_the_restrictive_values():
+    big = "x = 1\n" * 30_000
+    assert ParseFacts().facts(_edit(big, big + "y = 2\n"), 5).readings == ParseFacts.restrictive
+    assert _cc().facts(_edit(big, big + "y = 2\n"), 5).readings["touches_protected"] is True
+    assert ParseFacts().facts(_edit(OLD, OLD + "# c\n"), -1).readings == ParseFacts.restrictive
+    assert _cc().facts(_edit(OLD, OLD), -1).readings == {"touches_protected": True, "adds_protected_reference": True}
+
+
+def test_schema_ok_escapes_the_path(tmp_path):
+    path = tmp_path / "a?b#c.sqlite"
+    db = sqlite3.connect(path)
+    db.execute("CREATE TABLE files (file TEXT, module TEXT, sha256 TEXT, tier TEXT)")
+    db.execute("CREATE TABLE symbols (file TEXT, symbol TEXT, symbol_kind TEXT, tier TEXT)")
+    db.commit()
+    db.close()
+    assert indexstatement.schema_ok(str(path))
+
+
+# ---------------------------------------------------------- the compile checks of the review (F5, F11, F13)
+def test_a_rule_that_refuses_only_on_false_and_allows_the_rest_is_refused_at_compile():
+    rules = '-> refuse agent:network: when tests_pass == "false"\n-> allow: when tool == "write_file"\n'
+    found = _found(_source(TESTS_FIELD, rules), ("tests",))
+    assert [line for line, _m in found] == [8]
+    assert "'not_run'" in found[0][1] and "'false'" in found[0][1]
+    assert _found(_source(TESTS_FIELD, '-> refuse agent:network: when tests_pass == "false"\n'
+                          '-> allow: when tool == "write_file" and tests_pass == "true"\n'), ("tests",)) == []
+    assert [line for line, _m in _found(_source(TESTS_FIELD, '-> allow: when tool == "write_file" and tests_pass != "false"\n'),
+                                        ("tests",))] == [8]
+
+
+def test_a_rule_that_allows_only_on_true_passes_the_monotone_check():
+    assert _found(_source(TESTS_FIELD, TESTS_RULES), ("tests",)) == []
+
+
+def test_loading_a_policy_that_reads_an_evidence_field_with_no_point_is_a_load_error():
+    from prismpath.kernel.decision import OutsideDomain
+    compiled = ps.compile_full(_source(TESTS_FIELD, TESTS_RULES))
+    with pytest.raises(OutsideDomain, match="information point tests"):
+        agent_policy.Policy(compiled.image)
+    assert agent_policy.Policy(compiled.image, ("tests",)).domain.name == "agent+tests"
+
+
+def test_an_evidence_field_named_like_a_classifier_bool_or_int_is_a_clash(monkeypatch):
+    from prismpath.information import catalog
+    fake = catalog.EvidenceField("path_control", "parse", "bool", (False, True), False)
+    monkeypatch.setattr(catalog, "fields_of", lambda names: {"path_control": fake})
+    with pytest.raises(ValueError, match="also a field of the classifier"):
+        profile.agent_domain(("parse",))

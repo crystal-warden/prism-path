@@ -64,6 +64,52 @@ def evidence_findings(image: bytes, points: Sequence[str] = ()) -> List[Tuple[Wh
     return found
 
 
+def monotone(loaded, bound) -> List[Tuple[Where, str]]:
+    """A value that says a point gave no evidence (`tests_pass` `not_run`) must never get past a rule that the
+    restrictive value does not: every reading the policy allows with the field at such a value it must allow with the
+    field at its restrictive value too, else a rule that refuses only on `false` lets an unrun test through. Walks the
+    policy's finite domain by classes of values, as `profile.needs_all` does. One finding for each field and value,
+    on the field's declaration."""
+    import itertools
+
+    from prismpath.kernel import domain as kdomain
+    found: List[Tuple[Where, str]] = []
+    doc, domain = loaded.doc, loaded.domain
+    for name in sorted(bound):
+        have = bound[name]
+        if not have.no_evidence:
+            continue
+        try:
+            names, constant, groups = kdomain.domain_classes([doc], domain, (name,))
+        except kdomain.DomainError:
+            continue
+        others = [(n, g) for n, g in zip(names, groups) if n != name]
+        bad = set()
+        for combo in itertools.product(*(g for _n, g in others)):
+            reading = {n: members[0] for (n, _g), members in zip(others, combo)}
+            reading.update(constant)
+            for value in have.no_evidence:
+                if value in bad:
+                    continue
+                chosen = {n: members for (n, _g), members in zip(others, combo)}
+                full = tuple(chosen[n] if n != name else [value] for n in names)
+                if profile_unproduced(names, full):
+                    continue
+                if loaded.decide(loaded.reading_bytes({**reading, name: value})).runs \
+                        and not loaded.decide(loaded.reading_bytes({**reading, name: have.restrictive})).runs:
+                    bad.add(value)
+        for value in sorted(bad, key=str):
+            found.append((name, f"{name} read as {value!r} allows a reading that {name} read as {have.restrictive!r} "
+                                f"refuses, so a point that gave no evidence would get past a rule written for failing "
+                                f"evidence; make the rule allow only on a value that is evidence"))
+    return found
+
+
+def profile_unproduced(names, combo) -> bool:
+    from prismpath.agent import profile
+    return profile.unproduced(list(names), combo)
+
+
 def check(image: bytes, points: Sequence[str] = ()) -> List[Tuple[Where, str]]:
     """What stops the governed agent from running this image as its policy, in source order. Empty when nothing does.
     `points` are the information points the policy is built with (`--point`, or `policy.points` of a manifest): a field
@@ -106,6 +152,9 @@ def check(image: bytes, points: Sequence[str] = ()) -> List[Tuple[Where, str]]:
         loaded = agent_policy.Policy(image, domain_points)
     except ValueError as error:
         return [(None, str(error))]
+    bound = {n: e for n, e in evidence.items() if n in declared and n not in known and e.point in domain_points}
+    if bound:
+        found.extend(monotone(loaded, bound))
     mismatch = agent_policy.classifier_mismatch(loaded)
     if mismatch is not None:
         found.append(("classifier_version", mismatch))

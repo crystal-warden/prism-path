@@ -637,7 +637,10 @@ Normatively, as follows.
 - **Information points.** `policy.points` (list of word) names the information points the rules are built with. A rules
   source that declares a field only a point supplies (`tests_pass`, `edit_kind`, `behaviour_preserving`,
   `touches_protected`, `adds_protected_reference`) is a `points` finding unless the point that supplies it is named,
-  and `prismpath policy compile --target agent` refuses it, on the line of the field, unless it is given `--point`.
+  and `prismpath policy compile --target agent` refuses it, on the line of the field, unless it is given `--point`. A policy
+  that allows a reading with `tests_pass` at `not_run` that it refuses at `false` is refused too. `tests_pass` true is never enough
+  alone, and the five facts were proven together with `reaches_protected` and `unknown_reason`, so a policy that reads them should also
+  require `zone_reach == "none"`.
 - **Domain.** `policy.domain` is `field=value|value; other=LO..HI`: the values or the integer range each field of
   the image may take, each field once, and not empty. It is parsed and nothing compares it with the rules yet.
 - **Body.** The body holds notes and one rule, `-> refuse_135: always` (`dist:bad-format`), under a `##`
