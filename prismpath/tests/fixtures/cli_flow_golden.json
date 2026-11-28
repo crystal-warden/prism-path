@@ -1,0 +1,382 @@
+{
+ "capability prismpath/flows/bugfix.md": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "  tier: P1/P2   level_m: True\n  ✓ python (reference)                 yes\n  ◐ portable (js / rust / go)          needs-lockfile  - 9 reachable semantic edge(s) — P0 runs unconditionally; lock them for P1\n        · gather_info -> triage: enough information is now available to investigate\n        · implement -> review: the fix is complete and all tests pass\n        · implement -> implement: the fix was changed but some tests still fail\n        · implement -> triage: a design decision is required before continuing\n        · review -> done: the change looks correct and is ready to merge\n        · review -> implement: the review found problems that need code changes\n        · triage -> implement: the bug is reproduced and the root cause is clear\n        · triage -> gather_info: it cannot be reproduced or more information is needed\n        · triage -> close: it is a duplicate or an invalid report\n  ✗ level-m hardware (fpga c-table / eBPF) no  - 9 reachable semantic edge(s) — not deterministic\n        · gather_info -> triage: enough information is now available to investigate\n        · implement -> review: the fix is complete and all tests pass\n        · implement -> implement: the fix was changed but some tests still fail\n        · implement -> triage: a design decision is required before continuing\n        · review -> done: the change looks correct and is ready to merge\n        · review -> implement: the review found problems that need code changes\n        · triage -> implement: the bug is reproduced and the root cause is clear\n        · triage -> gather_info: it cannot be reproduced or more information is needed\n        · triage -> close: it is a duplicate or an invalid report\n"
+ },
+ "capability prismpath/flows/build_prismpath.md": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "  tier: P1/P2   level_m: True\n  ✓ python (reference)                 yes\n  ◐ portable (js / rust / go)          needs-lockfile  - 2 reachable semantic edge(s) — P0 runs unconditionally; lock them for P1\n        · debug -> implement: the fix is clear, edit the code and try the tests again\n        · debug -> give_up: the failure is environmental or the task is unsolvable\n  ✗ level-m hardware (fpga c-table / eBPF) no  - 2 reachable semantic edge(s) — not deterministic\n        · debug -> implement: the fix is clear, edit the code and try the tests again\n        · debug -> give_up: the failure is environmental or the task is unsolvable\n"
+ },
+ "capability prismpath/flows/coding.md": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "  tier: P1/P2   level_m: True\n  ✓ python (reference)                 yes\n  ◐ portable (js / rust / go)          needs-lockfile  - 2 reachable semantic edge(s) — P0 runs unconditionally; lock them for P1\n        · debug -> write_code: the fix is clear, edit the code and try again\n        · debug -> give_up: the problem is unsolvable or out of scope\n  ✗ level-m hardware (fpga c-table / eBPF) no  - 2 reachable semantic edge(s) — not deterministic\n        · debug -> write_code: the fix is clear, edit the code and try again\n        · debug -> give_up: the problem is unsolvable or out of scope\n"
+ },
+ "capability prismpath/flows/crypto_agility_cnsa2.md": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "  tier: P0   level_m: True\n  ✓ python (reference)                 yes\n  ✓ portable (js / rust / go)          yes\n  ✓ level-m hardware (fpga c-table / eBPF) yes\n"
+ },
+ "capability prismpath/flows/data_pipeline.md": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "  tier: P1/P2   level_m: True\n  ✓ python (reference)                 yes\n  ◐ portable (js / rust / go)          needs-lockfile  - 3 reachable semantic edge(s) — P0 runs unconditionally; lock them for P1\n        · load -> halt: the write failed and cannot be retried\n        · validate -> clean: the records have minor formatting problems that the standard repair rules can fix\n        · validate -> quarantine: the records are corrupt or structurally broken beyond automatic repair\n  ✗ level-m hardware (fpga c-table / eBPF) no  - 3 reachable semantic edge(s) — not deterministic\n        · load -> halt: the write failed and cannot be retried\n        · validate -> clean: the records have minor formatting problems that the standard repair rules can fix\n        · validate -> quarantine: the records are corrupt or structurally broken beyond automatic repair\n"
+ },
+ "capability prismpath/flows/fanout_review.md": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "  tier: P0   level_m: True\n  ✓ python (reference)                 yes\n  ✓ portable (js / rust / go)          yes\n  ✓ level-m hardware (fpga c-table / eBPF) yes\n"
+ },
+ "capability prismpath/flows/hr_onboarding.md": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "  tier: P1/P2   level_m: True\n  ✓ python (reference)                 yes\n  ◐ portable (js / rust / go)          needs-lockfile  - 2 reachable semantic edge(s) — P0 runs unconditionally; lock them for P1\n        · security_review -> provision: the reviewer approved — finish provisioning\n        · security_review -> escalate_hr: the reviewer rejected or found a conflict\n  ✗ level-m hardware (fpga c-table / eBPF) no  - 2 reachable semantic edge(s) — not deterministic\n        · security_review -> provision: the reviewer approved — finish provisioning\n        · security_review -> escalate_hr: the reviewer rejected or found a conflict\n"
+ },
+ "capability prismpath/flows/pr_review.md": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "  tier: P1/P2   level_m: True\n  ✓ python (reference)                 yes\n  ◐ portable (js / rust / go)          needs-lockfile  - 5 reachable semantic edge(s) — P0 runs unconditionally; lock them for P1\n        · human_review -> approve: the change is correct and well-designed\n        · human_review -> request_changes: the reviewer found issues that need code changes\n        · human_review -> needs_discussion: a design tradeoff needs to be debated before deciding\n        · needs_discussion -> human_review: the design question is resolved, re-review the code\n        · request_changes -> closed: the author abandoned the PR or it is rejected\n  ✗ level-m hardware (fpga c-table / eBPF) no  - 5 reachable semantic edge(s) — not deterministic\n        · human_review -> approve: the change is correct and well-designed\n        · human_review -> request_changes: the reviewer found issues that need code changes\n        · human_review -> needs_discussion: a design tradeoff needs to be debated before deciding\n        · needs_discussion -> human_review: the design question is resolved, re-review the code\n        · request_changes -> closed: the author abandoned the PR or it is rejected\n"
+ },
+ "capability prismpath/flows/release.md": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "  tier: P1/P2   level_m: False\n  ✓ python (reference)                 yes\n  ◐ portable (js / rust / go)          needs-lockfile  - 2 reachable semantic edge(s) — P0 runs unconditionally; lock them for P1\n        · staging -> production: the staging metrics are healthy and stable\n        · staging -> rollback: the staging metrics show regressions or errors\n  ✗ level-m hardware (fpga c-table / eBPF) no  - 2 reachable semantic edge(s) — not deterministic\n        · staging -> production: the staging metrics are healthy and stable\n        · staging -> rollback: the staging metrics show regressions or errors\n"
+ },
+ "capability prismpath/flows/review_one.md": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "  tier: P0   level_m: True\n  ✓ python (reference)                 yes\n  ✓ portable (js / rust / go)          yes\n  ✓ level-m hardware (fpga c-table / eBPF) yes\n"
+ },
+ "capability prismpath/flows/sprint_loop.md": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "  tier: P1/P2   level_m: True\n  ✓ python (reference)                 yes\n  ◐ portable (js / rust / go)          needs-lockfile  - 2 reachable semantic edge(s) — P0 runs unconditionally; lock them for P1\n        · escalate -> fix: the supervisor answered with guidance — retry the fix with it\n        · escalate -> abandon: the supervisor says this unit is not worth pursuing — skip it\n  ✗ level-m hardware (fpga c-table / eBPF) no  - 2 reachable semantic edge(s) — not deterministic\n        · escalate -> fix: the supervisor answered with guidance — retry the fix with it\n        · escalate -> abandon: the supervisor says this unit is not worth pursuing — skip it\n"
+ },
+ "capability prismpath/flows/triage_support.md": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "  tier: P1/P2   level_m: True\n  ✓ python (reference)                 yes\n  ◐ portable (js / rust / go)          needs-lockfile  - 8 reachable semantic edge(s) — P0 runs unconditionally; lock them for P1\n        · billing -> resolve: the charge is correct or a refund can be issued on the spot\n        · billing -> escalate: a manager approval or exception is required\n        · bug_report -> resolve: the issue is understood and a workaround or fix can be given directly\n        · bug_report -> escalate: it needs engineering investigation beyond first-line support\n        · classify -> bug_report: the customer is reporting that something is broken or erroring\n        · classify -> billing: the message is about payment, invoices, refunds, or subscription charges\n        · classify -> feature_request: the customer is asking for a new capability or enhancement\n        · classify -> general_question: it is a how-to or general usage question\n  ✗ level-m hardware (fpga c-table / eBPF) no  - 8 reachable semantic edge(s) — not deterministic\n        · billing -> resolve: the charge is correct or a refund can be issued on the spot\n        · billing -> escalate: a manager approval or exception is required\n        · bug_report -> resolve: the issue is understood and a workaround or fix can be given directly\n        · bug_report -> escalate: it needs engineering investigation beyond first-line support\n        · classify -> bug_report: the customer is reporting that something is broken or erroring\n        · classify -> billing: the message is about payment, invoices, refunds, or subscription charges\n        · classify -> feature_request: the customer is asking for a new capability or enhancement\n        · classify -> general_question: it is a how-to or general usage question\n"
+ },
+ "capability prismpath/flows/wazuh_triage.md": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "  tier: P0   level_m: True\n  ✓ python (reference)                 yes\n  ✓ portable (js / rust / go)          yes\n  ✓ level-m hardware (fpga c-table / eBPF) yes\n"
+ },
+ "capability prismpath/flows/wazuh_triage_decomposed.md": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "  tier: P1/P2   level_m: True\n  ✓ python (reference)                 yes\n  ◐ portable (js / rust / go)          needs-lockfile  - 9 reachable semantic edge(s) — P0 runs unconditionally; lock them for P1\n        · route -> adjudicate_credential_access: the technique targets credentials — LSASS, NTDS/DCSync, SAM, Kerberos tickets, cached secrets\n        · route -> adjudicate_lateral_movement: remote execution or movement — DCOM/WMI/PsExec, RDP, PowerShell Remoting, admin shares, pass-the-hash\n        · route -> adjudicate_execution: code execution — script hosts, LOLBins, scheduled tasks, service creation, wmic/mshta/rundll32\n        · route -> adjudicate_persistence: persistence — run keys, autoruns, accessibility features, WMI subscriptions, startup items, new services\n        · route -> adjudicate_privilege_escalation: privilege escalation — token or UAC abuse, named-pipe impersonation, kernel/driver or exploit\n        · route -> adjudicate_defense_evasion: defense evasion — clearing logs, disabling controls, obfuscation, masquerading, test-signing\n        · route -> adjudicate_discovery: discovery or recon — enumerating shares, users, groups, domain, systems, or network\n        · route -> adjudicate_c2_exfil: command-and-control or exfiltration — beaconing, tunneling, DNS abuse, external data transfer\n        · route -> general_adjudicate: routine operational activity or ordinary homelab noise with no attack technique — normal logons, service starts, updates, scheduled maintenance, benign administration\n  ✗ level-m hardware (fpga c-table / eBPF) no  - 9 reachable semantic edge(s) — not deterministic\n        · route -> adjudicate_credential_access: the technique targets credentials — LSASS, NTDS/DCSync, SAM, Kerberos tickets, cached secrets\n        · route -> adjudicate_lateral_movement: remote execution or movement — DCOM/WMI/PsExec, RDP, PowerShell Remoting, admin shares, pass-the-hash\n        · route -> adjudicate_execution: code execution — script hosts, LOLBins, scheduled tasks, service creation, wmic/mshta/rundll32\n        · route -> adjudicate_persistence: persistence — run keys, autoruns, accessibility features, WMI subscriptions, startup items, new services\n        · route -> adjudicate_privilege_escalation: privilege escalation — token or UAC abuse, named-pipe impersonation, kernel/driver or exploit\n        · route -> adjudicate_defense_evasion: defense evasion — clearing logs, disabling controls, obfuscation, masquerading, test-signing\n        · route -> adjudicate_discovery: discovery or recon — enumerating shares, users, groups, domain, systems, or network\n        · route -> adjudicate_c2_exfil: command-and-control or exfiltration — beaconing, tunneling, DNS abuse, external data transfer\n        · route -> general_adjudicate: routine operational activity or ordinary homelab noise with no attack technique — normal logons, service starts, updates, scheduled maintenance, benign administration\n"
+ },
+ "capability prismpath/gallery/fanout_review/fanout_review.md": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "  tier: P0   level_m: True\n  ✓ python (reference)                 yes\n  ✓ portable (js / rust / go)          yes\n  ✓ level-m hardware (fpga c-table / eBPF) yes\n"
+ },
+ "capability prismpath/gallery/fanout_review/review_one.md": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "  tier: P0   level_m: True\n  ✓ python (reference)                 yes\n  ✓ portable (js / rust / go)          yes\n  ✓ level-m hardware (fpga c-table / eBPF) yes\n"
+ },
+ "capability prismpath/gallery/incident_severity/incident_severity.md": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "  tier: P0   level_m: True\n  ✓ python (reference)                 yes\n  ✓ portable (js / rust / go)          yes\n  ✓ level-m hardware (fpga c-table / eBPF) yes\n"
+ },
+ "capability prismpath/gallery/pr_review/pr_review.md": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "  tier: P1/P2   level_m: True\n  ✓ python (reference)                 yes\n  ◐ portable (js / rust / go)          needs-lockfile  - 5 reachable semantic edge(s) — P0 runs unconditionally; lock them for P1\n        · human_review -> approve: the change is correct and well-designed\n        · human_review -> request_changes: the reviewer found issues that need code changes\n        · human_review -> needs_discussion: a design tradeoff needs to be debated before deciding\n        · needs_discussion -> human_review: the design question is resolved, re-review the code\n        · request_changes -> closed: the author abandoned the PR or it is rejected\n  ✗ level-m hardware (fpga c-table / eBPF) no  - 5 reachable semantic edge(s) — not deterministic\n        · human_review -> approve: the change is correct and well-designed\n        · human_review -> request_changes: the reviewer found issues that need code changes\n        · human_review -> needs_discussion: a design tradeoff needs to be debated before deciding\n        · needs_discussion -> human_review: the design question is resolved, re-review the code\n        · request_changes -> closed: the author abandoned the PR or it is rejected\n"
+ },
+ "capability prismpath/gallery/support_triage/support_triage.md": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "  tier: P1/P2   level_m: True\n  ✓ python (reference)                 yes\n  ◐ portable (js / rust / go)          needs-lockfile  - 8 reachable semantic edge(s) — P0 runs unconditionally; lock them for P1\n        · billing -> resolve: the charge is correct or a refund can be issued on the spot\n        · billing -> escalate: a manager approval or exception is required\n        · bug_report -> resolve: the issue is understood and a workaround or fix can be given directly\n        · bug_report -> escalate: it needs engineering investigation beyond first-line support\n        · classify -> bug_report: the customer is reporting that something is broken or erroring\n        · classify -> billing: the message is about payment, invoices, refunds, or subscription charges\n        · classify -> feature_request: the customer is asking for a new capability or enhancement\n        · classify -> general_question: it is a how-to or general usage question\n  ✗ level-m hardware (fpga c-table / eBPF) no  - 8 reachable semantic edge(s) — not deterministic\n        · billing -> resolve: the charge is correct or a refund can be issued on the spot\n        · billing -> escalate: a manager approval or exception is required\n        · bug_report -> resolve: the issue is understood and a workaround or fix can be given directly\n        · bug_report -> escalate: it needs engineering investigation beyond first-line support\n        · classify -> bug_report: the customer is reporting that something is broken or erroring\n        · classify -> billing: the message is about payment, invoices, refunds, or subscription charges\n        · classify -> feature_request: the customer is asking for a new capability or enhancement\n        · classify -> general_question: it is a how-to or general usage question\n"
+ },
+ "lint prismpath/flows/bugfix.md": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "  ⚠ [gather_info] cycle (gather_info, implement, review, triage) has no `visits`-based cap - it is bounded only by max_steps; add e.g. `-> give_up: when visits > N`  (unbounded-cycle)\n\n✅ compiles (with advisories) - 1 warning(s)\n"
+ },
+ "lint prismpath/flows/build_prismpath.md": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "  clean ✅  · the flow compiles\n"
+ },
+ "lint prismpath/flows/coding.md": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "  clean ✅  · the flow compiles\n"
+ },
+ "lint prismpath/flows/crypto_agility_cnsa2.md": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "  clean ✅  · the flow compiles\n"
+ },
+ "lint prismpath/flows/data_pipeline.md": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "  clean ✅  · the flow compiles\n"
+ },
+ "lint prismpath/flows/fanout_review.md": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "  clean ✅  · the flow compiles\n"
+ },
+ "lint prismpath/flows/hr_onboarding.md": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "  clean ✅  · the flow compiles\n"
+ },
+ "lint prismpath/flows/pr_review.md": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "  ⚠ [human_review] cycle (human_review, lint, needs_discussion, request_changes, run_ci) has no `visits`-based cap - it is bounded only by max_steps; add e.g. `-> give_up: when visits > N`  (unbounded-cycle)\n\n✅ compiles (with advisories) - 1 warning(s)\n"
+ },
+ "lint prismpath/flows/release.md": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "  ⚠ [production] deterministic-only node whose conditions are not provably exhaustive - add an `else`/`always` edge (or a complementary `when not …`) so it can't halt as stuck  (possible-stuck)\n  ⚠ [security_scan] deterministic-only node whose conditions are not provably exhaustive - add an `else`/`always` edge (or a complementary `when not …`) so it can't halt as stuck  (possible-stuck)\n\n✅ compiles (with advisories) - 2 warning(s)\n"
+ },
+ "lint prismpath/flows/review_one.md": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "  clean ✅  · the flow compiles\n"
+ },
+ "lint prismpath/flows/sprint_loop.md": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "  clean ✅  · the flow compiles\n"
+ },
+ "lint prismpath/flows/triage_support.md": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "  clean ✅  · the flow compiles\n"
+ },
+ "lint prismpath/flows/wazuh_triage.md": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "  clean ✅  · the flow compiles\n"
+ },
+ "lint prismpath/flows/wazuh_triage_decomposed.md": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "  clean ✅  · the flow compiles\n"
+ },
+ "lint prismpath/gallery/fanout_review/fanout_review.md": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "  clean ✅  · the flow compiles\n"
+ },
+ "lint prismpath/gallery/fanout_review/review_one.md": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "  clean ✅  · the flow compiles\n"
+ },
+ "lint prismpath/gallery/incident_severity/incident_severity.md": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "  clean ✅  · the flow compiles\n"
+ },
+ "lint prismpath/gallery/pr_review/pr_review.md": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "  clean ✅  · the flow compiles\n"
+ },
+ "lint prismpath/gallery/support_triage/support_triage.md": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "  clean ✅  · the flow compiles\n"
+ },
+ "test prismpath/flows/bugfix.md": {
+  "code": 2,
+  "stderr": "",
+  "stdout": "no fixture found: prismpath/flows/bugfix.tests.md\n"
+ },
+ "test prismpath/flows/build_prismpath.md": {
+  "code": 2,
+  "stderr": "",
+  "stdout": "no fixture found: prismpath/flows/build_prismpath.tests.md\n"
+ },
+ "test prismpath/flows/coding.md": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "  ✓ [run_tests] --deterministic--> done  (expect done)\n  ✓ [run_tests] --deterministic--> debug  (expect debug)\n  ✓ [run_tests] --deterministic--> give_up  (expect give_up)\n  ✓ [debug] --embed--> write_code  (expect write_code)\n  ✓ [debug] --embed--> give_up  (expect give_up)\n\n5/5 passed\n"
+ },
+ "test prismpath/flows/crypto_agility_cnsa2.md": {
+  "code": 2,
+  "stderr": "",
+  "stdout": "no fixture found: prismpath/flows/crypto_agility_cnsa2.tests.md\n"
+ },
+ "test prismpath/flows/data_pipeline.md": {
+  "code": 2,
+  "stderr": "",
+  "stdout": "no fixture found: prismpath/flows/data_pipeline.tests.md\n"
+ },
+ "test prismpath/flows/fanout_review.md": {
+  "code": 2,
+  "stderr": "",
+  "stdout": "no fixture found: prismpath/flows/fanout_review.tests.md\n"
+ },
+ "test prismpath/flows/hr_onboarding.md": {
+  "code": 2,
+  "stderr": "",
+  "stdout": "no fixture found: prismpath/flows/hr_onboarding.tests.md\n"
+ },
+ "test prismpath/flows/pr_review.md": {
+  "code": 2,
+  "stderr": "",
+  "stdout": "no fixture found: prismpath/flows/pr_review.tests.md\n"
+ },
+ "test prismpath/flows/release.md": {
+  "code": 2,
+  "stderr": "",
+  "stdout": "no fixture found: prismpath/flows/release.tests.md\n"
+ },
+ "test prismpath/flows/review_one.md": {
+  "code": 2,
+  "stderr": "",
+  "stdout": "no fixture found: prismpath/flows/review_one.tests.md\n"
+ },
+ "test prismpath/flows/sprint_loop.md": {
+  "code": 2,
+  "stderr": "",
+  "stdout": "no fixture found: prismpath/flows/sprint_loop.tests.md\n"
+ },
+ "test prismpath/flows/triage_support.md": {
+  "code": 2,
+  "stderr": "",
+  "stdout": "no fixture found: prismpath/flows/triage_support.tests.md\n"
+ },
+ "test prismpath/flows/wazuh_triage.md": {
+  "code": 2,
+  "stderr": "",
+  "stdout": "no fixture found: prismpath/flows/wazuh_triage.tests.md\n"
+ },
+ "test prismpath/flows/wazuh_triage_decomposed.md": {
+  "code": 2,
+  "stderr": "",
+  "stdout": "no fixture found: prismpath/flows/wazuh_triage_decomposed.tests.md\n"
+ },
+ "test prismpath/gallery/fanout_review/fanout_review.md": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "  ✓ [gather] --deterministic--> dispatch  (expect dispatch)\n  ✓ [gather] --deterministic--> nothing_to_review  (expect nothing_to_review)\n\n2/2 passed\n"
+ },
+ "test prismpath/gallery/fanout_review/review_one.md": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "  ✓ [review] --deterministic--> approve  (expect approve)\n  ✓ [review] --deterministic--> request_changes  (expect request_changes)\n\n2/2 passed\n"
+ },
+ "test prismpath/gallery/incident_severity/incident_severity.md": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "  ✓ [assess] --deterministic--> sev1_page  (expect sev1_page)\n  ✓ [assess] --deterministic--> sev1_page  (expect sev1_page)\n  ✓ [assess] --deterministic--> sev2_oncall  (expect sev2_oncall)\n  ✓ [assess] --deterministic--> sev3_ticket  (expect sev3_ticket)\n  ✓ [assess] --deterministic--> watch  (expect watch)\n\n5/5 passed\n"
+ },
+ "test prismpath/gallery/pr_review/pr_review.md": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "  ✓ [lint] --deterministic--> run_ci  (expect run_ci)\n  ✓ [lint] --deterministic--> request_changes  (expect request_changes)\n  ✓ [run_ci] --deterministic--> human_review  (expect human_review)\n  ✓ [run_ci] --deterministic--> request_changes  (expect request_changes)\n  ✓ [request_changes] --deterministic--> lint  (expect lint)\n\n5/5 passed\n"
+ },
+ "test prismpath/gallery/support_triage/support_triage.md": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "  ✓ [bug_report] --deterministic--> escalate  (expect escalate)\n  ✓ [billing] --deterministic--> escalate  (expect escalate)\n  ✓ [billing] --deterministic--> resolve  (expect resolve)\n  ✓ [feature_request] --deterministic--> resolve  (expect resolve)\n  ✓ [general_question] --deterministic--> resolve  (expect resolve)\n\n5/5 passed\n"
+ },
+ "validate prismpath/flows/bugfix.md": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "  ⚠ [gather_info] cycle (gather_info, implement, review, triage) has no `visits`-based cap - it is bounded only by max_steps; add e.g. `-> give_up: when visits > N`  (unbounded-cycle)\n\n✅ compiles (with advisories) - 1 warning(s)\n"
+ },
+ "validate prismpath/flows/build_prismpath.md": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "  clean ✅  · the flow compiles\n"
+ },
+ "validate prismpath/flows/coding.md": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "  clean ✅  · the flow compiles\n"
+ },
+ "validate prismpath/flows/crypto_agility_cnsa2.md": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "  clean ✅  · the flow compiles\n"
+ },
+ "validate prismpath/flows/data_pipeline.md": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "  clean ✅  · the flow compiles\n"
+ },
+ "validate prismpath/flows/fanout_review.md": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "  clean ✅  · the flow compiles\n"
+ },
+ "validate prismpath/flows/hr_onboarding.md": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "  clean ✅  · the flow compiles\n"
+ },
+ "validate prismpath/flows/pr_review.md": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "  ⚠ [human_review] cycle (human_review, lint, needs_discussion, request_changes, run_ci) has no `visits`-based cap - it is bounded only by max_steps; add e.g. `-> give_up: when visits > N`  (unbounded-cycle)\n\n✅ compiles (with advisories) - 1 warning(s)\n"
+ },
+ "validate prismpath/flows/release.md": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "  ⚠ [production] deterministic-only node whose conditions are not provably exhaustive - add an `else`/`always` edge (or a complementary `when not …`) so it can't halt as stuck  (possible-stuck)\n  ⚠ [security_scan] deterministic-only node whose conditions are not provably exhaustive - add an `else`/`always` edge (or a complementary `when not …`) so it can't halt as stuck  (possible-stuck)\n\n✅ compiles (with advisories) - 2 warning(s)\n"
+ },
+ "validate prismpath/flows/review_one.md": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "  clean ✅  · the flow compiles\n"
+ },
+ "validate prismpath/flows/sprint_loop.md": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "  clean ✅  · the flow compiles\n"
+ },
+ "validate prismpath/flows/triage_support.md": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "  clean ✅  · the flow compiles\n"
+ },
+ "validate prismpath/flows/wazuh_triage.md": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "  clean ✅  · the flow compiles\n"
+ },
+ "validate prismpath/flows/wazuh_triage_decomposed.md": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "  clean ✅  · the flow compiles\n"
+ },
+ "validate prismpath/gallery/fanout_review/fanout_review.md": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "  clean ✅  · the flow compiles\n"
+ },
+ "validate prismpath/gallery/fanout_review/review_one.md": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "  clean ✅  · the flow compiles\n"
+ },
+ "validate prismpath/gallery/incident_severity/incident_severity.md": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "  clean ✅  · the flow compiles\n"
+ },
+ "validate prismpath/gallery/pr_review/pr_review.md": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "  clean ✅  · the flow compiles\n"
+ },
+ "validate prismpath/gallery/support_triage/support_triage.md": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "  clean ✅  · the flow compiles\n"
+ }
+}
