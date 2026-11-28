@@ -227,6 +227,7 @@ prismpath/agent/mcp_proxy.py
 prismpath/agent/observe.py
 prismpath/agent/policy.py
 prismpath/agent/policy/agent_default.core.json
+prismpath/agent/policy/agent_default.policy.md
 prismpath/agent/policy/agent_default.rules.md
 prismpath/agent/policy/agent_review.core.json
 prismpath/agent/policy/agent_review.rules.md
@@ -280,7 +281,9 @@ prismpath/distribution/http.py
 prismpath/distribution/install.py
 prismpath/distribution/kinds.py
 prismpath/distribution/legacy.py
+prismpath/distribution/manifest_cli.py
 prismpath/distribution/pep.py
+prismpath/distribution/seal.py
 prismpath/distribution/state_record.py
 prismpath/distribution/statement.py
 prismpath/distribution/table_compare.py
@@ -376,7 +379,12 @@ prismpath/hotswap/policy_host.py
 prismpath/hotswap/policy_pack.py
 prismpath/hotswap/ppt_eval.py
 prismpath/information/__init__.py
+prismpath/information/catalog.py
 prismpath/information/contextcloud.py
+prismpath/information/indexstatement.py
+prismpath/information/parsefacts.py
+prismpath/information/projecttests.py
+prismpath/information/protectedfacts.py
 prismpath/interactions.py
 prismpath/kappa.py
 prismpath/kernel/__init__.py
@@ -398,6 +406,7 @@ prismpath/kernel/level_m.py
 prismpath/kernel/lint.py
 prismpath/kernel/model_check.py
 prismpath/kernel/parser.py
+prismpath/kernel/policy_manifest.py
 prismpath/kernel/policy_source.py
 prismpath/kernel/ppt_compile.py
 prismpath/kernel/predicates.py
@@ -846,6 +855,7 @@ prismpath/tests/test_distribution_pep.py
 prismpath/tests/test_distribution_reconciling.py
 prismpath/tests/test_distribution_revocation.py
 prismpath/tests/test_distribution_rotation.py
+prismpath/tests/test_distribution_seal.py
 prismpath/tests/test_distribution_state_record.py
 prismpath/tests/test_distribution_statement.py
 prismpath/tests/test_distribution_table_compare.py
@@ -887,6 +897,7 @@ prismpath/tests/test_guard_semantic.py
 prismpath/tests/test_hermes_swarm.py
 prismpath/tests/test_host_trace_corpus.py
 prismpath/tests/test_import_layers.py
+prismpath/tests/test_information_facts.py
 prismpath/tests/test_information_port.py
 prismpath/tests/test_installed_package.py
 prismpath/tests/test_intoto.py
@@ -940,6 +951,7 @@ prismpath/tests/test_plain_json_never_hashed.py
 prismpath/tests/test_plugins.py
 prismpath/tests/test_polarity_lint.py
 prismpath/tests/test_policy_host.py
+prismpath/tests/test_policy_manifest.py
 prismpath/tests/test_policy_pack.py
 prismpath/tests/test_policy_source.py
 prismpath/tests/test_portability.py

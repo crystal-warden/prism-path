@@ -104,7 +104,9 @@ def _add_owner_commands(subparsers) -> None:
     lint_parser.set_defaults(func=lint_flow)
 
     from prismpath.kernel import policy_source
-    policy_source.add_parser(subparsers)
+    policy_actions = policy_source.add_parser(subparsers)
+    from prismpath.distribution import manifest_cli
+    manifest_cli.add_parser(policy_actions)
 
     from prismpath.gateway import cli as gateway_cli
     gateway_cli.add_parser(subparsers)

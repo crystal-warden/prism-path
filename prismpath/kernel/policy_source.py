@@ -801,7 +801,7 @@ COMPILE_CHECKS: Dict[str, Any] = {}
 
 
 def register_compile_checks(kind: str, checks) -> None:
-    """Add the checks `--target kind` runs: `checks(image, listed values)` answers [(field, rule index or None, the
+    """Add the checks `--target kind` runs: `checks(image, listed values[, points=...])` answers [(field, rule index or None, the
     message)]. One per kind."""
     existing = COMPILE_CHECKS.get(kind)
     if existing is not None and existing is not checks:
@@ -819,8 +819,9 @@ def line_of(where, field_lines, rule_lines) -> int:
 
 
 # ----------------------------------------------------------------- command line
-def add_parser(subparsers) -> None:
-    """`prismpath policy compile | render | skeleton | check | causes`."""
+def add_parser(subparsers):
+    """`prismpath policy compile | render | skeleton | check | causes`. Returns the `<action>` group, which a surface
+    adds its own actions to (`policy manifest`, in distribution/manifest_cli.py)."""
     policy_parser = subparsers.add_parser(
         'policy', help='Write a core policy as readable rules: compile the rules to the signed image\'s '
                        'canonical bytes, render an image back to rules, start a classifier for the fields')
@@ -829,6 +830,9 @@ def add_parser(subparsers) -> None:
                                                         'checked by the core, in canonical canon/2 bytes')
     compile_parser.add_argument('source', help='the rules source (.rules.md)')
     compile_parser.add_argument('-o', '--out', default=None, help='write the image here (default standard output)')
+    compile_parser.add_argument('--point', action='append', default=[], metavar='NAME',
+                                help='an information point the policy is built with, so a field only it supplies '
+                                     '(tests_pass, edit_kind, touches_protected ...) may be declared; with --target')
     compile_parser.add_argument('--target', choices=('agent',), default=None,
                                 help='also run the checks of what will enforce the image: agent is the governed agent '
                                      '(reading domain, fields, control files, connections, sandbox profile)')
@@ -851,6 +855,7 @@ def add_parser(subparsers) -> None:
                                                                    'policy decides')
     causes_parser.add_argument('--json', action='store_true', help='print JSON')
     policy_parser.set_defaults(func=policy_cmd)
+    return actions
 
 
 def _write(path: str, data: bytes) -> None:
@@ -948,11 +953,14 @@ def policy_cmd(args) -> int:
               f"sha256 {held_sha256}. Compile it again with `prismpath policy compile {args.source} -o {args.image}`",
               file=sys.stderr)
         return 1
+    if args.point and not args.target:
+        return refuse(["--point names an information point for a target's checks, and no --target was given"])
     if args.target:
         checks = COMPILE_CHECKS.get(args.target)             # the kind's own checks, as it registered them
         if checks is None:
             return refuse([f"no checks of the {args.target} target are loaded, so nothing was written"])
-        found = checks(compiled.image, compiled.values)
+        found = checks(compiled.image, compiled.values, points=tuple(args.point)) if args.point \
+            else checks(compiled.image, compiled.values)
         if found:
             return refuse(SourceError([(line_of(where, compiled.field_lines, compiled.rule_lines), message)
                                        for where, message in found], args.source).lines())

@@ -8,14 +8,25 @@ fields at the value it lists in `restrictive`. This module imports nothing from 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, FrozenSet, Mapping, Protocol, Tuple, Union, runtime_checkable
+from typing import Any, FrozenSet, Mapping, Optional, Protocol, Tuple, Union, runtime_checkable
+
+
+@dataclass(frozen=True)
+class Edit:
+    """The text of a file edit: `relative` is the file's path under the project, `old` its text now, `new` its text
+    with the edit applied."""
+    relative: str
+    old: str
+    new: str
 
 
 @dataclass(frozen=True)
 class Change:
-    """What a point is asked about: one path a call changes, and the configuration it is read against."""
+    """What a point is asked about: one path a call changes, and the configuration it is read against. `edit` is the
+    file's text before and after, for the points that read it; None when the edit could not be applied."""
     raw_path: str
     config: Any
+    edit: Optional[Edit] = None
 
 
 @dataclass(frozen=True)
