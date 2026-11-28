@@ -378,7 +378,12 @@ prismpath/hotswap/policy_host.py
 prismpath/hotswap/policy_pack.py
 prismpath/hotswap/ppt_eval.py
 prismpath/information/__init__.py
+prismpath/information/catalog.py
 prismpath/information/contextcloud.py
+prismpath/information/indexstatement.py
+prismpath/information/parsefacts.py
+prismpath/information/projecttests.py
+prismpath/information/protectedfacts.py
 prismpath/interactions.py
 prismpath/kappa.py
 prismpath/kernel/__init__.py
@@ -889,6 +894,7 @@ prismpath/tests/test_guard_semantic.py
 prismpath/tests/test_hermes_swarm.py
 prismpath/tests/test_host_trace_corpus.py
 prismpath/tests/test_import_layers.py
+prismpath/tests/test_information_facts.py
 prismpath/tests/test_information_port.py
 prismpath/tests/test_installed_package.py
 prismpath/tests/test_intoto.py

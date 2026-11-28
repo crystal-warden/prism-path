@@ -629,7 +629,18 @@ Normatively, as follows.
 - **Context Cloud.** `policy.cc_protected` (list of names as `agent.zones` holds them: 1 to 512 characters of `[A-Za-z0-9_.:@-]`, no `/`, at most 10,000), `policy.cc_index` with `policy.cc_index_sha256`,
   `policy.cc_freshness_s` (1 and up, the oldest index a reading may use), `policy.cc_required_certainty` (`certain`
   or `likely`) and `policy.cc_engine_agreement` (1 to 64, the engines that must agree). The grammar reads them. What
-  a target does with them is its own.
+  a target does with them is its own. The protected set in force is the union of `policy.cc_protected` and the
+  `protected` list of the `policy.zones` file: neither wins and neither removes a name from the other. `policy.cc_index`
+  pins the sha256 of an index statement (the index's path under the project, the program and package that read it, and
+  the schema), not of the SQLite file, which is rebuilt as the code changes and is checked by the per file hashes it
+  holds and by `policy.cc_freshness_s`.
+- **Information points.** `policy.points` (list of word) names the information points the rules are built with. A rules
+  source that declares a field only a point supplies (`tests_pass`, `edit_kind`, `behaviour_preserving`,
+  `touches_protected`, `adds_protected_reference`) is a `points` finding unless the point that supplies it is named,
+  and `prismpath policy compile --target agent` refuses it, on the line of the field, unless it is given `--point`. A policy
+  that allows a reading with `tests_pass` at `not_run` that it refuses at `false` is refused too. `tests_pass` true is never enough
+  alone, and the five facts were proven together with `reaches_protected` and `unknown_reason`, so a policy that reads them should also
+  require `zone_reach == "none"`.
 - **Domain.** `policy.domain` is `field=value|value; other=LO..HI`: the values or the integer range each field of
   the image may take, each field once, and not empty. It is parsed and nothing compares it with the rules yet.
 - **Body.** The body holds notes and one rule, `-> refuse_135: always` (`dist:bad-format`), under a `##`
