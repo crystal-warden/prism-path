@@ -60,10 +60,22 @@ def add_parser(subparsers) -> None:
     commands = dist.add_subparsers(dest='dist_command', metavar='<action>')
     commands.required = True
 
-    seal = commands.add_parser('seal', help='sign a distribution envelope for a body (the owner, where the key is)')
-    seal.add_argument('--artifact', required=True, help='the artifact kind, such as policy.ppt')
-    seal.add_argument('--body', required=True, metavar='FILE')
-    _release_args(seal)
+    seal = commands.add_parser('seal', help='sign the envelopes of a release from a signed policy manifest with --manifest, '
+                                            'or one envelope for a body from flags (the owner, where the key is)')
+    seal.add_argument('--manifest', default=None, metavar='FILE',
+                      help='a signed policy manifest (<name>.policy.md): check it as `policy manifest check` does and '
+                           'seal one envelope per artifact of each target\'s release into the --out directory; the '
+                           'stream, seq, targets, times, widens and replaces come from it, not from flags')
+    seal.add_argument('--pub', action='append', default=[], metavar='PUB',
+                      help='with --manifest, a trusted authority public key that may have signed it (repeatable)')
+    seal.add_argument('--revoked', default=None, metavar='JSON',
+                      help='with --manifest, the revocation list of authority key ids')
+    seal.add_argument('--state-dir', dest='state_dir', default=None, metavar='DIR',
+                      help='with --manifest, the version floor: a manifest signed below the version sealed before is '
+                           'refused, and the floor is raised once the envelopes are written')
+    seal.add_argument('--artifact', default=None, help='the artifact kind, such as policy.ppt (the flag form)')
+    seal.add_argument('--body', default=None, metavar='FILE', help='the body (the flag form)')
+    _release_args(seal, required=False)
     seal.add_argument('--release', default=None, help='the release id (default the release of this one artifact)')
     seal.add_argument('--policy', default=None, metavar='SHA256', help='the policy hash (default the body\'s own)')
     seal.add_argument('--replaces', default=None, metavar='SHA256',
@@ -280,15 +292,18 @@ def add_parser(subparsers) -> None:
     pep.set_defaults(func=pep_cmd)
 
 
-def _release_args(parser) -> None:
-    parser.add_argument('--stream', required=True)
-    parser.add_argument('--seq', type=int, required=True)
-    parser.add_argument('--target', action='append', required=True, help='a target kind (repeatable)')
+def _release_args(parser, required: bool = True) -> None:
+    """The flags of a release. `required` False leaves the release's own flags to the command to check, for `seal`,
+    whose `--manifest` form takes them from the manifest."""
+    parser.add_argument('--stream', required=required)
+    parser.add_argument('--seq', type=int, required=required)
+    parser.add_argument('--target', action='append', required=required, help='a target kind (repeatable)')
     parser.add_argument('--not-before', type=int, default=None, help='Unix seconds (default now)')
     parser.add_argument('--expires', type=int, default=0, help='Unix seconds; 0 only for a trust kind')
     parser.add_argument('--key', action='append', required=True, metavar='PEM', help='an authority private key (repeatable)')
     parser.add_argument('--held', default=None, metavar='DIR', help='a controller directory, for R8')
-    parser.add_argument('--out', required=True, metavar='FILE', help='where the sealed envelope is written')
+    parser.add_argument('--out', required=True, metavar='FILE',
+                        help='where the sealed envelope is written (with seal --manifest, a directory)')
 
 
 def _trust_args(parser) -> None:
@@ -407,7 +422,83 @@ def _said_yes(args, question: str) -> bool:
     return answer.strip().lower() in ("y", "yes")
 
 
+FLAG_FORM = ("--artifact", "--body", "--stream", "--seq", "--target")
+FLAG_ONLY = ("artifact", "body", "stream", "seq", "target", "not_before", "release", "policy", "replaces", "meta",
+             "qualification", "ceiling")
+DEPRECATED = ("note: the flag form of dist seal is deprecated; write the release in a signed policy manifest and seal "
+              "it with dist seal --manifest FILE.policy.md (SPEC.md section 10)")
+
+
 def seal_cmd(args) -> int:
+    if args.manifest is not None:
+        return seal_manifest_cmd(args)
+    missing = [flag for flag in FLAG_FORM if getattr(args, flag[2:]) is None]
+    if missing:
+        print(f"prismpath dist seal: the flag form needs {', '.join(missing)}, or seal from a manifest with --manifest",
+              file=sys.stderr)
+        return 2
+    print(DEPRECATED, file=sys.stderr)
+    return _seal_flags(args)
+
+
+def seal_manifest_cmd(args) -> int:
+    """`dist seal --manifest FILE`: the release check of the manifest, then one envelope per artifact of each target's
+    release, written to the `--out` directory as `<target>.<artifact>.sealed` with its `.body` beside it, the names
+    the controller's inbox takes (F1). Nothing is written unless every envelope is sealed. With `--state-dir` the flow
+    authority's version floor is raised to the manifest's version after the envelopes are written."""
+    from prismpath.distribution import manifest_cli
+    from prismpath.distribution.seal import seal_manifest
+    from prismpath.hotswap import flow_authority
+    given = [name for name in FLAG_ONLY if getattr(args, name) not in (None, 0, [], False)]
+    if given or args.widens or args.yes:
+        flags = [f"--{name.replace('_', '-')}" for name in given] + (["--widens"] if args.widens else []) + \
+            (["--yes"] if args.yes else [])
+        print(f"prismpath dist seal: --manifest takes the release from the manifest, so {', '.join(flags)} is not "
+              f"given with it", file=sys.stderr)
+        return 2
+    if not args.pub:
+        print("prismpath dist seal: --manifest needs --pub, the authority public key the manifest is checked against",
+              file=sys.stderr)
+        return 2
+    try:
+        done = manifest_cli.examine(args.manifest, args.pub, revoked=args.revoked, state_dir=args.state_dir)
+    except manifest_cli.Unreadable as error:
+        for line in error.lines:
+            print(f"prismpath dist seal: {line}", file=sys.stderr)
+        return 2
+    if done.release is None:
+        for finding in done.findings:
+            print(finding.render(args.manifest), file=sys.stderr)
+        return _fail(kinds.BAD_FORMAT, "the manifest does not hold, so nothing is sealed")
+    try:
+        result = seal_manifest(done.release, _authority(args.key), held=args.held)
+    except Refused as refused:
+        return _fail(refused.cause, str(refused))
+    except ValueError as error:                      # a --held directory that holds no controller state
+        print(f"prismpath dist seal: {error}", file=sys.stderr)
+        return 2
+    os.makedirs(args.out, exist_ok=True)
+    written = []
+    for one in result.envelopes:
+        stem = os.path.join(args.out, f"{one.target}.{one.artifact}")
+        _write(stem + ".sealed", one.sealed)
+        _write(stem + ".body", one.body)
+        written.append({"target": one.target, "artifact": one.artifact, "sealed": stem + ".sealed",
+                        "body": stem + ".body", "envelope_id": env.envelope_id(env.unseal(one.sealed)[0])})
+    if args.state_dir:
+        flow_authority.VersionFloor.in_state_dir(args.state_dir).accept(done.signed)
+    manifest = done.release.manifest
+    printed = {"manifest": args.manifest, "manifest_sha256": done.release.manifest_sha256, "stream": manifest.stream,
+               "seq": manifest.seq, "policy_sha256": manifest.image_sha256, "replaces": result.replaces,
+               "widens": result.widens, "larger": result.larger, "releases": result.releases, "envelopes": written}
+    if result.widens:
+        printed["next"] = ("the release widens; sign its widening statement for each target's policy.core with "
+                           "dist widen, as the owner, on purpose")
+    _print(printed)
+    return 0
+
+
+def _seal_flags(args) -> int:
     from prismpath.distribution.controller import WIDENING
     meta = _json(args.meta)
     qualification = _json(args.qualification) if meta is None and args.qualification else None

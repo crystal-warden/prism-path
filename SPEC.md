@@ -576,6 +576,7 @@ other, so the signature is a `prismpath-flow-manifest/1` beside it (`<name>.poli
 
 ```markdown
 ---
+name: agent-default
 policy.id: agent-default-1
 policy.stream: agent-default
 policy.seq: 1
@@ -600,9 +601,12 @@ Normatively, as follows.
   the text parsed is the text signed. `prismpath policy manifest check` also requires the sha256 of the text
   it parsed to be the `flow_sha256` of the verified signature.
 - **Front matter** is required, between two lines that are exactly `---` (nothing before or after), one
-  `key: value` per line, each starting in the first column. Every key starts with `policy.`. The keys `name`
-  (a name), `description` (printable text up to 200 characters) and `start` (a name) are also accepted, since they
-  belong to the flow, and the signed flow takes its name from `name`. Any other key is an error that names its line.
+  `key: value` per line, each starting in the first column. Every key starts with `policy.`. The keys `name`,
+  `description` (printable text up to 200 characters) and `start` (a name) are also accepted, since they belong to the
+  flow. `name` is required and is `policy.stream`: the signed flow takes its name from it, and the flow authority
+  keeps its version floor per flow name, so the floor is one per stream. Tying it to `policy.id`, which names one
+  release, would give every release a floor of its own, so an older signed manifest of the stream would never be
+  refused. Any other key is an error that names its line.
   A `policy.` key or a `---` line below the closing fence is an error, since it would read as a note. A key written twice is an
   error. A refusal names the line of the key, and the whole file when a required key is missing. Every problem is
   reported, not only the first.
@@ -630,23 +634,76 @@ Normatively, as follows.
   `policy.cc_freshness_s` (1 and up, the oldest index a reading may use), `policy.cc_required_certainty` (`certain`
   or `likely`) and `policy.cc_engine_agreement` (1 to 64, the engines that must agree). The grammar reads them. What
   a target does with them is its own.
-- **Domain.** `policy.domain` is `field=value|value; other=LO..HI`: the values or the integer range each field of
-  the image may take, each field once, and not empty. It is parsed and nothing compares it with the rules yet.
+- **Domain.** `policy.domain` is reserved, and written it is an error. The domain of a release is the rules
+  source's own typed `field.<name>:` lines, which `policy.rules_sha256` already signs, so a second statement of it
+  could only repeat them or contradict them. The floor and ceiling per field it was meant to carry bound what a later
+  release may widen to, and nothing reads such a bound yet. A signed file carries no syntax whose meaning is not fixed,
+  so the key stays reserved until that reader is specified.
 - **Body.** The body holds notes and one rule, `-> refuse_135: always` (`dist:bad-format`), under a `##`
   heading. It is written as the canonical rendering writes a target, so the file parses as a flow and the flow parser
   does not refuse it as a rules source. Any other rule line is an error.
 
 **The release check.** `prismpath policy manifest check FILE --pub KEY...` (`policy_manifest.check`) holds when,
 in this order, the signature verifies with a trusted authority key (the flow authority, `prismpath authorize
-verify`); `policy.rules` compiles with `prismpath policy compile` to the image byte for byte, with its final line feed
-or without; `policy.rules_sha256` is the sha256 of the rules file and `policy.image_sha256` of the compiled
-image's bytes without the line feed; and every side input named has the sha256 it says. A signature that does not
+verify`) at a version that is `policy.seq`; `policy.rules` compiles with `prismpath policy compile` to the image byte
+for byte, with its final line feed or without; `policy.rules_sha256` is the sha256 of the rules file and
+`policy.image_sha256` of the compiled image's bytes without the line feed; every target is one a manifest can be sealed
+for and the checks of `prismpath policy compile --target` that its kind registered hold (`target-check`); and every
+side input named has the sha256 it says. The signed version and `policy.seq` are one counter, so the version floor's
+rule (a version below the one accepted is refused, the same version only with the same text) is the stream's seq rule
+as the sealing tool sees it. A signature that does not
 hold is the only finding, since nothing the manifest says counts without it. Every file is read from the manifest's
 directory, and one that resolves outside it, a link for one, reads as absent. A file is opened without following a
 link at its last part, and one over 16 MiB is a finding. With the clock the check also finds a manifest before
 `policy.not_before` or past its end (`expired`, `not-yet-valid`). Exit 0 holds, 1 for a finding and 2
-for a manifest that does not read. The command seals nothing. Sealing from a manifest, the envelope's `manifest_sha256`
-and `rules_sha256` members and the target checks of each target are specified with `dist seal --manifest`.
+for a manifest that does not read. The command seals nothing, and with `--state-dir` it reads the version floor and
+never raises it.
+
+**Sealing from a manifest.** `prismpath dist seal --manifest FILE --pub KEY... --key PEM... --out DIR [--held DIR]
+[--state-dir DIR]` runs the release check and seals what it verified (`policy_manifest.verify`, then
+`distribution/seal.py`, `seal_manifest`). Nothing is read twice: the check hands on the compiled image, the rules
+bytes, each side file's bytes and the signed `created`, `version` and `key_id`, and the tool seals from those. The
+image sealed is the compiled image, never the image file's bytes.
+
+- **Targets.** A manifest can be sealed for a target whose kind registered a `derive` (`agent` and `gateway` in this
+  version). `host` and `mesh` need a `policy.ppt` and `xdp` a `net.edge`, and the grammar names none of them, so
+  `check` finds such a target (`target`). Each target gets its own release: one envelope per artifact its `derive`
+  makes, the release id over those artifacts and `targets` that one kind, because a PEP computes the release id over
+  the artifacts staged for it (E10, C2). Every release of one manifest carries the same stream, seq, policy hash
+  (`policy.image_sha256`), `replaces` and `widens`. `agent` is its `policy.core` and its `egress.hosts`, and
+  `agent.zones` when the manifest names zones. `gateway` is its `policy.core` and its `gateway.routes`, and
+  `identity.bundle` and `identity.map` when the policy reads `workload` (ID3). A side file is its artifact's body byte
+  for byte and is read as that artifact reads it.
+- **An absent key.** An absent side file is the target's default, the one that allows least: no `policy.egress_hosts`
+  seals the empty host list, no `policy.zones` seals no `agent.zones`, so the release declares no zone and its release
+  id signs that, and a gateway with no `policy.routes` is refused, since it has no route table to fall back on. An
+  absent value key is the target's built in value. A side file no target reads, and a value key no target carries, is
+  refused: a signed key no PEP holds would read as enforced. In this version `agent` carries `policy.allowed_remotes`,
+  `policy.max_processes`, `policy.timeout_s`, `policy.shell_many`, `policy.toolchain_dirs` and `policy.ro_mounts`
+  only at today's built in values, and every other value key is carried by no target, because no artifact of a
+  release holds it yet.
+- **Times.** `not_before` is `policy.not_before`, else the signing time, and `expires` is the end `policy.expires`
+  or `policy.valid_days` gives. So the same manifest seals to the same envelopes.
+- **Widening (W7).** The tool decides `widens` itself. It compares each target's release, whole, with the one it
+  replaces in the controller state `--held`, as a PEP that decides compares it (W1). `widens: no` is refused with
+  `dist:widening-unsigned` when the tool finds the release larger or holds no release to compare it with, and is
+  sealed with `widens` false only when it finds it not larger. `widens: yes` seals a widening, and the tool never
+  signs its widening statement: the owner signs that with `dist widen`, as a separate act (W4, W5). `replaces` is
+  `policy.replaces`, else the policy hash of the latest release `--held` holds below this seq for the target, else
+  none. A manifest whose targets would replace different policies is refused, since it states one `replaces`.
+- **Meta.** Each envelope's `meta` names the manifest and the rules: `manifest_sha256`, the `flow_sha256` the
+  manifest's signature covers, on every artifact; `source_sha256`, the sha256 of the rules source, on the
+  `policy.core`; and `rules_sha256`, the same hash, on each side artifact, the rules of the release it is sealed with.
+  An auditor goes from a receipt's policy hash to the `policy.core` envelope, to the manifest by its hash and to the
+  rules source by its hash. No PEP check reads them.
+- **The check before signing.** Each artifact is held to its own check (V11) for its target before anything is
+  written, and nothing is written unless every envelope is sealed. The envelopes go to `--out` as
+  `<target>.<artifact>.sealed` with `<target>.<artifact>.body` beside each, the names a controller's inbox takes.
+- **The floor.** With `--state-dir`, a manifest signed at a version below the one sealed before, or at the same
+  version with another text, is refused (`flow:version-replay`), and the floor is raised to the manifest's version
+  once the envelopes are written. The sealing tool raises it, and the release check only reads it.
+- **The flag form.** `dist seal --artifact A --body FILE --stream S --seq N --target T ...` still seals one envelope,
+  and prints a note that it is deprecated in favour of `--manifest`. With `--manifest` no release flag is given.
 
 ---
 

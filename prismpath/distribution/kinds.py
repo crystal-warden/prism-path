@@ -171,7 +171,18 @@ FORMS: Dict[str, Callable[[Any], bool]] = {
     "answer_rate": _rate,
     "command": lambda value: is_int(value, 0, 255),
     "layout": lambda value: is_hex64(value),
+    "manifest_sha256": lambda value: is_hex64(value),
+    "rules_sha256": lambda value: is_hex64(value),
+    "source_sha256": lambda value: is_hex64(value),
 }
+# The members an envelope sealed from a signed policy manifest carries (SPEC.md section 10, `dist seal --manifest`),
+# each optional, so an envelope sealed by the flags reads as before. `manifest_sha256` is the `flow_sha256` the
+# manifest's signature covers, on every artifact sealed from one. `source_sha256` is the sha256 of the rules source a
+# `policy.core` image compiles from, and `rules_sha256` the same hash on a side artifact (the rules of the release it
+# is sealed with), so one envelope never names one hash twice. None of them is read by a check: they let an auditor
+# go from an envelope to the manifest and the rules line, and a PEP decides nothing on them.
+CORE_SEALED_META = frozenset({"manifest_sha256", "source_sha256"})
+SIDE_SEALED_META = frozenset({"manifest_sha256", "rules_sha256"})
 
 
 @dataclass(frozen=True)
@@ -449,16 +460,16 @@ def _reads(reader: Callable[[bytes], dict]) -> Callable[[Any, bytes, Any], Optio
 # ------------------------------------------------------------------ the table
 
 ARTIFACTS: Dict[str, Artifact] = {
-    "policy.core": Artifact(check=check_policy_core),
+    "policy.core": Artifact(meta_optional=CORE_SEALED_META, check=check_policy_core),
     "policy.ppt": Artifact(frozenset({"fields", "counts", "wcet_cycles", "qualification"}),
                            frozenset({"packing", "flow_sha256", "overlay_of"}), check_policy_ppt),
     "policy.spiral": Artifact(check=check_policy_spiral),
     "sandbox.profile": Artifact(frozenset({"compiler"}), check=_reads(lambda body: read_profile(body))),
-    "egress.hosts": Artifact(check=_reads(_registered("egress.hosts"))),
-    "agent.zones": Artifact(check=_reads(read_zones)),
-    "gateway.routes": Artifact(check=_reads(_registered("gateway.routes"))),
-    "identity.bundle": Artifact(check=_reads(_registered("identity.bundle"))),
-    "identity.map": Artifact(check=_reads(_registered("identity.map"))),
+    "egress.hosts": Artifact(meta_optional=SIDE_SEALED_META, check=_reads(_registered("egress.hosts"))),
+    "agent.zones": Artifact(meta_optional=SIDE_SEALED_META, check=_reads(read_zones)),
+    "gateway.routes": Artifact(meta_optional=SIDE_SEALED_META, check=_reads(_registered("gateway.routes"))),
+    "identity.bundle": Artifact(meta_optional=SIDE_SEALED_META, check=_reads(_registered("identity.bundle"))),
+    "identity.map": Artifact(meta_optional=SIDE_SEALED_META, check=_reads(_registered("identity.map"))),
     "net.dests": Artifact(check=_reads(_registered("net.dests"))),
     "net.edge": Artifact(frozenset({"flow_sha256", "names_sha256", "qualification"}), check=check_net_edge),
     "cfs.table": Artifact(),
@@ -655,6 +666,12 @@ def register(kind) -> None:
         policy_source.register_compile_checks(name, kind.compile_checks)
     TARGETS[name] = kind.row
     KINDS[name] = kind
+
+
+def sealable() -> FrozenSet[str]:
+    """The target kinds registered in this process that a signed policy manifest can be sealed for: those whose
+    registration has a `derive` (`TargetKind.derive`)."""
+    return frozenset(name for name, kind in KINDS.items() if getattr(kind, "derive", None) is not None)
 
 
 def register_target(name: str, target: Target) -> None:

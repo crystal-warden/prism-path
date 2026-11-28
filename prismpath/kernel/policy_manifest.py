@@ -9,6 +9,7 @@ is prose and one fixed rule, `-> refuse_135: always`, so the file parses as a fl
 can sign it. The rules reach no image unless this file is signed.
 
     ---
+    name: agent-default
     policy.id: agent-default-1
     policy.stream: agent-default
     policy.seq: 1
@@ -25,9 +26,13 @@ can sign it. The rules reach no image unless this file is signed.
     -> refuse_135: always
 
 `parse` reads the front matter into a `Manifest`. It refuses an unknown key, a missing required key, a key written
-twice and a value of the wrong form, and names the line of each (`ManifestError`). `check` is the release check
-that comes before anything is sealed or installed from a manifest: the signature held, the rules source compiles
-to the image byte for byte, both hashes hold, and every side input named is the one its hash says. This module
+twice and a value of the wrong form, and names the line of each (`ManifestError`). The flow key `name` is required and
+is the stream, so the flow authority's version floor, which is kept per flow name, is one per stream, and the signed
+version must be `policy.seq`. `check` is the release check that comes before anything is sealed or installed from a
+manifest: the signature held, the rules source compiles to the image byte for byte, both hashes hold, each target's
+own compile checks hold, and every side input named is the one its hash says. `verify` is the same check, and it
+returns the bytes it checked and the signed facts as a `Release`, which is all the sealing tool reads: it never
+opens a file the check did not hash (`distribution/seal.py`, `seal_manifest`). This module
 reads no file and holds no key. The caller reads the files and verifies the signature (the flow authority, in
 the onion) and hands the bytes and the answer in, so the kernel stays pure. Standard library and the kernel only.
 """
@@ -80,7 +85,7 @@ _HEAD = re.compile(r"^\s*##\s+\S")
 #   yesno             `yes` or `no`
 #   list:T            items of type T joined by `|`, an empty value is an empty list, no item twice
 #   enum:A|B          one of the words
-#   domain            `field=value|value; field=LO..HI`, the floor and ceiling of each field
+#   reserved          a key of the proposal no reader defines yet: written, it is refused (see `RESERVED`)
 KEYS: Dict[str, Tuple[str, bool]] = {
     # identity
     "id": ("name", True),
@@ -121,11 +126,23 @@ KEYS: Dict[str, Tuple[str, bool]] = {
     "cc_required_certainty": ("enum:certain|likely", False),
     "cc_engine_agreement": ("int:1:64", False),
     # domain
-    "domain": ("domain", False),
+    "domain": ("reserved", False),
 }
+# Keys the grammar knows and refuses. `policy.domain` was to name the floor and ceiling of each field. The rules
+# source's own `field.<name>:` lines are the domain, and `policy.rules_sha256` already signs them, so a second
+# statement could only repeat them or contradict them, and the bound on a later release it was meant to be has no
+# reader. A signed file must not carry a syntax whose meaning is not fixed, so the key is refused until one is.
+RESERVED = {"domain": "the domain is the rules source's typed `field.` lines, which `policy.rules_sha256` signs; "
+                      "the key is reserved until a reader of a floor and ceiling of each field is specified"}
 # The side files: each is a path with its hash, both or neither. The value is the kind of file in the receipt.
 FILES = ("egress_hosts", "zones", "routes", "identity_bundle", "identity_map", "net_dests", "cc_index")
 FILE_SHA = {name: f"{name}_sha256" for name in FILES}
+# The keys of the release itself; every other key but a side file, its hash and a reserved key is a value key, which a
+# target kind carries at the value it registered (`TargetKind.manifest_values`) or the sealing tool refuses.
+RELEASE_KEYS = ("id", "stream", "seq", "targets", "rules", "rules_sha256", "image", "image_sha256", "not_before",
+                "expires", "valid_days", "widens", "replaces")
+VALUE_KEYS = tuple(name for name in KEYS if name not in RELEASE_KEYS and name not in FILES
+                   and name not in FILE_SHA.values() and name not in RESERVED)
 
 
 class ManifestError(ValueError):
@@ -281,46 +298,10 @@ def _scalar(kind: str, text: str) -> Any:
     raise AssertionError(kind)
 
 
-def _domain(text: str) -> Tuple[Tuple[str, str], ...]:
-    """`field=a|b|c; other=0..10` as ((field, "a|b|c"), (other, "0..10")): the ceiling of each field, written as
-    a list of the values it may take or an integer range, each field once. Seal copies the lists a rules source
-    types into this key, and the key bounds what a later release may widen to."""
-    entries = []
-    seen = set()
-    for part in text.split(";"):
-        part = part.strip()
-        if not part:
-            continue
-        if "=" not in part:
-            raise ValueError(f"`{part}` is not `field=value|value` or `field=LO..HI`")
-        name, _, spec = part.partition("=")
-        name, spec = name.strip(), spec.strip()
-        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name):
-            raise ValueError(f"`{name}` is not a field name")
-        if name in seen:
-            raise ValueError(f"the field {name} is written twice")
-        seen.add(name)
-        if re.fullmatch(r"-?[0-9]+\.\.-?[0-9]+", spec):
-            low, high = (int(side) for side in spec.split(".."))
-            if low > high:
-                raise ValueError(f"the range of {name} is empty ({spec})")
-        else:
-            if ".." in spec:
-                raise ValueError(f"`{spec}` is not a range LO..HI of whole numbers")
-            values = [value.strip() for value in spec.split("|")]
-            if not all(re.fullmatch(r"[A-Za-z0-9_.:-]+", value) for value in values) or len(set(values)) != len(values):
-                raise ValueError(f"the values of {name} are words of `[A-Za-z0-9_.:-]`, none twice (or a range LO..HI)")
-            spec = "|".join(values)
-        entries.append((name, spec))
-    if not entries:
-        raise ValueError("an empty domain; leave the key out to say nothing")
-    return tuple(entries)
-
-
-def _value(kind: str, text: str) -> Any:
+def _value(kind: str, text: str, name: str = "") -> Any:
     """The value a key's text reads as, or ValueError naming what is wrong with it."""
-    if kind == "domain":
-        return _domain(text)
+    if kind == "reserved":
+        raise ValueError(f"is reserved and not written: {RESERVED[name]}")
     if kind.startswith("list:"):
         item = kind[len("list:"):]
         parts = [part.strip() for part in text.split("|")] if text.strip() else []
@@ -362,8 +343,9 @@ def _free_text(kind: str, value: str) -> str:
         if not value.isprintable() or len(value) > MAX_DESCRIPTION:
             raise ValueError(f"a description is printable text of at most {MAX_DESCRIPTION} characters")
         return value
-    if not re.fullmatch(r"[A-Za-z0-9_.-]{1,%d}" % MAX_NAME, value):
-        raise ValueError(f"`{value}` is not a name of letters, digits, `_`, `.` and `-`, 1 to {MAX_NAME} long")
+    if not _STREAM.fullmatch(value):
+        raise ValueError(f"`{value}` is not a stream name (lowercase letters, digits and `. _ / -`, 1 to {MAX_NAME} "
+                         f"long); `name` is the manifest's `policy.stream`")
     return value
 
 
@@ -465,7 +447,7 @@ def parse(text: str, path: str = "<manifest>") -> Manifest:
     for name, (written, line) in keys.items():
         kind = KEYS[name][0]
         try:
-            values[name] = _value(kind, written)
+            values[name] = _value(kind, written, name)
             at[name] = line
         except ValueError as error:
             problems.append((line, f"{PREFIX}{name}: {error}"))
@@ -474,6 +456,13 @@ def parse(text: str, path: str = "<manifest>") -> Manifest:
     for name, (_kind, required) in KEYS.items():
         if required and name not in keys:
             problems.append((0, f"the required key `{PREFIX}{name}` is missing"))
+    if "name" not in flow:
+        problems.append((0, f"the flow key `name` is missing; it is the stream (`{PREFIX}stream`), so the version "
+                            f"floor the signature is held to is one per stream"))
+    elif "stream" in values and flow["name"][0] != values["stream"]:
+        problems.append((flow["name"][1], f"`name: {flow['name'][0]}` is not the stream `{values['stream']}`; a "
+                                          f"manifest's flow name is its `{PREFIX}stream`, so the version floor the "
+                                          f"signature is held to is one per stream"))
     if "expires" in keys and "valid_days" in keys:
         problems.append((at.get("valid_days", 0), f"`{PREFIX}expires` and `{PREFIX}valid_days` are both written; write one"))
     elif "expires" not in keys and "valid_days" not in keys:
@@ -513,11 +502,15 @@ class Signature:
     """What the caller found when it verified the manifest's signature (`prismpath authorize verify`): whether it
     holds, and the causes (`sig:missing`, `sig:invalid`, `flow:sha256-mismatch` and so on) when it does not. When it
     holds, `flow_sha256` is the one the signature covers and `check` requires the text it parsed to have it, so a
-    caller that read the file twice cannot check one text and sign another."""
+    caller that read the file twice cannot check one text and sign another. `created`, `version` and `key_id` are the
+    verified flow manifest's own: the signing time, the signed version, which must be `policy.seq`, and the id of the
+    authority key that signed."""
     ok: bool
     reasons: Tuple[str, ...] = ()
     flow_sha256: str = ""            # the `flow_sha256` of the verified flow manifest: what the signature covers
     created: Optional[int] = None    # the verified flow manifest's `created`, Unix seconds: the start of `valid_days`
+    version: Optional[int] = None    # the verified flow manifest's `version`, which is `policy.seq`
+    key_id: str = ""                 # the verified flow manifest's `key_id`, the authority key that signed
 
 
 @dataclass(frozen=True)
@@ -529,6 +522,27 @@ class Finding:
 
     def render(self, path: str) -> str:
         return f"{path}:{self.line}: {self.code}: {self.message}" if self.line else f"{path}: {self.code}: {self.message}"
+
+
+@dataclass(frozen=True)
+class Release:
+    """A manifest that `verify` found holds, with the bytes it checked and the facts the signature gives. The sealing
+    tool reads only this: `image` is the compiled image (the `policy.core` body, canonical bytes with no final line
+    feed), never the image file's bytes, `rules` the rules source, `files` each side file by key, and `values` the
+    values each category of the rules source lists. `manifest_sha256` is the signed `flow_sha256`. `not_before` is
+    `policy.not_before`, else the signing time, and `expires` the end `expiry` gives, so the same manifest always seals
+    to the same envelopes."""
+    manifest: Manifest
+    image: bytes
+    rules: bytes
+    files: Mapping[str, bytes]
+    values: Mapping[str, Tuple[str, ...]]
+    manifest_sha256: str
+    created: int
+    version: int
+    key_id: str
+    not_before: int
+    expires: int
 
 
 def _sha(data: bytes) -> str:
@@ -552,23 +566,53 @@ def expiry(manifest: Manifest, created: Optional[int]) -> Optional[int]:
 
 
 def check(manifest: Manifest, signature: Signature, read: Callable[[str], Optional[bytes]], *,
-          known_targets: Optional[Collection[str]] = None, now: Optional[int] = None) -> List[Finding]:
+          known_targets: Collection[str], now: Optional[int] = None) -> List[Finding]:
     """What is wrong with a release, in the order the proposal gives: the signature, then the rules and the
-    image, then each side input. An empty list means the manifest holds. `read(path)` returns the bytes of a
-    path the manifest names (relative to the manifest), or None when there is no such file; it is the caller's
-    to confine to the manifest's directory. A failed signature is the only finding returned, since nothing a
-    manifest says counts without it. `known_targets` is the set of target kinds the caller can seal for; a
-    target outside it is a finding. With `now` (Unix seconds, the caller's clock) a manifest before `not_before` or
-    past its end (`expiry`) is a finding, and so is one with `valid_days` whose start the signature does not give."""
+    image, each target's compile checks, then each side input. An empty list means the manifest holds. `read(path)`
+    returns the bytes of a path the manifest names (relative to the manifest), or None when there is no such file; it
+    is the caller's to confine to the manifest's directory. A failed signature is the only finding returned, since
+    nothing a manifest says counts without it. `known_targets` is the set of target kinds the caller can seal for, and
+    it is required, so no caller skips it; a target outside it is a finding. With `now` (Unix seconds, the caller's
+    clock) a manifest before `not_before` or past its end (`expiry`) is a finding, and so is one with `valid_days`
+    whose start the signature does not give."""
+    return _examine(manifest, signature, read, known_targets, now)[0]
+
+
+def verify(manifest: Manifest, signature: Signature, read: Callable[[str], Optional[bytes]], *,
+           known_targets: Collection[str], now: int) -> Tuple[List[Finding], Optional[Release]]:
+    """`check`, and when it finds nothing the `Release` that holds the bytes it checked and the signed facts, else
+    None. `now` is required: a release is never made from a manifest whose time was not checked. A signature that
+    gives no signing time, version or key id makes no release."""
+    found, rules, compiled, files = _examine(manifest, signature, read, known_targets, now)
+    if found:
+        return found, None
+    if signature.created is None or signature.version is None or not signature.key_id:
+        return [Finding("signature", 0, "the signature gives no signing time, version or key id, so no release is "
+                                        "made from it")], None
+    end = expiry(manifest, signature.created)
+    assert rules is not None and compiled is not None and end is not None
+    return [], Release(manifest, compiled.image, rules, files, dict(compiled.values), signature.flow_sha256,
+                       signature.created, signature.version, signature.key_id,
+                       manifest.not_before if manifest.not_before is not None else signature.created, end)
+
+
+def _examine(manifest: Manifest, signature: Signature, read: Callable[[str], Optional[bytes]],
+             known_targets: Collection[str], now: Optional[int]):
+    """(findings, the rules bytes, the `Compiled` rules, {side key: bytes}) of `check`."""
     if not signature.ok:
-        return [check_signature_only(signature)]
+        return [check_signature_only(signature)], None, None, {}
     if signature.flow_sha256 and signature.flow_sha256 != manifest.sha256:
         return [Finding("signature", 0, f"the text read is sha256 {manifest.sha256}, and the signature covers "
-                                        f"{signature.flow_sha256}, so the file was not the one signed")]
+                                        f"{signature.flow_sha256}, so the file was not the one signed")], None, None, {}
     if not signature.flow_sha256:
-        return [Finding("signature", 0, "the signature names no flow_sha256, so it is not bound to the text read")]
+        return [Finding("signature", 0, "the signature names no flow_sha256, so it is not bound to the text read")], \
+            None, None, {}
     found: List[Finding] = []
     lines = manifest.lines
+    if signature.version is not None and signature.version != manifest.seq:
+        found.append(Finding("version", lines["seq"], f"the manifest is signed at version {signature.version} and its "
+                                                      f"seq is {manifest.seq}; sign it with `--version {manifest.seq}`, "
+                                                      f"so the version floor and the stream's seq are one counter"))
     if now is not None:
         if manifest.not_before is not None and now < manifest.not_before:
             found.append(Finding("not-yet-valid", lines["not_before"], f"the manifest is valid from {manifest.not_before} "
@@ -580,10 +624,10 @@ def check(manifest: Manifest, signature: Signature, read: Callable[[str], Option
         elif now >= end:
             found.append(Finding("expired", lines.get("expires", lines.get("valid_days", 0)),
                                  f"the manifest ended at {end} and it is {now}"))
-    if known_targets is not None:
-        for target in manifest.targets:
-            if target not in known_targets:
-                found.append(Finding("target", lines["targets"], f"`{target}` is not a target kind this tool seals for"))
+    for target in manifest.targets:
+        if target not in known_targets:
+            found.append(Finding("target", lines["targets"], f"`{target}` is not a target kind this tool seals for"))
+
     def read_file(path: str) -> Optional[bytes]:
         try:
             return read(path)
@@ -596,6 +640,7 @@ def check(manifest: Manifest, signature: Signature, read: Callable[[str], Option
     path_keys = {manifest.rules: "rules", manifest.image: "image", **{ref.path: ref.key for ref in manifest.files.values()}}
     rules = read_file(manifest.rules)
     held = read_file(manifest.image)
+    compiled = None
     if rules is None and manifest.rules not in failed:
         found.append(Finding("missing", lines["rules"], f"{manifest.rules} is not there"))
     if held is None and manifest.image not in failed:
@@ -623,10 +668,13 @@ def check(manifest: Manifest, signature: Signature, read: Callable[[str], Option
                 found.append(Finding("image-stale", lines["image"],
                                      f"{manifest.rules} compiles to image sha256 {image_sha}, but {manifest.image} is "
                                      f"sha256 {held_sha}; compile it again with `prismpath policy compile`"))
+            for target in manifest.targets:
+                found += _target_checks(manifest, target, compiled)
     elif held is not None and _sha(policy_source.read_image_bytes(held)) != manifest.image_sha256:
         found.append(Finding("image-sha256", lines["image_sha256"],
                              f"{manifest.image} is sha256 {_sha(policy_source.read_image_bytes(held))}, and the manifest "
                              f"says {manifest.image_sha256}"))
+    files: Dict[str, bytes] = {}
     for ref in manifest.files.values():
         data = read_file(ref.path)
         if data is None:
@@ -635,5 +683,19 @@ def check(manifest: Manifest, signature: Signature, read: Callable[[str], Option
         elif _sha(data) != ref.sha256:
             found.append(Finding(f"{ref.key}-sha256", manifest.lines[FILE_SHA[ref.key]],
                                  f"{ref.path} is sha256 {_sha(data)}, and the manifest says {ref.sha256}"))
-    return found
+        else:
+            files[ref.key] = data
+    return found, rules, compiled, files
 
+
+def _target_checks(manifest: Manifest, target: str, compiled) -> List[Finding]:
+    """`prismpath policy compile --target <target>` on the rules (the proposal's step 4): the checks the target kind
+    registered (`policy_source.COMPILE_CHECKS`), each finding named with its line in the rules source. A kind that
+    registered none has none to run, and its PEP still holds the image to its own check (V11) when it is sealed."""
+    checks = policy_source.COMPILE_CHECKS.get(target)
+    if checks is None:
+        return []
+    return [Finding("target-check", manifest.lines["targets"],
+                    f"{target}: {manifest.rules}:{policy_source.line_of(where, compiled.field_lines, compiled.rule_lines)}: "
+                    f"{message}")
+            for where, message in checks(compiled.image, compiled.values)]

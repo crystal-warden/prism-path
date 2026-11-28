@@ -5,6 +5,13 @@ one it replaces, and returns the sealed envelope with what the command prints ab
 namespace, prints nothing and asks no one. The terminal's yes for a change statement is a `confirm` callback, so
 `dist seal` and any later caller (a manifest) use the one function. The same inputs, keys and `not_before` give the
 same bytes. The commands in `cli.py` keep only the argument reading, the files and the printing.
+
+`seal_manifest` seals a whole release from a signed policy manifest that `policy_manifest.verify` found holds: one
+release per target, each made by the target kind's registered `derive`, with the stream, seq, times, `replaces` and
+`widens` the manifest and the tool's own comparison give (SPEC.md section 10). It seals each artifact with
+`build_sealed` rather than `seal_release`, because `seal_release` compares one artifact with the one it replaces and
+a release from a manifest is several artifacts with one `widens` and one `replaces` (E7), so the tool compares the
+whole release, as the PEP that decides does (W1).
 """
 
 from __future__ import annotations
@@ -12,7 +19,7 @@ from __future__ import annotations
 import os
 import time
 from dataclasses import dataclass
-from typing import Callable, List, Optional
+from typing import Callable, Dict, List, Optional, Tuple
 
 from prismpath import canon
 from prismpath.distribution import envelope as env
@@ -249,3 +256,163 @@ def seal_release(artifact: str, body: bytes, *, stream: str, seq: int, targets: 
     statement = change_sealed(sealed, signers) if change else None
     return SealedRelease(sealed, previous_hash, widens, mark, comparison, statement)
 
+
+
+# ------------------------------------------------------------------ sealing from a signed policy manifest
+
+@dataclass(frozen=True)
+class SealedArtifact:
+    """One envelope `seal_manifest` sealed: the target kind its release is for, the artifact, the sealed envelope and
+    the body beside it."""
+    target: str
+    artifact: str
+    sealed: bytes
+    body: bytes
+
+
+@dataclass(frozen=True)
+class ManifestSealed:
+    """What `seal_manifest` returns: every envelope in the order target, then artifact, the one `replaces` and `widens`
+    of every release it sealed (E7), whether the tool found the release larger than the one it replaces (W1), and the
+    release id of each target's release."""
+    envelopes: Tuple[SealedArtifact, ...]
+    replaces: str
+    widens: bool
+    larger: bool
+    releases: Dict[str, str]
+
+
+def _same_value(written, carried) -> bool:
+    """A manifest value equals the one a kind carries. A list compares as a set: the order of toolchain directories or
+    of remotes changes nothing a PEP reads."""
+    if isinstance(written, tuple) and isinstance(carried, tuple):
+        return sorted(written) == sorted(carried)
+    return written == carried
+
+
+def _registered(manifest) -> Dict[str, object]:
+    """The registration of each target of `manifest` that can be sealed from a manifest, or `Refused`."""
+    found = {}
+    for target in manifest.targets:
+        kind = kinds.KINDS.get(target)
+        if kind is None or getattr(kind, "derive", None) is None:
+            raise Refused(kinds.BAD_FORMAT, f"a {target} release is not sealed from a manifest: no kind of that name "
+                                            f"registered a derive in this process (the grammar names none of its "
+                                            f"artifacts)")
+        found[target] = kind
+    return found
+
+
+def _carried(manifest, registered: Dict[str, object]) -> None:
+    """Every side file and value key the manifest writes reaches a release, or `Refused`: a signed key no PEP holds would
+    read as enforced and be dropped. A side file is read by a target that lists it in `manifest_inputs`. A value key is
+    carried by a target that lists it in `manifest_values`, at that value only, by every target that lists it."""
+    from prismpath.kernel import policy_manifest
+    inputs = {key for kind in registered.values() for key in kind.manifest_inputs}
+    for key in sorted(manifest.files):
+        if key not in inputs:
+            raise Refused(kinds.BAD_FORMAT, f"policy.{key} is read by no target of this release "
+                                            f"({', '.join(manifest.targets)}), so no PEP would hold it")
+    for key in policy_manifest.VALUE_KEYS:
+        if key not in manifest.values:
+            continue
+        carriers = [(name, kind.manifest_values[key]) for name, kind in registered.items() if key in kind.manifest_values]
+        if not carriers:
+            raise Refused(kinds.BAD_FORMAT, f"policy.{key} is carried by no target of this release "
+                                            f"({', '.join(manifest.targets)}) yet, so no PEP would hold it")
+        for name, value in carriers:
+            if not _same_value(manifest.values[key], value):
+                raise Refused(kinds.BAD_FORMAT, f"policy.{key} is not the value a {name} release carries; no artifact "
+                                                f"of a release holds another value yet, so it is not sealed")
+
+
+def _previous(controller, target: str, stream: str, seq: int, policy: Optional[str]):
+    """(policy hash, {artifact: body}) of the release a `target` release at `seq` replaces in the controller state: the
+    latest one stored on `stream` below `seq` for that target, or the latest whose policy hash is `policy` when one is
+    named, with every artifact of its release that names the target. ("", None) when none is held, and (`policy`, None)
+    when none is held for the policy named."""
+    held = [info for info in controller.stored.values()
+            if info["stream"] == stream and info["seq"] < seq and target in info["targets"]
+            and info["artifact"] not in kinds.TRUST_ARTIFACTS and info["artifact"] not in kinds.INSTALL_ARTIFACTS
+            and (policy is None or info["policy"] == policy)]
+    if not held:
+        return (policy or ""), None
+    latest = max(held, key=lambda info: info["seq"])
+    bodies = {info["artifact"]: controller.blob(info["body_sha256"]) for info in controller.stored.values()
+              if info["release"] == latest["release"] and info["seq"] == latest["seq"] and target in info["targets"]
+              and info["artifact"] not in kinds.TRUST_ARTIFACTS}
+    return latest["policy"], bodies
+
+
+def _view(target: str):
+    """What an artifact's own check (V11) reads of a PEP of `target` that holds no install part, for the check the
+    sealing tool runs before it signs."""
+    from types import SimpleNamespace
+    return SimpleNamespace(kind=target, install=None, qualification=None)
+
+
+def seal_manifest(release, signers: List[Signer], *, held: Optional[str] = None) -> ManifestSealed:
+    """The envelopes of a verified policy manifest (`policy_manifest.verify`, a `Release`), one release per target and
+    one envelope per artifact of it, made by the target kind's `derive` from the bytes the check verified and nothing
+    read again (SPEC.md section 10). Each release carries the manifest's stream, seq, not_before and end, and every
+    envelope's meta names the manifest (`manifest_sha256`, its signed `flow_sha256`) and the rules (`source_sha256` on
+    the `policy.core`, `rules_sha256` on a side artifact).
+
+    The tool decides `widens` itself (W7): it compares each target's release, whole, with the one it replaces in the
+    controller state `held` (W1, `widening.compare_release`, as a PEP that decides compares it). `widens: no` is
+    refused with `dist:widening-unsigned` when it finds the release larger or holds no release to compare with, and
+    `widens: yes` seals a widening, which needs its own widening statement (`dist widen`): the tool never signs one.
+    `replaces` is the manifest's, else the policy hash of the release `held` holds below this seq, else none, and it
+    must be one hash for every target. A release is sealed per target because a PEP computes the release id over the
+    artifacts staged for it (E10, C2). `Refused` with the first cause, and nothing is returned."""
+    from prismpath.distribution import widening
+    manifest = release.manifest
+    registered = _registered(manifest)
+    _carried(manifest, registered)
+    bodies = {}
+    for target, kind in registered.items():
+        derived = dict(kind.derive(release))
+        if "policy.core" not in derived or canon.sha256_hex(derived["policy.core"]) != manifest.image_sha256:
+            raise Refused(kinds.BAD_FORMAT, f"the {target} release's policy is not the manifest's image; a manifest "
+                                            f"states one policy hash, its image's, for every target")
+        unused = set(derived) - kinds.TARGETS[target].uses
+        if unused:
+            raise Refused(kinds.BAD_FORMAT, f"a {target} release does not carry {', '.join(sorted(unused))}")
+        bodies[target] = derived
+    policy = manifest.image_sha256
+    controller = held_controller(held) if held is not None else None
+    previous = {target: _previous(controller, target, manifest.stream, manifest.seq, manifest.replaces or None)
+                if controller is not None else (manifest.replaces, None) for target in registered}
+    replaces = {hash_ for hash_, _bodies in previous.values()}
+    if len(replaces) != 1:
+        raise Refused(kinds.BAD_FORMAT, "the targets' releases replace different policies, and a manifest states one "
+                                        "replaces; name it with policy.replaces or seal each target from its own manifest")
+    replaces_hash = replaces.pop()
+    larger = any(widening.compare_release(old, bodies[target]) != widening.NOT_LARGER
+                 for target, (_hash, old) in previous.items())
+    if not manifest.widens and larger:
+        compared = "found the release larger" if controller is not None and all(
+            old is not None for _hash, old in previous.values()) else "holds no release it replaces to compare with"
+        raise Refused(widening.UNSIGNED, f"the manifest says widens: no and the sealing tool {compared} (W7); write "
+                                         f"widens: yes and sign its widening statement with dist widen")
+    widens = bool(manifest.widens)
+    sealed = []
+    ids = {}
+    for target in sorted(bodies):
+        derived = bodies[target]
+        release_id = env.release_id([(artifact, canon.sha256_hex(body)) for artifact, body in derived.items()])
+        ids[target] = release_id
+        for artifact in sorted(derived):
+            body = derived[artifact]
+            meta = ({"manifest_sha256": release.manifest_sha256, "source_sha256": manifest.rules_sha256}
+                    if artifact == "policy.core" else
+                    {"manifest_sha256": release.manifest_sha256, "rules_sha256": manifest.rules_sha256})
+            one = build_sealed(artifact, body, stream=manifest.stream, seq=manifest.seq, targets=[target],
+                               signers=signers, not_before=release.not_before, expires=release.expires, meta=meta,
+                               release=release_id, policy=policy, replaces=replaces_hash, widens=widens)
+            envelope = env.read(env.unseal(one)[0])
+            cause = kinds.TARGETS[target].check_for(artifact)(envelope, body, _view(target))
+            if cause is not None:
+                raise Refused(cause, f"the {target} release's {artifact} does not pass its own check (V11)")
+            sealed.append(SealedArtifact(target, artifact, one, body))
+    return ManifestSealed(tuple(sealed), replaces_hash, widens, larger, ids)

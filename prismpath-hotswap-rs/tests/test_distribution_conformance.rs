@@ -282,6 +282,16 @@ rust_cases! {
     case_079_trust_kind_with_expires => "079_trust_kind_with_expires",
     /// case_079: X4, E5, the verdict; applying the list is in test_distribution_pep.rs.
     case_079_revocation_read_years_later => "079_revocation_read_years_later",
+    /// case_309: E11, V4, V5, an envelope sealed from a policy manifest reads and its kind is not the host's.
+    case_309_policy_core_sealed_from_a_manifest => "309_policy_core_sealed_from_a_manifest",
+    /// case_309: E11, V4, V5.
+    case_309_egress_hosts_sealed_from_a_manifest => "309_egress_hosts_sealed_from_a_manifest",
+    /// case_310: E11, V4, a member the artifact does not carry.
+    case_310_policy_core_naming_rules_sha256 => "310_policy_core_naming_rules_sha256",
+    /// case_310: E11, V4, a member the artifact does not carry.
+    case_310_egress_hosts_naming_source_sha256 => "310_egress_hosts_naming_source_sha256",
+    /// case_310: E11, V4, a member of the wrong form.
+    case_310_manifest_sha256_not_a_hash => "310_manifest_sha256_not_a_hash",
 }
 
 #[test]

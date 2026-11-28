@@ -1,5 +1,5 @@
 ---
-name: agent_default_policy
+name: agent-default
 description: the manifest of the default starter, which keeps today's defaults
 policy.id: agent-default-1
 policy.stream: agent-default

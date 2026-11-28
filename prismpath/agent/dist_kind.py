@@ -500,8 +500,39 @@ def compile_checks(image: bytes, values) -> list:
     return target.check_listed(values) + target.check(image)
 
 
+# ------------------------------------------------------------------ sealed from a policy manifest
+
+# The side files of a manifest an agent release is made from, and the artifact each one's bytes are (SPEC.md section 10).
+MANIFEST_INPUTS = {"egress_hosts": "egress.hosts", "zones": "agent.zones"}
+# The value keys an agent release carries, each at the one value it carries it at: today's built in defaults
+# (`profile.MAX_PROCESSES`, `profile.TIMEOUT_S`, `session_state.SHELL_MANY`, `classifier.Config.for_workspace`, no
+# remote and no read only mount). No artifact of a release carries another value yet, so a manifest that writes one is
+# refused by the sealing tool rather than sealed into a release that drops it. A test pins each against its source.
+TOOLCHAIN_DIRS = ("workspace:.toolchain", "/usr", "/opt", "/etc", "~/.cargo", "~/.rustup", "~/.elan", "~/.local",
+                  "~/.npm", "~/.pyenv")
+MANIFEST_VALUES = {"allowed_remotes": (), "max_processes": 64, "timeout_s": 30, "shell_many": 20,
+                   "toolchain_dirs": TOOLCHAIN_DIRS, "ro_mounts": ()}
+NO_HOSTS = canon.canon2_bytes([])                  # `egress.hosts` when the manifest names none: no host is reached
+
+
+def derive(release) -> Dict[str, bytes]:
+    """The bodies of an agent release from a verified manifest (`policy_manifest.Release`): its `policy.core`, the
+    compiled image; its `egress.hosts`, the `policy.egress_hosts` file, or the empty list when the manifest names none,
+    so an absent key reaches no host; and its `agent.zones`, the `policy.zones` file, only when the manifest names one,
+    so an absent key declares no zone and the release id signs that absence (section 3). Each side file is the
+    artifact's body byte for byte and is read as its artifact reads it, `Refused` with its cause when it does not."""
+    bodies = {"policy.core": bytes(release.image),
+              "egress.hosts": bytes(release.files.get("egress_hosts", NO_HOSTS))}
+    read_hosts(bodies["egress.hosts"])
+    if "zones" in release.files:
+        bodies["agent.zones"] = bytes(release.files["zones"])
+        kinds.read_zones(bodies["agent.zones"])
+    return bodies
+
+
 KIND = TargetKind(name="agent", row=ROW, readers={"egress.hosts": read_hosts},
                   comparators={"egress.hosts": compare_hosts, "agent.zones": compare_zones},
                   domain=reading_domain, policy=policy, domain_document=domain_document,
-                  compile_checks=compile_checks)
+                  compile_checks=compile_checks, derive=derive, manifest_inputs=MANIFEST_INPUTS,
+                  manifest_values=MANIFEST_VALUES)
 kinds.register(KIND)
