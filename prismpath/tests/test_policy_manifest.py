@@ -83,7 +83,7 @@ def test_every_key_of_the_proposal_is_accepted_with_its_form():
         net_dests_sha256=ONES, max_processes="64", timeout_s="30", shell_many="20", toolchain_dirs="/usr | ~/.cargo | workspace:.toolchain",
         ro_mounts="/data/models", local_model="http://127.0.0.1:8000", grant_classes="read | write", cc_protected="auth | billing",
         cc_index="idx.json", cc_index_sha256=ONES, cc_freshness_s="3600", cc_required_certainty="likely",
-        cc_engine_agreement="2")
+        cc_engine_agreement="2", points="tests | parse")
     manifest = pm.parse(every)
     assert manifest.targets == ("agent", "gateway") and manifest.not_before == 1796083200 and manifest.expires == 1800000000
     assert manifest.widens is False and set(manifest.files) == set(pm.FILES)
@@ -97,7 +97,8 @@ def test_the_accepted_keys_are_exactly_the_proposals():
                 "zones_sha256", "routes", "routes_sha256", "identity_bundle", "identity_bundle_sha256", "identity_map",
                 "identity_map_sha256", "net_dests", "net_dests_sha256", "max_processes", "timeout_s", "shell_many",
                 "toolchain_dirs", "ro_mounts", "local_model", "grant_classes", "cc_protected", "cc_index",
-                "cc_index_sha256", "cc_freshness_s", "cc_required_certainty", "cc_engine_agreement", "domain"}
+                "cc_index_sha256", "cc_freshness_s", "cc_required_certainty", "cc_engine_agreement", "domain",
+                "points"}
     assert set(pm.KEYS) == proposal
 
 

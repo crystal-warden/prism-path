@@ -119,6 +119,8 @@ KEYS: Dict[str, Tuple[str, bool]] = {
     "ro_mounts": ("list:hostpath", False),
     "local_model": ("token", False),
     "grant_classes": ("list:grantclass", False),
+    # information points: the points the rules are built with, so a field only a point supplies may be read
+    "points": ("list:token", False),
     # Context Cloud
     "cc_protected": ("list:zonename", False),
     "cc_index": ("path", False), "cc_index_sha256": ("sha256", False),
@@ -566,7 +568,8 @@ def expiry(manifest: Manifest, created: Optional[int]) -> Optional[int]:
 
 
 def check(manifest: Manifest, signature: Signature, read: Callable[[str], Optional[bytes]], *,
-          known_targets: Collection[str], now: Optional[int] = None) -> List[Finding]:
+          known_targets: Collection[str], now: Optional[int] = None,
+          point_findings: Optional[Callable[[bytes, Tuple[str, ...]], List[Tuple[Any, str]]]] = None) -> List[Finding]:
     """What is wrong with a release, in the order the proposal gives: the signature, then the rules and the
     image, each target's compile checks, then each side input. An empty list means the manifest holds. `read(path)`
     returns the bytes of a path the manifest names (relative to the manifest), or None when there is no such file; it
@@ -574,16 +577,20 @@ def check(manifest: Manifest, signature: Signature, read: Callable[[str], Option
     nothing a manifest says counts without it. `known_targets` is the set of target kinds the caller can seal for, and
     it is required, so no caller skips it; a target outside it is a finding. With `now` (Unix seconds, the caller's
     clock) a manifest before `not_before` or past its end (`expiry`) is a finding, and so is one with `valid_days`
-    whose start the signature does not give."""
-    return _examine(manifest, signature, read, known_targets, now)[0]
+    whose start the signature does not give. `point_findings(image, points)` answers what is wrong with an image's
+    evidence fields given the points `policy.points` names, as (field, message); the surface that has the information
+    points passes it, and each answer is a `points` finding on the line of the rules the field is declared in."""
+    return _examine(manifest, signature, read, known_targets, now, point_findings)[0]
 
 
 def verify(manifest: Manifest, signature: Signature, read: Callable[[str], Optional[bytes]], *,
-           known_targets: Collection[str], now: int) -> Tuple[List[Finding], Optional[Release]]:
+           known_targets: Collection[str], now: int,
+           point_findings: Optional[Callable[[bytes, Tuple[str, ...]], List[Tuple[Any, str]]]] = None
+           ) -> Tuple[List[Finding], Optional[Release]]:
     """`check`, and when it finds nothing the `Release` that holds the bytes it checked and the signed facts, else
     None. `now` is required: a release is never made from a manifest whose time was not checked. A signature that
     gives no signing time, version or key id makes no release."""
-    found, rules, compiled, files = _examine(manifest, signature, read, known_targets, now)
+    found, rules, compiled, files = _examine(manifest, signature, read, known_targets, now, point_findings)
     if found:
         return found, None
     if signature.created is None or signature.version is None or not signature.key_id:
@@ -597,7 +604,7 @@ def verify(manifest: Manifest, signature: Signature, read: Callable[[str], Optio
 
 
 def _examine(manifest: Manifest, signature: Signature, read: Callable[[str], Optional[bytes]],
-             known_targets: Collection[str], now: Optional[int]):
+             known_targets: Collection[str], now: Optional[int], point_findings=None):
     """(findings, the rules bytes, the `Compiled` rules, {side key: bytes}) of `check`."""
     if not signature.ok:
         return [check_signature_only(signature)], None, None, {}
@@ -659,6 +666,11 @@ def _examine(manifest: Manifest, signature: Signature, read: Callable[[str], Opt
                                      f"{manifest.rules}:{line}: {message}" if line else f"{manifest.rules}: {message}"))
         else:
             image_sha = _sha(compiled.image)
+            if point_findings is not None:
+                for where, message in point_findings(compiled.image, tuple(manifest.get("points", ()))):
+                    at = compiled.field_lines.get(where, 0) if isinstance(where, str) else 0
+                    found.append(Finding("points", lines.get("points", lines["rules"]),
+                                         f"{manifest.rules}:{at}: {message}" if at else f"{manifest.rules}: {message}"))
             if image_sha != manifest.image_sha256:
                 found.append(Finding("image-sha256", lines["image_sha256"],
                                      f"{manifest.rules} compiles to image sha256 {image_sha}, and the manifest says "
@@ -690,12 +702,15 @@ def _examine(manifest: Manifest, signature: Signature, read: Callable[[str], Opt
 
 def _target_checks(manifest: Manifest, target: str, compiled) -> List[Finding]:
     """`prismpath policy compile --target <target>` on the rules (the proposal's step 4): the checks the target kind
-    registered (`policy_source.COMPILE_CHECKS`), each finding named with its line in the rules source. A kind that
+    registered (`policy_source.COMPILE_CHECKS`), each finding named with its line in the rules source. The points
+    `policy.points` names are passed as `--point` passes them, and only when there are some. A kind that
     registered none has none to run, and its PEP still holds the image to its own check (V11) when it is sealed."""
     checks = policy_source.COMPILE_CHECKS.get(target)
     if checks is None:
         return []
+    points = tuple(manifest.get("points", ()))     # as `policy compile --target T --point P` passes them
     return [Finding("target-check", manifest.lines["targets"],
                     f"{target}: {manifest.rules}:{policy_source.line_of(where, compiled.field_lines, compiled.rule_lines)}: "
                     f"{message}")
-            for where, message in checks(compiled.image, compiled.values)]
+            for where, message in (checks(compiled.image, compiled.values, points=points) if points
+                                   else checks(compiled.image, compiled.values))]

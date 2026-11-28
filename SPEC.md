@@ -633,7 +633,20 @@ Normatively, as follows.
 - **Context Cloud.** `policy.cc_protected` (list of names as `agent.zones` holds them: 1 to 512 characters of `[A-Za-z0-9_.:@-]`, no `/`, at most 10,000), `policy.cc_index` with `policy.cc_index_sha256`,
   `policy.cc_freshness_s` (1 and up, the oldest index a reading may use), `policy.cc_required_certainty` (`certain`
   or `likely`) and `policy.cc_engine_agreement` (1 to 64, the engines that must agree). The grammar reads them. What
-  a target does with them is its own.
+  a target does with them is its own. The protected set in force is the union of `policy.cc_protected` and the
+  `protected` list of the `policy.zones` file: neither wins and neither removes a name from the other. `policy.cc_index`
+  pins the sha256 of an index statement (the index's path under the project, the program and package that read it, and
+  the schema), not of the SQLite file, which is rebuilt as the code changes and is checked by the per file hashes it
+  holds and by `policy.cc_freshness_s`.
+- **Information points.** `policy.points` (list of word) names the information points the rules are built with. A rules
+  source that declares a field only a point supplies (`tests_pass`, `edit_kind`, `behaviour_preserving`,
+  `touches_protected`, `adds_protected_reference`) is a `points` finding unless the point that supplies it is named,
+  and `prismpath policy compile --target agent` refuses it, on the line of the field, unless it is given `--point`. A policy
+  that allows a reading with `tests_pass` at `not_run` that it refuses at `false` is refused too. `tests_pass` true is never enough
+  alone, and the five facts were proven together with `reaches_protected` and `unknown_reason`, so a policy that reads them should also
+  require `zone_reach == "none"`. The sealing tool refuses `policy.points` with "no PEP holds this yet": no artifact of a
+  release carries the points and no PEP builds its policy with them, so a release sealed from it would be read without
+  the points it names.
 - **Domain.** `policy.domain` is reserved, and written it is an error. The domain of a release is the rules
   source's own typed `field.<name>:` lines, which `policy.rules_sha256` already signs, so a second statement of it
   could only repeat them or contradict them. The floor and ceiling per field it was meant to carry bound what a later

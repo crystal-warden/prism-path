@@ -494,10 +494,11 @@ def domain_document() -> dict:
     return {"kind": "agent", "categories": {name: list(values) for name, values in profile.KNOWN_CATEGORIES.items()}}
 
 
-def compile_checks(image: bytes, values) -> list:
-    """`prismpath policy compile --target agent`: the listed values of the source, then the image's own checks."""
+def compile_checks(image: bytes, values, points=()) -> list:
+    """`prismpath policy compile --target agent`: the listed values of the source, then the image's own checks, with
+    the information points named by `--point`."""
     from prismpath.agent import target
-    return target.check_listed(values) + target.check(image)
+    return target.check_listed(values) + target.check(image, points)
 
 
 # ------------------------------------------------------------------ sealed from a policy manifest

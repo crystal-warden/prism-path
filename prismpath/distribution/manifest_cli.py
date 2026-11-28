@@ -49,6 +49,12 @@ def add_parser(actions) -> None:
 MAX_FILE = 16 * 1024 * 1024        # the most a side file may hold; a larger one is a finding, not a read
 
 
+def _point_findings(image, points):
+    """What is wrong with the evidence fields of an image, given the information points the manifest names."""
+    from prismpath.agent import target
+    return target.evidence_findings(image, points)
+
+
 def _reader(directory: str):
     """The bytes of a file the manifest names, or None when there is none. A path that resolves outside the
     manifest's directory (a link) reads as absent, so the check never hashes a file the signer did not place. The
@@ -156,7 +162,7 @@ def examine(path: str, pubs: List[str], *, revoked: Optional[str] = None, state_
             return Examined(None, [policy_manifest.check_signature_only(signature)], None, None)
         raise Unreadable(error.lines()) from None
     found, release = policy_manifest.verify(manifest, signature, _reader(os.path.dirname(os.path.abspath(path))),
-                                            known_targets=sealable_targets(), now=now)
+                                            known_targets=sealable_targets(), now=now, point_findings=_point_findings)
     return Examined(manifest, found, release, signed)
 
 

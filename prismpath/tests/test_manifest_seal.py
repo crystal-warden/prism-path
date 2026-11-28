@@ -199,7 +199,7 @@ def test_a_side_file_no_target_reads_is_refused(owner):
     ("max_processes", "64"), ("timeout_s", "30"), ("shell_many", "20"), ("allowed_remotes", ""), ("ro_mounts", ""),
     ("toolchain_dirs", "workspace:.toolchain | /usr"), ("max_processes", "8"), ("local_model", "m"),
     ("cc_freshness_s", "60"), ("grant_classes", "read"), ("cc_protected", "a"), ("cc_required_certainty", "certain"),
-    ("cc_engine_agreement", "2"),
+    ("cc_engine_agreement", "2"), ("points", "tests"),
 ])
 def test_every_value_key_is_refused_until_a_pep_holds_it(owner, key, value):
     """The review's F1: the launcher runs 512 processes and calls of 120 to 600 seconds whatever a manifest says, and no
