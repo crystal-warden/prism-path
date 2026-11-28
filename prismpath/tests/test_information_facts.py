@@ -467,7 +467,7 @@ def _manifest(points, rules_text):
     if points is not None:
         keys["points"] = points
     front = "\n".join(f"policy.{k}: {v}" for k, v in keys.items())
-    manifest = pm.parse(f"---\n{front}\n---\n## manifest\nNotes.\n{pm.FIXED_RULE}\n", "m.policy.md")
+    manifest = pm.parse(f"---\nname: s\n{front}\n---\n## manifest\nNotes.\n{pm.FIXED_RULE}\n", "m.policy.md")
     files = {"a.rules.md": rules_text.encode(), "a.core.json": compiled.image + b"\n"}
     return manifest, pm.Signature(True, (), manifest.sha256, None), files.get
 
@@ -476,20 +476,23 @@ def test_a_manifest_that_names_the_point_holds_and_one_that_does_not_is_refused_
     from prismpath.kernel import policy_manifest as pm
     rules = _source(TESTS_FIELD, TESTS_RULES)
     manifest, signature, read = _manifest("tests", rules)
-    assert pm.check(manifest, signature, read, point_findings=target.evidence_findings) == []
+    assert pm.check(manifest, signature, read, known_targets={"agent"}, point_findings=target.evidence_findings) == []
     manifest, signature, read = _manifest(None, rules)
-    found = pm.check(manifest, signature, read, point_findings=target.evidence_findings)
-    assert [(f.code, f.message.startswith("a.rules.md:8: tests_pass is a field of the information point tests"))
-            for f in found] == [("points", True)]
+    found = pm.check(manifest, signature, read, known_targets={"agent"}, point_findings=target.evidence_findings)
+    # the agent's own compile checks (`policy compile --target agent`, run by the check since A4b) refuse it too
+    assert ("points", True) in [(f.code, f.message.startswith("a.rules.md:8: tests_pass is a field of the information "
+                                                              "point tests")) for f in found]
+    assert {f.code for f in found} == {"points", "target-check"}
     manifest, signature, read = _manifest("tests | nope", rules)
-    assert [f.code for f in pm.check(manifest, signature, read, point_findings=target.evidence_findings)] == ["points"]
+    assert "points" in [f.code for f in pm.check(manifest, signature, read, known_targets={"agent"},
+                                                 point_findings=target.evidence_findings)]
 
 
 def test_a_manifest_without_evidence_fields_is_unchanged_by_the_check():
     from prismpath.kernel import policy_manifest as pm
     rules = _source("", '-> allow: when tool == "read_file"\n')
     manifest, signature, read = _manifest(None, rules)
-    assert pm.check(manifest, signature, read, point_findings=target.evidence_findings) == pm.check(manifest, signature, read) == []
+    assert pm.check(manifest, signature, read, known_targets={"agent"}, point_findings=target.evidence_findings) == pm.check(manifest, signature, read, known_targets={"agent"}) == []
 
 
 # ------------------------------------------------------------------------------------ the review's probes

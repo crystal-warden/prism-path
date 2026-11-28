@@ -114,15 +114,15 @@ home holds one release, so they cannot hold different versions of one policy.
 
 | Artifact | Body | `meta` members | Check beyond the hash (V11) |
 |---|---|---|---|
-| `policy.core` | A `prismpath.core/1` image in canon/2 bytes with no trailing line feed | none | The image loads (`prismpath.agent.policy.Policy`), every value a rule names is inside its field's reading domain (9.4, `policy:out-of-domain`), and its SHA-256 is `policy_sha256` |
+| `policy.core` | A `prismpath.core/1` image in canon/2 bytes with no trailing line feed | when present `manifest_sha256` and `source_sha256` (E11) | The image loads (`prismpath.agent.policy.Policy`), every value a rule names is inside its field's reading domain (9.4, `policy:out-of-domain`), and its SHA-256 is `policy_sha256` |
 | `policy.ppt` | A `.ppt` image | `fields`, `counts`, `wcet_cycles`, `qualification`, and when present `packing`, `flow_sha256`, `overlay_of`. They mean what the same members of a `ppt-pack/1` manifest mean, and `qualification` is its `envelope_id` | `validate_image`, the counts, the recomputed WCET and the qualification envelope gate, with their existing causes. A `mesh` target runs its own table parser and ignores `meta` |
 | `policy.spiral` | The spiral sidecar bytes (`<name>.ppt.spiral`) | none | Its SHA-256 is the `sidecar_sha256` in the staged `policy.ppt` envelope's `meta.packing`. A missing one is `spiral:sidecar-missing` at commit and a wrong one `spiral:sidecar-hash-mismatch` |
 | `sandbox.profile` | A sandbox profile in canon/2 bytes (`Profile.canonical`) | `compiler` | The PEP compiles the profile from the staged `policy.core` and the bytes must be equal. Optional for `agent`, and checked when present |
-| `egress.hosts` | A canon/2 array of lower case host names, sorted, without repeats. It may be empty | none | Each name is one the egress proxy can read |
-| `agent.zones` | A canon/2 object with `encoding`, `format` `prismpath.dist-zones/1` and `protected`, the owner's protected names, sorted, without repeats, at most 10,000 names of at most 512 characters | none | Each name is one the zone point can read. The body names no path. Where the project and its index are is the home's own setting, and the index is one of the home's control paths. A release with no `agent.zones` declares no zone, and the release id (E10) signs that absence |
-| `gateway.routes` | A route table document in canon/2 bytes | none | `Routes.from_doc` accepts it |
-| `identity.bundle` | A trust bundle, each trust domain's X.509 CA certificates (section 13.1) | none | ID1 |
-| `identity.map` | An identity map, SPIFFE ID patterns to classes (section 13.1) | none | ID2 |
+| `egress.hosts` | A canon/2 array of lower case host names, sorted, without repeats. It may be empty | when present `manifest_sha256` and `rules_sha256` (E11) | Each name is one the egress proxy can read |
+| `agent.zones` | A canon/2 object with `encoding`, `format` `prismpath.dist-zones/1` and `protected`, the owner's protected names, sorted, without repeats, at most 10,000 names of at most 512 characters | when present `manifest_sha256` and `rules_sha256` (E11) | Each name is one the zone point can read. The body names no path. Where the project and its index are is the home's own setting, and the index is one of the home's control paths. A release with no `agent.zones` declares no zone, and the release id (E10) signs that absence |
+| `gateway.routes` | A route table document in canon/2 bytes | when present `manifest_sha256` and `rules_sha256` (E11) | `Routes.from_doc` accepts it |
+| `identity.bundle` | A trust bundle, each trust domain's X.509 CA certificates (section 13.1) | when present `manifest_sha256` and `rules_sha256` (E11) | ID1 |
+| `identity.map` | An identity map, SPIFFE ID patterns to classes (section 13.1) | when present `manifest_sha256` and `rules_sha256` (E11) | ID2 |
 | `net.dests` | A `prismpath.net_dests/1` destination table in canonical form | none | The table is one the edge can use |
 | `net.edge` | The edge `.ppt` image | `flow_sha256`, `names_sha256`, `qualification` | The table recompiled from the staged `policy.core` and `net.dests` is byte for byte the body |
 | `cfs.table` | The `PP_PolicyTable_t` bytes before `ImageSig` | none | The kernel check, and the SHA-256 of the core image inside the table is `policy_sha256` |
@@ -222,11 +222,19 @@ checks the form when it reads the envelope (V4), before any check uses the membe
 | `policy.ppt` | `overlay_of` | a string of 1 to 128 characters |
 | `net.edge` | `names_sha256` | 64 lower case hex digits |
 | `sandbox.profile` | `compiler` | an integer, 1 or more |
+| `policy.core`, `egress.hosts`, `agent.zones`, `gateway.routes`, `identity.bundle`, `identity.map` | `manifest_sha256` | 64 lower case hex digits, the `flow_sha256` the signature of the policy manifest the release was sealed from covers (SPEC.md section 10) |
+| `policy.core` | `source_sha256` | 64 lower case hex digits, the SHA-256 of the rules source the image compiles from |
+| `egress.hosts`, `agent.zones`, `gateway.routes`, `identity.bundle`, `identity.map` | `rules_sha256` | 64 lower case hex digits, the SHA-256 of the rules source of the release the artifact is sealed with |
 | `install.floor`, `install.fallback`, `install.ceiling` | `as` | an artifact kind of section 3 other than a trust kind, a grant or an install kind, or `policy.list` on a ceiling (CL1) |
 | `install.floor` | `rate` | an object with exactly `allows`, an integer from 1 to 65535, and `window`, an integer from 1 to 86400 |
 | `install.floor` | `command` | an integer from 0 to 255, the register of the command field |
 | `install.floor` | `layout` | 64 lower case hex digits, the SHA-256 of the layout document (AF10) |
 | `install.floor`, `install.fallback`, `install.ceiling` | the members of the artifact that `as` names | the forms this table gives them for that artifact |
+
+The members `manifest_sha256`, `source_sha256` and `rules_sha256` are written by `dist seal --manifest` only, and each
+is optional, so an envelope sealed from flags reads as before. One envelope never names one hash twice: a
+`policy.core` names its rules source as `source_sha256`, and a side artifact names the rules of its release as
+`rules_sha256`. No check reads them. They take an auditor from an envelope to the manifest and the rules line.
 
 A check that reads a signed member never has to guess its type. The same holds for the older pack gate,
 which refuses a manifest whose `fields` or `counts` is not an object with `manifest:bad-format`.
@@ -2016,6 +2024,8 @@ are the change statement on every PEP that takes it.
 | 306 | A `host` and a `mesh` PEP commit a release inside their ceiling and apply a narrower ceiling the release is above, and the power is lost after the ceiling is durable and before the lapse. Each restarts, and on Python another is not restarted and ticks. A `host` PEP reconciling a commit with its runtime withdrawn is cut the same way and restarts | the release lapses with `dist:above-ceiling` at the start and at the tick, and the reconciling PEP's held release falls with `dist:above-ceiling` at the tests of C10 and is never installed. No cut leaves a release under a ceiling it is above | CL3, C10, IS12 | P R C |
 | 307 | A `host` and a `mesh` PEP whose ceiling no copy holds are sent, with `widens` false, the empty ceiling, a wider list, a narrower list whose `replaces` is the lost list's policy hash, and the lost list with `replaces` empty, then restart, then are sent the lost list naming the lost hash. Another such PEP is sent a narrower list with `widens` true. A PEP whose ceiling is lost is provisioned with an anchor that shares its install keys and restarts. The IS12 table of `install_larger.json` is replayed | `dist:widening-unsigned` four times with the ceiling still lost after the restart, then `install-applied`, then `install-widened` with `dist:install-widened`. The provisioned PEP refuses a release with `dist:install-lost` before and after the restart. Every row answers with its event and cause | IS10, IS12, AF8, OP4 | P R C |
 | 308 | A withheld artifact at commit on host. A `host` PEP with a release active, and in the C core a `mesh` PEP, is offered a release whose signed release id covers a `policy.ppt` and a `policy.spiral`, and only the `policy.ppt` is staged and committed. The same table is then sent with a release id over what is staged | `dist:incomplete` and the release active before stays active, then `committed` | C2, E10 | P R C |
+| 309 | A `host` and a `mesh` PEP are sent a `policy.core` envelope sealed from a policy manifest, its `meta` naming `manifest_sha256` and `source_sha256`, and an `egress.hosts` envelope of the same release naming `manifest_sha256` and `rules_sha256` | `dist:target-mismatch` for each, after the envelope reads, since neither kind uses them | E11, V4, V5 | P R C |
+| 310 | A `host` and a `mesh` PEP are sent a `policy.core` envelope whose `meta` names `rules_sha256`, an `egress.hosts` envelope whose `meta` names `source_sha256`, and a `policy.core` envelope whose `manifest_sha256` is 63 hex digits | `dist:bad-format` each on `host`. On `mesh`, whose scanner skips `meta` (E9), `dist:target-mismatch` | E9, E11, V4, V5 | P R C |
 
 ## 21. The action floor, the fallback policy and the ceiling
 

@@ -72,13 +72,13 @@ def _covered(impl: str) -> set:
     return covered
 
 
-def test_the_spec_has_287_numbered_cases_each_naming_rules_and_implementations():
+def test_the_spec_has_289_numbered_cases_each_naming_rules_and_implementations():
     # 144 to 160 are left to the pull requests in flight that number their cases from 144; section 21 starts after them,
     # 289 to 295 are the table comparator's and the change statement's (W8 to W11), and 296 to 301 the install change
     # statement's (IS14, IS15), 302 to 305 the ceiling's preview and staged rollout (CL5 to CL7), 306 and 307 a power
     # loss between a ceiling and its lapse and a ceiling after a lost one (CL3, C10, IS10, IS12), and 308 a withheld
-    # artifact at commit (C2, E10)
-    assert sorted(SPEC) == [*range(1, 144), *range(161, 309)]
+    # artifact at commit (C2, E10), and 309 and 310 the meta members of an envelope sealed from a policy manifest (E11)
+    assert sorted(SPEC) == [*range(1, 144), *range(161, 311)]
     assert all(case["rules"].strip() and case["runs_on"] for case in SPEC.values())
 
 

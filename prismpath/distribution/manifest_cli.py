@@ -4,8 +4,10 @@
 
 The grammar and the check are the kernel's (`kernel/policy_manifest.py`). This surface does what the kernel may not:
 it reads the manifest and the files it names (each confined to the manifest's directory), verifies the signature
-with the flow authority, and prints what `policy_manifest.check` found. `add_parser` takes the `<action>` group of
-`prismpath policy`, so the command is registered in one place (`cli.py` calls it right after `policy_source`).
+with the flow authority, and prints what `policy_manifest.check` found. `examine` is that read and check as a call,
+and `dist seal --manifest` seals from the `Release` it returns, so the seal reads nothing the check did not verify.
+A manifest's targets are held to the kinds that registered a `derive` (`kinds.sealable`). `add_parser` takes the
+`<action>` group of `prismpath policy`, so the command is registered in one place (`cli.py` calls it right after `policy_source`).
 
 Exit 0 when the manifest holds, 1 when the check found something wrong, 2 when the manifest does not read or a
 needed file cannot be read at all.
@@ -17,6 +19,7 @@ import os
 import stat
 import sys
 import time
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import List, Optional
 
@@ -97,43 +100,86 @@ def _created(manifest) -> Optional[int]:
     return int(moment.timestamp())
 
 
-def manifest_cmd(args) -> int:
-    from prismpath.hotswap import flow_authority, policy_pack
+class Unreadable(Exception):
+    """The manifest or a key file it is checked with cannot be read at all (exit 2). `lines` say why."""
 
+    def __init__(self, lines: List[str]):
+        super().__init__("\n".join(lines))
+        self.lines = lines
+
+
+@dataclass(frozen=True)
+class Examined:
+    """What reading and verifying a manifest found: the parsed manifest (None when the signature failed and the text
+    does not read either), the findings, the `Release` when there are none, and the verified flow manifest."""
+    manifest: Optional[policy_manifest.Manifest]
+    findings: List[policy_manifest.Finding]
+    release: Optional[policy_manifest.Release]
+    signed: Optional[dict]
+
+
+def sealable_targets() -> frozenset:
+    """The target kinds a manifest can be sealed for in this process: every kind that registered a `derive`."""
+    from prismpath import kinds_builtin
+    kinds_builtin.load()
+    return kinds.sealable()
+
+
+def examine(path: str, pubs: List[str], *, revoked: Optional[str] = None, state_dir: Optional[str] = None,
+            now: Optional[int] = None) -> Examined:
+    """Read the manifest at `path` once, verify its signature with the flow authority against `pubs` (and the version
+    floor in `state_dir` when it is named), parse the same bytes, and check it against the files beside it, each
+    confined to its directory. `Unreadable` when the manifest or a key file cannot be read at all, or the manifest's
+    signature holds and its text does not read. The floor is read, never raised: raising it is the sealing tool's,
+    once a release is written (`dist seal --manifest --state-dir`)."""
+    from prismpath.hotswap import flow_authority, policy_pack
+    now = int(time.time()) if now is None else now
+    for one in [*pubs, *([revoked] if revoked else [])]:
+        if not os.path.isfile(one):
+            raise Unreadable([f"{one}: no such file"])
+    try:
+        with open(path, "rb") as handle:
+            raw = handle.read()
+        text = raw.decode("utf-8")
+    except (OSError, UnicodeDecodeError) as error:
+        raise Unreadable([f"{path}: {getattr(error, 'strerror', None) or error}"]) from None
+    # The signature is verified first, and the text parsed is the buffer read above: `check` requires its hash to be the
+    # `flow_sha256` the signature covers, so a file swapped between the two reads fails.
+    try:
+        floor = flow_authority.VersionFloor.in_state_dir(state_dir) if state_dir else None
+        ok, reasons, signed = flow_authority.verify_flow(path, pubs, policy_pack.load_revoked(revoked), floor=floor)
+    except (OSError, ValueError) as error:
+        raise Unreadable([f"{error}"]) from None
+    signed = signed if ok else None
+    version = (signed or {}).get("version")
+    signature = policy_manifest.Signature(ok, tuple(reasons), (signed or {}).get("flow_sha256", ""), _created(signed)
+                                          if ok else None, version if isinstance(version, int) else None,
+                                          str((signed or {}).get("key_id", "")))
+    try:
+        manifest = policy_manifest.parse(text, path)
+    except policy_manifest.ManifestError as error:
+        if not ok:
+            return Examined(None, [policy_manifest.check_signature_only(signature)], None, None)
+        raise Unreadable(error.lines()) from None
+    found, release = policy_manifest.verify(manifest, signature, _reader(os.path.dirname(os.path.abspath(path))),
+                                            known_targets=sealable_targets(), now=now, point_findings=_point_findings)
+    return Examined(manifest, found, release, signed)
+
+
+def manifest_cmd(args) -> int:
     def refuse(lines: List[str]) -> int:
         for text in lines:
             print(f"prismpath policy manifest check: {text}", file=sys.stderr)
         return 2
 
-    for path in [*args.pub, *([args.revoked] if args.revoked else [])]:
-        if not os.path.isfile(path):
-            return refuse([f"{path}: no such file"])
     try:
-        with open(args.manifest, "rb") as handle:
-            raw = handle.read()
-        text = raw.decode("utf-8")
-    except (OSError, UnicodeDecodeError) as error:
-        return refuse([f"{args.manifest}: {getattr(error, 'strerror', None) or error}"])
-    # The signature is verified first, and the text parsed is the buffer read above: `check` requires its hash to be the
-    # `flow_sha256` the signature covers, so a file swapped between the two reads fails.
-    try:
-        floor = flow_authority.VersionFloor.in_state_dir(args.state_dir) if args.state_dir else None
-        ok, reasons, signed = flow_authority.verify_flow(args.manifest, args.pub, policy_pack.load_revoked(args.revoked),
-                                                         floor=floor)
-    except (OSError, ValueError) as error:
-        return refuse([f"{error}"])
-    signature = policy_manifest.Signature(ok, tuple(reasons), (signed or {}).get("flow_sha256", "") if ok else "",
-                                          _created(signed) if ok else None)
-    try:
-        manifest = policy_manifest.parse(text, args.manifest)
-    except policy_manifest.ManifestError as error:
-        if not ok:
-            print(policy_manifest.check_signature_only(signature).render(args.manifest), file=sys.stderr)
-            return 1
-        return refuse(error.lines())
-    found = policy_manifest.check(manifest, signature, _reader(os.path.dirname(os.path.abspath(args.manifest))),
-                                  known_targets=kinds.TARGET_KINDS, now=int(time.time()),
-                                  point_findings=_point_findings)
+        done = examine(args.manifest, args.pub, revoked=args.revoked, state_dir=args.state_dir)
+    except Unreadable as error:
+        return refuse(error.lines)
+    manifest, found = done.manifest, done.findings
+    if manifest is None:
+        print(found[0].render(args.manifest), file=sys.stderr)
+        return 1
     if args.json:
         print(json.dumps({"ok": not found, "manifest": args.manifest, "manifest_sha256": manifest.sha256,
                           "id": manifest.id, "stream": manifest.stream, "seq": manifest.seq,
