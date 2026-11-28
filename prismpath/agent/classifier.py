@@ -66,6 +66,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
+from prismpath.ports.information import InformationPoint
+
 CLASSIFIER_VERSION = 3
 MOUNT = "/workspace"          # where the sandbox mounts the workspace, and the path the model is told
 TOOLS = ("list_dir", "read_file", "write_file", "delete_path", "run_command", "git")
@@ -202,7 +204,7 @@ class Config:
     toolchain_dirs: Tuple[Path, ...] = ()
     allowed_remotes: Tuple[str, ...] = ()
     allowed_hosts: Tuple[str, ...] = ()       # lower case host names a connect to port 443 may reach (net_dest allowed_host)
-    zones: Any = None                         # the zone information point (zones.py); None reads every changing call unknown
+    zones: Optional[InformationPoint] = None  # the zone information point (zones.py); None reads every changing call unknown
 
     def __post_init__(self):
         self.workspace = Path(os.path.realpath(self.workspace))

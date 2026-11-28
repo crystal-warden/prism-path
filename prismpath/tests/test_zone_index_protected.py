@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from prismpath.agent import claude_code, classifier, controls, sandbox_exec, sandbox_hook, session_state, zones
+from prismpath.information import contextcloud
 from prismpath.agent.policy import Policy, starter_path
 from prismpath.agent.profile import Profile
 from prismpath.agent.sandbox_exec import SandboxUnavailable
@@ -197,7 +198,7 @@ def test_discover_binds_an_extra_control_path_below_the_workspace_only(project, 
 @pytest.fixture()
 def other_user(monkeypatch):
     """The agent runs as another user than the one that made the files, so only the modes decide."""
-    monkeypatch.setattr(zones, "_agent_uid", lambda: os.getuid() + 1)
+    monkeypatch.setattr(contextcloud, "agent_uid", lambda: os.getuid() + 1)
 
 
 def _no_sandbox(monkeypatch):
@@ -401,7 +402,7 @@ def test_5_the_owner_of_a_read_only_index_is_not_trusted_but_another_owner_is(pr
     project.index.chmod(0o444)
     (project.root / ".contextcloud").chmod(0o555)
     assert "owns or can write" in project.point().why
-    monkeypatch.setattr(zones, "_agent_uid", lambda: os.getuid() + 1)
+    monkeypatch.setattr(contextcloud, "agent_uid", lambda: os.getuid() + 1)
     assert project.point().why == ""
 
 
@@ -615,7 +616,7 @@ def test_zones_set_refuses_a_package_the_agents_user_could_change_where_nothing_
     (package / "deep" / "x.py").write_text("")
     assert zones.package_tree_problem(str(package), project.root, confined=True) == ""         # the sandbox holds
     assert "owns or can write" in zones.package_tree_problem(str(package), project.root, confined=False)
-    monkeypatch.setattr(zones, "_agent_uid", lambda: os.getuid() + 1)
+    monkeypatch.setattr(contextcloud, "agent_uid", lambda: os.getuid() + 1)
     assert "owns or can write" in zones.package_tree_problem(str(package), project.root, confined=False)   # writable by mode
     for path in [package / "deep" / "x.py", package / "deep", package, package.parent]:
         path.chmod(0o555 if path.is_dir() else 0o444)
