@@ -563,8 +563,8 @@ _FILE_ERRORS = (FileNotFoundError, NotADirectoryError, IsADirectoryError, Permis
 def _user_error(exc: BaseException):
     """The one line `main` prints for `exc`, or None when `exc` is not an ordinary user mistake."""
     from prismpath import extras
-    from prismpath.kernel.parser import ParseError
-    if isinstance(exc, CliError):
+    from prismpath.kernel.parser import FlowInputError, ParseError
+    if isinstance(exc, (CliError, FlowInputError)):
         return str(exc)
     missing = extras.from_exception(exc)
     if missing is not None:
