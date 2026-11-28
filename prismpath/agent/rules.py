@@ -35,7 +35,7 @@ are records, never decisions: nothing here changes a rule, a policy or a verdict
 Unreachable. A rule is unreachable when no reading in the reading domain makes it the first rule that holds.
 The domain is every combination of values of the policy's fields: a bool is true or false, an int is its min
 to max range (up to 64 values), and a category is one of the values the classifier produces
-(`prismpath.agent.classifier`, listed in the agent's reading domain, `prismpath.kernel.domain.AGENT_DOMAIN`). The combinations include ones the classifier never
+(`prismpath.agent.classifier`, listed in the agent's reading domain, `prismpath.agent.profile.AGENT_DOMAIN`). The combinations include ones the classifier never
 produces together, so a rule that only an impossible combination reaches is not reported (the finding is
 conservative). A field with no finite domain (a category the classifier does not produce, a fixed point
 number, an int with a wide range) is not enumerated: the rules that read it are reported as not checked, and
@@ -242,9 +242,10 @@ def _count_lines(path: Path) -> int:
 def _domain(name: str, text: str):
     """The finite list of values of a field from its definition text, or None when it has no finite domain (the
     kernel's walk, `prismpath.kernel.domain`, over the agent's domain)."""
+    from prismpath.agent.profile import AGENT_DOMAIN
     from prismpath.kernel import domain
     try:
-        return domain.field_values(name, text, domain.AGENT_DOMAIN)
+        return domain.field_values(name, text, AGENT_DOMAIN)
     except domain.DomainError:
         return None
 
@@ -252,7 +253,8 @@ def _domain(name: str, text: str):
 def unreachable(policy) -> Dict[str, Any]:
     """Which rules no reading can reach, by deciding every reading of the finite domain through the reference."""
     from prismpath.kernel import predicates
-    from prismpath.kernel.domain import AGENT_DOMAIN, names_read
+    from prismpath.agent.profile import AGENT_DOMAIN
+    from prismpath.kernel.domain import names_read
     doc = policy.doc
     fields = doc["fields"]
     reads = [names_read(rule["when"], fields) for rule in doc["rules"]]

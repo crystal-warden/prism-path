@@ -8,12 +8,15 @@ answer that per artifact, `LARGER`, `NOT_LARGER` or `CANNOT_DECIDE`:
     policy.core      every reading of the finite reading domain, walked by the classes the agent profile
                      compiler uses (`domain.domain_classes`), and a reading that moves up the order refuse,
                      escalate, allow is larger. Two policies whose fields differ are larger
-    egress.hosts     larger when the staged list is not a subset of the active one
-    gateway.routes   any change is larger
-    identity.bundle  larger unless every staged CA is one the active bundle holds for the same trust domain (ID7)
+    egress.hosts     larger when the staged list is not a subset of the active one, registered by the agent kind
+    agent.zones      larger when a protected name is gone, and a release that drops the artifact drops them all,
+                     registered by the agent kind (`prismpath/agent/dist_kind.py`)
+    gateway.routes   any change is larger, registered by the gateway kind (`prismpath/gateway/dist_kind.py`)
+    identity.bundle  larger unless every staged CA is one the active bundle holds for the same trust domain (ID7),
+                     registered by the gateway kind
     identity.map     larger unless the staged map is the active one with entries taken out, in the same order, and
-                     no entry taken out matches an ID a later entry kept also matches (ID7)
-    agent.zones      larger when a protected name is gone, and a release that drops the artifact drops them all
+                     no entry taken out matches an ID a later entry kept also matches (ID7), registered by the
+                     gateway kind
     policy.ppt       any change is larger, since the table format gives its nodes no meaning and nothing in
                      the image says which outcome is the more permissive one. That is the PEP's rule (W2). The
                      sealing tool and the controller also run `table_compare` (W8), which never changes it
@@ -22,7 +25,8 @@ answer that per artifact, `LARGER`, `NOT_LARGER` or `CANNOT_DECIDE`:
                      registered from `prismpath-ebpf/net_dist.py`, which the `net.dests` check loads
 
 Going from no policy to any policy is larger, and an answer that cannot be reached is treated as larger. An
-artifact whose reader lives outside this package adds its comparator with `register_comparator`.
+artifact whose reader lives with its kind adds its comparator when the kind registers (`kinds.register`) or with
+`register_comparator`. An artifact whose comparator was never registered cannot be decided unless it is unchanged.
 
 `check` is V12 for one envelope at staging and `check_release` for a whole release at commit. A PEP that can
 decide computes the answer itself (W1) and refuses a release it finds larger whose `widens` is false, even
@@ -34,7 +38,7 @@ one never larger.
 """
 from __future__ import annotations
 
-from typing import Callable, Dict, Mapping, Optional, Sequence
+from typing import Callable, Dict, Mapping, Optional
 
 from prismpath.distribution import kinds
 from prismpath.distribution.adapters import CANNOT_DECIDE, LARGER, NOT_LARGER
@@ -50,19 +54,24 @@ def compare_policies(active: bytes, staged: bytes) -> str:
     """W1 for `policy.core`: walk the finite reading domain once for both images, a class at a time, and find
     the first reading the staged policy treats more permissively. A combination the classifier never gives
     (`domain.unproduced`) is walked too, so a release that allows more there is larger, and one that refuses
-    more there is a tightening (9.4). The domain is the agent's for every kind, as it always has been."""
+    more there is a tightening (9.4). The domain is the agent kind's for every kind, as it always has been (Q4), asked
+    of the kind registry, and a process with no agent kind loaded cannot decide."""
     from prismpath.kernel import domain
     from prismpath.kernel.decision import Policy, kind_of
     if active == staged:
         return NOT_LARGER
     try:
-        old, new = Policy(active, domain.AGENT_DOMAIN), Policy(staged, domain.AGENT_DOMAIN)
+        reading_domain = kinds.reading_domain("agent")
+    except Refused:
+        return CANNOT_DECIDE
+    try:
+        old, new = Policy(active, reading_domain), Policy(staged, reading_domain)
     except ValueError:
         return CANNOT_DECIDE
     if old.doc["fields"] != new.doc["fields"]:
         return LARGER                                  # 9.4: two policies without the same fields
     try:
-        names, constant, groups = domain.domain_classes([old.doc, new.doc], domain.AGENT_DOMAIN, boundary_ints=True)
+        names, constant, groups = domain.domain_classes([old.doc, new.doc], reading_domain, boundary_ints=True)
     except domain.DomainError:
         return CANNOT_DECIDE
     import itertools
@@ -74,92 +83,13 @@ def compare_policies(active: bytes, staged: bytes) -> str:
     return NOT_LARGER
 
 
-def _names(body: bytes, read: Callable[[object], Sequence[str]]) -> Optional[frozenset]:
-    try:
-        return frozenset(read(kinds.load_canonical(body, "a compared artifact")))
-    except (Refused, TypeError, KeyError, ValueError):
-        return None
-
-
-def _host_list(doc) -> Sequence[str]:
-    if not isinstance(doc, list) or not all(isinstance(name, str) for name in doc):
-        raise ValueError("not a list of host names")
-    return doc
-
-
-def _protected(doc) -> Sequence[str]:
-    if not isinstance(doc, dict) or not isinstance(doc.get("protected"), list):
-        raise ValueError("not a zone file")
-    return doc["protected"]
-
-
-def compare_hosts(active: bytes, staged: bytes) -> str:
-    """W1 for `egress.hosts`: larger when a staged host is not in the active list."""
-    old, new = _names(active, _host_list), _names(staged, _host_list)
-    if old is None or new is None:
-        return CANNOT_DECIDE
-    return NOT_LARGER if new <= old else LARGER
-
-
-def compare_routes(active: bytes, staged: bytes) -> str:
-    """W1 for `gateway.routes`: any change is larger, because a path that loses its route reads as another class."""
-    return NOT_LARGER if bytes(active) == bytes(staged) else LARGER
-
-
 def compare_ppt(active: bytes, staged: bytes) -> str:
     """W1 for `policy.ppt`: the same image is not larger and any other is (section 9.4)."""
     return NOT_LARGER if bytes(active) == bytes(staged) else LARGER
 
 
-def compare_zones(active: Optional[bytes], staged: Optional[bytes]) -> str:
-    """W1 for `agent.zones`: larger when a name the active file protects is gone. No file protects nothing."""
-    old = frozenset() if active is None else _names(active, _protected)
-    new = frozenset() if staged is None else _names(staged, _protected)
-    if old is None or new is None:
-        return CANNOT_DECIDE
-    return NOT_LARGER if old <= new else LARGER
-
-
-def compare_bundles(active: bytes, staged: bytes) -> str:
-    """W1 for `identity.bundle` (ID7): not larger when the staged bundle only removes CAs or trust domains, so a
-    certificate it validates the active one validates too. Anything else, a CA added or moved to another trust
-    domain, is larger."""
-    try:
-        old, new = kinds.read_identity_bundle(active), kinds.read_identity_bundle(staged)
-    except Refused:
-        return CANNOT_DECIDE
-    return NOT_LARGER if all(domain in old and set(cas) <= set(old[domain]) for domain, cas in new.items()) else LARGER
-
-
-def compare_maps(active: bytes, staged: bytes) -> str:
-    """W1 for `identity.map` (ID7): not larger only when the staged entries are the active ones with some taken out,
-    in the same order, and no entry taken out overlaps an entry kept after it. Each SPIFFE ID then keeps its class
-    or reads `other`. A class changed, an entry added or moved, or one taken out whose IDs a later entry would take
-    is larger, since an ID would read another class."""
-    try:
-        old, new = kinds.read_identity_map(active), kinds.read_identity_map(staged)
-    except Refused:
-        return CANNOT_DECIDE
-    kept, at = [], 0
-    for index, entry in enumerate(old):
-        if at < len(new) and new[at] == entry:
-            kept.append(index)
-            at += 1
-    if at != len(new):
-        return LARGER                                  # an entry that is not one of the active ones, in its order
-    removed = [index for index in range(len(old)) if index not in set(kept)]
-    if any(old[gone].overlaps(old[later]) for gone in removed for later in kept if later > gone):
-        return LARGER                                  # an ID the removed entry classed would take a later class
-    return NOT_LARGER
-
-
 COMPARATORS: Dict[str, Comparator] = {
     "policy.core": compare_policies,
-    "egress.hosts": compare_hosts,
-    "gateway.routes": compare_routes,
-    "identity.bundle": compare_bundles,
-    "identity.map": compare_maps,
-    "agent.zones": compare_zones,
     "policy.ppt": compare_ppt,
 }
 OPTIONAL = frozenset({"agent.zones"})              # an artifact whose absence is a value: it drops every name
@@ -183,7 +113,8 @@ def compare_artifact(artifact: str, active: Optional[bytes], staged: Optional[by
     if artifact in ("sandbox.profile", "net.edge", "policy.spiral"):
         return NOT_LARGER
     if artifact in OPTIONAL:
-        return COMPARATORS[artifact](active, staged)
+        comparator = COMPARATORS.get(artifact)
+        return CANNOT_DECIDE if comparator is None else comparator(active, staged)
     if active is None or staged is None:
         return LARGER if staged is not None else NOT_LARGER
     comparator = COMPARATORS.get(artifact)

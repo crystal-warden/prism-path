@@ -793,6 +793,31 @@ def test_the_unknown_reading_is_never_allowed():
     return module_text, test_text
 
 
+# ----------------------------------------------------------------- the checks of what will enforce an image
+# `prismpath policy compile --target KIND` runs the checks the target kind registered (`TargetKind.compile_checks`,
+# through `distribution.kinds.register`). A kind that never registered has none, and the compile refuses rather than
+# writing an image nobody checked for it.
+COMPILE_CHECKS: Dict[str, Any] = {}
+
+
+def register_compile_checks(kind: str, checks) -> None:
+    """Add the checks `--target kind` runs: `checks(image, listed values)` answers [(field, rule index or None, the
+    message)]. One per kind."""
+    existing = COMPILE_CHECKS.get(kind)
+    if existing is not None and existing is not checks:
+        raise ValueError(f"the {kind} target already has its compile checks")
+    COMPILE_CHECKS[kind] = checks
+
+
+def line_of(where, field_lines, rule_lines) -> int:
+    """The source line a finding is about, 0 for the whole source: a field's declaration line, a rule's line."""
+    if isinstance(where, str):
+        return field_lines.get(where, 0)
+    if isinstance(where, int) and 0 <= where < len(rule_lines):
+        return rule_lines[where]
+    return 0
+
+
 # ----------------------------------------------------------------- command line
 def add_parser(subparsers) -> None:
     """`prismpath policy compile | render | skeleton | check | causes`."""
@@ -924,10 +949,12 @@ def policy_cmd(args) -> int:
               file=sys.stderr)
         return 1
     if args.target:
-        from prismpath.agent import target as agent_target      # the agent's own checks, read lazily
-        found = agent_target.LISTED[args.target](compiled.values) + agent_target.TARGETS[args.target](compiled.image)
+        checks = COMPILE_CHECKS.get(args.target)             # the kind's own checks, as it registered them
+        if checks is None:
+            return refuse([f"no checks of the {args.target} target are loaded, so nothing was written"])
+        found = checks(compiled.image, compiled.values)
         if found:
-            return refuse(SourceError([(agent_target.line_of(where, compiled.field_lines, compiled.rule_lines), message)
+            return refuse(SourceError([(line_of(where, compiled.field_lines, compiled.rule_lines), message)
                                        for where, message in found], args.source).lines())
     if args.out:
         _write(args.out, compiled.image + b"\n")

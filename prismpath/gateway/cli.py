@@ -94,27 +94,28 @@ def _home(args) -> Path:
 
 
 def _distributed(home: Path) -> bool:
-    from prismpath.distribution.adapters import agent_home
-    return agent_home.is_distributed(home)
+    from prismpath.onion import home as onion_home
+    return onion_home.is_distributed(home)
 
 
 def _load(home: Path):
     """(policy, run store) of the home: the committed release of a home that follows a stream, else the recorded,
-    attested policy."""
-    from prismpath.agent import commands
+    attested policy, each the policy a gateway home decides with (`home.policy_of`)."""
+    from prismpath.agent.run import RunStore
+    from prismpath.onion import home as onion_home
     if _distributed(home):
-        from prismpath.distribution.adapters import gateway as gateway_adapter
-        return gateway_adapter.load(home)
-    return commands.load_checked(home)
+        policy, _bodies = onion_home.load_distributed(Path(home), kind="gateway")
+    else:
+        policy = onion_home.load_checked(home, kind="gateway")
+    return policy, RunStore(Path(home) / onion_home.RUNS_DIR)
 
 
 def init(home: Path, policy: Optional[str], out=None) -> int:
-    from prismpath.agent import commands
-    from prismpath.agent.policy import Policy
     from prismpath.kernel import policy_source
+    from prismpath.onion import home as onion_home
     out = out or sys.stdout
     if _distributed(home):
-        raise commands.AgentError(f"{home} follows a stream, so its policy is the release its PEP commits and none is "
+        raise onion_home.AgentError(f"{home} follows a stream, so its policy is the release its PEP commits and none is "
                                   f"recorded here")
     path = Path(policy) if policy else DEMO_POLICY
     if path.name.endswith(".rules.md"):
@@ -123,21 +124,21 @@ def init(home: Path, policy: Optional[str], out=None) -> int:
         image = path.read_bytes()
     image = image[:-1] if image.endswith(b"\n") else image
     from prismpath.gateway import reading
-    checked = Policy(image)
+    checked = onion_home.policy_of("gateway", image)
     if not reading.fields_ok(checked.fields):
-        raise commands.AgentError(f"{path} defines the fields {checked.fields}, not the gateway reading's "
+        raise onion_home.AgentError(f"{path} defines the fields {checked.fields}, not the gateway reading's "
                                   f"{sorted(reading.FIELDS)}, with or without {reading.WORKLOAD}")
-    commands._make_dir(home)
-    keys = {role: commands._ensure_key(home, role) for role in commands.KEY_ROLES}
-    for name, data in ((commands.POLICY_FILE, image), (commands.ATTESTATION_FILE,
-                                                       commands._attestation(home, image, "gateway"))):
+    onion_home.make_dir(home)
+    keys = {role: onion_home.ensure_key(home, role) for role in onion_home.KEY_ROLES}
+    for name, data in ((onion_home.POLICY_FILE, image), (onion_home.ATTESTATION_FILE,
+                                                       onion_home.attestation(home, image, "gateway"))):
         tmp = home / (name + ".tmp")
         fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         with os.fdopen(fd, "wb") as handle:
             handle.write(data)
         os.replace(tmp, home / name)
-    commands.load_checked(home)
-    print(f"gateway home {home}: keys {keys}, policy sha256 {commands._sha256_hex(image)} recorded, attested by the "
+    onion_home.load_checked(home, kind="gateway")
+    print(f"gateway home {home}: keys {keys}, policy sha256 {onion_home.sha256_hex(image)} recorded, attested by the "
           f"authority key", file=out)
     return 0
 
@@ -193,12 +194,12 @@ def serve(args) -> int:
 
 
 def verify(home: Path, as_json: bool, out=None) -> int:
-    from prismpath.agent import commands
     from prismpath.agent.run import RunStore
+    from prismpath.onion import home as onion_home
     out = out or sys.stdout
-    commands._require_keys(home)
+    onion_home.require_keys(home)
     rows = []
-    for run in RunStore(home / commands.RUNS_DIR).runs():
+    for run in RunStore(home / onion_home.RUNS_DIR).runs():
         row: Dict[str, Any] = {"session": run.session}
         try:
             summary = run.summary()
@@ -211,7 +212,7 @@ def verify(home: Path, as_json: bool, out=None) -> int:
                            routes_sha256=result["bound"]["routes_sha256"],
                            verified=result["disagree"] == 0 and result["root_statement"] == "signed")
         except Exception as exc:   # noqa: BLE001 - one bad run does not stop the others
-            row.update(verified=False, error=commands._detail(exc))
+            row.update(verified=False, error=onion_home.detail(exc))
         rows.append(row)
     ok = all(r["verified"] for r in rows)
     if as_json:
@@ -231,10 +232,11 @@ def verify(home: Path, as_json: bool, out=None) -> int:
 
 
 def rules(home: Path, as_json: bool, out=None) -> int:
-    from prismpath.agent import commands, rules as agent_rules
+    from prismpath.agent import rules as agent_rules
+    from prismpath.onion import home as onion_home
     out = out or sys.stdout
     if not _distributed(home):
-        commands._require_keys(home)
+        onion_home.require_keys(home)
     policy, _store = _load(home)
     data = agent_rules.report(home, policy, "custom", None, None)
     out.write(json.dumps(data, indent=2) + "\n" if as_json else agent_rules.render(data))
@@ -244,18 +246,18 @@ def rules(home: Path, as_json: bool, out=None) -> int:
 def grant(home: Path, path_classes, method_classes, ttl: int, as_json: bool, out=None, stream: Optional[str] = None) -> int:
     """Seal a grant envelope under the recorded policy for the gateway on `stream` (this home's own by default) and
     print the header value a client sends."""
-    from prismpath.agent import commands
     from prismpath.gateway import grants
+    from prismpath.onion import home as onion_home
     out = out or sys.stdout
     if _distributed(home):
-        raise commands.AgentError(f"{home} follows a stream and holds no authority key; issue the grant where the "
+        raise onion_home.AgentError(f"{home} follows a stream and holds no authority key; issue the grant where the "
                                   f"authority key is, with --stream naming this gateway's stream")
-    policy, _store = commands.load_checked(home)
+    policy = onion_home.load_checked(home, kind="gateway")
     try:
-        value, doc = grants.issue(home, commands._sha256_hex(policy.image), path_classes, method_classes, ttl,
+        value, doc = grants.issue(home, onion_home.sha256_hex(policy.image), path_classes, method_classes, ttl,
                                   stream=stream or grants.LOCAL_STREAM)
     except grants.GrantError as exc:
-        raise commands.AgentError(str(exc))
+        raise onion_home.AgentError(str(exc))
     if as_json:
         print(json.dumps({"header": grants_header(), "value": value, "grant": doc}, sort_keys=True), file=out)
     else:
@@ -271,15 +273,15 @@ def grants_header() -> str:
 
 
 def revoke(home: Path, grant_id: Optional[str], out=None) -> int:
-    from prismpath.agent import commands
+    from prismpath.onion import home as onion_home
     from prismpath.gateway import grants
     out = out or sys.stdout
     if not grant_id:
-        raise commands.AgentError("name the grant with --grant-id ID")
+        raise onion_home.AgentError("name the grant with --grant-id ID")
     try:
         added = grants.revoke(home, grant_id)
     except grants.GrantError as exc:
-        raise commands.AgentError(str(exc))
+        raise onion_home.AgentError(str(exc))
     print(f"grant {grant_id} {'revoked' if added else 'was already revoked'}; the next request that presents it is refused", file=out)
     return 0
 
@@ -288,35 +290,35 @@ def identity_bundle(domains, out_path: Optional[str], out=None) -> int:
     """Write the `identity.bundle` body of these `TD=PEM` pairs, each PEM file holding CA certificates."""
     from cryptography import x509
     from cryptography.hazmat.primitives import serialization
-    from prismpath.agent import commands
+    from prismpath.onion import home as onion_home
     from prismpath.gateway import identity
     out = out or sys.stdout
     if not domains or not out_path:
-        raise commands.AgentError("name each trust domain with --domain TD=PEM and the body with --out FILE")
+        raise onion_home.AgentError("name each trust domain with --domain TD=PEM and the body with --out FILE")
     pairs: Dict[str, list] = {}
     for item in domains:
         domain, mark, pem = item.partition("=")
         if not mark or not pem:
-            raise commands.AgentError(f"{item!r} is not TD=PEM")
+            raise onion_home.AgentError(f"{item!r} is not TD=PEM")
         try:
             certs = x509.load_pem_x509_certificates(Path(pem).read_bytes())
         except (OSError, ValueError) as exc:
-            raise commands.AgentError(f"{pem} holds no PEM certificates ({exc})")
+            raise onion_home.AgentError(f"{pem} holds no PEM certificates ({exc})")
         pairs.setdefault(domain, []).extend(cert.public_bytes(serialization.Encoding.DER) for cert in certs)
     try:
         body = identity.bundle_body(pairs)
     except identity.IdentityError as exc:
-        raise commands.AgentError(str(exc))
+        raise onion_home.AgentError(str(exc))
     return _write_body(out_path, body, "identity.bundle", out)
 
 
 def identity_map(map_path: Optional[str], out_path: Optional[str], out=None) -> int:
     """Write the `identity.map` body of the entries in a JSON file, in their order."""
-    from prismpath.agent import commands
+    from prismpath.onion import home as onion_home
     from prismpath.gateway import identity
     out = out or sys.stdout
     if not map_path or not out_path:
-        raise commands.AgentError("name the entries with --map FILE and the body with --out FILE")
+        raise onion_home.AgentError("name the entries with --map FILE and the body with --out FILE")
     try:
         doc = json.loads(Path(map_path).read_text(encoding="utf-8"))
         rows = doc["entries"] if isinstance(doc, dict) and set(doc) == {"entries"} else None
@@ -325,7 +327,7 @@ def identity_map(map_path: Optional[str], out_path: Optional[str], out=None) -> 
             raise ValueError('the map file is {"entries": [{"match": ..., "class": ...}, ...]}')
         body = identity.map_body(rows)
     except (OSError, ValueError) as exc:
-        raise commands.AgentError(f"{map_path}: {exc}")
+        raise onion_home.AgentError(f"{map_path}: {exc}")
     return _write_body(out_path, body, "identity.map", out)
 
 
@@ -338,7 +340,7 @@ def _write_body(path: str, body: bytes, artifact: str, out) -> int:
 
 
 def gateway_cmd(args) -> int:
-    from prismpath.agent import commands
+    from prismpath.onion import home as onion_home
     try:
         if args.action == 'init':
             return init(_home(args), args.policy)
@@ -355,6 +357,6 @@ def gateway_cmd(args) -> int:
         if args.action == 'identity-map':
             return identity_map(args.map, args.out)
         return serve(args)
-    except commands.AgentError as exc:
+    except onion_home.AgentError as exc:
         print(f"prismpath gateway: {exc}", file=sys.stderr)
         return 2

@@ -32,6 +32,8 @@ def main(argv=None):
     parser.add_argument("--read-only", action="store_true",
                         help="mount no route that controls a sprint or writes a file (also MC_READ_ONLY=1)")
     args = parser.parse_args(argv)
+    from prismpath import kinds_builtin
+    kinds_builtin.load()                                 # every built in target kind, for the views that read a home
     settings = core.SETTINGS
     if args.read_only:
         settings.read_only = True

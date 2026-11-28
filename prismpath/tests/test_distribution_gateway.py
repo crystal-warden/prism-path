@@ -20,8 +20,8 @@ from prismpath import canon  # noqa: E402
 from prismpath.agent import commands  # noqa: E402
 from prismpath.distribution import envelope as env  # noqa: E402
 from prismpath.distribution import state_record  # noqa: E402
-from prismpath.distribution.adapters import agent_home  # noqa: E402
-from prismpath.distribution.adapters.gateway import Following, GatewayHomeAdapter  # noqa: E402
+from prismpath.agent import dist_kind as agent_home  # noqa: E402
+from prismpath.gateway.dist_kind import Following, GatewayHomeAdapter  # noqa: E402
 from prismpath.distribution.verify import GR2, PepView, verify  # noqa: E402
 from prismpath.gateway import cli as gcli, grants, proxy, reading as rd  # noqa: E402
 from prismpath.kernel import canon2  # noqa: E402
@@ -101,7 +101,7 @@ class GatewayHome(_dist.Point):
 
 @pytest.fixture
 def gw(tmp_path, monkeypatch):
-    monkeypatch.setattr(agent_home, "clock", lambda: NOW)
+    monkeypatch.setattr(agent_home.onion_home, "clock", lambda: NOW)
     point = GatewayHome(tmp_path / "gateway")
     assert point.release(DEMO, 1)[-1].event == "committed"
     return point
@@ -163,9 +163,9 @@ def test_case_081_a_grant_envelope_reads_valid_expired_then_invalid_four_ways(gw
 
     state, record = read(value)
     assert state == "valid" and record["grant_id"] == doc["grant_id"]
-    monkeypatch.setattr(agent_home, "clock", lambda: NOW + 600)
+    monkeypatch.setattr(agent_home.onion_home, "clock", lambda: NOW + 600)
     assert read(value)[0] == "expired"
-    monkeypatch.setattr(agent_home, "clock", lambda: NOW)
+    monkeypatch.setattr(agent_home.onion_home, "clock", lambda: NOW)
     assert read(issue(owner, policy="ab" * 32)[0])[0] == "invalid"                     # another policy
     assert read(value, "orders")[0] == "invalid" and read(value, "admin", "write")[0] == "invalid"   # out of scope
     sealed, _body = (_unb64(part) for part in value.split("."))
@@ -239,7 +239,7 @@ def test_a_running_gateway_follows_a_revocation_a_route_change_and_an_expiry(gw,
         assert g.request("GET", "/admin/users", headers={HDR: value})[0] == 403
         assert gw.release(DEMO, 2, routes=OPEN, froms=[H(DEMO)])[-1].event == "committed"
         assert g.request("GET", "/admin/users")[0] == 200
-        monkeypatch.setattr(agent_home, "clock", lambda: EXPIRES)                   # no file changed, only the time
+        monkeypatch.setattr(agent_home.onion_home, "clock", lambda: EXPIRES)                   # no file changed, only the time
         status, _headers, body = g.request("GET", "/api/orders/7")
         assert status == 403 and "no longer decides" in json.loads(body)["detail"]
     finally:
@@ -300,7 +300,7 @@ def test_a_gateway_floor_allows_one_exact_route_and_method_and_is_silent_beside_
     with basis `floor` whatever the release says, is silent for a write of it and for a path beside it, and a floor
     route that ends in `*` or a rule with no `method_class` test is `dist:floor-broad`."""
     from prismpath.distribution import floor
-    monkeypatch.setattr(agent_home, "clock", lambda: NOW)
+    monkeypatch.setattr(agent_home.onion_home, "clock", lambda: NOW)
     point = GatewayHome(tmp_path / "gateway", install_keys=["N1", "N2"], install_threshold=2)
     assert point.release(DEMO, 1)[-1].event == "committed"
     fields = canon2.loads(DEMO)["fields"]
@@ -332,7 +332,7 @@ def test_a_gateway_floor_allows_one_exact_route_and_method_and_is_silent_beside_
 def test_case_203_a_gateway_route_table_is_held_inside_the_ceiling(tmp_path, monkeypatch):
     """case_203: CL1, CL2, the `gateway` part. A gateway PEP with a ceiling refuses a route table that gives one path
     another class than the ceiling's with `dist:above-ceiling`, and stages one that names fewer routes."""
-    monkeypatch.setattr(agent_home, "clock", lambda: NOW)
+    monkeypatch.setattr(agent_home.onion_home, "clock", lambda: NOW)
     point = GatewayHome(tmp_path / "gateway", install_keys=["N1", "N2"], install_threshold=2)
     assert point.release(DEMO, 1)[-1].event == "committed"
     ceiling = point.install_set("install.ceiling", {"policy.core": DEMO, "gateway.routes": ROUTES}, 1, widens=False)

@@ -460,10 +460,10 @@ def test_case_267_an_agent_commit_never_reconciles_and_its_lapse_waits_for_every
     and a gateway PEP each commit and are not reconciling. The agent release then lapses with both sessions
     running, one of which ignores the terminate: the launcher's withdrawal ends the first, the PEP is reconciling
     with the lapsed release as the running release, and the next try kills the second and sends `lapsed`."""
-    from prismpath.distribution.adapters import agent_home
+    from prismpath.agent import dist_kind as agent_home
     from prismpath.tests.test_distribution_agent_home import DEFAULT, STRICT, HomePep
     from prismpath.tests.test_distribution_gateway import DEMO, GatewayHome
-    monkeypatch.setattr(agent_home, "clock", lambda: _dist.NOW)
+    monkeypatch.setattr(agent_home.onion_home, "clock", lambda: _dist.NOW)
     home = HomePep(tmp_path / "agent")
     assert home.release(STRICT, 1)[-1].event == "committed"
     sessions = [subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"], start_new_session=True),

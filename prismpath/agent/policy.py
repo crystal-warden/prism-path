@@ -41,7 +41,7 @@ HERE = Path(__file__).resolve().parent
 
 from prismpath.kernel import decision  # noqa: E402
 from prismpath.kernel.decision import Decision, OutsideDomain, kind_of, target_decision  # noqa: E402,F401
-from prismpath.kernel.domain import AGENT_DOMAIN  # noqa: E402
+from prismpath.agent.profile import AGENT_DOMAIN  # noqa: E402
 
 POLICY_PATH = HERE / "policy" / "agent_rules.core.json"
 SOURCE_PATH = HERE / "policy" / "agent_rules.rules.md"   # the readable rules the image compiles from
