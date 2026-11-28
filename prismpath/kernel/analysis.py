@@ -790,7 +790,16 @@ def _child_emitted_types(graph) -> Dict[str, str]:
     return out
 
 
-def analyze_composition(graph, flow_path) -> List[Finding]:
+def _default_files():
+    """The file reader the old names use when the caller passes none. It is `prismpath.flow_files`, which is a
+    surface module, so it is named by string and not imported: the kernel reads no file itself. The old names stay
+    for one release; a caller that has a reader passes it as `files`, and `prismpath.flow_files` has the same
+    functions with the reader filled in."""
+    import importlib
+    return importlib.import_module("prismpath.flow_files").FILES
+
+
+def analyze_composition(graph, flow_path, files=None) -> List[Finding]:
     """Cross-FLOW-BOUNDARY checks for `@spawn` nodes (roadmap item #4, hard part 2). Unlike the pure
     `analyze()`, these do I/O - they resolve the child flow path (relative to `flow_path`'s dir), parse
     it, and reason across the two documents:
@@ -801,22 +810,21 @@ def analyze_composition(graph, flow_path) -> List[Finding]:
         `@emits` declarations, so the composition contract is checkable across the boundary.
     Composition is the stress test of the data-not-code thesis: the whole call tree is inspectable
     statically, no run required."""
-    import os
-    from prismpath.kernel.parser import parse_file
+    files = files or _default_files()
     out: List[Finding] = []
-    base = os.path.dirname(os.path.abspath(os.fspath(flow_path)))
+    base = files.abspath(flow_path)
     for name, node_obj in graph.nodes.items():
         spawn = node_obj.annotations.get("spawn")
         if spawn is None or not spawn.get("child"):
             continue
         child = spawn["child"]
-        cpath = child if os.path.isabs(child) else os.path.normpath(os.path.join(base, child))
-        if not os.path.exists(cpath):
+        cpath = files.child_path(base, child)
+        if not files.exists(cpath):
             out.append(Finding("error", "spawn-missing-child", name,
                                f"`@spawn(child={child!r})` does not resolve to a file ({cpath})"))
             continue
         try:
-            child_graph = parse_file(cpath)
+            child_graph = files.parse(cpath)
         except Exception as exc:                        # noqa: BLE001
             out.append(Finding("error", "spawn-child-unparseable", name,
                                f"child flow {child!r} failed to parse: {exc}"))
@@ -876,36 +884,35 @@ def portability(graph) -> List[Finding]:
     return out
 
 
-def portability_tree(graph, flow_path, _seen=None) -> List[Finding]:
+def portability_tree(graph, flow_path, _seen=None, files=None) -> List[Finding]:
     """`portability` across the WHOLE composition tree: this flow plus, recursively, every
     `@spawn` child (a portable parent spawning a non-portable child is not portable). Missing/
     unparseable children are already errors in `analyze_composition`, so here they're skipped;
     cyclic compositions are visited once (guarded), not looped."""
-    import os
-    from prismpath.kernel.parser import parse_file
+    files = files or _default_files()
     _seen = _seen or set()
-    ap = os.path.abspath(os.fspath(flow_path))
+    ap = files.abspath(flow_path)
     if ap in _seen:
         return []
     _seen = _seen | {ap}
     out = list(portability(graph))
-    base = os.path.dirname(ap)
+    base = ap
     for name, node_obj in graph.nodes.items():
         spawn = node_obj.annotations.get("spawn")
         if spawn is None or not spawn.get("child"):
             continue
         child = spawn["child"]
-        cpath = child if os.path.isabs(child) else os.path.normpath(os.path.join(base, child))
+        cpath = files.child_path(base, child)
         try:
-            child_graph = parse_file(cpath)
+            child_graph = files.parse(cpath)
         except Exception:                             # noqa: BLE001 - analyze_composition owns this error
             continue
-        for finding in portability_tree(child_graph, cpath, _seen):
+        for finding in portability_tree(child_graph, cpath, _seen, files):
             out.append(Finding(finding.severity, finding.code, f"{child}:{finding.node}" if finding.node else child, finding.message))
     return out
 
 
-def portability_tier(graph, flow_path) -> dict:
+def portability_tier(graph, flow_path, files=None) -> dict:
     """Stratify portability into the three deployment TIERS (a lint-computable flow property):
 
       * **P0** - every reachable edge is decidable (when/error/event). Zero ML: runs on the
@@ -936,20 +943,10 @@ def portability_tier(graph, flow_path) -> dict:
     if not semantic:
         return {"tier": "P0", "semantic_edges": [], "unlocked": [], "lock": None,
                 "lock_error": None, "level_m": lm_all}
-    import os
-    from prismpath.routing import lockfile as _lf
-    lp = _lf.lock_path(flow_path)
-    locked_conds = set()
-    lock_found = None
-    lock_error = None
-    if os.path.exists(lp):
-        try:
-            locked_conds = set(_lf.load_lock(lp).get("conditions", {}))
-            lock_found = lp
-        except Exception as exc:                      # noqa: BLE001 - unreadable lock == no lock
-            # the tier still degrades to P2, but a lock that is present and broken is not the same
-            # answer as no lock at all, so the reason travels with the verdict for the operator
-            lock_error = f"{lp}: {exc}"
+    # the reader answers with the conditions the lockfile pins, the lock's path when it read, and the reason when a
+    # lock is present and broken: the tier degrades to P2 either way, but that is not the same answer as no lock at
+    # all, so the reason travels with the verdict for the operator
+    locked_conds, lock_found, lock_error = (files or _default_files()).lock_conditions(flow_path)
     unlocked = sorted({condition for _, _, condition in semantic if condition not in locked_conds})
     tier = "P1" if lock_found and not unlocked else "P2"
     return {"tier": tier, "semantic_edges": semantic, "unlocked": unlocked, "lock": lock_found,
@@ -957,32 +954,31 @@ def portability_tier(graph, flow_path) -> dict:
             "level_m": False}       # Level M is a within-P0 stratum (SPEC §7)
 
 
-def portability_tier_tree(graph, flow_path, _seen=None) -> dict:
+def portability_tier_tree(graph, flow_path, _seen=None, files=None) -> dict:
     """The tier of a WHOLE composition tree: the max (worst) tier across this flow and,
     recursively, every `@spawn` child - a P0 parent spawning a P2 child deploys as P2. Returns
     {tier, flows: {path_or_ref: per-flow tier dict}}. Cycle-guarded like portability_tree."""
-    import os
-    from prismpath.kernel.parser import parse_file
+    files = files or _default_files()
     order = {"P0": 0, "P1": 1, "P2": 2}
     _seen = _seen or set()
-    ap = os.path.abspath(os.fspath(flow_path))
+    ap = files.abspath(flow_path)
     if ap in _seen:
         return {"tier": "P0", "flows": {}}
     _seen = _seen | {ap}
-    mine = portability_tier(graph, flow_path)
-    flows = {os.fspath(flow_path): mine}
+    mine = portability_tier(graph, flow_path, files)
+    flows = {files.text(flow_path): mine}
     worst = mine["tier"]
     for name, node_obj in graph.nodes.items():
         spawn = node_obj.annotations.get("spawn")
         if spawn is None or not spawn.get("child"):
             continue
         child = spawn["child"]
-        cpath = child if os.path.isabs(child) else os.path.normpath(os.path.join(os.path.dirname(ap), child))
+        cpath = files.child_path(ap, child)
         try:
-            child_graph = parse_file(cpath)
+            child_graph = files.parse(cpath)
         except Exception:                             # noqa: BLE001 - analyze_composition owns this error
             continue
-        sub = portability_tier_tree(child_graph, cpath, _seen)
+        sub = portability_tier_tree(child_graph, cpath, _seen, files)
         flows.update(sub["flows"])
         if order[sub["tier"]] > order[worst]:
             worst = sub["tier"]

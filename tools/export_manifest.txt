@@ -318,6 +318,7 @@ prismpath/examples/pr_demo/triage.md
 prismpath/examples/pr_demo/triage.tests.md
 prismpath/extras.py
 prismpath/flow_context.py
+prismpath/flow_files.py
 prismpath/flow_test.py
 prismpath/flows/bugfix.md
 prismpath/flows/build_prismpath.md
@@ -888,6 +889,7 @@ prismpath/tests/test_intoto.py
 prismpath/tests/test_intoto_bundle.py
 prismpath/tests/test_kappa.py
 prismpath/tests/test_kernel_decision.py
+prismpath/tests/test_kernel_hygiene.py
 prismpath/tests/test_landlock_backend.py
 prismpath/tests/test_langgraph_import.py
 prismpath/tests/test_lazy_connector_import.py

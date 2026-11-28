@@ -137,6 +137,10 @@ def run(graph: Graph, worker: Optional[Callable[[str, str, dict], object]] = Non
     if worker is None:
         raise TypeError("run() needs a worker: run(graph, worker)")
     if router is None:
+        # The default router stays for one release. After it, a run that reaches a semantic edge with no
+        # router passed is refused, and this import goes (owner answer Q3 of the refactor plan).
+        warnings.warn("run() with no router builds a default EmbeddingRouter; pass router=... because a later "
+                      "release requires one when a semantic edge is reached", DeprecationWarning, stacklevel=2)
         from prismpath.routing.router import EmbeddingRouter
         router = EmbeddingRouter()
     # type_gate: validate each worker's output against the contract derived from the node's `when`

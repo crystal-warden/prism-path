@@ -28,9 +28,7 @@
     "gateway/proxy.py -> agent/run.py (adapter -> adapter, another package)",
     "gateway/proxy.py -> distribution/adapters/agent_home.py (adapter -> adapter, another package)",
     "gateway/proxy.py -> distribution/adapters/gateway.py (adapter -> adapter, another package)",
-    "kernel/analysis.py -> routing/lockfile.py (kernel -> adapter)",
     "kernel/engine.py -> routing/router.py (kernel -> adapter)",
-    "kernel/model_check.py -> cli.py (kernel -> surface)",
     "kernel/policy_source.py -> agent/target.py (kernel -> adapter)"
   ],
   "private_use": [
