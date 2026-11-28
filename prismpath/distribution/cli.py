@@ -65,14 +65,15 @@ def add_parser(subparsers) -> None:
     seal.add_argument('--manifest', default=None, metavar='FILE',
                       help='a signed policy manifest (<name>.policy.md): check it as `policy manifest check` does and '
                            'seal one envelope per artifact of each target\'s release into the --out directory; the '
-                           'stream, seq, targets, times, widens and replaces come from it, not from flags')
+                           'stream, seq, targets, times, widens and replaces come from it, not from flags; --out is a new '
+                           'or empty directory')
     seal.add_argument('--pub', action='append', default=[], metavar='PUB',
                       help='with --manifest, a trusted authority public key that may have signed it (repeatable)')
     seal.add_argument('--revoked', default=None, metavar='JSON',
                       help='with --manifest, the revocation list of authority key ids')
     seal.add_argument('--state-dir', dest='state_dir', default=None, metavar='DIR',
-                      help='with --manifest, the version floor: a manifest signed below the version sealed before is '
-                           'refused, and the floor is raised once the envelopes are written')
+                      help='with --manifest, and required with it: the version floor, so a manifest signed below the '
+                           'version sealed before is refused, and the floor is raised once the envelopes are written')
     seal.add_argument('--artifact', default=None, help='the artifact kind, such as policy.ppt (the flag form)')
     seal.add_argument('--body', default=None, metavar='FILE', help='the body (the flag form)')
     _release_args(seal, required=False)
@@ -299,7 +300,7 @@ def _release_args(parser, required: bool = True) -> None:
     parser.add_argument('--seq', type=int, required=required)
     parser.add_argument('--target', action='append', required=required, help='a target kind (repeatable)')
     parser.add_argument('--not-before', type=int, default=None, help='Unix seconds (default now)')
-    parser.add_argument('--expires', type=int, default=0, help='Unix seconds; 0 only for a trust kind')
+    parser.add_argument('--expires', type=int, default=None, help='Unix seconds; 0 (the default) only for a trust kind')
     parser.add_argument('--key', action='append', required=True, metavar='PEM', help='an authority private key (repeatable)')
     parser.add_argument('--held', default=None, metavar='DIR', help='a controller directory, for R8')
     parser.add_argument('--out', required=True, metavar='FILE',
@@ -423,8 +424,8 @@ def _said_yes(args, question: str) -> bool:
 
 
 FLAG_FORM = ("--artifact", "--body", "--stream", "--seq", "--target")
-FLAG_ONLY = ("artifact", "body", "stream", "seq", "target", "not_before", "release", "policy", "replaces", "meta",
-             "qualification", "ceiling")
+FLAG_ONLY = ("artifact", "body", "stream", "seq", "target", "not_before", "expires", "release", "policy", "replaces",
+             "meta", "qualification", "ceiling")
 DEPRECATED = ("note: the flag form of dist seal is deprecated; write the release in a signed policy manifest and seal "
               "it with dist seal --manifest FILE.policy.md (SPEC.md section 10)")
 
@@ -449,7 +450,7 @@ def seal_manifest_cmd(args) -> int:
     from prismpath.distribution import manifest_cli
     from prismpath.distribution.seal import seal_manifest
     from prismpath.hotswap import flow_authority
-    given = [name for name in FLAG_ONLY if getattr(args, name) not in (None, 0, [], False)]
+    given = [name for name in FLAG_ONLY if getattr(args, name) is not None]
     if given or args.widens or args.yes:
         flags = [f"--{name.replace('_', '-')}" for name in given] + (["--widens"] if args.widens else []) + \
             (["--yes"] if args.yes else [])
@@ -459,6 +460,14 @@ def seal_manifest_cmd(args) -> int:
     if not args.pub:
         print("prismpath dist seal: --manifest needs --pub, the authority public key the manifest is checked against",
               file=sys.stderr)
+        return 2
+    if not args.state_dir:
+        print("prismpath dist seal: --manifest needs --state-dir, the directory of the version floor, so an older signed "
+              "manifest of the stream is never sealed again", file=sys.stderr)
+        return 2
+    held_out = _out_refusal(args.out)
+    if held_out:
+        print(f"prismpath dist seal: {held_out}", file=sys.stderr)
         return 2
     try:
         done = manifest_cli.examine(args.manifest, args.pub, revoked=args.revoked, state_dir=args.state_dir)
@@ -477,7 +486,11 @@ def seal_manifest_cmd(args) -> int:
     except ValueError as error:                      # a --held directory that holds no controller state
         print(f"prismpath dist seal: {error}", file=sys.stderr)
         return 2
-    os.makedirs(args.out, exist_ok=True)
+    try:
+        os.makedirs(args.out, exist_ok=True)
+    except OSError as error:
+        print(f"prismpath dist seal: {args.out}: {error.strerror or error}", file=sys.stderr)
+        return 2
     written = []
     for one in result.envelopes:
         stem = os.path.join(args.out, f"{one.target}.{one.artifact}")
@@ -490,12 +503,29 @@ def seal_manifest_cmd(args) -> int:
     manifest = done.release.manifest
     printed = {"manifest": args.manifest, "manifest_sha256": done.release.manifest_sha256, "stream": manifest.stream,
                "seq": manifest.seq, "policy_sha256": manifest.image_sha256, "replaces": result.replaces,
-               "widens": result.widens, "larger": result.larger, "releases": result.releases, "envelopes": written}
+               "widens": result.widens, "larger": result.larger, "releases": result.releases,
+               "compared": result.compared, "envelopes": written}
     if result.widens:
         printed["next"] = ("the release widens; sign its widening statement for each target's policy.core with "
                            "dist widen, as the owner, on purpose")
     _print(printed)
     return 0
+
+
+def _out_refusal(out: str) -> str:
+    """Why `--out` cannot take a manifest's envelopes, or "": it is a file, or a directory that already holds a `.sealed`
+    or `.body` file, so the envelopes of two releases would sit together under the names an inbox takes."""
+    if os.path.exists(out) and not os.path.isdir(out):
+        return f"--out {out} is a file; it names a directory for the envelopes"
+    if os.path.isdir(out):
+        try:
+            held = sorted(name for name in os.listdir(out) if name.endswith((".sealed", ".body")))
+        except OSError as error:
+            return f"--out {out}: {error.strerror or error}"
+        if held:
+            return (f"--out {out} already holds {held[0]} and {len(held) - 1} more envelope file(s) of another seal; "
+                    f"name a new or empty directory")
+    return ""
 
 
 def _seal_flags(args) -> int:
@@ -504,7 +534,7 @@ def _seal_flags(args) -> int:
     qualification = _json(args.qualification) if meta is None and args.qualification else None
     try:
         done = seal_release(args.artifact, _read(args.body), stream=args.stream, seq=args.seq, targets=args.target,
-                            signers=_authority(args.key), not_before=args.not_before, expires=args.expires,
+                            signers=_authority(args.key), not_before=args.not_before, expires=args.expires or 0,
                             meta=meta, qualification=qualification, release=args.release, policy=args.policy,
                             replaces=args.replaces, widens=args.widens, held=args.held, ceiling=args.ceiling,
                             confirm=lambda comparison, replaces: _confirmed(args, comparison, replaces))

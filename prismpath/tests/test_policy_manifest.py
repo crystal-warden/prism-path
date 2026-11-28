@@ -54,12 +54,11 @@ def problems(source):
 
 
 # ----------------------------------------------------------------------------------------------- grammar
-def test_the_shipped_starter_manifest_reads_and_keeps_todays_defaults():
+def test_the_shipped_starter_manifest_reads_and_writes_no_value_key_a_pep_does_not_hold():
     manifest = pm.parse((POLICY / "agent_default.policy.md").read_text(encoding="utf-8"))
     assert (manifest.stream, manifest.seq, manifest.targets, manifest.valid_days) == ("agent-default", 1, ("agent",), 90)
-    assert manifest.get("allowed_remotes") == () and manifest.files == {}          # hosts empty, zones absent
-    assert manifest.get("toolchain_dirs")[:3] == ("workspace:.toolchain", "/usr", "/opt") and manifest.get("ro_mounts") == ()
-    assert (manifest.get("max_processes"), manifest.get("timeout_s"), manifest.get("shell_many")) == (64, 30, 20)
+    assert manifest.files == {}                                                   # hosts empty, zones absent
+    assert not set(manifest.values) & set(pm.VALUE_KEYS)       # no artifact of a release holds a value key yet
     assert manifest.widens is True and manifest.replaces == ""
 
 

@@ -273,13 +273,15 @@ class SealedArtifact:
 @dataclass(frozen=True)
 class ManifestSealed:
     """What `seal_manifest` returns: every envelope in the order target, then artifact, the one `replaces` and `widens`
-    of every release it sealed (E7), whether the tool found the release larger than the one it replaces (W1), and the
-    release id of each target's release."""
+    of every release it sealed (E7), whether the tool found the release larger than the one it replaces (W1), the
+    release id of each target's release, and per target what it compared (`_compared`): the artifacts it found larger,
+    the optional artifacts absent, and whether the held release was whole."""
     envelopes: Tuple[SealedArtifact, ...]
     replaces: str
     widens: bool
     larger: bool
     releases: Dict[str, str]
+    compared: Dict[str, dict]
 
 
 def _same_value(written, carried) -> bool:
@@ -299,6 +301,10 @@ def _registered(manifest) -> Dict[str, object]:
             raise Refused(kinds.BAD_FORMAT, f"a {target} release is not sealed from a manifest: no kind of that name "
                                             f"registered a derive in this process (the grammar names none of its "
                                             f"artifacts)")
+        if not kinds.TARGETS[target].decides:
+            raise Refused(kinds.BAD_FORMAT, f"a {target} PEP cannot decide larger (W1), and the manifest form has no "
+                                            f"table comparison (W8) or change statement (W10), so the tool's own "
+                                            f"comparison would be the only one; it is not sealed from a manifest")
         found[target] = kind
     return found
 
@@ -318,8 +324,8 @@ def _carried(manifest, registered: Dict[str, object]) -> None:
             continue
         carriers = [(name, kind.manifest_values[key]) for name, kind in registered.items() if key in kind.manifest_values]
         if not carriers:
-            raise Refused(kinds.BAD_FORMAT, f"policy.{key} is carried by no target of this release "
-                                            f"({', '.join(manifest.targets)}) yet, so no PEP would hold it")
+            raise Refused(kinds.BAD_FORMAT, f"policy.{key}: no PEP holds this yet, no artifact of a "
+                                            f"{', '.join(manifest.targets)} release carries it, so it is not sealed")
         for name, value in carriers:
             if not _same_value(manifest.values[key], value):
                 raise Refused(kinds.BAD_FORMAT, f"policy.{key} is not the value a {name} release carries; no artifact "
@@ -327,21 +333,41 @@ def _carried(manifest, registered: Dict[str, object]) -> None:
 
 
 def _previous(controller, target: str, stream: str, seq: int, policy: Optional[str]):
-    """(policy hash, {artifact: body}) of the release a `target` release at `seq` replaces in the controller state: the
-    latest one stored on `stream` below `seq` for that target, or the latest whose policy hash is `policy` when one is
-    named, with every artifact of its release that names the target. ("", None) when none is held, and (`policy`, None)
-    when none is held for the policy named."""
+    """(policy hash, {artifact: body} or None, what is held) of the release a `target` release at `seq` replaces in the
+    controller state: the latest one stored on `stream` below `seq` for that target, or the latest whose policy hash is
+    `policy` when one is named, with every artifact of its release that names the target. The bodies are given only when
+    the held release is whole: every body is stored and hashes to its envelope's, and the release id computed over them
+    is the signed `release` (E10). A partial copy would make the tool compare with less than the release, and a zone
+    file missing from it would read as protecting nothing. What is held is `whole`, `partial` or `none`."""
+    def release_member(info) -> bool:
+        return (info["stream"] == stream and target in info["targets"] and info["artifact"] not in kinds.TRUST_ARTIFACTS
+                and info["artifact"] not in kinds.INSTALL_ARTIFACTS)
     held = [info for info in controller.stored.values()
-            if info["stream"] == stream and info["seq"] < seq and target in info["targets"]
-            and info["artifact"] not in kinds.TRUST_ARTIFACTS and info["artifact"] not in kinds.INSTALL_ARTIFACTS
-            and (policy is None or info["policy"] == policy)]
+            if release_member(info) and info["seq"] < seq and (policy is None or info["policy"] == policy)]
     if not held:
-        return (policy or ""), None
+        return (policy or ""), None, "none"
     latest = max(held, key=lambda info: info["seq"])
-    bodies = {info["artifact"]: controller.blob(info["body_sha256"]) for info in controller.stored.values()
-              if info["release"] == latest["release"] and info["seq"] == latest["seq"] and target in info["targets"]
-              and info["artifact"] not in kinds.TRUST_ARTIFACTS}
-    return latest["policy"], bodies
+    members = [info for info in controller.stored.values()
+               if release_member(info) and info["release"] == latest["release"] and info["seq"] == latest["seq"]]
+    bodies = {info["artifact"]: controller.blob(info["body_sha256"]) for info in members}
+    whole = (len(bodies) == len(members)
+             and all(body is not None and canon.sha256_hex(body) == info["body_sha256"]
+                     for info, body in ((info, bodies[info["artifact"]]) for info in members))
+             and env.release_id([(name, canon.sha256_hex(body)) for name, body in bodies.items()]) == latest["release"])
+    return latest["policy"], (bodies if whole else None), ("whole" if whole else "partial")
+
+
+def _compared(target: str, old: Optional[Dict[str, bytes]], new: Dict[str, bytes], held: str) -> dict:
+    """What the tool found for one target's release against the one it replaces, for the owner to read before a widening
+    statement: the artifacts it found larger (W1, each as `widening.compare_artifact` answers), the optional artifacts
+    the release does not carry, and whether the held release was whole."""
+    from prismpath.distribution import widening
+    absent = sorted(name for name in kinds.TARGETS[target].when_declared if name not in new and name != "sandbox.profile")
+    if old is None:
+        return {"held": held, "larger": sorted(new), "absent": absent}
+    larger = sorted(name for name in sorted(set(old) | set(new)) if (name in new or name in widening.OPTIONAL)
+                    and widening.compare_artifact(name, old.get(name), new.get(name)) != widening.NOT_LARGER)
+    return {"held": held, "larger": larger, "absent": absent}
 
 
 def _view(target: str):
@@ -382,18 +408,26 @@ def seal_manifest(release, signers: List[Signer], *, held: Optional[str] = None)
     policy = manifest.image_sha256
     controller = held_controller(held) if held is not None else None
     previous = {target: _previous(controller, target, manifest.stream, manifest.seq, manifest.replaces or None)
-                if controller is not None else (manifest.replaces, None) for target in registered}
-    replaces = {hash_ for hash_, _bodies in previous.values()}
+                if controller is not None else (manifest.replaces, None, "none") for target in registered}
+    replaces = {hash_ for hash_, _bodies, _held in previous.values()}
     if len(replaces) != 1:
         raise Refused(kinds.BAD_FORMAT, "the targets' releases replace different policies, and a manifest states one "
-                                        "replaces; name it with policy.replaces or seal each target from its own manifest")
+                                        "replaces; name it with policy.replaces or seal each target from a manifest "
+                                        "on its own stream")
     replaces_hash = replaces.pop()
+    compared = {target: _compared(target, old, bodies[target], held_as) for target, (_h, old, held_as) in previous.items()}
     larger = any(widening.compare_release(old, bodies[target]) != widening.NOT_LARGER
-                 for target, (_hash, old) in previous.items())
+                 for target, (_hash, old, _held) in previous.items())
     if not manifest.widens and larger:
-        compared = "found the release larger" if controller is not None and all(
-            old is not None for _hash, old in previous.values()) else "holds no release it replaces to compare with"
-        raise Refused(widening.UNSIGNED, f"the manifest says widens: no and the sealing tool {compared} (W7); write "
+        if all(old is not None for _hash, old, _held in previous.values()):
+            found = "found the release larger"
+        elif any(held_as == "partial" for _hash, _old, held_as in previous.values()):
+            found = "holds only part of the release it replaces, so it holds no whole release to compare with"
+        else:
+            found = "holds no release it replaces to compare with"
+        found += " (" + "; ".join(f"{target}: larger {', '.join(seen['larger']) or 'nothing'}, absent "
+                                  f"{', '.join(seen['absent']) or 'nothing'}" for target, seen in sorted(compared.items())) + ")"
+        raise Refused(widening.UNSIGNED, f"the manifest says widens: no and the sealing tool {found} (W7); write "
                                          f"widens: yes and sign its widening statement with dist widen")
     widens = bool(manifest.widens)
     sealed = []
@@ -415,4 +449,4 @@ def seal_manifest(release, signers: List[Signer], *, held: Optional[str] = None)
             if cause is not None:
                 raise Refused(cause, f"the {target} release's {artifact} does not pass its own check (V11)")
             sealed.append(SealedArtifact(target, artifact, one, body))
-    return ManifestSealed(tuple(sealed), replaces_hash, widens, larger, ids)
+    return ManifestSealed(tuple(sealed), replaces_hash, widens, larger, ids, compared)

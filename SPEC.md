@@ -587,7 +587,6 @@ policy.image: agent_default.core.json
 policy.image_sha256: <sha256 of the image's canonical bytes>
 policy.widens: yes
 policy.valid_days: 90
-policy.max_processes: 64
 ---
 ## manifest
 Notes for the reader.
@@ -629,7 +628,8 @@ Normatively, as follows.
   `policy.ro_mounts` (lists of host path: absolute, `~/` under the home, or `workspace:` under the workspace, no `..`),
   `policy.grant_classes` (list of `[a-z][a-z0-9_]{0,31}`) and `policy.local_model` (word). A key
   that is absent has no value here. The grammar applies no default, a default belongs to the target that reads the
-  key, and a manifest that keeps today's defaults writes them.
+  key. The grammar reads every value key, and the sealing tool refuses each one no target carries yet (below), which in
+  this version is all of them, so a manifest to be sealed writes none.
 - **Context Cloud.** `policy.cc_protected` (list of names as `agent.zones` holds them: 1 to 512 characters of `[A-Za-z0-9_.:@-]`, no `/`, at most 10,000), `policy.cc_index` with `policy.cc_index_sha256`,
   `policy.cc_freshness_s` (1 and up, the oldest index a reading may use), `policy.cc_required_certainty` (`certain`
   or `likely`) and `policy.cc_engine_agreement` (1 to 64, the engines that must agree). The grammar reads them. What
@@ -660,7 +660,7 @@ for a manifest that does not read. The command seals nothing, and with `--state-
 never raises it.
 
 **Sealing from a manifest.** `prismpath dist seal --manifest FILE --pub KEY... --key PEM... --out DIR [--held DIR]
-[--state-dir DIR]` runs the release check and seals what it verified (`policy_manifest.verify`, then
+--state-dir DIR` runs the release check and seals what it verified (`policy_manifest.verify`, then
 `distribution/seal.py`, `seal_manifest`). Nothing is read twice: the check hands on the compiled image, the rules
 bytes, each side file's bytes and the signed `created`, `version` and `key_id`, and the tool seals from those. The
 image sealed is the compiled image, never the image file's bytes.
@@ -674,23 +674,31 @@ image sealed is the compiled image, never the image file's bytes.
   `agent.zones` when the manifest names zones. `gateway` is its `policy.core` and its `gateway.routes`, and
   `identity.bundle` and `identity.map` when the policy reads `workload` (ID3). A side file is its artifact's body byte
   for byte and is read as that artifact reads it.
-- **An absent key.** An absent side file is the target's default, the one that allows least: no `policy.egress_hosts`
-  seals the empty host list, no `policy.zones` seals no `agent.zones`, so the release declares no zone and its release
-  id signs that, and a gateway with no `policy.routes` is refused, since it has no route table to fall back on. An
-  absent value key is the target's built in value. A side file no target reads, and a value key no target carries, is
-  refused: a signed key no PEP holds would read as enforced. In this version `agent` carries `policy.allowed_remotes`,
-  `policy.max_processes`, `policy.timeout_s`, `policy.shell_many`, `policy.toolchain_dirs` and `policy.ro_mounts`
-  only at today's built in values, and every other value key is carried by no target, because no artifact of a
-  release holds it yet.
+- **An absent key.** No `policy.egress_hosts` seals the empty host list, the least a release can reach. No
+  `policy.zones` seals no `agent.zones`: the release declares no zone and its release id signs that absence (section 3
+  of the distribution spec). That protects nothing, so it is larger than any release that had zones, and the tool
+  finds it so (W7) and prints it. A gateway with no `policy.routes` is refused, since it has no route table to fall back
+  on. A side file no target reads is refused, and so is every value key no target carries: a signed key no PEP holds
+  would read as enforced. In this version no target carries a value key. `policy.max_processes`, `policy.timeout_s`,
+  `policy.shell_many`, `policy.toolchain_dirs`, `policy.ro_mounts`, `policy.allowed_remotes`, `policy.local_model`,
+  `policy.grant_classes` and every `policy.cc_*` key are refused with "no PEP holds this yet", because no artifact of a
+  release holds them and the launcher runs values of its own. They are wired into what a PEP holds in a later version.
 - **Times.** `not_before` is `policy.not_before`, else the signing time, and `expires` is the end `policy.expires`
-  or `policy.valid_days` gives. So the same manifest seals to the same envelopes.
+  or `policy.valid_days` gives. So the same manifest and the same held state seal to the same envelopes. (With
+  `widens: yes` and no `policy.replaces`, `replaces` comes from the held state, so another held state gives another
+  `replaces`.)
 - **Widening (W7).** The tool decides `widens` itself. It compares each target's release, whole, with the one it
-  replaces in the controller state `--held`, as a PEP that decides compares it (W1). `widens: no` is refused with
+  replaces in the controller state `--held`, as a PEP that decides compares it (W1). The held release counts only when
+  it is whole: every body of it is stored and the release id computed over them is its signed `release`, else the tool
+  holds no release to compare with. Only a target kind that decides (W1) is sealed from a manifest, so the tool's
+  comparison is never the only one. `widens: no` is refused with
   `dist:widening-unsigned` when the tool finds the release larger or holds no release to compare it with, and is
   sealed with `widens` false only when it finds it not larger. `widens: yes` seals a widening, and the tool never
   signs its widening statement: the owner signs that with `dist widen`, as a separate act (W4, W5). `replaces` is
   `policy.replaces`, else the policy hash of the latest release `--held` holds below this seq for the target, else
-  none. A manifest whose targets would replace different policies is refused, since it states one `replaces`.
+  none. A manifest whose targets would replace different policies is refused, since it states one `replaces`. The tool
+  prints, per target, the artifacts it found larger than the held release and the optional artifacts the release does
+  not carry (`agent.zones` absent, say), so the owner sees them before signing a widening statement.
 - **Meta.** Each envelope's `meta` names the manifest and the rules: `manifest_sha256`, the `flow_sha256` the
   manifest's signature covers, on every artifact; `source_sha256`, the sha256 of the rules source, on the
   `policy.core`; and `rules_sha256`, the same hash, on each side artifact, the rules of the release it is sealed with.
@@ -699,11 +707,16 @@ image sealed is the compiled image, never the image file's bytes.
 - **The check before signing.** Each artifact is held to its own check (V11) for its target before anything is
   written, and nothing is written unless every envelope is sealed. The envelopes go to `--out` as
   `<target>.<artifact>.sealed` with `<target>.<artifact>.body` beside each, the names a controller's inbox takes.
-- **The floor.** With `--state-dir`, a manifest signed at a version below the one sealed before, or at the same
-  version with another text, is refused (`flow:version-replay`), and the floor is raised to the manifest's version
-  once the envelopes are written. The sealing tool raises it, and the release check only reads it.
+  `--out` is a new directory or an empty one: one that already holds a `.sealed` or a `.body` file is refused, so the
+  envelopes of two releases never sit together, and an `--out` that is a file is refused (exit 2).
+- **The floor.** `--state-dir` is required with `--manifest`. A manifest signed at a version below the one sealed
+  before, or at the same version with another text, is refused (`flow:version-replay`), and the floor is raised to the
+  manifest's version once the envelopes are written. So an older signed manifest of the stream is never sealed again.
+  The sealing tool raises it, and the release check only reads it.
 - **The flag form.** `dist seal --artifact A --body FILE --stream S --seq N --target T ...` still seals one envelope,
-  and prints a note that it is deprecated in favour of `--manifest`. With `--manifest` no release flag is given.
+  and prints a note that it is deprecated in favour of `--manifest`. With `--manifest` no release flag is given:
+  `--artifact`, `--body`, `--stream`, `--seq`, `--target`, `--not-before`, `--expires`, `--release`, `--policy`,
+  `--replaces`, `--widens`, `--yes`, `--meta`, `--qualification` and `--ceiling` each exit 2.
 
 ---
 

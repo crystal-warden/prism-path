@@ -171,12 +171,16 @@ def test_the_same_manifest_seals_to_the_same_bytes(owner):
     assert seal.seal_manifest(release, SIGNERS) == seal.seal_manifest(release, SIGNERS)
 
 
-def test_an_absent_side_key_is_the_target_default_that_allows_least(owner):
+def test_an_absent_side_key_seals_no_hosts_and_declares_no_zone(owner):
+    """No egress hosts is the least a release reaches. No zones declares no zone, which protects nothing: it is not the
+    least allowing default, and the tool says it is absent (the review's F3)."""
     result = seal.seal_manifest(owner.release(), SIGNERS)
     sealed = by_artifact(result)
     assert sorted(sealed) == ["egress.hosts", "policy.core"] and sealed["egress.hosts"].body == canon.canon2_bytes([])
-    with_zones = by_artifact(seal.seal_manifest(owner.release(2, side={"zones": zones("payroll")}), SIGNERS))
-    assert sorted(with_zones) == ["agent.zones", "egress.hosts", "policy.core"]
+    assert result.compared["agent"]["absent"] == ["agent.zones"] and result.compared["agent"]["held"] == "none"
+    with_zones = seal.seal_manifest(owner.release(2, side={"zones": zones("payroll")}), SIGNERS)
+    assert sorted(by_artifact(with_zones)) == ["agent.zones", "egress.hosts", "policy.core"]
+    assert with_zones.compared["agent"]["absent"] == []
 
 
 def test_a_side_file_that_does_not_read_as_its_artifact_is_refused(owner):
@@ -191,37 +195,24 @@ def test_a_side_file_no_target_reads_is_refused(owner):
     assert "read by no target" in str(raised.value)
 
 
-def test_a_value_key_is_carried_only_at_the_value_the_kind_carries(owner):
-    from prismpath.agent import dist_kind
-    defaults = owner.release(max_processes="64", timeout_s="30", shell_many="20", allowed_remotes="", ro_mounts="",
-                             toolchain_dirs=" | ".join(reversed(dist_kind.TOOLCHAIN_DIRS)))
-    assert seal.seal_manifest(defaults, SIGNERS).envelopes
-    for key, value in (("max_processes", "8"), ("toolchain_dirs", "/usr"), ("local_model", "m"),
-                       ("cc_freshness_s", "60"), ("grant_classes", "read")):
-        with pytest.raises(Refused) as raised:
-            seal.seal_manifest(owner.release(2, **{key: value}), SIGNERS)
-        assert f"policy.{key}" in str(raised.value), key
+@pytest.mark.parametrize("key,value", [
+    ("max_processes", "64"), ("timeout_s", "30"), ("shell_many", "20"), ("allowed_remotes", ""), ("ro_mounts", ""),
+    ("toolchain_dirs", "workspace:.toolchain | /usr"), ("max_processes", "8"), ("local_model", "m"),
+    ("cc_freshness_s", "60"), ("grant_classes", "read"), ("cc_protected", "a"), ("cc_required_certainty", "certain"),
+    ("cc_engine_agreement", "2"),
+])
+def test_every_value_key_is_refused_until_a_pep_holds_it(owner, key, value):
+    """The review's F1: the launcher runs 512 processes and calls of 120 to 600 seconds whatever a manifest says, and no
+    artifact carries any value key, so each is refused, today's defaults included."""
+    with pytest.raises(Refused) as raised:
+        seal.seal_manifest(owner.release(**{key: value}), SIGNERS)
+    assert f"policy.{key}" in str(raised.value) and "no PEP holds this yet" in str(raised.value)
 
 
-def test_the_carried_values_are_the_agents_built_in_defaults():
-    from prismpath.agent import classifier, dist_kind, profile, session_state
-    assert dist_kind.MANIFEST_VALUES["max_processes"] == profile.MAX_PROCESSES
-    assert dist_kind.MANIFEST_VALUES["timeout_s"] == profile.TIMEOUT_S
-    assert dist_kind.MANIFEST_VALUES["shell_many"] == session_state.SHELL_MANY
-    workspace = Path("/w")
-    home = Path("~").expanduser()
-    spelled = []
-    for path in classifier.Config.for_workspace(workspace).toolchain_dirs:
-        path = Path(path)
-        if path.is_relative_to(Path(classifier.os.path.realpath(workspace))):
-            spelled.append("workspace:" + str(path.relative_to(Path(classifier.os.path.realpath(workspace)))))
-        elif path.is_relative_to(home):
-            spelled.append("~/" + str(path.relative_to(home)))
-        else:
-            spelled.append(str(path))
-    assert sorted(spelled) == sorted(dist_kind.TOOLCHAIN_DIRS)
+def test_no_target_carries_a_value_key_and_the_shipped_manifest_writes_none():
+    assert all(not kind.manifest_values for kind in kinds.KINDS.values())
     shipped = pm.parse((POLICY / "agent_default.policy.md").read_text(encoding="utf-8"))
-    assert all(seal._same_value(shipped.get(key), value) for key, value in dist_kind.MANIFEST_VALUES.items())
+    assert not set(shipped.values) & set(pm.VALUE_KEYS)
 
 
 def test_a_gateway_release_needs_its_routes(owner):
@@ -272,20 +263,58 @@ def test_widens_yes_never_signs_a_widening_statement(owner):
     assert all(one.artifact not in kinds.TRUST_ARTIFACTS for one in result.envelopes)
 
 
-def _held(tmp_path, release):
-    """A controller directory that serves the agent stream and holds the release sealed from `release`."""
+def _held(tmp_path, release, skip=(), name="controller"):
+    """A controller directory that serves the agent stream and holds the release sealed from `release`, without the
+    envelopes of the artifacts in `skip` (a partial copy)."""
     from prismpath.distribution import trust
     from prismpath.distribution.controller import Controller
-    directory = tmp_path / "controller"
+    directory = tmp_path / name
     control = Controller(str(directory), _dist.instance_key("C"), clock=lambda: release.created + 60)
     control.add_anchor(trust.anchor_bytes([_dist.public("A")], target="agent", stream=STREAM))
     result = seal.seal_manifest(release, SIGNERS)
     statement, body = seal.widening_sealed(by_artifact(result)["policy.core"].sealed, [], SIGNERS)
     control.put(statement, body)
     for one in result.envelopes:
-        control.put(one.sealed, one.body)
+        if one.artifact not in skip:
+            control.put(one.sealed, one.body)
     control.save()
     return str(directory)
+
+
+def test_dropping_the_zones_under_widens_no_is_refused_and_named(owner, tmp_path):
+    """Probe P2 of the review: a whole held release protects `secret`, and a manifest that drops its zones says it does
+    not widen. The tool finds it larger and names `agent.zones`; under `widens: yes` it seals and prints both."""
+    first = owner.release(side={"egress_hosts": HOSTS, "zones": zones("secret")})
+    held = _held(tmp_path, first)
+    with pytest.raises(Refused) as raised:
+        seal.seal_manifest(owner.release(2, widens="no", replaces=SHA(first.image), side={"egress_hosts": HOSTS}),
+                           SIGNERS, held=held)
+    assert raised.value.cause == widening.UNSIGNED and "larger agent.zones" in str(raised.value)
+    widened = seal.seal_manifest(owner.release(3, side={"egress_hosts": HOSTS}), SIGNERS, held=held)
+    assert widened.compared["agent"] == {"held": "whole", "larger": ["agent.zones"], "absent": ["agent.zones"]}
+
+
+def test_a_held_release_with_an_envelope_missing_is_no_release_to_compare_with(owner, tmp_path):
+    """Probe P3 of the review: the held copy lacks the zones envelope of the release it replaces. Read as protecting
+    nothing, the zones' absence would look not larger and seal `widens` false, which the PEP that holds the whole release
+    then refuses. The tool now requires the held release whole (its release id over the held bodies) and refuses."""
+    first = owner.release(side={"egress_hosts": HOSTS, "zones": zones("secret")})
+    partial = _held(tmp_path, first, skip=("agent.zones",))
+    with pytest.raises(Refused) as raised:
+        seal.seal_manifest(owner.release(2, widens="no", replaces=SHA(first.image), side={"egress_hosts": HOSTS}),
+                           SIGNERS, held=partial)
+    assert raised.value.cause == widening.UNSIGNED and "holds only part" in str(raised.value)
+    widened = seal.seal_manifest(owner.release(3, side={"egress_hosts": HOSTS}), SIGNERS, held=partial)
+    assert widened.compared["agent"]["held"] == "partial" and widened.replaces == SHA(first.image)
+
+
+def test_a_target_that_cannot_decide_is_not_sealed_from_a_manifest(owner, monkeypatch):
+    """The review's F2, second part: a kind that cannot decide larger would leave the tool's comparison the only one."""
+    import dataclasses
+    monkeypatch.setitem(kinds.TARGETS, "agent", dataclasses.replace(kinds.TARGETS["agent"], decides=False))
+    with pytest.raises(Refused) as raised:
+        seal.seal_manifest(owner.release(), SIGNERS)
+    assert "cannot decide larger" in str(raised.value)
 
 
 def test_mixed_targets_that_replace_different_policies_are_refused(owner, tmp_path):
@@ -358,9 +387,10 @@ def test_the_command_seals_a_manifest_into_a_directory_and_raises_the_floor(owne
     assert (out / "agent.policy.core.sealed").is_file() and (out / "agent.egress.hosts.body").read_bytes() == HOSTS
     floor = json.loads((state / flow_authority.FLOOR_FILE).read_text(encoding="utf-8"))
     assert floor[STREAM]["version"] == 1
-    again = run("dist", "seal", "--manifest", str(path), "--pub", owner.pub, "--key", key, "--out", str(out),
-                "--state-dir", str(state))
+    again = run("dist", "seal", "--manifest", str(path), "--pub", owner.pub, "--key", key, "--out",
+                str(tmp_path / "again"), "--state-dir", str(state))
     assert again[0] == 0                                       # the same version and text: a repeat
+    assert "compared" in json.loads(again[1]) and json.loads(again[1])["compared"]["agent"]["absent"] == ["agent.zones"]
     older = owner.write(1, side={"egress_hosts": MORE_HOSTS})  # another text at the version sealed
     code, _printed, err = run("dist", "seal", "--manifest", str(older), "--pub", owner.pub, "--key", key, "--out",
                               str(tmp_path / "out2"), "--state-dir", str(state))
@@ -371,18 +401,62 @@ def test_the_command_refuses_a_manifest_that_does_not_hold_and_writes_nothing(ow
     path = owner.write(side={"egress_hosts": HOSTS})
     (owner.dir / "egress_hosts1.dat").write_bytes(MORE_HOSTS)
     code, _printed, err = run("dist", "seal", "--manifest", str(path), "--pub", owner.pub, "--key",
-                              _signer_pem(tmp_path), "--out", str(tmp_path / "out"))
+                              _signer_pem(tmp_path), "--out", str(tmp_path / "out"), "--state-dir", str(tmp_path / "s"))
     assert code == 1 and "egress_hosts-sha256" in err and not (tmp_path / "out").exists()
 
 
 def test_the_command_takes_no_release_flag_with_a_manifest(owner, tmp_path):
     path = owner.write()
-    code, _printed, err = run("dist", "seal", "--manifest", str(path), "--pub", owner.pub, "--key",
-                              _signer_pem(tmp_path), "--out", str(tmp_path / "out"), "--seq", "3", "--widens")
+    base = ["dist", "seal", "--manifest", str(path), "--pub", owner.pub, "--key", _signer_pem(tmp_path), "--out",
+            str(tmp_path / "out"), "--state-dir", str(tmp_path / "s")]
+    code, _printed, err = run(*base, "--seq", "3", "--widens")
     assert code == 2 and "--seq" in err and "--widens" in err
+    for flag, value in (("--expires", "5"), ("--expires", "0"), ("--not-before", "5"), ("--stream", "x"),
+                        ("--ceiling", "d")):
+        code, _printed, err = run(*base, flag, value)          # probe P1 of the review: --expires was dropped
+        assert code == 2 and flag in err, flag
+    assert not (tmp_path / "out").exists()
     code, _printed, err = run("dist", "seal", "--manifest", str(path), "--key", _signer_pem(tmp_path), "--out",
-                              str(tmp_path / "out"))
+                              str(tmp_path / "out"), "--state-dir", str(tmp_path / "s"))
     assert code == 2 and "--pub" in err
+
+
+def test_the_version_floor_is_not_opt_in(owner, tmp_path):
+    """Probe P4 of the review: without --state-dir an older signed manifest of the stream sealed again."""
+    key = _signer_pem(tmp_path)
+    newer, older = owner.write(6, side={"egress_hosts": HOSTS}), owner.write(5, side={"egress_hosts": HOSTS})
+    code, _printed, err = run("dist", "seal", "--manifest", str(older), "--pub", owner.pub, "--key", key, "--out",
+                              str(tmp_path / "o"))
+    assert code == 2 and "--state-dir" in err and not (tmp_path / "o").exists()
+    state = str(tmp_path / "state")
+    assert run("dist", "seal", "--manifest", str(newer), "--pub", owner.pub, "--key", key, "--out",
+               str(tmp_path / "o6"), "--state-dir", state)[0] == 0
+    code, _printed, err = run("dist", "seal", "--manifest", str(older), "--pub", owner.pub, "--key", key, "--out",
+                              str(tmp_path / "o5"), "--state-dir", state)
+    assert code == 1 and "flow:version-replay" in err and not (tmp_path / "o5").exists()
+
+
+def test_out_is_a_new_or_empty_directory(owner, tmp_path):
+    """The review's F6: a directory with another seal's envelopes would mix two releases, and a file was a traceback."""
+    key = _signer_pem(tmp_path)
+    first, second = owner.write(1, side={"zones": zones("a")}), owner.write(2)
+    out, state = tmp_path / "out", str(tmp_path / "state")
+    assert run("dist", "seal", "--manifest", str(first), "--pub", owner.pub, "--key", key, "--out", str(out),
+               "--state-dir", state)[0] == 0
+    code, _printed, err = run("dist", "seal", "--manifest", str(second), "--pub", owner.pub, "--key", key, "--out",
+                              str(out), "--state-dir", state)
+    assert code == 2 and "already holds" in err and not (out / "agent.policy.core.sealed").read_bytes() == b""
+    assert sorted(path.name for path in out.iterdir()) == sorted(
+        f"agent.{name}.{ext}" for name in ("agent.zones", "egress.hosts", "policy.core") for ext in ("body", "sealed"))
+    a_file = tmp_path / "a_file"
+    a_file.write_bytes(b"x")
+    code, _printed, err = run("dist", "seal", "--manifest", str(second), "--pub", owner.pub, "--key", key, "--out",
+                              str(a_file), "--state-dir", state)
+    assert code == 2 and "is a file" in err
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    assert run("dist", "seal", "--manifest", str(second), "--pub", owner.pub, "--key", key, "--out", str(empty),
+               "--state-dir", state)[0] == 0
 
 
 def test_the_flag_form_still_seals_and_says_it_is_deprecated(tmp_path):

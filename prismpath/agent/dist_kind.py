@@ -504,14 +504,11 @@ def compile_checks(image: bytes, values) -> list:
 
 # The side files of a manifest an agent release is made from, and the artifact each one's bytes are (SPEC.md section 10).
 MANIFEST_INPUTS = {"egress_hosts": "egress.hosts", "zones": "agent.zones"}
-# The value keys an agent release carries, each at the one value it carries it at: today's built in defaults
-# (`profile.MAX_PROCESSES`, `profile.TIMEOUT_S`, `session_state.SHELL_MANY`, `classifier.Config.for_workspace`, no
-# remote and no read only mount). No artifact of a release carries another value yet, so a manifest that writes one is
-# refused by the sealing tool rather than sealed into a release that drops it. A test pins each against its source.
-TOOLCHAIN_DIRS = ("workspace:.toolchain", "/usr", "/opt", "/etc", "~/.cargo", "~/.rustup", "~/.elan", "~/.local",
-                  "~/.npm", "~/.pyenv")
-MANIFEST_VALUES = {"allowed_remotes": (), "max_processes": 64, "timeout_s": 30, "shell_many": 20,
-                   "toolchain_dirs": TOOLCHAIN_DIRS, "ro_mounts": ()}
+# The value keys an agent release carries: none yet. No artifact of a release holds `policy.max_processes`,
+# `policy.timeout_s`, `policy.shell_many`, `policy.toolchain_dirs`, `policy.ro_mounts` or `policy.allowed_remotes`, and
+# the launcher runs values of its own (512 processes, calls of 120 to 600 seconds), so a signed value would read as
+# enforced and not be. The sealing tool refuses each until A4c wires it into what a PEP holds.
+MANIFEST_VALUES: Dict[str, Any] = {}
 NO_HOSTS = canon.canon2_bytes([])                  # `egress.hosts` when the manifest names none: no host is reached
 
 
