@@ -319,8 +319,8 @@ def _json(path: Optional[str]) -> Optional[dict]:
 
 
 def _authority(paths: List[str]) -> list:
-    from prismpath.hotswap import policy_pack
-    return [policy_pack._load_private(path) for path in paths]
+    from prismpath.onion import keys
+    return [keys.load_signer(path) for path in paths]
 
 
 def _instance(path: str):
@@ -685,9 +685,8 @@ def revoke_cmd(args) -> int:
 
 
 def rotation_body(new_private, retire: str = "") -> bytes:
-    from prismpath.hotswap import policy_pack
-    _priv, _pub, ser, _invalid = policy_pack._ed25519()
-    public = new_private.public_key().public_bytes(ser.Encoding.Raw, ser.PublicFormat.Raw)
+    from prismpath.onion import keys
+    public = keys.public_raw_of(new_private)
     return canon.canon2_bytes({canon.ENCODING_KEY: canon.CANON2, "format": kinds.ROTATION_FORMAT,
                                "add": public.hex(), "retire": retire})
 
@@ -705,11 +704,9 @@ def rekey_cmd(args) -> int:
     Otherwise it is refused before anything is stored. Each statement is stored in the controller directory, which the running
     `serve` offers."""
     from prismpath.distribution import widening
-    from prismpath.hotswap import policy_pack
     controller = _controller(args)
     old, new = _authority([args.old])[0], _authority([args.new])[0]
-    _priv, _pub, ser, _invalid = policy_pack._ed25519()
-    old_id = env.key_id(old.public_key().public_bytes(ser.Encoding.Raw, ser.PublicFormat.Raw))
+    old_id = env.key_id(old.public_raw)
     targets = sorted({anchor["target"] for anchor in controller.anchors.values()})
     now = int(time.time())
     try:

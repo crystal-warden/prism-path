@@ -57,8 +57,8 @@ import os
 from typing import Callable, Dict, Iterable, List, Optional, Tuple
 
 from prismpath import canon
-from prismpath.extras import MissingExtra
 from prismpath.ledgers import ledger_ots as merkle
+from prismpath.onion import keys
 
 # A statement is written as `prismpath-root-statement/3`, a canon/2 document that names its encoding,
 # carries its time as an integer of microseconds, and states a root of the RFC 6962 tree
@@ -94,50 +94,25 @@ UNSIGNED = "unsigned"                # no statements, and no key was pinned: a l
 INVALID = "invalid"                  # at least one fatal finding
 
 
-def _ed25519():
-    try:
-        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
-        from cryptography.hazmat.primitives import serialization
-        from cryptography.exceptions import InvalidSignature
-    except ImportError as exc:
-        raise MissingExtra("signing", "cryptography") from exc
-    return Ed25519PrivateKey, Ed25519PublicKey, serialization, InvalidSignature
+# The older private name, the same function until the shims go: integrations read it. New code calls
+# `prismpath.onion.keys`.
+_ed25519 = keys.primitives
+key_id_of = keys.key_id_of        # sha256 hex of the raw 32 byte public key, the identity the authority keys use
+fingerprint = keys.fingerprint    # the first 16 hex characters of the key id
 
 
-def key_id_of(public_raw: bytes) -> str:
-    """sha256 hex of the raw 32 byte public key: the same identity rule the authority keys use, so one
-    revocation list and one comparison serve both."""
-    return canon.sha256_hex(public_raw)
+class InstanceKey(keys.FileKey):
+    """A loaded instance private key, a file key behind the `Signer` port. It never renders its private half:
+    `repr` shows the fingerprint."""
 
-
-def fingerprint(key_id: str) -> str:
-    """The short form people read and compare: the first 16 hex characters of the key id."""
-    return key_id[:16]
-
-
-class InstanceKey:
-    """A loaded instance private key. It never renders its private half: `repr` shows the fingerprint."""
-
-    def __init__(self, private_key, public_raw: bytes, path: Optional[str] = None):
-        self._private = private_key
-        self.public_raw = public_raw
-        self.key_id = key_id_of(public_raw)
-        self.fingerprint = fingerprint(self.key_id)
-        self.path = path
+    def __init__(self, private_key, public_raw: Optional[bytes] = None, path: Optional[str] = None):
+        super().__init__(private_key, public_raw, path)
 
     @classmethod
     def load(cls, path: str) -> "InstanceKey":
-        _Priv, _Pub, ser, _Inv = _ed25519()
-        with open(path, "rb") as handle:
-            private_key = ser.load_pem_private_key(handle.read(), password=None)
-        public_raw = private_key.public_key().public_bytes(ser.Encoding.Raw, ser.PublicFormat.Raw)
-        return cls(private_key, public_raw, path)
-
-    def sign(self, data: bytes) -> bytes:
-        return self._private.sign(data)
-
-    def __repr__(self) -> str:
-        return f"InstanceKey(fingerprint={self.fingerprint!r})"
+        key = super().load(path)
+        key.public_raw                    # worked out now: an instance key that loads has a public half
+        return key
 
 
 def keygen(out_dir: str, name: str = DEFAULT_KEY_NAME) -> dict:
@@ -145,49 +120,22 @@ def keygen(out_dir: str, name: str = DEFAULT_KEY_NAME) -> dict:
     bytes), the same file shapes `swap keygen` writes. It refuses to replace an existing key, because
     the statements an old key signed verify only against that key. Returns paths, key id and
     fingerprint; never the private material."""
-    Priv, _Pub, ser, _Inv = _ed25519()
-    os.makedirs(out_dir, exist_ok=True)
-    priv_path = os.path.join(out_dir, f"{name}.key")
-    pub_path = os.path.join(out_dir, f"{name}.pub")
-    for path in (priv_path, pub_path):
-        if os.path.exists(path):
-            raise FileExistsError(17, "refusing to replace an existing key (statements it signed verify only "
-                                      "against it); choose another --name or --out", path)
-    private_key = Priv.generate()
-    pem = private_key.private_bytes(ser.Encoding.PEM, ser.PrivateFormat.PKCS8, ser.NoEncryption())
-    fd = os.open(priv_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    with os.fdopen(fd, "wb") as handle:
-        handle.write(pem)
-    public_raw = private_key.public_key().public_bytes(ser.Encoding.Raw, ser.PublicFormat.Raw)
-    with open(pub_path, "wb") as handle:
-        handle.write(public_raw)
-    key_id = key_id_of(public_raw)
-    return {"private": priv_path, "public": pub_path, "key_id": key_id, "fingerprint": fingerprint(key_id),
-            "role": "instance"}
+    return {**keys.keygen(out_dir, name, replace=False), "role": "instance"}
 
 
-def load_public(path: str) -> bytes:
-    """A raw 32 byte Ed25519 public key file, as `keygen` and `swap keygen` write it."""
-    with open(path, "rb") as handle:
-        raw = handle.read()
-    if len(raw) != 32:
-        raise ValueError(f"{path}: not a raw 32 byte Ed25519 public key ({len(raw)} bytes)")
-    return raw
+load_public = keys.load_public    # a raw 32 byte Ed25519 public key file, as `keygen` and `swap keygen` write it
 
 
-def key_from_env(environ=None) -> Optional[InstanceKey]:
+def key_from_env(environ=None) -> Optional[keys.Signer]:
     """The instance key named by PRISMPATH_INSTANCE_KEY, or None when it is unset or empty. A value `unix:PATH`
     names a signer daemon's socket (`prismpath.ledgers.signer_daemon`): the key stays in the daemon and each
-    signature is asked of it."""
+    signature is asked of it (`keys.load_signer`)."""
     environ = os.environ if environ is None else environ
     path = environ.get(INSTANCE_KEY_ENV, "").strip()
-    if path.startswith("unix:"):
-        from prismpath.ledgers import signer_daemon
-        return signer_daemon.DaemonKey(path[len("unix:"):])
-    return InstanceKey.load(path) if path else None
+    return keys.load_signer(path, file_key=InstanceKey) if path else None
 
 
-def check_separation(instance_key: Optional[InstanceKey], authority_key_ids: Iterable[str]) -> None:
+def check_separation(instance_key: Optional[keys.Signer], authority_key_ids: Iterable[str]) -> None:
     """Refuse an instance key that is also a policy authority key: the key that authorizes policy must
     not be the key that attests what the deployment recorded under it."""
     if instance_key is not None and instance_key.key_id in set(authority_key_ids):
@@ -416,7 +364,7 @@ def _now_us() -> int:
     return _time.time_ns() // 1000
 
 
-def make_statement(key: InstanceKey, *, log: str, seq: int, root: str, leaves: int, prev: str,
+def make_statement(key: keys.Signer, *, log: str, seq: int, root: str, leaves: int, prev: str,
                    trigger: str, policy: Optional[dict] = None, time_us: Optional[int] = None) -> dict:
     body = {"format": STATEMENT_FORMAT, canon.ENCODING_KEY: canon.CANON2, "log": log, "seq": int(seq),
             "root": root, "leaves": int(leaves), "prev": prev,
@@ -472,7 +420,7 @@ def read_statements(path: str, data: Optional[bytes] = None) -> Tuple[List[dict]
 class RootSigner:
     """Appends signed statements to one statements file, continuing the chain already in it."""
 
-    def __init__(self, key: InstanceKey, path: str, log: str = LOG_AUDIT):
+    def __init__(self, key: keys.Signer, path: str, log: str = LOG_AUDIT):
         self.key = key
         self.path = path
         self.log = log
@@ -519,13 +467,13 @@ class RootSigner:
 
 
 def _verify_signature(statement: dict) -> bool:
-    _Priv, Pub, _ser, InvalidSignature = _ed25519()
+    keys.require()
     try:
-        Pub.from_public_bytes(bytes.fromhex(statement["public_key"])).verify(
-            bytes.fromhex(statement["sig"]), signed_bytes(statement))
-        return True
-    except (InvalidSignature, ValueError):
+        public_raw, signature = bytes.fromhex(statement["public_key"]), bytes.fromhex(statement["sig"])
+        message = signed_bytes(statement)
+    except ValueError:
         return False
+    return keys.verify(public_raw, signature, message)
 
 
 def _well_formed(statement: dict, log: str) -> bool:

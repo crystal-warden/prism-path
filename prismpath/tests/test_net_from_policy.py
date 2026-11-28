@@ -50,6 +50,7 @@ from prismpath.agent.profile import compile_profile  # noqa: E402
 from prismpath.kernel import canon2  # noqa: E402
 from prismpath.kernel.parser import parse  # noqa: E402
 from prismpath.tests.test_egress_policy import IMAGES, _oracle_allows, oracle, with_rules  # noqa: E402,F401
+from prismpath.onion import keys as onion_keys
 
 TCP, UDP, ICMP, GRE = 6, 17, 1, 47
 GOVERNED = ("192.168.4.20", "200.1.2.3")
@@ -438,7 +439,7 @@ def older_sign_destinations(path, priv_path, pub_path, version=1):
                 "created": datetime.now(timezone.utc).isoformat(timespec="seconds")}
     json_path, sig_path = str(path) + ".manifest.json", str(path) + ".manifest.sig"
     pp.write_signed_document(json_path, manifest)
-    Path(sig_path).write_bytes(pp._load_private(priv_path).sign(pp.signed_bytes(manifest)))
+    Path(sig_path).write_bytes(onion_keys.load_signer(priv_path).sign(pp.signed_bytes(manifest)))
     return manifest
 
 
@@ -635,7 +636,7 @@ def test_a_tampered_or_wrongly_signed_older_destination_table_is_refused(owner, 
         manifest = json.loads(manifest_path.read_text())
         manifest["file_sha256"] = pp.sha256_hex(path.read_bytes())
         pp.write_signed_document(str(manifest_path), manifest)
-        sig_path.write_bytes(pp._load_private(keys["private"]).sign(pp.signed_bytes(manifest)))
+        sig_path.write_bytes(onion_keys.load_signer(keys["private"]).sign(pp.signed_bytes(manifest)))
     got, table, _manifest = nf.verify_destinations(path, pub, revoked)
     assert got == [reason] and table is None
     with pytest.raises(nf.DestinationError, match=reason):

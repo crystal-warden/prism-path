@@ -183,17 +183,16 @@ class Record:
         verifies. The envelope is signed when at least the install threshold count. Otherwise `sig:revoked-key`
         when an entry verifies under a retired install or operator key, `sig:invalid` when one names a held key and
         does not verify, and `dist:unknown-key`. A retired id past the eight remembered reads as unknown (IS11)."""
-        from prismpath.hotswap import policy_pack
-        _priv, Public, _ser, InvalidSignature = policy_pack._ed25519()
+        from prismpath.onion import keys
+        keys.require()
         counted, held_fails = 0, False
         for kid, signature in entries:
             key = self.keys.get(kid)
             if key is None:
                 continue
-            try:
-                Public.from_public_bytes(key).verify(signature, message)
+            if keys.verify(key, signature, message):
                 counted += 1
-            except (InvalidSignature, ValueError):
+            else:
                 held_fails = True
         if counted >= self.threshold:
             return Verdict(None)
@@ -205,18 +204,16 @@ class Record:
         """OP1, S3 to S5 for the role `operator`: one signature by an operator key the record holds is enough, and
         no other key signs an answer. Otherwise `sig:revoked-key` when an entry verifies under a retired id,
         `sig:invalid` when one names a held operator key and does not verify, and `dist:unknown-key`."""
-        from prismpath.hotswap import policy_pack
-        _priv, Public, _ser, InvalidSignature = policy_pack._ed25519()
+        from prismpath.onion import keys
+        keys.require()
         held_fails = False
         for kid, signature in entries:
             key = self.operators.get(kid)
             if key is None:
                 continue
-            try:
-                Public.from_public_bytes(key).verify(signature, message)
+            if keys.verify(key, signature, message):
                 return Verdict(None)
-            except (InvalidSignature, ValueError):
-                held_fails = True
+            held_fails = True
         if any(kid in self.retired for kid, _signature in entries):
             return Verdict(REVOKED_KEY)
         return Verdict(INVALID if held_fails else UNKNOWN_KEY)
@@ -272,8 +269,8 @@ def check_trust(record: Record, body: bytes, entries: Sequence[Tuple[str, bytes]
     retired, a key id on the revocation list or a retired install or operator key. A key it adds to `keys` is not a
     held operator key, one it adds to `operators` not a held install key, and no key is in both lists. A wrong
     `widens` false is `dist:widening-unsigned`. None when it may be applied."""
-    from prismpath.hotswap import policy_pack
-    _priv, Public, _ser, InvalidSignature = policy_pack._ed25519()
+    from prismpath.onion import keys as onion_keys
+    onion_keys.require()
     doc = kinds.read_install_trust(body)
     keys = {env.key_id(bytes.fromhex(one)): bytes.fromhex(one) for one in doc["keys"]}
     operators = {env.key_id(bytes.fromhex(one)): bytes.fromhex(one) for one in doc["operators"]}
@@ -290,9 +287,7 @@ def check_trust(record: Record, body: bytes, entries: Sequence[Tuple[str, bytes]
     for kid, public in added.items():
         if kid not in signed:
             return ROTATION_INVALID
-        try:
-            Public.from_public_bytes(public).verify(signed[kid], message)
-        except (InvalidSignature, ValueError):
+        if not onion_keys.verify(public, signed[kid], message):
             return ROTATION_INVALID
     if not widens and trust_widens(record, body):
         return UNSIGNED
@@ -1098,13 +1093,13 @@ def seal_trust(record: Record, body: bytes, *, stream: str, seq: int, targets: S
     set as it is now at the threshold as it is now and by every key it adds, a sealed envelope holds four
     signatures (S2), and no key it adds was ever retired in any role: `retired` is every id the engineer's tool keeps,
     which outlasts what a PEP remembers. `Refused` otherwise."""
-    from prismpath.hotswap import policy_pack
-    _priv, _pub, ser, _invalid = policy_pack._ed25519()
+    from prismpath.onion import keys
+    keys.require()
     doc = kinds.read_install_trust(body)
     added = {env.key_id(bytes.fromhex(one)) for one in doc["keys"] + doc["operators"]} - set(record.keys) - set(record.operators)
     if added & (set(retired) | set(record.retired)):
         raise Refused(ROTATION_INVALID, "the statement adds a key that was retired (K4)")
-    signer_ids = {env.key_id(key.public_key().public_bytes(ser.Encoding.Raw, ser.PublicFormat.Raw)) for key in signers}
+    signer_ids = {env.key_id(keys.public_raw_of(key)) for key in signers}
     current = signer_ids & set(record.keys)
     if len(current) < record.threshold or not added <= signer_ids:
         need = record.threshold + len(added)

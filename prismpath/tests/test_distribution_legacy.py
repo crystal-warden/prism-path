@@ -28,6 +28,7 @@ from prismpath.kernel import canon2, ppt_compile as pc  # noqa: E402
 from prismpath.kernel.parser import parse  # noqa: E402
 from prismpath.ledgers.audit_log import AuditLog  # noqa: E402
 from prismpath.tests.test_gateway_grants import older_grant  # noqa: E402
+from prismpath.onion import keys as onion_keys
 
 ROOT = Path(__file__).resolve().parents[2]
 FIELDS = {"temp": "int"}
@@ -44,7 +45,7 @@ def older_pack(ppt, keys, version, envelope_id="env1"):
 def older_attestation(home: Path, image: bytes, case: str = commands.POLICY_CASE) -> bytes:
     """A home's `prismpath.core-image/1` attestation, signed with its authority key."""
     from prismpath.ledgers import core_evidence
-    signer = pp._load_private(str(commands._key_paths(home, "authority")[0]))
+    signer = onion_keys.load_signer(str(commands._key_paths(home, "authority")[0]))
     return canon2.dumps({"format": core_evidence.IMAGE_FORMAT, "case": case,
                          "image_sha256": hashlib.sha256(image).hexdigest(), "key_id": commands._key_id(home, "authority"),
                          "sig": signer.sign(core_evidence.IMAGE_DOMAIN + image).hex()}) + b"\n"
@@ -173,7 +174,7 @@ def test_case_100_a_sealed_record_for_another_artifact_or_kind_is_refused(tmp_pa
     home = tmp_path / "gw"
     assert gcli.init(home, None, out=open(os.devnull, "w")) == 0
     image = (home / commands.POLICY_FILE).read_bytes()
-    signer = pp._load_private(str(commands._key_paths(home, "authority")[0]))
+    signer = onion_keys.load_signer(str(commands._key_paths(home, "authority")[0]))
     (home / commands.ATTESTATION_FILE).write_bytes(legacy.local_seal("policy.core", image, [signer], seq=1,
                                                                      targets=("host",)))
     with pytest.raises(commands.AgentError, match="not a policy.core for an agent or gateway home"):

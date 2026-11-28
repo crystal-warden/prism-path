@@ -254,3 +254,16 @@ def test_a_deleted_last_statement_is_restored_from_the_daemon(running, tmp_path)
     path.write_text(path.read_text().splitlines(keepends=True)[0])
     rs.RootSigner(key, str(path), rs.LOG_AUDIT)
     assert path.read_bytes() == whole
+
+
+def test_load_signer_names_the_daemon_behind_the_port(running):
+    from prismpath.onion import keys
+    key = keys.load_signer("unix:" + running.socket)
+    assert isinstance(key, sd.DaemonKey) and isinstance(key, keys.ChainSigner)
+    assert key.public_raw == running.pub and key.fingerprint == keys.fingerprint(keys.key_id_of(running.pub))
+    message = rs.SIGNING_DOMAIN + b"not a statement"
+    with pytest.raises(sd.SignerRefused):
+        key.sign(message)                       # the daemon signs statements only, so the port holds its refusal
+    root = rs.merkle_root(_leaves(2))
+    assert core_evidence.make_root_statement(key, root, 2, b"{}", time_us=1) == \
+        core_evidence.make_root_statement(keys.load_signer(running.key_path), root, 2, b"{}", time_us=1)

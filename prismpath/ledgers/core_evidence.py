@@ -67,6 +67,7 @@ from pathlib import Path
 
 from prismpath.kernel import canon2, causes, core_policy, core_reference, core_render
 from prismpath.ledgers import ledger_ots, root_statement
+from prismpath.onion import keys as onion_keys
 
 RUN_FORMAT = "prismpath.core-run/1"
 IMAGE_FORMAT = "prismpath.core-image/1"
@@ -245,7 +246,6 @@ def produce(cases_path: Path, out: Path, keys: Path, decider: str = "python", ti
     answers included, and `rates` the counted overrides, each {rule, window, count, case, reading} naming its receipt.
     `escalations` is the escalation documents the PEP opened (bytes each), and `operator` the decision members of
     each `operator` case's receipt by case id, the answer's (OP3)."""
-    from prismpath.hotswap import policy_pack
     cases_path, out = Path(cases_path), Path(out)
     authority_key, authority_pub, instance_key, instance_pub = ensure_keys(keys)
     root_statement.check_separation(root_statement.InstanceKey.load(str(instance_key)),
@@ -263,7 +263,7 @@ def produce(cases_path: Path, out: Path, keys: Path, decider: str = "python", ti
         if case["basis"] == "operator":
             decisions[case["id"]] = [dict(operator[case["id"]]) for _raw in case["readings"]]
 
-    signer = policy_pack._load_private(str(authority_key))
+    signer = onion_keys.load_signer(str(authority_key))
     authority_id = sha256_hex(authority_pub.read_bytes())
     images = bytearray()
     for case in cases:
@@ -354,13 +354,13 @@ def _hex_of(value, size: int) -> bool:
     return isinstance(value, str) and len(value) == 2 * size and all(char in "0123456789abcdef" for char in value)
 
 
-def _public_key(raw: bytes, what: str):
-    """An Ed25519 public key from a run's raw 32 bytes, or Bad naming which key does not read."""
-    _Priv, Pub, _ser, _Invalid = root_statement._ed25519()
+def _public_key(raw: bytes, what: str) -> bytes:
+    """A run's raw 32 byte Ed25519 public key, checked to read as one, or Bad naming which key does not read."""
     try:
-        return Pub.from_public_bytes(raw)
+        onion_keys.public_key(raw)
     except ValueError:
         raise Bad(f"the run's {what} key is not a raw 32 byte Ed25519 public key") from None
+    return bytes(raw)
 
 
 def verify_root_statement(data: bytes, leaves, manifest_bytes: bytes, instance_raw: bytes) -> dict:
@@ -368,7 +368,7 @@ def verify_root_statement(data: bytes, leaves, manifest_bytes: bytes, instance_r
     the members of `prismpath.core-run-root/2` with their types, the run's instance key, a signature under
     that key over the domain prefix and the body, the Merkle root of every receipt and their count, and the
     manifest's hash."""
-    _Priv, _Pub, _ser, InvalidSignature = root_statement._ed25519()
+    onion_keys.require()
     lines = data.split(b"\n")
     if len(lines) != 2 or lines[1] != b"":
         raise Bad("the root statement is not one line")
@@ -393,10 +393,13 @@ def verify_root_statement(data: bytes, leaves, manifest_bytes: bytes, instance_r
         raise Bad("the root statement's root, key or signature is malformed")
     if statement["public_key"] != instance_raw.hex() or statement["key_id"] != sha256_hex(instance_raw):
         raise Bad("the root statement is not signed with the run's instance key")
+    public = _public_key(instance_raw, "instance")
     try:
-        _public_key(instance_raw, "instance").verify(bytes.fromhex(statement["sig"]), root_signed_bytes(statement))
-    except (InvalidSignature, ValueError):
+        signature, message = bytes.fromhex(statement["sig"]), root_signed_bytes(statement)
+    except ValueError:
         raise Bad("the root statement's signature does not verify") from None
+    if not onion_keys.verify(public, signature, message):
+        raise Bad("the root statement's signature does not verify")
     if statement["leaves"] != len(leaves) or statement["root"] != root_statement.merkle_root(leaves):
         raise Bad("the root statement does not verify: its root is not the receipts' Merkle root")
     if statement["policy"] != {"core_run_sha256": sha256_hex(manifest_bytes)}:
@@ -496,7 +499,7 @@ def _check(run: Path, pin_authority, pin_instance, pin_install=None):
         problem = flow_problem(case)
         if problem is not None:
             raise Bad(problem)
-    _Priv, _Pub, _ser, InvalidSignature = root_statement._ed25519()
+    onion_keys.require()
     authority = _public_key(authority_raw, "authority")
     image_lines = _lines(run / "images.jsonl")
     if len(image_lines) != len(cases):
@@ -512,9 +515,11 @@ def _check(run: Path, pin_authority, pin_instance, pin_install=None):
                 or attestation.get("image_sha256") != sha256_hex(case["image"]):
             raise Bad(f"case {case['id']}: the image attestation does not match the image")
         try:
-            authority.verify(bytes.fromhex(attestation["sig"]), IMAGE_DOMAIN + case["image"])
-        except (InvalidSignature, ValueError):
+            signature = bytes.fromhex(attestation["sig"])
+        except ValueError:
             raise Bad(f"case {case['id']}: the image signature does not verify") from None
+        if not onion_keys.verify(authority, signature, IMAGE_DOMAIN + case["image"]):
+            raise Bad(f"case {case['id']}: the image signature does not verify")
 
     # every receipt, in order: every reading of every case the run did not exclude, once
     excluded = {}

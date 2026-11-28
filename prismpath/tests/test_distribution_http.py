@@ -337,8 +337,7 @@ def test_case_095_three_host_peps_over_http_one_commits_one_refuses_a_downgrade_
 
 
 def _pem(path, name):
-    from prismpath.hotswap import policy_pack
-    _priv, _pub, ser, _invalid = policy_pack._ed25519()
+    from cryptography.hazmat.primitives import serialization as ser
     path.write_bytes(GEN.test_key(name).private_bytes(ser.Encoding.PEM, ser.PrivateFormat.PKCS8, ser.NoEncryption()))
     return str(path)
 

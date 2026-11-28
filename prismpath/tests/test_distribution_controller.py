@@ -460,8 +460,7 @@ def test_case_130_the_sealing_tool_refuses_a_list_that_drops_an_entry_no_floor_h
     that leaves out an envelope a floor has passed, and refuses one that leaves out an envelope no floor has
     passed, writing nothing. `seal` of a revocation list without the directory is refused."""
     from prismpath.distribution import cli as dist_cli
-    from prismpath.hotswap import policy_pack
-    _priv, _pub, ser, _invalid = policy_pack._ed25519()
+    from cryptography.hazmat.primitives import serialization as ser
     pem = tmp_path / "A.pem"
     pem.write_bytes(GEN.test_key("A").private_bytes(ser.Encoding.PEM, ser.PrivateFormat.PKCS8, ser.NoEncryption()))
     fleet = Fleet(tmp_path, names=("p1",))
@@ -665,8 +664,7 @@ def test_case_136_the_sealing_tool_and_the_controller_hold_widens_to_what_they_h
     whose rules alone differ, is in integrations/cfs/tests/test_cfs_dist.py."""
     import json
     from prismpath import cli
-    from prismpath.hotswap import policy_pack
-    _priv, _pub, ser, _invalid = policy_pack._ed25519()
+    from cryptography.hazmat.primitives import serialization as ser
     pem = tmp_path / "A.pem"
     pem.write_bytes(GEN.test_key("A").private_bytes(ser.Encoding.PEM, ser.PrivateFormat.PKCS8, ser.NoEncryption()))
     fleet = Fleet(tmp_path, names=("n1",), kind="mesh")
@@ -697,8 +695,7 @@ def test_case_136_the_sealing_tool_and_the_controller_hold_widens_to_what_they_h
 
 
 def _pem_of(tmp_path, name):
-    from prismpath.hotswap import policy_pack
-    _priv, _pub, ser, _invalid = policy_pack._ed25519()
+    from cryptography.hazmat.primitives import serialization as ser
     pem = tmp_path / f"{name}.pem"
     pem.write_bytes(GEN.test_key(name).private_bytes(ser.Encoding.PEM, ser.PrivateFormat.PKCS8, ser.NoEncryption()))
     return pem

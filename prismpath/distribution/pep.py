@@ -81,17 +81,14 @@ def _signed_by_a_held_key(trust: TrustStore, entries, message: bytes) -> bool:
     """A stored sealed envelope still carries a signature that verifies under a key the store holds, whatever that
     key's standing: a blob changed on disk is caught when it is read back, and revocation and retirement are
     R5's to judge, after the load."""
-    from prismpath.hotswap import policy_pack
-    _priv, Public, _ser, InvalidSignature = policy_pack._ed25519()
+    from prismpath.onion import keys
+    keys.require()
     for kid, signature in entries:
         key = trust.keys.get(kid)
         if key is None:
             continue
-        try:
-            Public.from_public_bytes(key.public).verify(signature, message)
+        if keys.verify(key.public, signature, message):
             return True
-        except (InvalidSignature, ValueError):
-            continue
     return False
 
 
@@ -493,8 +490,8 @@ class Pep:
         home = getattr(self.adapter, "home", None)
         if not home or not trust.keys or not os.path.isdir(home):
             return
-        from prismpath.hotswap import policy_pack
-        _priv, _pub, ser, _invalid = policy_pack._ed25519()
+        from prismpath.onion import keys
+        keys.require()
         looked = 0
         for directory, subdirectories, files in os.walk(home):
             # the scan is bounded: not the PEP's own store, not the runs a home keeps, no deeper than two levels,
@@ -515,8 +512,7 @@ class Pep:
                         head = handle.read(64)
                     if not (head.startswith(b"-----BEGIN") and b"PRIVATE KEY" in head):
                         continue
-                    key = policy_pack._load_private(path)
-                    public = key.public_key().public_bytes(ser.Encoding.Raw, ser.PublicFormat.Raw)
+                    public = keys.FileKey.load(path).public_raw
                 except (OSError, ValueError, TypeError, AttributeError):
                     continue
                 if env.key_id(public) in trust.keys:

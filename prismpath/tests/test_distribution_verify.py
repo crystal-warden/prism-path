@@ -17,6 +17,7 @@ from prismpath.distribution import devbuild, verify as verifier  # noqa: E402
 from prismpath.distribution import envelope as env  # noqa: E402
 from prismpath.distribution.trust import TrustStore  # noqa: E402
 from prismpath.ledgers.audit_log import AuditLog  # noqa: E402
+from prismpath.onion import keys as onion_keys
 
 REPO = Path(__file__).resolve().parent.parent
 CORPUS = json.loads((REPO / "portable" / "conformance" / "distribution.json").read_text(encoding="utf-8"))
@@ -277,7 +278,7 @@ def test_case_127_a_meta_member_of_another_form_is_refused_where_it_is_read(tmp_
         manifest[member] = "x"
         pp.write_signed_document(str(ppt) + ".manifest.json", manifest)
         with open(str(ppt) + ".manifest.sig", "wb") as handle:
-            handle.write(pp._load_private(keys["private"]).sign(pp.signed_bytes(manifest)))
+            handle.write(onion_keys.load_signer(keys["private"]).sign(pp.signed_bytes(manifest)))
         ok, reasons, _manifest = pp.verify_pack(str(ppt), [keys["public"]])
         assert (ok, reasons) == (False, ["manifest:bad-format"]), member
         assert pp.check_envelope(manifest, image, envelope) == (False, ["manifest:bad-format"])

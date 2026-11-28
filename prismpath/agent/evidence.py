@@ -59,8 +59,8 @@ class EpisodeRun:
 
     def close(self, time_us: int = None) -> Dict[str, Any]:
         """Seal the episode: the inputs, the signed image attestation, the manifest and the signed root."""
-        from prismpath.hotswap import policy_pack
         from prismpath.ledgers import root_statement
+        from prismpath.onion import keys as onion_keys
         self.receipts.close()
         authority_key, authority_pub, instance_key, instance_pub = ensure_keys(self.keys)
         instance = root_statement.InstanceKey.load(str(instance_key))
@@ -68,7 +68,7 @@ class EpisodeRun:
         root_statement.check_separation(instance, [authority_id])
         cases = [{"id": self.case_id, "image": self.image, "readings": list(self.readings)}]
         core_evidence.write_cases(cases, self.run / "cases.jsonl")
-        signer = policy_pack._load_private(str(authority_key))
+        signer = onion_keys.load_signer(str(authority_key))
         images = canon2.dumps({"format": core_evidence.IMAGE_FORMAT, "case": self.case_id,
                                "image_sha256": core_evidence.sha256_hex(self.image), "key_id": authority_id,
                                "sig": signer.sign(core_evidence.IMAGE_DOMAIN + self.image).hex()}) + b"\n"

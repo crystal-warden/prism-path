@@ -27,6 +27,7 @@ from prismpath.hotswap import crypto_registry as cr
 from prismpath.hotswap import policy_pack as pp
 from prismpath.ledgers.audit_log import AuditLog
 from prismpath.ledgers import root_statement
+from prismpath.onion import keys
 from prismpath.hotswap.policy_host import _authority_key_ids
 from prismpath import canon
 
@@ -57,8 +58,7 @@ def build_crypto_pack(ppt_path: str, fields: dict, version: int, envelope_id: st
     manifest = pp.build_manifest(image, fields, version, envelope_id, key_id)
     manifest["suites"] = sorted(suites)
     manifest["registry_hash"] = registry_hash
-    priv = pp._load_private(priv_path)
-    sig = priv.sign(pp.signed_bytes(manifest))
+    sig = keys.load_signer(priv_path).sign(pp.signed_bytes(manifest))
     pp.write_signed_document(ppt_path + ".manifest.json", manifest)
     with open(ppt_path + ".manifest.sig", "wb") as handle:
         handle.write(sig)
@@ -137,7 +137,7 @@ def measure_suite_cost(suite_spec: dict, payload_len: int = 1024, iters: int = 5
 class CryptoHost:
     def __init__(self, state_dir: str, pubkey_paths: List[str], envelope: dict, registry: dict,
                  audit_path: Optional[str] = None, revoked: frozenset = frozenset(),
-                 instance_key: Optional[root_statement.InstanceKey] = None):
+                 instance_key: Optional[keys.Signer] = None):
         self.state_dir = state_dir
         self.pubkey_paths = list(pubkey_paths)
         self.envelope = envelope

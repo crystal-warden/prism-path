@@ -42,6 +42,7 @@ from typing import Dict, Iterable, List, Optional, Tuple
 
 from prismpath import canon
 from prismpath.ledgers import root_statement as rs
+from prismpath.onion import keys
 
 FORMAT = "prismpath-root-witness/1"
 SIGNING_DOMAIN = b"prismpath-root-witness/1\x00"
@@ -81,12 +82,12 @@ def _hex(value, size: int) -> bool:
 
 
 def _verify(public_hex: str, sig_hex: str, message: bytes) -> bool:
-    _Priv, Pub, _ser, InvalidSignature = rs._ed25519()
+    keys.require()
     try:
-        Pub.from_public_bytes(bytes.fromhex(public_hex)).verify(bytes.fromhex(sig_hex), message)
-        return True
-    except (InvalidSignature, ValueError):
+        public_raw, signature = bytes.fromhex(public_hex), bytes.fromhex(sig_hex)
+    except ValueError:
         return False
+    return keys.verify(public_raw, signature, message)
 
 
 def _core_run_signed_bytes(statement: dict) -> bytes:
@@ -125,7 +126,7 @@ class Witness:
     `state_path` is a canon/2 file the witness writes atomically after every cosignature, so a witness that
     restarts resumes where it stopped and still refuses a shorter or forked log."""
 
-    def __init__(self, key: rs.InstanceKey, signers: Iterable[bytes], state_path: str):
+    def __init__(self, key: keys.Signer, signers: Iterable[bytes], state_path: str):
         self.key = key
         self.signers = {rs.key_id_of(raw) for raw in signers}
         if not self.signers:

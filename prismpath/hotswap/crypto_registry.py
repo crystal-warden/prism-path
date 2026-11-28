@@ -19,6 +19,7 @@ import os
 from typing import Dict, List, Optional, Tuple
 
 from prismpath.hotswap import policy_pack as pp
+from prismpath.onion import keys
 from prismpath import canon
 
 REGISTRY_FORMAT = "ppt-suite-registry/1"
@@ -59,7 +60,7 @@ def sign_registry(registry: dict, priv_path: str, out_path: str) -> str:
     """Write the canonical registry JSON + a detached Ed25519 signature (`<out>.sig`). Returns hash. The
     registry is written as canon/2 (it names the encoding) and the signature covers `canon.CANON2_DOMAIN`
     and those bytes."""
-    priv = pp._load_private(priv_path)
+    priv = keys.load_signer(priv_path)
     registry = canon.tagged(registry)
     payload = canon.canon2_bytes(registry)
     with open(out_path, "wb") as handle:
@@ -74,7 +75,7 @@ def verify_registry(path: str, pubkey_paths: List[str],
                     revoked: frozenset = frozenset()) -> Tuple[bool, List[str], Optional[dict]]:
     """Verify a registry file's detached signature by a known, non-revoked authority key.
     Returns (ok, stable-reasons, registry-or-None). Loud absence if signing lib is unavailable."""
-    _Priv, _Pub, _ser, InvalidSignature = pp._ed25519()
+    keys.require()
     sig_path = path + ".sig"
     if not os.path.exists(path) or not os.path.exists(sig_path):
         return False, ["registry:missing"], None
@@ -92,13 +93,10 @@ def verify_registry(path: str, pubkey_paths: List[str],
     message = canon.CANON2_DOMAIN + raw
     signer_id = None
     for pk in pubkey_paths:
-        pub, key_id = pp.load_public(pk)
-        try:
-            pub.verify(sig, message)
+        public_raw, key_id = pp.load_public_raw(pk)
+        if keys.verify(public_raw, sig, message):
             signer_id = key_id
             break
-        except InvalidSignature:
-            continue
     if signer_id is None:
         return False, ["registry:sig-invalid"], registry
     if signer_id in revoked:

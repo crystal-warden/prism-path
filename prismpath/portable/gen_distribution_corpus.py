@@ -54,6 +54,7 @@ from prismpath.distribution import verify as verifier  # noqa: E402
 from prismpath.distribution.trust import TrustStore  # noqa: E402
 from prismpath.hotswap import policy_pack as pp  # noqa: E402
 from prismpath.kernel import canon2, ppt_compile  # noqa: E402
+from prismpath.onion import keys as onion_keys  # noqa: E402
 
 OUT = HERE / "conformance" / "distribution.json"
 SPEC = REPO / "docs" / "design" / "spec-policy-distribution.md"
@@ -85,8 +86,7 @@ def test_key(name: str):
 
 
 def public_raw(private) -> bytes:
-    _priv, _pub, ser, _invalid = pp._ed25519()
-    return private.public_key().public_bytes(ser.Encoding.Raw, ser.PublicFormat.Raw)
+    return onion_keys.public_raw_of(private)
 
 
 def image() -> bytes:

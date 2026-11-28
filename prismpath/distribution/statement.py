@@ -91,10 +91,7 @@ def verify(data: bytes, controller_public: Optional[bytes]) -> Optional[Statemen
         statement, unsigned, signature = parse(data)
     except Refused:
         return None
-    from prismpath.hotswap import policy_pack
-    _priv, Public, _ser, InvalidSignature = policy_pack._ed25519()
-    try:
-        Public.from_public_bytes(bytes(controller_public)).verify(signature, signed_message(unsigned))
-    except (InvalidSignature, ValueError):
+    from prismpath.onion import keys
+    if not keys.verify(bytes(controller_public), signature, signed_message(unsigned)):
         return None
     return statement

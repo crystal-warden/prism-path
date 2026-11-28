@@ -51,6 +51,7 @@ from prismpath.distribution import envelope as env
 from prismpath.distribution import kinds
 from prismpath.distribution.kinds import Refused
 from prismpath.kernel import canon2
+from prismpath.onion import keys
 
 FORMAT = "prismpath.grant/1"                       # the older form, read for L3
 GRANT_FORMAT = kinds.GRANT_FORMAT
@@ -143,7 +144,6 @@ def issue(home: Path, policy_sha256: str, path_classes: Sequence[str], method_cl
     says). A home that follows a stream holds no authority key, so the owner issues its grants where the key is,
     naming the gateway's stream."""
     from prismpath.agent import commands
-    from prismpath.hotswap import policy_pack
     if type(ttl) is not int or not 0 < ttl <= MAX_LIFETIME:
         raise GrantError(f"a grant lasts from 1 second to {MAX_LIFETIME} seconds, not {ttl!r}")
     if not kinds.is_hex64(policy_sha256):
@@ -162,7 +162,7 @@ def issue(home: Path, policy_sha256: str, path_classes: Sequence[str], method_cl
                                    not_before=start, expires=start + ttl)
     except Refused as refused:
         raise GrantError(f"the grant would not be well formed ({refused})") from None
-    sealed = env.seal(envelope_bytes, [policy_pack._load_private(str(key_path))])
+    sealed = env.seal(envelope_bytes, [keys.load_signer(str(key_path))])
     classes = kinds.read_grant(body)
     doc = {"format": GRANT_FORMAT, "grant_id": env.envelope_id(envelope_bytes), "key_id": _sha256(pub_path.read_bytes()),
            "policy_sha256": policy_sha256, "stream": stream, "path_classes": classes["path_classes"],
@@ -181,12 +181,12 @@ class Verifier:
     def __init__(self, authority_pub: Optional[bytes], policy_sha256: str, revoked_path: Optional[Path] = None,
                  clock=time.time, *, trust=None, stream: str = LOCAL_STREAM, legacy_log: Optional[Path] = None,
                  instance_key=None):
-        from prismpath.hotswap import policy_pack
-        _Priv, Pub, _ser, self._invalid = policy_pack._ed25519()
+        keys.require()
         if (authority_pub is None) == (trust is None):
             raise ValueError("a verifier reads under its home's authority key or under a trust store, one of them")
         self.legacy = trust is None
-        self._key = Pub.from_public_bytes(authority_pub) if authority_pub is not None else None
+        if authority_pub is not None:
+            keys.public_key(authority_pub)          # ValueError now for a key that is not 32 raw bytes
         self._authority = bytes(authority_pub) if authority_pub is not None else None
         self.key_id = _sha256(authority_pub) if authority_pub is not None else None
         self.policy_sha256 = policy_sha256
@@ -319,9 +319,8 @@ class Verifier:
             doc = canon2.loads(body)
             if canon2.dumps(doc) != body or not document_ok(doc) or doc["key_id"] != self.key_id:
                 return "invalid", None
-            self._key.verify(signature, GRANT_DOMAIN + body)
-        except self._invalid:
-            return "invalid", None
+            if not keys.verify(self._authority, signature, GRANT_DOMAIN + body):
+                return "invalid", None
         except Exception:   # noqa: BLE001 - anything that cannot be read is invalid
             return "invalid", None
         record = {"grant_id": doc["grant_id"], "grant_sha256": _sha256(body)}

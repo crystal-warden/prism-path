@@ -62,11 +62,11 @@ def test_case_001_round_trip_keeps_the_envelope_id():
     read = env.read(out)
     assert read.envelope_id == env.envelope_id(envelope_bytes) == canon.sha256_hex(envelope_bytes)
     assert read.artifact == "policy.ppt" and read.targets == ("host",) and read.seq == 1
-    _priv, Public, _ser, _invalid = policy_pack._ed25519()
+    from prismpath.onion import keys as onion_keys
     signed = _dsse_pae(b"application/vnd.prismpath.dist+json", envelope_bytes)
     assert signed.startswith(b"DSSEv1 35 application/vnd.prismpath.dist+json ") and len(b"DSSEv1 35 application/vnd.prismpath.dist+json ") == 46
     assert env.signed_message(envelope_bytes) == signed
-    Public.from_public_bytes(GEN.public_raw(GEN.test_key("A"))).verify(entries[0][1], signed)
+    assert onion_keys.verify(GEN.public_raw(GEN.test_key("A")), entries[0][1], signed)
     assert sealed[:6] == b"PPDE\x01\x01" and sealed[6:38] == bytes.fromhex(entries[0][0])
     assert sealed[102:104] == len(envelope_bytes).to_bytes(2, "little") and sealed[104:] == envelope_bytes
 
@@ -211,11 +211,11 @@ def test_case_116_a_sealed_envelope_maps_to_dsse_json_and_back():
     doc = env.to_dsse(sealed)
     assert env.from_dsse(json.loads(json.dumps(doc))) == sealed
     assert doc["payloadType"] == "application/vnd.prismpath.dist+json"
-    _priv, Public, _ser, _invalid = policy_pack._ed25519()
+    from prismpath.onion import keys as onion_keys
     publics = {env.key_id(GEN.public_raw(GEN.test_key(name))): GEN.public_raw(GEN.test_key(name)) for name in "AB"}
     signed = _dsse_pae(doc["payloadType"].encode(), base64.b64decode(doc["payload"]))
     for member in doc["signatures"]:
-        Public.from_public_bytes(publics[member["keyid"]]).verify(base64.b64decode(member["sig"]), signed)
+        assert onion_keys.verify(publics[member["keyid"]], base64.b64decode(member["sig"]), signed)
     urlsafe = {**doc, "payload": base64.urlsafe_b64encode(base64.b64decode(doc["payload"])).decode().rstrip("="),
                "signatures": [{"keyid": member["keyid"],
                                "sig": base64.urlsafe_b64encode(base64.b64decode(member["sig"])).decode()}

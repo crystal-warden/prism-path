@@ -22,6 +22,7 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
 
 from prismpath.kernel import canon2
 from prismpath.ledgers import core_evidence, root_statement
+from prismpath.onion import keys as onion_keys
 
 PAYLOAD_TYPE = "application/vnd.in-toto+json"
 STATEMENT_TYPE = "https://in-toto.io/Statement/v1"
@@ -104,8 +105,8 @@ def _candidate_key_files(run: Path) -> Iterable[Path]:
                     yield path
 
 
-def _load_key_arg(arg: Any) -> root_statement.InstanceKey:
-    if isinstance(arg, root_statement.InstanceKey):
+def _load_key_arg(arg: Any) -> onion_keys.Signer:
+    if isinstance(arg, onion_keys.Signer):
         return arg
     path = Path(arg)
     if path.is_dir():
@@ -118,7 +119,7 @@ def _load_key_arg(arg: Any) -> root_statement.InstanceKey:
         raise Bad(f"instance key {path} could not be loaded: {exc}") from None
 
 
-def _find_instance_key(run: Path, keys: Any = None, instance_key: Any = None) -> root_statement.InstanceKey:
+def _find_instance_key(run: Path, keys: Any = None, instance_key: Any = None) -> onion_keys.Signer:
     pub_path = run / "instance.pub"
     if not pub_path.is_file():
         raise Bad("the run has no instance.pub")
@@ -187,7 +188,7 @@ def _export_one(run: Path, keys: Any = None, instance_key: Any = None) -> Dict[s
     return sign_statement(statement, signer)
 
 
-def sign_statement(statement: Dict[str, Any], signer: root_statement.InstanceKey) -> Dict[str, Any]:
+def sign_statement(statement: Dict[str, Any], signer: onion_keys.Signer) -> Dict[str, Any]:
     """A DSSE envelope of the in-toto Statement v1 `statement`: its canon/2 bytes as the payload, signed by the
     instance key `signer` over the PAE, with the key id as the hint."""
     if not isinstance(statement, dict) or statement.get("_type") != STATEMENT_TYPE:
@@ -220,17 +221,18 @@ def open_statement(envelope: Any, public_raw: bytes, predicate_type: str) -> Dic
     if not isinstance(sigs, list) or not sigs:
         raise Bad("the DSSE envelope carries no signatures")
     public = core_evidence._public_key(bytes(public_raw), "signer")
-    _Priv, _Pub, _ser, InvalidSignature = root_statement._ed25519()
+    onion_keys.require()
     message = pae(PAYLOAD_TYPE, payload_bytes)
     verified = False
     for entry in sigs:
         if not isinstance(entry, dict) or not isinstance(entry.get("sig"), str):
             continue
         try:
-            public.verify(_b64_decode(entry["sig"], "signature"), message)
-            verified = True
-        except (Bad, InvalidSignature, ValueError):
+            signature = _b64_decode(entry["sig"], "signature")
+        except (Bad, ValueError):
             continue
+        if onion_keys.verify(public, signature, message):
+            verified = True
     if not verified:
         raise Bad("no DSSE signature verifies under the key given")
     try:
@@ -371,17 +373,15 @@ def _verify_one(
     verify_raw = inst_pin if inst_pin is not None else instance_raw
     verify_key_id = core_evidence.sha256_hex(verify_raw)
     verify_pub = core_evidence._public_key(verify_raw, "instance")
-    _Priv, _Pub, _ser, InvalidSignature = root_statement._ed25519()
+    onion_keys.require()
 
     pae_bytes = pae(envelope["payloadType"], payload_bytes)
     matching = [sig_raw for keyid, sig_raw in parsed_sigs if keyid == verify_key_id]
     if not matching:
         raise Bad("the DSSE envelope is not signed by the run's instance key")
     for sig_raw in matching:
-        try:
-            verify_pub.verify(sig_raw, pae_bytes)
-        except (InvalidSignature, ValueError):
-            raise Bad("the DSSE PAE signature does not verify") from None
+        if not onion_keys.verify(verify_pub, sig_raw, pae_bytes):
+            raise Bad("the DSSE PAE signature does not verify")
 
     try:
         statement = canon2.loads(payload_bytes)

@@ -249,18 +249,19 @@ def signed_message(envelope_bytes: bytes) -> bytes:
 
 
 def seal(envelope_bytes: bytes, signers: Iterable[Any]) -> bytes:
-    """S2: the sealed envelope, `envelope_bytes` with one entry per signer (Ed25519 private keys), entries
-    sorted by key id. Refuses no signer, more than four and a repeated key. A key is loaded with
-    `policy_pack._load_private`, so no new private key format is read here."""
-    from prismpath.hotswap import policy_pack
-    _priv, _pub, ser, _invalid = policy_pack._ed25519()
+    """S2: the sealed envelope, `envelope_bytes` with one entry per signer, entries sorted by key id. A signer is
+    a `Signer` (`prismpath.ports.keys`) or an Ed25519 private key as `cryptography` holds it. Refuses no signer,
+    more than four and a repeated key. A key is loaded with `keys.load_signer`, so no new private key format is
+    read here."""
+    from prismpath.onion import keys
+    keys.require()
     raw = bytes(envelope_bytes)
     _require(0 < len(raw) <= MAX_ENVELOPE, f"an envelope of {len(raw)} bytes")
     message = signed_message(raw)
     entries = []
     for private in signers:
-        public_raw = private.public_key().public_bytes(ser.Encoding.Raw, ser.PublicFormat.Raw)
-        entries.append((bytes.fromhex(key_id(public_raw)), private.sign(message)))
+        signer = keys.as_signer(private)
+        entries.append((bytes.fromhex(key_id(signer.public_raw)), signer.sign(message)))
     entries.sort()
     _require(1 <= len(entries) <= MAX_ENTRIES, f"{len(entries)} signers")
     _require(len({entry[0] for entry in entries}) == len(entries), "a key signs twice")
