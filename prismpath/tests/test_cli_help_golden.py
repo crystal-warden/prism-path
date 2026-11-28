@@ -82,7 +82,13 @@ def test_every_command_help_matches_golden():
                if key != "prismpath" and key.split()[1] not in withdrawn}
     assert sorted(got) == sorted(golden)
     for key in sorted(got):
-        assert got[key] == golden[key], key
+        # argparse's column layout shifts with the Python patch release and the installed set of commands, so the
+        # words are compared, not the spacing. A refactor that changes a word, a flag or an exit code still fails.
+        assert _words(got[key]) == _words(golden[key]), key
+
+
+def _words(capture):
+    return {"code": capture["code"], "stdout": capture["stdout"].split(), "stderr": capture["stderr"].split()}
 
 
 if __name__ == "__main__":
