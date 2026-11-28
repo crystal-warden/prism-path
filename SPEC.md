@@ -595,9 +595,15 @@ Notes for the reader.
 
 Normatively, as follows.
 
-- **Front matter** is required, between two `---` lines, one `key: value` per line. Every key starts with
-  `policy.`. The keys `name`, `description` and `start` are also accepted, since they belong to the flow, and the
-  signed flow takes its name from `name`. Any other key is an error that names its line. A key written twice is an
+- **Text.** The file is read as the flow authority hashes it: `\r\n` is a line end, and every other control
+  character, a carriage return alone, a line or paragraph separator and a byte order mark included, is an error. So
+  the text parsed is the text signed. `prismpath policy manifest check` also requires the sha256 of the text
+  it parsed to be the `flow_sha256` of the verified signature.
+- **Front matter** is required, between two lines that are exactly `---` (nothing before or after), one
+  `key: value` per line, each starting in the first column. Every key starts with `policy.`. The keys `name`
+  (a name), `description` (printable text up to 200 characters) and `start` (a name) are also accepted, since they
+  belong to the flow, and the signed flow takes its name from `name`. Any other key is an error that names its line.
+  A `policy.` key or a `---` line below the closing fence is an error, since it would read as a note. A key written twice is an
   error. A refusal names the line of the key, and the whole file when a required key is missing. Every problem is
   reported, not only the first.
 - **Values.** A word is `[A-Za-z0-9_.:@/-]`, a name `[A-Za-z0-9_.-]`, a stream `[a-z0-9._/-]{1,64}` and a target
@@ -608,22 +614,24 @@ Normatively, as follows.
 - **Keys.** Required: `policy.id` (name), `policy.stream` (stream), `policy.seq` (1 to 2^53-1), `policy.targets`
   (list of target, at least one, kept sorted), `policy.rules` and `policy.image` (paths), `policy.rules_sha256` and
   `policy.image_sha256` (sha256), `policy.widens` (yes or no), and exactly one of `policy.expires` (time) and
-  `policy.valid_days` (1 to 3650, counted from `policy.not_before`, else from the time of sealing). Optional:
+  `policy.valid_days` (1 to 3650, counted from `policy.not_before` when it is written, else from the `created` time of
+  the manifest's signature, as the delegate envelope counts its grant, and never from the time of sealing). Optional:
   `policy.not_before` (time), `policy.replaces` (sha256 of the policy it replaces; `policy.widens: no` needs it, since
   a release that replaces nothing widens), and every other key of the next three items.
 - **Side inputs.** A file is a path and its hash, written together or not at all: `policy.egress_hosts`,
   `policy.zones`, `policy.routes`, `policy.identity_bundle`, `policy.identity_map`, `policy.net_dests` and
   `policy.cc_index`, each with `<key>_sha256`. The values are `policy.allowed_remotes` (list of word),
   `policy.max_processes`, `policy.timeout_s`, `policy.shell_many` (each 1 and up), `policy.toolchain_dirs` and
-  `policy.ro_mounts` (lists of path), `policy.local_model` (word) and `policy.grant_classes` (list of word). A key
+  `policy.ro_mounts` (lists of host path: absolute, `~/` under the home, or `workspace:` under the workspace, no `..`),
+  `policy.grant_classes` (list of `[a-z][a-z0-9_]{0,31}`) and `policy.local_model` (word). A key
   that is absent has no value here. The grammar applies no default, a default belongs to the target that reads the
   key, and a manifest that keeps today's defaults writes them.
-- **Context Cloud.** `policy.cc_protected` (list of word), `policy.cc_index` with `policy.cc_index_sha256`,
+- **Context Cloud.** `policy.cc_protected` (list of names as `agent.zones` holds them: 1 to 512 characters of `[A-Za-z0-9_.:@-]`, no `/`, at most 10,000), `policy.cc_index` with `policy.cc_index_sha256`,
   `policy.cc_freshness_s` (1 and up, the oldest index a reading may use), `policy.cc_required_certainty` (`certain`
   or `likely`) and `policy.cc_engine_agreement` (1 to 64, the engines that must agree). The grammar reads them. What
   a target does with them is its own.
 - **Domain.** `policy.domain` is `field=value|value; other=LO..HI`: the values or the integer range each field of
-  the image may take, each field once.
+  the image may take, each field once, and not empty. It is parsed and nothing compares it with the rules yet.
 - **Body.** The body holds notes and one rule, `-> refuse_135: always` (`dist:bad-format`), under a `##`
   heading. It is written as the canonical rendering writes a target, so the file parses as a flow and the flow parser
   does not refuse it as a rules source. Any other rule line is an error.
@@ -634,7 +642,9 @@ verify`); `policy.rules` compiles with `prismpath policy compile` to the image b
 or without; `policy.rules_sha256` is the sha256 of the rules file and `policy.image_sha256` of the compiled
 image's bytes without the line feed; and every side input named has the sha256 it says. A signature that does not
 hold is the only finding, since nothing the manifest says counts without it. Every file is read from the manifest's
-directory, and one that resolves outside it, a link for one, reads as absent. Exit 0 holds, 1 for a finding and 2
+directory, and one that resolves outside it, a link for one, reads as absent. A file is opened without following a
+link at its last part, and one over 16 MiB is a finding. With the clock the check also finds a manifest before
+`policy.not_before` or past its end (`expired`, `not-yet-valid`). Exit 0 holds, 1 for a finding and 2
 for a manifest that does not read. The command seals nothing. Sealing from a manifest, the envelope's `manifest_sha256`
 and `rules_sha256` members and the target checks of each target are specified with `dist seal --manifest`.
 

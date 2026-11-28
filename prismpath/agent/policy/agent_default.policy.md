@@ -15,9 +15,11 @@ policy.allowed_remotes:
 policy.max_processes: 64
 policy.timeout_s: 30
 policy.shell_many: 20
+policy.toolchain_dirs: workspace:.toolchain | /usr | /opt | /etc | ~/.cargo | ~/.rustup | ~/.elan | ~/.local | ~/.npm | ~/.pyenv
+policy.ro_mounts:
 ---
 ## manifest
-This is the policy manifest of the default starter, `agent_default`. It names the rules source and the image it compiles to, each by path and sha256, and it keeps what a run does today: no extra egress hosts, no zones, a limit of 64 processes and 30 seconds for one call, and a session reading `many` shell runs from 20.
+This is the policy manifest of the default starter, `agent_default`. It names the rules source and the image it compiles to, each by path and sha256, and it keeps what a run does today: no extra egress hosts, no zones, a limit of 64 processes and 30 seconds for one call, a session reading `many` shell runs from 20, the toolchain directories the sandbox shows read only (`workspace:` is under the workspace and `~/` under the home), and no other read only mounts.
 
 The keys are written once here, in this file. Sign it with `prismpath authorize sign agent_default.policy.md`, and check it with `prismpath policy manifest check agent_default.policy.md --pub <authority key>`. Change the rules source and the hashes above no longer hold until they are written again.
 

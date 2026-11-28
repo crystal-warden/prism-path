@@ -14,7 +14,10 @@ from __future__ import annotations
 
 import json
 import os
+import stat
 import sys
+import time
+from datetime import datetime, timezone
 from typing import List, Optional
 
 from prismpath.distribution import kinds
@@ -30,8 +33,9 @@ def add_parser(actions) -> None:
         'check', help='check a manifest: its signature, that its rules compile to its image byte for byte, both '
                       'hashes, and the hash of every side input it names; exit 1 when anything is wrong')
     check_parser.add_argument('manifest', metavar='FILE', help='the manifest (<name>.policy.md)')
-    check_parser.add_argument('--pub', nargs='+', required=True, metavar='PUB',
-                              help='the trusted authority public key(s) that may have signed it (`swap keygen`)')
+    check_parser.add_argument('--pub', action='append', required=True, metavar='PUB',
+                              help='a trusted authority public key that may have signed it (`swap keygen`); repeat the flag '
+                                   'for more than one, and write FILE before the flags or after a flag\'s value')
     check_parser.add_argument('--revoked', default=None, help='revocation list JSON of authority key ids')
     check_parser.add_argument('--state-dir', dest='state_dir', default=None, metavar='DIR',
                               help='refuse a manifest signed at a version below the one this directory accepted')
@@ -39,18 +43,52 @@ def add_parser(actions) -> None:
     check_parser.set_defaults(func=manifest_cmd)
 
 
+MAX_FILE = 16 * 1024 * 1024        # the most a side file may hold; a larger one is a finding, not a read
+
+
 def _reader(directory: str):
     """The bytes of a file the manifest names, or None when there is none. A path that resolves outside the
-    manifest's directory (a link) reads as absent, so the check never hashes a file the signer did not place."""
+    manifest's directory (a link) reads as absent, so the check never hashes a file the signer did not place. The
+    file is opened without following a link at its last part and is the same file (device and inode) the confined
+    path named, so a link swapped in after the check is not followed. A file over MAX_FILE is a ValueError."""
     root = os.path.realpath(directory)
 
     def read(path: str) -> Optional[bytes]:
         full = os.path.realpath(os.path.join(root, path))
         if os.path.commonpath([root, full]) != root or not os.path.isfile(full):
             return None
-        with open(full, "rb") as handle:
-            return handle.read()
+        try:
+            descriptor = os.open(full, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        except OSError:
+            return None
+        with os.fdopen(descriptor, "rb") as handle:
+            opened = os.fstat(handle.fileno())
+            if not stat.S_ISREG(opened.st_mode):
+                return None
+            try:
+                named = os.stat(full)
+            except OSError:
+                return None
+            if (named.st_dev, named.st_ino) != (opened.st_dev, opened.st_ino):
+                return None
+            if opened.st_size > MAX_FILE:
+                raise ValueError(f"is {opened.st_size} bytes, more than the {MAX_FILE} a side input may hold")
+            data = handle.read(MAX_FILE + 1)
+            if len(data) > MAX_FILE:
+                raise ValueError(f"is more than the {MAX_FILE} bytes a side input may hold")
+            return data
     return read
+
+
+def _created(manifest) -> Optional[int]:
+    """Unix seconds of the flow manifest's signed `created`, or None when it is not a time."""
+    try:
+        moment = datetime.fromisoformat(str((manifest or {}).get("created")))
+    except ValueError:
+        return None
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone.utc)
+    return int(moment.timestamp())
 
 
 def manifest_cmd(args) -> int:
@@ -61,28 +99,34 @@ def manifest_cmd(args) -> int:
             print(f"prismpath policy manifest check: {text}", file=sys.stderr)
         return 2
 
+    for path in [*args.pub, *([args.revoked] if args.revoked else [])]:
+        if not os.path.isfile(path):
+            return refuse([f"{path}: no such file"])
     try:
         with open(args.manifest, "rb") as handle:
             raw = handle.read()
         text = raw.decode("utf-8")
     except (OSError, UnicodeDecodeError) as error:
         return refuse([f"{args.manifest}: {getattr(error, 'strerror', None) or error}"])
+    # The signature is verified first, and the text parsed is the buffer read above: `check` requires its hash to be the
+    # `flow_sha256` the signature covers, so a file swapped between the two reads fails.
+    try:
+        floor = flow_authority.VersionFloor.in_state_dir(args.state_dir) if args.state_dir else None
+        ok, reasons, signed = flow_authority.verify_flow(args.manifest, args.pub, policy_pack.load_revoked(args.revoked),
+                                                         floor=floor)
+    except (OSError, ValueError) as error:
+        return refuse([f"{error}"])
+    signature = policy_manifest.Signature(ok, tuple(reasons), (signed or {}).get("flow_sha256", "") if ok else "",
+                                          _created(signed) if ok else None)
     try:
         manifest = policy_manifest.parse(text, args.manifest)
     except policy_manifest.ManifestError as error:
+        if not ok:
+            print(policy_manifest.check_signature_only(signature).render(args.manifest), file=sys.stderr)
+            return 1
         return refuse(error.lines())
-    try:
-        for path in args.pub:
-            if not os.path.isfile(path):
-                return refuse([f"{path}: no such public key"])
-        floor = flow_authority.VersionFloor.in_state_dir(args.state_dir) if args.state_dir else None
-        ok, reasons, _signed = flow_authority.verify_flow(args.manifest, args.pub, policy_pack.load_revoked(args.revoked),
-                                                          floor=floor)
-    except (OSError, ValueError) as error:
-        return refuse([f"{error}"])
-    signature = policy_manifest.Signature(ok, tuple(reasons))
     found = policy_manifest.check(manifest, signature, _reader(os.path.dirname(os.path.abspath(args.manifest))),
-                                  known_targets=kinds.TARGET_KINDS)
+                                  known_targets=kinds.TARGET_KINDS, now=int(time.time()))
     if args.json:
         print(json.dumps({"ok": not found, "manifest": args.manifest, "manifest_sha256": manifest.sha256,
                           "id": manifest.id, "stream": manifest.stream, "seq": manifest.seq,

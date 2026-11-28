@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import calendar
 import hashlib
+import unicodedata
 import re
 from dataclasses import dataclass
 from typing import Any, Callable, Collection, Dict, List, Mapping, Optional, Tuple
@@ -46,6 +47,7 @@ FIXED_RULE = "-> refuse_135: always"        # `dist:bad-format`, in the canonica
 FLOW_KEYS = ("name", "description", "start")   # the keys of a flow that are not `policy.` keys; the flow signed takes its name from `name`
 MAX_SEQ = 2 ** 53 - 1                        # the same bound as a sealed envelope's integers (E1)
 MAX_LIST = 256
+SECONDS_PER_DAY = 86400
 MAX_INT = 2 ** 31 - 1
 
 _HEX64 = re.compile(r"[0-9a-f]{64}")
@@ -54,8 +56,14 @@ _STREAM = re.compile(r"[a-z0-9._/-]{1,64}")
 _TARGET = re.compile(r"[a-z][a-z0-9_-]{0,31}")
 _NAME = re.compile(r"[A-Za-z0-9_.-]{1,64}")
 _PATHPART = re.compile(r"[A-Za-z0-9_.@+=,-][A-Za-z0-9_.@+=, -]*")
-_TIME = re.compile(r"(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})Z")
+_TIME = re.compile(r"([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2}):([0-9]{2})Z")
 _RULE_LINE = re.compile(r"^\s*-?\s*->")
+_POLICY_KEY = re.compile(r"^\s*policy\.[A-Za-z0-9_]+\s*:")
+_FRONT_KEY = re.compile(r"[A-Za-z][A-Za-z0-9_.]*")
+_GRANT_CLASS = re.compile(r"[a-z][a-z0-9_]{0,31}")             # kinds._GRANT_CLASS
+ZONE_NAME_MAX, ZONES_MAX = 512, 10000                          # kinds.ZONE_NAME_MAX, kinds.ZONES_MAX: agent.zones names
+MAX_DESCRIPTION = 200
+MAX_NAME = 64
 _HEAD = re.compile(r"^\s*##\s+\S")
 
 # The keys, in the order of the proposal: (type, required). A type is the form of the value:
@@ -64,6 +72,10 @@ _HEAD = re.compile(r"^\s*##\s+\S")
 #   int:LO:HI         a decimal integer in LO..HI
 #   sha256            64 lowercase hex digits
 #   path              a relative path under the manifest's directory, no `..`, no drive, no backslash
+#   hostpath          a path on the host that runs the policy: absolute (`/usr`), under the home (`~/.cargo`) or under the
+#                     workspace (`workspace:.toolchain`); no `..`, `.` or empty part, no backslash
+#   grantclass        `[a-z][a-z0-9_]{0,31}`, as a grant's classes are
+#   zonename          1 to 512 characters of a word, no `/`, as the names of agent.zones are
 #   time              Unix seconds, or `YYYY-MM-DDTHH:MM:SSZ`, read as Unix seconds
 #   yesno             `yes` or `no`
 #   list:T            items of type T joined by `|`, an empty value is an empty list, no item twice
@@ -98,12 +110,12 @@ KEYS: Dict[str, Tuple[str, bool]] = {
     "max_processes": (f"int:1:{MAX_INT}", False),
     "timeout_s": (f"int:1:{MAX_INT}", False),
     "shell_many": (f"int:1:{MAX_INT}", False),
-    "toolchain_dirs": ("list:path", False),
-    "ro_mounts": ("list:path", False),
+    "toolchain_dirs": ("list:hostpath", False),
+    "ro_mounts": ("list:hostpath", False),
     "local_model": ("token", False),
-    "grant_classes": ("list:token", False),
+    "grant_classes": ("list:grantclass", False),
     # Context Cloud
-    "cc_protected": ("list:token", False),
+    "cc_protected": ("list:zonename", False),
     "cc_index": ("path", False), "cc_index_sha256": ("sha256", False),
     "cc_freshness_s": (f"int:1:{MAX_INT}", False),
     "cc_required_certainty": ("enum:certain|likely", False),
@@ -158,7 +170,7 @@ class Manifest:
     values: Mapping[str, Any]
     lines: Mapping[str, int]
     flow_name: str = ""                       # the front matter's `name`, which the signed flow carries; "" when absent
-    sha256: str = ""                          # of the manifest file's bytes, for the caller to record
+    sha256: str = ""                          # the `flow_sha256` a signature covers: sha256 of the text with CR LF read as LF
 
     def get(self, key: str, default: Any = None) -> Any:
         return self.values.get(key, default)
@@ -185,6 +197,24 @@ def _path(text: str) -> str:
             raise ValueError(f"`{text}` has an empty, `.` or `..` part, so it could leave the manifest's directory")
         if not _PATHPART.fullmatch(part) or part != part.strip():
             raise ValueError(f"`{text}` has a character a path of a manifest does not carry")
+    return text
+
+
+def _hostpath(text: str) -> str:
+    """A path on the host that runs the policy: `/usr`, `~/.cargo` or `workspace:.toolchain` (under the workspace)."""
+    if text.startswith("workspace:"):
+        rest = text[len("workspace:"):]
+    elif text.startswith("~/"):
+        rest = text[2:]
+    elif text.startswith("/") and text != "/":
+        rest = text[1:]
+    else:
+        raise ValueError(f"`{text}` is not an absolute path, `~/` under the home or `workspace:` under the workspace")
+    if "\\" in text:
+        raise ValueError(f"`{text}` has a backslash")
+    for part in rest.split("/"):
+        if part in ("", ".", "..") or not _PATHPART.fullmatch(part) or part != part.strip():
+            raise ValueError(f"`{text}` has an empty, `.` or `..` part or a character a path of a manifest does not carry")
     return text
 
 
@@ -224,6 +254,16 @@ def _scalar(kind: str, text: str) -> Any:
         return text
     if kind == "path":
         return _path(text)
+    if kind == "hostpath":
+        return _hostpath(text)
+    if kind == "grantclass":
+        if not _GRANT_CLASS.fullmatch(text):
+            raise ValueError(f"`{text}` is not a class name (`[a-z][a-z0-9_]{{0,31}}`)")
+        return text
+    if kind == "zonename":
+        if not re.fullmatch(r"[A-Za-z0-9_.:@-]{1,%d}" % ZONE_NAME_MAX, text) or text in (".", ".."):
+            raise ValueError(f"`{text}` is not a name of letters, digits and `_ . : @ -`, 1 to {ZONE_NAME_MAX} long, no `/`")
+        return text
     if kind == "time":
         return _time(text)
     if kind == "yesno":
@@ -272,6 +312,8 @@ def _domain(text: str) -> Tuple[Tuple[str, str], ...]:
                 raise ValueError(f"the values of {name} are words of `[A-Za-z0-9_.:-]`, none twice (or a range LO..HI)")
             spec = "|".join(values)
         entries.append((name, spec))
+    if not entries:
+        raise ValueError("an empty domain; leave the key out to say nothing")
     return tuple(entries)
 
 
@@ -282,8 +324,9 @@ def _value(kind: str, text: str) -> Any:
     if kind.startswith("list:"):
         item = kind[len("list:"):]
         parts = [part.strip() for part in text.split("|")] if text.strip() else []
-        if len(parts) > MAX_LIST:
-            raise ValueError(f"more than {MAX_LIST} items")
+        limit = ZONES_MAX if item == "zonename" else MAX_LIST
+        if len(parts) > limit:
+            raise ValueError(f"more than {limit} items")
         items = [_scalar(item, part) for part in parts]
         if item == "target" and not items:
             raise ValueError("at least one target kind")
@@ -294,24 +337,62 @@ def _value(kind: str, text: str) -> Any:
 
 
 # ----------------------------------------------------------------------------------------------- parse
+def _control_problems(text: str) -> List[Tuple[int, str]]:
+    """Every character that makes two readers split a line differently or hides text: any control character but the
+    line feed (a carriage return only as the first half of CR LF), a line or paragraph separator, a byte order mark.
+    The flow authority hashes the file with universal newlines, so a lone CR must never reach the parser as a
+    character: it would be a line end to the signature and not to this reader (SPEC.md section 10)."""
+    found: List[Tuple[int, str]] = []
+    line = 1
+    for at, char in enumerate(text):
+        if char == "\n":
+            line += 1
+        elif char == "\r" and text[at + 1:at + 2] == "\n":
+            continue
+        elif unicodedata.category(char) in ("Cc", "Zl", "Zp") or char == "\ufeff":
+            found.append((line, f"the character U+{ord(char):04X} is not allowed: a line ends with a line feed "
+                                f"(or CR LF) and no other control character is written"))
+            if len(found) >= 8:
+                break
+    return found
+
+
+def _free_text(kind: str, value: str) -> str:
+    if kind == "description":
+        if not value.isprintable() or len(value) > MAX_DESCRIPTION:
+            raise ValueError(f"a description is printable text of at most {MAX_DESCRIPTION} characters")
+        return value
+    if not re.fullmatch(r"[A-Za-z0-9_.-]{1,%d}" % MAX_NAME, value):
+        raise ValueError(f"`{value}` is not a name of letters, digits, `_`, `.` and `-`, 1 to {MAX_NAME} long")
+    return value
+
+
 def _front(lines: List[str], problems: List[Tuple[int, str]]) -> Tuple[Dict[str, Tuple[str, int]], Dict[str, Tuple[str, int]], int]:
-    """(`policy.` keys, flow keys, index of the first body line), each value with its line."""
-    if not lines or lines[0].strip() != "---":
-        problems.append((1, "a manifest starts with a front matter block between two `---` lines"))
+    """(`policy.` keys, flow keys, index of the first body line), each value with its line. The two fences are
+    exactly `---`, as the flow parser needs them, and a key starts in column 0."""
+    if not lines or lines[0] != "---":
+        problems.append((1, "a manifest starts with a front matter block between two lines that are exactly `---`"))
         return {}, {}, len(lines)
     keys: Dict[str, Tuple[str, int]] = {}
     flow: Dict[str, Tuple[str, int]] = {}
     for at in range(1, len(lines)):
         text, line = lines[at], at + 1
-        if text.strip() == "---":
+        if text == "---":
             return keys, flow, at + 1
-        if not text.strip():
+        if text.strip() == "---":
+            problems.append((line, "a fence is exactly `---`, with nothing before or after it"))
             continue
-        if ":" not in text:
-            problems.append((line, "a front matter line is `policy.<key>: <value>`"))
+        if not text.strip(" "):
+            continue
+        if ":" not in text or text[0] in " \t":
+            problems.append((line, "a front matter line is `policy.<key>: <value>`, starting in the first column"))
             continue
         key, value = text.split(":", 1)
-        key, value = key.strip(), value.strip()
+        value = value.strip(" ")
+        if not _FRONT_KEY.fullmatch(key):
+            problems.append((line, f"`{key}` is not a front matter key of a policy manifest: every key starts with "
+                                   f"`{PREFIX}` (or is `name`, `description` or `start`, which belong to the flow)"))
+            continue
         if key.startswith(PREFIX):
             name, bucket = key[len(PREFIX):], keys
             if name not in KEYS:
@@ -320,6 +401,11 @@ def _front(lines: List[str], problems: List[Tuple[int, str]]) -> Tuple[Dict[str,
                 continue
         elif key in FLOW_KEYS:
             name, bucket = key, flow
+            try:
+                _free_text(key, value)
+            except ValueError as error:
+                problems.append((line, f"{key}: {error}"))
+                continue
         else:
             problems.append((line, f"`{key}` is not a front matter key of a policy manifest: every key starts with "
                                    f"`{PREFIX}` (or is `name`, `description` or `start`, which belong to the flow)"))
@@ -333,11 +419,17 @@ def _front(lines: List[str], problems: List[Tuple[int, str]]) -> Tuple[Dict[str,
 
 
 def _body(lines: List[str], start: int, problems: List[Tuple[int, str]]) -> None:
-    """The body holds the one fixed rule under a `##` heading, so the file is a flow with one node and one edge."""
+    """The body holds the one fixed rule under a `##` heading, so the file is a flow with one node and one edge. A
+    `policy.` key or a fence below the front matter is refused: it would be read as prose and look signed."""
     heading_seen = False
     rules = []
     for at in range(start, len(lines)):
         text, line = lines[at], at + 1
+        if _POLICY_KEY.match(text):
+            problems.append((line, "a `policy.` key is written in the front matter, above the closing `---`; here it "
+                                   "would be read as a note and the release would not have it"))
+        elif text.strip() == "---":
+            problems.append((line, "the body holds no `---` line; the front matter ended above"))
         if _HEAD.match(text):
             heading_seen = True
         if _RULE_LINE.match(text):
@@ -359,9 +451,12 @@ def _body(lines: List[str], start: int, problems: List[Tuple[int, str]]) -> None
 
 
 def parse(text: str, path: str = "<manifest>") -> Manifest:
-    """The manifest a text writes. `ManifestError` names every line it cannot read."""
-    problems: List[Tuple[int, str]] = []
-    raw = text
+    """The manifest a text writes. `ManifestError` names every line it cannot read. The text is read as the flow
+    authority hashes it: CR LF is a line feed, and a carriage return anywhere else is refused, so the text parsed
+    is the text signed (`Manifest.sha256` is the hash a signature covers)."""
+    problems: List[Tuple[int, str]] = _control_problems(text)
+    if problems:
+        raise ManifestError(problems, path)
     text = text.replace("\r\n", "\n")
     lines = text.split("\n")
     keys, flow, body_at = _front(lines, problems)
@@ -394,7 +489,7 @@ def parse(text: str, path: str = "<manifest>") -> Manifest:
         problems.append((at["expires"], f"`{PREFIX}expires` is not after `{PREFIX}not_before`"))
     if values.get("widens") is False and not values.get("replaces"):
         problems.append((at.get("widens", 0), f"`{PREFIX}widens: no` needs `{PREFIX}replaces`: a release that replaces "
-                                              f"nothing widens (W7)"))
+                                              f"nothing widens (W2 reads a release as not larger only with `widens: false` and the policy it replaces, W6 makes a first install larger)"))
     seen_paths: Dict[str, str] = {}
     for name in ("rules", "image", *FILES):
         if name in values:
@@ -409,16 +504,20 @@ def parse(text: str, path: str = "<manifest>") -> Manifest:
         rules_sha256=values["rules_sha256"], image=values["image"], image_sha256=values["image_sha256"],
         widens=values["widens"], not_before=values.get("not_before"), expires=values.get("expires"),
         valid_days=values.get("valid_days"), replaces=values.get("replaces", ""), files=files, values=values, lines=at,
-        flow_name=flow.get("name", ("", 0))[0], sha256=hashlib.sha256(raw.encode("utf-8")).hexdigest())
+        flow_name=flow.get("name", ("", 0))[0], sha256=hashlib.sha256(text.encode("utf-8")).hexdigest())
 
 
 # ----------------------------------------------------------------------------------------------- check
 @dataclass(frozen=True)
 class Signature:
     """What the caller found when it verified the manifest's signature (`prismpath authorize verify`): whether it
-    holds, and the causes (`sig:missing`, `sig:invalid`, `flow:sha256-mismatch` and so on) when it does not."""
+    holds, and the causes (`sig:missing`, `sig:invalid`, `flow:sha256-mismatch` and so on) when it does not. When it
+    holds, `flow_sha256` is the one the signature covers and `check` requires the text it parsed to have it, so a
+    caller that read the file twice cannot check one text and sign another."""
     ok: bool
     reasons: Tuple[str, ...] = ()
+    flow_sha256: str = ""            # the `flow_sha256` of the verified flow manifest: what the signature covers
+    created: Optional[int] = None    # the verified flow manifest's `created`, Unix seconds: the start of `valid_days`
 
 
 @dataclass(frozen=True)
@@ -436,28 +535,70 @@ def _sha(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+def check_signature_only(signature: Signature) -> Finding:
+    """The finding for a signature that does not hold, for a caller whose manifest does not read either."""
+    reasons = ", ".join(signature.reasons) or "it does not verify"
+    return Finding("signature", 0, f"the signature does not hold ({reasons}), so nothing in the manifest counts")
+
+
+def expiry(manifest: Manifest, created: Optional[int]) -> Optional[int]:
+    """The Unix second a release ends, or None when it cannot be told. `expires` is written. `valid_days` counts from
+    `not_before` when it is written and otherwise from the `created` of the verified flow manifest, the signing
+    time, as the delegate envelope counts its grant; never from the time of sealing."""
+    if manifest.expires is not None:
+        return manifest.expires
+    start = manifest.not_before if manifest.not_before is not None else created
+    return None if start is None else start + manifest.valid_days * SECONDS_PER_DAY
+
+
 def check(manifest: Manifest, signature: Signature, read: Callable[[str], Optional[bytes]], *,
-          known_targets: Optional[Collection[str]] = None) -> List[Finding]:
+          known_targets: Optional[Collection[str]] = None, now: Optional[int] = None) -> List[Finding]:
     """What is wrong with a release, in the order the proposal gives: the signature, then the rules and the
     image, then each side input. An empty list means the manifest holds. `read(path)` returns the bytes of a
     path the manifest names (relative to the manifest), or None when there is no such file; it is the caller's
     to confine to the manifest's directory. A failed signature is the only finding returned, since nothing a
     manifest says counts without it. `known_targets` is the set of target kinds the caller can seal for; a
-    target outside it is a finding."""
+    target outside it is a finding. With `now` (Unix seconds, the caller's clock) a manifest before `not_before` or
+    past its end (`expiry`) is a finding, and so is one with `valid_days` whose start the signature does not give."""
     if not signature.ok:
-        reasons = ", ".join(signature.reasons) or "it does not verify"
-        return [Finding("signature", 0, f"the signature does not hold ({reasons}), so nothing in the manifest counts")]
+        return [check_signature_only(signature)]
+    if signature.flow_sha256 and signature.flow_sha256 != manifest.sha256:
+        return [Finding("signature", 0, f"the text read is sha256 {manifest.sha256}, and the signature covers "
+                                        f"{signature.flow_sha256}, so the file was not the one signed")]
+    if not signature.flow_sha256:
+        return [Finding("signature", 0, "the signature names no flow_sha256, so it is not bound to the text read")]
     found: List[Finding] = []
     lines = manifest.lines
+    if now is not None:
+        if manifest.not_before is not None and now < manifest.not_before:
+            found.append(Finding("not-yet-valid", lines["not_before"], f"the manifest is valid from {manifest.not_before} "
+                                                                       f"and it is {now}"))
+        end = expiry(manifest, signature.created)
+        if end is None:
+            found.append(Finding("expiry", lines["valid_days"], "valid_days counts from the signing time and the "
+                                                                 "signature gives none"))
+        elif now >= end:
+            found.append(Finding("expired", lines.get("expires", lines.get("valid_days", 0)),
+                                 f"the manifest ended at {end} and it is {now}"))
     if known_targets is not None:
         for target in manifest.targets:
             if target not in known_targets:
                 found.append(Finding("target", lines["targets"], f"`{target}` is not a target kind this tool seals for"))
-    rules = read(manifest.rules)
-    held = read(manifest.image)
-    if rules is None:
+    def read_file(path: str) -> Optional[bytes]:
+        try:
+            return read(path)
+        except (OSError, ValueError) as error:
+            failed.add(path)
+            found.append(Finding("unreadable", lines.get(path_keys.get(path, ""), 0), f"{path}: {error}"))
+            return None
+
+    failed = set()
+    path_keys = {manifest.rules: "rules", manifest.image: "image", **{ref.path: ref.key for ref in manifest.files.values()}}
+    rules = read_file(manifest.rules)
+    held = read_file(manifest.image)
+    if rules is None and manifest.rules not in failed:
         found.append(Finding("missing", lines["rules"], f"{manifest.rules} is not there"))
-    if held is None:
+    if held is None and manifest.image not in failed:
         found.append(Finding("missing", lines["image"], f"{manifest.image} is not there"))
     if rules is not None:
         if _sha(rules) != manifest.rules_sha256:
@@ -487,9 +628,10 @@ def check(manifest: Manifest, signature: Signature, read: Callable[[str], Option
                              f"{manifest.image} is sha256 {_sha(policy_source.read_image_bytes(held))}, and the manifest "
                              f"says {manifest.image_sha256}"))
     for ref in manifest.files.values():
-        data = read(ref.path)
+        data = read_file(ref.path)
         if data is None:
-            found.append(Finding("missing", ref.line, f"{ref.path} is not there"))
+            if ref.path not in failed:
+                found.append(Finding("missing", ref.line, f"{ref.path} is not there"))
         elif _sha(data) != ref.sha256:
             found.append(Finding(f"{ref.key}-sha256", manifest.lines[FILE_SHA[ref.key]],
                                  f"{ref.path} is sha256 {_sha(data)}, and the manifest says {ref.sha256}"))
