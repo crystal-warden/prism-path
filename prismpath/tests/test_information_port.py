@@ -122,4 +122,4 @@ def test_facts_never_raises(tmp_path):
         evidence = point.facts(Change("a.py", config), 0.1)
         assert evidence.readings == point.restrictive and evidence.why
     assert _built(tmp_path).facts(Change("a.py", None), 0.1).readings == dict(_built(tmp_path).restrictive)
-    assert _built(tmp_path, host_path=broken).facts(Change("a.py", None), 0.1).readings == {"zone_reach": "unknown"}
+    assert _built(tmp_path, host_path=broken).facts(Change("a.py", None), 0.1).readings == dict(_built(tmp_path).restrictive)
