@@ -983,8 +983,7 @@ def test_the_engineer_s_tool_writes_the_anchor_s_install_part_sets_and_install_t
     `dist install-trust` keeps the retired ids and refuses to add one back. A set sealed to follow the empty set names
     the empty string as `replaces`, since the empty set withdrew its kind (IS6)."""
     from prismpath import cli
-    from prismpath.hotswap import policy_pack
-    _priv, _pub, ser, _invalid = policy_pack._ed25519()
+    from cryptography.hazmat.primitives import serialization as ser
     keys = {}
     for name in ("A", "C", "N1", "N2", "N3"):
         keys[name] = tmp_path / f"{name}.pem"
@@ -1051,8 +1050,7 @@ def test_case_301_the_engineer_s_tool_signs_an_install_change_statement_only_on_
     `widens` true and no change statement."""
     import json
     from prismpath import cli
-    from prismpath.hotswap import policy_pack
-    _priv, _pub, ser, _invalid = policy_pack._ed25519()
+    from cryptography.hazmat.primitives import serialization as ser
     keys = {}
     for name in ("N1", "N2"):
         keys[name] = tmp_path / f"{name}.pem"
@@ -1112,8 +1110,7 @@ class CeilingFleet:
         from prismpath import cli
         from prismpath.distribution.controller import Controller
         from prismpath.distribution.http import LocalTransport, PullClient
-        from prismpath.hotswap import policy_pack
-        _priv, _pub, ser, _invalid = policy_pack._ed25519()
+        from cryptography.hazmat.primitives import serialization as ser
         self.tmp, self.cli = tmp_path, cli
         keys = {}
         for name in ("N1", "N2"):

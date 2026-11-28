@@ -150,8 +150,8 @@ def _attestation(home: Path, image: bytes, case: str = POLICY_CASE) -> bytes:
     for the `gateway` kind when `case` is `gateway` and for `agent` otherwise, signed with the authority key. The
     starter's name is not sealed; `starter_of` reads it from the image."""
     from prismpath.distribution import legacy
-    from prismpath.hotswap import policy_pack
-    signer = policy_pack._load_private(str(_key_paths(home, "authority")[0]))
+    from prismpath.onion import keys as onion_keys
+    signer = onion_keys.load_signer(str(_key_paths(home, "authority")[0]))
     kind = "gateway" if case == "gateway" else "agent"
     return legacy.local_seal("policy.core", image, [signer], seq=1, targets=(kind,))
 
@@ -277,6 +277,7 @@ def load_checked(home: Path):
     from prismpath.agent.policy import Policy
     from prismpath.agent.run import RunStore
     from prismpath.hotswap import policy_pack
+    from prismpath.onion import keys as onion_keys
     from prismpath.kernel import canon2
     from prismpath.ledgers import core_evidence, root_statement
     from prismpath.distribution.adapters import agent_home
@@ -287,7 +288,7 @@ def load_checked(home: Path):
             if not path.is_file():
                 raise AgentError(f"no {role} key at {path}; run `prismpath agent init`")
     authority, authority_id = policy_pack.load_public(str(_key_paths(home, "authority")[1]))
-    policy_pack._load_private(str(_key_paths(home, "authority")[0]))   # the private half must read too
+    onion_keys.load_signer(str(_key_paths(home, "authority")[0]))   # the private half must read too
     instance = root_statement.InstanceKey.load(str(_key_paths(home, "instance")[0]))
     if instance.key_id != _key_id(home, "instance"):
         raise AgentError("instance.key and instance.pub are not one key pair")

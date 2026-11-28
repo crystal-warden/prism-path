@@ -53,6 +53,7 @@ from typing import Any, Dict, Iterable, Optional, Tuple
 
 from prismpath import canon
 from prismpath.ledgers import root_statement as rs
+from prismpath.onion import keys
 
 STATE_FORMAT = "prismpath-signer-state/1"
 CORE_RUN_ROOT_FORMAT = "prismpath.core-run-root/2"          # core_evidence.ROOT_FORMAT, named here to avoid a cycle
@@ -124,7 +125,7 @@ def confinement(pid: int, proc: str = "/proc") -> Dict[str, Any]:
 class SignerDaemon:
     """One instance key, one socket, one state file. `serve_forever` answers callers one at a time."""
 
-    def __init__(self, key: rs.InstanceKey, socket_path: str, state_path: str, *,
+    def __init__(self, key: keys.Signer, socket_path: str, state_path: str, *,
                  allowed_uids: Optional[Iterable[int]] = None, refuse_confined: bool = True, fresh: bool = False,
                  proc: str = "/proc"):
         if not sys.platform.startswith("linux"):
@@ -297,8 +298,9 @@ class SignerDaemon:
 
 # ------------------------------------------------------------------ the client
 class DaemonKey:
-    """An instance key the deployment does not hold: the same face as `InstanceKey` (`public_raw`, `key_id`,
-    `fingerprint`, `sign`), each signature asked of the daemon at `socket_path`."""
+    """An instance key the deployment does not hold: a `ChainSigner` (`prismpath.ports.keys`), the same face as
+    `InstanceKey` (`public_raw`, `key_id`, `fingerprint`, `sign`) and `head`, each signature asked of the daemon at
+    `socket_path`. `keys.load_signer("unix:PATH")` makes one."""
 
     def __init__(self, socket_path: str, timeout: float = 5.0):
         self.socket_path = socket_path
@@ -306,8 +308,8 @@ class DaemonKey:
         self.path = None
         answer = self._ask({"op": "public"})
         self.public_raw = bytes.fromhex(answer["public_key"])
-        self.key_id = rs.key_id_of(self.public_raw)
-        self.fingerprint = rs.fingerprint(self.key_id)
+        self.key_id = keys.key_id_of(self.public_raw)
+        self.fingerprint = keys.fingerprint(self.key_id)
 
     def _ask(self, request: Dict[str, Any]) -> Dict[str, Any]:
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:

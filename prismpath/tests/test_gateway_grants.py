@@ -19,6 +19,7 @@ from prismpath.agent import commands  # noqa: E402
 from prismpath.gateway import cli as gcli, grants, reading as rd  # noqa: E402
 from prismpath.kernel import canon2  # noqa: E402
 from prismpath.tests.test_gateway import ROUTES, Running, Upstream, receipts  # noqa: E402
+from prismpath.onion import keys as onion_keys
 
 HDR = rd.GRANT_HEADER
 NOW = 1_800_000_000
@@ -49,7 +50,6 @@ def verifier(home, now=NOW):
 def older_grant(home, sha, paths, methods, ttl, now=None):
     """A grant of the older form `prismpath.grant/1`, signed by the home's authority key, as writers before 0.3.0
     made them. Nothing in the package writes this form any more (L1)."""
-    from prismpath.hotswap import policy_pack
     import time
     key, pub = commands._key_paths(home, "authority")
     start = int(time.time()) if now is None else now
@@ -60,7 +60,7 @@ def older_grant(home, sha, paths, methods, ttl, now=None):
     if not grants.document_ok(doc):
         raise grants.GrantError("not a well formed older grant")
     body = canon2.dumps(doc)
-    signature = policy_pack._load_private(str(key)).sign(grants.GRANT_DOMAIN + body)
+    signature = onion_keys.load_signer(str(key)).sign(grants.GRANT_DOMAIN + body)
     return f"{_b64(body)}.{_b64(signature)}", doc
 
 

@@ -168,7 +168,9 @@
       "predicates.py"
     ],
     "ports": [
-      "distribution/adapters/__init__.py"
+      "distribution/adapters/__init__.py",
+      "ports/__init__.py",
+      "ports/keys.py"
     ],
     "onion": [
       "audit_log.py",
@@ -223,6 +225,8 @@
       "ledgers/root_statement.py",
       "ledgers/signer_daemon.py",
       "ledgers/witness.py",
+      "onion/__init__.py",
+      "onion/keys.py",
       "otel.py",
       "policy_host.py",
       "policy_pack.py",

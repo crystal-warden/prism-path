@@ -23,40 +23,14 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import struct
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple
 from prismpath import canon
-from prismpath.extras import MissingExtra
-# --- .ppt format facts (read-only mirror of kernel/ppt_compile.py / TABLE_FORMAT.md) ---
-MAGIC = 0x4D545050          # "PPTM"
-FORMAT_VERSION = 1
-HEADER = struct.Struct("<IHHHHHHHHHHHH")   # 28 bytes
-ATOM = struct.Struct("<HBBi")               # fidx, op, ty, val
-NODE = struct.Struct("<HH")
-EDGE = struct.Struct("<HHH")
-WORD = struct.Struct("<H")
-OPS = frozenset(range(7))                   # ==, !=, <, <=, >, >=, truthy
-TYPES = frozenset(range(4))                 # none, bool, int, str
-PROG_OPCODES = frozenset({0x8000, 0x8001, 0x8002, 0x8003, 0x8004})  # NOT AND OR TRUE FALSE
-# The 12th header word (offset 26) is split: low byte = flags, high byte = the optional signed
-# safe_node (a fail-safe node index; 0 = undeclared -> reader falls back to the last-node convention).
-# Flags bit 0 => a per-node ATTRIBUTE section (nodes x uint16) is appended after the program and signed
-# with the image. The format gives the attribute no meaning; the substrate MATERIALIZES it (an LED
-# color in the fabric, an skb mark / XDP verdict / traffic-class in the kernel, a UI label in
-# software). LED color is one materialization, hence the back-compat alias.
-FLAG_NODE_ATTR = 0x0001
-FLAG_COLORS = FLAG_NODE_ATTR   # back-compat alias: the fabric's LED-color materialization
-FLAG_MIGRATE_BY_NAME = 0x0002  # flags bit1: resident-selector hot-swap migration mode — set = by-name
-                               # (re-resolve the current node by name), clear = reset-to (the fail-safe).
-                               # Meaningful only when safe_node is declared; signed with the image.
-FLAG_NODE_NAMES = 0x0004       # flags bit2: a per-node uint32 name-hash section (FNV-1a-32 of each node
-                               # name) is appended after the node-attr section — the signed identities the
-                               # loader matches for by-name migration across a hot-swap.
-FLAG_STATEFUL = 0x0008         # flags bit3: the policy DECLARES the resident-FSM (stateful) profile. The
-                               # mode is a signed property of the pack, derived by every endpoint from the
-                               # same policy (declared, not negotiated). Absent = the stateless self-healing
-                               # base. The evaluator is identical either way — one option, one oracle.
+from prismpath.onion import keys
+# --- .ppt format facts, read from the compiler that writes them (kernel/ppt_compile.py / TABLE_FORMAT.md) ---
+from prismpath.kernel.ppt_compile import (  # noqa: F401  (re-exported: the readers use policy_pack.HEADER and so on)
+    ATOM, EDGE, FLAG_COLORS, FLAG_MIGRATE_BY_NAME, FLAG_NODE_ATTR, FLAG_NODE_NAMES, FLAG_STATEFUL, FORMAT_VERSION,
+    HEADER, MAGIC, NODE, OPS, PROG_OPCODES, TYPES, WORD)
 
 PACK_FORMAT = "ppt-pack/1"
 SEALED = ".sealed"                # the `policy.ppt` envelope beside an image (L1)
@@ -66,24 +40,12 @@ SEALED = ".sealed"                # the `policy.ppt` envelope beside an image (L
 DEFAULT_CAPS = {"atoms": 1024, "nodes": 256, "edges": 1024, "prog_words": 4096,
                 "max_steps": 25, "max_stack": 16}
 
-_INSTALL_MSG = "policy signing needs cryptography (the signing extra): pip install 'prismpath[signing]'"
-
-
-class MissingSigningExtra(MissingExtra, RuntimeError):
-    """The signing extra is not installed. Also a RuntimeError, because callers have long caught the
-    loud absence as one; the command line prints its install line alone."""
-
-
-def _ed25519():
-    """Import the Ed25519 primitives, loudly refusing if the optional dep is absent."""
-    try:
-        from cryptography.hazmat.primitives.asymmetric.ed25519 import (
-            Ed25519PrivateKey, Ed25519PublicKey)
-        from cryptography.hazmat.primitives import serialization
-        from cryptography.exceptions import InvalidSignature
-    except ImportError as exc:                                   # pragma: no cover
-        raise MissingSigningExtra("signing", "cryptography", _INSTALL_MSG) from exc
-    return Ed25519PrivateKey, Ed25519PublicKey, serialization, InvalidSignature
+_INSTALL_MSG = keys.INSTALL_MSG
+MissingSigningExtra = keys.MissingSigningExtra
+# The older private names, kept as the same functions until the shims go: integrations and the certified caller
+# (comparisons/groupa/ai_worker_governance_loop.py) read them. New code calls `prismpath.onion.keys`.
+_ed25519 = keys.primitives
+_load_private = keys.load_private_key
 
 
 def canonical_bytes(obj) -> bytes:
@@ -218,35 +180,24 @@ def wcet_cycles(data: bytes) -> int:
 
 def keygen(out_dir: str, name: str = "authority") -> dict:
     """Generate an Ed25519 keypair. Private key PEM written 0600; returns paths + key_id
-    (sha256 of the raw public bytes — the identity used in manifests and revocation lists)."""
-    Priv, _Pub, ser, _Inv = _ed25519()
-    os.makedirs(out_dir, exist_ok=True)
-    priv = Priv.generate()
-    priv_path = os.path.join(out_dir, f"{name}.key")
-    pub_path = os.path.join(out_dir, f"{name}.pub")
-    pem = priv.private_bytes(ser.Encoding.PEM, ser.PrivateFormat.PKCS8, ser.NoEncryption())
-    fd = os.open(priv_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "wb") as handle:
-        handle.write(pem)
-    raw = priv.public_key().public_bytes(ser.Encoding.Raw, ser.PublicFormat.Raw)
-    with open(pub_path, "wb") as handle:
-        handle.write(raw)
-    return {"private": priv_path, "public": pub_path, "key_id": sha256_hex(raw)}
+    (sha256 of the raw public bytes — the identity used in manifests and revocation lists). An authority key
+    already under the name is replaced (`keys.keygen` with `replace`)."""
+    return keys.keygen(out_dir, name, replace=True)
 
 
-def _load_private(path: str):
-    Priv, _Pub, ser, _Inv = _ed25519()
+def load_public_raw(path: str) -> Tuple[bytes, str]:
+    """A raw-32-byte Ed25519 public key file -> (raw, key_id), refused as `load_public` refuses it."""
+    keys.require()                               # the loud absence comes before the file is read, as ever
     with open(path, "rb") as handle:
-        key = ser.load_pem_private_key(handle.read(), password=None)
-    return key
+        raw = handle.read()
+    keys.public_key(raw)                         # ValueError for a file that is not 32 raw bytes, as ever
+    return raw, sha256_hex(raw)
 
 
 def load_public(path: str) -> Tuple[object, str]:
     """Load a raw-32-byte Ed25519 public key file -> (key, key_id)."""
-    _Priv, Pub, _ser, _Inv = _ed25519()
-    with open(path, "rb") as handle:
-        raw = handle.read()
-    return Pub.from_public_bytes(raw), sha256_hex(raw)
+    raw, key_id = load_public_raw(path)
+    return keys.public_key(raw), key_id
 
 
 def load_revoked(path: Optional[str]) -> frozenset:
@@ -336,8 +287,7 @@ def build_pack(ppt_path: str, fields: Dict[str, str], version: int, envelope_id:
         manifest["overlay_of"] = str(overlay_of)
     if flow_sha256 is not None:
         manifest["flow_sha256"] = flow_sha256
-    priv = _load_private(priv_path)
-    sig = priv.sign(signed_bytes(manifest))
+    sig = keys.load_signer(priv_path).sign(signed_bytes(manifest))
     write_signed_document(ppt_path + ".manifest.json", manifest)
     with open(ppt_path + ".manifest.sig", "wb") as handle:
         handle.write(sig)
@@ -372,9 +322,8 @@ def seal_pack(ppt_path: str, fields: Dict[str, str], version: int, envelope_id: 
     if not ok:
         raise ValueError("refusing to sign an invalid image: " + ",".join(reasons))
     _pub, key_id = load_public(pub_path)
-    priv = _load_private(priv_path)
-    _Priv, _Pub, ser, _Inv = _ed25519()
-    if sha256_hex(priv.public_key().public_bytes(ser.Encoding.Raw, ser.PublicFormat.Raw)) != key_id:
+    priv = keys.load_signer(priv_path)
+    if priv.key_id != key_id:
         raise ValueError(f"{priv_path} is not the private half of {pub_path}")
     header = read_ppt_header(image)
     meta = {"fields": dict(fields or {}), "qualification": envelope_id, "wcet_cycles": wcet_cycles(image),
@@ -422,7 +371,7 @@ def _verify_sealed(ppt_path: str, pubkey_paths: List[str],
     from prismpath.distribution import envelope as env
     from prismpath.distribution.kinds import Refused
     from prismpath.distribution.verify import SKEW
-    _Priv, _Pub, _ser, InvalidSignature = _ed25519()
+    keys.require()
     try:
         with open(ppt_path + SEALED, "rb") as handle:
             envelope_bytes, entries = env.unseal(handle.read())
@@ -432,16 +381,13 @@ def _verify_sealed(ppt_path: str, pubkey_paths: List[str],
     if envelope.artifact != "policy.ppt" or "host" not in envelope.targets:
         return False, ["dist:target-mismatch"], None
     message, signer_id = env.signed_message(envelope_bytes), None
-    keys = dict((key_id, pub) for pub, key_id in (load_public(path) for path in pubkey_paths))
+    held = dict((key_id, public_raw) for public_raw, key_id in (load_public_raw(path) for path in pubkey_paths))
     for key_id, signature in entries:
-        if key_id not in keys:
+        if key_id not in held:
             continue
-        try:
-            keys[key_id].verify(signature, message)
+        if keys.verify(held[key_id], signature, message):
             signer_id = key_id
             break
-        except InvalidSignature:
-            continue
     if signer_id is None:
         return False, ["sig:invalid"], None
     manifest = _sealed_manifest(envelope, signer_id)
@@ -508,7 +454,7 @@ def verify_pack(ppt_path: str, pubkey_paths: List[str],
     An image with `<ppt>.sealed` beside it is read in that form alone (`_verify_sealed`), and the manifest returned
     has `format` `prismpath.dist/1`. Otherwise the older manifest is read, and a reader with an audit log writes
     the `legacy_form` event for it (`is_older`)."""
-    _Priv, _Pub, _ser, InvalidSignature = _ed25519()
+    keys.require()
     if os.path.exists(ppt_path + SEALED):
         return _verify_sealed(ppt_path, pubkey_paths, revoked)
     man_path, sig_path = ppt_path + ".manifest.json", ppt_path + ".manifest.sig"
@@ -539,13 +485,10 @@ def verify_pack(ppt_path: str, pubkey_paths: List[str],
         return False, ["manifest:bad-format"], manifest
     signer_id = None
     for path in pubkey_paths:
-        pub, key_id = load_public(path)
-        try:
-            pub.verify(sig, payload)
+        public_raw, key_id = load_public_raw(path)
+        if keys.verify(public_raw, sig, payload):
             signer_id = key_id
             break
-        except InvalidSignature:
-            continue
     if signer_id is None:
         return False, ["sig:invalid"], manifest
     if signer_id in revoked:
@@ -590,7 +533,7 @@ def build_envelope(envelope_id: str, fields: Dict[str, str], caps: Optional[dict
     env = {"envelope_id": envelope_id, "fields": dict(fields),
            "caps": {**DEFAULT_CAPS, **(caps or {})}, "require_level_m": True,
            "key_id": key_id, canon.ENCODING_KEY: canon.CANON2}
-    sig = _load_private(priv_path).sign(signed_bytes(env))
+    sig = keys.load_signer(priv_path).sign(signed_bytes(env))
     os.makedirs(out_dir, exist_ok=True)
     base = os.path.join(out_dir, f"{envelope_id}.envelope")
     write_signed_document(base + ".json", env)
@@ -601,7 +544,7 @@ def build_envelope(envelope_id: str, fields: Dict[str, str], caps: Optional[dict
 
 def load_envelope(base_path: str, pubkey_paths: List[str]) -> Tuple[Optional[dict], List[str]]:
     """Load + signature-verify an envelope (`base_path` without .json/.sig suffix)."""
-    _Priv, _Pub, _ser, InvalidSignature = _ed25519()
+    keys.require()
     for suffix in (".json", ".sig"):            # the files are <base>.json and <base>.sig; take either name
         if base_path.endswith(suffix):
             base_path = base_path[:-len(suffix)]
@@ -621,12 +564,9 @@ def load_envelope(base_path: str, pubkey_paths: List[str]) -> Tuple[Optional[dic
     except canon.CanonicalError:
         return None, ["envelope:sig-invalid"]
     for path in pubkey_paths:
-        pub, _kid = load_public(path)
-        try:
-            pub.verify(sig, payload)
+        public_raw, _kid = load_public_raw(path)
+        if keys.verify(public_raw, sig, payload):
             return env, []
-        except InvalidSignature:
-            continue
     return None, ["envelope:sig-invalid"]
 
 

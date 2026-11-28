@@ -487,6 +487,8 @@ prismpath/mission_control/static/vendor/cytoscape.min.js
 prismpath/mission_control/status.py
 prismpath/model_check.py
 prismpath/nudges/APP_ARCHITECTURE.md
+prismpath/onion/__init__.py
+prismpath/onion/keys.py
 prismpath/orchestration/__init__.py
 prismpath/orchestration/gates.py
 prismpath/orchestration/hermes_swarm.py
@@ -564,6 +566,8 @@ prismpath/portable/gen_rules_source_fixtures.py
 prismpath/portable/gen_safety_conformance.py
 prismpath/portable/merkle.mjs
 prismpath/portable/transparency_dev_consistency.json
+prismpath/ports/__init__.py
+prismpath/ports/keys.py
 prismpath/predicates.py
 prismpath/prefilter.py
 prismpath/retriever.py
@@ -913,6 +917,7 @@ prismpath/tests/test_mission_control_session.py
 prismpath/tests/test_model_check.py
 prismpath/tests/test_negative_literals.py
 prismpath/tests/test_net_from_policy.py
+prismpath/tests/test_onion_keys.py
 prismpath/tests/test_operator_overlay.py
 prismpath/tests/test_orchestrator.py
 prismpath/tests/test_otel.py

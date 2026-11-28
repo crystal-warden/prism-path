@@ -41,6 +41,18 @@ I32_MIN, I32_MAX = -(2 ** 31), 2 ** 31 - 1
 MAGIC = 0x4D545050          # "PPTM"
 VISITS_NONE = 0xFFFF
 
+# The .ppt record layouts (TABLE_FORMAT.md). `serialize` writes them and every reader of an image
+# (`hotswap/policy_pack.py`, the trust path, the mesh kind) reads them from here.
+FORMAT_VERSION = 1
+HEADER = struct.Struct("<IHHHHHHHHHHHH")   # 28 bytes
+ATOM = struct.Struct("<HBBi")               # fidx, op, ty, val
+NODE = struct.Struct("<HH")
+EDGE = struct.Struct("<HHH")
+WORD = struct.Struct("<H")
+OPS = frozenset(range(7))                   # ==, !=, <, <=, >, >=, truthy
+TYPES = frozenset(range(4))                 # none, bool, int, str
+PROG_OPCODES = frozenset({OPC_NOT, OPC_AND, OPC_OR, OPC_TRUE, OPC_FALSE})
+
 _OP_NAME = {OP_EQ: "==", OP_NE: "!=", OP_LT: "<", OP_LE: "<=", OP_GT: ">", OP_GE: ">=",
             OP_TRUTHY: "truthy"}
 _TY_NAME = {TY_NONE: "none", TY_BOOL: "bool", TY_INT: "int", TY_STR: "str"}
@@ -54,6 +66,16 @@ _FLIP = {OP_LT: OP_GT, OP_LE: OP_GE, OP_GT: OP_LT, OP_GE: OP_LE, OP_EQ: OP_EQ, O
 # sets the header flags word to 0 and appends no color section, so it stays byte-identical to a
 # pre-color build (the frozen corpus is untouched). See TABLE_FORMAT.md.
 FLAG_COLORS = 0x0001
+# The 12th header word (offset 26) is split: low byte = flags, high byte = the optional signed
+# safe_node (a fail-safe node index; 0 = undeclared -> reader falls back to the last-node convention).
+# Flags bit 0 => a per-node ATTRIBUTE section (nodes x uint16) is appended after the program and signed
+# with the image. The format gives the attribute no meaning; the substrate MATERIALIZES it (an LED
+# color in the fabric, an skb mark / XDP verdict / traffic-class in the kernel, a UI label in
+# software). LED color is one materialization, hence FLAG_COLORS above.
+FLAG_NODE_ATTR = FLAG_COLORS
+FLAG_NODE_NAMES = 0x0004       # flags bit2: a per-node uint32 name-hash section (FNV-1a-32 of each node
+                               # name) is appended after the node-attr section — the signed identities the
+                               # loader matches for by-name migration across a hot-swap.
 # Resident-FSM (stateful selector) declarations, byte-identical to the kernel image flags
 # (prismpath-ebpf/ppt_common.h): the mode is a signed property of the pack, declared not negotiated.
 # safe_node rides the high byte of the same flags word (offset 26), covered by the image hash.
@@ -232,21 +254,21 @@ class TableImage:
             flags |= FLAG_MIGRATE_BY_NAME
         if self.safe_node is not None:
             flags |= (self.safe_node & 0xFF) << 8            # signed fail-safe, rides the image hash
-        out = struct.pack("<IHHHHHHHHHHHH", MAGIC, 1,
+        out = HEADER.pack(MAGIC, FORMAT_VERSION,
                           len(self.fields), len(self.intern), len(self.atoms),
                           len(self.nodes), len(edges), len(prog_blob),
                           self.start, visits_idx, self.max_steps, max_stack, flags)
         for fidx, op, ty, val in self.atoms:
-            out += struct.pack("<HBBi", fidx, op, ty, val)
+            out += ATOM.pack(fidx, op, ty, val)
         for edge_offset, edge_count in node_recs:
-            out += struct.pack("<HH", edge_offset, edge_count)
+            out += NODE.pack(edge_offset, edge_count)
         for edge_target, prog_offset, prog_count in edges:
-            out += struct.pack("<HHH", edge_target, prog_offset, prog_count)
+            out += EDGE.pack(edge_target, prog_offset, prog_count)
         for word in prog_blob:
-            out += struct.pack("<H", word)
+            out += WORD.pack(word)
         if flags & FLAG_COLORS:                              # appended last: one uint16 color / node
             for color in colors:
-                out += struct.pack("<H", color & 0xFFFF)
+                out += WORD.pack(color & 0xFFFF)
         return out
 
     def debug(self) -> dict:

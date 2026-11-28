@@ -62,7 +62,7 @@ def test_case_017_an_instance_key_that_is_a_trusted_key_is_refused_at_start(tmp_
 
 def test_case_018_a_host_pep_with_an_authority_private_key_in_its_home_refuses_to_start(point):
     """case_018: K2. A PEM private key in the host's home whose public half the store trusts."""
-    _priv, _pub, ser, _invalid = pp._ed25519()
+    from cryptography.hazmat.primitives import serialization as ser
     pem = _dist.GEN.test_key("A").private_bytes(ser.Encoding.PEM, ser.PrivateFormat.PKCS8, ser.NoEncryption())
     (point.state_dir / "keys").mkdir()
     (point.state_dir / "keys" / "authority.key").write_bytes(pem)

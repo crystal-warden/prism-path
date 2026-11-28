@@ -32,6 +32,7 @@ sys.path.insert(0, str(REPO))
 from prismpath import canon  # noqa: E402
 from prismpath.hotswap import policy_pack as pp  # noqa: E402
 from prismpath.kernel import ppt_compile as pc   # noqa: E402
+from prismpath.onion import keys as onion_keys  # noqa: E402
 
 OUT = HERE / "conformance" / "hotswap.json"
 
@@ -143,15 +144,15 @@ def main() -> int:
         legacy = {key: value for key, value in manifest.items() if key != "encoding"}
         legacy_bytes = json.dumps(legacy, sort_keys=True, separators=(",", ":")).encode("ascii")
         record("a_canon1_manifest_is_refused", image, legacy,
-               pp._load_private(keys["private"]).sign(legacy_bytes), [pub], [])
+               onion_keys.load_signer(keys["private"]).sign(legacy_bytes), [pub], [])
         # the same legacy manifest given the canon/2 tag after signing: the signature does not cover it
         record("legacy_signature_over_a_retagged_manifest", image, manifest,
-               pp._load_private(keys["private"]).sign(legacy_bytes), [pub], [])
+               onion_keys.load_signer(keys["private"]).sign(legacy_bytes), [pub], [])
 
         # out-of-envelope field: manifest fields {"z": int}, properly re-signed -> verify ok,
         # envelope check fails with envelope:unknown-field:z
         m_z = pp.build_manifest(image, {"z": "int"}, 4, "test-env", keys["key_id"])
-        sig_z = pp._load_private(keys["private"]).sign(pp.signed_bytes(m_z))
+        sig_z = onion_keys.load_signer(keys["private"]).sign(pp.signed_bytes(m_z))
         record("bad_envelope_field", image, m_z, sig_z, [pub], [])
 
         # injected out-of-fragment opcode: patch a prog word to 0x9999, re-sign over the
@@ -164,12 +165,12 @@ def main() -> int:
         struct.pack_into("<H", bad_img, prog_off, 0x9999)
         bad_img = bytes(bad_img)
         m_op = pp.build_manifest(bad_img, fields, 5, "test-env", keys["key_id"])
-        sig_op = pp._load_private(keys["private"]).sign(pp.signed_bytes(m_op))
+        sig_op = onion_keys.load_signer(keys["private"]).sign(pp.signed_bytes(m_op))
         record("injected_opcode", bad_img, m_op, sig_op, [pub], [])
 
 
         # ---- image format facts: flags, safe_node, sections, WCET, packing, overlay, flow hash ----
-        priv = pp._load_private(keys["private"])
+        priv = onion_keys.load_signer(keys["private"])
 
         def signed(image_b, version, fields_=None, mutate=None):
             """A manifest built by the reference over `image_b` (bypassing build_pack's refusal of an

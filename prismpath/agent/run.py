@@ -895,7 +895,7 @@ class Run:
     def seal(self, keys: Path, time_us: Optional[int] = None, decider: str = DECIDER) -> Dict[str, Any]:
         """Seal every receipt so far with the root statement signed by the instance key; the manifest.
         Does nothing when the run is already sealed over exactly these receipts."""
-        from prismpath.hotswap import policy_pack
+        from prismpath.onion import keys as onion_keys
         from prismpath.ledgers import root_statement
         with _locked(self.dir / LOCK):
             entries = self._entries()
@@ -913,7 +913,7 @@ class Run:
             core_evidence.write_cases([case], tmp_cases)
             out["cases.jsonl"] = tmp_cases.read_bytes()
             tmp_cases.unlink()
-            signer = policy_pack._load_private(str(authority_key))
+            signer = onion_keys.load_signer(str(authority_key))
             out["images.jsonl"] = canon2.dumps({
                 "format": core_evidence.IMAGE_FORMAT, "case": self.session,
                 "image_sha256": core_evidence.sha256_hex(image), "key_id": authority_id,
