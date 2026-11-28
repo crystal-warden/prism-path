@@ -1,0 +1,11 @@
+# Paths a branch named refactor-* may add to and may not modify, delete or rename (refactor plan 3.1, G8).
+# One git pathspec per line. A line that starts with # is a comment.
+prismpath/portable/conformance/
+prismpath/telemetry/conformance/
+prismpath/tests/fixtures/
+:(glob)prismpath/**/*.core.json
+:(glob)integrations/**/*.core.json
+:(glob)prismpath/**/*.ppt
+:(glob)integrations/**/*.ppt
+prismpath/policies/
+prismpath-hw/TABLE_FORMAT.md

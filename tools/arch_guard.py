@@ -3,7 +3,7 @@
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """The architecture guard: the Dictionary's enforceable contract, checked, plus the adapter scorecard.
 
-Four things fail the build, each with the file, the line and what to do:
+Seven things fail the build, each with the file, the line and what to do. The first four are the original contract.
   * a domain noun or an adapter import inside a CORE module (the hexagonal bright line, Signal 1);
   * a declared path that does not exist: a core module, an adapter's code or flow, an orchestration
     module, the console. A checker that skips a missing module is a checker that can be silenced by
@@ -11,17 +11,25 @@ Four things fail the build, each with the file, the line and what to do:
   * a deprecated identifier used outside the paths that keep it alive on purpose (a shim that warns,
     the test that pins the warning) and outside certified paths, which never move;
   * vocabulary drift: a term named in docs/vocabulary.json with no entry in docs/DICTIONARY.md, or a
-    domain the dictionary does not name, so the two files cannot part ways silently.
+    domain the dictionary does not name, so the two files cannot part ways silently;
+  * a production file that is in no layer, or in two, or a declared one that is gone (S1);
+  * a wrong way import between layers, function level imports included, an adapter importing another adapter
+    package, another module's private name used, or a file outside the onion that both decides and appends a
+    receipt (S2, S3, S5, S7). Each is one line of tools/arch_baseline.json. A line that is not there fails, and
+    so does a line there that is gone, so the file only shrinks (--shrink-baseline deletes, nothing adds);
+  * on a branch named refactor-*, a path of tools/frozen_paths.txt that is modified, deleted or renamed against
+    the merge base with main (G8).
 
 The domain nouns, the deprecated identifiers and the certified paths come from docs/vocabulary.json,
 the structured half of the Dictionary; the prose explains, this file enforces. Two trend signals are
 reported and not gated: core churn since a baseline (Signal 3) and the marginal cost of each adapter
 with its share of logic in Markdown (Signal 7).
 
-Run: python tools/arch_guard.py [--baseline REF]. Dependency free (stdlib and git). Writes
+Run: python tools/arch_guard.py [--baseline REF] [--shrink-baseline]. Dependency free (stdlib and git). Writes
 docs/design/arch-scorecard.md (git ignored) and tools/arch_scorecard.json; exit 1 on any hard failure.
 """
 import argparse
+import ast
 import json
 import os
 import re
@@ -169,7 +177,340 @@ def git_core_churn(root, package_directory, core_modules, baseline):
         return {"error": str(error)[:120]}
 
 
-def run(root, config_path, baseline=None):
+# ---- layers, import direction, private use, the governor rule, the baseline and the frozen paths (R0) ----
+
+LAYER_RANK = {"kernel": 0, "ports": 1, "onion": 2, "adapter": 3, "surface": 4, "tooling": 5}
+# importer layer -> the layers it may import. An adapter may import another adapter only inside its own package.
+ALLOWED = {
+    "kernel": {"kernel"},
+    "ports": {"kernel", "ports"},
+    "onion": {"kernel", "ports", "onion"},
+    "adapter": {"kernel", "ports", "onion", "adapter"},
+    "surface": {"kernel", "ports", "onion", "adapter", "surface"},
+    "tooling": set(LAYER_RANK),
+}
+BASELINE_SECTIONS = ("import_direction", "private_use", "decides_outside_onion")
+
+
+def production_files(package_directory, exempt_directories):
+    """Every .py file under the package, relative to it, outside the exempt directory names."""
+    found = []
+    for directory, subdirectories, files in os.walk(package_directory):
+        subdirectories[:] = sorted(name for name in subdirectories if name != "__pycache__" and name not in exempt_directories)
+        for name in sorted(files):
+            if name.endswith(".py"):
+                found.append(os.path.relpath(os.path.join(directory, name), package_directory).replace(os.sep, "/"))
+    return sorted(found)
+
+
+def declared_layers(config):
+    """({file: layer}, [problems]). A file declared twice is a problem."""
+    table, problems = {}, []
+    for layer, files in config.get("layers", {}).items():
+        if layer not in LAYER_RANK:
+            problems.append(f"the layer {layer!r} is not one of {', '.join(LAYER_RANK)}")
+        for path in files:
+            if path in table:
+                problems.append(f"{path} is declared in two layers, {table[path]} and {layer}")
+            table[path] = layer
+    return table, problems
+
+
+def layer_problems(package_directory, config):
+    """(layer table, [problems]): a production file in no layer, and a declared file that is gone."""
+    table, problems = declared_layers(config)
+    present = production_files(package_directory, set(config.get("layer_exempt_dirs", ["tests"])))
+    problems += [f"{path} is in no layer; declare it in tools/arch_guard.config.json" for path in present if path not in table]
+    problems += [f"{path} is declared in a layer and does not exist; remove it from the config in the change that removes the file"
+                 for path in sorted(table) if path not in set(present)]
+    return table, problems
+
+
+class Resolver:
+    """Dotted module name to file, and the alias modules that only re export a moved module."""
+
+    def __init__(self, package_directory, files):
+        self.package_directory = package_directory
+        self.files = set(files)
+        self.aliases = {}
+
+    def file_of(self, dotted):
+        """The file of a dotted module name under prismpath, or None."""
+        if dotted != "prismpath" and not dotted.startswith("prismpath."):
+            return None
+        relative = dotted[len("prismpath"):].lstrip(".").replace(".", "/")
+        for candidate in ((relative + ".py") if relative else None, (relative + "/__init__.py") if relative else "__init__.py"):
+            if candidate and candidate in self.files:
+                return self.follow(candidate)
+        return None
+
+    def follow(self, path):
+        """The file an alias module stands for, so an import of the old name is judged as the new one."""
+        if path not in self.aliases:
+            self.aliases[path] = None
+            target = self.alias_target(path)
+            self.aliases[path] = target
+        return self.aliases[path] or path
+
+    def alias_target(self, path):
+        if "/" in path:
+            return None
+        try:
+            with open(os.path.join(self.package_directory, path), encoding="utf-8") as handle:
+                source = handle.read()
+        except OSError:
+            return None
+        if "_sys.modules[__name__] = _m" not in source:
+            return None
+        match = re.search(r"^from (prismpath(?:\.\w+)*) import (\w+) as _m$", source, re.M)
+        if not match:
+            return None
+        return self.file_of(match.group(1) + "." + match.group(2))
+
+    def is_alias(self, path):
+        self.follow(path)
+        return self.aliases.get(path) is not None
+
+
+def _is_type_checking(test):
+    return (isinstance(test, ast.Name) and test.id == "TYPE_CHECKING") or \
+           (isinstance(test, ast.Attribute) and test.attr == "TYPE_CHECKING")
+
+
+def _is_main_guard(test):
+    return (isinstance(test, ast.Compare) and isinstance(test.left, ast.Name) and test.left.id == "__name__"
+            and len(test.comparators) == 1 and isinstance(test.comparators[0], ast.Constant)
+            and test.comparators[0].value == "__main__")
+
+
+def live_nodes(tree):
+    """Every node of the tree except the body of `if TYPE_CHECKING:` and of `if __name__ == "__main__":` (S8).
+    Function level imports are live."""
+    stack = [tree]
+    while stack:
+        node = stack.pop()
+        yield node
+        if isinstance(node, ast.If) and (_is_type_checking(node.test) or _is_main_guard(node.test)):
+            stack.append(node.test)
+            stack.extend(node.orelse)
+            continue
+        stack.extend(ast.iter_child_nodes(node))
+
+
+def _package_of(path):
+    """The dotted package a file's relative imports start from."""
+    parts = ["prismpath"] + path.split("/")[:-1]
+    return parts
+
+
+def import_targets(resolver, path, node):
+    """[(file, bound name or None, module file or None)] for one Import or ImportFrom node. The third item is the
+    module a bound name stands for, for the private use check."""
+    out = []
+    if isinstance(node, ast.Import):
+        for item in node.names:
+            target = resolver.file_of(item.name)
+            if target is not None:
+                bound = item.asname or item.name.split(".")[0]
+                out.append((target, bound if item.asname else item.name, target))
+        return out
+    if node.level:
+        base = _package_of(path)[:len(_package_of(path)) - (node.level - 1)]
+        module = ".".join(base + ([node.module] if node.module else []))
+    else:
+        module = node.module or ""
+    if not (module == "prismpath" or module.startswith("prismpath.")):
+        return out
+    base_file = resolver.file_of(module)
+    for item in node.names:
+        sub = resolver.file_of(module + "." + item.name) if item.name != "*" else None
+        if sub is not None and sub != base_file:
+            out.append((sub, item.asname or item.name, sub))
+        elif base_file is not None:
+            out.append((base_file, None, None))
+    return out
+
+
+def file_imports(resolver, path, tree):
+    """(set of imported files, module aliases {name: file}) over the live nodes of one file."""
+    imported, bound = set(), {}
+    for node in live_nodes(tree):
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            for target, name, module in import_targets(resolver, path, node):
+                imported.add(target)
+                if name is not None and module is not None:
+                    bound[name] = module
+    return imported, bound
+
+
+def _is_private(name):
+    return name.startswith("_") and not (name.startswith("__") and name.endswith("__"))
+
+
+def dotted_name(node):
+    parts = []
+    while isinstance(node, ast.Attribute):
+        parts.append(node.attr)
+        node = node.value
+    if isinstance(node, ast.Name):
+        parts.append(node.id)
+        return ".".join(reversed(parts))
+    return None
+
+
+def private_uses(resolver, path, tree, bound):
+    """[(target file, private name)] for every use of another module's private name in one file."""
+    uses = []
+    for node in live_nodes(tree):
+        if isinstance(node, ast.ImportFrom):
+            if node.level:
+                base = _package_of(path)[:len(_package_of(path)) - (node.level - 1)]
+                module_name = ".".join(base + ([node.module] if node.module else []))
+            else:
+                module_name = node.module or ""
+            base_file = resolver.file_of(module_name)
+            for item in node.names:
+                if not _is_private(item.name):
+                    continue
+                target = resolver.file_of(module_name + "." + item.name) or base_file
+                if target is not None and target != path:
+                    uses.append((target, item.name))
+        elif isinstance(node, ast.Attribute) and _is_private(node.attr):
+            dotted = dotted_name(node.value)
+            if dotted is None:
+                continue
+            target = bound.get(dotted) or resolver.file_of(dotted if dotted.startswith("prismpath") else "")
+            if target is not None and target != path:
+                uses.append((target, node.attr))
+    return uses
+
+
+def decides_outside_onion(tree):
+    """True when one file both asks a policy to decide and appends to a run, which is the governor's sequence."""
+    decides = appends = False
+    for node in live_nodes(tree):
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+            if node.func.attr == "decide":
+                decides = True
+            elif node.func.attr == "append" and len(node.args) + len(node.keywords) >= 2:
+                appends = True
+    return decides and appends
+
+
+def layer_findings(root, config):
+    """({section: sorted lines}, [layer problems]) for the tree. Each line is one offending pair or site."""
+    if "layers" not in config:                       # a config with no layer table has no layer contract to hold
+        return {section: [] for section in BASELINE_SECTIONS}, []
+    package_directory = os.path.join(root, config["package_dir"])
+    table, problems = layer_problems(package_directory, config)
+    resolver = Resolver(package_directory, table)
+    allowed_pairs = {tuple(pair) for pair in config.get("adapter_allowed_pairs", [])}
+    imports, private, deciders = set(), [], set()
+    for path in sorted(table):
+        if resolver.is_alias(path):
+            if LAYER_RANK.get(table[path]) is not None and table.get(resolver.follow(path)) != table[path]:
+                problems.append(f"{path} is an alias of {resolver.follow(path)} and must sit in its layer")
+            continue
+        try:
+            with open(os.path.join(package_directory, path), encoding="utf-8") as handle:
+                tree = ast.parse(handle.read(), filename=path)
+        except (OSError, SyntaxError) as error:
+            problems.append(f"{path} cannot be parsed ({type(error).__name__})")
+            continue
+        layer = table[path]
+        files, bound = file_imports(resolver, path, tree)
+        for target in files:
+            if target == path or target not in table:
+                continue
+            other = table[target]
+            if other in ALLOWED[layer]:
+                if layer == "adapter" and other == "adapter" and path.split("/")[0] != target.split("/")[0] \
+                        and (path.split("/")[0], target.split("/")[0]) not in allowed_pairs:
+                    imports.add(f"{path} -> {target} (adapter -> adapter, another package)")
+                continue
+            imports.add(f"{path} -> {target} ({layer} -> {other})")
+        counts = {}
+        for target, name in private_uses(resolver, path, tree, bound):
+            key = f"{path} -> {target} :: {name}"
+            counts[key] = counts.get(key, 0) + 1
+            private.append(f"{key} #{counts[key]}")
+        if layer not in ("onion", "tooling") and decides_outside_onion(tree):
+            deciders.add(path)
+    return {"import_direction": sorted(imports), "private_use": sorted(private),
+            "decides_outside_onion": sorted(deciders)}, problems
+
+
+def read_baseline(path):
+    if not os.path.exists(path):
+        return {section: [] for section in BASELINE_SECTIONS}
+    with open(path, encoding="utf-8") as handle:
+        data = json.load(handle)
+    return {section: list(data.get(section, [])) for section in BASELINE_SECTIONS}
+
+
+def write_baseline(path, sections):
+    """One line per entry, sorted, so two branches that delete different lines merge by line."""
+    doc = ("The ratchet. One line per offending import pair, per private use and per file that decides outside the onion. "
+           "A line that is not here fails tools/arch_guard.py, and so does a line here that no longer exists. "
+           "The file only loses lines. Delete them with python tools/arch_guard.py --shrink-baseline.")
+    lines = ["{", f'  "_doc": {json.dumps(doc)},']
+    for index, section in enumerate(BASELINE_SECTIONS):
+        entries = sorted(set(sections[section]))
+        lines.append(f'  "{section}": [' + ("]" if not entries else ""))
+        if entries:
+            lines += ["    " + json.dumps(entry) + ("," if position < len(entries) - 1 else "") for position, entry in enumerate(entries)]
+            lines.append("  ]")
+        lines[-1] += "," if index < len(BASELINE_SECTIONS) - 1 else ""
+    lines.append("}")
+    with open(path, "w", encoding="utf-8") as handle:
+        handle.write("\n".join(lines) + "\n")
+
+
+def compare_baseline(found, baseline):
+    """({section: new lines}, {section: stale lines})."""
+    new = {section: sorted(set(found[section]) - set(baseline[section])) for section in BASELINE_SECTIONS}
+    stale = {section: sorted(set(baseline[section]) - set(found[section])) for section in BASELINE_SECTIONS}
+    return new, stale
+
+
+FROZEN_BRANCH = re.compile(r"^refactor-")
+
+
+def current_branch(root):
+    for variable in ("GITHUB_HEAD_REF", "GITHUB_REF_NAME"):
+        if os.environ.get(variable):
+            return os.environ[variable]
+    out = subprocess.run(["git", "-C", root, "rev-parse", "--abbrev-ref", "HEAD"], capture_output=True, text=True)
+    return out.stdout.strip() if out.returncode == 0 else ""
+
+
+def frozen_findings(root, frozen_file, branch=None, base_ref=None):
+    """([changed frozen paths as 'S path'], note). Only a branch named refactor-* is held to the list (G8).
+    Added files are allowed; modified, deleted and renamed files fail against the merge base with origin/main."""
+    branch = current_branch(root) if branch is None else branch
+    if not FROZEN_BRANCH.match(branch):
+        return [], f"branch {branch!r} is not a refactor branch, so the frozen paths are not held"
+    try:
+        with open(frozen_file, encoding="utf-8") as handle:
+            specs = [line.strip() for line in handle if line.strip() and not line.startswith("#")]
+    except OSError:
+        return [f"? {frozen_file} is missing"], "the frozen paths file is missing"
+    refs = [base_ref] if base_ref else ["origin/main", "main"]
+    for ref in refs:
+        base = subprocess.run(["git", "-C", root, "merge-base", ref, "HEAD"], capture_output=True, text=True)
+        if base.returncode == 0 and base.stdout.strip():
+            break
+    else:
+        return [f"? no merge base with {' or '.join(refs)}, so the frozen paths cannot be checked"], "no merge base"
+    diff = subprocess.run(["git", "-C", root, "diff", "--name-status", "-M", "--diff-filter=MDR", base.stdout.strip(), "HEAD", "--", *specs],
+                          capture_output=True, text=True)
+    if diff.returncode != 0:
+        return [f"? git diff failed ({diff.stderr.strip()[:120]})"], "git diff failed"
+    changed = [" ".join(line.split("\t")) for line in diff.stdout.splitlines() if line.strip()]
+    return changed, f"merge base {base.stdout.strip()[:10]}"
+
+
+def run(root, config_path, baseline=None, branch=None):
     """Every check over one tree. Returns (result, hard_failures); the caller decides about writing."""
     config = json.load(open(config_path, encoding="utf-8"))
     vocabulary = json.load(open(os.path.join(root, config["vocabulary"]), encoding="utf-8"))
@@ -206,13 +547,31 @@ def run(root, config_path, baseline=None):
         scores.append({"adapter": name, "code_loc": code_loc, "flow_md_loc": markdown_loc,
                        "pct_logic_in_md": round(markdown_loc / total, 3) if total else None})
 
-    hard_failures = len(violations) + len(missing) + len(deprecated) + len(drift)
+    found, layer_issues = layer_findings(root, config)
+    baseline = read_baseline(os.path.join(root, config.get("baseline", "tools/arch_baseline.json")))
+    new_lines, stale_lines = compare_baseline(found, baseline)
+    if "frozen_paths" in config:
+        frozen, frozen_note = frozen_findings(root, os.path.join(root, config["frozen_paths"]), branch=branch)
+    else:                                            # a config that names no frozen list holds no frozen paths
+        frozen, frozen_note = [], "the config names no frozen paths"
+    ratchet_failures = sum(len(lines) for lines in new_lines.values()) + sum(len(lines) for lines in stale_lines.values())
+
+    hard_failures = len(violations) + len(missing) + len(deprecated) + len(drift) + len(layer_issues) + ratchet_failures + len(frozen)
     result = {
         "signal_1_core_purity": {"PASS": not violations, "violations": violations},
         "declared_paths": {"PASS": not missing, "missing": missing,
                            "fix": "a declared module that no longer exists is removed from tools/arch_guard.config.json in the same change that removes the file"},
         "deprecated_identifiers": {"PASS": not deprecated, "findings": deprecated},
         "vocabulary_drift": {"PASS": not drift, "problems": drift},
+        "layers": {"PASS": not layer_issues, "problems": layer_issues,
+                   "fix": "every production file is in exactly one layer of tools/arch_guard.config.json (refactor plan 1.3)"},
+        "ratchet": {"PASS": ratchet_failures == 0, "counts": {section: len(found[section]) for section in BASELINE_SECTIONS},
+                    "baseline_counts": {section: len(baseline[section]) for section in BASELINE_SECTIONS},
+                    "new": new_lines, "stale": stale_lines,
+                    "fix": "a new line is a wrong way import, a private use or a decision outside the onion that this change added, so remove it. "
+                           "a stale line was fixed, so delete it with python tools/arch_guard.py --shrink-baseline. The baseline file only loses lines."},
+        "frozen_paths": {"PASS": not frozen, "changed": frozen, "note": frozen_note,
+                         "fix": "a refactor branch may add to a frozen path and may not modify, delete or rename one (G8, tools/frozen_paths.txt)"},
         "signal_3_core_churn": {"core_total_loc": core_loc, "churn_since_baseline": churn,
                                 "note": "track per adapter; must decay. flat or rising means rebuilding, not generalizing."},
         "signal_7_marginal_cost": {"adapters": scores,
@@ -255,14 +614,30 @@ def main():
     parser.add_argument("--config", default=os.path.join(HERE, "arch_guard.config.json"))
     parser.add_argument("--baseline", default=None, help="git ref to measure core churn since (Signal 3)")
     parser.add_argument("--root", default=ROOT, help="the repository root (default: this checkout)")
+    parser.add_argument("--branch", default=None, help="the branch name the frozen paths check uses (default: the checked out branch)")
+    parser.add_argument("--shrink-baseline", action="store_true",
+                        help="delete the baseline lines that no longer exist. It never adds a line")
+    parser.add_argument("--regenerate-baseline", action="store_true",
+                        help="write the baseline whole from the tree. Only the contract package and a merge of main use this")
     args = parser.parse_args()
-    result, hard_failures = run(args.root, args.config, args.baseline)
     config = json.load(open(args.config, encoding="utf-8"))
+    if args.shrink_baseline or args.regenerate_baseline:
+        baseline_path = os.path.join(args.root, config.get("baseline", "tools/arch_baseline.json"))
+        found, _issues = layer_findings(args.root, config)
+        if args.regenerate_baseline:
+            write_baseline(baseline_path, found)
+            print("baseline written: " + ", ".join(f"{section} {len(found[section])}" for section in BASELINE_SECTIONS))
+        else:
+            old = read_baseline(baseline_path)
+            kept = {section: [line for line in old[section] if line in set(found[section])] for section in BASELINE_SECTIONS}
+            write_baseline(baseline_path, kept)
+            print("baseline shrunk: " + ", ".join(f"{section} {len(old[section])} to {len(kept[section])}" for section in BASELINE_SECTIONS))
+    result, hard_failures = run(args.root, args.config, args.baseline, args.branch)
     scorecard_dir = os.path.join(args.root, "docs", "design")
     os.makedirs(scorecard_dir, exist_ok=True)
     with open(os.path.join(scorecard_dir, "arch-scorecard.md"), "w", encoding="utf-8") as scorecard_file:
         scorecard_file.write(render_scorecard(result, len(config["core_modules"])))
-    with open(os.path.join(HERE, "arch_scorecard.json"), "w", encoding="utf-8") as json_file:
+    with open(os.path.join(args.root, "tools", "arch_scorecard.json"), "w", encoding="utf-8") as json_file:
         json.dump(result, json_file, indent=2)
         json_file.write("\n")
     summary = {"PASS": hard_failures == 0, "hard_failures": hard_failures,
@@ -270,6 +645,9 @@ def main():
                "missing_declared_paths": result["declared_paths"]["missing"],
                "deprecated_identifier_findings": [f"{finding['file']}:{finding['line']} {finding['identifier']}" for finding in result["deprecated_identifiers"]["findings"][:12]],
                "vocabulary_drift": result["vocabulary_drift"]["problems"],
+               "layer_problems": result["layers"]["problems"][:12],
+               "baseline_new": result["ratchet"]["new"], "baseline_stale": result["ratchet"]["stale"],
+               "frozen_paths_changed": result["frozen_paths"]["changed"],
                "core_total_loc": result["signal_3_core_churn"]["core_total_loc"],
                "signal_7": result["signal_7_marginal_cost"]["adapters"]}
     print(json.dumps(summary, indent=2))
