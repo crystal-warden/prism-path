@@ -323,23 +323,19 @@ def anchor_part(install_keys: Sequence[bytes], *, threshold: int, operators: Seq
 
 
 def domain_document(adapter) -> bytes:
-    """CL4, P4: the reading domain the PEP was built with, as canon/2 bytes. On `agent` it is the values the
-    classifier produces for each category; on `gateway` the classes its reading gives; on a kind that cannot decide it
-    is the layout the PEP was built for, the adapter's `layout` document, which on `host` is the qualification
-    envelope's fields. An adapter may name its own with `domain`."""
+    """CL4, P4: the reading domain the PEP was built with, as canon/2 bytes. A kind that registered a domain document
+    names it (`TargetKind.domain_document`): on `agent` it is the values the classifier produces for each category,
+    on `gateway` the classes its reading gives. On a kind that cannot decide it is the layout the PEP was built for,
+    the adapter's `layout` document, which on `host` is the qualification envelope's fields. An adapter may name its
+    own with `domain`."""
     own = getattr(adapter, "domain", None)
     if own is not None:
         return bytes(own)
     kind = adapter.kind
-    if kind == "agent":
-        from prismpath.agent import profile
-        doc: Any = {"kind": kind, "categories": {name: list(values) for name, values in profile.KNOWN_CATEGORIES.items()}}
-    elif kind == "gateway":
-        from prismpath.gateway import reading
-        doc = {"kind": kind, "fields": list(reading.FIELDS),
-               "categories": {"method_class": list(reading.METHOD_CLASSES), "body_class": list(reading.BODY_CLASSES),
-                              "content_class": list(reading.CONTENT_CLASSES), "query": list(reading.QUERY_CLASSES),
-                              "grant": list(reading.GRANT_STATES)}}
+    registered = kinds.KINDS.get(kind)
+    doc: Any
+    if registered is not None and registered.domain_document is not None:
+        doc = registered.domain_document()
     elif kind == "host":
         qualification = getattr(adapter, "qualification", None) or {}
         doc = {"kind": kind, "fields": dict(qualification.get("fields") or {})}
@@ -359,14 +355,16 @@ BOUNDED = ("int", "fixed")                         # the field kinds whose floor
 
 
 def built_categories(kind: str) -> FrozenSet[str]:
-    """CL4, P4: the category fields of the domain a PEP of `kind` was built with, as `domain_document` names them. On
-    `gateway` the fields its reading gives, and on `agent` and `xdp` the categories the classifier produces and
-    `zone_name`, the one category of the reading whose values are the names of the zones (AF1)."""
-    if kind == "gateway":
-        from prismpath.gateway import reading
-        return frozenset(reading.FIELDS)
-    from prismpath.agent import profile
-    return frozenset(profile.KNOWN_CATEGORIES) | {profile.ZONE_NAME}
+    """CL4, P4: the category fields of the domain a PEP of `kind` was built with, as `domain_document` names them. A
+    kind that registered its own names them (`TargetKind.categories`): on `gateway` the fields its reading gives. On
+    every other kind, `agent` and `xdp` among them, they are the categories of the reading domain its policy is checked
+    against (`kinds.reading_domain`), the ones the classifier produces, and its name field `zone_name`, the one
+    category of the reading whose values are the names of the zones (AF1)."""
+    registered = kinds.KINDS.get(kind)
+    if registered is not None and registered.categories is not None:
+        return frozenset(registered.categories())
+    domain = kinds.reading_domain(kind)
+    return frozenset(domain.categories) | ({domain.name_field} if domain.name_field else frozenset())
 
 
 def _definitions(body: bytes) -> Dict[str, Tuple[dict, Dict[str, str]]]:
@@ -424,7 +422,7 @@ def _routes_inside(ceiling: bytes, staged: bytes) -> bool:
     `/*` covers every path below it, and the ceiling must give all of them its class, so any entry of the ceiling
     that reaches one of them with another class, or a path the ceiling leaves to `other`, puts it outside."""
     try:
-        ceiling_routes, staged_routes = kinds.read_routes(ceiling), kinds.read_routes(staged)
+        ceiling_routes, staged_routes = kinds.read("gateway.routes", ceiling), kinds.read("gateway.routes", staged)
     except Refused:
         return False
     for base, prefix, name in staged_routes.entries:

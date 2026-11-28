@@ -223,7 +223,7 @@ def launch(command: Sequence[str], workspace: str, credential: Optional[str] = N
     if decider is None:
         profile, policy, store = _policy_profile(home_dir, max_processes)
         session = session or f"egress-{time.strftime('%Y%m%dT%H%M%S')}-{os.getpid()}"
-        from prismpath.distribution.adapters import agent_home
+        from prismpath.agent import dist_kind as agent_home
         follow = commands.Committed(home_dir) if agent_home.is_distributed(home_dir) else None
         gate = egress_policy.PolicyGate(policy, store, session, root, profile, allowed_hosts, home=home_dir,
                                         follow=follow)
@@ -340,7 +340,7 @@ def _policy_profile(home: Path, max_processes: int):
     """(the agent profile, the policy, the store of runs) of the recorded policy, or a LaunchError saying what to fix."""
     try:
         policy, store = commands.load_checked(home)
-        from prismpath.distribution.adapters import agent_home
+        from prismpath.agent import dist_kind as agent_home
         # AF1: a home that follows a stream runs under the profile of the policy in force and its action floor together
         profile = agent_home.running_profile(home, "agent") if agent_home.is_distributed(home) \
             else compile_profile(policy, "agent")

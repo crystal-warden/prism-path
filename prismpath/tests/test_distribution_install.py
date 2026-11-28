@@ -365,7 +365,7 @@ def test_case_196_the_runtime_decides_under_the_fallback_set_and_without_one_ref
     fallback set. The same two with none lapse, the host withdraws its policy and every part of the home refuses."""
     from prismpath.agent import commands, egress_policy, mcp_proxy
     from prismpath.agent.profile import compile_profile
-    from prismpath.distribution.adapters import agent_home
+    from prismpath.agent import dist_kind as agent_home
     from prismpath.tests.test_distribution_agent_home import ALLOW_HOSTS, DEFAULT, HomePep
     for with_fallback in (True, False):
         host = _host(tmp_path, f"host{with_fallback}")
@@ -385,7 +385,7 @@ def test_case_196_the_runtime_decides_under_the_fallback_set_and_without_one_ref
         if with_fallback:
             home.send(home.install_set(FALLBACK, {"policy.core": DEFAULT, "egress.hosts": MORE_HOSTS}, 1, widens=True))
         assert home.release(ALLOW_HOSTS, 1)[-1].event == "committed"
-        monkeypatch.setattr(agent_home, "clock", lambda: EXPIRES)
+        monkeypatch.setattr(agent_home.onion_home, "clock", lambda: EXPIRES)
         home.clock.now = EXPIRES
         home.pep.tick()
         workspace = tmp_path / f"ws{with_fallback}"
@@ -953,10 +953,10 @@ def test_a_gateway_routes_by_its_fallback_set_when_its_release_lapses(tmp_path, 
     """FB1: a `gateway` home whose release lapses routes by its fallback set, as its long running gateway reads it,
     and one with none refuses."""
     from prismpath.agent import commands
-    from prismpath.distribution.adapters import agent_home
-    from prismpath.distribution.adapters.gateway import Following
+    from prismpath.agent import dist_kind as agent_home
+    from prismpath.gateway.dist_kind import Following
     from prismpath.tests.test_distribution_gateway import DEMO, OPEN, ROUTES, GatewayHome
-    monkeypatch.setattr(agent_home, "clock", lambda: NOW)
+    monkeypatch.setattr(agent_home.onion_home, "clock", lambda: NOW)
     for with_fallback in (True, False):
         point = GatewayHome(tmp_path / f"gateway{with_fallback}", install_keys=KEYS, install_threshold=2)
         if with_fallback:
@@ -966,14 +966,14 @@ def test_a_gateway_routes_by_its_fallback_set_when_its_release_lapses(tmp_path, 
         following = Following(point.state_dir)
         assert following.current().routes.canonical() == ROUTES
         point.clock.now = EXPIRES
-        monkeypatch.setattr(agent_home, "clock", lambda: EXPIRES)
+        monkeypatch.setattr(agent_home.onion_home, "clock", lambda: EXPIRES)
         point.pep.tick()
         if with_fallback:
             assert following.current().routes.canonical() == OPEN
         else:
             with pytest.raises(commands.AgentError):
                 following.current()
-        monkeypatch.setattr(agent_home, "clock", lambda: NOW)
+        monkeypatch.setattr(agent_home.onion_home, "clock", lambda: NOW)
 
 
 def test_the_engineer_s_tool_writes_the_anchor_s_install_part_sets_and_install_trust(tmp_path):

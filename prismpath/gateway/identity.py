@@ -392,11 +392,11 @@ class Identity:
     def from_bodies(cls, bundle: bytes, mapping: bytes, setting: Setting, clock: Callable[[], float]) -> "Identity":
         """IdentityError when a body does not read or the map names a trust domain the bundle does not hold."""
         import hashlib
-        from prismpath.distribution import kinds
         from prismpath.distribution.kinds import Refused
+        from prismpath.gateway import dist_kind
         try:
-            domains = kinds.read_identity_bundle(bundle)
-            entries = kinds.read_identity_map(mapping)
+            domains = dist_kind.read_identity_bundle(bundle)
+            entries = dist_kind.read_identity_map(mapping)
         except Refused as refused:
             raise IdentityError(str(refused)) from None
         missing = sorted({entry.domain for entry in entries} - set(domains))

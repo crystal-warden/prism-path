@@ -121,7 +121,7 @@ class Governor:
         store = None
         try:
             from prismpath.agent import commands
-            from prismpath.distribution.adapters import agent_home
+            from prismpath.agent import dist_kind as agent_home
             self.config = classifier.Config.for_workspace(workspace)
             self.policy, store = commands.load_checked(home)
             if agent_home.is_distributed(home):
@@ -178,7 +178,7 @@ class Governor:
             decision = self.policy.decide(raw)
         except Exception as exc:   # noqa: BLE001
             return Outcome("refuse", failure=f"the call could not be decided ({type(exc).__name__}: {exc})")
-        from prismpath.distribution.adapters import agent_home
+        from prismpath.agent import dist_kind as agent_home
         agent_home.note(self.home, reading)                     # a home that follows a stream, for its heartbeat
         try:
             index = self.run.append(raw, decision.verdict)

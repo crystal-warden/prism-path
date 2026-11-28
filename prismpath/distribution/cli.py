@@ -988,10 +988,10 @@ def _host_pep(args):
     from prismpath.hotswap.policy_host import PolicyHost
     key = _instance(args.key)
     if getattr(args, "kind", "host") == "agent":
-        from prismpath.distribution.adapters.agent_home import AgentHomeAdapter
+        from prismpath.agent.dist_kind import AgentHomeAdapter
         return Pep(args.state, AgentHomeAdapter(args.state), key, time.time)
     if getattr(args, "kind", "host") == "gateway":
-        from prismpath.distribution.adapters.gateway import GatewayHomeAdapter
+        from prismpath.gateway.dist_kind import GatewayHomeAdapter
         return Pep(args.state, GatewayHomeAdapter(args.state), key, time.time)
     saved = os.path.join(args.state, "dist-qualification.json")
     if args.qualification:

@@ -112,7 +112,7 @@ def _read(image: bytes) -> Optional[_Table]:
 
 
 def _atom(atom: Tuple[int, int, int, int], value: Tuple[int, int]) -> bool:
-    """One atom against one register (TABLE_FORMAT.md, and `adapters.mesh._atom` step for step)."""
+    """One atom against one register (TABLE_FORMAT.md, and `hotswap.ppt_eval._atom` step for step)."""
     _field, op, aty, aval = atom
     rty, rval = value
     lnum, rnum = rty in (TY_BOOL, TY_INT), aty in (TY_BOOL, TY_INT)

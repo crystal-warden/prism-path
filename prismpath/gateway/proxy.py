@@ -12,7 +12,7 @@ decision is appended to the gateway's run as a receipt, durably, before anything
 A home that follows a stream (spec-policy-distribution.md, section 3, the `gateway` target) holds no policy file and
 takes no route table from the command line: at every request the gateway reads the release its PEP committed, the
 `policy.core`, the `gateway.routes` and the trust store its grants are verified under
-(`prismpath.distribution.adapters.gateway.Following`). A revocation, an expiry or a new route table takes effect at
+(`prismpath.gateway.dist_kind.Following`). A revocation, an expiry or a new route table takes effect at
 the next request, and a release that no longer stands refuses every request until one does. One run is decided by
 one policy, so a release with another policy refuses until the gateway is started again under it.
 
@@ -61,6 +61,8 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 from urllib.parse import urlsplit
 
 from prismpath.agent.run import Extras
+from prismpath.gateway import dist_kind  # noqa: F401 - registers the gateway kind for every gateway
+from prismpath.onion import home as onion_home
 from . import reading as rd
 
 CAUSE_NAME = "gateway:request-refused"
@@ -70,8 +72,7 @@ METHODS = ("GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "TRACE")
 
 
 def gateway_home(env=None) -> Path:
-    from prismpath.agent import commands
-    return commands.config_dir(env).with_name("gateway")
+    return onion_home.config_dir(env).with_name("gateway")
 
 
 class Outcome:
@@ -101,8 +102,7 @@ class Gateway:
         self.lock = threading.Lock()
         self.policy = self.run = self.grants = self.follow = self.identity = None
         self.failure: Optional[str] = None
-        from prismpath.distribution.adapters import agent_home
-        distributed = agent_home.is_distributed(self.home)
+        distributed = onion_home.is_distributed(self.home)
         if identity_setting is not None and identity_setting.header in self.forward_headers:
             raise ValueError(f"the client certificate header {identity_setting.header} is read here and never passed on")
         if distributed and identity_bodies is not None:
@@ -114,26 +114,26 @@ class Gateway:
         if not distributed and routes is None:
             raise ValueError("a gateway home that does not follow a stream is given its route table")
         try:
-            from prismpath.agent import commands
+            from prismpath.agent.run import RunStore
             from . import grants
             if distributed:
-                from prismpath.distribution.adapters.gateway import Following
-                from prismpath.agent.run import RunStore
+                from prismpath.gateway.dist_kind import Following
                 self.follow = Following(self.home, identity_setting)
                 state = self.follow.current()
-                policy, store = state.policy, RunStore(self.home / commands.RUNS_DIR)
+                policy, store = state.policy, RunStore(self.home / onion_home.RUNS_DIR)
                 self.routes, self.grants, self.identity = state.routes, state.grants, state.identity
             else:
                 from prismpath.distribution import legacy
                 from prismpath.ledgers.root_statement import InstanceKey
-                policy, store = commands.load_checked(self.home)
-                self.grants = grants.Verifier(commands._key_paths(self.home, "authority")[1].read_bytes(),
-                                              commands._sha256_hex(policy.image), self.home / grants.REVOKED_FILE,
+                policy = onion_home.load_checked(self.home, kind="gateway")
+                store = RunStore(self.home / onion_home.RUNS_DIR)
+                self.grants = grants.Verifier(onion_home.key_paths(self.home, "authority")[1].read_bytes(),
+                                              onion_home.sha256_hex(policy.image), self.home / grants.REVOKED_FILE,
                                               legacy_log=self.home / legacy.AUDIT_FILE,
-                                              instance_key=InstanceKey.load(str(commands._key_paths(self.home, "instance")[0])))
+                                              instance_key=InstanceKey.load(str(onion_home.key_paths(self.home, "instance")[0])))
                 self.identity = _local_identity(policy, identity_setting, identity_bodies)
             if not rd.fields_ok(policy.fields):
-                raise commands.AgentError(f"the recorded policy's fields {policy.fields} are not the gateway reading's "
+                raise onion_home.AgentError(f"the recorded policy's fields {policy.fields} are not the gateway reading's "
                                           f"{sorted(rd.FIELDS)}, with or without {rd.WORKLOAD}")
             self.policy = policy
             self.run = store.open(self.session, policy.image)
@@ -149,10 +149,9 @@ class Gateway:
             return self.failure, None, None, None
         if self.follow is None:
             return None, self.routes, self.grants, self.identity
-        from prismpath.agent import commands
         try:
             state = self.follow.current()
-        except commands.AgentError as exc:
+        except onion_home.AgentError as exc:
             return f"the home's release no longer decides ({exc})", None, None, None
         if state.policy.image != self.policy.image:
             return ("the home committed another policy since this run began, and one run is decided by one policy",
@@ -169,8 +168,7 @@ class Gateway:
             if failure:
                 return Outcome("refuse", failure=failure)
         if self.follow is not None:
-            from prismpath.distribution.adapters import agent_home
-            agent_home.note(self.home, reading)                  # for the PEP's heartbeat (H5)
+            onion_home.note(self.home, reading)                  # for the PEP's heartbeat (H5)
         try:
             raw = self.policy.reading_bytes(reading)
             decision = self.policy.decide(raw)
@@ -231,19 +229,18 @@ class Gateway:
 def _local_identity(policy, setting, bodies: Optional[Tuple[bytes, bytes]]):
     """The workload reader of a home that holds its own policy: built from the bundle and map given at start when
     the policy reads `workload`, None when it does not. AgentError when they are missing or given for nothing."""
-    from prismpath.agent import commands
     from . import identity
     if identity.FIELD not in policy.fields:
         if bodies is not None:
-            raise commands.AgentError("an identity bundle and map are given and the policy reads no workload")
+            raise onion_home.AgentError("an identity bundle and map are given and the policy reads no workload")
         return None
     if bodies is None or setting is None:
-        raise commands.AgentError("the policy reads workload, so the gateway needs --identity-bundle, --identity-map, "
+        raise onion_home.AgentError("the policy reads workload, so the gateway needs --identity-bundle, --identity-map, "
                                   "--client-cert-header and --front-proxy")
     try:
         return identity.Identity.from_bodies(bodies[0], bodies[1], setting, clock=time.time)
     except identity.IdentityError as exc:
-        raise commands.AgentError(f"the identity bundle and map do not read ({exc})") from None
+        raise onion_home.AgentError(f"the identity bundle and map do not read ({exc})") from None
 
 
 class _Server(ThreadingHTTPServer):

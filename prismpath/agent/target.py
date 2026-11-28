@@ -19,7 +19,8 @@ on the image the compiler just made, so the author learns it with the line it is
   listed values        `check_listed`, on the source, a category whose `a|b|c` list is not the classifier's values
 
 A finding is (field or rule index, message), and the compiler turns a field into its declaration line and a rule into
-its rule line. Nothing here reads the distribution side (prismpath/distribution/kinds.py).
+its rule line. The agent kind registers these checks with the kind registry (prismpath/agent/dist_kind.py), and the
+compiler runs what the registry holds for `--target`.
 """
 from __future__ import annotations
 
@@ -96,10 +97,4 @@ TARGETS = {"agent": check}
 LISTED = {"agent": check_listed}
 
 
-def line_of(where: Where, field_lines, rule_lines) -> int:
-    """The source line a finding is about, 0 for the whole source."""
-    if isinstance(where, str):
-        return field_lines.get(where, 0)
-    if isinstance(where, int) and 0 <= where < len(rule_lines):
-        return rule_lines[where]
-    return 0
+from prismpath.kernel.policy_source import line_of  # noqa: E402,F401 - the source line a finding is about

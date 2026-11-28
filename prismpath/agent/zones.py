@@ -246,10 +246,10 @@ def load(home: Path, policy_image: bytes, workspace: Optional[Path] = None) -> O
     the signature does not verify under the authority key, it is bound to another policy, or (when `workspace` is
     given) to another project."""
     from prismpath.agent import commands
-    from prismpath.distribution.adapters import agent_home
+    from prismpath.onion import home as onion_home
     from prismpath.hotswap import policy_pack
     from prismpath.kernel import canon2
-    if agent_home.is_distributed(home):
+    if onion_home.is_distributed(home):
         return _load_distributed(home, policy_image, workspace)
     path, attestation = home / ZONES_FILE, home / ATTESTATION_FILE
     if not path.exists() and not attestation.exists():
