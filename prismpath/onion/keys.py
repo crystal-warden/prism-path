@@ -103,6 +103,7 @@ class FileKey:
         self._private = private_key
         self._public_raw = None if public_raw is None else bytes(public_raw)
         self._key_id: Optional[str] = None
+        self._fingerprint: Optional[str] = None
         self.path = path
 
     @classmethod
@@ -115,15 +116,29 @@ class FileKey:
             self._public_raw = _raw_public_of_private(self._private)
         return self._public_raw
 
+    @public_raw.setter
+    def public_raw(self, value: bytes) -> None:
+        self._public_raw, self._key_id, self._fingerprint = bytes(value), None, None
+
     @property
     def key_id(self) -> str:
         if self._key_id is None:
             self._key_id = key_id_of(self.public_raw)
         return self._key_id
 
+    @key_id.setter
+    def key_id(self, value: str) -> None:             # the fields stay as writable as they always were
+        self._key_id = value
+
     @property
     def fingerprint(self) -> str:
-        return fingerprint(self.key_id)
+        if self._fingerprint is None:
+            self._fingerprint = fingerprint(self.key_id)
+        return self._fingerprint
+
+    @fingerprint.setter
+    def fingerprint(self, value: str) -> None:
+        self._fingerprint = value
 
     def sign(self, message: bytes) -> bytes:
         return self._private.sign(message)

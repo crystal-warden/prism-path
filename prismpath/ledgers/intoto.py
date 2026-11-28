@@ -220,7 +220,8 @@ def open_statement(envelope: Any, public_raw: bytes, predicate_type: str) -> Dic
     sigs = envelope["signatures"]
     if not isinstance(sigs, list) or not sigs:
         raise Bad("the DSSE envelope carries no signatures")
-    public = core_evidence._public_key(bytes(public_raw), "signer")
+    core_evidence._public_key(bytes(public_raw), "signer")
+    public = bytes(public_raw)
     onion_keys.require()
     message = pae(PAYLOAD_TYPE, payload_bytes)
     verified = False
@@ -372,7 +373,8 @@ def _verify_one(
 
     verify_raw = inst_pin if inst_pin is not None else instance_raw
     verify_key_id = core_evidence.sha256_hex(verify_raw)
-    verify_pub = core_evidence._public_key(verify_raw, "instance")
+    core_evidence._public_key(verify_raw, "instance")
+    verify_pub = bytes(verify_raw)
     onion_keys.require()
 
     pae_bytes = pae(envelope["payloadType"], payload_bytes)

@@ -354,13 +354,12 @@ def _hex_of(value, size: int) -> bool:
     return isinstance(value, str) and len(value) == 2 * size and all(char in "0123456789abcdef" for char in value)
 
 
-def _public_key(raw: bytes, what: str) -> bytes:
-    """A run's raw 32 byte Ed25519 public key, checked to read as one, or Bad naming which key does not read."""
+def _public_key(raw: bytes, what: str):
+    """An Ed25519 public key from a run's raw 32 bytes, or Bad naming which key does not read."""
     try:
-        onion_keys.public_key(raw)
+        return onion_keys.public_key(raw)
     except ValueError:
         raise Bad(f"the run's {what} key is not a raw 32 byte Ed25519 public key") from None
-    return bytes(raw)
 
 
 def verify_root_statement(data: bytes, leaves, manifest_bytes: bytes, instance_raw: bytes) -> dict:
@@ -393,7 +392,8 @@ def verify_root_statement(data: bytes, leaves, manifest_bytes: bytes, instance_r
         raise Bad("the root statement's root, key or signature is malformed")
     if statement["public_key"] != instance_raw.hex() or statement["key_id"] != sha256_hex(instance_raw):
         raise Bad("the root statement is not signed with the run's instance key")
-    public = _public_key(instance_raw, "instance")
+    _public_key(instance_raw, "instance")
+    public = bytes(instance_raw)
     try:
         signature, message = bytes.fromhex(statement["sig"]), root_signed_bytes(statement)
     except ValueError:
@@ -500,7 +500,8 @@ def _check(run: Path, pin_authority, pin_instance, pin_install=None):
         if problem is not None:
             raise Bad(problem)
     onion_keys.require()
-    authority = _public_key(authority_raw, "authority")
+    _public_key(authority_raw, "authority")
+    authority = bytes(authority_raw)
     image_lines = _lines(run / "images.jsonl")
     if len(image_lines) != len(cases):
         raise Bad("images.jsonl does not hold one attestation per case")
