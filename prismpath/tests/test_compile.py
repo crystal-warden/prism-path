@@ -217,7 +217,7 @@ def test_compiled_bundle_inlines_the_extracted_engine(tmp_path):
     # two files. Both halves of that contract are asserted here.
     from prismpath import bundle_compile, cli
 
-    engine_path = os.path.join(os.path.dirname(cli.__file__), "portable", bundle_compile.BUNDLE_ENGINE_FILE)
+    engine_path = os.path.join(os.path.dirname(bundle_compile.__file__), "portable", bundle_compile.BUNDLE_ENGINE_FILE)
     engine_source = open(engine_path, encoding="utf-8").read()
     assert engine_source.count(bundle_compile.BUNDLE_STRIP_BEGIN) == 1
     assert engine_source.count(bundle_compile.BUNDLE_STRIP_END) == 1

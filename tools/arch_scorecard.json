@@ -24,13 +24,13 @@
   "ratchet": {
     "PASS": true,
     "counts": {
-      "import_direction": 29,
-      "private_use": 147,
+      "import_direction": 6,
+      "private_use": 133,
       "decides_outside_onion": 4
     },
     "baseline_counts": {
-      "import_direction": 29,
-      "private_use": 147,
+      "import_direction": 6,
+      "private_use": 133,
       "decides_outside_onion": 4
     },
     "new": {
@@ -48,11 +48,11 @@
   "frozen_paths": {
     "PASS": true,
     "changed": [],
-    "note": "merge base b6afb8af96",
+    "note": "merge base 9a5a14c4e2",
     "fix": "a refactor branch may add to a frozen path and may not modify, delete or rename one (G8, tools/frozen_paths.txt)"
   },
   "signal_3_core_churn": {
-    "core_total_loc": 9519,
+    "core_total_loc": 9605,
     "churn_since_baseline": null,
     "note": "track per adapter; must decay. flat or rising means rebuilding, not generalizing."
   },
