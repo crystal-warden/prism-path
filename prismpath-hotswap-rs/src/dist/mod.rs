@@ -590,7 +590,11 @@ impl ArtifactKind {
             },
             InstallChange => Artifact { check: Some(install::check_install_change), role: INSTALL, ..PLAIN },
             OperatorAnswer => Artifact { role: OPERATOR, ..PLAIN },
-            PolicyCore | EgressHosts | GatewayRoutes | IdentityBundle | IdentityMap | NetDests | CfsTable | Grant => PLAIN,
+            PolicyCore => Artifact { meta: |doc| codec::from_doc(doc).map(Meta::PolicyCore), ..PLAIN },
+            EgressHosts | GatewayRoutes | IdentityBundle | IdentityMap => {
+                Artifact { meta: |doc| codec::from_doc(doc).map(Meta::SealedSide), ..PLAIN }
+            }
+            NetDests | CfsTable | Grant => PLAIN,
         }
     }
 
@@ -799,10 +803,36 @@ pub struct ProfileMeta {
     pub compiler: std::num::NonZeroU64,
 }
 
+/// `policy.core` `meta`, written only by a release sealed from a signed policy manifest (SPEC.md section 10): the
+/// manifest's signed `flow_sha256` and the sha256 of the rules source the image compiles from. Both optional, so an
+/// envelope sealed from flags reads with `{}`. No check reads them; they take an auditor to the manifest and the rules.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CoreMeta {
+    #[serde(default, deserialize_with = "present", skip_serializing_if = "Option::is_none")]
+    pub manifest_sha256: Option<Hex64>,
+    #[serde(default, deserialize_with = "present", skip_serializing_if = "Option::is_none")]
+    pub source_sha256: Option<Hex64>,
+}
+
+/// The `meta` of a side artifact a manifest seals (`egress.hosts`, `gateway.routes`,
+/// `identity.bundle`, `identity.map`): the manifest's signed `flow_sha256` and the sha256 of the rules source of the
+/// release it is sealed with. Both optional.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SideMeta {
+    #[serde(default, deserialize_with = "present", skip_serializing_if = "Option::is_none")]
+    pub manifest_sha256: Option<Hex64>,
+    #[serde(default, deserialize_with = "present", skip_serializing_if = "Option::is_none")]
+    pub rules_sha256: Option<Hex64>,
+}
+
 /// An envelope's `meta` read as its artifact's form.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Meta {
     None,
+    PolicyCore(CoreMeta),
+    SealedSide(SideMeta),
     PolicyPpt(PptMeta),
     NetEdge(NetEdgeMeta),
     SandboxProfile(ProfileMeta),
