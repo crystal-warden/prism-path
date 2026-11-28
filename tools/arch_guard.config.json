@@ -290,7 +290,6 @@
       "composer.py",
       "connector.py",
       "deferral.py",
-      "distribution/adapters/agent_home.py",
       "distribution/adapters/host.py",
       "distribution/adapters/mesh.py",
       "distribution/export.py",

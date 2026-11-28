@@ -5,7 +5,6 @@
     "agent/launcher.py -> agent/commands.py (adapter -> surface)",
     "agent/mcp_proxy.py -> agent/commands.py (adapter -> surface)",
     "agent/zones.py -> agent/commands.py (adapter -> surface)",
-    "agent/zones.py -> distribution/adapters/agent_home.py (adapter -> adapter, another package)",
     "gateway/proxy.py -> agent/run.py (adapter -> adapter, another package)",
     "kernel/analysis.py -> routing/lockfile.py (kernel -> adapter)",
     "kernel/engine.py -> routing/router.py (kernel -> adapter)",

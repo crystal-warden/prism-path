@@ -265,7 +265,6 @@ prismpath/crypto_registry.py
 prismpath/deferral.py
 prismpath/distribution/__init__.py
 prismpath/distribution/adapters/__init__.py
-prismpath/distribution/adapters/agent_home.py
 prismpath/distribution/adapters/host.py
 prismpath/distribution/adapters/mesh.py
 prismpath/distribution/cli.py
