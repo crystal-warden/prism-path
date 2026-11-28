@@ -2,6 +2,10 @@
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """The Context Cloud information point: whether a change reaches the owner's protected code, asked of Context Cloud.
 
+The point supplies `zone_reach` and, as fields of its own, `cc_certainty` and `cc_engine_agreement`: Context Cloud's
+answer before the policy's requirements are applied, and how many engines agree with it. `policy.cc_required_certainty`
+and `policy.cc_engine_agreement` narrow `zone_reach` only (`ContextCloudZones._reading`).
+
 The point is evidence and never authority. It reads `unknown` for every path, and says why, when the index or the
 program that reads it could have been written by the agent (`_distrust`). This module imports no other prismpath
 package. What it needs from the agent kind is handed to it: `host_path` (how a model's path names a host file) and
@@ -30,6 +34,13 @@ CACHE_FILE = "zones-cache.json"
 DEFAULT_BUDGET_S = 0.1          # what one path may spend asking Context Cloud before it reads unknown
 WORKERS = min(16, os.cpu_count() or 4)     # lookups run side by side: each one is a process start
 ZONE_REACH = ("none", "protected", "unknown")
+# What Context Cloud says of a file: its strongest answer over the file's functions, in Context Cloud's own words
+# (`contextcloud reaches --json`, `certainty`: no, certain, likely or unknown; `no` is read as `none`).
+CC_CERTAINTY = ("none", "likely", "certain", "unknown")
+# How many engines agree with that answer, as Context Cloud reports it. 0 to 63, a closed range of 64 values.
+CC_ENGINE_AGREEMENT = tuple(range(64))
+REQUIRED_CERTAINTIES = ("likely", "certain")      # `policy.cc_required_certainty`, weakest first
+RANK = {"unknown": 0, "likely": 1, "certain": 2}
 
 
 def _sha256(data: bytes) -> str:
@@ -82,6 +93,15 @@ def agent_uid() -> int:
     return os.geteuid()
 
 
+def _requirement_problem(required_certainty: Any, engine_agreement: Any) -> str:
+    """'' when the two requirements are values the grammar allows, else why not."""
+    if not isinstance(required_certainty, str) or required_certainty not in REQUIRED_CERTAINTIES:
+        return f"the required certainty {required_certainty!r} is not one of {', '.join(REQUIRED_CERTAINTIES)}"
+    if isinstance(engine_agreement, bool) or not isinstance(engine_agreement, int) or not 1 <= engine_agreement <= 64:
+        return f"the required engine agreement {engine_agreement!r} is not a whole number from 1 to 64"
+    return ""
+
+
 # ------------------------------------------------------------------------------------------------ the adapter
 def _covered(name: str, protected: Sequence[str]) -> bool:
     """`name` is a protected name, or lies inside a protected module or class."""
@@ -97,13 +117,25 @@ class ContextCloudZones:
     """The information point that asks Context Cloud (`contextcloud reaches --json`, whose JSON output is described in the Context Cloud repository)."""
 
     name = "contextcloud"
-    fields = {"zone_reach": ZONE_REACH}
-    restrictive = {"zone_reach": "unknown"}
+    fields = {"zone_reach": ZONE_REACH, "cc_certainty": CC_CERTAINTY, "cc_engine_agreement": CC_ENGINE_AGREEMENT}
+    restrictive = {"zone_reach": "unknown", "cc_certainty": "unknown", "cc_engine_agreement": 0}
+    classifier_fields = ("zone_reach",)     # fields the agent's classifier already has; the catalog lists the others
 
     def __init__(self, doc: Dict[str, Any], home: Path, executable: str, budget_s: float = DEFAULT_BUDGET_S,
                  run=subprocess.run, host_write: bool = False, unconfined: Optional[Callable[[], bool]] = None,
-                 host_path: Optional[Callable[[str, Any], str]] = None):
+                 host_path: Optional[Callable[[str, Any], str]] = None, required_certainty: Any = "likely",
+                 engine_agreement: Any = 1):
+        """`required_certainty` (`policy.cc_required_certainty`) is the weakest answer of Context Cloud that
+        `zone_reach` reads `protected` for: `likely` (the default, and what the point always did) reads a `certain`
+        and a `likely` answer `protected`, `certain` only a `certain` one. `engine_agreement`
+        (`policy.cc_engine_agreement`) is how many engines must agree before `zone_reach` reads `protected`: 1 (the
+        default) asks nothing beyond Context Cloud's own answer, more asks for `cc_engine_agreement` to reach it. An
+        answer that does not meet either reads `unknown` for `zone_reach`, never `none`. A requirement that is not
+        one of the listed values (not `likely` or `certain`, not an int from 1 to 64) makes every path read `unknown`
+        and says why."""
         self._unconfined, self._host_path = unconfined, host_path
+        self.required_certainty, self.engine_agreement = required_certainty, engine_agreement
+        self.requirement_why = _requirement_problem(required_certainty, engine_agreement)
         self.doc, self.home, self.exe, self.budget_s, self._run = doc, Path(home), executable, budget_s, run
         self.protected: List[str] = list(doc["protected"])
         self.project = Path(doc["project"])
@@ -112,7 +144,7 @@ class ContextCloudZones:
         self.stats: Dict[str, Any] = {}
         self.host_write = host_write
         self.real_exe = os.path.realpath(executable)
-        self.why = self._distrust()
+        self.why = self.requirement_why or self._distrust()
 
     # --- the index is a control path, and must not be one the agent could have written
     @property
@@ -234,7 +266,7 @@ class ContextCloudZones:
             value = json.loads(self._cache_path().read_text(encoding="utf-8")).get(key)
         except Exception:   # noqa: BLE001
             return None
-        return value if value in ("none", "protected") else None
+        return value if value in ("none", "likely", "certain") else None
 
     def _cache_put(self, key: str, value: str) -> None:
         try:
@@ -266,16 +298,37 @@ class ContextCloudZones:
             certainty = json.loads(done.stdout).get("certainty")
         except Exception:   # noqa: BLE001 - a timeout, a missing program and bad output all say nothing
             return "unknown"
-        return {"no": "none", "certain": "protected", "likely": "protected"}.get(certainty, "unknown")
+        if not isinstance(certainty, str):
+            return "unknown"
+        return {"no": "none", "certain": "certain", "likely": "likely"}.get(certainty, "unknown")
 
     # --- one path
     def reach(self, raw: str, config: Any, budget_s: Optional[float] = None) -> str:
         return self.reach_names(raw, config, budget_s)[0]
 
-    def reach_names(self, raw: str, config: Any, budget_s: Optional[float] = None) -> Tuple[str, frozenset]:
-        """`reach`, and the protected names of the zone document the path reaches (spec-policy-distribution.md, AF1),
-        for `zone_name`. A file that defines protected code names the names that cover it. A file found protected only
-        by a lookup of its functions names none, since Context Cloud answers for the protected set as a whole."""
+    def _reading(self, certainty: str) -> str:
+        """`zone_reach` for Context Cloud's answer `certainty` (none, likely, certain or unknown) under the point's
+        requirements: `none` stays `none`, an answer of the required rank or above that has the engine agreement
+        asked reads `protected`, and every other answer reads `unknown`, never `none`. An agreement of 1 asks
+        nothing beyond Context Cloud's own answer; more is met only by `_engines`, which is 0 today."""
+        if certainty == "none":
+            return "none"
+        if certainty not in ("likely", "certain") or RANK[certainty] < RANK[self.required_certainty]:
+            return "unknown"
+        return "protected" if self.engine_agreement <= 1 or self._engines() >= self.engine_agreement else "unknown"
+
+    @staticmethod
+    def _engines() -> int:
+        """How many engines agree with the answer. `contextcloud reaches --json` names no engine beside its own call
+        graph and value flow (each witness edge says `by: call graph` or `by: value flow`, two analyses of one engine),
+        and the other engines' answers (Pyrefly, scip-python) sit in the index's `edge_evidence` table, which `reaches`
+        does not read. So nothing is reported and this is the restrictive value."""
+        return 0
+
+    def certainty_names(self, raw: str, config: Any, budget_s: Optional[float] = None) -> Tuple[str, frozenset]:
+        """Context Cloud's answer for the path (`CC_CERTAINTY`) and the protected names the path reaches. `unknown`
+        and no names whenever the point distrusts its index or program, has no `host_path`, or the path is not a
+        Python file of the index; the restrictive value on every error."""
         self.names = frozenset()
         if self.why or self._host_path is None:
             self.stats = {"functions": 0, "cached": False, "seconds": 0.0, "untrusted_index": self.why}
@@ -296,17 +349,41 @@ class ContextCloudZones:
         finally:
             self.stats["seconds"] = round(time.monotonic() - started, 4)
 
+    def reach_names(self, raw: str, config: Any, budget_s: Optional[float] = None) -> Tuple[str, frozenset]:
+        """`reach`, and the protected names of the zone document the path reaches (spec-policy-distribution.md, AF1),
+        for `zone_name`. A file that defines protected code names the names that cover it. A file found protected only
+        by a lookup of its functions names none, since Context Cloud answers for the protected set as a whole. A path
+        whose answer does not meet the point's requirements reads `unknown` and names none."""
+        certainty, names = self.certainty_names(raw, config, budget_s)
+        fact = self._reading(certainty)
+        if fact != "protected":
+            self.names = frozenset()
+            return fact, frozenset()
+        return fact, names
+
     def facts(self, change: Change, budget_s: float) -> Evidence:
         """The port's one question: `reach_names` of the change's path, as Evidence. The names are the protected
-        names the path reaches; `why` is why the point reads `unknown` when it distrusts its index or program."""
+        names the path reaches; `why` is why the point reads `unknown` when it distrusts its index or program.
+        `cc_certainty` is Context Cloud's answer whatever the requirements, so a rule can read a `likely` that
+        `zone_reach` did not call protected; `cc_engine_agreement` is what `_engines` says."""
         try:
-            fact, names = self.reach_names(change.raw_path, change.config, budget_s)
+            certainty, names = self.certainty_names(change.raw_path, change.config, budget_s)
+            fact = self._reading(certainty)
+            if certainty not in CC_CERTAINTY or fact not in ZONE_REACH:
+                raise ValueError("an answer outside the closed lists")
+            agreement = self._engines()
+            if isinstance(agreement, bool) or not isinstance(agreement, int) or agreement not in CC_ENGINE_AGREEMENT:
+                raise ValueError("an agreement outside the closed list")
         except Exception as exc:   # noqa: BLE001 - a point that fails says nothing, which is its restrictive value
             return Evidence(dict(self.restrictive), frozenset(), f"the point failed ({type(exc).__name__})", {})
         why = self.why or ("no function that names the host path was supplied" if self._host_path is None else "")
-        return Evidence({"zone_reach": fact}, names, why, dict(self.stats))
+        return Evidence({"zone_reach": fact, "cc_certainty": certainty, "cc_engine_agreement": agreement},
+                        names if fact == "protected" else frozenset(), why, dict(self.stats))
 
     def _file(self, rel: str, content: bytes, started: float, budget: float) -> str:
+        """Context Cloud's answer for one file: `certain` for a file that defines protected code, else the strongest
+        answer of its functions (`certain`, then `likely`), `unknown` when one function said so or timed out and none
+        was `certain` or `likely`, and `none` only when every function answered `no`."""
         rows = self._index_rows(rel)
         if rows is None:
             return "unknown"                      # a file the index does not hold
@@ -315,7 +392,7 @@ class ContextCloudZones:
             return "unknown"                      # the index holds another version of this file
         if _covered(module, self.protected) or any(_covered(n, self.protected) for n in names):
             self.names = _covering(module, self.protected).union(*(_covering(n, self.protected) for n in names))
-            return "protected"                    # the file defines protected code, no lookup needed
+            return "certain"                      # the file defines protected code, no lookup needed
         key = _sha256("|".join((self._index_signature(), self.zones_sha, indexed_sha, rel)).encode())
         cached = self._cache_get(key) if self._confined() else None      # elsewhere the agent can write the cache
         if cached is not None:
@@ -335,8 +412,10 @@ class ContextCloudZones:
             timed_out = bool(pending)
         finally:
             pool.shutdown(wait=False, cancel_futures=True)
-        if "protected" in answers:
-            fact = "protected"
+        if "certain" in answers:
+            fact = "certain"
+        elif "likely" in answers:
+            fact = "likely"
         elif timed_out or "unknown" in answers:
             self.stats["timed_out"] = timed_out
             return "unknown"

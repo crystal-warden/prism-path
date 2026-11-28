@@ -40,6 +40,9 @@ def _evidence_finding(name, text, have, bound) -> List[Tuple[Where, str]]:
     if text.split()[:1] != [have.kind]:
         return [(name, f"the information point {have.point} gives {name} as a {have.kind}, not a "
                        f"{(text.split() or ['nothing'])[0]}")]
+    if have.kind == "int" and sorted(text.split()) != sorted(catalog.declaration(have).split()):
+        return [(name, f"the information point {have.point} gives {name} as `{catalog.declaration(have)}`, not "
+                       f"`{text}`")]
     return []
 
 

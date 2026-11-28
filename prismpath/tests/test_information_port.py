@@ -77,7 +77,7 @@ def test_a_context_cloud_point_without_what_the_agent_kind_hands_it_reads_unknow
     point = contextcloud.ContextCloudZones(doc, tmp_path, str(tmp_path / "contextcloud"))
     assert not point._confined()
     evidence = point.facts(Change(str(tmp_path / "a.py"), classifier.Config.for_workspace(tmp_path)), 0.1)
-    assert evidence.readings == {"zone_reach": point.restrictive["zone_reach"]}
+    assert evidence.readings == dict(point.restrictive)
     assert point.reach("a.py", classifier.Config.for_workspace(tmp_path)) == "unknown"
     assert point.name == "contextcloud" and isinstance(point, InformationPoint)
 
@@ -121,5 +121,5 @@ def test_facts_never_raises(tmp_path):
     for point in (_built(tmp_path, host_path=broken), _built(tmp_path)):
         evidence = point.facts(Change("a.py", config), 0.1)
         assert evidence.readings == point.restrictive and evidence.why
-    assert _built(tmp_path).facts(Change("a.py", None), 0.1).readings == {"zone_reach": "unknown"}
+    assert _built(tmp_path).facts(Change("a.py", None), 0.1).readings == dict(_built(tmp_path).restrictive)
     assert _built(tmp_path, host_path=broken).facts(Change("a.py", None), 0.1).readings == {"zone_reach": "unknown"}

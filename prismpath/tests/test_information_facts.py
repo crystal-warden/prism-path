@@ -35,12 +35,13 @@ def test_every_point_has_the_port_shape_and_a_restrictive_value_for_each_field(p
     assert all(point.restrictive[f] in point.fields[f] for f in point.fields)
 
 
-def test_the_five_facts_are_fields_of_three_points_and_no_name_is_declared_twice():
+def test_the_five_facts_and_the_two_certainty_fields_are_fields_of_four_points_and_no_name_is_declared_twice():
     found = catalog.evidence_fields()
     assert {n: f.point for n, f in found.items()} == {
         "edit_kind": "parse", "behaviour_preserving": "parse", "tests_pass": "tests",
-        "touches_protected": "cc_graph", "adds_protected_reference": "cc_graph"}
-    assert sum(len(c.fields) for c in catalog.POINTS.values()) == len(found)
+        "touches_protected": "cc_graph", "adds_protected_reference": "cc_graph",
+        "cc_certainty": "contextcloud", "cc_engine_agreement": "contextcloud"}
+    assert sum(len(set(c.fields) - set(getattr(c, "classifier_fields", ()))) for c in catalog.POINTS.values()) == len(found)
     assert not set(found) & set(agent_fields.by_name())
 
 
@@ -50,7 +51,9 @@ def test_the_restrictive_values_are_the_listed_ones():
         "behaviour_preserving": ("bool", (False, True), False),
         "tests_pass": ("category", ("true", "false", "not_run"), "false"),
         "touches_protected": ("bool", (False, True), True),
-        "adds_protected_reference": ("bool", (False, True), True)}
+        "adds_protected_reference": ("bool", (False, True), True),
+        "cc_certainty": ("category", ("none", "likely", "certain", "unknown"), "unknown"),
+        "cc_engine_agreement": ("int", tuple(range(64)), 0)}
 
 
 def test_a_name_that_is_no_point_is_refused():
@@ -618,3 +621,47 @@ def test_an_evidence_field_named_like_a_classifier_bool_or_int_is_a_clash(monkey
     monkeypatch.setattr(catalog, "fields_of", lambda names: {"path_control": fake})
     with pytest.raises(ValueError, match="also a field of the classifier"):
         profile.agent_domain(("parse",))
+
+
+# ------------------------------------------------------ the Context Cloud point's two fields (certainty, A6)
+CC_FIELDS = ("field.cc_certainty: category none|likely|certain|unknown\nfield.cc_engine_agreement: int min=0 max=63\n")
+CC_RULES = ('-> refuse agent:network: when cc_certainty == "certain"\n'
+            '-> allow: when tool == "write_file" and cc_certainty == "none"\n-> allow: when tool == "read_file"\n')
+
+
+def test_a_policy_that_names_a_certainty_field_with_no_point_bound_is_refused_with_its_line():
+    found = _found(_source(CC_FIELDS, CC_RULES))
+    assert [(line, "information point contextcloud" in message) for line, message in found] == [(8, True), (9, True)]
+    assert _found(_source(CC_FIELDS, CC_RULES), ("contextcloud",)) == []
+
+
+def test_the_engine_agreement_must_be_declared_over_the_points_range():
+    wrong = CC_FIELDS.replace("max=63", "max=10")
+    assert [line for line, _m in _found(_source(wrong, CC_RULES), ("contextcloud",))] == [9]
+    other = CC_FIELDS.replace("field.cc_engine_agreement: int min=0 max=63", "field.cc_engine_agreement: bool")
+    assert "gives cc_engine_agreement as a int, not a bool" in _found(_source(other, CC_RULES), ("contextcloud",))[0][1]
+    listed = _found(_source(CC_FIELDS.replace("none|likely|certain|unknown", "none|certain|likely|unknown"), CC_RULES),
+                    ("contextcloud",))
+    assert [line for line, _m in listed] == [8]
+
+
+def test_the_certainty_fields_are_in_the_domain_with_their_restrictive_defaults():
+    domain = profile.agent_domain(("contextcloud",))
+    assert domain.categories["cc_certainty"] == ("none", "likely", "certain", "unknown")
+    assert "cc_engine_agreement" not in domain.categories                       # an int is declared by the source
+    assert domain.defaults["cc_certainty"] == "unknown" and domain.defaults["cc_engine_agreement"] == 0
+    assert "zone_reach" in profile.AGENT_DOMAIN.categories and "cc_certainty" not in profile.AGENT_DOMAIN.categories
+
+
+def test_a_policy_reads_the_certainty_fields_and_a_reading_without_them_reads_the_restrictive_values():
+    compiled = ps.compile_full(_source(CC_FIELDS, CC_RULES))
+    loaded = agent_policy.Policy(compiled.image, ("contextcloud",))
+    base = {"tool": "write_file", "path_scope": "workspace", "command_class": "none", "git_op": "none",
+            "path_control": False, "net_dest": "none", "classifier_version": 3}
+    allowed = loaded.decide(loaded.reading_bytes({**base, "cc_certainty": "none", "cc_engine_agreement": 0})).runs
+    refused = loaded.decide(loaded.reading_bytes({**base, "cc_certainty": "certain", "cc_engine_agreement": 0})).runs
+    lacking = loaded.decide(loaded.reading_bytes(base)).runs
+    assert allowed and not refused and not lacking          # a reading without the field is `unknown`, which no rule allows
+    from prismpath.kernel.decision import OutsideDomain
+    with pytest.raises(OutsideDomain, match="information point contextcloud"):
+        agent_policy.Policy(compiled.image)

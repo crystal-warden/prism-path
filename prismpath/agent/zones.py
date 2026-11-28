@@ -65,7 +65,8 @@ write any file or directory below it, or when it is inside the project (`package
 counts as able to write.
 
 A path is `protected` when the file defines a protected name (or sits under a protected module), or any function of
-the file reaches the protected set with certainty `certain` or `likely`; `unknown` when the file is not a Python
+the file reaches the protected set with certainty `certain` or `likely` (or only `certain`, when the point is built with
+that required certainty, a `likely` answer then reading `unknown`); `unknown` when the file is not a Python
 file of the index, the index holds a different version of it (a stale index), a lookup fails or times out, or Context
 Cloud says `unknown`; `none` only when every function of the file answered `no`. The file is the unit because a
 write names a file and not a line. Code at module level (outside every function) is not a function in Context
@@ -410,11 +411,13 @@ class ContextCloudZones(contextcloud.ContextCloudZones):
     (`classifier.host_path`) and whether no per call sandbox confines the agent (`_agent_unconfined`)."""
 
     def __init__(self, doc: Dict[str, Any], home: Path, executable: str, budget_s: float = DEFAULT_BUDGET_S,
-                 run=subprocess.run, host_write: bool = False, unconfined=None, host_path=None):
+                 run=subprocess.run, host_write: bool = False, unconfined=None, host_path=None,
+                 required_certainty="likely", engine_agreement=1):
         from prismpath.agent import classifier
         super().__init__(doc, home, executable, budget_s, run, host_write,
                          unconfined=_agent_unconfined if unconfined is None else unconfined,
-                         host_path=classifier.host_path if host_path is None else host_path)
+                         host_path=classifier.host_path if host_path is None else host_path,
+                         required_certainty=required_certainty, engine_agreement=engine_agreement)
 
 
 def status(home: Path, policy_image: bytes, workspace: Path, env: Optional[Mapping[str, str]] = None) -> Dict[str, Any]:

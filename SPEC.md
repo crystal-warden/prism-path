@@ -640,13 +640,24 @@ Normatively, as follows.
   holds and by `policy.cc_freshness_s`.
 - **Information points.** `policy.points` (list of word) names the information points the rules are built with. A rules
   source that declares a field only a point supplies (`tests_pass`, `edit_kind`, `behaviour_preserving`,
-  `touches_protected`, `adds_protected_reference`) is a `points` finding unless the point that supplies it is named,
+  `touches_protected`, `adds_protected_reference`, `cc_certainty`, `cc_engine_agreement`) is a `points` finding unless the point that supplies it is named,
   and `prismpath policy compile --target agent` refuses it, on the line of the field, unless it is given `--point`. A policy
   that allows a reading with `tests_pass` at `not_run` that it refuses at `false` is refused too. `tests_pass` true is never enough
   alone, and the five facts were proven together with `reaches_protected` and `unknown_reason`, so a policy that reads them should also
   require `zone_reach == "none"`. The sealing tool refuses `policy.points` with "no PEP holds this yet": no artifact of a
   release carries the points and no PEP builds its policy with them, so a release sealed from it would be read without
   the points it names.
+- **Context Cloud certainty.** The `contextcloud` point supplies two fields besides `zone_reach`. `cc_certainty` is
+  `none`, `likely`, `certain` or `unknown`: Context Cloud's strongest answer over the file's functions (`certain` for a
+  file that defines protected code), `unknown` on every error, a missing or stale index, an untrusted program or index
+  and a timeout. `cc_engine_agreement` is `int min=0 max=63`, how many engines agree with that answer as Context Cloud
+  reports it, and reads 0 on every path today, since `contextcloud reaches --json` names no engine beside its own and
+  does not read the other engines' answers in the index. The two requirements narrow `zone_reach`: with
+  `policy.cc_required_certainty` `certain`, a `likely` answer reads `unknown`, never `none`, and with
+  `policy.cc_engine_agreement` above 1 every `certain` or `likely` answer reads `unknown` until Context Cloud reports
+  that many engines. The defaults, `likely` and 1, are what the point always read (`certain` and `likely` are both
+  `protected`). The point reads them as constructor arguments; no manifest carries them to a running agent yet, and
+  the sealing tool still refuses the keys.
 - **Domain.** `policy.domain` is reserved, and written it is an error. The domain of a release is the rules
   source's own typed `field.<name>:` lines, which `policy.rules_sha256` already signs, so a second statement of it
   could only repeat them or contradict them. The floor and ceiling per field it was meant to carry bound what a later
