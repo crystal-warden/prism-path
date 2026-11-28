@@ -43,7 +43,20 @@ def test_the_old_analysis_names_and_flow_files_agree():
     assert analysis.analyze_composition(graph, str(FLOW)) == flow_files.analyze_composition(graph, str(FLOW))
 
 
-def test_run_with_no_router_warns_once_for_the_default():
+def test_run_with_no_router_warns_once_for_the_default(monkeypatch):
+    # The default router needs the embeddings extra, which this test does not. A stand in keeps it to the warning.
+    from prismpath.routing import router as router_module
+    class Built(Exception):
+        pass
+
+    class Stand:
+        def route(self, *args, **kwargs):
+            raise Built
+
+    monkeypatch.setattr(router_module, "EmbeddingRouter", Stand)
     graph = parse_file(str(FLOW))
     with pytest.warns(DeprecationWarning, match="no router"):
-        engine.run(graph, lambda node, text, state: "", max_steps=1)
+        try:
+            engine.run(graph, lambda node, text, state: "", max_steps=1)
+        except Built:
+            pass

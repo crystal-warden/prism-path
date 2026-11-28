@@ -62,7 +62,15 @@ def test_the_flow_list_is_not_empty():
 def test_the_commands_print_what_they_printed():
     pytest.importorskip("numpy")
     golden = json.loads(FIXTURE.read_text(encoding="utf-8"))
-    got = capture_all()
+    commands = COMMANDS
+    try:
+        import sentence_transformers  # noqa: F401  (lint embeds the edge texts)
+    except ImportError:
+        # Without the embeddings extra `lint` and `test` refuse before they read a flow, so their captures say
+        # nothing here. The gate, which has the extra, holds all four.
+        commands = ("validate", "capability")
+        golden = {key: value for key, value in golden.items() if key.split(" ", 1)[0] in commands}
+    got = {f"{command} {flow}": _capture(command, flow) for flow in _flows() for command in commands}
     assert sorted(got) == sorted(golden)
     for key in sorted(got):
         assert got[key] == golden[key], key
