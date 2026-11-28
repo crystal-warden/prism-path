@@ -16,8 +16,43 @@
     "PASS": true,
     "problems": []
   },
+  "layers": {
+    "PASS": true,
+    "problems": [],
+    "fix": "every production file is in exactly one layer of tools/arch_guard.config.json (refactor plan 1.3)"
+  },
+  "ratchet": {
+    "PASS": true,
+    "counts": {
+      "import_direction": 29,
+      "private_use": 147,
+      "decides_outside_onion": 4
+    },
+    "baseline_counts": {
+      "import_direction": 29,
+      "private_use": 147,
+      "decides_outside_onion": 4
+    },
+    "new": {
+      "import_direction": [],
+      "private_use": [],
+      "decides_outside_onion": []
+    },
+    "stale": {
+      "import_direction": [],
+      "private_use": [],
+      "decides_outside_onion": []
+    },
+    "fix": "a new line is a wrong way import, a private use or a decision outside the onion that this change added, so remove it. a stale line was fixed, so delete it with python tools/arch_guard.py --shrink-baseline. The baseline file only loses lines."
+  },
+  "frozen_paths": {
+    "PASS": true,
+    "changed": [],
+    "note": "merge base b6afb8af96",
+    "fix": "a refactor branch may add to a frozen path and may not modify, delete or rename one (G8, tools/frozen_paths.txt)"
+  },
   "signal_3_core_churn": {
-    "core_total_loc": 9481,
+    "core_total_loc": 9519,
     "churn_since_baseline": null,
     "note": "track per adapter; must decay. flat or rising means rebuilding, not generalizing."
   },
@@ -28,6 +63,12 @@
         "code_loc": 636,
         "flow_md_loc": 93,
         "pct_logic_in_md": 0.128
+      },
+      {
+        "adapter": "compliance",
+        "code_loc": 6088,
+        "flow_md_loc": 289,
+        "pct_logic_in_md": 0.045
       }
     ],
     "note": "adapter N should cost less than adapter 1; a higher share of logic in Markdown is the point."

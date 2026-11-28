@@ -55,6 +55,12 @@ class ParseError(ValueError):
     without special-casing."""
 
 
+class FlowInputError(ValueError):
+    """A request about a flow that the flow cannot answer, such as a node name it does not have. The message is the
+    one line the person at the terminal can act on; `prismpath.cli` prints it and exits 2, so the kernel does not
+    import the CLI to say so."""
+
+
 class RulesSourceError(ParseError):
     """The document is a rules source, not a flow. Its rules are compiled by `prismpath policy compile`, and
     reading them as flow edges would drop every refusal and escalation."""

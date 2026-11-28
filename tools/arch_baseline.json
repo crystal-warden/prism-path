@@ -6,9 +6,7 @@
     "agent/mcp_proxy.py -> agent/commands.py (adapter -> surface)",
     "agent/zones.py -> agent/commands.py (adapter -> surface)",
     "gateway/proxy.py -> agent/run.py (adapter -> adapter, another package)",
-    "kernel/analysis.py -> routing/lockfile.py (kernel -> adapter)",
-    "kernel/engine.py -> routing/router.py (kernel -> adapter)",
-    "kernel/model_check.py -> cli.py (kernel -> surface)"
+    "kernel/engine.py -> routing/router.py (kernel -> adapter)"
   ],
   "private_use": [
     "agent/claude_code.py -> agent/classifier.py :: _FIND_EFFECTS #1",
