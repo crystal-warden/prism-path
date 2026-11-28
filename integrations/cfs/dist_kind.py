@@ -21,6 +21,8 @@ import struct
 from typing import Any, Dict, Optional
 
 from integrations.cfs.ground import table
+from prismpath.agent import dist_kind as _agent_kind  # noqa: F401 - the agent kind's reading domain, which a cfs
+#                                                       table's core image is checked and compared under (Q4)
 from prismpath.distribution import kinds
 from prismpath.distribution.adapters import Adapter
 

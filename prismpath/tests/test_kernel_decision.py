@@ -34,22 +34,22 @@ def test_the_agent_policy_is_the_kernel_class_bound_to_the_agent_domain():
     assert agent_policy.OutsideDomain is decision.OutsideDomain
     assert agent_policy.target_decision is decision.target_decision
     assert profile.ProfileError is domain.DomainError
-    assert profile.KNOWN_CATEGORIES is domain.AGENT_DOMAIN.categories
-    assert profile.CLASSIFIER_ONLY is domain.AGENT_DOMAIN.unproduced
-    assert agent_policy.Policy(_starters()[0]).domain is domain.AGENT_DOMAIN
+    assert profile.KNOWN_CATEGORIES is profile.AGENT_DOMAIN.categories
+    assert profile.CLASSIFIER_ONLY is profile.AGENT_DOMAIN.unproduced
+    assert agent_policy.Policy(_starters()[0]).domain is profile.AGENT_DOMAIN
 
 
 def test_the_agent_domain_gives_the_session_fields_their_restrictive_values():
-    assert dict(domain.AGENT_DOMAIN.defaults) == session_state.RESTRICTIVE
-    assert tuple(domain.AGENT_DOMAIN.defaults) == session_state.FIELDS
+    assert dict(profile.AGENT_DOMAIN.defaults) == session_state.RESTRICTIVE
+    assert tuple(profile.AGENT_DOMAIN.defaults) == session_state.FIELDS
 
 
 def test_every_starter_decides_alike_through_the_kernel_and_the_agent_names():
     for image in _starters():
-        agent, core = agent_policy.Policy(image), decision.Policy(image, domain.AGENT_DOMAIN)
+        agent, core = agent_policy.Policy(image), decision.Policy(image, profile.AGENT_DOMAIN)
         assert agent.stateful == core.stateful
         names, constant, groups = profile.domain_classes([agent.doc])
-        assert (names, constant, groups) == domain.domain_classes([core.doc], domain.AGENT_DOMAIN)
+        assert (names, constant, groups) == domain.domain_classes([core.doc], profile.AGENT_DOMAIN)
         for combo in itertools.islice(itertools.product(*groups), 0, None, 997):     # a fixed sample, a few dozen
             reading = dict(zip(names, (group[0] for group in combo)), **constant)
             raw = agent.reading_bytes(reading)
@@ -60,22 +60,22 @@ def test_every_starter_decides_alike_through_the_kernel_and_the_agent_names():
 
 def test_the_domain_is_an_argument():
     image = agent_policy.starter_path("strict").read_bytes()
-    narrow = domain.ReadingDomain(name="narrow", categories={**domain.AGENT_DOMAIN.categories,
+    narrow = domain.ReadingDomain(name="narrow", categories={**profile.AGENT_DOMAIN.categories,
                                                              "tool": ("read_file", "unknown")})
     with pytest.raises(decision.OutsideDomain):
         decision.Policy(image, narrow)
-    wide = domain.ReadingDomain(name="wide", categories={**domain.AGENT_DOMAIN.categories,
-                                                         "tool": domain.AGENT_DOMAIN.categories["tool"] + ("mcp",)})
+    wide = domain.ReadingDomain(name="wide", categories={**profile.AGENT_DOMAIN.categories,
+                                                         "tool": profile.AGENT_DOMAIN.categories["tool"] + ("mcp",)})
     policy = decision.Policy(image, wide)
     assert not policy.stateful                       # this domain gives no defaults, so nothing is opted in to
     reading = {"tool": "mcp"}
     assert domain.reading_outside_domain(policy.doc["fields"], reading, wide) is None
-    assert "outside" in domain.reading_outside_domain(policy.doc["fields"], reading, domain.AGENT_DOMAIN)
+    assert "outside" in domain.reading_outside_domain(policy.doc["fields"], reading, profile.AGENT_DOMAIN)
 
 
 def test_a_domain_with_no_name_field_reads_zone_name_as_a_plain_category():
     when = ["cmp", "zone_name", "!=", ["str", "a"]]
-    assert domain.name_problem(when, domain.AGENT_DOMAIN)
+    assert domain.name_problem(when, profile.AGENT_DOMAIN)
     assert not domain.name_problem(when, domain.ReadingDomain(name="plain", categories={}))
 
 
@@ -108,7 +108,7 @@ def test_the_trust_path_decides_through_the_kernel_and_imports_no_agent_module()
 
 def test_kind_of_gives_a_stateful_policy_the_restrictive_session_values():
     image = agent_policy.starter_path("session").read_bytes()
-    policy = decision.Policy(image, domain.AGENT_DOMAIN)
+    policy = decision.Policy(image, profile.AGENT_DOMAIN)
     assert policy.stateful
     raw = policy.reading_bytes({"tool": "read_file"})
     assert {key: canon2.loads(raw)[key] for key in session_state.FIELDS} == session_state.RESTRICTIVE

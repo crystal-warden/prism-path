@@ -17,7 +17,7 @@ from prismpath.agent import commands, zones  # noqa: E402
 from prismpath.agent.policy import starter_path  # noqa: E402
 from prismpath.agent.profile import compile_profile  # noqa: E402
 from prismpath.distribution import state_record  # noqa: E402
-from prismpath.distribution.adapters import agent_home  # noqa: E402
+from prismpath.agent import dist_kind as agent_home  # noqa: E402
 from prismpath.tests import _dist  # noqa: E402
 from prismpath.tests._dist import STREAM, seal  # noqa: E402
 
@@ -203,7 +203,7 @@ def test_a_commit_changes_the_hook_and_the_egress_proxy_together(tmp_path, monke
 def test_every_load_checks_the_release_again(home, monkeypatch):
     """A release that expired, or whose only signing key was revoked, no longer loads, with no authority key."""
     home.release(STRICT, 1)
-    monkeypatch.setattr(agent_home, "clock", lambda: _dist.EXPIRES)
+    monkeypatch.setattr(agent_home.onion_home, "clock", lambda: _dist.EXPIRES)
     with pytest.raises(commands.AgentError):
         commands.load_checked(home.state_dir)
     other = HomePep(home.state_dir.parent / "other", authorities=["A", "B"])
@@ -351,7 +351,7 @@ def test_a_reader_of_the_home_and_the_machine_judge_the_active_release_alike(tmp
         point.rotate(1, add="C", retire="A", signers=("A", "C"))
     elif ground == "expired":
         point.clock.now = _dist.EXPIRES
-        monkeypatch.setattr(agent_home, "clock", lambda: _dist.EXPIRES)
+        monkeypatch.setattr(agent_home.onion_home, "clock", lambda: _dist.EXPIRES)
     else:
         lists = {"envelope": {"envelopes": [envelope]}, "policy": {"policies": [H(STRICT)]},
                  "key": {"keys": [_dist.key_id("A")]}, "floor": {"floors": {STREAM: 5}}}[ground]
@@ -431,7 +431,7 @@ def test_a_long_running_decider_follows_a_revocation_and_an_expiry(tmp_path, mon
     assert outcome.kind == "refuse" and "no release is active" in outcome.failure
     assert gate("docs.example.com:443") == (False, "policy-lapsed")
     _home, governor, gate = deciders("expired")
-    monkeypatch.setattr(agent_home, "clock", lambda: _dist.EXPIRES)        # no file changed, only the time
+    monkeypatch.setattr(agent_home.onion_home, "clock", lambda: _dist.EXPIRES)        # no file changed, only the time
     assert governor.decide(params).failure.startswith("the home's release no longer decides")
     assert gate("docs.example.com:443") == (False, "policy-lapsed")
 
@@ -561,7 +561,7 @@ def test_case_187_the_real_home_asks_its_floor_first_in_the_hook_the_proxies_and
     monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)    # the hook is given HOME only, so both find one home
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setattr(commands.sys, "platform", "linux")
-    monkeypatch.setattr(agent_home, "clock", lambda: _dist.NOW)
+    monkeypatch.setattr(agent_home.onion_home, "clock", lambda: _dist.NOW)
     home_dir = commands.config_dir()
     point = HomePep(home_dir, install_keys=["N1", "N2", "N3"], install_threshold=2)
     release = _with_rules(NO_READS, {"target": "refuse_104", "when": ["cmp", "tool", "==", ["str", "list_dir"]]})
