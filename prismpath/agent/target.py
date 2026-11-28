@@ -108,6 +108,56 @@ def monotone(loaded, bound) -> List[Tuple[Where, str]]:
     return found
 
 
+ORDER = {"refuse": 0, "escalate": 1, "allow": 2}
+
+
+def dominance(loaded, bound) -> List[Tuple[Where, str]]:
+    """The restrictive value of an evidence field must be treated no more permissively than any other value of it:
+    every reading the policy decides at the field's restrictive value it must decide at every other value of the field
+    no stricter, in the order refuse < escalate < allow. Else a point that cannot answer (it reads the restrictive
+    value) would get past a rule written for its answers, as `refuse when cc_certainty == "certain"` lets `unknown`
+    through. Rules over an evidence field must therefore be written as allows (`allow when cc_certainty == "none"`).
+    Walks the policy's finite domain by classes of values, as `monotone` does. One finding for each field, on the
+    field's declaration, naming the first value that is treated more strictly."""
+    import itertools
+
+    from prismpath.kernel import domain as kdomain
+    found: List[Tuple[Where, str]] = []
+    doc, domain = loaded.doc, loaded.domain
+    for name in sorted(bound):
+        have = bound[name]
+        try:
+            names, constant, groups = kdomain.domain_classes([doc], domain, (name,))
+        except kdomain.DomainError:
+            continue
+        if name not in names:
+            continue
+        others = [(n, g) for n, g in zip(names, groups) if n != name]
+        values = [members[0] for members in groups[list(names).index(name)]]
+        bad = None
+        for combo in itertools.product(*(g for _n, g in others)):
+            reading = {n: members[0] for (n, _g), members in zip(others, combo)}
+            reading.update(constant)
+            chosen = {n: members for (n, _g), members in zip(others, combo)}
+            at_restrictive = ORDER[loaded.decide(loaded.reading_bytes({**reading, name: have.restrictive})).kind]
+            for value in values:
+                if value == have.restrictive:
+                    continue
+                full = tuple(chosen[n] if n != name else [value] for n in names)
+                if profile_unproduced(names, full):
+                    continue
+                if ORDER[loaded.decide(loaded.reading_bytes({**reading, name: value})).kind] < at_restrictive:
+                    bad = value
+                    break
+            if bad is not None:
+                break
+        if bad is not None:
+            found.append((name, f"{name} read as {have.restrictive!r} is decided more permissively than {name} read as "
+                                f"{bad!r}, so a point that cannot answer would get past a rule written for its answers; "
+                                f"write the rules over {name} as allows (refuse < escalate < allow)"))
+    return found
+
+
 def profile_unproduced(names, combo) -> bool:
     from prismpath.agent import profile
     return profile.unproduced(list(names), combo)
@@ -158,6 +208,7 @@ def check(image: bytes, points: Sequence[str] = ()) -> List[Tuple[Where, str]]:
     bound = {n: e for n, e in evidence.items() if n in declared and n not in known and e.point in domain_points}
     if bound:
         found.extend(monotone(loaded, bound))
+        found.extend(dominance(loaded, bound))
     mismatch = agent_policy.classifier_mismatch(loaded)
     if mismatch is not None:
         found.append(("classifier_version", mismatch))

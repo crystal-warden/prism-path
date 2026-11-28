@@ -51,8 +51,18 @@ def test_every_point_has_the_port_shape(point):
 def test_a_fixed_point_answers_through_facts_and_through_reach(answer):
     point = zones.fixed(answer)
     evidence = point.facts(Change("src/a.py", None), 0.1)
-    assert evidence.readings == {"zone_reach": answer} and point.reach("src/a.py") == answer
+    assert evidence.readings == {"zone_reach": answer, "cc_certainty": "none" if answer == "none" else "unknown",
+                                 "cc_engine_agreement": 0}
+    assert point.reach("src/a.py") == answer
     assert evidence.names == frozenset() and evidence.why == point.why
+
+
+def test_cc_certainty_is_none_exactly_when_zone_reach_is_none_for_every_fixed_point():
+    for point in (zones.NO_ZONES, zones.UNKNOWN_ZONES, zones.fixed("none"), zones.fixed("protected"),
+                  zones.fixed("unknown")):
+        readings = point.facts(Change("src/a.py", None), 0.1).readings
+        assert (readings["zone_reach"] == "none") == (readings["cc_certainty"] == "none")
+        assert set(readings) == set(point.fields) and set(point.restrictive) == set(point.fields)
 
 
 def test_a_point_that_raises_reads_every_field_at_its_restrictive_value(tmp_path):

@@ -632,7 +632,7 @@ Normatively, as follows.
   this version is all of them, so a manifest to be sealed writes none.
 - **Context Cloud.** `policy.cc_protected` (list of names as `agent.zones` holds them: 1 to 512 characters of `[A-Za-z0-9_.:@-]`, no `/`, at most 10,000), `policy.cc_index` with `policy.cc_index_sha256`,
   `policy.cc_freshness_s` (1 and up, the oldest index a reading may use), `policy.cc_required_certainty` (`certain`
-  or `likely`) and `policy.cc_engine_agreement` (1 to 64, the engines that must agree). The grammar reads them. What
+  or `likely`) and `policy.cc_engine_agreement` (1 to 64, the engines that must agree, Context Cloud's own answer counting as one). The grammar reads them. What
   a target does with them is its own. The protected set in force is the union of `policy.cc_protected` and the
   `protected` list of the `policy.zones` file: neither wins and neither removes a name from the other. `policy.cc_index`
   pins the sha256 of an index statement (the index's path under the project, the program and package that read it, and
@@ -649,15 +649,27 @@ Normatively, as follows.
   the points it names.
 - **Context Cloud certainty.** The `contextcloud` point supplies two fields besides `zone_reach`. `cc_certainty` is
   `none`, `likely`, `certain` or `unknown`: Context Cloud's strongest answer over the file's functions (`certain` for a
-  file that defines protected code), `unknown` on every error, a missing or stale index, an untrusted program or index
-  and a timeout. `cc_engine_agreement` is `int min=0 max=63`, how many engines agree with that answer as Context Cloud
-  reports it, and reads 0 on every path today, since `contextcloud reaches --json` names no engine beside its own and
-  does not read the other engines' answers in the index. The two requirements narrow `zone_reach`: with
-  `policy.cc_required_certainty` `certain`, a `likely` answer reads `unknown`, never `none`, and with
-  `policy.cc_engine_agreement` above 1 every `certain` or `likely` answer reads `unknown` until Context Cloud reports
-  that many engines. The defaults, `likely` and 1, are what the point always read (`certain` and `likely` are both
-  `protected`). The point reads them as constructor arguments; no manifest carries them to a running agent yet, and
-  the sealing tool still refuses the keys.
+  file that defines protected code). It reads `unknown` on every error, a missing or stale index, an untrusted program
+  or index, a bad requirement, and when the answer is incomplete: a function timed out or errored and no function was
+  `certain`, which includes a `likely` beside a function that did not answer (that function could have been `certain`).
+  `zone_reach` still reads such a `likely` as `likely` does, so the default is unchanged, and only a complete answer is
+  cached. `cc_engine_agreement` is `int min=0 max=63`, the number of engines other than Context Cloud that agree with
+  the answer, as Context Cloud reports it. It reads 0 on every path today, since `contextcloud reaches --json` names no
+  engine beside its own and the point does not read the other engines' answers in the index. A requirement of N
+  engines (`policy.cc_engine_agreement`, 1 to 64) is met by Context Cloud and N - 1 others, so 1 means Context Cloud
+  alone and 64 needs the field's top value of 63. Rules over these two fields, and over every evidence field, must be
+  written as allows (`allow when cc_certainty == "none"`): the compile refuses a policy that decides a field's
+  restrictive value, the value it reads when its point cannot answer, more permissively than another value of it
+  (refuse < escalate < allow), as `refuse when cc_certainty == "certain"` does, with a finding on the field's line.
+  The two requirements can only move a `protected` reading of `zone_reach` to `unknown`, never to `none`
+  (`policy.cc_required_certainty` `certain`: a `likely` answer reads `unknown`; `policy.cc_engine_agreement` above 1:
+  every `certain` and `likely` answer reads `unknown` until Context Cloud reports that many engines). That narrows
+  the decision only for a policy that treats `zone_reach` `unknown` at least as strictly as `protected`; a policy that
+  refuses `protected` and escalates `unknown` is loosened by a stricter requirement, so a release that carries a
+  requirement must hold that condition (the dominance check applied to `zone_reach`), which the wiring has to enforce.
+  The defaults, `likely` and 1, are what the point always read. The point reads the requirements as constructor
+  arguments, read only afterwards; no manifest carries them to a running agent yet, and the sealing tool still
+  refuses the keys.
 - **Domain.** `policy.domain` is reserved, and written it is an error. The domain of a release is the rules
   source's own typed `field.<name>:` lines, which `policy.rules_sha256` already signs, so a second statement of it
   could only repeat them or contradict them. The floor and ceiling per field it was meant to carry bound what a later

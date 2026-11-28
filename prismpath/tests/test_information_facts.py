@@ -625,8 +625,8 @@ def test_an_evidence_field_named_like_a_classifier_bool_or_int_is_a_clash(monkey
 
 # ------------------------------------------------------ the Context Cloud point's two fields (certainty, A6)
 CC_FIELDS = ("field.cc_certainty: category none|likely|certain|unknown\nfield.cc_engine_agreement: int min=0 max=63\n")
-CC_RULES = ('-> refuse agent:network: when cc_certainty == "certain"\n'
-            '-> allow: when tool == "write_file" and cc_certainty == "none"\n-> allow: when tool == "read_file"\n')
+CC_RULES = ('-> allow: when tool == "write_file" and cc_certainty == "none"\n'
+            '-> allow: when tool == "list_dir" and cc_engine_agreement >= 2\n-> allow: when tool == "read_file"\n')
 
 
 def test_a_policy_that_names_a_certainty_field_with_no_point_bound_is_refused_with_its_line():
@@ -639,7 +639,7 @@ def test_the_engine_agreement_must_be_declared_over_the_points_range():
     wrong = CC_FIELDS.replace("max=63", "max=10")
     assert [line for line, _m in _found(_source(wrong, CC_RULES), ("contextcloud",))] == [9]
     other = CC_FIELDS.replace("field.cc_engine_agreement: int min=0 max=63", "field.cc_engine_agreement: bool")
-    assert "gives cc_engine_agreement as a int, not a bool" in _found(_source(other, CC_RULES), ("contextcloud",))[0][1]
+    assert "gives cc_engine_agreement as a int, not a bool" in _found(_source(other, '-> allow: when tool == "read_file"\n'), ("contextcloud",))[0][1]
     listed = _found(_source(CC_FIELDS.replace("none|likely|certain|unknown", "none|certain|likely|unknown"), CC_RULES),
                     ("contextcloud",))
     assert [line for line, _m in listed] == [8]
@@ -665,3 +665,32 @@ def test_a_policy_reads_the_certainty_fields_and_a_reading_without_them_reads_th
     from prismpath.kernel.decision import OutsideDomain
     with pytest.raises(OutsideDomain, match="information point contextcloud"):
         agent_policy.Policy(compiled.image)
+
+
+# ------------------------------------------------ the dominance check over every evidence field (A6 round 2)
+@pytest.mark.parametrize("rules", [
+    '-> refuse agent:network: when cc_certainty == "certain"\n-> allow: when tool == "write_file"\n-> allow: when tool == "read_file"\n',
+    '-> refuse agent:network: when cc_engine_agreement >= 2\n-> allow: when tool == "write_file"\n-> allow: when tool == "read_file"\n',
+    '-> allow: when tool == "write_file" and cc_engine_agreement < 2\n-> allow: when tool == "read_file"\n',
+    '-> escalate agent:network: when cc_certainty == "likely"\n-> allow: when tool == "write_file" and cc_certainty == "none"\n'
+    '-> allow: when tool == "read_file"\n'])
+def test_a_rule_that_treats_the_restrictive_value_more_permissively_than_another_value_is_refused(rules):
+    found = _found(_source(CC_FIELDS, rules), ("contextcloud",))
+    assert len(found) == 1 and "decided more permissively" in found[0][1] and "as allows" in found[0][1]
+    assert found[0][0] in (8, 9)
+
+
+def test_rules_that_allow_on_named_values_pass_the_dominance_check():
+    rules = ('-> allow: when tool == "write_file" and cc_certainty in ["none", "likely"]\n'
+             '-> allow: when tool == "list_dir" and cc_engine_agreement >= 2\n-> allow: when tool == "read_file"\n')
+    assert _found(_source(CC_FIELDS, rules), ("contextcloud",)) == []
+
+
+def test_the_dominance_check_also_covers_the_five_facts():
+    found = _found(_source("field.touches_protected: bool\n",
+                           '-> refuse agent:network: when not touches_protected\n-> allow: when tool == "write_file"\n'
+                           '-> allow: when tool == "read_file"\n'), ("cc_graph",))
+    assert [line for line, _m in found] == [8] and "decided more permissively" in found[0][1]
+    assert _found(_source("field.touches_protected: bool\n",
+                          '-> allow: when tool == "write_file" and not touches_protected\n-> allow: when tool == "read_file"\n'),
+                  ("cc_graph",)) == []

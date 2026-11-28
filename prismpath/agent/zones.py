@@ -104,12 +104,16 @@ class ZoneError(Exception):
 
 class _Fixed:
     name = "fixed"
-    fields = {"zone_reach": ANSWERS}
-    restrictive = {"zone_reach": "unknown"}
+    fields = {"zone_reach": ANSWERS, "cc_certainty": contextcloud.CC_CERTAINTY,
+              "cc_engine_agreement": contextcloud.CC_ENGINE_AGREEMENT}
+    restrictive = {"zone_reach": "unknown", "cc_certainty": "unknown", "cc_engine_agreement": 0}
     control_paths: Tuple[str, ...] = ()
 
     def __init__(self, answer: str, why: str):
+        """`cc_certainty` is `none` exactly when the answer is `none` (a point with no zone to reach), and `unknown`
+        for every other fixed answer, since a fixed point has no Context Cloud answer to report."""
         self.answer, self.why = answer, why
+        self.certainty = "none" if answer == "none" else "unknown"
 
     def reach(self, raw: str, config: Any = None) -> str:
         return self.answer
@@ -119,7 +123,8 @@ class _Fixed:
         return self.answer, frozenset()
 
     def facts(self, change: Change, budget_s: float) -> Evidence:
-        return Evidence({"zone_reach": self.answer}, frozenset(), self.why, {})
+        return Evidence({"zone_reach": self.answer, "cc_certainty": self.certainty, "cc_engine_agreement": 0},
+                        frozenset(), self.why, {})
 
     def __repr__(self) -> str:
         return f"<zones {self.answer}: {self.why}>"

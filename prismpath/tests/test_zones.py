@@ -572,7 +572,7 @@ def test_a_file_reads_its_strongest_function_and_a_file_that_defines_protected_c
     strict = _point_with(world, required_certainty="certain")
     for answers, certainty, reach in (
             (dict(pkg__a__f="likely", pkg__a__g="certain", pkg__a__h="unknown"), "certain", "protected"),
-            (dict(pkg__a__f="likely", pkg__a__g="unknown", pkg__a__h="no"), "likely", "unknown"),
+            (dict(pkg__a__f="likely", pkg__a__g="unknown", pkg__a__h="no"), "unknown", "unknown"),    # incomplete
             (dict(pkg__a__f="no", pkg__a__g="error", pkg__a__h="no"), "unknown", "unknown"),
             (dict(pkg__a__f="no", pkg__a__g="no", pkg__a__h="no"), "none", "none")):
         world.answer(**answers)
@@ -612,10 +612,11 @@ def test_a_requirement_the_grammar_does_not_allow_makes_every_path_read_the_rest
     world.add("pkg/secure.py", "def check(): pass\n", ["check"])
     world.answer(pkg__a__f="certain")
     point = _point_with(world, required_certainty=required, engine_agreement=agreement)
-    assert point.why and "required" in point.why
+    assert "required" in point.requirement_why and not point.why          # its own reason, not an index problem
     for rel in ("pkg/a.py", "pkg/secure.py"):
         evidence = _facts(point, world.config(), rel)
-        assert evidence.readings == dict(point.restrictive) | {} and evidence.why == point.why
+        assert evidence.readings == dict(point.restrictive) and evidence.why == point.requirement_why
+        assert point.stats["bad_requirement"] == point.requirement_why and "untrusted_index" not in point.stats
         assert evidence.names == frozenset()
     assert world.calls() == []                                    # nothing was asked
 
@@ -670,3 +671,81 @@ def test_a_zone_reach_of_none_is_exactly_a_cc_certainty_of_none_for_every_requir
                 assert (got["zone_reach"] == "none") == (got["cc_certainty"] == "none"), (said, required, agreement)
                 if got["cc_certainty"] != "none":
                     assert got["zone_reach"] in ("protected", "unknown")
+
+
+# ---------------------------------------------------------------- the review's fixes (A6 round 2)
+def _confined_point(world, budget=2.0, **req):
+    doc = zones.zone_document(("pkg.secure.check",), world.project, world.index, world.image,
+                              program={"path": os.path.realpath(world.exe), "package": str(world.pkg)})
+    return zones.ContextCloudZones(doc, world.home, str(world.exe), budget_s=budget, unconfined=lambda: False, **req)
+
+
+def test_a_partial_likely_reads_cc_certainty_unknown_zone_reach_protected_and_is_not_cached(world):
+    world.add("pkg/a.py", "def f(): pass\ndef g(): pass\n", ["f", "g"])
+    cfg = world.config()
+    world.answer(pkg__a__f="likely", pkg__a__g="slow")
+    first = _confined_point(world, budget=0.6)
+    assert first._confined()
+    got = _facts(first, cfg).readings
+    assert got["zone_reach"] == "protected" and got["cc_certainty"] == "unknown"      # the default is unchanged
+    world.answer(pkg__a__f="likely", pkg__a__g="certain")                            # g really is certain
+    again = _facts(_confined_point(world), cfg)
+    assert again.readings["cc_certainty"] == "certain" and again.stats["cached"] is False
+    strict = _facts(_confined_point(world, required_certainty="certain"), cfg)
+    assert strict.readings["zone_reach"] == "protected"                              # nothing stale kept it unknown
+
+
+def test_a_partial_likely_with_an_error_is_incomplete_and_a_complete_likely_is_cached(world):
+    world.add("pkg/a.py", "def f(): pass\ndef g(): pass\n", ["f", "g"])
+    cfg = world.config()
+    world.answer(pkg__a__f="likely", pkg__a__g="error")
+    got = _facts(_confined_point(world), cfg).readings
+    assert (got["zone_reach"], got["cc_certainty"]) == ("protected", "unknown")
+    assert _facts(_confined_point(world, required_certainty="certain"), cfg).readings["zone_reach"] == "unknown"
+    world.answer(pkg__a__f="likely", pkg__a__g="no")
+    assert _facts(_confined_point(world), cfg).readings["cc_certainty"] == "likely"
+    world.answer(pkg__a__f="error", pkg__a__g="error")                               # the cached complete answer holds
+    cached = _facts(_confined_point(world), cfg)
+    assert cached.readings["cc_certainty"] == "likely" and cached.stats["cached"] is True
+
+
+def test_a_certain_beside_a_timeout_is_complete_and_cached(world):
+    world.add("pkg/a.py", "def f(): pass\ndef g(): pass\n", ["f", "g"])
+    world.answer(pkg__a__f="certain", pkg__a__g="slow")
+    first = _facts(_confined_point(world, budget=0.6), world.config())
+    assert first.readings["cc_certainty"] == "certain"
+    assert _facts(_confined_point(world), world.config()).stats["cached"] is True
+
+
+def test_the_requirements_are_read_only_after_construction(world):
+    point = _point_with(world, required_certainty="certain", engine_agreement=3)
+    assert (point.required_certainty, point.engine_agreement) == ("certain", 3)
+    with pytest.raises(AttributeError):
+        point.required_certainty = "bogus"
+    with pytest.raises(AttributeError):
+        point.engine_agreement = "3"
+    assert (point.required_certainty, point.engine_agreement) == ("certain", 3)
+
+
+def test_a_bad_requirement_does_not_hide_the_index_trust_reason(world):
+    world.add("pkg/a.py", "def f(): pass\n", ["f"])
+    doc = zones.zone_document(("pkg.x",), world.project, world.index, world.image,
+                              program={"path": "/usr/bin/elsewhere", "package": str(world.pkg)})
+    point = zones.ContextCloudZones(doc, world.home, str(world.exe), required_certainty="strict")
+    assert "elsewhere" in point.why and "required certainty" in point.requirement_why
+    evidence = _facts(point, world.config())
+    assert evidence.stats["untrusted_index"] == point.why and evidence.stats["bad_requirement"] == point.requirement_why
+    assert evidence.why == point.requirement_why
+
+
+def test_a_requirement_of_n_engines_is_met_by_context_cloud_and_n_minus_one_others(world, monkeypatch):
+    world.add("pkg/a.py", "def f(): pass\n", ["f"])
+    world.answer(pkg__a__f="certain")
+    cfg = world.config()
+    for others, required, want in ((0, 1, "protected"), (0, 2, "unknown"), (1, 2, "protected"), (1, 3, "unknown"),
+                                   (63, 64, "protected"), (62, 64, "unknown")):
+        monkeypatch.setattr(zones.ContextCloudZones, "_engines", staticmethod(lambda n=others: n))
+        got = _facts(_point_with(world, engine_agreement=required), cfg).readings
+        assert (got["zone_reach"], got["cc_engine_agreement"]) == (want, others), (others, required)
+    monkeypatch.setattr(zones.ContextCloudZones, "_engines", staticmethod(lambda: 64))     # outside the closed list
+    assert _facts(_point_with(world), cfg).readings == dict(zones.ContextCloudZones.restrictive)
