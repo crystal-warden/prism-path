@@ -282,6 +282,7 @@ prismpath/distribution/install.py
 prismpath/distribution/kinds.py
 prismpath/distribution/legacy.py
 prismpath/distribution/pep.py
+prismpath/distribution/seal.py
 prismpath/distribution/state_record.py
 prismpath/distribution/statement.py
 prismpath/distribution/table_compare.py
