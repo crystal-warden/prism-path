@@ -50,9 +50,9 @@ def test_every_point_has_the_port_shape(point):
 @pytest.mark.parametrize("answer", ["none", "protected", "unknown"])
 def test_a_fixed_point_answers_through_facts_and_through_reach(answer):
     point = zones.fixed(answer)
-    evidence = point.facts(Change("src/a.py"), 0.1)
+    evidence = point.facts(Change("src/a.py", None), 0.1)
     assert evidence.readings == {"zone_reach": answer} and point.reach("src/a.py") == answer
-    assert evidence.names == frozenset() and evidence.why == ""
+    assert evidence.names == frozenset() and evidence.why == point.why
 
 
 def test_a_point_that_raises_reads_every_field_at_its_restrictive_value(tmp_path):
@@ -76,7 +76,7 @@ def test_a_context_cloud_point_without_what_the_agent_kind_hands_it_reads_unknow
                               {"package": str(tmp_path), "path": str(tmp_path / "contextcloud")})
     point = contextcloud.ContextCloudZones(doc, tmp_path, str(tmp_path / "contextcloud"))
     assert not point._confined()
-    evidence = point.facts(Change(str(tmp_path / "a.py")), 0.1)
+    evidence = point.facts(Change(str(tmp_path / "a.py"), classifier.Config.for_workspace(tmp_path)), 0.1)
     assert evidence.readings == {"zone_reach": point.restrictive["zone_reach"]}
     assert point.reach("a.py", classifier.Config.for_workspace(tmp_path)) == "unknown"
     assert point.name == "contextcloud" and isinstance(point, InformationPoint)
@@ -88,3 +88,38 @@ def test_the_information_package_imports_no_other_prismpath_package_but_the_port
         text = path.read_text(encoding="utf-8")
         found = set(re.findall(r"^\s*(?:from|import)\s+(prismpath[\w.]*)", text, re.M))
         assert found <= {"prismpath.ports.information"}, found
+
+
+def _built(tmp_path, **kwargs):
+    doc = zones.zone_document(["pkg.x"], tmp_path, tmp_path / "index.sqlite", b"image",
+                              {"package": str(tmp_path), "path": str(tmp_path / "contextcloud")})
+    return contextcloud.ContextCloudZones(doc, tmp_path, str(tmp_path / "contextcloud"), **kwargs)
+
+
+def _raises():
+    raise RuntimeError("the probe failed")
+
+
+@pytest.mark.parametrize("probe,confined", [(None, False), (lambda: None, False), (lambda: 0, False), (_raises, False),
+                                            (lambda: True, False), (lambda: False, True)])
+def test_only_a_probe_that_answers_false_says_the_sandbox_holds(tmp_path, probe, confined):
+    point = _built(tmp_path, unconfined=probe)         # a raising probe does not escape the constructor
+    assert point._confined() is confined
+    assert not _built(tmp_path, unconfined=probe, host_write=True)._confined()
+
+
+def test_a_missing_probe_leaves_the_index_to_the_permission_rule(tmp_path, monkeypatch):
+    monkeypatch.setattr(contextcloud, "agent_uid", lambda: 0)          # the agent counts as able to write
+    for probe in (None, lambda: None, _raises, lambda: True):
+        assert "owns or can write" in _built(tmp_path, unconfined=probe).why
+
+
+def test_facts_never_raises(tmp_path):
+    def broken(raw, config):
+        raise RuntimeError("no")
+    config = classifier.Config.for_workspace(tmp_path)
+    for point in (_built(tmp_path, host_path=broken), _built(tmp_path)):
+        evidence = point.facts(Change("a.py", config), 0.1)
+        assert evidence.readings == point.restrictive and evidence.why
+    assert _built(tmp_path).facts(Change("a.py", None), 0.1).readings == {"zone_reach": "unknown"}
+    assert _built(tmp_path, host_path=broken).facts(Change("a.py", None), 0.1).readings == {"zone_reach": "unknown"}

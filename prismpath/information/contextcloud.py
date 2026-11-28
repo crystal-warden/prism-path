@@ -77,7 +77,7 @@ def contextcloud_executable(env: Optional[Mapping[str, str]] = None) -> Optional
     return shutil.which("contextcloud", path=env.get("PATH"))
 
 
-def _agent_uid() -> int:
+def agent_uid() -> int:
     """The user the agent runs as: the hook's own, since the hook and the agent are one user's processes."""
     return os.geteuid()
 
@@ -126,13 +126,19 @@ class ContextCloudZones:
         return path == self.project or self._below_project(path)
 
     def _confined(self) -> bool:
-        """The per call sandbox holds the agent to the workspace here (see the module docstring)."""
-        return self._unconfined is not None and not self._unconfined() and not self.host_write
+        """The per call sandbox holds the agent to the workspace here (see the docstring of prismpath/agent/zones.py).
+        Only a probe that answers exactly False says so; no probe, a probe that raises, or any other answer is not."""
+        if self.host_write or self._unconfined is None:
+            return False
+        try:
+            return self._unconfined() is False
+        except Exception:   # noqa: BLE001 - a probe that fails cannot say the sandbox holds
+            return False
 
     @staticmethod
     def _not_the_agents(targets: Sequence[str]) -> str:
         """'' when the agent's user neither owns nor can write any of `targets`, else the first that it does."""
-        uid = _agent_uid()
+        uid = agent_uid()
         for target in targets:
             st = os.stat(target)
             if uid == 0 or st.st_uid == uid or os.access(target, os.W_OK):
@@ -293,8 +299,12 @@ class ContextCloudZones:
     def facts(self, change: Change, budget_s: float) -> Evidence:
         """The port's one question: `reach_names` of the change's path, as Evidence. The names are the protected
         names the path reaches; `why` is why the point reads `unknown` when it distrusts its index or program."""
-        fact, names = self.reach_names(change.raw_path, change.config, budget_s)
-        return Evidence({"zone_reach": fact}, names, self.why, dict(self.stats))
+        try:
+            fact, names = self.reach_names(change.raw_path, change.config, budget_s)
+        except Exception as exc:   # noqa: BLE001 - a point that fails says nothing, which is its restrictive value
+            return Evidence(dict(self.restrictive), frozenset(), f"the point failed ({type(exc).__name__})", {})
+        why = self.why or ("no function that names the host path was supplied" if self._host_path is None else "")
+        return Evidence({"zone_reach": fact}, names, why, dict(self.stats))
 
     def _file(self, rel: str, content: bytes, started: float, budget: float) -> str:
         rows = self._index_rows(rel)

@@ -80,10 +80,10 @@ import stat
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Dict, Iterable, Mapping, Optional, Sequence, Tuple
 
 from prismpath.information import contextcloud
-from prismpath.information.contextcloud import (CACHE_FILE, DEFAULT_BUDGET_S, WORKERS, clean_env, contextcloud_executable,
+from prismpath.information.contextcloud import (CACHE_FILE, DEFAULT_BUDGET_S, clean_env, contextcloud_executable,
                                                 control_paths_of, program_argv)
 from prismpath.ports.information import Change, Evidence
 
@@ -118,7 +118,7 @@ class _Fixed:
         return self.answer, frozenset()
 
     def facts(self, change: Change, budget_s: float) -> Evidence:
-        return Evidence({"zone_reach": self.answer}, frozenset(), "", {})
+        return Evidence({"zone_reach": self.answer}, frozenset(), self.why, {})
 
     def __repr__(self) -> str:
         return f"<zones {self.answer}: {self.why}>"
@@ -173,7 +173,7 @@ def package_tree_problem(package: str, project: Path, confined: bool) -> str:
         return f"the Context Cloud package {real} is inside the project, where the agent can change it"
     if confined:
         return ""
-    uid = _agent_uid()
+    uid = contextcloud.agent_uid()
     for here, dirs, files in os.walk(real):
         for name in [here] + [os.path.join(here, n) for n in dirs + files]:
             try:
@@ -386,11 +386,6 @@ def information_point(home: Path, policy_image: bytes, workspace: Path, env: Opt
     if not Path(doc["index"]).is_file():
         return unusable(f"no Context Cloud index at {doc['index']}; run `contextcloud index`", held)
     return ContextCloudZones(doc, home, exe, host_write=_host_write(home, policy_image))
-
-
-def _agent_uid() -> int:
-    """The user the agent runs as: the hook's own, since the hook and the agent are one user's processes."""
-    return os.geteuid()
 
 
 def _agent_unconfined() -> bool:

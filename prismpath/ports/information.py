@@ -15,7 +15,7 @@ from typing import Any, FrozenSet, Mapping, Protocol, Tuple, Union, runtime_chec
 class Change:
     """What a point is asked about: one path a call changes, and the configuration it is read against."""
     raw_path: str
-    config: Any = None
+    config: Any
 
 
 @dataclass(frozen=True)
