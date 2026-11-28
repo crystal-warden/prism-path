@@ -150,6 +150,8 @@
       "kernel/core_policy.py",
       "kernel/core_reference.py",
       "kernel/core_render.py",
+      "kernel/decision.py",
+      "kernel/domain.py",
       "kernel/engine.py",
       "kernel/field_definitions.py",
       "kernel/flow_context.py",

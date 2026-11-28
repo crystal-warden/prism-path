@@ -35,7 +35,7 @@ are records, never decisions: nothing here changes a rule, a policy or a verdict
 Unreachable. A rule is unreachable when no reading in the reading domain makes it the first rule that holds.
 The domain is every combination of values of the policy's fields: a bool is true or false, an int is its min
 to max range (up to 64 values), and a category is one of the values the classifier produces
-(`prismpath.agent.classifier`, listed in KNOWN_CATEGORIES). The combinations include ones the classifier never
+(`prismpath.agent.classifier`, listed in the agent's reading domain, `prismpath.kernel.domain.AGENT_DOMAIN`). The combinations include ones the classifier never
 produces together, so a rule that only an impossible combination reaches is not reported (the finding is
 conservative). A field with no finite domain (a category the classifier does not produce, a fixed point
 number, an int with a wide range) is not enumerated: the rules that read it are reported as not checked, and
@@ -65,20 +65,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-# the values each classifier field takes (the field list at the top of prismpath/agent/classifier.py)
-KNOWN_CATEGORIES = {
-    "tool": ("list_dir", "read_file", "write_file", "delete_path", "run_command", "git", "connect", "unknown"),
-    "path_scope": ("none", "workspace", "outside", "unknown"),
-    "command_class": ("none", "read_only", "mutating", "network", "git", "unknown"),
-    "git_op": ("none", "local_read", "local_write", "mutating", "push", "network", "unknown"),
-    "remote_class": ("none", "allowed", "other"),
-    "net_dest": ("none", "model_api", "allowed_host", "other", "unknown"),
-    "proc_class": ("none", "single", "tree", "unknown"),
-    "zone_reach": ("none", "protected", "unknown"),
-    "session_protected_changes": ("none", "some"),
-    "session_shell_runs": ("none", "few", "many"),
-}
-MAX_INT_RANGE = 64
 CORE_REFUSALS = ("route:no-matching-edge", "route:contract-violation")
 
 
@@ -253,47 +239,23 @@ def _count_lines(path: Path) -> int:
 
 
 # ------------------------------------------------------------------------------------------ unreachable
-def _names_read(when, fields) -> set:
-    """The field names a rule's condition mentions. Every string in the condition that is a field name is
-    taken, which can only add a field, never miss one."""
-    found = set()
-    stack = [when]
-    while stack:
-        item = stack.pop()
-        if isinstance(item, str):
-            if item in fields:
-                found.add(item)
-        elif isinstance(item, (list, tuple)):
-            stack.extend(item)
-    return found
-
-
 def _domain(name: str, text: str):
-    """The finite list of values of a field from its definition text, or None when it has no finite domain."""
-    words = text.split()
-    kind, options = words[0], dict(w.split("=", 1) for w in words[1:] if "=" in w)
-    values = None
-    if kind == "bool":
-        values = [False, True]
-    elif kind == "int":
-        try:
-            lo, hi = int(options["min"]), int(options["max"])
-        except (KeyError, ValueError):
-            return None
-        values = list(range(lo, hi + 1)) if 0 <= hi - lo < MAX_INT_RANGE else None
-    elif kind == "category":
-        values = list(KNOWN_CATEGORIES[name]) if name in KNOWN_CATEGORIES else None
-    if values is not None and options.get("absent") == "allowed":
-        values.append(None)
-    return values
+    """The finite list of values of a field from its definition text, or None when it has no finite domain (the
+    kernel's walk, `prismpath.kernel.domain`, over the agent's domain)."""
+    from prismpath.kernel import domain
+    try:
+        return domain.field_values(name, text, domain.AGENT_DOMAIN)
+    except domain.DomainError:
+        return None
 
 
 def unreachable(policy) -> Dict[str, Any]:
     """Which rules no reading can reach, by deciding every reading of the finite domain through the reference."""
     from prismpath.kernel import predicates
+    from prismpath.kernel.domain import AGENT_DOMAIN, names_read
     doc = policy.doc
     fields = doc["fields"]
-    reads = [_names_read(rule["when"], fields) for rule in doc["rules"]]
+    reads = [names_read(rule["when"], fields) for rule in doc["rules"]]
     domains = {name: _domain(name, text) for name, text in fields.items()}
     open_fields = sorted(name for name, values in domains.items() if values is None)
     not_checked = [{"rule": n, "fields": sorted(r & set(open_fields))} for n, r in enumerate(reads, 1)
@@ -304,19 +266,18 @@ def unreachable(policy) -> Dict[str, Any]:
     used = sorted(set().union(*(reads[n - 1] for n in numbers)) if numbers else set())
     constant = {name: values[0] for name, values in domains.items() if values and name not in used}
     names = [name for name in used]
-    from prismpath.agent.profile import CLASSIFIER_ONLY, _holds
     chosen, readings = set(), 0
     for combo in itertools.product(*(domains[name] for name in names)):
         doc_reading = dict(zip(names, combo), **constant)
         if any(field in doc_reading and gate in doc_reading and doc_reading[field] != empty
-               and doc_reading[gate] not in values for field, empty, gate, values in CLASSIFIER_ONLY):
+               and doc_reading[gate] not in values for field, empty, gate, values in AGENT_DOMAIN.unproduced):
             continue            # a reading the classifier never gives (a destination without a connect)
         readings += 1
         for at, (_target, cond) in enumerate(edges):       # engine.first_deterministic, each condition parsed once
             if not predicates.is_deterministic(cond):
                 continue
             try:
-                if _holds(cond, doc_reading):
+                if predicates.holds(cond, doc_reading):
                     chosen.add(at)
                     break
             except predicates.PredicateError:

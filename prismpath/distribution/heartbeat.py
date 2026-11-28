@@ -5,7 +5,7 @@ steps 4 and 5).
 
 The body is a grouped spiral stream of PROTOCOL.md section 2.6.1 at the band tier, built with
 `prismpath.telemetry.spiral_groups.GroupedFacet` from the canonical flow text of the active policy
-(`core_render.render` of the `policy.core` image, which `prismpath.agent.policy.Policy` holds). Its frames
+(`core_render.render` of the `policy.core` image, which `prismpath.kernel.decision.Policy` holds). Its frames
 are the decisions the PEP made since its previous record, at most 64, the oldest dropped first, and fewer
 when 64 would not fit the record's 1,024 bytes. Its 42 byte preamble carries the policy's hash and layout
 hash, so a controller finds a PEP on another policy by comparing hashes, never by a decode that happens to
@@ -31,9 +31,10 @@ def facet(image: bytes):
     key = hashlib.sha256(bytes(image)).hexdigest()
     codec = _FACETS.get(key)
     if codec is None:
-        from prismpath.agent.policy import Policy
+        from prismpath.kernel.decision import Policy
+        from prismpath.kernel.domain import AGENT_DOMAIN
         from prismpath.telemetry.spiral_groups import GroupedFacet
-        policy = Policy(bytes(image))
+        policy = Policy(bytes(image), AGENT_DOMAIN)
         codec = _FACETS[key] = GroupedFacet(policy.graph, policy.flow)
     return codec
 

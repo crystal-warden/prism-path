@@ -22,10 +22,10 @@ capability is switched on only if some allowed reading needs it:
 
 Nothing here decides a reading itself: the allow set is the set of readings the reference decides `allow`.
 
-The domain walk is the one `prismpath agent rules` uses for its unreachable finding (`_domain` and `_names_read` in
-prismpath/agent/rules.py): the same domains and the same constant for a field no rule reads. The two modules each
-keep a copy of the walk, and a bool field such as `path_control` needs no entry here because a bool is enumerated
-by its definition, not by name.
+The domain walk is the kernel's (prismpath/kernel/domain.py), bound here to the agent's reading domain
+(`AGENT_DOMAIN`). `prismpath agent rules` uses the same walk for its unreachable finding, with the same domains and the
+same constant for a field no rule reads, and a bool field such as `path_control` needs no entry in the domain because
+a bool is enumerated by its definition, not by name.
 
 Fail closed. An image that does not define the three fields a profile is projected from (`path_scope`,
 `command_class`, `git_op`), or one with a field that has no finite domain (a category the classifier does not
@@ -55,6 +55,10 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 from prismpath.kernel import canon2
+from prismpath.kernel import domain as _kernel_domain
+from prismpath.kernel.decision import kind_of  # noqa: F401 - the kind `Policy.decide` gives a reading, for the widening walk
+from prismpath.kernel.domain import AGENT_DOMAIN, MAX_INT_RANGE, DomainError  # noqa: F401
+from prismpath.kernel.predicates import holds as _holds
 
 FORMAT = "prismpath.profile/1"          # a profile with no `net`: the bytes (and hash) every such profile has always had
 FORMAT_NET = "prismpath.profile/2"      # a profile that carries `net`
@@ -64,29 +68,13 @@ SYSTEM_PREFIX = "/usr"
 WORKSPACE = "workspace"        # the role of the one read write path; the runner binds the real directory
 MAX_PROCESSES = 64
 TIMEOUT_S = 30                 # the harness's limit for one call (integrations/governed_harness/sandbox.py)
-MAX_INT_RANGE = 64
 
-# the values each classifier field takes (the field list at the top of prismpath/agent/classifier.py)
-KNOWN_CATEGORIES = {
-    "tool": ("list_dir", "read_file", "write_file", "delete_path", "run_command", "git", "connect", "unknown"),
-    "path_scope": ("none", "workspace", "outside", "unknown"),
-    "command_class": ("none", "read_only", "mutating", "network", "git", "unknown"),
-    "git_op": ("none", "local_read", "local_write", "mutating", "push", "network", "unknown"),
-    "remote_class": ("none", "allowed", "other"),
-    "net_dest": ("none", "model_api", "allowed_host", "other", "unknown"),
-    "proc_class": ("none", "single", "tree", "unknown"),
-    "zone_reach": ("none", "protected", "unknown"),
-    "session_protected_changes": ("none", "some"),
-    "session_shell_runs": ("none", "few", "many"),
-}
+# the values each classifier field takes (the field list at the top of prismpath/agent/classifier.py), the agent's
+# reading domain, which the kernel holds (prismpath/kernel/domain.py)
+KNOWN_CATEGORIES = AGENT_DOMAIN.categories
 REQUIRED_FIELDS = ("path_scope", "command_class", "git_op")
-# What the classifier never produces, so the walk does not decide it: a field that is `none` unless another field has
-# one of some values (a `net_dest` other than none only for a `connect`, a `proc_class` other than none only for a
-# `run_command`, a `zone_reach` other than none only for a file tool or a `run_command`). (field, its empty value, the gate field, the gate values.) A group of values is skipped only when it
-# holds no empty value and its gate group holds none of the gate values, so a policy whose rules cannot tell the gate
-# values apart is still walked whole. Without this the three fields multiply the walk by their classes.
-CLASSIFIER_ONLY = (("net_dest", "none", "tool", ("connect",)), ("proc_class", "none", "tool", ("run_command",)),
-                   ("zone_reach", "none", "tool", ("write_file", "delete_path", "run_command")))
+# What the classifier never produces, so the walk does not decide it (`ReadingDomain.unproduced`)
+CLASSIFIER_ONLY = AGENT_DOMAIN.unproduced
 OUTSIDE_SCOPES = ("outside", "unknown", None)
 NETWORK_VALUES = ("network", "unknown")
 CHANGING_TOOLS = ("write_file", "delete_path")
@@ -97,8 +85,9 @@ CHANGING_GIT_OPS = ("local_write", "mutating", "push", "network", "unknown")
 NET_STATES = ("none", "proxy_model", "proxy_allow")
 
 
-class ProfileError(Exception):
-    """The image cannot be projected onto a profile; the caller runs nothing."""
+# The image cannot be projected onto a profile; the caller runs nothing. It is the kernel's `DomainError`, so a walk
+# of the domain that fails and a profile that cannot be made are caught alike.
+ProfileError = DomainError
 
 
 @dataclass(frozen=True)
@@ -142,90 +131,54 @@ STRICTEST = Profile()
 
 
 # ------------------------------------------------------------------------------------------ the domain
-def _names_read(when, fields) -> set:
-    """The field names a rule's condition mentions (every string in it that is a field name, which can only
-    add a field, never miss one)."""
-    found, stack = set(), [when]
-    while stack:
-        item = stack.pop()
-        if isinstance(item, str):
-            if item in fields:
-                found.add(item)
-        elif isinstance(item, (list, tuple)):
-            stack.extend(item)
-    return found
+# The walk is the kernel's (prismpath/kernel/domain.py), here bound to the agent's domain. `prismpath agent rules`
+# uses the same walk for its unreachable finding.
+ZONE_NAME = AGENT_DOMAIN.name_field
+ZONE_NAME_MAX = AGENT_DOMAIN.name_max
 
 
 def _domain(name: str, text: str) -> List[Any]:
     """The finite list of values of a field from its definition, or ProfileError saying why there is none."""
-    words = text.split()
-    if not words:
-        raise ProfileError(f"field {name!r} has an empty definition")
-    kind = words[0]
-    options = dict(w.split("=", 1) for w in words[1:] if "=" in w)
-    if kind == "bool":
-        values: List[Any] = [False, True]
-    elif kind == "int":
-        try:
-            lo, hi = int(options["min"]), int(options["max"])
-        except (KeyError, ValueError):
-            raise ProfileError(f"field {name!r} is an int without a readable min and max: {text!r}")
-        if not 0 <= hi - lo < MAX_INT_RANGE:
-            raise ProfileError(f"field {name!r} is an int with {hi - lo + 1} values, past the {MAX_INT_RANGE} "
-                               f"the walk enumerates")
-        values = list(range(lo, hi + 1))
-    elif kind == "category":
-        if name not in KNOWN_CATEGORIES:
-            raise ProfileError(f"field {name!r} is a category the classifier does not produce, so it has "
-                               f"no finite domain")
-        values = list(KNOWN_CATEGORIES[name])
-    else:
-        raise ProfileError(f"field {name!r} is a {kind!r}, which has no finite domain")
-    if options.get("absent") == "allowed":
-        values.append(None)
-    return values
+    return _kernel_domain.field_values(name, text, AGENT_DOMAIN)
 
 
-def _atoms(when, out) -> bool:
-    """Collect every atom of a condition (cmp, in, truthy under and, or, not). False when one is not of a
-    shape this reads, so the caller enumerates every value instead of grouping them."""
-    head = when[0] if isinstance(when, list) and when else None
-    if head in ("and", "or"):
-        return all(_atoms(part, out) for part in when[1:])
-    if head == "not":
-        return _atoms(when[1], out)
-    if head in ("always", "never"):
-        return True
-    if head in ("cmp", "in", "truthy"):
-        out.append(when)
-        return True
-    return False
+_names_read = _kernel_domain.names_read
 
 
-def _atom_true(atom, value) -> bool:
-    head = atom[0]
-    if head == "truthy":
-        return bool(value)
-    if head == "in":
-        return value in [const[1] for const in atom[2]]
-    _cmp, _field, op, (_kind, const) = atom
-    return {"==": value == const, "!=": value != const, ">=": value >= const, ">": value > const,
-            "<=": value <= const, "<": value < const}[op]
+def zone_name_ok(name: Any) -> bool:
+    """A value the zone point can read as one `agent.zones` name: 1 to 512 characters and no path."""
+    return _kernel_domain.name_ok(name, AGENT_DOMAIN)
 
 
-def _classes(values: List[Any], atoms: List[list]) -> List[List[Any]]:
-    """The values grouped so that every atom on the field is true of all of a group or of none: the first
-    rule that holds is a function of the atoms' truth, so a group is decided as one. A value of no group
-    (absent, or one an atom cannot compare) stands alone, and so does every value if an atom is not
-    understood. The first of a group stands for it."""
-    groups: Dict[Any, List[Any]] = {}
-    for n, value in enumerate(values):
-        try:
-            key: Any = None if value is None else tuple(_atom_true(a, value) for a in atoms)
-        except (TypeError, ValueError, KeyError, IndexError):
-            key = None
-        groups.setdefault(key if key is not None else ("alone", n), []).append(value)
-    return list(groups.values())
+def zone_name_problem(when) -> bool:
+    """AF1 (spec-policy-distribution.md, 21.2): a rule tests `zone_name` other than for equality with one name the
+    zone point can read, as a conjunct of the whole rule. Such a rule is `policy:out-of-domain`."""
+    return _kernel_domain.name_problem(when, AGENT_DOMAIN)
+
+
+def domain_classes(docs, read_also: Tuple[str, ...] = (), boundary_ints: bool = False):
+    """`kernel.domain.domain_classes` over the agent's domain."""
+    return _kernel_domain.domain_classes(docs, AGENT_DOMAIN, read_also, boundary_ints)
+
+
+def unproduced(names: List[str], combo) -> bool:
+    """True when a combination of value groups is one the classifier never gives (`CLASSIFIER_ONLY`)."""
+    return _kernel_domain.unproduced(names, combo, AGENT_DOMAIN)
+
+
+_unproduced = unproduced
+
+
+def reading_outside_domain(fields, reading) -> Optional[str]:
+    """`kernel.domain.reading_outside_domain` over the agent's domain."""
+    return _kernel_domain.reading_outside_domain(fields, reading, AGENT_DOMAIN)
+
+
+def outside_domain(doc) -> Optional[str]:
+    """`kernel.domain.outside_domain` over the agent's domain."""
+    return _kernel_domain.outside_domain(doc, AGENT_DOMAIN)
+
+
 
 
 def _gives(reading: Dict[str, Any]) -> Tuple[bool, bool, bool]:
@@ -243,38 +196,6 @@ def _net_gives(reading: Dict[str, Any]) -> Tuple[bool, bool]:
         return False, False
     dest = reading.get("net_dest")
     return dest == "model_api", dest == "allowed_host"
-
-
-_PARSED: Dict[str, Any] = {}
-
-
-def _holds(condition: str, reading: Dict[str, Any]) -> bool:
-    """`predicates.eval_condition`, step for step, with the parse and the static check of a condition made once and
-    kept (they depend on the condition's text alone). The walk asks the same few conditions of every reading, and
-    parsing them each time was most of its cost."""
-    import ast
-    from prismpath.kernel import predicates
-    cached = _PARSED.get(condition)
-    if cached is None:
-        expr = predicates._expr_of(condition)
-        low = expr.lower()
-        if low in predicates.ALWAYS or low in predicates.NEVER:
-            cached = ("const", low in predicates.ALWAYS)
-        else:
-            try:
-                tree = ast.parse(expr, mode="eval")
-                predicates.fold_unary_signs(tree)
-                for node in ast.walk(tree):
-                    if not isinstance(node, predicates._ALLOWED_NODES):
-                        raise predicates.PredicateError(f"disallowed syntax ({type(node).__name__})")
-                cached = ("tree", tree)
-            except (SyntaxError, ValueError):       # PredicateError is a ValueError: unreadable, never matching
-                cached = ("never", False)
-        _PARSED[condition] = cached
-    kind, value = cached
-    if kind == "tree":
-        return bool(predicates._ev(value.body, reading, 0))
-    return value
 
 
 def _first_allows(policy, reading: Dict[str, Any]) -> bool:
@@ -298,264 +219,6 @@ def _first_allows(policy, reading: Dict[str, Any]) -> bool:
         return False
     except Exception:  # noqa: BLE001 - decided by the full path, which refuses it
         return True
-
-
-def kind_of(policy, reading: Dict[str, Any]) -> str:
-    """The kind `Policy.decide` gives `reading`, `allow`, `refuse` or `escalate`, by the reference's two steps
-    (`core_reference._python_verdict`): the system boundary, then the first deterministic rule that holds, found
-    as `engine.first_deterministic` finds it but with each condition parsed once (`_holds`), and the policy check
-    left out, which does not change a verdict. A reading the session fields are missing from is given them at
-    their most restrictive, as `Policy.reading_bytes` does. The widening comparator walks a whole domain with
-    it, and `prismpath/tests/test_distribution_widening.py` holds it to `Policy.decide`."""
-    from prismpath.agent import session_state
-    from prismpath.agent.policy import target_decision
-    from prismpath.kernel import field_definitions, predicates
-    if policy.stateful and not all(name in reading for name in session_state.FIELDS):
-        reading = {**session_state.RESTRICTIVE, **reading}
-    try:
-        if field_definitions.system_boundary(policy.graph, reading) is not None:
-            return "refuse"
-        for target, condition in policy.graph.nodes[policy.graph.start].edges:
-            if not predicates.is_deterministic(condition):
-                continue
-            try:
-                if _holds(condition, reading):
-                    decision = target_decision(target)
-                    return decision[0] if decision is not None else "refuse"
-            except predicates.PredicateError:
-                pass
-    except Exception:  # noqa: BLE001 - the reference refuses a reading it cannot decide
-        return "refuse"
-    return "refuse"
-
-
-def _unproduced(names: List[str], combo) -> bool:
-    """True when a combination of value groups is one the classifier never gives (`CLASSIFIER_ONLY`)."""
-    groups = dict(zip(names, combo))
-    for field, empty, gate, values in CLASSIFIER_ONLY:
-        if field in groups and gate in groups and empty not in groups[field] \
-                and not any(value in groups[gate] for value in values):
-            return True
-    return False
-
-
-def _wide_atoms(when, out) -> bool:
-    """`_atoms`, also reading `not in`, for the boundary walk of a wide integer field."""
-    head = when[0] if isinstance(when, list) and when else None
-    if head in ("and", "or"):
-        return all(_wide_atoms(part, out) for part in when[1:])
-    if head == "not":
-        return _wide_atoms(when[1], out)
-    if head in ("always", "never"):
-        return True
-    if head in ("cmp", "in", "not in", "truthy"):
-        out.append(when)
-        return True
-    return False
-
-
-def _boundary_domain(name: str, text: str, atoms: List[list]) -> List[Any]:
-    """The values of a wide integer field that stand for all of them: its ends and each constant an atom on it
-    compares with, with its neighbours, inside the declared range. Between two of them every atom is true or
-    false alike, so they meet every class `_classes` makes of the whole range. ProfileError when an atom is not
-    a comparison with integer constants."""
-    options = dict(word.split("=", 1) for word in text.split()[1:] if "=" in word)
-    low, high = int(options["min"]), int(options["max"])
-    points = {low, high}
-    for atom in atoms:
-        if atom[0] == "cmp" and isinstance(atom[3], list) and isinstance(atom[3][1], int):
-            constants = [atom[3][1]]
-        elif atom[0] in ("in", "not in") and all(isinstance(const, list) and isinstance(const[1], int) for const in atom[2]):
-            constants = [const[1] for const in atom[2]]
-        elif atom[0] == "truthy":
-            constants = [0]
-        else:
-            raise ProfileError(f"field {name!r} is an int with an atom the boundary walk does not read")
-        for const in constants:
-            points.update(value for value in (const - 1, const, const + 1) if low <= value <= high)
-    values: List[Any] = sorted(points)
-    if options.get("absent") == "allowed":
-        values.append(None)
-    return values
-
-
-ZONE_NAME = "zone_name"
-ZONE_NAME_MAX = 512
-
-
-def zone_name_ok(name: Any) -> bool:
-    """A value the zone point can read as one `agent.zones` name: 1 to 512 characters and no path."""
-    return isinstance(name, str) and 1 <= len(name) <= ZONE_NAME_MAX and "/" not in name and name not in (".", "..")
-
-
-def _conjuncts(when) -> List[Any]:
-    if isinstance(when, list) and when and when[0] == "and":
-        return [part for operand in when[1:] for part in _conjuncts(operand)]
-    return [when]
-
-
-def _mentions(when, name: str) -> bool:
-    if not isinstance(when, list):
-        return False
-    return (len(when) >= 2 and when[0] in ("cmp", "in", "not in", "truthy") and when[1] == name) or any(
-        _mentions(part, name) for part in when[1:] if isinstance(part, list))
-
-
-def zone_name_problem(when) -> bool:
-    """AF1 (spec-policy-distribution.md, 21.2): a rule tests `zone_name` other than for equality with one name the
-    zone point can read, as a conjunct of the whole rule. Such a rule is `policy:out-of-domain`."""
-    for conjunct in _conjuncts(when):
-        if not _mentions(conjunct, ZONE_NAME):
-            continue
-        if not (isinstance(conjunct, list) and len(conjunct) == 4 and conjunct[0] == "cmp" and conjunct[1] == ZONE_NAME
-                and conjunct[2] == "==" and isinstance(conjunct[3], list) and len(conjunct[3]) == 2
-                and conjunct[3][0] == "str" and zone_name_ok(conjunct[3][1])):
-            return True
-    return False
-
-
-def _zone_names(docs) -> List[Any]:
-    """AF1, 9.4: the walk of `zone_name` needs no list of every name, because a rule only tests equality. It takes the
-    empty name, each name either document tests, and one name neither tests, which stands for every other."""
-    tested = set()
-    for doc in docs:
-        for rule in doc["rules"]:
-            for conjunct in _conjuncts(rule["when"]):
-                if (isinstance(conjunct, list) and len(conjunct) == 4 and conjunct[:3] == ["cmp", ZONE_NAME, "=="]
-                        and isinstance(conjunct[3], list) and len(conjunct[3]) == 2):
-                    tested.add(conjunct[3][1])
-    other = "zone"
-    while other in tested:
-        other += "_"
-    return ["", *sorted(tested), other]
-
-
-def domain_classes(docs, read_also: Tuple[str, ...] = (), boundary_ints: bool = False):
-    """The finite reading domain of one or more policy documents over the same fields, as value classes:
-    `(names, constant, groups)`. `names` are the fields some rule of some document reads (and `read_also`),
-    `constant` gives every other field its first value, and `groups[i]` are the classes of `names[i]`, grouped
-    so that every atom any of the documents has on that field is true of all of a class or of none (see
-    `_classes`). A first rule that holds is then a function of the classes, so each document decides a
-    combination of classes as one, by its first values, and `_unproduced` names the combinations the
-    classifier never gives. Raises ProfileError when a field has no finite domain. `needs_all` walks it for one
-    image, and the widening comparator (`prismpath.distribution.widening`) for two. With `boundary_ints` an
-    integer field whose range is too wide to list stands for itself by its boundary values
-    (`_boundary_domain`), which is exact when every rule is read as atoms; the profile compiler does not use it."""
-    fields = docs[0]["fields"]
-    atoms: Dict[str, List[list]] = {name: [] for name in fields}
-    understood = True
-    read = set(read_also)
-    for doc in docs:
-        for rule in doc["rules"]:
-            found: List[list] = []
-            understood = _atoms(rule["when"], found) and understood
-            for atom in found:
-                if atom[1] in atoms:
-                    atoms[atom[1]].append(atom)
-            read |= _names_read(rule["when"], fields)
-    domains = {}
-    for name, text in sorted(fields.items()):
-        if name == ZONE_NAME and text.split()[:1] == ["category"]:
-            if any(zone_name_problem(rule["when"]) for doc in docs for rule in doc["rules"]):
-                raise ProfileError("a rule tests zone_name other than for equality with one name")
-            domains[name] = _zone_names(docs)
-            continue
-        try:
-            domains[name] = _domain(name, text)
-        except ProfileError:
-            if not (boundary_ints and text.split()[0] == "int"):
-                raise
-            wide: List[list] = []
-            if not all(_wide_atoms(rule["when"], wide) for doc in docs for rule in doc["rules"]):
-                raise
-            domains[name] = _boundary_domain(name, text, [atom for atom in wide if atom[1] == name])
-    names = sorted(read)
-    constant = {name: values[0] for name, values in domains.items() if name not in read}
-    groups = [_classes(domains[n], atoms[n]) if understood else [[v] for v in domains[n]] for n in names]
-    return names, constant, groups
-
-
-unproduced = _unproduced          # the classifier's impossible combinations, for a walk of `domain_classes`
-
-
-def _bounds(name: str, text: str):
-    """The values a rule may name for a field: a set for a category the classifier produces and for a bool, the
-    (low, high) range of an int, or None for a field whose definition sets no bounds here."""
-    words = text.split()
-    kind = words[0] if words else ""
-    if kind == "category":
-        return frozenset(KNOWN_CATEGORIES[name]) if name in KNOWN_CATEGORIES else None
-    if kind == "bool":
-        return frozenset({False, True})
-    if kind == "int":
-        options = dict(word.split("=", 1) for word in words[1:] if "=" in word)
-        try:
-            return int(options["min"]), int(options["max"])
-        except (KeyError, ValueError):
-            return None
-    return None
-
-
-def reading_outside_domain(fields, reading) -> Optional[str]:
-    """The first category value of a reading outside its field's reading domain, the values the classifier
-    produces (`KNOWN_CATEGORIES`), as a sentence, or None. A bool or an int out of its declared kind or range is
-    the core's to refuse, as it always has (`route:contract-violation`), and so is a key that is not one of the
-    policy's fields, an absent value and a category with no known values."""
-    if not isinstance(reading, dict):
-        return None
-    for name, text in fields.items():
-        if name not in reading or reading[name] is None:
-            continue
-        if not text.split()[:1] == ["category"] or name not in KNOWN_CATEGORIES:
-            continue
-        value = reading[name]
-        inside = isinstance(value, str) and value in KNOWN_CATEGORIES[name]
-        if not inside:
-            return f"the reading gives {name} {value!r}, which is outside the field's reading domain"
-    return None
-
-
-def outside_domain(doc) -> Optional[str]:
-    """The first value a rule of the policy document names outside its field's reading domain, as a sentence, or
-    None when every value it names is inside. The domain is what the installer defined: the values the classifier
-    produces for a category (`KNOWN_CATEGORIES`), true and false for a bool, and min to max for an int, where an
-    equality or a membership names a value and an ordering only bounds one. A value outside the domain is a
-    resource nobody accounted for. The walk of `domain_classes` never meets it, so the widening comparator could
-    not see a rule that allows it (spec-policy-distribution.md, 9.4)."""
-    fields = doc.get("fields") if isinstance(doc, dict) else None
-    if not isinstance(fields, dict):
-        return None
-    for rule in doc.get("rules") or ():
-        if ZONE_NAME in fields and isinstance(rule, dict) and zone_name_problem(rule.get("when")):
-            return "a rule tests zone_name other than for equality with one name the zone point can read"
-        stack = [rule.get("when") if isinstance(rule, dict) else None]
-        while stack:
-            item = stack.pop()
-            if not isinstance(item, list) or not item:
-                continue
-            head = item[0]
-            if head == "cmp" and len(item) == 4 and item[1] in fields:
-                name, op, constants = item[1], item[2], [item[3]]
-            elif head in ("in", "not in") and len(item) == 3 and item[1] in fields and isinstance(item[2], list):
-                name, op, constants = item[1], head, item[2]
-            else:
-                stack.extend(item)
-                continue
-            bounds = _bounds(name, fields[name])
-            if bounds is None:
-                continue
-            for constant in constants:
-                value = constant[1] if isinstance(constant, list) and len(constant) == 2 else constant
-                if value is None:
-                    continue                    # absence is the kernel's to check (policy:none)
-                if isinstance(bounds, tuple):
-                    inside = (op not in ("==", "!=", "in", "not in") or not isinstance(value, int)
-                              or isinstance(value, bool) or bounds[0] <= value <= bounds[1])
-                else:
-                    inside = value in bounds and type(value) is type(next(iter(bounds)))
-                if not inside:
-                    return f"a rule names {name} {value!r}, which is outside the field's reading domain"
-    return None
 
 
 def needs(policy) -> Tuple[bool, bool, bool]:
@@ -628,10 +291,11 @@ def compile_profile(image: Union[bytes, "Policy"], role: str = "bash") -> Profil
     """The profile an image needs: the strictest one its allow set permits. `role` is `bash` (one allowed shell
     command, never a proxy) or `agent` (the whole agent process tree, `net` from the allow set). Raises ProfileError."""
     from prismpath.agent.policy import Policy
+    from prismpath.kernel.decision import Policy as CorePolicy
     if role not in ROLES:
         raise ProfileError(f"role must be one of {ROLES}, not {role!r}")
     try:
-        policy = image if isinstance(image, Policy) else Policy(image)
+        policy = image if isinstance(image, CorePolicy) else Policy(image)
     except ValueError as exc:
         raise ProfileError(f"the image does not load: {exc}")
     required = REQUIRED_FIELDS + (("tool", "net_dest") if role == "agent" else ())
