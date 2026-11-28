@@ -395,3 +395,21 @@ def test_the_flag_form_still_seals_and_says_it_is_deprecated(tmp_path):
     assert code == 0 and "deprecated" in err and "--manifest" in err and json.loads(printed)["widens"]
     code, _printed, err = run("dist", "seal", "--artifact", "egress.hosts", "--key", key, "--out", str(tmp_path / "b"))
     assert code == 2 and "--body" in err and "--seq" in err
+
+
+def test_a_controller_stores_both_releases_of_a_mixed_manifest_at_one_seq(owner, tmp_path):
+    from prismpath.distribution import trust
+    from prismpath.distribution.controller import Controller
+    from prismpath.gateway.reading import Routes
+    routes = Routes.from_doc({"routes": [{"match": "/api/*", "class": "api"}]}).canonical()
+    release = owner.release(targets="agent | gateway", side={"egress_hosts": HOSTS, "routes": routes})
+    result = seal.seal_manifest(release, SIGNERS)
+    control = Controller(str(tmp_path / "controller"), _dist.instance_key("C"), clock=lambda: release.created + 60)
+    for target in ("agent", "gateway"):
+        control.add_anchor(trust.anchor_bytes([_dist.public("A")], target=target, stream=STREAM))
+        statement, body = seal.widening_sealed(by_artifact(result, target)["policy.core"].sealed, [], SIGNERS)
+        control.put(statement, body)
+    stored = [control.put(one.sealed, one.body) for one in result.envelopes]
+    assert sorted((one.targets[0], one.artifact) for one in stored) == [
+        ("agent", "egress.hosts"), ("agent", "policy.core"), ("gateway", "gateway.routes"), ("gateway", "policy.core")]
+    assert {one.seq for one in stored} == {1} and len({one.release for one in stored}) == 2
