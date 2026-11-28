@@ -205,6 +205,37 @@ def eval_condition(condition: str, ctx: Dict[str, Any]) -> bool:
     return bool(_ev(tree.body, ctx, 0))
 
 
+_HELD: Dict[str, Any] = {}
+
+
+def holds(condition: str, ctx: Dict[str, Any]) -> bool:
+    """`eval_condition`, step for step, with the parse and the static check of a condition made once and kept (they
+    depend on the condition's text alone). A condition that does not parse or uses disallowed syntax never holds. The
+    reading domain walks ask the same few conditions of every reading, and parsing them each time was most of their
+    cost."""
+    cached = _HELD.get(condition)
+    if cached is None:
+        expr = _expr_of(condition)
+        low = expr.lower()
+        if low in ALWAYS or low in NEVER:
+            cached = ("const", low in ALWAYS)
+        else:
+            try:
+                tree = ast.parse(expr, mode="eval")
+                fold_unary_signs(tree)
+                for node in ast.walk(tree):
+                    if not isinstance(node, _ALLOWED_NODES):
+                        raise PredicateError(f"disallowed syntax ({type(node).__name__})")
+                cached = ("tree", tree)
+            except (SyntaxError, ValueError):       # PredicateError is a ValueError: unreadable, never matching
+                cached = ("never", False)
+        _HELD[condition] = cached
+    kind, value = cached
+    if kind == "tree":
+        return bool(_ev(value.body, ctx, 0))
+    return value
+
+
 def _compare(op, left, right) -> bool:
     """One pairwise comparison, made total: a missing field (None) or a type-mismatched pair
     makes an ordering/membership test *unsatisfied* rather than raising. `==`/`!=` are already
