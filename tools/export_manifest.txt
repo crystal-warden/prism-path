@@ -373,6 +373,8 @@ prismpath/hotswap/crypto_registry.py
 prismpath/hotswap/flow_authority.py
 prismpath/hotswap/policy_host.py
 prismpath/hotswap/policy_pack.py
+prismpath/information/__init__.py
+prismpath/information/contextcloud.py
 prismpath/interactions.py
 prismpath/kappa.py
 prismpath/kernel/__init__.py
@@ -562,6 +564,8 @@ prismpath/portable/gen_rules_source_fixtures.py
 prismpath/portable/gen_safety_conformance.py
 prismpath/portable/merkle.mjs
 prismpath/portable/transparency_dev_consistency.json
+prismpath/ports/__init__.py
+prismpath/ports/information.py
 prismpath/predicates.py
 prismpath/prefilter.py
 prismpath/retriever.py
