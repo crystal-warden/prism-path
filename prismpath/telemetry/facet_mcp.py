@@ -55,6 +55,7 @@ from prismpath.hotswap import policy_pack as pp
 from prismpath.kernel import canon2, core_render
 from prismpath.kernel.parser import parse
 from prismpath.ledgers import core_evidence
+from prismpath.onion import keys
 from prismpath.telemetry import packed, quantizer, selfheal, wire
 from prismpath.telemetry import zeckendorf as zeck
 
@@ -155,7 +156,7 @@ def sign_image(path: str, priv_path: str, pub_path: str) -> dict:
     """Write `<image>.attest`, the authority's signature on a core image."""
     body = image_bytes(path)
     _pub, key_id = pp.load_public(pub_path)
-    signer = pp._load_private(priv_path)
+    signer = keys.load_signer(priv_path)
     attestation = {"format": ATTEST_FORMAT, "image_sha256": hashlib.sha256(body).hexdigest(), "key_id": key_id,
                    "sig": signer.sign(core_evidence.IMAGE_DOMAIN + body).hex()}
     with open(path + ATTEST_SUFFIX, "wb") as handle:
@@ -167,7 +168,7 @@ def verify_image(path: str, pubkey_paths: List[str], revoked: frozenset = frozen
                  ) -> Tuple[bool, List[str], Optional[dict]]:
     """(ok, causes, attestation) in the order flow_authority.verify_flow asks: signature present, a trusted key
     made it, the key is not revoked, the image is the one signed."""
-    _Priv, _Pub, _ser, InvalidSignature = pp._ed25519()
+    keys.require()
     try:
         with open(path + ATTEST_SUFFIX, "rb") as handle:
             raw = handle.read()
@@ -187,13 +188,10 @@ def verify_image(path: str, pubkey_paths: List[str], revoked: frozenset = frozen
         return False, ["manifest:bad-format"], attestation
     signer = None
     for pub in pubkey_paths:
-        key, key_id = pp.load_public(pub)
-        try:
-            key.verify(signature, core_evidence.IMAGE_DOMAIN + body)
+        public_raw, key_id = pp.load_public_raw(pub)
+        if keys.verify(public_raw, signature, core_evidence.IMAGE_DOMAIN + body):
             signer = key_id
             break
-        except InvalidSignature:
-            continue
     if signer is None:
         return False, ["sig:invalid"], attestation
     if signer in revoked:

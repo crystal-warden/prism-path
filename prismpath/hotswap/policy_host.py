@@ -36,6 +36,7 @@ from prismpath.distribution import devbuild, legacy
 from prismpath.hotswap import policy_pack as pp
 from prismpath.ledgers.audit_log import AuditLog
 from prismpath.ledgers import root_statement
+from prismpath.onion import keys
 from prismpath import canon
 
 LEGACY_IMAGE = "active.ppt"
@@ -78,7 +79,7 @@ def _now() -> str:
 class PolicyHost:
     def __init__(self, state_dir: str, pubkey_paths: List[str], envelope: dict,
                  audit_path: Optional[str] = None, revoked: frozenset = frozenset(),
-                 instance_key: Optional[root_statement.InstanceKey] = None):
+                 instance_key: Optional[keys.Signer] = None):
         self.state_dir = state_dir
         self.pubkey_paths = list(pubkey_paths)
         self.envelope = envelope

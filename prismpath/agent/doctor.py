@@ -119,7 +119,8 @@ def _check_key_pair(home: Path, role: str) -> Dict[str, Any]:
         from prismpath.hotswap import policy_pack
         verifier, key_id = policy_pack.load_public(str(pub))
         if role == "authority":
-            signer = policy_pack._load_private(str(key))
+            from prismpath.onion import keys as onion_keys
+            signer = onion_keys.load_signer(str(key))
         else:
             from prismpath.ledgers import root_statement
             signer = root_statement.InstanceKey.load(str(key))

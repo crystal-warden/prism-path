@@ -223,13 +223,13 @@ def find_program(exe: str, home: Path, run=subprocess.run) -> Dict[str, str]:
 def sign(home: Path, doc: Dict[str, Any]) -> None:
     """Record `doc` in the agent's config directory, signed with the authority key that signed the policy."""
     from prismpath.agent import commands
-    from prismpath.hotswap import policy_pack
+    from prismpath.onion import keys as onion_keys
     from prismpath.kernel import canon2
     key_path = commands._key_paths(home, "authority")[0]
     if not key_path.is_file():
         raise ZoneError(f"no authority key at {key_path}; run `prismpath agent init`")
     data = canon2.dumps(doc) + b"\n"
-    signer = policy_pack._load_private(str(key_path))
+    signer = onion_keys.load_signer(str(key_path))
     statement = canon2.dumps({"format": ATTESTATION_FORMAT, "key_id": commands._key_id(home, "authority"),
                               "sig": signer.sign(ZONE_DOMAIN + data).hex(), "zones_sha256": _sha256(data)}) + b"\n"
     for name, content in ((ZONES_FILE, data), (ATTESTATION_FILE, statement)):

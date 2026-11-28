@@ -385,6 +385,8 @@ prismpath/kernel/contract.py
 prismpath/kernel/core_policy.py
 prismpath/kernel/core_reference.py
 prismpath/kernel/core_render.py
+prismpath/kernel/decision.py
+prismpath/kernel/domain.py
 prismpath/kernel/engine.py
 prismpath/kernel/field_definitions.py
 prismpath/kernel/flow_context.py
@@ -487,6 +489,8 @@ prismpath/mission_control/static/vendor/cytoscape.min.js
 prismpath/mission_control/status.py
 prismpath/model_check.py
 prismpath/nudges/APP_ARCHITECTURE.md
+prismpath/onion/__init__.py
+prismpath/onion/keys.py
 prismpath/orchestration/__init__.py
 prismpath/orchestration/gates.py
 prismpath/orchestration/hermes_swarm.py
@@ -566,6 +570,7 @@ prismpath/portable/merkle.mjs
 prismpath/portable/transparency_dev_consistency.json
 prismpath/ports/__init__.py
 prismpath/ports/information.py
+prismpath/ports/keys.py
 prismpath/predicates.py
 prismpath/prefilter.py
 prismpath/retriever.py
@@ -880,6 +885,7 @@ prismpath/tests/test_installed_package.py
 prismpath/tests/test_intoto.py
 prismpath/tests/test_intoto_bundle.py
 prismpath/tests/test_kappa.py
+prismpath/tests/test_kernel_decision.py
 prismpath/tests/test_landlock_backend.py
 prismpath/tests/test_langgraph_import.py
 prismpath/tests/test_lazy_connector_import.py
@@ -915,6 +921,7 @@ prismpath/tests/test_mission_control_session.py
 prismpath/tests/test_model_check.py
 prismpath/tests/test_negative_literals.py
 prismpath/tests/test_net_from_policy.py
+prismpath/tests/test_onion_keys.py
 prismpath/tests/test_operator_overlay.py
 prismpath/tests/test_orchestrator.py
 prismpath/tests/test_otel.py

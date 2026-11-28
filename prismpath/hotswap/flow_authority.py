@@ -51,6 +51,7 @@ from typing import Dict, Iterable, List, Optional, Sequence, Tuple, Union
 
 from prismpath import canon
 from prismpath.hotswap import policy_pack as pp
+from prismpath.onion import keys
 
 FLOW_MANIFEST_FORMAT = "prismpath-flow-manifest/1"
 REQUIRE_ENV = "PRISMPATH_REQUIRE_AUTHORIZATION"
@@ -91,11 +92,10 @@ def sign_flow(flow_path: str, version: int, priv_path: str, pub_path: str) -> di
     graph = parse(text)
     if int(version) < 1:
         raise ValueError("the version must be a positive integer, and each new authorization a higher one")
-    _Priv, _Pub, ser, _Inv = pp._ed25519()
+    keys.require()
     _pub, key_id = pp.load_public(pub_path)
-    private_key = pp._load_private(priv_path)
-    derived = private_key.public_key().public_bytes(ser.Encoding.Raw, ser.PublicFormat.Raw)
-    if canon.sha256_hex(derived) != key_id:
+    private_key = keys.load_signer(priv_path)
+    if private_key.key_id != key_id:
         raise ValueError(f"{priv_path} is not the private half of {pub_path}")
     manifest = {"format": FLOW_MANIFEST_FORMAT, canon.ENCODING_KEY: canon.CANON2, "flow": graph.name, "flow_sha256": canon.sha256_hex(text.encode("utf-8")),
                 "version": int(version), "key_id": key_id,
@@ -126,7 +126,7 @@ def verify_flow(flow_path: str, pubkey_paths: List[str], revoked: frozenset = fr
     """The authorization check, in the order a reader would ask: is there a signature, does a trusted
     and unrevoked authority key make it, does the manifest name that key, is the flow the one signed,
     and is the version at or above the one already accepted. Returns (ok, causes, manifest)."""
-    _Priv, _Pub, _ser, InvalidSignature = pp._ed25519()
+    keys.require()
     json_path, sig_path = manifest_paths(flow_path)
     if not os.path.exists(json_path) or not os.path.exists(sig_path):
         return False, ["sig:missing"], None
@@ -147,13 +147,10 @@ def verify_flow(flow_path: str, pubkey_paths: List[str], revoked: frozenset = fr
     # Any one trusted key may have signed, so a rotation can trust the old and the new key together; the
     # key that verified, not the one the manifest names, decides what is checked next.
     for path in pubkey_paths:
-        public_key, key_id = pp.load_public(path)
-        try:
-            public_key.verify(signature, payload)
+        public_raw, key_id = pp.load_public_raw(path)
+        if keys.verify(public_raw, signature, payload):
             signer_id = key_id
             break
-        except InvalidSignature:
-            continue
     # The order of the refusals is the order of the questions, cheapest and most fundamental first, and the
     # first one that fails is the only cause reported: a forged signature is not also called a stale version.
     # Revocation comes right after the signature because a revoked key's signatures must stop counting even

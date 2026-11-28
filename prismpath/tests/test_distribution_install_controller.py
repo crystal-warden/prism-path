@@ -598,7 +598,6 @@ def test_case_239_the_tool_and_the_controller_keep_every_retired_id(tmp_path):
     holds the first id of each. The sealing tool and the controller, which keep every retired id, refuse a rotation
     and an `install.trust` that add back the first of each."""
     from prismpath.distribution import cli as dist_cli
-    from prismpath.hotswap import policy_pack
     fleet = Fleet(tmp_path)
     controller, point = fleet.controller, fleet.first
     current = "A"
@@ -636,7 +635,7 @@ def test_case_239_the_tool_and_the_controller_keep_every_retired_id(tmp_path):
         controller.put(sealed, again)
     assert refused.value.cause == install.ROTATION_INVALID
     controller.save()
-    _priv, _pub, ser, _invalid = policy_pack._ed25519()
+    from cryptography.hazmat.primitives import serialization as ser
 
     def pem(name):
         path = tmp_path / f"{name}.pem"
@@ -670,7 +669,6 @@ def test_case_172_a_revocation_never_reaches_an_install_key_or_an_install_set(tm
     counting. A `trust.rotation` whose `retire` names an install key is `dist:rotation-invalid`. The sealing tool and
     the controller refuse that revocation list."""
     from prismpath.distribution import cli as dist_cli
-    from prismpath.hotswap import policy_pack
     fleet = Fleet(tmp_path)
     controller, point = fleet.controller, fleet.first
     floor = _floor_in_place(fleet)
@@ -689,7 +687,7 @@ def test_case_172_a_revocation_never_reaches_an_install_key_or_an_install_set(tm
         controller.put(_dist.seal("trust.revocation", body, stream=env.TRUST_STREAM, targets=("agent",)), body)
     assert refused.value.cause == install.ROTATION_INVALID
     controller.save()
-    _priv, _pub, ser, _invalid = policy_pack._ed25519()
+    from cryptography.hazmat.primitives import serialization as ser
     pem = tmp_path / "A.pem"
     pem.write_bytes(GEN.test_key("A").private_bytes(ser.Encoding.PEM, ser.PrivateFormat.PKCS8, ser.NoEncryption()))
     out = tmp_path / "list.sealed"
@@ -774,8 +772,7 @@ def test_case_185_the_acknowledger_s_command_names_envelope_ids_and_signs_nothin
     statements as the login that runs it, refusing a release id and 64 zeros."""
     import json
     from prismpath import cli
-    from prismpath.hotswap import policy_pack
-    _priv, _pub, ser, _invalid = policy_pack._ed25519()
+    from cryptography.hazmat.primitives import serialization as ser
     keyfile = tmp_path / "C.pem"
     keyfile.write_bytes(GEN.test_key("C").private_bytes(ser.Encoding.PEM, ser.PrivateFormat.PKCS8, ser.NoEncryption()))
 

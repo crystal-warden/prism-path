@@ -254,17 +254,14 @@ class TrustStore:
     def holds_up(self, entries: Sequence[Tuple[str, bytes]], message: bytes, role: str = kinds.AUTHORITY) -> bool:
         """R5, O3: an entry by a key the store holds in `role`, not revoked, verifies. A retired key still holds up
         a release already active under it, where it no longer counts for a new envelope (S5)."""
-        from prismpath.hotswap import policy_pack
-        _priv, Public, _ser, InvalidSignature = policy_pack._ed25519()
+        from prismpath.onion import keys
+        keys.require()
         for kid, signature in entries:
             key = self.keys.get(kid)
             if key is None or key.role != role or kid in self.revoked_keys:
                 continue
-            try:
-                Public.from_public_bytes(key.public).verify(signature, message)
+            if keys.verify(key.public, signature, message):
                 return True
-            except InvalidSignature:
-                continue
         return False
 
     # ------------------------------------------------------------------ O1 to O4: rotation
@@ -274,8 +271,8 @@ class TrustStore:
         `add` signs it too, so it is signed under the store it leaves as well, `add` is neither the PEP's own
         instance key, a revoked key nor a key the store retired, since a retired key does not come back, and
         `retire` names a key the store holds. None, or `dist:rotation-invalid`."""
-        from prismpath.hotswap import policy_pack
-        _priv, Public, _ser, InvalidSignature = policy_pack._ed25519()
+        from prismpath.onion import keys
+        keys.require()
         doc = kinds.read_rotation(body)
         added = bytes.fromhex(doc["add"])
         added_id = canon.sha256_hex(added)
@@ -292,11 +289,9 @@ class TrustStore:
             return "dist:too-large"                                  # K5: a ninth key
         for kid, signature in entries:
             if kid == added_id:
-                try:
-                    Public.from_public_bytes(added).verify(signature, message)
+                if keys.verify(added, signature, message):
                     return None                                      # O2
-                except (InvalidSignature, ValueError):
-                    break
+                break
         return ROTATION_INVALID
 
     def apply_rotation(self, envelope, body: bytes) -> "TrustStore":
@@ -325,16 +320,14 @@ class TrustStore:
         `sig:invalid` when an entry names a held key and does not verify, and `dist:unknown-key` otherwise."""
         if not self.readable:
             return Verdict(UNKNOWN_KEY)
-        from prismpath.hotswap import policy_pack
-        _priv, Public, _ser, InvalidSignature = policy_pack._ed25519()
+        from prismpath.onion import keys
+        keys.require()
         counting, revoked_verifies, held_fails = 0, False, False
         for kid, signature in entries:
             key = self.keys.get(kid)
             if key is None:
                 continue
-            try:
-                Public.from_public_bytes(key.public).verify(signature, message)
-            except InvalidSignature:
+            if not keys.verify(key.public, signature, message):
                 held_fails = True
                 continue
             if kid in self.retired or kid in self.revoked_keys:

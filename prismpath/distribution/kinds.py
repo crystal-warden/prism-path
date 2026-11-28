@@ -227,9 +227,10 @@ def check_policy_core(envelope, body: bytes, pep) -> Optional[str]:
     refusal = core_policy.load_policy(bytes(body))
     if refusal is not None:
         return refusal[0]
-    from prismpath.agent.policy import OutsideDomain, Policy
+    from prismpath.kernel.decision import OutsideDomain, Policy
+    from prismpath.kernel.domain import AGENT_DOMAIN
     try:
-        Policy(bytes(body))
+        Policy(bytes(body), AGENT_DOMAIN)                # the agent's domain for every kind, as it always has been (Q4)
     except OutsideDomain:
         return "policy:out-of-domain"
     except ValueError:

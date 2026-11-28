@@ -253,15 +253,13 @@ def named_pep(data: bytes) -> bytes:
 def read(data: bytes, instance_public: bytes) -> StateRecord:
     """H1, H2, H6 step 1: the record in `data`, signed by the instance key whose 32 raw public bytes are
     `instance_public` and naming that key's PEP id. Anything else is `fleet:state-invalid`."""
-    from prismpath.hotswap import policy_pack
-    _priv, Public, _ser, InvalidSignature = policy_pack._ed25519()
+    from prismpath.onion import keys
+    keys.require()
     record, unsigned, signature = _parse(bytes(data))
     if record.pep_id != pep_id(instance_public):
         raise Refused(INVALID, "the record names another PEP")
-    try:
-        Public.from_public_bytes(bytes(instance_public)).verify(signature, signed_message(unsigned))
-    except (InvalidSignature, ValueError):
-        raise Refused(INVALID, "the signature does not verify under the instance key") from None
+    if not keys.verify(bytes(instance_public), signature, signed_message(unsigned)):
+        raise Refused(INVALID, "the signature does not verify under the instance key")
     check_reconciling(record)
     installs = [value for kind, value in extension_entries(record.extensions) if kind == INSTALL_ENTRY]
     if len(installs) > 1:

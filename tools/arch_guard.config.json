@@ -150,6 +150,8 @@
       "kernel/core_policy.py",
       "kernel/core_reference.py",
       "kernel/core_render.py",
+      "kernel/decision.py",
+      "kernel/domain.py",
       "kernel/engine.py",
       "kernel/field_definitions.py",
       "kernel/flow_context.py",
@@ -168,7 +170,8 @@
     "ports": [
       "distribution/adapters/__init__.py",
       "ports/__init__.py",
-      "ports/information.py"
+      "ports/information.py",
+      "ports/keys.py"
     ],
     "onion": [
       "audit_log.py",
@@ -223,6 +226,8 @@
       "ledgers/root_statement.py",
       "ledgers/signer_daemon.py",
       "ledgers/witness.py",
+      "onion/__init__.py",
+      "onion/keys.py",
       "otel.py",
       "policy_host.py",
       "policy_pack.py",
