@@ -6,7 +6,7 @@ A release is larger than another when some request is treated more permissively.
 answer that per artifact, `LARGER`, `NOT_LARGER` or `CANNOT_DECIDE`:
 
     policy.core      every reading of the finite reading domain, walked by the classes the agent profile
-                     compiler uses (`profile.domain_classes`), and a reading that moves up the order refuse,
+                     compiler uses (`domain.domain_classes`), and a reading that moves up the order refuse,
                      escalate, allow is larger. Two policies whose fields differ are larger
     egress.hosts     larger when the staged list is not a subset of the active one
     gateway.routes   any change is larger
@@ -49,26 +49,26 @@ Comparator = Callable[[bytes, bytes], str]       # (active body, staged body) ->
 def compare_policies(active: bytes, staged: bytes) -> str:
     """W1 for `policy.core`: walk the finite reading domain once for both images, a class at a time, and find
     the first reading the staged policy treats more permissively. A combination the classifier never gives
-    (`profile.unproduced`) is walked too, so a release that allows more there is larger, and one that refuses
-    more there is a tightening (9.4)."""
-    from prismpath.agent import profile
-    from prismpath.agent.policy import Policy
+    (`domain.unproduced`) is walked too, so a release that allows more there is larger, and one that refuses
+    more there is a tightening (9.4). The domain is the agent's for every kind, as it always has been."""
+    from prismpath.kernel import domain
+    from prismpath.kernel.decision import Policy, kind_of
     if active == staged:
         return NOT_LARGER
     try:
-        old, new = Policy(active), Policy(staged)
+        old, new = Policy(active, domain.AGENT_DOMAIN), Policy(staged, domain.AGENT_DOMAIN)
     except ValueError:
         return CANNOT_DECIDE
     if old.doc["fields"] != new.doc["fields"]:
         return LARGER                                  # 9.4: two policies without the same fields
     try:
-        names, constant, groups = profile.domain_classes([old.doc, new.doc], boundary_ints=True)
-    except profile.ProfileError:
+        names, constant, groups = domain.domain_classes([old.doc, new.doc], domain.AGENT_DOMAIN, boundary_ints=True)
+    except domain.DomainError:
         return CANNOT_DECIDE
     import itertools
     for combo in itertools.product(*groups):
         reading = dict(zip(names, (group[0] for group in combo)), **constant)
-        before, after = RANK[profile.kind_of(old, reading)], RANK[profile.kind_of(new, reading)]
+        before, after = RANK[kind_of(old, reading)], RANK[kind_of(new, reading)]
         if after > before:
             return LARGER                              # 9.4: on a combination the classifier never gives as well
     return NOT_LARGER

@@ -172,7 +172,7 @@ def _bounded(conjuncts: Sequence[Any], name: str, field_min: int, field_max: int
 
 
 def _target(rule: Any) -> Optional[str]:
-    from prismpath.agent.policy import target_decision
+    from prismpath.kernel.decision import target_decision
     target = rule.get("target") if isinstance(rule, dict) else None
     decision = target_decision(target) if isinstance(target, str) else None
     return None if decision is None else decision[0]
@@ -190,9 +190,9 @@ def _core_doc(image: bytes) -> dict:
 
 
 def zone_problem(when: Any) -> bool:
-    """AF1: `profile.zone_name_problem`, a test of `zone_name` that is not an equality with one readable name."""
-    from prismpath.agent import profile
-    return profile.zone_name_problem(when)
+    """AF1: `domain.name_problem`, a test of `zone_name` that is not an equality with one readable name."""
+    from prismpath.kernel import domain
+    return domain.name_problem(when, domain.AGENT_DOMAIN)
 
 
 def _core_rule_problem(kind: str, rule: dict, layout: Optional[dict]) -> Optional[str]:
@@ -484,8 +484,9 @@ SILENT = Answer(None)
 
 @functools.lru_cache(maxsize=64)
 def _policy(image: bytes):
-    from prismpath.agent.policy import Policy
-    return Policy(bytes(image))
+    from prismpath.kernel.decision import Policy
+    from prismpath.kernel.domain import AGENT_DOMAIN
+    return Policy(bytes(image), AGENT_DOMAIN)
 
 
 def _hold(condition: Any, reading: Mapping[str, Any]) -> Optional[bool]:

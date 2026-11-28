@@ -34,15 +34,14 @@ from __future__ import annotations
 import hashlib
 import itertools
 import re
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
 HERE = Path(__file__).resolve().parent
 
-from prismpath.agent import session_state  # noqa: E402
-from prismpath.kernel import canon2, causes, core_policy, core_reference, core_render  # noqa: E402
-from prismpath.kernel.parser import parse  # noqa: E402
+from prismpath.kernel import decision  # noqa: E402
+from prismpath.kernel.decision import Decision, OutsideDomain, kind_of, target_decision  # noqa: E402,F401
+from prismpath.kernel.domain import AGENT_DOMAIN  # noqa: E402
 
 POLICY_PATH = HERE / "policy" / "agent_rules.core.json"
 SOURCE_PATH = HERE / "policy" / "agent_rules.rules.md"   # the readable rules the image compiles from
@@ -221,10 +220,9 @@ def _base_reading(policy: "Policy") -> Dict[str, Any]:
 
 def _not_refused(policy: "Policy", reading: Dict[str, Any]) -> bool:
     """True when the reference does not refuse the reading (it allows or escalates it). A quick screen reads the first
-    rule that holds as the reference does (`profile._holds`): a boundary refusal, a rule whose target refuses and a
+    rule that holds as the reference does (`predicates.holds`): a boundary refusal, a rule whose target refuses and a
     reading no rule holds for are refusals, and everything else is decided by the reference's own decision path before
     it is called not refused."""
-    from prismpath.agent import profile
     from prismpath.kernel import core_reference, field_definitions, predicates
     try:
         if field_definitions.system_boundary(policy.graph, reading) is not None:
@@ -233,7 +231,7 @@ def _not_refused(policy: "Policy", reading: Dict[str, Any]) -> bool:
             if not predicates.is_deterministic(condition):
                 continue
             try:
-                if profile._holds(condition, reading):
+                if predicates.holds(condition, reading):
                     if target.startswith("refuse_"):
                         return False
                     break
@@ -295,100 +293,14 @@ def control_check(image: bytes) -> Dict[str, Any]:
                      f"open is denied its next call until it ends, and keeps the old policy in its own run)."))
     return result
 
-_TARGET = re.compile(r"^(allow|refuse_(\d+)|escalate_(\d+))$")
+class Policy(decision.Policy):
+    """The kernel's policy (`prismpath.kernel.decision.Policy`) bound to the agent's reading domain, the values the
+    classifier produces, and the session defaults (`session_state.RESTRICTIVE`, given to a reading that lacks the
+    session fields when the policy reads the session's history)."""
 
-
-@dataclass(frozen=True)
-class Decision:
-    """What the harness does with one call: `allow`, `refuse` or `escalate`, with the registered cause of a
-    refusal or an escalation, and the core's own verdict it came from."""
-    kind: str
-    cause: Optional[str]
-    cause_code: Optional[int]
-    verdict: Dict[str, Any]
-
-    @property
-    def runs(self) -> bool:
-        return self.kind == "allow"
-
-
-def target_decision(target: str):
-    """(kind, cause, code) a rule's target names, or None when it names nothing the harness knows."""
-    match = _TARGET.match(target)
-    if not match:
-        return None
-    if match.group(1) == "allow":
-        return "allow", None, None
-    code = int(match.group(2) or match.group(3))
-    name = causes.name(code)
-    if name is None:
-        return None
-    return ("refuse" if match.group(2) else "escalate"), name, code
-
-
-class OutsideDomain(ValueError):
-    """The policy names a value outside its reading domain (`profile.outside_domain`), cause
-    `policy:out-of-domain`."""
-
-
-class Policy:
     def __init__(self, image: bytes):
-        if image.endswith(b"\n"):
-            image = image[:-1]                 # the one line feed a file may end with
-        self.image = image
-        refusal = core_policy.load_policy(image)
-        if refusal is not None:
-            raise ValueError(f"the core refuses the agent policy: {refusal}")
-        self.doc = canon2.loads(image)
-        self.flow = core_render.render(self.doc)
-        self.graph = parse(self.flow)
-        self.fields = sorted(self.doc["fields"])
-        self.stateful = session_state.defined_by(self.doc["fields"])      # the policy reads the session's history
-        for rule in self.doc["rules"]:
-            if target_decision(rule["target"]) is None:
-                raise ValueError(f"the policy names a target the harness does not know: {rule['target']}")
-        from prismpath.agent import profile
-        outside = profile.outside_domain(self.doc)
-        if outside is not None:
-            raise OutsideDomain(f"policy:out-of-domain: {outside}")
+        super().__init__(image, AGENT_DOMAIN)
 
     @classmethod
     def load(cls, path: Path = POLICY_PATH) -> "Policy":
         return cls(Path(path).read_bytes())
-
-    def reading_bytes(self, reading: Dict[str, Any]) -> bytes:
-        """A reading's canonical canon/2 bytes: the only spelling the core reads. A policy that reads the session's
-        history (`session_state`) is given both session fields when the reading lacks them, at the most restrictive
-        value: a caller that did not read the session's state cannot make a decision the state would have restricted."""
-        if self.stateful and not all(name in reading for name in session_state.FIELDS):
-            reading = {**session_state.RESTRICTIVE, **reading}
-        return canon2.dumps(reading)
-
-    def verdict(self, raw: bytes) -> Dict[str, Any]:
-        """The core's verdict on one reading's bytes, from the reference decision path."""
-        verdict = core_reference.python_reading(self.graph, raw)
-        verdict.pop("policy_check", None)
-        return verdict
-
-    def decide(self, raw: bytes) -> Decision:
-        """The decision on one reading's bytes. A reading with a value outside its field's reading domain is a
-        resource nobody accounted for, so it is refused with `policy:out-of-domain` before the policy runs
-        (spec-policy-distribution.md, 9.4)."""
-        from prismpath.agent import profile
-        try:
-            reading = canon2.loads(raw)
-        except Exception:  # noqa: BLE001 - a reading that does not read is the core's to refuse
-            reading = None
-        outside = profile.reading_outside_domain(self.doc["fields"], reading)
-        if outside is not None:
-            return Decision("refuse", "policy:out-of-domain", causes.code("policy:out-of-domain"),
-                            {"verdict": "refuse", "cause": "policy:out-of-domain", "detail": outside})
-        verdict = self.verdict(raw)
-        if verdict.get("verdict") == "route":
-            kind, cause, code = target_decision(verdict["target"])
-            return Decision(kind, cause, code, verdict)
-        cause = verdict.get("cause")
-        code = causes.code(cause) if isinstance(cause, str) else None
-        # an uncoded refusal (the reference crashed) is still a refusal, never a run; it carries no code, so
-        # its receipt fails verification and the run reports it, rather than borrowing another cause
-        return Decision("refuse", cause if isinstance(cause, str) else "crash", code, verdict)
