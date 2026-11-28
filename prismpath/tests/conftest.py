@@ -43,3 +43,10 @@ def _fresh_needs(request, monkeypatch):
     if request.node.get_closest_marker("fresh_needs"):
         monkeypatch.setattr(_profile, "needs_all", _WALK)
     yield
+
+
+# Every built in target kind, as each surface loads them (prismpath/kinds_builtin.py). A test that needs a process
+# without them runs one (tests/test_kinds_registry.py).
+from prismpath import kinds_builtin as _kinds_builtin  # noqa: E402
+
+_kinds_builtin.load()

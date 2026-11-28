@@ -23,10 +23,10 @@ document decides a combination of classes as one, by its first values. The profi
 (`prismpath.agent.profile`), the widening comparator (`prismpath.distribution.widening`) and `prismpath agent rules`
 use it.
 
-`AGENT_DOMAIN` is the agent kind's domain, the values the classifier produces (the field list at the top of
-prismpath/agent/classifier.py) and the two session fields (prismpath/agent/session_state.py). It is held here so the
-trust path can apply it without importing the agent: `distribution.kinds.check_policy_core` applies it to every kind,
-as it always has (owner answer Q4), until each kind registers its own.
+Each target kind registers its own domain with the kind registry (`prismpath.ports.target.TargetKind.domain`). The
+agent kind's is `prismpath.agent.profile.AGENT_DOMAIN`, and the trust path asks the registry for it
+(`distribution.kinds.reading_domain`), applying it to every kind as it always has (owner answer Q4) until each kind
+has its own.
 
 Nothing here does I/O.
 """
@@ -51,33 +51,6 @@ class ReadingDomain:
     name_field: Optional[str] = None
     name_max: int = 512
     defaults: Mapping[str, Any] = field(default_factory=dict)
-
-
-AGENT_DOMAIN = ReadingDomain(
-    name="agent",
-    categories={
-        "tool": ("list_dir", "read_file", "write_file", "delete_path", "run_command", "git", "connect", "unknown"),
-        "path_scope": ("none", "workspace", "outside", "unknown"),
-        "command_class": ("none", "read_only", "mutating", "network", "git", "unknown"),
-        "git_op": ("none", "local_read", "local_write", "mutating", "push", "network", "unknown"),
-        "remote_class": ("none", "allowed", "other"),
-        "net_dest": ("none", "model_api", "allowed_host", "other", "unknown"),
-        "proc_class": ("none", "single", "tree", "unknown"),
-        "zone_reach": ("none", "protected", "unknown"),
-        "session_protected_changes": ("none", "some"),
-        "session_shell_runs": ("none", "few", "many"),
-    },
-    # What the classifier never produces: a `net_dest` other than none only for a `connect`, a `proc_class` other than
-    # none only for a `run_command`, a `zone_reach` other than none only for a file tool or a `run_command`. A group
-    # of values is skipped only when it holds no empty value and its gate group holds none of the gate values, so a
-    # policy whose rules cannot tell the gate values apart is still walked whole. Without this the three fields
-    # multiply the walk by their classes.
-    unproduced=(("net_dest", "none", "tool", ("connect",)), ("proc_class", "none", "tool", ("run_command",)),
-                ("zone_reach", "none", "tool", ("write_file", "delete_path", "run_command"))),
-    name_field="zone_name",
-    name_max=512,
-    defaults={"session_protected_changes": "some", "session_shell_runs": "many"},
-)
 
 
 def names_read(when, fields) -> set:

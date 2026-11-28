@@ -357,8 +357,8 @@ def test_case_111_a_host_pep_refuses_to_start_with_hold(tmp_path, monkeypatch):
     kind whose row is not in the table refuses to start whatever its setting: every kind of the closed list has a
     row now, so the test takes the xdp row out to show it."""
     from prismpath.distribution import kinds
-    from prismpath.distribution.adapters.agent_home import AgentHomeAdapter
-    from prismpath.distribution.adapters.gateway import GatewayHomeAdapter
+    from prismpath.agent.dist_kind import AgentHomeAdapter
+    from prismpath.gateway.dist_kind import GatewayHomeAdapter
     with pytest.raises(PepRefused):
         _dist.HostPep(tmp_path, expiry_response="hold")
     for name, adapter in (("agent", AgentHomeAdapter), ("gateway", GatewayHomeAdapter)):

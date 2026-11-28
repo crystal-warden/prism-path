@@ -143,7 +143,7 @@ def issue(home: Path, policy_sha256: str, path_classes: Sequence[str], method_cl
     """Seal a grant envelope for the gateway on `stream` with the authority key in `home`; (header value, what it
     says). A home that follows a stream holds no authority key, so the owner issues its grants where the key is,
     naming the gateway's stream."""
-    from prismpath.agent import commands
+    from prismpath.onion import home as onion_home
     if type(ttl) is not int or not 0 < ttl <= MAX_LIFETIME:
         raise GrantError(f"a grant lasts from 1 second to {MAX_LIFETIME} seconds, not {ttl!r}")
     if not kinds.is_hex64(policy_sha256):
@@ -151,7 +151,7 @@ def issue(home: Path, policy_sha256: str, path_classes: Sequence[str], method_cl
     if not kinds.is_stream(stream) or stream == env.TRUST_STREAM:
         raise GrantError(f"{stream!r} is not a gateway's stream")
     start = int(time.time()) if now is None else int(now)
-    key_path, pub_path = commands._key_paths(Path(home), "authority")
+    key_path, pub_path = onion_home.key_paths(Path(home), "authority")
     if not key_path.is_file() or not pub_path.is_file():
         raise GrantError(f"{home} has no authority key; a grant is issued where the authority key is "
                          f"(`prismpath gateway init` makes one)")
@@ -344,8 +344,8 @@ class Verifier:
 def revoke(home: Path, grant_id: str) -> bool:
     """Add `grant_id` to the revocation list of a home that holds its authority key; False when it was already
     there. A home that follows a stream takes its revocations from the signed list alone (GR3)."""
-    from prismpath.distribution.adapters import agent_home
-    if agent_home.is_distributed(home):
+    from prismpath.onion import home as onion_home
+    if onion_home.is_distributed(home):
         raise GrantError(f"{home} follows a stream, so a grant is revoked by its envelope id in a signed "
                          f"trust.revocation (`prismpath dist revoke`), not here")
     if not isinstance(grant_id, str) or not _REVOKED_ID.match(grant_id):

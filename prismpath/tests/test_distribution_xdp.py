@@ -202,7 +202,7 @@ def test_the_xdp_row_reads_its_artifacts_when_they_are_staged(edge):
     good = pairs[1][1]
     assert kinds.check_net_edge(None, good, None) is None
     assert kinds.check_net_edge(None, b"XXXX" + good[4:], None) is not None
-    assert kinds.read_dests(DESTS) == nf.Destinations.from_object(TABLE)
+    assert kinds.read("net.dests", DESTS) == nf.Destinations.from_object(TABLE)
 
 
 def test_case_111_an_xdp_pep_refuses_to_start_with_hold(tmp_path):
@@ -650,12 +650,12 @@ def test_case_164_each_kind_takes_its_three_sets_in_its_own_form(tmp_path, monke
     `dist:derived-mismatch` and `dist:incomplete`, each with the held set unchanged."""
     from integrations.cfs.tests.test_cfs_dist import ALLOW_3, _body, _cfs_floor, _floor_point
     from prismpath.distribution import install
-    from prismpath.distribution.adapters import agent_home
+    from prismpath.agent import dist_kind as agent_home
     from prismpath.gateway import reading as rd
     from prismpath.kernel import canon2
     from prismpath.tests import test_distribution_floor as tf
     from prismpath.tests.test_distribution_gateway import DEMO, ROUTES, GatewayHome
-    monkeypatch.setattr(agent_home, "clock", lambda: _dist.NOW)
+    monkeypatch.setattr(agent_home.onion_home, "clock", lambda: _dist.NOW)
     FLOOR, FALLBACK, CEILING = "install.floor", "install.fallback", "install.ceiling"
 
     def events(point, pairs):

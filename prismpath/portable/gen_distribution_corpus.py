@@ -55,6 +55,9 @@ from prismpath.distribution.trust import TrustStore  # noqa: E402
 from prismpath.hotswap import policy_pack as pp  # noqa: E402
 from prismpath.kernel import canon2, ppt_compile  # noqa: E402
 from prismpath.onion import keys as onion_keys  # noqa: E402
+from prismpath import kinds_builtin  # noqa: E402
+
+kinds_builtin.load()                               # the corpus verifies envelopes of every built in kind
 
 OUT = HERE / "conformance" / "distribution.json"
 SPEC = REPO / "docs" / "design" / "spec-policy-distribution.md"

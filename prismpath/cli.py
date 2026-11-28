@@ -630,6 +630,8 @@ def main(argv=None) -> int:
         # the hook is a new process per tool call: answer before the whole parser is built
         from prismpath.agent import commands
         return commands.hook_main()
+    from prismpath import kinds_builtin
+    kinds_builtin.load()                               # every built in target kind, before any command reads one
     parser = build_parser()
     args = parser.parse_args(argv)
     if not args.command:

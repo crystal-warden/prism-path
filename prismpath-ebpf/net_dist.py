@@ -102,6 +102,10 @@ def compare_dests(active: bytes, staged: bytes) -> str:
                              for classes in CLASS_SETS) else LARGER
 
 
+# the `xdp` row is the kind table's own, and its destination table is read here: importing this module registers
+# the reader and the comparator of `net.dests` with the kind registry (`prismpath.kinds_builtin` finds it)
+if "net.dests" not in kinds.READERS:
+    kinds.register_reader("net.dests", read_dests)
 if "net.dests" not in widening.COMPARATORS:
     widening.register_comparator("net.dests", compare_dests)
 

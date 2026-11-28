@@ -212,6 +212,7 @@ prismpath/agent/claude_code.py
 prismpath/agent/commands.py
 prismpath/agent/controls.py
 prismpath/agent/decider.py
+prismpath/agent/dist_kind.py
 prismpath/agent/doctor.py
 prismpath/agent/egress.py
 prismpath/agent/egress_policy.py
@@ -264,8 +265,6 @@ prismpath/crypto_registry.py
 prismpath/deferral.py
 prismpath/distribution/__init__.py
 prismpath/distribution/adapters/__init__.py
-prismpath/distribution/adapters/agent_home.py
-prismpath/distribution/adapters/gateway.py
 prismpath/distribution/adapters/host.py
 prismpath/distribution/adapters/mesh.py
 prismpath/distribution/cli.py
@@ -354,6 +353,7 @@ prismpath/gallery/support_triage/support_triage.tests.md
 prismpath/gates.py
 prismpath/gateway/__init__.py
 prismpath/gateway/cli.py
+prismpath/gateway/dist_kind.py
 prismpath/gateway/grants.py
 prismpath/gateway/identity.py
 prismpath/gateway/policy/demo.core.json
@@ -373,6 +373,7 @@ prismpath/hotswap/crypto_registry.py
 prismpath/hotswap/flow_authority.py
 prismpath/hotswap/policy_host.py
 prismpath/hotswap/policy_pack.py
+prismpath/hotswap/ppt_eval.py
 prismpath/information/__init__.py
 prismpath/information/contextcloud.py
 prismpath/interactions.py
@@ -399,6 +400,7 @@ prismpath/kernel/parser.py
 prismpath/kernel/policy_source.py
 prismpath/kernel/ppt_compile.py
 prismpath/kernel/predicates.py
+prismpath/kinds_builtin.py
 prismpath/langgraph_import.py
 prismpath/ledger.py
 prismpath/ledger_airgap.py
@@ -490,6 +492,7 @@ prismpath/mission_control/status.py
 prismpath/model_check.py
 prismpath/nudges/APP_ARCHITECTURE.md
 prismpath/onion/__init__.py
+prismpath/onion/home.py
 prismpath/onion/keys.py
 prismpath/orchestration/__init__.py
 prismpath/orchestration/gates.py
@@ -571,6 +574,7 @@ prismpath/portable/transparency_dev_consistency.json
 prismpath/ports/__init__.py
 prismpath/ports/information.py
 prismpath/ports/keys.py
+prismpath/ports/target.py
 prismpath/predicates.py
 prismpath/prefilter.py
 prismpath/retriever.py
@@ -886,6 +890,7 @@ prismpath/tests/test_intoto.py
 prismpath/tests/test_intoto_bundle.py
 prismpath/tests/test_kappa.py
 prismpath/tests/test_kernel_decision.py
+prismpath/tests/test_kinds_registry.py
 prismpath/tests/test_landlock_backend.py
 prismpath/tests/test_langgraph_import.py
 prismpath/tests/test_lazy_connector_import.py

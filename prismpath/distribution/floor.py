@@ -190,9 +190,10 @@ def _core_doc(image: bytes) -> dict:
 
 
 def zone_problem(when: Any) -> bool:
-    """AF1: `domain.name_problem`, a test of `zone_name` that is not an equality with one readable name."""
+    """AF1: `domain.name_problem`, a test of `zone_name` that is not an equality with one readable name, under the agent
+    kind's reading domain, which every kind is checked against (Q4)."""
     from prismpath.kernel import domain
-    return domain.name_problem(when, domain.AGENT_DOMAIN)
+    return domain.name_problem(when, kinds.reading_domain("agent"))
 
 
 def _core_rule_problem(kind: str, rule: dict, layout: Optional[dict]) -> Optional[str]:
@@ -269,20 +270,20 @@ def can_escalate(image: bytes) -> bool:
 
 def _program(image: bytes, offset: int, count: int, words: int) -> Any:
     """The tree of one edge program: ("atom", index), ("not", t), ("and", a, b), ("or", a, b), ("const", bool)."""
-    from prismpath.distribution.adapters import mesh
     from prismpath.hotswap import policy_pack
+    from prismpath.kernel import ppt_compile as ppt        # the table's opcodes, as the mesh evaluator reads them
     stack: List[Any] = []
     for position in range(count):
         (word,) = policy_pack.WORD.unpack_from(image, words + policy_pack.WORD.size * (offset + position))
         if word < 0x8000:
             stack.append(("atom", word))
-        elif word in (mesh.OPC_TRUE, mesh.OPC_FALSE):
-            stack.append(("const", word == mesh.OPC_TRUE))
-        elif word == mesh.OPC_NOT and stack:
+        elif word in (ppt.OPC_TRUE, ppt.OPC_FALSE):
+            stack.append(("const", word == ppt.OPC_TRUE))
+        elif word == ppt.OPC_NOT and stack:
             stack[-1] = ("not", stack[-1])
-        elif word in (mesh.OPC_AND, mesh.OPC_OR) and len(stack) >= 2:
+        elif word in (ppt.OPC_AND, ppt.OPC_OR) and len(stack) >= 2:
             right = stack.pop()
-            stack[-1] = ("and" if word == mesh.OPC_AND else "or", stack[-1], right)
+            stack[-1] = ("and" if word == ppt.OPC_AND else "or", stack[-1], right)
         else:
             raise Refused(BROAD, "a floor edge whose program does not read")
     if len(stack) != 1:
@@ -347,7 +348,7 @@ def narrow_table(image: bytes, command: Any, layout: Optional[dict]) -> Optional
     conjunct of the whole program, each parameter register bounded from both sides by less than its whole domain,
     and no test of a register the layout does not label or marks the proposer's. `command` is the register the
     floor's `meta` names, which is the one the layout labels its command field. None when it is narrow."""
-    from prismpath.distribution.adapters import mesh
+    from prismpath.kernel import ppt_compile as ppt        # the table's operators and types, as the mesh reads them
     if layout is None:
         return BROAD
     by_register = _by(layout, "register")
@@ -367,7 +368,7 @@ def narrow_table(image: bytes, command: Any, layout: Optional[dict]) -> Optional
             if conjunct[0] == "atom":
                 register, op, kind, value = table.atoms[conjunct[1]]
                 tests.append((register, op, kind, value))
-        if not any(register == labelled and op == mesh.OP_EQ and kind == mesh.TY_INT for register, op, kind, _v in tests):
+        if not any(register == labelled and op == ppt.OP_EQ and kind == ppt.TY_INT for register, op, kind, _v in tests):
             return BROAD
         for index in _tree_atoms(tree):
             register = table.atoms[index][0]
@@ -378,13 +379,13 @@ def narrow_table(image: bytes, command: Any, layout: Optional[dict]) -> Optional
                 continue
             low = high = None
             for register, op, kind, value in tests:
-                if register != one["register"] or kind != mesh.TY_INT:
+                if register != one["register"] or kind != ppt.TY_INT:
                     continue
-                if op in (mesh.OP_EQ, mesh.OP_GE, mesh.OP_GT):
-                    bound = value + (1 if op == mesh.OP_GT else 0)
+                if op in (ppt.OP_EQ, ppt.OP_GE, ppt.OP_GT):
+                    bound = value + (1 if op == ppt.OP_GT else 0)
                     low = bound if low is None else max(low, bound)
-                if op in (mesh.OP_EQ, mesh.OP_LE, mesh.OP_LT):
-                    bound = value - (1 if op == mesh.OP_LT else 0)
+                if op in (ppt.OP_EQ, ppt.OP_LE, ppt.OP_LT):
+                    bound = value - (1 if op == ppt.OP_LT else 0)
                     high = bound if high is None else min(high, bound)
             if low is None or high is None or (low <= one["min"] and high >= one["max"]):
                 return BROAD
@@ -402,7 +403,7 @@ def narrow(kind: str, named: str, body: bytes, meta: Mapping[str, Any], layout: 
         if isinstance(listed, list) and (len(listed) > MAX_RULES or any(
                 not isinstance(host, str) or "*" in host or "." not in host.strip(".") for host in listed)):
             return BROAD                               # AF9: at most 8 entries, each one full name
-        kinds.read_hosts(body)
+        kinds.read("egress.hosts", body)
         return None
     if named == "net.dests" and kind == "xdp":
         table = kinds.load_canonical(body, "net.dests")
@@ -418,7 +419,7 @@ def narrow(kind: str, named: str, body: bytes, meta: Mapping[str, Any], layout: 
     if named == "net.edge" and kind == "xdp":
         return None                                    # AF9: held byte for byte to what the two above compile to (V11)
     if named == "gateway.routes":
-        routes = kinds.read_routes(body)
+        routes = kinds.read("gateway.routes", body)
         return BROAD if len(routes.entries) > MAX_RULES or any(prefix for _b, prefix, _n in routes.entries) else None
     if named == "policy.core":
         return narrow_core(kind, body) if kind in ACTION else BROAD
@@ -485,8 +486,7 @@ SILENT = Answer(None)
 @functools.lru_cache(maxsize=64)
 def _policy(image: bytes):
     from prismpath.kernel.decision import Policy
-    from prismpath.kernel.domain import AGENT_DOMAIN
-    return Policy(bytes(image), AGENT_DOMAIN)
+    return Policy(bytes(image), kinds.reading_domain("agent"))      # the agent kind's domain for every kind (Q4)
 
 
 def _hold(condition: Any, reading: Mapping[str, Any]) -> Optional[bool]:
@@ -552,12 +552,11 @@ def _ask_core(image: bytes, reading: Mapping[str, Any], name: str) -> Tuple[Answ
 
 
 def _table_answer(image: bytes, regs: bytes) -> Tuple[Answer, Optional[int]]:
-    from prismpath.distribution.adapters import mesh
-    from prismpath.hotswap import policy_pack
+    from prismpath.hotswap import policy_pack, ppt_eval
     try:
         start = policy_pack.read_ppt_header(image)["start"]
-        step = mesh.evaluate(image, regs, start)
-    except (ValueError, IndexError, KeyError, mesh.EvalError):
+        step = ppt_eval.evaluate(image, regs, start)
+    except (ValueError, IndexError, KeyError, ppt_eval.EvalError):
         return SILENT, None
     if step is None:
         return Answer(REFUSE, "route:no-matching-edge"), None
@@ -613,7 +612,7 @@ def ask(kind: str, bodies: Mapping[str, bytes], request: Mapping[str, Any], *, f
         host = request.get("host")
         if hosts is None or not isinstance(host, str):
             return SILENT
-        listed = host in kinds.read_hosts(bytes(hosts))
+        listed = host in kinds.read("egress.hosts", bytes(hosts))
         return Answer(ALLOW, None, f"egress.hosts:{host}", allow_only=True) if listed else Answer(REFUSE, None)
     reading = dict(request.get("reading") or {})
     if kind == "gateway":
@@ -621,7 +620,7 @@ def ask(kind: str, bodies: Mapping[str, bytes], request: Mapping[str, Any], *, f
         path = request.get("path")
         if routes is None or not isinstance(path, str):
             return SILENT
-        path_class = kinds.read_routes(bytes(routes)).classify(path)
+        path_class = kinds.read("gateway.routes", bytes(routes)).classify(path)
         if floor and path_class in ("other", "unknown"):
             return SILENT
         reading["path_class"] = path_class
@@ -662,7 +661,7 @@ def ask(kind: str, bodies: Mapping[str, bytes], request: Mapping[str, Any], *, f
         if equal.get("tool") == "connect":
             hosts = bodies.get("egress.hosts")
             host = request.get("connect_host")
-            if hosts is None or not isinstance(host, str) or host not in kinds.read_hosts(bytes(hosts)):
+            if hosts is None or not isinstance(host, str) or host not in kinds.read("egress.hosts", bytes(hosts)):
                 return SILENT
         return Answer(answer.outcome, answer.cause, answer.rule, zone)
     return answer

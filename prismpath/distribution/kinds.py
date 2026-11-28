@@ -5,11 +5,15 @@ new kind is one row.
 
 The names are closed lists of the format: an envelope naming any other artifact or target kind is
 `dist:bad-format` (E8), and each artifact's `meta` members are its row's. A target kind has a row in
-`TARGETS` once an enforcement point of that kind is built: `host`, `agent`, `gateway`, `mesh` and `xdp` here, and `cfs`, whose table
-layout lives with the cFS app, registered by `integrations/cfs/dist_kind.py` through `register_target`. The `xdp`
-row's destination table is read by the edge's own reader (`prismpath-ebpf/net_dist.py`), which lives beside the
-loader it feeds and is found from here, so a tree without it refuses the artifact rather than guessing at it. A
-PEP of a kind with no row cannot be described to the verifier. Each artifact's own check (V11) is
+`TARGETS` once an enforcement point of that kind is built: `host`, `mesh` and `xdp` here, and every other kind
+registers its own with `register` when its module is imported (`prismpath.ports.target.TargetKind`): `agent` from
+`prismpath/agent/dist_kind.py`, `gateway` from `prismpath/gateway/dist_kind.py` and `cfs`, whose table layout lives
+with the cFS app, from `integrations/cfs/dist_kind.py`. A surface imports the built in kinds once
+(`prismpath.kinds_builtin`). Nothing here guesses a row: a PEP of a kind that never registered cannot be built or
+described to the verifier ("no enforcement point of kind"). An artifact whose reader lives with its kind
+(`egress.hosts`, `gateway.routes`, `identity.bundle`, `identity.map`, and `net.dests`, which the XDP edge's own
+reader in `prismpath-ebpf/net_dist.py` reads) is read through `read`, which refuses it with `dist:bad-format` while
+no reader is registered. Each artifact's own check (V11) is
 `check(envelope, body, pep)`, which answers None or the cause. A target row may hold its own check of an
 artifact in `checks`, as a mesh node reads a `policy.ppt` with its own table parser and ignores `meta`.
 
@@ -22,11 +26,8 @@ with `dist:target-mismatch`, so a statement is never verified and then left unap
 from __future__ import annotations
 
 import hashlib
-import importlib
 import re
-import sys
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any, Callable, Dict, FrozenSet, Optional, Tuple
 
 from prismpath import canon
@@ -228,9 +229,12 @@ def check_policy_core(envelope, body: bytes, pep) -> Optional[str]:
     if refusal is not None:
         return refusal[0]
     from prismpath.kernel.decision import OutsideDomain, Policy
-    from prismpath.kernel.domain import AGENT_DOMAIN
     try:
-        Policy(bytes(body), AGENT_DOMAIN)                # the agent's domain for every kind, as it always has been (Q4)
+        domain = reading_domain(getattr(pep, "kind", "agent"))   # the agent's for every kind, as it always has been (Q4)
+    except Refused as refused:
+        return refused.cause
+    try:
+        Policy(bytes(body), domain)
     except OutsideDomain:
         return "policy:out-of-domain"
     except ValueError:
@@ -243,21 +247,6 @@ def check_policy_core(envelope, body: bytes, pep) -> Optional[str]:
     from prismpath.distribution import install
     return install.out_of_scope(pep.kind, envelope.artifact, body, view.ceiling)
 
-
-def read_hosts(body: bytes) -> list:
-    """`egress.hosts`: a canon/2 array of lower case host names, sorted, without repeats, each one the egress proxy
-    reads as itself. `Refused` with `dist:bad-format` otherwise."""
-    from prismpath.agent.egress import Refusal, parse_authority
-    doc = load_canonical(body, "egress.hosts")
-    if not isinstance(doc, list) or not all(isinstance(name, str) for name in doc) or doc != sorted(set(doc)):
-        raise Refused(BAD_FORMAT, "egress.hosts is not a sorted list of names without repeats")
-    for name in doc:
-        try:
-            if parse_authority(f"{name}:443") != (name, 443):
-                raise Refused(BAD_FORMAT, f"{name!r} is not a lower case host name")
-        except Refusal:
-            raise Refused(BAD_FORMAT, f"{name!r} is not a host name the egress proxy reads") from None
-    return doc
 
 
 def check_mesh_table(_envelope, body: bytes, _pep) -> Optional[str]:
@@ -387,19 +376,6 @@ def read_zones(body: bytes) -> dict:
     return doc
 
 
-def read_routes(body: bytes):
-    """`gateway.routes`: a route table in canon/2 bytes, read by `Routes.from_doc` and spelled as
-    `Routes.canonical` spells it, so one table is one body. `Refused` with `dist:bad-format` otherwise."""
-    from prismpath.gateway.reading import RouteError, Routes
-    doc = load_canonical(body, "gateway.routes")
-    try:
-        routes = Routes.from_doc(doc)
-    except RouteError as error:
-        raise Refused(BAD_FORMAT, f"gateway.routes is not a route table ({error})") from None
-    if routes.canonical() != bytes(body):
-        raise Refused(BAD_FORMAT, "gateway.routes is not the table's canonical spelling")
-    return routes
-
 
 GRANT_FORMAT = "prismpath.dist-grant/1"
 GRANT_METHOD_CLASSES = ("delete", "other", "read", "write")
@@ -422,51 +398,6 @@ def read_grant(body: bytes) -> dict:
     return doc
 
 
-def read_identity_bundle(body: bytes) -> dict:
-    """`identity.bundle` (section 13.1, ID1): a canon/2 object with `domains`, `encoding` and `format`
-    `prismpath.dist-identity-bundle/1`, each trust domain to the standard base64 DER of its X.509 CA certificates,
-    sorted, without repeats, each a CA with keyCertSign. `Refused` with `dist:bad-format` otherwise."""
-    from prismpath.gateway import identity
-    doc = load_canonical(body, "identity.bundle")
-    try:
-        return identity.bundle_doc(doc)
-    except identity.IdentityError as error:
-        raise Refused(BAD_FORMAT, f"identity.bundle is not a trust bundle ({error})") from None
-
-
-def read_identity_map(body: bytes) -> tuple:
-    """`identity.map` (section 13.1, ID2): a canon/2 object with `encoding`, `entries` and `format`
-    `prismpath.dist-identity-map/1`, its entries SPIFFE ID patterns to classes, in order. `Refused` with
-    `dist:bad-format` otherwise."""
-    from prismpath.gateway import identity
-    doc = load_canonical(body, "identity.map")
-    try:
-        return identity.map_doc(doc)
-    except identity.IdentityError as error:
-        raise Refused(BAD_FORMAT, f"identity.map is not an identity map ({error})") from None
-
-
-EDGE_DIR = Path(__file__).resolve().parents[2] / "prismpath-ebpf"
-
-
-def edge_reader():
-    """`net_dist`, the XDP edge's reader of `net.dests` and its loader adapter, from `prismpath-ebpf/` beside the
-    package. `Refused` with `dist:bad-format` in a tree that does not carry it, so a destination table is never
-    taken unread."""
-    if "net_dist" in sys.modules:
-        return sys.modules["net_dist"]
-    if not (EDGE_DIR / "net_dist.py").is_file():
-        raise Refused(BAD_FORMAT, "this tree has no reader of the XDP edge's destination table")
-    if str(EDGE_DIR) not in sys.path:
-        sys.path.insert(0, str(EDGE_DIR))
-    return importlib.import_module("net_dist")
-
-
-def read_dests(body: bytes):
-    """`net.dests`: a `prismpath.net_dests/1` destination table in its canonical spelling, one the edge can use
-    (`net_from_policy.Destinations`). `Refused` with `dist:bad-format` otherwise."""
-    return edge_reader().read_dests(body)
-
 
 def check_net_edge(_envelope, body: bytes, _pep) -> Optional[str]:
     """`net.edge` when it is staged (V11): the image check, with its existing causes. That it is byte for byte the
@@ -475,6 +406,34 @@ def check_net_edge(_envelope, body: bytes, _pep) -> Optional[str]:
     from prismpath.hotswap import policy_pack
     ok, reasons = policy_pack.validate_image(body)
     return None if ok else _first_cause(reasons)
+
+
+# ------------------------------------------------------------------ the readers a kind registers
+
+READERS: Dict[str, Callable[[bytes], Any]] = {}     # artifact -> the reader its kind registered
+
+
+def register_reader(artifact: str, reader: Callable[[bytes], Any]) -> None:
+    """Add the reader of an artifact whose reader lives with its kind. One per artifact."""
+    if artifact not in ARTIFACTS or artifact in TRUST_ARTIFACTS:
+        raise ValueError(f"{artifact!r} is not an artifact a release carries")
+    existing = READERS.get(artifact)
+    if existing is not None and existing is not reader:
+        raise ValueError(f"{artifact} already has a reader")
+    READERS[artifact] = reader
+
+
+def read(artifact: str, body: bytes) -> Any:
+    """`artifact`'s body read by the reader its kind registered. `Refused` with `dist:bad-format` while no kind
+    registered one, so an artifact is never taken unread."""
+    reader = READERS.get(artifact)
+    if reader is None:
+        raise Refused(BAD_FORMAT, f"no reader of {artifact} is registered in this process")
+    return reader(body)
+
+
+def _registered(artifact: str) -> Callable[[bytes], Any]:
+    return lambda body: read(artifact, body)
 
 
 def _reads(reader: Callable[[bytes], dict]) -> Callable[[Any, bytes, Any], Optional[str]]:
@@ -495,12 +454,12 @@ ARTIFACTS: Dict[str, Artifact] = {
                            frozenset({"packing", "flow_sha256", "overlay_of"}), check_policy_ppt),
     "policy.spiral": Artifact(check=check_policy_spiral),
     "sandbox.profile": Artifact(frozenset({"compiler"}), check=_reads(lambda body: read_profile(body))),
-    "egress.hosts": Artifact(check=_reads(read_hosts)),
+    "egress.hosts": Artifact(check=_reads(_registered("egress.hosts"))),
     "agent.zones": Artifact(check=_reads(read_zones)),
-    "gateway.routes": Artifact(check=_reads(read_routes)),
-    "identity.bundle": Artifact(check=_reads(read_identity_bundle)),
-    "identity.map": Artifact(check=_reads(read_identity_map)),
-    "net.dests": Artifact(check=_reads(read_dests)),
+    "gateway.routes": Artifact(check=_reads(_registered("gateway.routes"))),
+    "identity.bundle": Artifact(check=_reads(_registered("identity.bundle"))),
+    "identity.map": Artifact(check=_reads(_registered("identity.map"))),
+    "net.dests": Artifact(check=_reads(_registered("net.dests"))),
     "net.edge": Artifact(frozenset({"flow_sha256", "names_sha256", "qualification"}), check=check_net_edge),
     "cfs.table": Artifact(),
     "grant": Artifact(check=_reads(read_grant)),
@@ -630,10 +589,6 @@ MESH_TABLE_MAX = 640                               # E6: TBL_MAX in prismpath-hw
 TARGETS: Dict[str, Target] = {
     "host": Target(needs=frozenset({"policy.ppt"}), decides=False, when_declared=frozenset({"policy.spiral"}),
                    compares=frozenset({"policy.ppt"}), applies=APPLIES_WITH_CHANGE),
-    "agent": Target(needs=frozenset({"policy.core", "egress.hosts"}), decides=True,
-                    when_declared=frozenset({"agent.zones", "sandbox.profile"})),
-    "gateway": Target(needs=frozenset({"policy.core", "gateway.routes"}), decides=True,
-                      when_declared=frozenset({"identity.bundle", "identity.map"})),
     "xdp": Target(needs=frozenset({"policy.core", "net.dests", "net.edge"}), decides=True),
     "mesh": Target(needs=frozenset({"policy.ppt"}), decides=False, expiry_hold=True, body_bound=MESH_TABLE_MAX,
                    checks={"policy.ppt": check_mesh_table}, reads_meta=False, compares=frozenset({"policy.ppt"}),
@@ -667,14 +622,60 @@ def _check_row(name: str, target: Target) -> None:
         raise ValueError(f"the {name} row uses an artifact with no check")
 
 
-def register_target(name: str, target: Target) -> None:
-    """Add the row of a target kind whose checks live outside this package, as the cFS app's table layout does.
-    The name must be on the closed list, and a kind is registered once with one row."""
-    _check_row(name, target)
-    existing = TARGETS.get(name)
-    if existing is not None and existing != target:
+KINDS: Dict[str, Any] = {}                          # name -> the `TargetKind` it registered
+
+
+def register(kind) -> None:
+    """Add a target kind (`prismpath.ports.target.TargetKind`) when its module is imported: its row, the readers and
+    comparators of its artifacts, and the checks `prismpath policy compile --target` runs for it. The name must be on
+    the closed list (E8), and a kind is registered once: the same registration again changes nothing, and another
+    one for the same name, a row that differs from the one held or a reader or comparator another kind holds is
+    refused before anything is added."""
+    from prismpath.distribution import widening
+    name = kind.name
+    _check_row(name, kind.row)
+    if name in KINDS:
+        if KINDS[name] != kind:
+            raise ValueError(f"the {name} kind is registered with another row")
+        return
+    if name in TARGETS and TARGETS[name] != kind.row:
         raise ValueError(f"the {name} kind is registered with another row")
-    TARGETS[name] = target
+    for artifact, reader in kind.readers.items():
+        if READERS.get(artifact) not in (None, reader):
+            raise ValueError(f"{artifact} already has a reader")
+    for artifact, comparator in kind.comparators.items():
+        if widening.COMPARATORS.get(artifact) not in (None, comparator):
+            raise ValueError(f"{artifact} already has a comparator")
+    for artifact, reader in kind.readers.items():
+        register_reader(artifact, reader)
+    for artifact, comparator in kind.comparators.items():
+        widening.register_comparator(artifact, comparator)
+    if kind.compile_checks is not None:
+        from prismpath.kernel import policy_source
+        policy_source.register_compile_checks(name, kind.compile_checks)
+    TARGETS[name] = kind.row
+    KINDS[name] = kind
+
+
+def register_target(name: str, target: Target) -> None:
+    """Add the row of a target kind whose checks live outside this package, as the cFS app's table layout does: a
+    kind with a row and nothing else (`register`)."""
+    from prismpath.ports.target import TargetKind
+    register(TargetKind(name=name, row=target))
+
+
+def reading_domain(kind: str = "agent"):
+    """The reading domain the `policy.core` of a PEP of `kind` is checked against (9.4): the kind's own when it
+    registered one, else the agent kind's, which every kind is checked against until each has its own (owner answer
+    Q4). `Refused` with `dist:bad-format` when neither is registered, so no policy is checked against a guess."""
+    own = KINDS.get(kind)
+    if own is not None and own.domain is not None:
+        return own.domain()
+    agent = KINDS.get("agent")
+    if agent is None or agent.domain is None:
+        raise Refused(BAD_FORMAT, "no reading domain is registered: the agent kind, whose domain every kind's policy "
+                                  "is checked against (Q4), is not loaded in this process")
+    return agent.domain()
 
 
 for _name, _target in TARGETS.items():

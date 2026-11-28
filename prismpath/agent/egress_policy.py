@@ -50,7 +50,7 @@ def hosts_digest(allowed_hosts: Iterable[str]) -> str:
 
 
 class PolicyGate:
-    """`follow`, a `commands.Committed`, is given for a home that follows a stream: each CONNECT then reads the
+    """`follow`, a `home.Committed`, is given for a home that follows a stream: each CONNECT then reads the
     committed state first, refuses with `policy-lapsed` when the release no longer decides and with
     `policy-changed` when another policy was committed since the run began, and takes its hosts from the committed
     `egress.hosts`, so a commit that removes a host closes it at the next connection."""
@@ -74,11 +74,11 @@ class PolicyGate:
 
     def _follow(self) -> Optional[str]:
         """The committed state for this connection: None to decide, else the refusal's reason."""
-        from prismpath.agent import commands
-        from prismpath.distribution.adapters import agent_home
+        from prismpath.agent import dist_kind as agent_home
+        from prismpath.onion.home import AgentError
         try:
             policy, bodies = self.follow.current()
-        except commands.AgentError:
+        except AgentError:
             return "policy-lapsed"
         if policy.image != self.policy.image:
             return "policy-changed"
@@ -95,7 +95,7 @@ class PolicyGate:
         host it lists is reached whatever the release says. Its receipt is the floor's (`agent_home.ask_floor`)."""
         if self.home is None:
             return False
-        from prismpath.distribution.adapters import agent_home
+        from prismpath.agent import dist_kind as agent_home
         host, _port = split_authority(authority)
         answered = agent_home.ask_floor(self.home, {"host": host.lower()})
         return answered is not None and answered["decision"] == "allow"
@@ -115,7 +115,7 @@ class PolicyGate:
             raw = self.policy.reading_bytes(reading)
             decision = self.policy.decide(raw)
             if self.home is not None:
-                from prismpath.distribution.adapters import agent_home
+                from prismpath.agent import dist_kind as agent_home
                 agent_home.note(self.home, reading)
             with self._lock:
                 if self.run is None:

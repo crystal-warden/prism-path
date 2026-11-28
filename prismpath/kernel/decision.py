@@ -22,7 +22,7 @@ with the request, and names the cause by its registered code:
 A refusal of the core itself is a refusal too, so the policy fails closed by the core's own semantics.
 
 The domain is an argument. `prismpath.agent.policy.Policy` is this class bound to the agent's domain, which the
-trust path also applies to every kind for now (`prismpath.kernel.domain.AGENT_DOMAIN`).
+trust path also applies to every kind for now, asking the kind registry for it (`distribution.kinds.reading_domain`).
 """
 from __future__ import annotations
 

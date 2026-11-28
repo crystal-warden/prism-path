@@ -17,11 +17,12 @@ import pytest
 pytest.importorskip("cryptography")
 
 from prismpath import canon  # noqa: E402
-from prismpath.agent import profile  # noqa: E402
+from prismpath.agent import dist_kind as agent_kind, profile  # noqa: E402
 from prismpath.agent.policy import Policy, starter_path  # noqa: E402
 from prismpath.distribution import kinds, state_record, widening  # noqa: E402
 from prismpath.distribution.adapters import CANNOT_DECIDE, LARGER, NOT_LARGER  # noqa: E402
 from prismpath.distribution.kinds import Refused  # noqa: E402
+from prismpath.gateway import dist_kind as gateway_kind  # noqa: E402
 from prismpath.kernel.policy_source import compile_source  # noqa: E402
 from prismpath.tests import _dist  # noqa: E402
 from prismpath.tests._dist import STREAM, seal  # noqa: E402
@@ -111,15 +112,15 @@ def test_the_starters_compare_as_their_rules_say():
 def test_the_comparators_of_the_lists_and_the_tables():
     """W1 for egress.hosts (a host not in the active list), gateway.routes (any change), agent.zones (a protected
     name gone, and no zone file protects nothing) and policy.ppt (any change of the image)."""
-    assert widening.compare_hosts(_hosts("a.example"), _hosts("a.example", "b.example")) == LARGER
-    assert widening.compare_hosts(_hosts("a.example", "b.example"), _hosts("a.example")) == NOT_LARGER
-    assert widening.compare_hosts(_hosts("a.example"), b"{}") == CANNOT_DECIDE
-    assert widening.compare_routes(b'{"routes":[]}', b'{"routes":[]}') == NOT_LARGER
-    assert widening.compare_routes(b'{"routes":[]}', b'{"routes":[{}]}') == LARGER
-    assert widening.compare_zones(_zones("a", "b"), _zones("a")) == LARGER
-    assert widening.compare_zones(_zones("a"), _zones("a", "b")) == NOT_LARGER
-    assert widening.compare_zones(_zones("a"), None) == LARGER
-    assert widening.compare_zones(None, _zones("a")) == NOT_LARGER
+    assert agent_kind.compare_hosts(_hosts("a.example"), _hosts("a.example", "b.example")) == LARGER
+    assert agent_kind.compare_hosts(_hosts("a.example", "b.example"), _hosts("a.example")) == NOT_LARGER
+    assert agent_kind.compare_hosts(_hosts("a.example"), b"{}") == CANNOT_DECIDE
+    assert gateway_kind.compare_routes(b'{"routes":[]}', b'{"routes":[]}') == NOT_LARGER
+    assert gateway_kind.compare_routes(b'{"routes":[]}', b'{"routes":[{}]}') == LARGER
+    assert agent_kind.compare_zones(_zones("a", "b"), _zones("a")) == LARGER
+    assert agent_kind.compare_zones(_zones("a"), _zones("a", "b")) == NOT_LARGER
+    assert agent_kind.compare_zones(_zones("a"), None) == LARGER
+    assert agent_kind.compare_zones(None, _zones("a")) == NOT_LARGER
     assert widening.compare_ppt(OLD, OLD) == NOT_LARGER and widening.compare_ppt(NEW, OLD) == LARGER
 
 
@@ -148,7 +149,7 @@ def test_a_release_is_larger_when_one_artifact_is_and_than_no_policy():
     assert widening.compare_release(active, {**active, "sandbox.profile": b"anything"}) == NOT_LARGER
     assert widening.compare_release(active, {**active, "net.dests": b"x"}) == LARGER      # nothing it replaces
     with pytest.raises(ValueError):
-        widening.register_comparator("trust.revocation", widening.compare_routes)
+        widening.register_comparator("trust.revocation", gateway_kind.compare_routes)
 
 
 def test_a_widening_statement_covers_a_pep_when_from_is_empty_or_holds_its_policy():

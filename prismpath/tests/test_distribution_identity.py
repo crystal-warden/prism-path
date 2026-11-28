@@ -26,7 +26,8 @@ from cryptography.x509.oid import NameOID  # noqa: E402
 from prismpath import canon  # noqa: E402
 from prismpath.agent import commands  # noqa: E402
 from prismpath.distribution import envelope as env, kinds, trust as trust_module, widening  # noqa: E402
-from prismpath.distribution.adapters import CANNOT_DECIDE, LARGER, NOT_LARGER, agent_home  # noqa: E402
+from prismpath.agent import dist_kind as agent_home  # noqa: E402
+from prismpath.distribution.adapters import CANNOT_DECIDE, LARGER, NOT_LARGER  # noqa: E402
 from prismpath.distribution.verify import PepView, verify  # noqa: E402
 from prismpath.gateway import cli as gcli, identity, proxy, reading as rd  # noqa: E402
 from prismpath.kernel import canon2, policy_source  # noqa: E402
@@ -175,7 +176,7 @@ def release(gw, policy: bytes, seq: int, extra=None, *, widens=True, froms=(), s
 @pytest.fixture
 def gw(tmp_path, monkeypatch):
     """A gateway PEP that committed the workload policy with the bundle and the map at seq 1."""
-    monkeypatch.setattr(agent_home, "clock", lambda: NOW)
+    monkeypatch.setattr(agent_home.onion_home, "clock", lambda: NOW)
     point = GatewayHome(tmp_path / "gateway")
     records = release(point, WORKLOAD_POLICY, 1, {"identity.bundle": BUNDLE, "identity.map": MAP})
     assert records[-1].event == "committed", records
@@ -207,7 +208,7 @@ def test_case_282_an_identity_bundle_reads_only_as_sorted_ca_certificates_per_tr
     empty, a trust domain name in capitals, no domain, base64 that is not canonical, DER that is not a certificate, an
     extra member. The same bundle spelled out of order is `document:not-canonical`."""
     assert check("identity.bundle", BUNDLE) is None
-    assert set(kinds.read_identity_bundle(BUNDLE)) == {"example.org", "other.test"}
+    assert set(kinds.read("identity.bundle", BUNDLE)) == {"example.org", "other.test"}
     second = CA("example.org")
     no_sign = CA("example.org", usage=x509.KeyUsage(True, False, False, False, False, False, False, False, False))
     foreign = CA("example.org", uris=("spiffe://other.test",))
@@ -235,7 +236,7 @@ def test_case_283_an_identity_map_reads_spiffe_id_patterns_to_classes_in_order()
     closing `/*`, a `..` segment, a trailing `/`, a percent escape, a capital in the trust domain, a reserved class,
     a match listed twice and no entries."""
     assert check("identity.map", MAP) is None
-    entries = kinds.read_identity_map(map_doc([{"class": "admin", "match": "spiffe://example.org/ops/admin"},
+    entries = kinds.read("identity.map", map_doc([{"class": "admin", "match": "spiffe://example.org/ops/admin"},
                                                {"class": "ops", "match": "spiffe://example.org/ops/*"},
                                                {"class": "all", "match": "spiffe://example.org/*"}]))
     found = [identity.classify(entries, f"spiffe://example.org{path}") for path in

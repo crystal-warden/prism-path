@@ -1,8 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
-"""The `agent` target of policy distribution (spec-policy-distribution.md, section 3): one agent home. The hook,
-the decider, the sandbox profile, the egress proxy and the MCP proxy all read it through
-`prismpath.agent.commands.load_checked`, so they hold one release together.
+"""The `agent` target kind of policy distribution (spec-policy-distribution.md, section 3) and the adapter of one
+agent home. Importing this module registers the kind (`kinds.register`): its row, the reader and comparator of
+`egress.hosts`, the comparator of `agent.zones`, the agent's reading domain (`profile.AGENT_DOMAIN`), the policy it
+decides with (`prismpath.agent.policy.Policy`), the domain it is built with (CL4, P4) and the checks of `prismpath
+policy compile --target agent` (`prismpath.agent.target`). The hook, the decider, the sandbox profile, the egress
+proxy and the MCP proxy all read the home through `prismpath.agent.commands.load_checked` and the home functions
+of `prismpath.onion.home`, so they hold one release together.
 
 In a distributed home the PEP's store is `<home>/dist/` and the committed release is read from it on every load
 by `committed(home)`, which checks each envelope again: its signature under the trust store, its expiry, the
@@ -15,7 +19,7 @@ Its own check at commit (V11, C2) holds a staged `sandbox.profile` to the profil
 (`kinds.read_zones`), and the adapter adds nothing to it.
 
 A decider that runs long, the egress proxy's gate and the MCP proxy, follows the committed state through
-`commands.Committed`, so a revocation, an expiry or a commit reaches it at its next decision.
+`home.Committed`, so a revocation, an expiry or a commit reaches it at its next decision.
 
 A commit and a rollback have no runtime step here (C6): the durable active record is the switch, and a session
 already running keeps its sandbox profile while the hook decides each of its calls under the new release. A lapse
@@ -36,15 +40,17 @@ import os
 import signal
 import time as _time
 from pathlib import Path
-from typing import Any, Dict, Mapping, Optional, Tuple
+from typing import Any, Callable, Dict, Mapping, Optional, Sequence, Tuple
 
 from prismpath import canon
 from prismpath.distribution import kinds
-from prismpath.distribution.adapters import Adapter
 from prismpath.distribution.kinds import Refused
+from prismpath.onion import home as onion_home
+from prismpath.onion.home import (SPOOL, SPOOL_KEEP, committed_until, is_distributed, note,  # noqa: F401
+                                  take_readings)
+from prismpath.ports.target import CANNOT_DECIDE, LARGER, NOT_LARGER, Adapter, TargetKind
 
 DERIVED_MISMATCH = "dist:derived-mismatch"
-clock = _time.time                                 # the home's clock, Unix seconds
 
 
 class AgentHomeAdapter(Adapter):
@@ -305,7 +311,7 @@ def ask_floor(home, request: Mapping[str, Any], *, kind: str = "agent", now: Opt
     answer = floors.ask(kind, held.bodies, request, floor=True, ceiling_names=names)
     if answer.outcome not in (floors.ALLOW, floors.ESCALATE):
         return None
-    now = int(clock() if now is None else now)
+    now = int(onion_home.clock() if now is None else now)
     try:
         release = read_committed_release(str(home), kind, now)
         would, would_policy = floors.ask(kind, release.bodies, request), release.policy_sha256
@@ -377,7 +383,7 @@ def floor_hosts(home) -> Tuple[str, ...]:
     held, _installed = held_floor(home)
     if held is None or "egress.hosts" not in held.bodies:
         return ()
-    return tuple(kinds.read_hosts(held.bodies["egress.hosts"]))
+    return tuple(read_hosts(held.bodies["egress.hosts"]))
 
 
 def running_profile(home, role: str = "agent"):
@@ -386,7 +392,7 @@ def running_profile(home, role: str = "agent"):
     projected onto a profile adds nothing, and the profile is the release's alone."""
     from prismpath.agent import profile as profiles
     from prismpath.distribution.pep import read_committed_release
-    release = read_committed_release(str(home), "agent", int(clock()))
+    release = read_committed_release(str(home), "agent", int(onion_home.clock()))
     compiled = profiles.compile_profile(release.bodies["policy.core"], role)
     image = floor_image(home)
     if image is None:
@@ -397,72 +403,105 @@ def running_profile(home, role: str = "agent"):
         return compiled
 
 
-SPOOL = "recent.jsonl"
-SPOOL_KEEP = 64                                    # H5: a record carries at most the last 64 decisions
-
-
-def note(home, reading: Mapping[str, Any]) -> None:
-    """A decider of a distributed home (the egress proxy, the MCP proxy) hands the reading it decided to the PEP's
-    ring for the next state record (H5). The spool keeps the last 64, and a reading that cannot be written is
-    dropped: the decision stands and only the heartbeat misses it."""
-    if not is_distributed(home):
-        return
-    from prismpath.kernel import canon2
-    path = Path(home) / "dist" / SPOOL
-    try:
-        with open(path, "ab") as handle:
-            handle.write(canon2.dumps(dict(reading)) + b"\n")
-        if path.stat().st_size > 64 * 1024:
-            lines = path.read_bytes().splitlines()[-SPOOL_KEEP:]
-            canon.atomic_write_bytes(str(path), b"".join(line + b"\n" for line in lines))
-    except (OSError, ValueError, TypeError):
-        return
-
-
-def take_readings(home) -> list:
-    """The spooled readings, the last 64, and the spool emptied. The spool is moved aside before it is read, so a
-    reading noted meanwhile starts a new spool rather than being removed unread."""
-    from prismpath.kernel import canon2
-    path = Path(home) / "dist" / SPOOL
-    taking = path.with_name(SPOOL + ".taking")
-    try:
-        os.replace(path, taking)
-        lines = taking.read_bytes().splitlines()
-        taking.unlink()
-    except OSError:
-        return []
-    out = []
-    for line in lines[-SPOOL_KEEP:]:
-        try:
-            out.append(canon2.loads(line))
-        except Exception:  # noqa: BLE001 - a torn line is a reading lost to the heartbeat, not to the decision
-            continue
-    return out
-
-
-def is_distributed(home) -> bool:
-    """A home that follows a stream: its PEP store holds a trust store."""
-    return (Path(home) / "dist" / "trust.json").is_file()
-
-
-def committed_until(home, now: Optional[int] = None, kind: str = "agent") -> Tuple[Dict[str, bytes], int]:
-    """`committed`, and the earliest `expires` of the release's envelopes, 0 when none expires. `kind` is the
-    target the home is, `agent` or `gateway`, whose homes have one layout."""
-    from prismpath.distribution.pep import read_committed_release
-    release = read_committed_release(str(home), kind, int(clock() if now is None else now))
-    expiries = [envelope.expires for envelope in release.envelopes.values() if envelope.expires]
-    return dict(release.bodies), min(expiries, default=0)
-
-
 def committed(home, now: Optional[int] = None) -> Dict[str, bytes]:
     """The bodies of the release the home's PEP has active, {artifact: body}, held on every load to what the PEP
     machine holds it to (`pep.read_committed`): a locked PEP, an expired or revoked release, a floor a revocation
     raised and a signer the store no longer holds each refuse. No authority key is read."""
     from prismpath.distribution.pep import read_committed
-    return read_committed(str(home), "agent", int(clock() if now is None else now))
+    return read_committed(str(home), "agent", int(onion_home.clock() if now is None else now))
 
 
 def hosts(bodies: Mapping[str, bytes]) -> Tuple[str, ...]:
     """The committed `egress.hosts`, the only hosts a distributed home's egress proxy may reach."""
-    return tuple(kinds.read_hosts(bodies["egress.hosts"]))
+    return tuple(read_hosts(bodies["egress.hosts"]))
 
+
+# ------------------------------------------------------------------ the agent's artifacts
+
+def read_hosts(body: bytes) -> list:
+    """`egress.hosts`: a canon/2 array of lower case host names, sorted, without repeats, each one the egress proxy
+    reads as itself. `Refused` with `dist:bad-format` otherwise."""
+    from prismpath.agent.egress import Refusal, parse_authority
+    doc = kinds.load_canonical(body, "egress.hosts")
+    if not isinstance(doc, list) or not all(isinstance(name, str) for name in doc) or doc != sorted(set(doc)):
+        raise Refused(kinds.BAD_FORMAT, "egress.hosts is not a sorted list of names without repeats")
+    for name in doc:
+        try:
+            if parse_authority(f"{name}:443") != (name, 443):
+                raise Refused(kinds.BAD_FORMAT, f"{name!r} is not a lower case host name")
+        except Refusal:
+            raise Refused(kinds.BAD_FORMAT, f"{name!r} is not a host name the egress proxy reads") from None
+    return doc
+
+
+def _names(body: bytes, read: Callable[[object], Sequence[str]]) -> Optional[frozenset]:
+    try:
+        return frozenset(read(kinds.load_canonical(body, "a compared artifact")))
+    except (Refused, TypeError, KeyError, ValueError):
+        return None
+
+
+def _host_list(doc) -> Sequence[str]:
+    if not isinstance(doc, list) or not all(isinstance(name, str) for name in doc):
+        raise ValueError("not a list of host names")
+    return doc
+
+
+def _protected(doc) -> Sequence[str]:
+    if not isinstance(doc, dict) or not isinstance(doc.get("protected"), list):
+        raise ValueError("not a zone file")
+    return doc["protected"]
+
+
+def compare_hosts(active: bytes, staged: bytes) -> str:
+    """W1 for `egress.hosts`: larger when a staged host is not in the active list."""
+    old, new = _names(active, _host_list), _names(staged, _host_list)
+    if old is None or new is None:
+        return CANNOT_DECIDE
+    return NOT_LARGER if new <= old else LARGER
+
+
+def compare_zones(active: Optional[bytes], staged: Optional[bytes]) -> str:
+    """W1 for `agent.zones`: larger when a name the active file protects is gone. No file protects nothing."""
+    old = frozenset() if active is None else _names(active, _protected)
+    new = frozenset() if staged is None else _names(staged, _protected)
+    if old is None or new is None:
+        return CANNOT_DECIDE
+    return NOT_LARGER if old <= new else LARGER
+
+
+# ------------------------------------------------------------------ the kind
+
+ROW = kinds.Target(needs=frozenset({"policy.core", "egress.hosts"}), decides=True,
+                   when_declared=frozenset({"agent.zones", "sandbox.profile"}))
+
+
+def reading_domain():
+    """The agent's reading domain, the values the classifier produces (`profile.AGENT_DOMAIN`)."""
+    from prismpath.agent import profile
+    return profile.AGENT_DOMAIN
+
+
+def policy(image: bytes):
+    """The policy an agent home decides with: the kernel's, bound to the agent's domain (`agent.policy.Policy`)."""
+    from prismpath.agent.policy import Policy
+    return Policy(image)
+
+
+def domain_document() -> dict:
+    """CL4, P4: the domain an agent PEP is built with, the values the classifier produces for each category."""
+    from prismpath.agent import profile
+    return {"kind": "agent", "categories": {name: list(values) for name, values in profile.KNOWN_CATEGORIES.items()}}
+
+
+def compile_checks(image: bytes, values) -> list:
+    """`prismpath policy compile --target agent`: the listed values of the source, then the image's own checks."""
+    from prismpath.agent import target
+    return target.check_listed(values) + target.check(image)
+
+
+KIND = TargetKind(name="agent", row=ROW, readers={"egress.hosts": read_hosts},
+                  comparators={"egress.hosts": compare_hosts, "agent.zones": compare_zones},
+                  domain=reading_domain, policy=policy, domain_document=domain_document,
+                  compile_checks=compile_checks)
+kinds.register(KIND)

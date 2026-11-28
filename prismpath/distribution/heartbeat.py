@@ -31,10 +31,10 @@ def facet(image: bytes):
     key = hashlib.sha256(bytes(image)).hexdigest()
     codec = _FACETS.get(key)
     if codec is None:
+        from prismpath.distribution import kinds
         from prismpath.kernel.decision import Policy
-        from prismpath.kernel.domain import AGENT_DOMAIN
         from prismpath.telemetry.spiral_groups import GroupedFacet
-        policy = Policy(bytes(image), AGENT_DOMAIN)
+        policy = Policy(bytes(image), kinds.reading_domain("agent"))       # the agent kind's domain for every kind (Q4)
         codec = _FACETS[key] = GroupedFacet(policy.graph, policy.flow)
     return codec
 

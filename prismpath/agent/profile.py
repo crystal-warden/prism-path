@@ -57,7 +57,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 from prismpath.kernel import canon2
 from prismpath.kernel import domain as _kernel_domain
 from prismpath.kernel.decision import kind_of  # noqa: F401 - the kind `Policy.decide` gives a reading, for the widening walk
-from prismpath.kernel.domain import AGENT_DOMAIN, MAX_INT_RANGE, DomainError  # noqa: F401
+from prismpath.kernel.domain import MAX_INT_RANGE, DomainError, ReadingDomain  # noqa: F401
 from prismpath.kernel.predicates import holds as _holds
 
 FORMAT = "prismpath.profile/1"          # a profile with no `net`: the bytes (and hash) every such profile has always had
@@ -69,8 +69,34 @@ WORKSPACE = "workspace"        # the role of the one read write path; the runner
 MAX_PROCESSES = 64
 TIMEOUT_S = 30                 # the harness's limit for one call (integrations/governed_harness/sandbox.py)
 
-# the values each classifier field takes (the field list at the top of prismpath/agent/classifier.py), the agent's
-# reading domain, which the kernel holds (prismpath/kernel/domain.py)
+# The agent's reading domain: the values each classifier field takes (the field list at the top of
+# prismpath/agent/classifier.py) and the two session fields (prismpath/agent/session_state.py). The agent kind registers
+# it (prismpath/agent/dist_kind.py), and the trust path asks the kind registry for it.
+AGENT_DOMAIN = ReadingDomain(
+    name="agent",
+    categories={
+        "tool": ("list_dir", "read_file", "write_file", "delete_path", "run_command", "git", "connect", "unknown"),
+        "path_scope": ("none", "workspace", "outside", "unknown"),
+        "command_class": ("none", "read_only", "mutating", "network", "git", "unknown"),
+        "git_op": ("none", "local_read", "local_write", "mutating", "push", "network", "unknown"),
+        "remote_class": ("none", "allowed", "other"),
+        "net_dest": ("none", "model_api", "allowed_host", "other", "unknown"),
+        "proc_class": ("none", "single", "tree", "unknown"),
+        "zone_reach": ("none", "protected", "unknown"),
+        "session_protected_changes": ("none", "some"),
+        "session_shell_runs": ("none", "few", "many"),
+    },
+    # What the classifier never produces: a `net_dest` other than none only for a `connect`, a `proc_class` other than
+    # none only for a `run_command`, a `zone_reach` other than none only for a file tool or a `run_command`. A group
+    # of values is skipped only when it holds no empty value and its gate group holds none of the gate values, so a
+    # policy whose rules cannot tell the gate values apart is still walked whole. Without this the three fields
+    # multiply the walk by their classes.
+    unproduced=(("net_dest", "none", "tool", ("connect",)), ("proc_class", "none", "tool", ("run_command",)),
+                ("zone_reach", "none", "tool", ("write_file", "delete_path", "run_command"))),
+    name_field="zone_name",
+    name_max=512,
+    defaults={"session_protected_changes": "some", "session_shell_runs": "many"},
+)
 KNOWN_CATEGORIES = AGENT_DOMAIN.categories
 REQUIRED_FIELDS = ("path_scope", "command_class", "git_op")
 # What the classifier never produces, so the walk does not decide it (`ReadingDomain.unproduced`)
