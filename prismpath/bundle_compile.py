@@ -14,12 +14,12 @@ import os
 def _gather_compile_inputs(flow_md_path: str, target_tier: str):
     """Gather and validate inputs for compiling a JS bundle."""
     from prismpath.kernel.parser import parse_file
-    from prismpath.kernel import analysis
+    from prismpath import flow_files
     from prismpath.routing import lockfile
     import base64
 
     parsed_graph = parse_file(flow_md_path)
-    tier_tree = analysis.portability_tier_tree(parsed_graph, flow_md_path)
+    tier_tree = flow_files.portability_tier_tree(parsed_graph, flow_md_path)
     flow_tier = tier_tree["tier"]
 
     if target_tier == "p0" and flow_tier != "P0":

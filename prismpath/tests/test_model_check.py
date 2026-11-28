@@ -12,7 +12,7 @@ import pytest
 
 from prismpath.kernel import model_check as mc
 from prismpath.kernel.parser import parse
-from prismpath.kernel.analysis import portability_tier
+from prismpath.flow_files import portability_tier
 
 
 # ---------------------------------------------------------------- Level M classification

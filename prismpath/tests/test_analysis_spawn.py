@@ -8,6 +8,7 @@ Two layers:
   * cross-file (analysis.analyze_composition): the child flow must exist, parse, reach a terminal, and
     satisfy the parent's @expect against the child's @emits.
 """
+from prismpath import flow_files
 from prismpath.kernel.parser import parse, parse_file
 from prismpath.kernel import analysis
 
@@ -123,7 +124,7 @@ Combine.
 def test_missing_child_file_is_an_error(tmp_path):
     parent_path = _parent(tmp_path, "@spawn(child=nope.md, join=all_done)")
     graph = parse_file(str(parent_path))
-    assert "spawn-missing-child" in _codes(analysis.analyze_composition(graph, str(parent_path)))
+    assert "spawn-missing-child" in _codes(flow_files.analyze_composition(graph, str(parent_path)))
 
 
 def test_child_without_terminal_is_an_error(tmp_path):
@@ -138,14 +139,14 @@ Never terminates.
 """)
     parent_path = _parent(tmp_path, "@spawn(child=loop.md, join=all_done)")
     graph = parse_file(str(parent_path))
-    assert "spawn-child-no-terminal" in _codes(analysis.analyze_composition(graph, str(parent_path)))
+    assert "spawn-child-no-terminal" in _codes(flow_files.analyze_composition(graph, str(parent_path)))
 
 
 def test_valid_composition_has_no_spawn_findings(tmp_path):
     (tmp_path / "child.md").write_text(VALID_CHILD)
     parent_path = _parent(tmp_path, "@spawn(child=child.md, join=all_done)", "@expect(verdict)")
     graph = parse_file(str(parent_path))
-    comp = analysis.analyze_composition(graph, str(parent_path))
+    comp = flow_files.analyze_composition(graph, str(parent_path))
     assert not [finding for finding in comp if finding.code.startswith("spawn-")]      # child exists, terminal, @expect met
 
 
@@ -153,7 +154,7 @@ def test_expect_not_emitted_by_child_warns(tmp_path):
     (tmp_path / "child.md").write_text(VALID_CHILD)                  # child @emits(verdict), not `score`
     parent_path = _parent(tmp_path, "@spawn(child=child.md, join=all_done)", "@expect(verdict, score)")
     graph = parse_file(str(parent_path))
-    comp = analysis.analyze_composition(graph, str(parent_path))
+    comp = flow_files.analyze_composition(graph, str(parent_path))
     unmet = [finding for finding in comp if finding.code == "spawn-expect-unmet"]
     assert unmet and unmet[0].severity == "warning" and "score" in unmet[0].message
 
@@ -174,7 +175,7 @@ Done.
 """)
     parent_path = _parent(tmp_path, "@spawn(child=bare.md, join=all_done)", "@expect(verdict)")
     graph = parse_file(str(parent_path))
-    assert "spawn-expect-unmet" not in _codes(analysis.analyze_composition(graph, str(parent_path)))
+    assert "spawn-expect-unmet" not in _codes(flow_files.analyze_composition(graph, str(parent_path)))
 
 
 def test_composition_check_is_separate_from_pure_analyze(tmp_path):
@@ -183,7 +184,7 @@ def test_composition_check_is_separate_from_pure_analyze(tmp_path):
     parent_path = _parent(tmp_path, "@spawn(child=ghost.md, join=all_done)")
     graph = parse_file(str(parent_path))
     assert "spawn-missing-child" not in _codes(analysis.analyze(graph))
-    assert "spawn-missing-child" in _codes(analysis.analyze_composition(graph, str(parent_path)))
+    assert "spawn-missing-child" in _codes(flow_files.analyze_composition(graph, str(parent_path)))
 
 
 def test_spawn_expect_type_mismatch(tmp_path):
@@ -202,7 +203,7 @@ Done.
     # Parent expects score to be a number, but child emits it as a bool
     parent_path = _parent(tmp_path, "@spawn(child=child.md, join=all_done)", "@expect(score=number)")
     graph = parse_file(str(parent_path))
-    comp = analysis.analyze_composition(graph, str(parent_path))
+    comp = flow_files.analyze_composition(graph, str(parent_path))
     mismatches = [finding for finding in comp if finding.code == "spawn-expect-type-mismatch"]
     assert len(mismatches) == 1
     assert mismatches[0].node == "dispatch"

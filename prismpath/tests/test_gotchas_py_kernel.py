@@ -9,7 +9,7 @@ bytes rather than three quarters of a base64 length.
 """
 import sys
 
-from prismpath import canon
+from prismpath import canon, flow_files
 from prismpath.kernel import analysis
 from prismpath.kernel.parser import Graph, Node, parse_file
 
@@ -68,7 +68,7 @@ def test_unreadable_lock_is_reported_not_silently_treated_as_absent(tmp_path):
     flow_path = tmp_path / "sem.md"
     flow_path.write_text(SEMANTIC_FLOW)
     (tmp_path / "sem.lock").write_text("{ this is not json")
-    tier = analysis.portability_tier(parse_file(str(flow_path)), str(flow_path))
+    tier = flow_files.portability_tier(parse_file(str(flow_path)), str(flow_path))
     assert tier["tier"] == "P2"
     assert tier["lock"] is None                       # nothing usable was loaded, so the tier degrades
     assert tier["lock_error"] and "sem.lock" in tier["lock_error"]
@@ -83,5 +83,5 @@ def test_readable_lock_has_no_lock_error(tmp_path):
         "embedder": {"name": "stub", "dim": 8, "probe": "p", "probe_vec": ""},
         "delta_micro": 50000,
         "conditions": {"the change is correct and complete": ""}}))
-    tier = analysis.portability_tier(parse_file(str(flow_path)), str(flow_path))
+    tier = flow_files.portability_tier(parse_file(str(flow_path)), str(flow_path))
     assert tier["tier"] == "P1" and tier["lock_error"] is None

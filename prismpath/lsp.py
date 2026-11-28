@@ -32,6 +32,7 @@ import re
 import sys
 from typing import Dict, List, Optional
 
+from prismpath import flow_files
 from prismpath.kernel import analysis
 from prismpath.kernel import predicates
 from prismpath.kernel import policy_source
@@ -275,7 +276,7 @@ class Server:
             path = _uri_to_path(uri)
             if path:
                 try:
-                    findings += analysis.analyze_composition(graph, path)
+                    findings += flow_files.analyze_composition(graph, path)
                 except Exception:                       # noqa: BLE001 - unsaved/moved children
                     pass
             if self.semantic:
