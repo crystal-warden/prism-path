@@ -1,0 +1,347 @@
+{
+ "prismpath": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "usage: prismpath [-h] [--version] <command> ...\n\nCommand-line interface for prismpath\n\npositional arguments:\n  <command>\n\noptions:\n  -h, --help  show this help message and exit\n  --version   show program's version number and exit\n\ncommands, by who runs them\n\nProcess owner: author and test the policy of record:\n  init         Scaffold a starter flow - zero to a running, validated flow in two commands\n  validate     Static analysis\n  test         Assert a flow's routing from a Markdown fixture (no LLM)\n  graph        Render the flow as a Mermaid diagram (solid=deterministic, dashed=semantic)\n  lint         Static analysis + semantic-ambiguity check (needs the embedder)\n  context      Emit the verified facts PrismPath can PROVE about a flow (nodes, edges, declared...\n  policy       Write a core policy as readable rules\n\nEngineer: implement the interface once, calibrate for deployment, deliver:\n  contract     Derive each node's worker output schema from its `when` edges\n  capability   Report which targets a flow compiles to (python / portable js-rust-go / Level M...\n  compile      Compile a flow and its lock into a single-file portable JS bundle\n  portable     Is this flow (and its @spawn children) in the ML-free portable subset? Portable...\n  lock         Write a routing lockfile (committed condition embeddings) for reproducible routing\n  verify       Bounded model checking over the decidable tiers\n  plugins      Audit the plugin ecosystem\n  ci-report    Markdown PR report for changed flows\n  lsp          Language Server over stdio\n  import       Import a LangGraph StateGraph (.py) as a skeleton flow (with TODO conditions)\n  calibrate    Calibrate the escalation threshold tau from labeled routing decisions\n  label        Hand-label routing decisions in a JSONL log (calibration data)\n  annotate     Blind-label a benchmark (labels hidden) for inter-annotator kappa (gate zero)\n  kappa        Cohen's kappa between two annotation files (+ adjudicated gold / disagreements)\n  centroids    Cross-validate prototype/centroid routing vs zero-shot embedding on a benchmark\n  authorize    Sign a Markdown flow with the policy authority key, or verify that signature\n  canonicalize Write a canon/2 document a person wrote (any spacing, member order or escapes) as...\n\nOperator: run the system day to day, swap and attest policy (Mission Control is the console; this is the scripted path):\n  run          Parse the flow and run it (mock worker by default; --worker ollama:MODEL for a real...\n  resume       Resume a suspended/crashed run from a JSON checkpoint (mock agent); like run, it...\n  compose      Advance pending fan-out/composition runs in the queue\n  swap         Secure policy hot-swap\n  trail        Summarise an audit log over a window\n  agent        Govern a Claude Code session\n  gateway      Protect a resource\n  dist         Policy distribution\n\nAssessor: anchor, verify, and read the evidence:\n  ledger       Evidence\n  evidence     Verify a signed core run\n  facet        Facet telemetry\n\n`swap` splits by action: keygen, envelope, and pack are the engineer's setup; swap and attest are the operator's; verify is the assessor's. `ledger keygen` is the engineer's setup too: it makes the deployment's instance key, which signs root statements and is never the policy authority key. `authorize` splits the same way as `swap`: sign is the engineer's (it holds the authority key), verify is the assessor's.\n"
+ },
+ "prismpath agent": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "usage: prismpath agent [-h] <action> ...\n\npositional arguments:\n  <action>\n    init      make the authority and instance keys in the user config\n              directory, record the signed agent_default policy, and write the\n              hook entries into the project's .claude/settings.json (shown\n              first; written with --yes or a y at the prompt)\n    hook      what Claude Code runs: the hook JSON on stdin, the answer on\n              stdout; any failure is a deny with cause agent:hook-error, never\n              an allow\n    verify    seal the open runs and verify every run with both keys pinned,\n              every receipt replayed through the reference kernel\n    status    the keys and their ids, the policy hash, the project's hook\n              entries and every run with its receipt count, open or sealed\n    rules     the installed policy's rules in order, each with its hits and\n              last hit counted from the receipts that verify, the core's own\n              refusals, the rules never matched and the rules no reading can\n              reach; it changes nothing\n    approvals\n              the escalate rules whose asks were approved (and the call ran)\n              at least N times, with counts and example readings as classes\n              only: candidates for the owner to sign into the policy; it\n              changes nothing and adopts nothing\n    doctor    check the whole setup (key modes and pairs, the policy, the hook\n              entries and their interpreter, a timed dry run, the runs, free\n              disk) and print ok, warn or fail with the fixing command for\n              each; it changes nothing\n    zones     the owner's protected code: `set` records and signs a zone file\n              (the protected names, bound to the recorded policy and the\n              project), `status` says what the hook will do about zones,\n              `warm` asks Context Cloud about every file so the hook answers\n              from the cache\n    run       run a program as the agent under the sandbox (Linux, bubblewrap\n              and socat): the workspace is the only writable path, its control\n              paths and the staged settings are read only, and the only way\n              out is a proxy that allows the model API. A \"yes, and don't ask\n              again\" that Claude Code would save to\n              .claude/settings.local.json fails here, by design\n\noptions:\n  -h, --help  show this help message and exit\n"
+ },
+ "prismpath agent approvals": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "usage: prismpath agent approvals [-h] [--min N] [--since ISO_TIME] [--json]\n\noptions:\n  -h, --help        show this help message and exit\n  --min N           list a rule approved at least this many times (default 3)\n  --since ISO_TIME  count only runs whose time is at or after this ISO 8601\n                    time\n  --json            machine readable output\n"
+ },
+ "prismpath agent doctor": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "usage: prismpath agent doctor [-h] [--project PROJECT] [--json]\n\noptions:\n  -h, --help         show this help message and exit\n  --project PROJECT  the project whose .claude/settings.json is checked\n                     (default as for init)\n  --json             machine readable output\n"
+ },
+ "prismpath agent hook": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "usage: prismpath agent hook [-h] [--json]\n\noptions:\n  -h, --help  show this help message and exit\n  --json      machine readable output\n"
+ },
+ "prismpath agent init": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "usage: prismpath agent init [-h] [--project PROJECT] [--yes] [--follow STREAM]\n                            [--anchor FILE] [--confirm FINGERPRINT]\n                            [--policy STARTER|FILE] [--json]\n\noptions:\n  -h, --help            show this help message and exit\n  --project PROJECT     the project directory (default $CLAUDE_PROJECT_DIR,\n                        else the current directory)\n  --yes                 write the settings change without asking\n  --follow STREAM       follow a policy stream instead: the home holds no\n                        authority key, takes the trust anchor given with\n                        --anchor, shows its fingerprint, and after --confirm\n                        commits the releases the controller offers (`prismpath\n                        dist`)\n  --anchor FILE         with --follow: the stream's trust anchor\n  --confirm FINGERPRINT\n                        with --follow: the anchor's fingerprint, as the owner\n                        gave it\n  --policy STARTER|FILE\n                        the policy to record. A starter is strict (refuses\n                        what it cannot read and shell commands that change\n                        files), default (asks about those), review (also asks\n                        about every change inside the project) or session\n                        (default, and also asks about later calls when the\n                        session already changed protected code or ran many\n                        shell commands). A FILE is your own rules source\n                        (.rules.md) or image (.core.json), compiled and\n                        checked as `prismpath policy compile --target agent`\n                        checks it (default: the one recorded, else default)\n  --json                machine readable output\n"
+ },
+ "prismpath agent rules": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "usage: prismpath agent rules [-h] [--since ISO_TIME] [--json]\n\noptions:\n  -h, --help        show this help message and exit\n  --since ISO_TIME  count only runs whose time is at or after this ISO 8601\n                    time\n  --json            machine readable output\n"
+ },
+ "prismpath agent run": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "usage: prismpath agent run [-h] [--workspace WORKSPACE] [--credential FILE]\n                           [--egress-log FILE] [--max-processes MAX_PROCESSES]\n                           [--allow-host HOST]\n                           [--local-model http://HOST:PORT] [--ro PATH]\n                           ...\n\npositional arguments:\n  program               -- PROGRAM [ARGS]\n\noptions:\n  -h, --help            show this help message and exit\n  --workspace WORKSPACE\n                        the directory the agent may write (default: the\n                        current directory)\n  --credential FILE     copy this one file into the sandbox as its Claude\n                        credential (off unless given; PrismPath never looks\n                        for a login of its own)\n  --egress-log FILE     keep the proxy's log of every connection attempt here\n                        (default: in the run directory of the egress run,\n                        beside its receipts)\n  --max-processes MAX_PROCESSES\n                        the process limit inside the sandbox\n  --allow-host HOST     a host name the policy may allow on port 443 (net_dest\n                        allowed_host); repeatable. The digest of the sorted\n                        list is recorded with the run\n  --local-model http://HOST:PORT\n                        a fixed route to one local model server: the sandbox\n                        reaches only that host and port, at 127.0.0.1:PORT\n                        inside, and each use is logged (a separate route, not\n                        a proxy exception)\n  --ro PATH             also show this host path to the program, read only\n                        (repeatable)\n"
+ },
+ "prismpath agent status": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "usage: prismpath agent status [-h] [--project PROJECT] [--json]\n\noptions:\n  -h, --help         show this help message and exit\n  --project PROJECT  the project whose .claude/settings.json is read (default\n                     as for init)\n  --json             machine readable output\n"
+ },
+ "prismpath agent verify": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "usage: prismpath agent verify [-h] [--tamper-demo] [--json]\n\noptions:\n  -h, --help     show this help message and exit\n  --tamper-demo  also copy a run to a temporary directory, flip one byte, show\n                 the verify refuse it, and delete the copy\n  --json         machine readable output\n"
+ },
+ "prismpath agent zones": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "usage: prismpath agent zones [-h] [--project PROJECT] [--protected NAME]\n                             [--protected-file FILE] [--index FILE] [--json]\n                             {set,status,warm}\n\npositional arguments:\n  {set,status,warm}\n\noptions:\n  -h, --help            show this help message and exit\n  --project PROJECT     the project the zones are for (default as for init)\n  --protected NAME      set: a protected function, class or module by its\n                        dotted name, as Context Cloud spells it (repeat, or\n                        comma separate)\n  --protected-file FILE\n                        set: a file with one protected name per line\n  --index FILE          set: the Context Cloud index (default\n                        .contextcloud/index.sqlite in the project)\n  --json                machine readable output\n"
+ },
+ "prismpath annotate": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "usage: prismpath annotate [-h] --out OUT [--flows-dir FLOWS_DIR]\n                          [--limit LIMIT]\n                          benchmark\n\npositional arguments:\n  benchmark             labeled benchmark JSONL (labels are hidden)\n\noptions:\n  -h, --help            show this help message and exit\n  --out OUT             per-annotator output JSONL (resumable)\n  --flows-dir FLOWS_DIR\n                        flows dir (default: package flows/)\n  --limit LIMIT         max cases this session\n"
+ },
+ "prismpath authorize": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "usage: prismpath authorize [-h] [--priv PRIV] [--pub PUB [PUB ...]]\n                           [--version VERSION] [--revoked REVOKED]\n                           [--state-dir DIR]\n                           {sign,verify} flow_md\n\npositional arguments:\n  {sign,verify}        sign | verify\n  flow_md              Path to the flow markdown file\n\noptions:\n  -h, --help           show this help message and exit\n  --priv PRIV          authority private key (sign)\n  --pub PUB [PUB ...]  authority public key (sign: the signer's; verify: the\n                       trusted keys)\n  --version VERSION    sign: the monotonic version of this authorization (1,\n                       2, ...)\n  --revoked REVOKED    verify: revocation list JSON of key ids\n  --state-dir DIR      verify: also check the version against the floor\n                       accepted in DIR\n"
+ },
+ "prismpath calibrate": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "usage: prismpath calibrate [-h] [--alpha ALPHA] [--out OUT] labels\n\npositional arguments:\n  labels         labeled routing-decision JSONL\n\noptions:\n  -h, --help     show this help message and exit\n  --alpha ALPHA  target risk (default 0.05)\n  --out OUT      write calibration JSON to this path\n"
+ },
+ "prismpath canonicalize": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "usage: prismpath canonicalize [-h] [--out PATH | --in-place | --check]\n                              document\n\npositional arguments:\n  document    the document to canonicalize, or - for standard input\n\noptions:\n  -h, --help  show this help message and exit\n  --out PATH  write the canonical bytes and a line feed here (default:\n              standard output)\n  --in-place  replace the document with its canonical bytes and a line feed\n  --check     write nothing; exit 1 when the document is not already its\n              canonical bytes\n"
+ },
+ "prismpath capability": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "usage: prismpath capability [-h] [--json] flow_md\n\npositional arguments:\n  flow_md     Path to the flow markdown file\n\noptions:\n  -h, --help  show this help message and exit\n  --json      machine-readable output\n"
+ },
+ "prismpath centroids": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "usage: prismpath centroids [-h] [--folds FOLDS] [--prior PRIOR]\n                           [--flows-dir FLOWS_DIR]\n                           benchmark\n\npositional arguments:\n  benchmark             labeled benchmark JSONL\n\noptions:\n  -h, --help            show this help message and exit\n  --folds FOLDS\n  --prior PRIOR         shrinkage prior weight\n  --flows-dir FLOWS_DIR\n"
+ },
+ "prismpath ci-report": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "usage: prismpath ci-report [-h] --base BASE [--out OUT]\n\noptions:\n  -h, --help   show this help message and exit\n  --base BASE  git ref to diff against (the PR base sha/branch)\n  --out OUT    write the report here instead of stdout\n"
+ },
+ "prismpath compile": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "usage: prismpath compile [-h] --tier {p0,p1} [--out OUT] flow_md\n\npositional arguments:\n  flow_md         Path to the flow markdown file\n\noptions:\n  -h, --help      show this help message and exit\n  --tier {p0,p1}  portability tier to compile (p0: ML-free, p1: embedded\n                  locked vectors)\n  --out OUT       output path for the .mjs bundle (default: <flow>.bundle.mjs)\n"
+ },
+ "prismpath compose": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "usage: prismpath compose [-h] [--queue QUEUE] [--require-authorization]\n                         [--authority-pub PUB [PUB ...]] [--revoked REVOKED]\n                         [--state-dir DIR]\n\noptions:\n  -h, --help            show this help message and exit\n  --queue QUEUE         queue dir to scan (default: the prismpath queue dir)\n  --require-authorization\n                        refuse a flow whose flow manifest is missing, edited\n                        after signing, signed by an unknown or revoked\n                        authority key, or older than a version already\n                        accepted (exit 2); also\n                        PRISMPATH_REQUIRE_AUTHORIZATION=1\n  --authority-pub PUB [PUB ...]\n                        trusted authority public key(s) (`swap keygen`);\n                        default: PRISMPATH_AUTHORITY_PUB, paths separated by\n                        the platform path separator\n  --revoked REVOKED     revocation list JSON of authority key ids\n  --state-dir DIR       where the accepted flow versions are kept (default:\n                        PRISMPATH_STATE_DIR, else ./.prismpath)\n"
+ },
+ "prismpath context": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "usage: prismpath context [-h] [--json] flow_md\n\npositional arguments:\n  flow_md     Path to the flow markdown file\n\noptions:\n  -h, --help  show this help message and exit\n  --json      machine-readable output\n"
+ },
+ "prismpath contract": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "usage: prismpath contract [-h] [--json] flow_md\n\npositional arguments:\n  flow_md     Path to the flow markdown file\n\noptions:\n  -h, --help  show this help message and exit\n  --json      emit the per-node schemas as JSON (constrained-decoding grammar)\n"
+ },
+ "prismpath dist": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "usage: prismpath dist [-h] <action> ...\n\npositional arguments:\n  <action>\n    seal         sign a distribution envelope for a body (the owner, where the\n                 key is)\n    widen        sign the widening statement a release that allows more needs\n                 (W4)\n    anchor       write the trust anchor of a stream from authority public keys\n    install      seal an install set: an action floor, a fallback policy or a\n                 ceiling (section 21)\n    install-trust\n                 seal an install trust statement (IS11)\n    verify       run the verifier on a sealed envelope and its body\n    serve        run the reference controller's HTTP listener on its directory\n    enroll       enrol a PEP by its instance public key, and serve its stream\n    acknowledge  acknowledge a held install set or install trust statement by\n                 the envelope ids of its statements, so the controller offers\n                 it (H13)\n    offer        offer a stored release to a group\n    commit       send commit to the members of a group's rollout that staged\n    abort        end a group's rollout and send abort to its members\n    fleet        print the fleet view (F4), or export its state records and\n                 findings\n    revoke       seal the next revocation list (the owner, where the key is)\n    rotate       seal a key rotation, signed by a trusted key and the new one\n    rekey        rotate, release under the new key, commit, then revoke the\n                 old key\n    pep          run a host enforcement point (provision, poll, status,\n                 rollback)\n\noptions:\n  -h, --help     show this help message and exit\n"
+ },
+ "prismpath dist abort": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "usage: prismpath dist abort [-h] --dir DIR --key FILE [--group GROUP]\n\noptions:\n  -h, --help     show this help message and exit\n  --dir DIR      the controller's directory\n  --key FILE     the controller's instance key\n  --group GROUP\n"
+ },
+ "prismpath dist acknowledge": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "usage: prismpath dist acknowledge [-h] --dir DIR --key FILE --envelope\n                                  ENVELOPE_ID [--by BY]\n\noptions:\n  -h, --help            show this help message and exit\n  --dir DIR             the controller's directory\n  --key FILE            the controller's instance key\n  --envelope ENVELOPE_ID\n                        an envelope id of the set, repeatable; name every\n                        statement of it, never a release id\n  --by BY               the acknowledger, by default the login running this\n                        command\n"
+ },
+ "prismpath dist anchor": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "usage: prismpath dist anchor [-h] --pub FILE --target TARGET --stream STREAM\n                             [--controller FILE] [--fresh SECONDS]\n                             [--install-pub FILE]\n                             [--install-threshold INSTALL_THRESHOLD]\n                             [--operator-pub FILE] [--install-seq INSTALL_SEQ]\n                             [--domain SHA256] --out FILE\n\noptions:\n  -h, --help            show this help message and exit\n  --pub FILE            an authority public key, 32 raw bytes (`swap keygen`),\n                        repeatable\n  --target TARGET       the target kind of the stream's PEPs\n  --stream STREAM\n  --controller FILE     the controller's instance public key, 32 raw bytes;\n                        writes a prismpath.dist-trust/2 anchor that names it\n                        as the first controller key (K6, P4)\n  --fresh SECONDS       with --controller, the longest lifetime of a fresh\n                        statement; 0 leaves freshness off (H16)\n  --install-pub FILE    an install public key, 32 raw bytes, repeatable;\n                        writes the anchor's install part (P4)\n  --install-threshold INSTALL_THRESHOLD\n                        the install threshold (IS2)\n  --operator-pub FILE   an operator public key, 32 raw bytes, repeatable (OP1)\n  --install-seq INSTALL_SEQ\n                        the install trust sequence the keys stand at\n  --domain SHA256       the hash of the reading domain the PEP was built with\n                        (P4, CL4); default the one this build gives the target\n                        kind\n  --out FILE\n"
+ },
+ "prismpath dist commit": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "usage: prismpath dist commit [-h] --dir DIR --key FILE [--group GROUP]\n\noptions:\n  -h, --help     show this help message and exit\n  --dir DIR      the controller's directory\n  --key FILE     the controller's instance key\n  --group GROUP\n"
+ },
+ "prismpath dist enroll": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "usage: prismpath dist enroll [-h] --dir DIR --key FILE --pub FILE --anchor\n                             FILE [--qualification FILE] [--group GROUP]\n                             [--rule {each,all}] [--install ENVELOPE_ID]\n                             [--layout FILE]\n\noptions:\n  -h, --help            show this help message and exit\n  --dir DIR             the controller's directory\n  --key FILE            the controller's instance key\n  --pub FILE            the PEP's instance public key, 32 raw bytes\n  --anchor FILE         the trust anchor of its stream\n  --qualification FILE  a host stream's qualification envelope\n  --group GROUP\n  --rule {each,all}\n  --install ENVELOPE_ID\n                        the envelope id of an install statement the PEP\n                        printed beside the anchor, repeatable; enrolls its\n                        install id, which acknowledges a first set it came\n                        with (P2 step 5, H13)\n  --layout FILE         for a table kind, the layout document its action\n                        floors are checked against (AF10)\n"
+ },
+ "prismpath dist fleet": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "usage: prismpath dist fleet [-h] --dir DIR --key FILE\n                            [--export {otel,ocsf,intoto}]\n\noptions:\n  -h, --help            show this help message and exit\n  --dir DIR             the controller's directory\n  --key FILE            the controller's instance key\n  --export {otel,ocsf,intoto}\n                        write each state record and finding as JSON lines:\n                        OpenTelemetry events, OCSF 1.10.0, or an in-toto\n                        statement about each commit signed by the controller's\n                        instance key\n"
+ },
+ "prismpath dist install": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "usage: prismpath dist install [-h] --kind {floor,fallback,ceiling}\n                              [--set AS=FILE] [--list FILE] [--empty] --stream\n                              STREAM --seq SEQ --target TARGET --key PEM\n                              [--not-before NOT_BEFORE] [--qualification FILE]\n                              [--follows DIR] [--ceiling DIR] [--widens]\n                              [--yes] [--held DIR] [--staged] [--canary GROUP]\n                              [--rate ALLOWS/WINDOW]\n                              [--answer-rate ALLOWS/WINDOW] [--layout FILE]\n                              [--command COMMAND_REGISTER] --out DIR\n\noptions:\n  -h, --help            show this help message and exit\n  --kind {floor,fallback,ceiling}\n                        the install kind: an action floor, a fallback policy\n                        or a ceiling\n  --set AS=FILE         an artifact of the set and its body, repeatable, such\n                        as policy.ppt=table.ppt\n  --list FILE           for a ceiling of a kind that cannot decide, a table\n                        the list holds, repeatable (CL1)\n  --empty               the empty set, which withdraws the held one (IS6)\n  --stream STREAM\n  --seq SEQ             the install sequence of this kind on the stream\n  --target TARGET       the one target kind of the set (IS1)\n  --key PEM             an install private key\n  --not-before NOT_BEFORE\n                        Unix seconds (default now)\n  --qualification FILE  for a policy.ppt, fill its meta from the image and\n                        this qualification envelope\n  --follows DIR         the set this one follows, as this command wrote it;\n                        sets replaces and is compared (IS12)\n  --ceiling DIR         the held ceiling, as this command wrote it (CL3)\n  --widens              say the set allows more than the one it follows\n  --yes                 sign the install change statement for a floor or\n                        fallback table the comparator finds allows nothing\n                        more, and a ceiling after its lapse preview, without\n                        asking at the terminal (IS15, CL5)\n  --held DIR            a controller directory, read and never written: a\n                        ceiling's lapse preview names the releases it is above\n                        and the machines that run each (CL5, CL6)\n  --staged              a ceiling for a planned change: the controller offers\n                        it to the canary group first and to the rest once the\n                        canary reports it applied with no unexpected lapse\n                        (CL7)\n  --canary GROUP        with --staged, the controller group offered the\n                        ceiling first (default canary)\n  --rate ALLOWS/WINDOW  a floor's signed rate of overrides (AF8)\n  --answer-rate ALLOWS/WINDOW\n                        a floor's signed rate of operator allows (OP4)\n  --layout FILE         a table floor's layout document (AF10)\n  --command COMMAND_REGISTER\n                        a table floor's command register (AF9)\n  --out DIR             where each <as>.sealed and <as>.body is written\n"
+ },
+ "prismpath dist install-trust": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "usage: prismpath dist install-trust [-h] --current-pub FILE\n                                    --current-threshold CURRENT_THRESHOLD\n                                    [--current-operator FILE] --install-pub\n                                    FILE [--operator-pub FILE] --threshold\n                                    THRESHOLD --retired FILE --stream STREAM\n                                    --seq SEQ --target TARGET --key PEM\n                                    [--not-before NOT_BEFORE] --out FILE\n\noptions:\n  -h, --help            show this help message and exit\n  --current-pub FILE    an install public key as the PEP holds it now,\n                        repeatable\n  --current-threshold CURRENT_THRESHOLD\n  --current-operator FILE\n  --install-pub FILE    a key of the new set\n  --operator-pub FILE\n  --threshold THRESHOLD\n  --retired FILE        the engineer's list of every retired key id, one per\n                        line, kept here and appended to (K4): a key once\n                        retired is never added again\n  --stream STREAM\n  --seq SEQ             the install trust sequence, the held one plus one\n  --target TARGET\n  --key PEM             a signer: the current install keys at the threshold\n                        and every key the statement adds\n  --not-before NOT_BEFORE\n                        Unix seconds (default now)\n  --out FILE            the sealed statement; the body goes beside it\n"
+ },
+ "prismpath dist offer": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "usage: prismpath dist offer [-h] --dir DIR --key FILE [--group GROUP] --stream\n                            STREAM --seq SEQ [--delay MS]\n\noptions:\n  -h, --help       show this help message and exit\n  --dir DIR        the controller's directory\n  --key FILE       the controller's instance key\n  --group GROUP\n  --stream STREAM\n  --seq SEQ\n  --delay MS       the flip delay of B8\n"
+ },
+ "prismpath dist pep": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "usage: prismpath dist pep [-h] --state DIR [--kind {host,agent,gateway}] --key\n                          FILE [--anchor FILE] [--qualification FILE]\n                          [--confirm FINGERPRINT] [--url URL] [--once]\n                          [--interval INTERVAL] [--wait WAIT]\n                          {provision,poll,status,rollback}\n\npositional arguments:\n  {provision,poll,status,rollback}\n\noptions:\n  -h, --help            show this help message and exit\n  --state DIR           the PEP's state directory\n  --kind {host,agent,gateway}\n                        host (a policy host), agent (an agent home that\n                        `prismpath agent init --follow` made) or gateway (a\n                        gateway home holding its instance key and no authority\n                        key)\n  --key FILE            the PEP's instance key (`ledger keygen`)\n  --anchor FILE         provision: the trust anchor\n  --qualification FILE  provision: the qualification envelope\n  --confirm FINGERPRINT\n                        provision: the anchor's fingerprint\n  --url URL             poll: the controller, http://host:port\n  --once                poll: one round, then exit\n  --interval INTERVAL   poll: seconds between rounds (B3)\n  --wait WAIT           poll: hold each request open up to this long\n"
+ },
+ "prismpath dist rekey": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "usage: prismpath dist rekey [-h] --dir DIR --key FILE --old PEM --new PEM\n                            --body FILE [--qualification FILE] [--group GROUP]\n                            --stream STREAM --seq SEQ --target TARGET\n                            [--not-before NOT_BEFORE] --expires EXPIRES\n                            [--timeout TIMEOUT] [--widens] [--yes]\n\noptions:\n  -h, --help            show this help message and exit\n  --dir DIR             the controller's directory\n  --key FILE            the controller's instance key\n  --old PEM             the authority key in use\n  --new PEM             the authority key that replaces it\n  --body FILE           the policy to release under the new key\n  --qualification FILE\n  --group GROUP\n  --stream STREAM\n  --seq SEQ             the release's seq\n  --target TARGET       a target kind (repeatable)\n  --not-before NOT_BEFORE\n  --expires EXPIRES\n  --timeout TIMEOUT     seconds to wait for the commit\n  --widens              the release may allow more than the table it replaces;\n                        without it a table the comparator finds larger is\n                        refused (W9)\n  --yes                 sign the change statement for a table the comparator\n                        finds allows nothing more (W11)\n"
+ },
+ "prismpath dist revoke": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "usage: prismpath dist revoke [-h] [--entry KIND=VALUE] [--drop KIND=VALUE]\n                             [--floor STREAM=SEQ] [--seq SEQ]\n                             [--target TARGET] --key PEM --held DIR\n                             [--not-before NOT_BEFORE] --out FILE\n\noptions:\n  -h, --help            show this help message and exit\n  --entry KIND=VALUE    add envelope=<id>, policy=<hash> or key=<key id>\n                        (repeatable)\n  --drop KIND=VALUE     leave out an envelope or a policy a floor has passed\n                        (repeatable)\n  --floor STREAM=SEQ    raise a floor (repeatable)\n  --seq SEQ             the trust sequence (default the held one plus one)\n  --target TARGET       a target kind (default every served kind)\n  --key PEM             a trusted authority private key\n  --held DIR            the controller directory (R1, R8)\n  --not-before NOT_BEFORE\n                        Unix seconds (default now)\n  --out FILE            the sealed statement; the body goes beside it\n"
+ },
+ "prismpath dist rotate": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "usage: prismpath dist rotate [-h] --new PEM [--retire KEY_ID] [--seq SEQ]\n                             [--target TARGET] --key PEM --held DIR\n                             [--not-before NOT_BEFORE] --out FILE\n\noptions:\n  -h, --help            show this help message and exit\n  --new PEM             the new authority private key\n  --retire KEY_ID       a trusted key id to retire\n  --seq SEQ             the trust sequence (default the held one plus one)\n  --target TARGET       a target kind (default every served kind)\n  --key PEM             a trusted authority private key\n  --held DIR            the controller directory (R1, R8)\n  --not-before NOT_BEFORE\n                        Unix seconds (default now)\n  --out FILE            the sealed statement; the body goes beside it\n"
+ },
+ "prismpath dist seal": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "usage: prismpath dist seal [-h] --artifact ARTIFACT --body FILE --stream\n                           STREAM --seq SEQ --target TARGET\n                           [--not-before NOT_BEFORE] [--expires EXPIRES] --key\n                           PEM [--held DIR] --out FILE [--release RELEASE]\n                           [--policy SHA256] [--replaces SHA256] [--widens]\n                           [--yes] [--meta FILE] [--qualification FILE]\n                           [--ceiling DIR]\n\noptions:\n  -h, --help            show this help message and exit\n  --artifact ARTIFACT   the artifact kind, such as policy.ppt\n  --body FILE\n  --stream STREAM\n  --seq SEQ\n  --target TARGET       a target kind (repeatable)\n  --not-before NOT_BEFORE\n                        Unix seconds (default now)\n  --expires EXPIRES     Unix seconds; 0 only for a trust kind\n  --key PEM             an authority private key (repeatable)\n  --held DIR            a controller directory, for R8\n  --out FILE            where the sealed envelope is written\n  --release RELEASE     the release id (default the release of this one\n                        artifact)\n  --policy SHA256       the policy hash (default the body's own)\n  --replaces SHA256     the policy hash this release replaces (default, with\n                        --held, the latest release stored on the stream below\n                        this seq, else none)\n  --widens              say the release allows more than the one it replaces;\n                        set as well unless the release is compared with the\n                        one --held holds for replaces and is not larger (W7)\n  --yes                 sign the change statement for a table the comparator\n                        finds allows nothing more, without asking (W9, W11)\n  --meta FILE           the meta object, JSON\n  --qualification FILE  for policy.ppt, fill meta from the image and this\n                        qualification envelope\n  --ceiling DIR         the ceiling the stream's PEPs hold, as `dist install`\n                        wrote it; a release above it is refused before it is\n                        sealed (CL2)\n"
+ },
+ "prismpath dist serve": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "usage: prismpath dist serve [-h] --dir DIR --key FILE [--listen HOST:PORT]\n\noptions:\n  -h, --help          show this help message and exit\n  --dir DIR           the controller's directory\n  --key FILE          the controller's instance key\n  --listen HOST:PORT\n"
+ },
+ "prismpath dist verify": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "usage: prismpath dist verify [-h] --sealed FILE --body FILE --anchor FILE\n                             [--qualification FILE] [--now NOW]\n\noptions:\n  -h, --help            show this help message and exit\n  --sealed FILE\n  --body FILE\n  --anchor FILE         the trust anchor the PEP holds\n  --qualification FILE  a host PEP's qualification envelope\n  --now NOW             the PEP's time, Unix seconds (default now)\n"
+ },
+ "prismpath dist widen": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "usage: prismpath dist widen [-h] --sealed FILE [--from SHA256] --key PEM --out\n                            FILE\n\noptions:\n  -h, --help     show this help message and exit\n  --sealed FILE  the sealed release it is for\n  --from SHA256  a policy hash the release may replace (repeatable); none\n                 means any, and no policy\n  --key PEM      an authority private key\n  --out FILE     the sealed statement; the body goes beside it\n"
+ },
+ "prismpath evidence": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "usage: prismpath evidence [-h] [--sample N|all] [--seed SEED]\n                          [--pin-authority PUB] [--pin-instance PUB]\n                          [--pin-install JSON] [--json]\n                          {verify} run\n\npositional arguments:\n  {verify}             evidence action: verify checks a core run directory and\n                       exits 0 when it verifies with both keys pinned and 1\n                       when refused; without both pins every check runs and\n                       the pass is refused with dist:hatch-refused outside a\n                       dev build\n  run                  the core run directory (run.json, cases.jsonl,\n                       images.jsonl, receipts.jsonl, receipts.roots.jsonl,\n                       authority.pub, instance.pub)\n\noptions:\n  -h, --help           show this help message and exit\n  --sample N|all       how many receipts to replay through the reference\n                       kernel, or all (default 200)\n  --seed SEED          the seed that chooses the sample (default 0)\n  --pin-authority PUB  your own copy of the authority public key (raw 32\n                       bytes, as `swap keygen` writes it); with --pin-instance\n                       the root statement is signed, and without both the\n                       verify is refused outside a dev build\n  --pin-instance PUB   your own copy of the instance public key (raw 32 bytes,\n                       as `ledger keygen` writes it)\n  --pin-install JSON   for a cFS run with an action floor or a fallback\n                       policy, your own copy of the install key set its PEP\n                       started from, the `install` part of its anchor (RC4)\n  --json               machine readable output\n"
+ },
+ "prismpath facet": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "usage: prismpath facet [-h] {quantize,encode,decode} flow_md payload\n\npositional arguments:\n  {quantize,encode,decode}\n                        facet action: quantize | encode | decode\n  flow_md               Path to the flow markdown file\n  payload               JSON reading or HEX string\n\noptions:\n  -h, --help            show this help message and exit\n"
+ },
+ "prismpath gateway": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "usage: prismpath gateway [-h] [--home HOME] [--upstream URL] [--listen ADDR]\n                         [--routes FILE] [--session SESSION]\n                         [--forward-header NAME] [--timeout TIMEOUT]\n                         [--deadline DEADLINE]\n                         [--upstream-timeout UPSTREAM_TIMEOUT]\n                         [--max-response MAX_RESPONSE]\n                         [--max-connections MAX_CONNECTIONS] [--policy FILE]\n                         [--path-class CLASS] [--method-class CLASS]\n                         [--ttl TTL] [--stream NAME] [--grant-id ID]\n                         [--client-cert-header NAME] [--front-proxy ADDR]\n                         [--identity-bundle FILE] [--identity-map FILE]\n                         [--domain TD=PEM] [--map FILE] [--out FILE] [--json]\n                         [{serve,init,verify,rules,grant,revoke,identity-bundle,identity-map}]\n\npositional arguments:\n  {serve,init,verify,rules,grant,revoke,identity-bundle,identity-map}\n                        serve (the default), init, verify, rules, grant,\n                        revoke, identity-bundle or identity-map\n\noptions:\n  -h, --help            show this help message and exit\n  --home HOME           the gateway home (default <config>/prismpath/gateway)\n  --upstream URL        serve: the one service, http://HOST[:PORT]\n  --listen ADDR         serve: HOST:PORT (default 127.0.0.1:8080)\n  --routes FILE         serve: the route table, required unless the home\n                        follows a stream, where it is the committed\n                        gateway.routes and refused here (the demo one is\n                        prismpath/gateway/policy/demo.routes.json)\n  --session SESSION     serve: the id of the run (default a fresh one)\n  --forward-header NAME\n                        serve: also pass this request header to the service\n                        (repeatable)\n  --timeout TIMEOUT     serve: seconds a client may be silent\n  --deadline DEADLINE   serve: seconds a connection may stay open\n  --upstream-timeout UPSTREAM_TIMEOUT\n                        serve: seconds the service has to answer\n  --max-response MAX_RESPONSE\n                        serve: bytes of the service's answer held\n  --max-connections MAX_CONNECTIONS\n                        serve: connections served at once\n  --policy FILE         init: the policy to record (.core.json or .rules.md;\n                        default the demo)\n  --path-class CLASS    grant: a route class the grant covers (repeat for\n                        more)\n  --method-class CLASS  grant: a method class the grant covers, read, write,\n                        delete or other (repeat for more)\n  --ttl TTL             grant: seconds the grant lasts (default 3600)\n  --stream NAME         grant: the stream of the gateway the grant is for\n                        (default this home's own)\n  --grant-id ID         revoke: the id of the grant to revoke\n  --client-cert-header NAME\n                        serve: the header the front proxy passes the client\n                        certificate chain in, percent encoded PEM, leaf first\n                        (read only under a policy that reads workload)\n  --front-proxy ADDR    serve: an IP address of the front proxy, the only peer\n                        the certificate header is read from (repeatable)\n  --identity-bundle FILE\n                        serve: the identity.bundle body, in a home that holds\n                        its own policy\n  --identity-map FILE   serve: the identity.map body, in a home that holds its\n                        own policy\n  --domain TD=PEM       identity-bundle: a trust domain and a PEM file of its\n                        CA certificates (repeatable)\n  --map FILE            identity-map: a JSON file {\"entries\": [{\"match\":\n                        \"spiffe://td/path/*\", \"class\": NAME}]}\n  --out FILE            identity-bundle, identity-map: where the body goes\n  --json                machine readable output\n"
+ },
+ "prismpath graph": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "usage: prismpath graph [-h] [--direction {TD,LR}] [--fenced] flow_md\n\npositional arguments:\n  flow_md              Path to the flow markdown file\n\noptions:\n  -h, --help           show this help message and exit\n  --direction {TD,LR}  layout direction\n  --fenced             wrap in a ```mermaid fence for READMEs\n"
+ },
+ "prismpath import": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "usage: prismpath import [-h] [--name NAME] [--out OUT] py_file\n\npositional arguments:\n  py_file      the LangGraph Python file\n\noptions:\n  -h, --help   show this help message and exit\n  --name NAME  flow name\n  --out OUT    write the .md flow here (else stdout)\n"
+ },
+ "prismpath init": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "usage: prismpath init [-h] [--template NAME] [path]\n\npositional arguments:\n  path             where to write the flow; .md is added when missing, and the\n                   tests go beside it as <name>.tests.md (default: ./flow.md,\n                   or ./<template>.md)\n\noptions:\n  -h, --help       show this help message and exit\n  --template NAME  start from a gallery flow instead of the generic starter\n                   (`--template list` shows what's available); copies the flow\n                   AND its routing tests\n"
+ },
+ "prismpath kappa": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "usage: prismpath kappa [-h] [--by-stratum] [--gold GOLD]\n                       [--disagreements DISAGREEMENTS]\n                       a b\n\npositional arguments:\n  a                     annotator A JSONL (benchmark-shaped)\n  b                     annotator B JSONL (benchmark-shaped)\n\noptions:\n  -h, --help            show this help message and exit\n  --by-stratum          also report kappa per stratum\n  --gold GOLD           write agreed cases as a gold benchmark JSONL\n  --disagreements DISAGREEMENTS\n                        write disagreements for a 3rd pass\n"
+ },
+ "prismpath label": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "usage: prismpath label [-h] log\n\npositional arguments:\n  log         routing-decision JSONL (from run_logged)\n\noptions:\n  -h, --help  show this help message and exit\n"
+ },
+ "prismpath ledger": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "usage: prismpath ledger [-h] [--name NAME] [--repo REPO] [--statements PATH]\n                        [--log PATH] [--pub INSTANCE_PUB [INSTANCE_PUB ...]]\n                        [--out OUT] [--label LABEL] [--leaf LEAF]\n                        [--root ROOT] [--request REQUEST] [--proofs PROOFS]\n                        [--dir DIR] [--cafile CAFILE] [--tsr TSR]\n                        [--policy-hash POLICY_HASH] [--gate-id GATE_ID]\n                        [--ots]\n                        {keygen,anchor,upgrade,verify,export-request,relay-stamp,import-proofs,rfc3161}\n\npositional arguments:\n  {keygen,anchor,upgrade,verify,export-request,relay-stamp,import-proofs,rfc3161}\n                        ledger action: keygen writes the instance key that\n                        signs root statements; the rest anchor and verify\n\noptions:\n  -h, --help            show this help message and exit\n  --name NAME           keygen key name (default instance; never the policy\n                        authority key)\n  --repo REPO           ledger git repo (anchor: enumerate Output-Hash\n                        trailers)\n  --statements PATH     anchor: the hashes of the signed root statements in\n                        this file (or the ones beside this audit log), so the\n                        timestamp covers the signatures\n  --log PATH            anchor: timestamp this audit log (the hash of its\n                        latest root statement when it has any, else its Merkle\n                        root; the output says which). verify: check the log\n                        still holds what was anchored under --out/--label, and\n                        the timestamp proof\n  --pub INSTANCE_PUB [INSTANCE_PUB ...]\n                        verify --log: pin the deployment's instance public\n                        key(s), as `trail --pub`\n  --out OUT             output dir (anchor/upgrade/verify) or bundle path\n                        (air-gap)\n  --label LABEL         anchor label (default v1)\n  --leaf LEAF           leaf hash hex (verify)\n  --root ROOT           root file (rfc3161 / export-request)\n  --request REQUEST     stamp-request bundle (relay-stamp)\n  --proofs PROOFS       proof bundle (import-proofs)\n  --dir DIR             roots dir (import-proofs)\n  --cafile CAFILE       TSA CA cert (rfc3161 verify)\n  --tsr TSR             RFC-3161 response file to verify\n  --policy-hash POLICY_HASH\n                        C1: bind the flow-definition hash to the anchored\n                        record\n  --gate-id GATE_ID     C1: bind the gate identity that produced the record\n  --ots                 accepted and ignored: verify always walks the Merkle\n                        path and then the OTS proof\n"
+ },
+ "prismpath lint": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "usage: prismpath lint [-h] [--json] flow_md\n\npositional arguments:\n  flow_md     Path to the flow markdown file\n\noptions:\n  -h, --help  show this help message and exit\n  --json      machine-readable findings\n"
+ },
+ "prismpath lock": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "usage: prismpath lock [-h] [--check] [--centroids LABELED_JSONL]\n                      [--prior PRIOR]\n                      flow_md\n\npositional arguments:\n  flow_md               Path to the flow markdown file\n\noptions:\n  -h, --help            show this help message and exit\n  --check               verify the local embedder still matches an existing\n                        lock\n  --centroids LABELED_JSONL\n                        pin LEARNED routing: build per-condition centroids\n                        from this labeled benchmark and commit the shrunk\n                        vectors in the lock\n  --prior PRIOR         centroid shrinkage prior weight (pseudo-count toward\n                        the zero-shot condition vector; default 4.0)\n"
+ },
+ "prismpath lsp": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "usage: prismpath lsp [-h]\n\noptions:\n  -h, --help  show this help message and exit\n"
+ },
+ "prismpath plugins": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "usage: prismpath plugins [-h] [--json] [--check FLOW] [--new NAME]\n\noptions:\n  -h, --help    show this help message and exit\n  --json        machine-readable listing (CI)\n  --check FLOW  verify every @worker binding in FLOW resolves; exit 1\n                otherwise\n  --new NAME    scaffold a pip-installable WORKER PACK: a package that\n                registers itself via the prismpath.plugins entry point - pip\n                install it and its workers are @worker-bindable\n"
+ },
+ "prismpath policy": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "usage: prismpath policy [-h] <action> ...\n\npositional arguments:\n  <action>\n    compile   compile a rules source to its prismpath.core/1 image, checked by\n              the core, in canonical canon/2 bytes\n    render    write the rules source of a prismpath.core/1 image\n    skeleton  write a classifier skeleton and its first tests for a rules\n              source's fields\n    check     check that a rules source compiles to an image byte for byte,\n              for CI: exit 1 when the image is stale\n    causes    list the registered causes a rule can name, with their codes and\n              meanings\n    manifest  the signed policy manifest (<name>.policy.md) that names a\n              release's rules, image and side inputs\n\noptions:\n  -h, --help  show this help message and exit\n"
+ },
+ "prismpath policy causes": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "usage: prismpath policy causes [-h] [--all] [--json]\n\noptions:\n  -h, --help  show this help message and exit\n  --all       list every registered cause, not only the ones a policy decides\n  --json      print JSON\n"
+ },
+ "prismpath policy check": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "usage: prismpath policy check [-h] source image\n\npositional arguments:\n  source      the rules source (.rules.md)\n  image       the image it must compile to (.core.json)\n\noptions:\n  -h, --help  show this help message and exit\n"
+ },
+ "prismpath policy compile": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "usage: prismpath policy compile [-h] [-o OUT] [--point NAME]\n                                [--target {agent}]\n                                source\n\npositional arguments:\n  source             the rules source (.rules.md)\n\noptions:\n  -h, --help         show this help message and exit\n  -o OUT, --out OUT  write the image here (default standard output)\n  --point NAME       an information point the policy is built with, so a field\n                     only it supplies (tests_pass, edit_kind,\n                     touches_protected ...) may be declared; with --target\n  --target {agent}   also run the checks of what will enforce the image: agent\n                     is the governed agent (reading domain, fields, control\n                     files, connections, sandbox profile)\n"
+ },
+ "prismpath policy manifest": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "usage: prismpath policy manifest [-h] <action> ...\n\npositional arguments:\n  <action>\n    check     check a manifest: its signature, that its rules compile to its\n              image byte for byte, both hashes, and the hash of every side\n              input it names; exit 1 when anything is wrong\n\noptions:\n  -h, --help  show this help message and exit\n"
+ },
+ "prismpath policy manifest check": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "usage: prismpath policy manifest check [-h] --pub PUB [--revoked REVOKED]\n                                       [--state-dir DIR] [--json]\n                                       FILE\n\npositional arguments:\n  FILE               the manifest (<name>.policy.md)\n\noptions:\n  -h, --help         show this help message and exit\n  --pub PUB          a trusted authority public key that may have signed it\n                     (`swap keygen`); repeat the flag for more than one, and\n                     write FILE before the flags or after a flag's value\n  --revoked REVOKED  revocation list JSON of authority key ids\n  --state-dir DIR    refuse a manifest signed at a version below the one this\n                     directory accepted\n  --json             print JSON\n"
+ },
+ "prismpath policy render": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "usage: prismpath policy render [-h] [-o OUT] image\n\npositional arguments:\n  image              the image (.core.json, or any canon/2 spelling of it)\n\noptions:\n  -h, --help         show this help message and exit\n  -o OUT, --out OUT  write the source here (default standard output)\n"
+ },
+ "prismpath policy skeleton": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "usage: prismpath policy skeleton [-h] -o OUT [--test TEST] [--force] source\n\npositional arguments:\n  source             the rules source (.rules.md)\n\noptions:\n  -h, --help         show this help message and exit\n  -o OUT, --out OUT  the module to write (module.py)\n  --test TEST        the test to write (default test_<module>.py beside it)\n  --force            overwrite files that exist\n"
+ },
+ "prismpath portable": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "usage: prismpath portable [-h] [--json] flow_md\n\npositional arguments:\n  flow_md     Path to the flow markdown file\n\noptions:\n  -h, --help  show this help message and exit\n  --json      machine-readable findings\n"
+ },
+ "prismpath resume": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "usage: prismpath resume [-h] [--choose CHOOSE] [--audit-log PATH]\n                        [--instance-key KEY] [--require-authorization]\n                        [--authority-pub PUB [PUB ...]] [--revoked REVOKED]\n                        [--state-dir DIR]\n                        checkpoint\n\npositional arguments:\n  checkpoint            Path to the checkpoint JSON\n\noptions:\n  -h, --help            show this help message and exit\n  --choose CHOOSE       the edge target a human picks (for a needs_human\n                        suspension)\n  --audit-log PATH      append one receipt per decision to this audit log\n                        (JSONL, Merkle rooted; `prismpath trail` reads it)\n  --instance-key KEY    the deployment's instance private key (`prismpath\n                        ledger keygen`): sign a root statement over the audit\n                        log at the end of the run (default:\n                        $PRISMPATH_INSTANCE_KEY, else the deployment's own key\n                        in the state directory; without one the receipts are\n                        written unsigned)\n  --require-authorization\n                        refuse a flow whose flow manifest is missing, edited\n                        after signing, signed by an unknown or revoked\n                        authority key, or older than a version already\n                        accepted (exit 2); also\n                        PRISMPATH_REQUIRE_AUTHORIZATION=1\n  --authority-pub PUB [PUB ...]\n                        trusted authority public key(s) (`swap keygen`);\n                        default: PRISMPATH_AUTHORITY_PUB, paths separated by\n                        the platform path separator\n  --revoked REVOKED     revocation list JSON of authority key ids\n  --state-dir DIR       where the accepted flow versions are kept (default:\n                        PRISMPATH_STATE_DIR, else ./.prismpath)\n"
+ },
+ "prismpath run": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "usage: prismpath run [-h] [--type-gate] [--worker SPEC] [--audit-log PATH]\n                     [--instance-key KEY] [--require-authorization]\n                     [--authority-pub PUB [PUB ...]] [--revoked REVOKED]\n                     [--state-dir DIR]\n                     flow_md\n\npositional arguments:\n  flow_md               Path to the flow markdown file\n\noptions:\n  -h, --help            show this help message and exit\n  --type-gate           validate each worker output against the derived\n                        contract (contract.py)\n  --worker SPEC         real worker instead of the mock: `ollama:llama3.2`\n                        (local Ollama) or `openai:MODEL@BASE` (any OpenAI-\n                        compatible endpoint - vLLM, LM Studio, llama.cpp).\n                        JSON replies feed `when` predicates; failures ride the\n                        flow's `on error` edges\n  --audit-log PATH      append one receipt per decision to this audit log\n                        (JSONL, Merkle rooted; `prismpath trail` reads it)\n  --instance-key KEY    the deployment's instance private key (`prismpath\n                        ledger keygen`): sign a root statement over the audit\n                        log at the end of the run (default:\n                        $PRISMPATH_INSTANCE_KEY, else the deployment's own key\n                        in the state directory; without one the receipts are\n                        written unsigned)\n  --require-authorization\n                        refuse a flow whose flow manifest is missing, edited\n                        after signing, signed by an unknown or revoked\n                        authority key, or older than a version already\n                        accepted (exit 2); also\n                        PRISMPATH_REQUIRE_AUTHORIZATION=1\n  --authority-pub PUB [PUB ...]\n                        trusted authority public key(s) (`swap keygen`);\n                        default: PRISMPATH_AUTHORITY_PUB, paths separated by\n                        the platform path separator\n  --revoked REVOKED     revocation list JSON of authority key ids\n  --state-dir DIR       where the accepted flow versions are kept (default:\n                        PRISMPATH_STATE_DIR, else ./.prismpath)\n"
+ },
+ "prismpath swap": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "usage: prismpath swap [-h] [--ppt PPT] [--priv PRIV] [--pub PUB [PUB ...]]\n                      [--out OUT] [--name NAME] [--fields FIELDS]\n                      [--flow FLOW] [--version VERSION]\n                      [--envelope-id ENVELOPE_ID] [--envelope ENVELOPE]\n                      [--caps CAPS] [--revoked REVOKED]\n                      [--overlay-of OVERLAY_OF] [--allow-unsigned]\n                      {keygen,pack,verify,envelope,swap,attest}\n\npositional arguments:\n  {keygen,pack,verify,envelope,swap,attest}\n                        keygen | pack | verify | envelope | swap | attest\n\noptions:\n  -h, --help            show this help message and exit\n  --ppt PPT             the .ppt image (pack/verify/swap)\n  --priv PRIV           authority private key (keygen writes it; pack/envelope\n                        use it)\n  --pub PUB [PUB ...]   authority public key(s) (verify/swap/attest)\n  --out OUT             output dir (keygen/envelope) or state dir\n                        (swap/attest)\n  --name NAME           keygen key name (default authority)\n  --fields FIELDS       comma list name:kind (pack/envelope), e.g.\n                        temp:int,rule:str\n  --flow FLOW           the flow the image was compiled from (pack/envelope):\n                        a flow that defines its fields supplies the signed\n                        field dictionary, and pack records its hash\n  --version VERSION     monotonic pack version (pack)\n  --envelope-id ENVELOPE_ID\n                        envelope id the pack targets / the envelope defines\n  --envelope ENVELOPE   envelope base path without .json/.sig (swap/attest)\n  --caps CAPS           comma list k=v envelope caps (envelope), e.g.\n                        atoms=1024,nodes=256\n  --revoked REVOKED     revocation list JSON of key_ids (verify/swap)\n  --overlay-of OVERLAY_OF\n                        pack: name the policy of record this pack temporarily\n                        overrides; attest shows it as overlay_of\n  --allow-unsigned      demo escape hatch: swap an unsigned image, stamped in\n                        the audit log\n"
+ },
+ "prismpath test": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "usage: prismpath test [-h] [--json] [--emit-labels PATH] flow_md [tests_md]\n\npositional arguments:\n  flow_md             Path to the flow markdown file\n  tests_md            fixture file (default <flow>.tests.md)\n\noptions:\n  -h, --help          show this help message and exit\n  --json              machine-readable results\n  --emit-labels PATH  append each case as a labeled routing record (JSONL)\n"
+ },
+ "prismpath trail": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "usage: prismpath trail [-h] [--since SINCE] [--last LAST] [--json]\n                       [--pub INSTANCE_PUB [INSTANCE_PUB ...]]\n                       [--statements PATH] [--receipt IDX] [--bundle-out FILE]\n                       [--verify-bundle FILE] [--anchor-dir DIR]\n                       [--label LABEL]\n                       [audit_log]\n\npositional arguments:\n  audit_log             an append only JSONL written by prismpath.audit_log\n                        (decisions, swaps, attestations); not given with\n                        --verify-bundle\n\noptions:\n  -h, --help            show this help message and exit\n  --since SINCE         ISO 8601 lower bound on event time (UTC if no zone)\n  --last LAST           only the most recent N events\n  --json                machine readable output\n  --pub INSTANCE_PUB [INSTANCE_PUB ...]\n                        pin the deployment's instance public key(s): every\n                        root statement must be signed by one, and a log with\n                        no statements is invalid rather than unsigned\n  --statements PATH     the root statements file (default: beside the log,\n                        run.audit.jsonl -> run.audit.roots.jsonl)\n  --receipt IDX         check one receipt offline: leaf -> inclusion path ->\n                        signed root -> signature -> key; --json prints the\n                        self contained bundle\n  --bundle-out FILE     with --receipt: write that receipt's bundle to FILE,\n                        for a reader to check with --verify-bundle\n  --verify-bundle FILE  check a receipt bundle from FILE (a --bundle-out file,\n                        or the --json report of --receipt) without the log:\n                        receipt -> leaf -> inclusion path -> signed root ->\n                        signature -> key, result signed | signed-unpinned |\n                        invalid (exit 0, 0, 1). Offline, except the anchor\n                        step: --anchor-dir runs `ots verify`, which needs\n                        Bitcoin block data (a node or an explorer)\n  --anchor-dir DIR      with --verify-bundle: also check the statement's hash\n                        is in the batch `ledger anchor --statements --out DIR`\n                        stamped, and that its OpenTimestamps proof verifies\n  --label LABEL         the anchor label (default v1), with --anchor-dir\n"
+ },
+ "prismpath validate": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "usage: prismpath validate [-h] [--json] flow_md\n\npositional arguments:\n  flow_md     Path to the flow markdown file\n\noptions:\n  -h, --help  show this help message and exit\n  --json      machine-readable findings\n"
+ },
+ "prismpath verify": {
+  "code": 0,
+  "stderr": "",
+  "stdout": "usage: prismpath verify [-h] [--reach NODE] [--forbid NODE] [--assume EXPR]\n                        [--bound BOUND] [--no-errors] [--no-events]\n                        [--level-m] [--json]\n                        flow_md\n\npositional arguments:\n  flow_md        Path to the flow markdown file\n\noptions:\n  -h, --help     show this help message and exit\n  --reach NODE   assert NODE is reachable (exit 1 if not); repeatable\n  --forbid NODE  assert NODE can NEVER be reached (exit 1 if reachable or may-\n                 reachable); repeatable\n  --assume EXPR  a `when`-style constraint every worker outcome satisfies,\n                 e.g. --assume \"amount <= 500\"\n  --bound BOUND  search depth limit in steps (default 25, the engine max_steps\n                 default)\n  --no-errors    exclude error-tier paths (assume workers never raise)\n  --no-events    exclude event-tier paths (assume suspended runs are never\n                 resumed)\n  --level-m      also report per-edge match-action fragment membership (SPEC\n                 §4.3)\n  --json         machine-readable output\n"
+ }
+}
