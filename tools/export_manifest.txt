@@ -253,7 +253,15 @@ prismpath/centroid.py
 prismpath/chat_agent.py
 prismpath/checkpoint.py
 prismpath/ci_report.py
-prismpath/cli.py
+prismpath/cli/__init__.py
+prismpath/cli/__main__.py
+prismpath/cli/agent.py
+prismpath/cli/common.py
+prismpath/cli/evidence.py
+prismpath/cli/flows.py
+prismpath/cli/policy.py
+prismpath/cli/routing.py
+prismpath/cli/runtime.py
 prismpath/cli_worker.py
 prismpath/code_nodes.py
 prismpath/composer.py
@@ -727,6 +735,7 @@ prismpath/tests/fixtures/claude_code_hooks.json
 prismpath/tests/fixtures/claude_code_live_2026-11-21.json
 prismpath/tests/fixtures/claude_code_zone_hooks.json
 prismpath/tests/fixtures/cli_flow_golden.json
+prismpath/tests/fixtures/cli_help_golden.json
 prismpath/tests/fixtures/collector_feed/gnet_late_join.jsonl
 prismpath/tests/fixtures/collector_feed/gnet_session.jsonl
 prismpath/tests/fixtures/compiler/SHA256SUMS
@@ -806,6 +815,7 @@ prismpath/tests/test_checkpoint.py
 prismpath/tests/test_ci_report.py
 prismpath/tests/test_cli_errors.py
 prismpath/tests/test_cli_flow_golden.py
+prismpath/tests/test_cli_help_golden.py
 prismpath/tests/test_cli_personas.py
 prismpath/tests/test_cli_run_worker_flag.py
 prismpath/tests/test_cli_without_js_engine.py

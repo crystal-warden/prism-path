@@ -27,7 +27,7 @@ def _imports(path):
 def test_model_check_and_analysis_import_neither_the_cli_nor_the_os():
     assert not any(name == "prismpath.cli" for name in _imports(PKG / "kernel" / "model_check.py"))
     found = _imports(PKG / "kernel" / "analysis.py")
-    assert "os" not in found and "prismpath.routing" not in found and "prismpath.flow_files" not in found
+    assert "os" not in found and "importlib" not in found and "prismpath.routing" not in found and "prismpath.flow_files" not in found
 
 
 def test_an_unknown_node_is_a_kernel_error_the_cli_prints_as_one_line(capsys):
@@ -39,8 +39,10 @@ def test_an_unknown_node_is_a_kernel_error_the_cli_prints_as_one_line(capsys):
 
 def test_the_old_analysis_names_and_flow_files_agree():
     graph = parse_file(str(FLOW))
-    assert analysis.portability_tier(graph, str(FLOW)) == flow_files.portability_tier(graph, str(FLOW))
-    assert analysis.analyze_composition(graph, str(FLOW)) == flow_files.analyze_composition(graph, str(FLOW))
+    assert analysis.portability_tier(graph, str(FLOW), flow_files.FILES) == flow_files.portability_tier(graph, str(FLOW))
+    assert analysis.analyze_composition(graph, str(FLOW), flow_files.FILES) == flow_files.analyze_composition(graph, str(FLOW))
+    with pytest.raises(TypeError):
+        analysis.analyze_composition(graph, str(FLOW))
 
 
 def test_run_with_no_router_warns_once_for_the_default(monkeypatch):

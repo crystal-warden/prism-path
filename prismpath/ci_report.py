@@ -26,6 +26,7 @@ import tempfile
 from dataclasses import dataclass, field
 from typing import List, Optional
 
+from prismpath import flow_files
 from prismpath.kernel import analysis
 from prismpath.kernel.parser import parse_file
 from prismpath.kernel.graph_export import to_mermaid
@@ -114,7 +115,7 @@ def report_flow(rel: str, base: str, cwd: str = ".") -> FlowReport:
     except Exception as exc:
         report.parse_error = str(exc)
         return report
-    report.findings = list(analysis.analyze(graph)) + analysis.analyze_composition(graph, flow_path)
+    report.findings = list(analysis.analyze(graph)) + flow_files.analyze_composition(graph, flow_path)
     report.mermaid_after = to_mermaid(graph)
     report.mermaid_before = _base_mermaid(base, rel, cwd)
     tests_path = flow_test.default_tests_path(flow_path)

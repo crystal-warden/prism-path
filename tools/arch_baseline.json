@@ -100,7 +100,6 @@
     "ledgers/witness.py -> ledgers/root_statement.py :: _now_us #1",
     "ledgers/witness.py -> ledgers/root_statement.py :: _verify_signature #1",
     "ledgers/witness.py -> ledgers/root_statement.py :: _well_formed #1",
-    "mission_control/authoring.py -> cli.py :: _gallery_templates #1",
     "mission_control/authoring.py -> mission_control/edit.py :: _sha256_of_file #1",
     "mission_control/authoring.py -> mission_control/evidence.py :: _confine #1",
     "mission_control/authoring.py -> mission_control/evidence.py :: _confine #2",

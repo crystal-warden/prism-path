@@ -98,7 +98,7 @@ def with_notes(report: Dict[str, Any], notes: List[Dict[str, Any]]) -> Dict[str,
 # --------------------------------------------------------------------------- templates
 def _gallery() -> Dict[str, str]:
     from prismpath import cli
-    return cli._gallery_templates()
+    return cli.gallery_templates()
 
 
 def _template_parts(template_dir: str) -> List[str]:

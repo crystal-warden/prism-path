@@ -18,6 +18,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from . import authoring, core
+from prismpath import flow_files
 from prismpath.kernel.parser import RulesSourceError, parse_file
 from prismpath.kernel import analysis
 
@@ -88,7 +89,7 @@ def inspect_validate(req: FlowReq):
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"could not parse flow: {e}")
     findings = list(analysis.analyze(graph))
-    findings += analysis.analyze_composition(graph, flow_path)
+    findings += flow_files.analyze_composition(graph, flow_path)
     errors = [f for f in findings if f.severity == "error"]
     warnings = [f for f in findings if f.severity == "warning"]
     return authoring.with_notes({"ok": not errors, "errors": len(errors), "warnings": len(warnings),
@@ -110,7 +111,7 @@ def inspect_lint(req: FlowReq):
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"could not parse flow: {e}")
     findings = list(analysis.analyze(graph))
-    findings += analysis.analyze_composition(graph, flow_path)
+    findings += flow_files.analyze_composition(graph, flow_path)
     # The non decidable checks that require the embedder, the same two the CLI folds in.
     from prismpath.kernel.lint import semantic_ambiguity, polarity_mirror
     findings += semantic_ambiguity(graph)
@@ -147,7 +148,7 @@ def inspect_portable(req: FlowReq):
     proj = core.current_project()                 # one project for the whole request
     flow_path = _resolve(req.flow_md, proj)
     graph = _parse(flow_path)
-    tree = analysis.portability_tier_tree(graph, flow_path)
+    tree = flow_files.portability_tier_tree(graph, flow_path)
     flows = {p: {"tier": d["tier"],
                  "semantic_edges": [{"node": n, "target": t, "condition": c}
                                     for n, t, c in d["semantic_edges"]],

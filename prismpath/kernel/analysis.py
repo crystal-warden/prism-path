@@ -790,15 +790,6 @@ def _child_emitted_types(graph) -> Dict[str, str]:
     return out
 
 
-def _default_files():
-    """The file reader the old names use when the caller passes none. It is `prismpath.flow_files`, which is a
-    surface module, so it is named by string and not imported: the kernel reads no file itself. The old names stay
-    for one release; a caller that has a reader passes it as `files`, and `prismpath.flow_files` has the same
-    functions with the reader filled in."""
-    import importlib
-    return importlib.import_module("prismpath.flow_files").FILES
-
-
 def analyze_composition(graph, flow_path, files=None) -> List[Finding]:
     """Cross-FLOW-BOUNDARY checks for `@spawn` nodes (roadmap item #4, hard part 2). Unlike the pure
     `analyze()`, these do I/O - they resolve the child flow path (relative to `flow_path`'s dir), parse
@@ -810,7 +801,8 @@ def analyze_composition(graph, flow_path, files=None) -> List[Finding]:
         `@emits` declarations, so the composition contract is checkable across the boundary.
     Composition is the stress test of the data-not-code thesis: the whole call tree is inspectable
     statically, no run required."""
-    files = files or _default_files()
+    if files is None:
+        raise TypeError("analyze_composition requires a file reader; call prismpath.flow_files or pass files=")
     out: List[Finding] = []
     base = files.abspath(flow_path)
     for name, node_obj in graph.nodes.items():
@@ -889,7 +881,8 @@ def portability_tree(graph, flow_path, _seen=None, files=None) -> List[Finding]:
     `@spawn` child (a portable parent spawning a non-portable child is not portable). Missing/
     unparseable children are already errors in `analyze_composition`, so here they're skipped;
     cyclic compositions are visited once (guarded), not looped."""
-    files = files or _default_files()
+    if files is None:
+        raise TypeError("portability_tree requires a file reader; call prismpath.flow_files or pass files=")
     _seen = _seen or set()
     ap = files.abspath(flow_path)
     if ap in _seen:
@@ -930,6 +923,8 @@ def portability_tier(graph, flow_path, files=None) -> dict:
     reasons it was. `level_m` marks the compile-to-hardware subset (SPEC §7):
     a P0 flow whose deterministic edges are all in the match-action fragment (§4.3). Decidable
     from the document + its sidecar lock - no model, no execution."""
+    if files is None:
+        raise TypeError("portability_tier requires a file reader; call prismpath.flow_files or pass files=")
     reach = _reachable(graph)
     semantic = []
     for name in sorted(reach):
@@ -946,7 +941,7 @@ def portability_tier(graph, flow_path, files=None) -> dict:
     # the reader answers with the conditions the lockfile pins, the lock's path when it read, and the reason when a
     # lock is present and broken: the tier degrades to P2 either way, but that is not the same answer as no lock at
     # all, so the reason travels with the verdict for the operator
-    locked_conds, lock_found, lock_error = (files or _default_files()).lock_conditions(flow_path)
+    locked_conds, lock_found, lock_error = files.lock_conditions(flow_path)
     unlocked = sorted({condition for _, _, condition in semantic if condition not in locked_conds})
     tier = "P1" if lock_found and not unlocked else "P2"
     return {"tier": tier, "semantic_edges": semantic, "unlocked": unlocked, "lock": lock_found,
@@ -958,7 +953,8 @@ def portability_tier_tree(graph, flow_path, _seen=None, files=None) -> dict:
     """The tier of a WHOLE composition tree: the max (worst) tier across this flow and,
     recursively, every `@spawn` child - a P0 parent spawning a P2 child deploys as P2. Returns
     {tier, flows: {path_or_ref: per-flow tier dict}}. Cycle-guarded like portability_tree."""
-    files = files or _default_files()
+    if files is None:
+        raise TypeError("portability_tier_tree requires a file reader; call prismpath.flow_files or pass files=")
     order = {"P0": 0, "P1": 1, "P2": 2}
     _seen = _seen or set()
     ap = files.abspath(flow_path)
