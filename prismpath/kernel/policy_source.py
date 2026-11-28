@@ -819,8 +819,9 @@ def line_of(where, field_lines, rule_lines) -> int:
 
 
 # ----------------------------------------------------------------- command line
-def add_parser(subparsers) -> None:
-    """`prismpath policy compile | render | skeleton | check | causes`."""
+def add_parser(subparsers):
+    """`prismpath policy compile | render | skeleton | check | causes`. Returns the `<action>` group, which a surface
+    adds its own actions to (`policy manifest`, in distribution/manifest_cli.py)."""
     policy_parser = subparsers.add_parser(
         'policy', help='Write a core policy as readable rules: compile the rules to the signed image\'s '
                        'canonical bytes, render an image back to rules, start a classifier for the fields')
@@ -851,6 +852,7 @@ def add_parser(subparsers) -> None:
                                                                    'policy decides')
     causes_parser.add_argument('--json', action='store_true', help='print JSON')
     policy_parser.set_defaults(func=policy_cmd)
+    return actions
 
 
 def _write(path: str, data: bytes) -> None:

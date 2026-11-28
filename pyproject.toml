@@ -68,7 +68,7 @@ include = ["prismpath*"]
 prismpath = ["flows/*.md",                    # example + reference flows
           "nudges/*.md",                      # prompt assets (orchestrator/run_sprint read these)
           "policies/*.md", "policies/*.json", # the guard's statutory floor + P1 lockfile
-          "agent/policy/*.json", "agent/policy/*.rules.md",   # the governed agent's rules: readable source, JSON source and signed canonical image
+          "agent/policy/*.json", "agent/policy/*.rules.md", "agent/policy/*.policy.md",   # the governed agent's rules: readable source, JSON source and signed canonical image
           "gateway/policy/*.json", "gateway/policy/*.rules.md",   # the gateway's demo policy: readable source, canonical image and route table
           "gallery/*.md", "gallery/*/*.md",   # `prismpath init --template` copies these
           "tests/fixtures/broken/*.md",       # the analyzer's broken-flow corpus (test_analysis)

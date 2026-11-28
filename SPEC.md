@@ -567,6 +567,77 @@ declared field is one the agent's classifier reads with the kind it gives it, th
 declared, every change to a control file and every connection but the model's API is refused, and a
 sandbox profile can be built. docs/guides/writing-agent-rules.md lists the fields and their values.
 
+## 10. Policy manifests
+
+A policy manifest is the one signed file that says what a release of a policy is. It is named
+`<name>.policy.md`, there is one per stream, and `prismpath/kernel/policy_manifest.py` reads it. The rules
+reach no image unless the manifest is signed. It is a flow of §1 that `prismpath authorize sign` signs like any
+other, so the signature is a `prismpath-flow-manifest/1` beside it (`<name>.policy.md.manifest.json`).
+
+```markdown
+---
+policy.id: agent-default-1
+policy.stream: agent-default
+policy.seq: 1
+policy.targets: agent
+policy.rules: agent_default.rules.md
+policy.rules_sha256: <sha256 of the rules source file>
+policy.image: agent_default.core.json
+policy.image_sha256: <sha256 of the image's canonical bytes>
+policy.widens: yes
+policy.valid_days: 90
+policy.max_processes: 64
+---
+## manifest
+Notes for the reader.
+-> refuse_135: always
+```
+
+Normatively, as follows.
+
+- **Front matter** is required, between two `---` lines, one `key: value` per line. Every key starts with
+  `policy.`. The keys `name`, `description` and `start` are also accepted, since they belong to the flow, and the
+  signed flow takes its name from `name`. Any other key is an error that names its line. A key written twice is an
+  error. A refusal names the line of the key, and the whole file when a required key is missing. Every problem is
+  reported, not only the first.
+- **Values.** A word is `[A-Za-z0-9_.:@/-]`, a name `[A-Za-z0-9_.-]`, a stream `[a-z0-9._/-]{1,64}` and a target
+  `[a-z][a-z0-9_-]*`. A sha256 is 64 lowercase hex digits. A number is a whole decimal number with no sign, no
+  leading zero and the bounds below. A time is Unix seconds or `YYYY-MM-DDTHH:MM:SSZ`, read as Unix seconds. A path
+  is relative to the manifest's directory, with no `..`, `.` or empty part, no drive and no backslash. A list is its
+  items joined by `|`, with no item twice, and an empty value is an empty list. `yes` and `no` are booleans.
+- **Keys.** Required: `policy.id` (name), `policy.stream` (stream), `policy.seq` (1 to 2^53-1), `policy.targets`
+  (list of target, at least one, kept sorted), `policy.rules` and `policy.image` (paths), `policy.rules_sha256` and
+  `policy.image_sha256` (sha256), `policy.widens` (yes or no), and exactly one of `policy.expires` (time) and
+  `policy.valid_days` (1 to 3650, counted from `policy.not_before`, else from the time of sealing). Optional:
+  `policy.not_before` (time), `policy.replaces` (sha256 of the policy it replaces; `policy.widens: no` needs it, since
+  a release that replaces nothing widens), and every other key of the next three items.
+- **Side inputs.** A file is a path and its hash, written together or not at all: `policy.egress_hosts`,
+  `policy.zones`, `policy.routes`, `policy.identity_bundle`, `policy.identity_map`, `policy.net_dests` and
+  `policy.cc_index`, each with `<key>_sha256`. The values are `policy.allowed_remotes` (list of word),
+  `policy.max_processes`, `policy.timeout_s`, `policy.shell_many` (each 1 and up), `policy.toolchain_dirs` and
+  `policy.ro_mounts` (lists of path), `policy.local_model` (word) and `policy.grant_classes` (list of word). A key
+  that is absent has no value here. The grammar applies no default, a default belongs to the target that reads the
+  key, and a manifest that keeps today's defaults writes them.
+- **Context Cloud.** `policy.cc_protected` (list of word), `policy.cc_index` with `policy.cc_index_sha256`,
+  `policy.cc_freshness_s` (1 and up, the oldest index a reading may use), `policy.cc_required_certainty` (`certain`
+  or `likely`) and `policy.cc_engine_agreement` (1 to 64, the engines that must agree). The grammar reads them. What
+  a target does with them is its own.
+- **Domain.** `policy.domain` is `field=value|value; other=LO..HI`: the values or the integer range each field of
+  the image may take, each field once.
+- **Body.** The body holds notes and one rule, `-> refuse_135: always` (`dist:bad-format`), under a `##`
+  heading. It is written as the canonical rendering writes a target, so the file parses as a flow and the flow parser
+  does not refuse it as a rules source. Any other rule line is an error.
+
+**The release check.** `prismpath policy manifest check FILE --pub KEY...` (`policy_manifest.check`) holds when,
+in this order, the signature verifies with a trusted authority key (the flow authority, `prismpath authorize
+verify`); `policy.rules` compiles with `prismpath policy compile` to the image byte for byte, with its final line feed
+or without; `policy.rules_sha256` is the sha256 of the rules file and `policy.image_sha256` of the compiled
+image's bytes without the line feed; and every side input named has the sha256 it says. A signature that does not
+hold is the only finding, since nothing the manifest says counts without it. Every file is read from the manifest's
+directory, and one that resolves outside it, a link for one, reads as absent. Exit 0 holds, 1 for a finding and 2
+for a manifest that does not read. The command seals nothing. Sealing from a manifest, the envelope's `manifest_sha256`
+and `rules_sha256` members and the target checks of each target are specified with `dist seal --manifest`.
+
 ---
 
 *This spec follows the reference implementation in this repository. Where prose and vectors

@@ -227,6 +227,7 @@ prismpath/agent/mcp_proxy.py
 prismpath/agent/observe.py
 prismpath/agent/policy.py
 prismpath/agent/policy/agent_default.core.json
+prismpath/agent/policy/agent_default.policy.md
 prismpath/agent/policy/agent_default.rules.md
 prismpath/agent/policy/agent_review.core.json
 prismpath/agent/policy/agent_review.rules.md
@@ -280,6 +281,7 @@ prismpath/distribution/http.py
 prismpath/distribution/install.py
 prismpath/distribution/kinds.py
 prismpath/distribution/legacy.py
+prismpath/distribution/manifest_cli.py
 prismpath/distribution/pep.py
 prismpath/distribution/state_record.py
 prismpath/distribution/statement.py
@@ -397,6 +399,7 @@ prismpath/kernel/level_m.py
 prismpath/kernel/lint.py
 prismpath/kernel/model_check.py
 prismpath/kernel/parser.py
+prismpath/kernel/policy_manifest.py
 prismpath/kernel/policy_source.py
 prismpath/kernel/ppt_compile.py
 prismpath/kernel/predicates.py
@@ -936,6 +939,7 @@ prismpath/tests/test_plain_json_never_hashed.py
 prismpath/tests/test_plugins.py
 prismpath/tests/test_polarity_lint.py
 prismpath/tests/test_policy_host.py
+prismpath/tests/test_policy_manifest.py
 prismpath/tests/test_policy_pack.py
 prismpath/tests/test_policy_source.py
 prismpath/tests/test_portability.py
