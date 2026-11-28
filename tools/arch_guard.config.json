@@ -347,6 +347,7 @@
       "distribution/controller.py",
       "distribution/controller_install.py",
       "distribution/manifest_cli.py",
+      "distribution/seal.py",
       "evals/annotate.py",
       "evals/kappa.py",
       "flow_test.py",
