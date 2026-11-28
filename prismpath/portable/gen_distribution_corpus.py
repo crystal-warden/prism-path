@@ -750,6 +750,34 @@ def build_cases(kind: str, spec: Dict[int, dict]) -> List[dict]:
         pep=view(qualification=QUALIFICATION, has_clock=False))
     add(119, "clock_a_month_early", "dist:not-yet-valid", good_sealed, now=NOT_BEFORE - month)
 
+    # SPEC.md section 10, E11: the members of an envelope sealed from a policy manifest. Neither kind uses a
+    # `policy.core` or an `egress.hosts`, so an envelope that reads is refused at V5. A host reads `meta` at V4 and refuses
+    # a member the artifact does not carry or one of the wrong form; a mesh node's scanner skips `meta` (E9).
+    core_body, hosts_body = canon.canon2_bytes({"format": "prismpath.core/1"}), canon.canon2_bytes(["api.example.com"])
+    manifest_release = env.release_id([("egress.hosts", canon.sha256_hex(hosts_body)),
+                                       ("policy.core", canon.sha256_hex(core_body))])
+
+    def from_manifest(artifact: str, payload: bytes, members: dict) -> bytes:
+        return sealed_by(raw(kind_doc(body, artifact=artifact, body_sha256=canon.sha256_hex(payload),
+                                      body_size=len(payload), meta=members, release=manifest_release,
+                                      policy_sha256=canon.sha256_hex(core_body), widens=True)), "A")
+
+    manifest_sha, rules_sha = "1" * 64, "2" * 64
+    wrong = "dist:bad-format" if kind == "host" else "dist:target-mismatch"
+    add(309, "policy_core_sealed_from_a_manifest", "dist:target-mismatch",
+        from_manifest("policy.core", core_body, {"manifest_sha256": manifest_sha, "source_sha256": rules_sha}),
+        payload=core_body)
+    add(309, "egress_hosts_sealed_from_a_manifest", "dist:target-mismatch",
+        from_manifest("egress.hosts", hosts_body, {"manifest_sha256": manifest_sha, "rules_sha256": rules_sha}),
+        payload=hosts_body)
+    add(310, "policy_core_naming_rules_sha256", wrong,
+        from_manifest("policy.core", core_body, {"manifest_sha256": manifest_sha, "rules_sha256": rules_sha}),
+        payload=core_body)
+    add(310, "egress_hosts_naming_source_sha256", wrong,
+        from_manifest("egress.hosts", hosts_body, {"source_sha256": rules_sha}), payload=hosts_body)
+    add(310, "manifest_sha256_not_a_hash", wrong,
+        from_manifest("policy.core", core_body, {"manifest_sha256": "1" * 63}), payload=core_body)
+
     return cases
 
 

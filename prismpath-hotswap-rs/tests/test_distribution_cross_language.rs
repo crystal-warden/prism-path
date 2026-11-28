@@ -456,3 +456,128 @@ fn case_256_the_python_controller_files_a_restarted_rust_pep_until_it_takes_a_st
     assert_eq!((again["findings_filed"].clone(), again["unverified"].clone()), (json!([null]), json!(false)), "{again}");
     println!("cross-language distribution: the Python controller filed the restarted Rust PEP until it took a statement");
 }
+
+/// The Python half of the manifest test: `seal_manifest` signs a policy manifest for the default agent starter with
+/// a flow authority key, checks it as `dist seal --manifest` does, seals its release with the test key A and
+/// verifies each envelope with an agent PEP view; `read` verifies envelopes the Rust writer sealed.
+const MANIFEST_PYTHON: &str = r#"
+import hashlib, json, os, sys
+sys.path.insert(0, os.environ["PP_REPO"])
+from prismpath import canon, kinds_builtin
+kinds_builtin.load()
+from prismpath.distribution import envelope as env, manifest_cli, seal, verify as verifier
+from prismpath.hotswap import flow_authority, policy_pack
+from prismpath.kernel import policy_manifest as pm, policy_source
+from prismpath.tests import _dist
+
+step = json.loads(open(os.environ["PP_IN"]).read())
+directory, stream = step["dir"], "agent/demo"
+trust = _dist.GEN.trust_store()
+view = verifier.PepView("agent", stream)
+sha = lambda data: hashlib.sha256(data).hexdigest()
+out = {"trust": canon.canon2_bytes(trust.document()).hex()}
+if step["op"] == "seal_manifest":
+    starters = os.path.join(os.environ["PP_REPO"], "prismpath", "agent", "policy")
+    rules = open(os.path.join(starters, "agent_default.rules.md"), "rb").read()
+    image = open(os.path.join(starters, "agent_default.core.json"), "rb").read()
+    hosts = canon.canon2_bytes(["api.example.com"])
+    work = os.path.join(directory, "manifest")
+    os.makedirs(work, exist_ok=True)
+    for name, data in (("r.rules.md", rules), ("i.core.json", image), ("hosts.json", hosts)):
+        open(os.path.join(work, name), "wb").write(data)
+    text = (f"---\nname: {stream}\npolicy.id: demo-1\npolicy.stream: {stream}\npolicy.seq: 1\npolicy.targets: agent\n"
+            f"policy.rules: r.rules.md\npolicy.rules_sha256: {sha(rules)}\npolicy.image: i.core.json\n"
+            f"policy.image_sha256: {sha(policy_source.read_image_bytes(image))}\npolicy.widens: yes\n"
+            f"policy.valid_days: 30\npolicy.egress_hosts: hosts.json\npolicy.egress_hosts_sha256: {sha(hosts)}\n"
+            f"---\n## manifest\nA release.\n{pm.FIXED_RULE}\n")
+    path = os.path.join(work, "demo.policy.md")
+    open(path, "w", encoding="utf-8").write(text)
+    keys = policy_pack.keygen(os.path.join(work, "keys"))
+    flow_authority.sign_flow(path, 1, keys["private"], keys["public"])
+    done = manifest_cli.examine(path, [keys["public"]])
+    result = seal.seal_manifest(done.release, [_dist.GEN.test_key("A")])
+    now = done.release.created + 60
+    out.update(now=now, manifest_sha256=done.release.manifest_sha256, rules_sha256=sha(rules),
+               policy_sha256=sha(done.release.image), envelopes=[
+                   {"artifact": one.artifact, "sealed": one.sealed.hex(), "body": one.body.hex(),
+                    "python": verifier.verify(one.sealed, one.body, trust=trust, pep=view, now=now).cause}
+                   for one in result.envelopes])
+elif step["op"] == "read":
+    out["verdicts"] = []
+    for one in step["envelopes"]:
+        sealed, body = bytes.fromhex(one["sealed"]), bytes.fromhex(one["body"])
+        verdict = verifier.verify(sealed, body, trust=trust, pep=view, now=step["now"])
+        out["verdicts"].append({"cause": verdict.cause, "meta": env.read(env.unseal(sealed)[0]).meta})
+print(json.dumps(out))
+"#;
+
+/// SPEC.md section 10, `dist seal --manifest`: the envelopes Python seals from a signed policy manifest read in Rust
+/// with their `manifest_sha256`, `source_sha256` and `rules_sha256` members, their signatures hold, and the Rust
+/// host PEP refuses them only at V5, as a kind they are not for, after V3 and V4 held; the Python agent PEP view takes
+/// each. The reverse: envelopes the Rust writer seals with those members verify in Python with the same meta, and the
+/// Rust writer refuses a member an artifact does not carry.
+#[test]
+fn envelopes_sealed_from_a_policy_manifest_read_in_both_runtimes() {
+    use prismpath_hotswap_rs::dist::trust::TrustStore;
+    use prismpath_hotswap_rs::dist::verify::{self as verifier, PepView};
+    use prismpath_hotswap_rs::dist::{Meta, TargetKind};
+    let Some(python) = Python::new("envelopes sealed from a policy manifest") else { return };
+    let sealed = python.run_script(MANIFEST_PYTHON, json!({"op": "seal_manifest"}));
+    let trust = TrustStore::from_bytes(&hex::decode(sealed["trust"].as_str().unwrap()).unwrap()).unwrap();
+    let host = PepView::new(TargetKind::Host, "agent/demo").unwrap();
+    let now = sealed["now"].as_i64().unwrap();
+    let manifest = Hex64::try_from(sealed["manifest_sha256"].as_str().unwrap()).unwrap();
+    let rules = Hex64::try_from(sealed["rules_sha256"].as_str().unwrap()).unwrap();
+    let mut seen = Vec::new();
+    for one in sealed["envelopes"].as_array().unwrap() {
+        assert_eq!(one["python"], Value::Null, "the Python agent PEP view takes {one}");
+        let sealed_bytes = hex::decode(one["sealed"].as_str().unwrap()).unwrap();
+        let body = hex::decode(one["body"].as_str().unwrap()).unwrap();
+        let envelope = env::read(env::unseal(&sealed_bytes).unwrap().0).unwrap();
+        assert_eq!(envelope.policy_sha256.as_str(), sealed["policy_sha256"].as_str().unwrap());
+        match (envelope.artifact, envelope.form()) {
+            (ArtifactKind::PolicyCore, Meta::PolicyCore(meta)) => {
+                assert_eq!((meta.manifest_sha256.as_ref(), meta.source_sha256.as_ref()), (Some(&manifest), Some(&rules)));
+            }
+            (ArtifactKind::EgressHosts, Meta::SealedSide(meta)) => {
+                assert_eq!((meta.manifest_sha256.as_ref(), meta.rules_sha256.as_ref()), (Some(&manifest), Some(&rules)));
+            }
+            other => panic!("an envelope a manifest seals for the agent: {other:?}"),
+        }
+        let verdict = verifier::verify(&sealed_bytes, &body, &trust, &host, now);
+        assert_eq!(verdict.cause.as_deref(), Some("dist:target-mismatch"), "V3 and V4 hold, V5 refuses");
+        seen.push(envelope.artifact);
+    }
+    seen.sort_by_key(|artifact| artifact.name());
+    assert_eq!(seen, vec![ArtifactKind::EgressHosts, ArtifactKind::PolicyCore]);
+
+    let core = std::fs::read(format!("{}/../prismpath/agent/policy/agent_default.core.json", env!("CARGO_MANIFEST_DIR"))).unwrap();
+    let core = core.strip_suffix(b"\n").unwrap_or(&core).to_vec();
+    let hosts = b"[\"api.example.com\"]".to_vec();
+    let release = env::release_id(&[(ArtifactKind::EgressHosts, h(&hosts)), (ArtifactKind::PolicyCore, h(&core))]).unwrap();
+    let args = |meta: Value| Args {
+        release: Some(release.clone()),
+        policy: Some(h(&core)),
+        meta: Some(meta),
+        stream: "agent/demo".to_string(),
+        targets: vec![TargetKind::Agent],
+        not_before: now - 60,
+        expires: now + 86400,
+        ..at(1)
+    };
+    let (m, r) = (manifest.as_str(), rules.as_str());
+    let written = [
+        (seal(ArtifactKind::PolicyCore, &core, &args(json!({"manifest_sha256": m, "source_sha256": r}))), core.clone()),
+        (seal(ArtifactKind::EgressHosts, &hosts, &args(json!({"manifest_sha256": m, "rules_sha256": r}))), hosts.clone()),
+    ];
+    let read = python.run_script(MANIFEST_PYTHON, json!({"op": "read", "now": now, "envelopes": written.iter().map(|(sealed, body)| {
+        json!({"sealed": hex::encode(sealed), "body": hex::encode(body)})
+    }).collect::<Vec<_>>()}));
+    assert_eq!(read["verdicts"][0], json!({"cause": null, "meta": {"manifest_sha256": m, "source_sha256": r}}));
+    assert_eq!(read["verdicts"][1], json!({"cause": null, "meta": {"manifest_sha256": m, "rules_sha256": r}}));
+    let good = envelope(ArtifactKind::PolicyCore, &core, &args(json!({"manifest_sha256": m, "source_sha256": r})));
+    let wrong = String::from_utf8(good).unwrap().replace("\"source_sha256\"", "\"rules_sha256\"");
+    let refused = env::read(wrong.as_bytes()).unwrap_err();
+    assert_eq!(refused.cause, "dist:bad-format", "a policy.core carries source_sha256, not rules_sha256");
+    println!("cross-language distribution: envelopes sealed from a policy manifest read and verify in both runtimes");
+}

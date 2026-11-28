@@ -261,10 +261,41 @@ def categories() -> frozenset:
     return frozenset(reading.FIELDS)
 
 
+# ------------------------------------------------------------------ sealed from a policy manifest
+
+# The side files of a manifest a gateway release is made from, and the artifact each one's bytes are (SPEC.md section 10).
+MANIFEST_INPUTS = {"routes": "gateway.routes", "identity_bundle": "identity.bundle", "identity_map": "identity.map"}
+
+
+def derive(release) -> Dict[str, bytes]:
+    """The bodies of a gateway release from a verified manifest (`policy_manifest.Release`): its `policy.core`, the
+    compiled image, its `gateway.routes`, the `policy.routes` file, and its `identity.bundle` and `identity.map`, the
+    two identity files. A gateway has no route table to fall back on, so a manifest that names none is refused, and the
+    identity files are held to ID3 as the adapter holds them at commit: both exactly when the policy reads `workload`.
+    Each side file is the artifact's body byte for byte and is read as its artifact reads it."""
+    if "routes" not in release.files:
+        raise Refused(BAD_FORMAT, "a gateway release needs its route table, and the manifest names no policy.routes")
+    bodies = {"policy.core": bytes(release.image), "gateway.routes": bytes(release.files["routes"])}
+    read_routes(bodies["gateway.routes"])
+    for key, artifact in (("identity_bundle", "identity.bundle"), ("identity_map", "identity.map")):
+        if key in release.files:
+            bodies[artifact] = bytes(release.files[key])
+    if "identity.bundle" in bodies:
+        read_identity_bundle(bodies["identity.bundle"])
+    if "identity.map" in bodies:
+        read_identity_map(bodies["identity.map"])
+    refusal = identity_refusal(bodies["policy.core"], bodies)
+    if refusal is not None:
+        raise Refused(refusal, "the identity files are named exactly when the policy reads workload, and the map names "
+                               "only trust domains the bundle holds (ID3)")
+    return bodies
+
+
 KIND = TargetKind(name="gateway", row=ROW,
                   readers={"gateway.routes": read_routes, "identity.bundle": read_identity_bundle,
                            "identity.map": read_identity_map},
                   comparators={"gateway.routes": compare_routes, "identity.bundle": compare_bundles,
                                "identity.map": compare_maps},
-                  domain_document=domain_document, categories=categories)
+                  domain_document=domain_document, categories=categories, derive=derive,
+                  manifest_inputs=MANIFEST_INPUTS)
 kinds.register(KIND)

@@ -501,8 +501,36 @@ def compile_checks(image: bytes, values, points=()) -> list:
     return target.check_listed(values) + target.check(image, points)
 
 
+# ------------------------------------------------------------------ sealed from a policy manifest
+
+# The side files of a manifest an agent release is made from, and the artifact each one's bytes are (SPEC.md section 10).
+MANIFEST_INPUTS = {"egress_hosts": "egress.hosts", "zones": "agent.zones"}
+# The value keys an agent release carries: none yet. No artifact of a release holds `policy.max_processes`,
+# `policy.timeout_s`, `policy.shell_many`, `policy.toolchain_dirs`, `policy.ro_mounts` or `policy.allowed_remotes`, and
+# the launcher runs values of its own (512 processes, calls of 120 to 600 seconds), so a signed value would read as
+# enforced and not be. The sealing tool refuses each until A4c wires it into what a PEP holds.
+MANIFEST_VALUES: Dict[str, Any] = {}
+NO_HOSTS = canon.canon2_bytes([])                  # `egress.hosts` when the manifest names none: no host is reached
+
+
+def derive(release) -> Dict[str, bytes]:
+    """The bodies of an agent release from a verified manifest (`policy_manifest.Release`): its `policy.core`, the
+    compiled image; its `egress.hosts`, the `policy.egress_hosts` file, or the empty list when the manifest names none,
+    so an absent key reaches no host; and its `agent.zones`, the `policy.zones` file, only when the manifest names one,
+    so an absent key declares no zone and the release id signs that absence (section 3). Each side file is the
+    artifact's body byte for byte and is read as its artifact reads it, `Refused` with its cause when it does not."""
+    bodies = {"policy.core": bytes(release.image),
+              "egress.hosts": bytes(release.files.get("egress_hosts", NO_HOSTS))}
+    read_hosts(bodies["egress.hosts"])
+    if "zones" in release.files:
+        bodies["agent.zones"] = bytes(release.files["zones"])
+        kinds.read_zones(bodies["agent.zones"])
+    return bodies
+
+
 KIND = TargetKind(name="agent", row=ROW, readers={"egress.hosts": read_hosts},
                   comparators={"egress.hosts": compare_hosts, "agent.zones": compare_zones},
                   domain=reading_domain, policy=policy, domain_document=domain_document,
-                  compile_checks=compile_checks)
+                  compile_checks=compile_checks, derive=derive, manifest_inputs=MANIFEST_INPUTS,
+                  manifest_values=MANIFEST_VALUES)
 kinds.register(KIND)

@@ -65,7 +65,8 @@ write any file or directory below it, or when it is inside the project (`package
 counts as able to write.
 
 A path is `protected` when the file defines a protected name (or sits under a protected module), or any function of
-the file reaches the protected set with certainty `certain` or `likely`; `unknown` when the file is not a Python
+the file reaches the protected set with certainty `certain` or `likely` (or only `certain`, when the point is built with
+that required certainty, a `likely` answer then reading `unknown`); `unknown` when the file is not a Python
 file of the index, the index holds a different version of it (a stale index), a lookup fails or times out, or Context
 Cloud says `unknown`; `none` only when every function of the file answered `no`. The file is the unit because a
 write names a file and not a line. Code at module level (outside every function) is not a function in Context
@@ -103,12 +104,16 @@ class ZoneError(Exception):
 
 class _Fixed:
     name = "fixed"
-    fields = {"zone_reach": ANSWERS}
-    restrictive = {"zone_reach": "unknown"}
+    fields = {"zone_reach": ANSWERS, "cc_certainty": contextcloud.CC_CERTAINTY,
+              "cc_engine_agreement": contextcloud.CC_ENGINE_AGREEMENT}
+    restrictive = {"zone_reach": "unknown", "cc_certainty": "unknown", "cc_engine_agreement": 0}
     control_paths: Tuple[str, ...] = ()
 
     def __init__(self, answer: str, why: str):
+        """`cc_certainty` is `none` exactly when the answer is `none` (a point with no zone to reach), and `unknown`
+        for every other fixed answer, since a fixed point has no Context Cloud answer to report."""
         self.answer, self.why = answer, why
+        self.certainty = "none" if answer == "none" else "unknown"
 
     def reach(self, raw: str, config: Any = None) -> str:
         return self.answer
@@ -118,7 +123,8 @@ class _Fixed:
         return self.answer, frozenset()
 
     def facts(self, change: Change, budget_s: float) -> Evidence:
-        return Evidence({"zone_reach": self.answer}, frozenset(), self.why, {})
+        return Evidence({"zone_reach": self.answer, "cc_certainty": self.certainty, "cc_engine_agreement": 0},
+                        frozenset(), self.why, {})
 
     def __repr__(self) -> str:
         return f"<zones {self.answer}: {self.why}>"
@@ -410,11 +416,13 @@ class ContextCloudZones(contextcloud.ContextCloudZones):
     (`classifier.host_path`) and whether no per call sandbox confines the agent (`_agent_unconfined`)."""
 
     def __init__(self, doc: Dict[str, Any], home: Path, executable: str, budget_s: float = DEFAULT_BUDGET_S,
-                 run=subprocess.run, host_write: bool = False, unconfined=None, host_path=None):
+                 run=subprocess.run, host_write: bool = False, unconfined=None, host_path=None,
+                 required_certainty="likely", engine_agreement=1):
         from prismpath.agent import classifier
         super().__init__(doc, home, executable, budget_s, run, host_write,
                          unconfined=_agent_unconfined if unconfined is None else unconfined,
-                         host_path=classifier.host_path if host_path is None else host_path)
+                         host_path=classifier.host_path if host_path is None else host_path,
+                         required_certainty=required_certainty, engine_agreement=engine_agreement)
 
 
 def status(home: Path, policy_image: bytes, workspace: Path, env: Optional[Mapping[str, str]] = None) -> Dict[str, Any]:

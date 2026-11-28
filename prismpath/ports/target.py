@@ -10,6 +10,12 @@ with, the domain document and the categories it was built with (CL4, P4), and th
 once (`prismpath.kinds_builtin`). A kind that was never registered has no row, so no enforcement point of it can
 be built and its artifacts do not read: the registry fails closed.
 
+A kind that can be sealed from a signed policy manifest (`dist seal --manifest`, SPEC.md section 10) also registers
+`derive`, which makes the bodies of its release from what the manifest check verified, `manifest_inputs`, the side
+files of the manifest it reads and the artifact each one is, and `manifest_values`, the value keys it carries and the
+one value it carries each at. A kind with no `derive` is not sealed from a manifest, and a manifest that names it
+does not hold.
+
 `Adapter` is the target runtime port, the interface between the one enforcement point machine
 (`prismpath.distribution.pep`) and the runtime a target kind protects.
 
@@ -38,6 +44,7 @@ LARGER, NOT_LARGER, CANNOT_DECIDE = "larger", "not-larger", "cannot-decide"
 Comparator = Callable[[Any, Any], str]            # (active body, staged body) -> LARGER, NOT_LARGER, CANNOT_DECIDE
 Reader = Callable[[bytes], Any]                    # a body to its reading, or `Refused` with the cause
 CompileChecks = Callable[[bytes, Mapping[str, Sequence[str]]], List[Tuple[Any, str]]]
+Derive = Callable[[Any], Mapping[str, bytes]]      # a verified `policy_manifest.Release` -> {artifact: body}
 
 
 @dataclass(frozen=True)
@@ -48,7 +55,11 @@ class TargetKind:
     has its own (owner answer Q4). `policy` builds the policy object the kind decides with from an image, and None is
     the kernel's policy bound to `domain`. `domain_document` answers the domain the kind was built with as a document
     (P4) and `categories` its category fields (CL4), None for the defaults the install part gives. `compile_checks`
-    answers the findings of `prismpath policy compile --target` for an image and its listed values."""
+    answers the findings of `prismpath policy compile --target` for an image and its listed values. `derive` answers the
+    bodies of the kind's release from a verified `policy_manifest.Release`, by artifact, or raises `kinds.Refused`;
+    `manifest_inputs` maps each side file key of the manifest it reads to the artifact the file's bytes are, and
+    `manifest_values` each value key it carries to the value it carries it at (a key at another value is not carried,
+    and the sealing tool refuses it rather than seal a release that drops it)."""
     name: str
     row: Any
     readers: Mapping[str, Reader] = field(default_factory=dict)
@@ -58,6 +69,9 @@ class TargetKind:
     domain_document: Optional[Callable[[], Any]] = None
     categories: Optional[Callable[[], FrozenSet[str]]] = None
     compile_checks: Optional[CompileChecks] = None
+    derive: Optional[Derive] = None
+    manifest_inputs: Mapping[str, str] = field(default_factory=dict)
+    manifest_values: Mapping[str, Any] = field(default_factory=dict)
 
 
 class Adapter:

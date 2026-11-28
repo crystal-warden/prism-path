@@ -401,6 +401,7 @@ jobs:
           grep -q "cross-language distribution: the Python controller accepted the Rust host PEP's records" cross_language.log
           grep -q "cross-language distribution: Rust read the Python host PEP's records of a release Rust sealed" cross_language.log
           grep -q "cross-language distribution: the Python controller accepted the Rust host PEP's refused and lapsed records" cross_language.log
+          grep -q "cross-language distribution: envelopes sealed from a policy manifest read and verify in both runtimes" cross_language.log
           grep -q "engine cross language: .* scenarios" cross_language.log
           grep -q "cross-language telemetry: Python decoded, re-encoded, demultiplexed and replayed what Rust wrote" cross_language.log
           grep -q "cross-language telemetry: Rust decoded, re-encoded, demultiplexed and replayed what Python wrote" cross_language.log

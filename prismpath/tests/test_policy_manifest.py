@@ -25,9 +25,13 @@ SHA = lambda data: hashlib.sha256(data).hexdigest()   # noqa: E731
 ZEROS, ONES = "0" * 64, "1" * 64
 
 
-def SIG(manifest, created=None):    # noqa: N802
-    """A signature that holds for exactly the text `manifest` was parsed from."""
-    return pm.Signature(True, (), manifest.sha256, created)
+def SIG(manifest, created=None, version=None):    # noqa: N802
+    """A signature that holds for exactly the text `manifest` was parsed from, signed at its seq."""
+    return pm.Signature(True, (), manifest.sha256, created, manifest.seq if version is None else version, ONES)
+
+
+def check(*args, known_targets=frozenset({"agent"}), **kwargs):
+    return pm.check(*args, known_targets=known_targets, **kwargs)
 
 BASE = {
     "id": "starter-1", "stream": "starter", "seq": "1", "targets": "agent", "rules": "a.rules.md",
@@ -35,10 +39,12 @@ BASE = {
 }
 
 
-def text(**changes):
+def text(name=None, **changes):
+    """A manifest's text. Its flow name, the stream, is the last line of the front matter, so the key lines are 2 on."""
     keys = {**BASE, **changes}
     front = "\n".join(f"policy.{key}: {value}" for key, value in keys.items() if value is not None)
-    return f"---\n{front}\n---\n## manifest\nNotes.\n{pm.FIXED_RULE}\n"
+    name = name or keys.get("stream") or "starter"
+    return f"---\n{front}\nname: {name}\n---\n## manifest\nNotes.\n{pm.FIXED_RULE}\n"
 
 
 def problems(source):
@@ -48,25 +54,24 @@ def problems(source):
 
 
 # ----------------------------------------------------------------------------------------------- grammar
-def test_the_shipped_starter_manifest_reads_and_keeps_todays_defaults():
+def test_the_shipped_starter_manifest_reads_and_writes_no_value_key_a_pep_does_not_hold():
     manifest = pm.parse((POLICY / "agent_default.policy.md").read_text(encoding="utf-8"))
     assert (manifest.stream, manifest.seq, manifest.targets, manifest.valid_days) == ("agent-default", 1, ("agent",), 90)
-    assert manifest.get("allowed_remotes") == () and manifest.files == {}          # hosts empty, zones absent
-    assert manifest.get("toolchain_dirs")[:3] == ("workspace:.toolchain", "/usr", "/opt") and manifest.get("ro_mounts") == ()
-    assert (manifest.get("max_processes"), manifest.get("timeout_s"), manifest.get("shell_many")) == (64, 30, 20)
+    assert manifest.files == {}                                                   # hosts empty, zones absent
+    assert not set(manifest.values) & set(pm.VALUE_KEYS)       # no artifact of a release holds a value key yet
     assert manifest.widens is True and manifest.replaces == ""
 
 
 def test_the_shipped_starter_manifest_parses_as_a_flow_so_it_can_be_signed():
     graph = parse_flow((POLICY / "agent_default.policy.md").read_text(encoding="utf-8"))
-    assert graph.name == "agent_default_policy" and graph.nodes["manifest"].edges == [("refuse_135", "always")]
+    assert graph.name == "agent-default" and graph.nodes["manifest"].edges == [("refuse_135", "always")]
 
 
 def test_the_shipped_starter_manifest_names_the_shipped_sources_by_hash():
     manifest = pm.parse((POLICY / "agent_default.policy.md").read_text(encoding="utf-8"))
     assert manifest.rules_sha256 == SHA(RULES)
     assert manifest.image_sha256 == SHA(policy_source.read_image_bytes(IMAGE))
-    assert pm.check(manifest, SIG(manifest), lambda path: (POLICY / path).read_bytes()) == []
+    assert check(manifest, SIG(manifest), lambda path: (POLICY / path).read_bytes()) == []
 
 
 def test_every_key_of_the_proposal_is_accepted_with_its_form():
@@ -78,13 +83,12 @@ def test_every_key_of_the_proposal_is_accepted_with_its_form():
         net_dests_sha256=ONES, max_processes="64", timeout_s="30", shell_many="20", toolchain_dirs="/usr | ~/.cargo | workspace:.toolchain",
         ro_mounts="/data/models", local_model="http://127.0.0.1:8000", grant_classes="read | write", cc_protected="auth | billing",
         cc_index="idx.json", cc_index_sha256=ONES, cc_freshness_s="3600", cc_required_certainty="likely",
-        cc_engine_agreement="2", domain="tool=read_file|write_file; retries=0..5", points="tests | parse")
+        cc_engine_agreement="2", points="tests | parse")
     manifest = pm.parse(every)
     assert manifest.targets == ("agent", "gateway") and manifest.not_before == 1796083200 and manifest.expires == 1800000000
     assert manifest.widens is False and set(manifest.files) == set(pm.FILES)
-    assert manifest.get("domain") == (("tool", "read_file|write_file"), ("retries", "0..5"))
     assert manifest.get("cc_required_certainty") == "likely" and manifest.get("toolchain_dirs") == ("/usr", "~/.cargo", "workspace:.toolchain")
-    assert set(manifest.values) == {name for name in pm.KEYS if name != "valid_days"}
+    assert set(manifest.values) == {name for name in pm.KEYS if name not in ("valid_days", "domain")}
 
 
 def test_the_accepted_keys_are_exactly_the_proposals():
@@ -106,8 +110,8 @@ def test_an_unknown_key_is_refused_with_its_line():
 
 def test_a_key_without_the_prefix_is_refused_but_the_flow_keys_are_allowed():
     assert any("not a front matter key" in m for _l, m in problems(text().replace("policy.seq: 1", "seq: 1\npolicy.seq: 1")))
-    manifest = pm.parse(text().replace("---\n", "---\nname: stream_one\ndescription: x\nstart: manifest\n", 1))
-    assert manifest.flow_name == "stream_one"
+    manifest = pm.parse(text().replace("---\n", "---\ndescription: x\nstart: manifest\n", 1))
+    assert manifest.flow_name == "starter"
 
 
 def test_a_missing_required_key_is_named():
@@ -220,51 +224,51 @@ def codes(findings):
 
 def test_a_manifest_that_holds_has_no_findings(tmp_path):
     _path, manifest = release(tmp_path, side={"zones": b"{}", "egress_hosts": b"a.example\n"})
-    assert pm.check(manifest, SIG(manifest), reader(tmp_path), known_targets={"agent"}) == []
+    assert check(manifest, SIG(manifest), reader(tmp_path), known_targets={"agent"}) == []
 
 
 def test_a_signature_that_fails_is_the_only_finding(tmp_path):
     (tmp_path / "a.core.json").write_bytes(b"{}")
     _path, manifest = release(tmp_path)
     (tmp_path / "a.core.json").write_bytes(b"{}")
-    found = pm.check(manifest, pm.Signature(False, ("sig:invalid",)), reader(tmp_path))
+    found = check(manifest, pm.Signature(False, ("sig:invalid",)), reader(tmp_path))
     assert codes(found) == ["signature"] and "sig:invalid" in found[0].message
 
 
 def test_an_edited_rules_source_is_found_by_its_hash_and_its_image(tmp_path):
     _path, manifest = release(tmp_path)
     (tmp_path / "a.rules.md").write_bytes(RULES.replace(b"-> allow", b"-> allow", 1) + b"\nAn added note.\n")
-    found = pm.check(manifest, SIG(manifest), reader(tmp_path))
+    found = check(manifest, SIG(manifest), reader(tmp_path))
     assert codes(found) == ["rules-sha256"] and found[0].line == manifest.lines["rules_sha256"]
     (tmp_path / "a.rules.md").write_bytes(RULES.replace(b'-> refuse agent:unclassifiable: when git_op == "unknown" or path_scope == "unknown"',
                                                          b'-> allow: when git_op == "unknown"'))
-    assert set(codes(pm.check(manifest, SIG(manifest), reader(tmp_path)))) == {"rules-sha256", "image-sha256", "image-stale"}
+    assert set(codes(check(manifest, SIG(manifest), reader(tmp_path)))) == {"rules-sha256", "image-sha256", "image-stale", "target-check"}
 
 
 def test_a_rules_source_that_does_not_compile_names_its_line(tmp_path):
     _path, manifest = release(tmp_path)
     (tmp_path / "a.rules.md").write_bytes(b"---\nname: x\n---\n## core_decision\n-> refuse no:such-cause: always\n")
-    found = pm.check(manifest, SIG(manifest), reader(tmp_path))
+    found = check(manifest, SIG(manifest), reader(tmp_path))
     assert "rules-compile" in codes(found) and any(":5:" in f.message for f in found if f.code == "rules-compile")
 
 
 def test_a_stale_image_file_is_found_even_when_the_hash_names_the_compile(tmp_path):
     _path, manifest = release(tmp_path)
     (tmp_path / "a.core.json").write_bytes(IMAGE.replace(b"allow", b"allux", 1))
-    assert codes(pm.check(manifest, SIG(manifest), reader(tmp_path))) == ["image-stale"]
+    assert codes(check(manifest, SIG(manifest), reader(tmp_path))) == ["image-stale"]
 
 
 def test_an_image_without_its_final_line_feed_still_holds(tmp_path):
     _path, manifest = release(tmp_path)
     (tmp_path / "a.core.json").write_bytes(policy_source.read_image_bytes(IMAGE))
-    assert pm.check(manifest, SIG(manifest), reader(tmp_path)) == []
+    assert check(manifest, SIG(manifest), reader(tmp_path)) == []
 
 
 def test_a_missing_file_is_a_finding_on_its_key_line(tmp_path):
     _path, manifest = release(tmp_path, side={"zones": b"{}"})
     (tmp_path / "zones.dat").unlink()
     (tmp_path / "a.core.json").unlink()
-    found = pm.check(manifest, SIG(manifest), reader(tmp_path))
+    found = check(manifest, SIG(manifest), reader(tmp_path))
     assert sorted((f.code, f.line) for f in found) == sorted([("missing", manifest.lines["image"]),
                                                               ("missing", manifest.lines["zones"])])
 
@@ -272,13 +276,13 @@ def test_a_missing_file_is_a_finding_on_its_key_line(tmp_path):
 def test_a_side_input_whose_hash_differs_is_found(tmp_path):
     _path, manifest = release(tmp_path, side={"routes": b"[]", "net_dests": b"x"})
     (tmp_path / "routes.dat").write_bytes(b"[1]")
-    found = pm.check(manifest, SIG(manifest), reader(tmp_path))
+    found = check(manifest, SIG(manifest), reader(tmp_path))
     assert [(f.code, f.line) for f in found] == [("routes-sha256", manifest.lines["routes_sha256"])]
 
 
 def test_a_target_outside_the_known_set_is_found(tmp_path):
     _path, manifest = release(tmp_path)
-    found = pm.check(manifest, SIG(manifest), reader(tmp_path), known_targets={"gateway"})
+    found = check(manifest, SIG(manifest), reader(tmp_path), known_targets={"gateway"})
     assert codes(found) == ["target"]
 
 
@@ -289,7 +293,7 @@ def test_the_check_reads_only_through_the_reader_it_is_given(tmp_path):
     def read(path):
         asked.append(path)
         return (tmp_path / path).read_bytes()
-    pm.check(manifest, SIG(manifest), read)
+    check(manifest, SIG(manifest), read)
     assert sorted(asked) == ["a.core.json", "a.rules.md", "zones.dat"]
 
 
@@ -374,7 +378,7 @@ def test_the_policy_command_still_has_its_other_actions():
 
 
 # ----------------------------------------------------------------------------------------------- review fixes
-def front(extra="", flow="name: m\ndescription: the release\n"):
+def front(extra="", flow="description: the release\n"):
     return text().replace("---\n", "---\n" + flow + extra, 1)
 
 
@@ -418,24 +422,24 @@ def test_valid_days_counts_from_the_signing_time_and_the_clock_is_checked(tmp_pa
     _path, manifest = release(tmp_path)                                     # valid_days 30, no not_before
     day = 86400
     assert pm.expiry(manifest, 1000) == 1000 + 30 * day
-    assert pm.check(manifest, SIG(manifest, 1000), reader(tmp_path), now=1000 + 29 * day) == []
-    assert codes(pm.check(manifest, SIG(manifest, 1000), reader(tmp_path), now=1000 + 30 * day)) == ["expired"]
-    assert codes(pm.check(manifest, SIG(manifest, None), reader(tmp_path), now=5)) == ["expiry"]
+    assert check(manifest, SIG(manifest, 1000), reader(tmp_path), now=1000 + 29 * day) == []
+    assert codes(check(manifest, SIG(manifest, 1000), reader(tmp_path), now=1000 + 30 * day)) == ["expired"]
+    assert codes(check(manifest, SIG(manifest, None), reader(tmp_path), now=5)) == ["expiry"]
     _path, written = release(tmp_path, not_before="5000")
     assert pm.expiry(written, 1000) == 5000 + 30 * day
-    assert codes(pm.check(written, SIG(written, 1000), reader(tmp_path), now=4000)) == ["not-yet-valid"]
+    assert codes(check(written, SIG(written, 1000), reader(tmp_path), now=4000)) == ["not-yet-valid"]
 
 
 def test_an_expires_time_in_the_past_is_found(tmp_path):
     _path, manifest = release(tmp_path, valid_days=None, expires="1000")
-    assert codes(pm.check(manifest, SIG(manifest), reader(tmp_path), now=2000)) == ["expired"]
+    assert codes(check(manifest, SIG(manifest), reader(tmp_path), now=2000)) == ["expired"]
 
 
 def test_a_signature_for_other_text_is_refused(tmp_path):
     _path, manifest = release(tmp_path)
-    found = pm.check(manifest, pm.Signature(True, (), ONES, 1), reader(tmp_path))
+    found = check(manifest, pm.Signature(True, (), ONES, 1), reader(tmp_path))
     assert codes(found) == ["signature"] and "not the one signed" in found[0].message
-    assert codes(pm.check(manifest, pm.Signature(True), reader(tmp_path))) == ["signature"]
+    assert codes(check(manifest, pm.Signature(True), reader(tmp_path))) == ["signature"]
 
 
 def test_a_policy_key_or_fence_in_the_body_is_refused():
@@ -453,7 +457,7 @@ def test_the_fences_are_exactly_three_hyphens_and_keys_start_in_column_one():
 def test_unicode_digits_spaces_and_an_empty_domain_are_refused():
     assert any("policy.not_before" in m for _l, m in problems(text(not_before="\uff12\uff10\uff12\uff16-11-28T00:00:00Z")))
     assert problems(text(shell_many="\u00a020"))
-    assert any("empty domain" in m for _l, m in problems(text(domain="")))
+    assert any("reserved" in m for _l, m in problems(text(domain="")))
     assert problems(text(grant_classes="Read"))
     assert problems(text(grant_classes="read | ../x"))
 
@@ -472,7 +476,7 @@ def test_a_file_that_cannot_be_read_is_a_finding_on_its_line(tmp_path):
         if path == "zones.dat":
             raise ValueError("is too big")
         return (tmp_path / path).read_bytes()
-    found = pm.check(manifest, SIG(manifest), read)
+    found = check(manifest, SIG(manifest), read)
     assert [(f.code, f.line) for f in found] == [("unreadable", manifest.lines["zones"])]
 
 
@@ -483,7 +487,7 @@ def test_the_widens_message_cites_w2_and_w6():
 def test_the_proof_script_attack_on_a_signed_manifest_exits_1_or_2(signed):
     directory, path, pub = signed
     body = path.read_text(encoding="utf-8")
-    with_key = body.replace("policy.id:", "name: m\ndescription: the release\npolicy.cc_protected: secrets\npolicy.id:", 1)
+    with_key = body.replace("policy.id:", "description: the release\npolicy.cc_protected: secrets\npolicy.id:", 1)
     path.write_text(with_key, encoding="utf-8")
     from prismpath.hotswap import flow_authority, policy_pack
     keys = policy_pack.keygen(str(directory / "k2"))

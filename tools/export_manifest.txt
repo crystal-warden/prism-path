@@ -929,6 +929,7 @@ prismpath/tests/test_llm_local.py
 prismpath/tests/test_lockfile.py
 prismpath/tests/test_lockfile_tree.py
 prismpath/tests/test_lsp.py
+prismpath/tests/test_manifest_seal.py
 prismpath/tests/test_merkle_consistency.py
 prismpath/tests/test_merkle_rfc6962.py
 prismpath/tests/test_merkle_stream.py

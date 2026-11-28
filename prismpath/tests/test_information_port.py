@@ -51,8 +51,18 @@ def test_every_point_has_the_port_shape(point):
 def test_a_fixed_point_answers_through_facts_and_through_reach(answer):
     point = zones.fixed(answer)
     evidence = point.facts(Change("src/a.py", None), 0.1)
-    assert evidence.readings == {"zone_reach": answer} and point.reach("src/a.py") == answer
+    assert evidence.readings == {"zone_reach": answer, "cc_certainty": "none" if answer == "none" else "unknown",
+                                 "cc_engine_agreement": 0}
+    assert point.reach("src/a.py") == answer
     assert evidence.names == frozenset() and evidence.why == point.why
+
+
+def test_cc_certainty_is_none_exactly_when_zone_reach_is_none_for_every_fixed_point():
+    for point in (zones.NO_ZONES, zones.UNKNOWN_ZONES, zones.fixed("none"), zones.fixed("protected"),
+                  zones.fixed("unknown")):
+        readings = point.facts(Change("src/a.py", None), 0.1).readings
+        assert (readings["zone_reach"] == "none") == (readings["cc_certainty"] == "none")
+        assert set(readings) == set(point.fields) and set(point.restrictive) == set(point.fields)
 
 
 def test_a_point_that_raises_reads_every_field_at_its_restrictive_value(tmp_path):
@@ -77,7 +87,7 @@ def test_a_context_cloud_point_without_what_the_agent_kind_hands_it_reads_unknow
     point = contextcloud.ContextCloudZones(doc, tmp_path, str(tmp_path / "contextcloud"))
     assert not point._confined()
     evidence = point.facts(Change(str(tmp_path / "a.py"), classifier.Config.for_workspace(tmp_path)), 0.1)
-    assert evidence.readings == {"zone_reach": point.restrictive["zone_reach"]}
+    assert evidence.readings == dict(point.restrictive)
     assert point.reach("a.py", classifier.Config.for_workspace(tmp_path)) == "unknown"
     assert point.name == "contextcloud" and isinstance(point, InformationPoint)
 
@@ -121,5 +131,5 @@ def test_facts_never_raises(tmp_path):
     for point in (_built(tmp_path, host_path=broken), _built(tmp_path)):
         evidence = point.facts(Change("a.py", config), 0.1)
         assert evidence.readings == point.restrictive and evidence.why
-    assert _built(tmp_path).facts(Change("a.py", None), 0.1).readings == {"zone_reach": "unknown"}
-    assert _built(tmp_path, host_path=broken).facts(Change("a.py", None), 0.1).readings == {"zone_reach": "unknown"}
+    assert _built(tmp_path).facts(Change("a.py", None), 0.1).readings == dict(_built(tmp_path).restrictive)
+    assert _built(tmp_path, host_path=broken).facts(Change("a.py", None), 0.1).readings == dict(_built(tmp_path).restrictive)

@@ -576,6 +576,7 @@ other, so the signature is a `prismpath-flow-manifest/1` beside it (`<name>.poli
 
 ```markdown
 ---
+name: agent-default
 policy.id: agent-default-1
 policy.stream: agent-default
 policy.seq: 1
@@ -586,7 +587,6 @@ policy.image: agent_default.core.json
 policy.image_sha256: <sha256 of the image's canonical bytes>
 policy.widens: yes
 policy.valid_days: 90
-policy.max_processes: 64
 ---
 ## manifest
 Notes for the reader.
@@ -600,9 +600,12 @@ Normatively, as follows.
   the text parsed is the text signed. `prismpath policy manifest check` also requires the sha256 of the text
   it parsed to be the `flow_sha256` of the verified signature.
 - **Front matter** is required, between two lines that are exactly `---` (nothing before or after), one
-  `key: value` per line, each starting in the first column. Every key starts with `policy.`. The keys `name`
-  (a name), `description` (printable text up to 200 characters) and `start` (a name) are also accepted, since they
-  belong to the flow, and the signed flow takes its name from `name`. Any other key is an error that names its line.
+  `key: value` per line, each starting in the first column. Every key starts with `policy.`. The keys `name`,
+  `description` (printable text up to 200 characters) and `start` (a name) are also accepted, since they belong to the
+  flow. `name` is required and is `policy.stream`: the signed flow takes its name from it, and the flow authority
+  keeps its version floor per flow name, so the floor is one per stream. Tying it to `policy.id`, which names one
+  release, would give every release a floor of its own, so an older signed manifest of the stream would never be
+  refused. Any other key is an error that names its line.
   A `policy.` key or a `---` line below the closing fence is an error, since it would read as a note. A key written twice is an
   error. A refusal names the line of the key, and the whole file when a required key is missing. Every problem is
   reported, not only the first.
@@ -625,10 +628,11 @@ Normatively, as follows.
   `policy.ro_mounts` (lists of host path: absolute, `~/` under the home, or `workspace:` under the workspace, no `..`),
   `policy.grant_classes` (list of `[a-z][a-z0-9_]{0,31}`) and `policy.local_model` (word). A key
   that is absent has no value here. The grammar applies no default, a default belongs to the target that reads the
-  key, and a manifest that keeps today's defaults writes them.
+  key. The grammar reads every value key, and the sealing tool refuses each one no target carries yet (below), which in
+  this version is all of them, so a manifest to be sealed writes none.
 - **Context Cloud.** `policy.cc_protected` (list of names as `agent.zones` holds them: 1 to 512 characters of `[A-Za-z0-9_.:@-]`, no `/`, at most 10,000), `policy.cc_index` with `policy.cc_index_sha256`,
   `policy.cc_freshness_s` (1 and up, the oldest index a reading may use), `policy.cc_required_certainty` (`certain`
-  or `likely`) and `policy.cc_engine_agreement` (1 to 64, the engines that must agree). The grammar reads them. What
+  or `likely`) and `policy.cc_engine_agreement` (1 to 64, the engines that must agree, Context Cloud's own answer counting as one). The grammar reads them. What
   a target does with them is its own. The protected set in force is the union of `policy.cc_protected` and the
   `protected` list of the `policy.zones` file: neither wins and neither removes a name from the other. `policy.cc_index`
   pins the sha256 of an index statement (the index's path under the project, the program and package that read it, and
@@ -636,28 +640,119 @@ Normatively, as follows.
   holds and by `policy.cc_freshness_s`.
 - **Information points.** `policy.points` (list of word) names the information points the rules are built with. A rules
   source that declares a field only a point supplies (`tests_pass`, `edit_kind`, `behaviour_preserving`,
-  `touches_protected`, `adds_protected_reference`) is a `points` finding unless the point that supplies it is named,
+  `touches_protected`, `adds_protected_reference`, `cc_certainty`, `cc_engine_agreement`) is a `points` finding unless the point that supplies it is named,
   and `prismpath policy compile --target agent` refuses it, on the line of the field, unless it is given `--point`. A policy
   that allows a reading with `tests_pass` at `not_run` that it refuses at `false` is refused too. `tests_pass` true is never enough
   alone, and the five facts were proven together with `reaches_protected` and `unknown_reason`, so a policy that reads them should also
-  require `zone_reach == "none"`.
-- **Domain.** `policy.domain` is `field=value|value; other=LO..HI`: the values or the integer range each field of
-  the image may take, each field once, and not empty. It is parsed and nothing compares it with the rules yet.
+  require `zone_reach == "none"`. The sealing tool refuses `policy.points` with "no PEP holds this yet": no artifact of a
+  release carries the points and no PEP builds its policy with them, so a release sealed from it would be read without
+  the points it names.
+- **Context Cloud certainty.** The `contextcloud` point supplies two fields besides `zone_reach`. `cc_certainty` is
+  `none`, `likely`, `certain` or `unknown`: Context Cloud's strongest answer over the file's functions (`certain` for a
+  file that defines protected code). It reads `unknown` on every error, a missing or stale index, an untrusted program
+  or index, a bad requirement, and when the answer is incomplete: a function timed out or errored and no function was
+  `certain`, which includes a `likely` beside a function that did not answer (that function could have been `certain`).
+  `zone_reach` still reads such a `likely` as `likely` does, so the default is unchanged, and only a complete answer is
+  cached. `cc_engine_agreement` is `int min=0 max=63`, the number of engines other than Context Cloud that agree with
+  the answer, as Context Cloud reports it. It reads 0 on every path today, since `contextcloud reaches --json` names no
+  engine beside its own and the point does not read the other engines' answers in the index. A requirement of N
+  engines (`policy.cc_engine_agreement`, 1 to 64) is met by Context Cloud and N - 1 others, so 1 means Context Cloud
+  alone and 64 needs the field's top value of 63. Rules over these two fields, and over every evidence field, must be
+  written as allows (`allow when cc_certainty == "none"`): the compile refuses a policy that decides a field's
+  restrictive value, the value it reads when its point cannot answer, more permissively than another value of it
+  (refuse < escalate < allow), as `refuse when cc_certainty == "certain"` does, with a finding on the field's line.
+  The two requirements can only move a `protected` reading of `zone_reach` to `unknown`, never to `none`
+  (`policy.cc_required_certainty` `certain`: a `likely` answer reads `unknown`; `policy.cc_engine_agreement` above 1:
+  every `certain` and `likely` answer reads `unknown` until Context Cloud reports that many engines). That narrows
+  the decision only for a policy that treats `zone_reach` `unknown` at least as strictly as `protected`; a policy that
+  refuses `protected` and escalates `unknown` is loosened by a stricter requirement, so a release that carries a
+  requirement must hold that condition (the dominance check applied to `zone_reach`), which the wiring has to enforce.
+  The defaults, `likely` and 1, are what the point always read. The point reads the requirements as constructor
+  arguments, read only afterwards; no manifest carries them to a running agent yet, and the sealing tool still
+  refuses the keys.
+- **Domain.** `policy.domain` is reserved, and written it is an error. The domain of a release is the rules
+  source's own typed `field.<name>:` lines, which `policy.rules_sha256` already signs, so a second statement of it
+  could only repeat them or contradict them. The floor and ceiling per field it was meant to carry bound what a later
+  release may widen to, and nothing reads such a bound yet. A signed file carries no syntax whose meaning is not fixed,
+  so the key stays reserved until that reader is specified.
 - **Body.** The body holds notes and one rule, `-> refuse_135: always` (`dist:bad-format`), under a `##`
   heading. It is written as the canonical rendering writes a target, so the file parses as a flow and the flow parser
   does not refuse it as a rules source. Any other rule line is an error.
 
 **The release check.** `prismpath policy manifest check FILE --pub KEY...` (`policy_manifest.check`) holds when,
 in this order, the signature verifies with a trusted authority key (the flow authority, `prismpath authorize
-verify`); `policy.rules` compiles with `prismpath policy compile` to the image byte for byte, with its final line feed
-or without; `policy.rules_sha256` is the sha256 of the rules file and `policy.image_sha256` of the compiled
-image's bytes without the line feed; and every side input named has the sha256 it says. A signature that does not
+verify`) at a version that is `policy.seq`; `policy.rules` compiles with `prismpath policy compile` to the image byte
+for byte, with its final line feed or without; `policy.rules_sha256` is the sha256 of the rules file and
+`policy.image_sha256` of the compiled image's bytes without the line feed; every target is one a manifest can be sealed
+for and the checks of `prismpath policy compile --target` that its kind registered hold (`target-check`); and every
+side input named has the sha256 it says. The signed version and `policy.seq` are one counter, so the version floor's
+rule (a version below the one accepted is refused, the same version only with the same text) is the stream's seq rule
+as the sealing tool sees it. A signature that does not
 hold is the only finding, since nothing the manifest says counts without it. Every file is read from the manifest's
 directory, and one that resolves outside it, a link for one, reads as absent. A file is opened without following a
 link at its last part, and one over 16 MiB is a finding. With the clock the check also finds a manifest before
 `policy.not_before` or past its end (`expired`, `not-yet-valid`). Exit 0 holds, 1 for a finding and 2
-for a manifest that does not read. The command seals nothing. Sealing from a manifest, the envelope's `manifest_sha256`
-and `rules_sha256` members and the target checks of each target are specified with `dist seal --manifest`.
+for a manifest that does not read. The command seals nothing, and with `--state-dir` it reads the version floor and
+never raises it.
+
+**Sealing from a manifest.** `prismpath dist seal --manifest FILE --pub KEY... --key PEM... --out DIR [--held DIR]
+--state-dir DIR` runs the release check and seals what it verified (`policy_manifest.verify`, then
+`distribution/seal.py`, `seal_manifest`). Nothing is read twice: the check hands on the compiled image, the rules
+bytes, each side file's bytes and the signed `created`, `version` and `key_id`, and the tool seals from those. The
+image sealed is the compiled image, never the image file's bytes.
+
+- **Targets.** A manifest can be sealed for a target whose kind registered a `derive` (`agent` and `gateway` in this
+  version). `host` and `mesh` need a `policy.ppt` and `xdp` a `net.edge`, and the grammar names none of them, so
+  `check` finds such a target (`target`). Each target gets its own release: one envelope per artifact its `derive`
+  makes, the release id over those artifacts and `targets` that one kind, because a PEP computes the release id over
+  the artifacts staged for it (E10, C2). Every release of one manifest carries the same stream, seq, policy hash
+  (`policy.image_sha256`), `replaces` and `widens`. `agent` is its `policy.core` and its `egress.hosts`, and
+  `agent.zones` when the manifest names zones. `gateway` is its `policy.core` and its `gateway.routes`, and
+  `identity.bundle` and `identity.map` when the policy reads `workload` (ID3). A side file is its artifact's body byte
+  for byte and is read as that artifact reads it.
+- **An absent key.** No `policy.egress_hosts` seals the empty host list, the least a release can reach. No
+  `policy.zones` seals no `agent.zones`: the release declares no zone and its release id signs that absence (section 3
+  of the distribution spec). That protects nothing, so it is larger than any release that had zones, and the tool
+  finds it so (W7) and prints it. A gateway with no `policy.routes` is refused, since it has no route table to fall back
+  on. A side file no target reads is refused, and so is every value key no target carries: a signed key no PEP holds
+  would read as enforced. In this version no target carries a value key. `policy.max_processes`, `policy.timeout_s`,
+  `policy.shell_many`, `policy.toolchain_dirs`, `policy.ro_mounts`, `policy.allowed_remotes`, `policy.local_model`,
+  `policy.grant_classes` and every `policy.cc_*` key are refused with "no PEP holds this yet", because no artifact of a
+  release holds them and the launcher runs values of its own. They are wired into what a PEP holds in a later version.
+- **Times.** `not_before` is `policy.not_before`, else the signing time, and `expires` is the end `policy.expires`
+  or `policy.valid_days` gives. So the same manifest and the same held state seal to the same envelopes. (With
+  `widens: yes` and no `policy.replaces`, `replaces` comes from the held state, so another held state gives another
+  `replaces`.)
+- **Widening (W7).** The tool decides `widens` itself. It compares each target's release, whole, with the one it
+  replaces in the controller state `--held`, as a PEP that decides compares it (W1). The held release counts only when
+  it is whole: every body of it is stored and the release id computed over them is its signed `release`, else the tool
+  holds no release to compare with. Only a target kind that decides (W1) is sealed from a manifest, so the tool's
+  comparison is never the only one. `widens: no` is refused with
+  `dist:widening-unsigned` when the tool finds the release larger or holds no release to compare it with, and is
+  sealed with `widens` false only when it finds it not larger. `widens: yes` seals a widening, and the tool never
+  signs its widening statement: the owner signs that with `dist widen`, as a separate act (W4, W5). `replaces` is
+  `policy.replaces`, else the policy hash of the latest release `--held` holds below this seq for the target, else
+  none. A manifest whose targets would replace different policies is refused, since it states one `replaces`. The tool
+  prints, per target, the artifacts it found larger than the held release and the optional artifacts the release does
+  not carry (`agent.zones` absent, say), so the owner sees them before signing a widening statement.
+- **Meta.** Each envelope's `meta` names the manifest and the rules: `manifest_sha256`, the `flow_sha256` the
+  manifest's signature covers, on every artifact; `source_sha256`, the sha256 of the rules source, on the
+  `policy.core`; and `rules_sha256`, the same hash, on each side artifact, the rules of the release it is sealed with.
+  An auditor goes from a receipt's policy hash to the `policy.core` envelope, to the manifest by its hash and to the
+  rules source by its hash. No PEP check reads them.
+- **The check before signing.** Each artifact is held to its own check (V11) for its target before anything is
+  written, and nothing is written unless every envelope is sealed. The envelopes go to `--out` as
+  `<target>.<artifact>.sealed` with `<target>.<artifact>.body` beside each, the names a controller's inbox takes.
+  `--out` is a new directory or an empty one: one that already holds a `.sealed` or a `.body` file is refused, so the
+  envelopes of two releases never sit together, and an `--out` that is a file is refused (exit 2).
+- **The floor.** `--state-dir` is required with `--manifest`. A manifest signed at a version below the one sealed
+  before, or at the same version with another text, is refused (`flow:version-replay`), and the floor is raised to the
+  manifest's version once the envelopes are written. So an older signed manifest of the stream is never sealed again.
+  The sealing tool raises it, and the release check only reads it.
+- **The flag form.** `dist seal --artifact A --body FILE --stream S --seq N --target T ...` still seals one envelope,
+  and prints a note that it is deprecated in favour of `--manifest`. With `--manifest` no release flag is given:
+  `--artifact`, `--body`, `--stream`, `--seq`, `--target`, `--not-before`, `--expires`, `--release`, `--policy`,
+  `--replaces`, `--widens`, `--yes`, `--meta`, `--qualification` and `--ceiling` each exit 2.
 
 ---
 
