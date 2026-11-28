@@ -281,6 +281,7 @@ prismpath/distribution/install.py
 prismpath/distribution/kinds.py
 prismpath/distribution/legacy.py
 prismpath/distribution/pep.py
+prismpath/distribution/seal.py
 prismpath/distribution/state_record.py
 prismpath/distribution/statement.py
 prismpath/distribution/table_compare.py
@@ -843,6 +844,7 @@ prismpath/tests/test_distribution_pep.py
 prismpath/tests/test_distribution_reconciling.py
 prismpath/tests/test_distribution_revocation.py
 prismpath/tests/test_distribution_rotation.py
+prismpath/tests/test_distribution_seal.py
 prismpath/tests/test_distribution_state_record.py
 prismpath/tests/test_distribution_statement.py
 prismpath/tests/test_distribution_table_compare.py
