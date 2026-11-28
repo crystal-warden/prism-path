@@ -170,6 +170,7 @@
     "ports": [
       "distribution/adapters/__init__.py",
       "ports/__init__.py",
+      "ports/information.py",
       "ports/keys.py",
       "ports/target.py"
     ],
@@ -301,6 +302,8 @@
       "gateway/identity.py",
       "gateway/proxy.py",
       "gateway/reading.py",
+      "information/__init__.py",
+      "information/contextcloud.py",
       "langgraph_import.py",
       "llm_local.py",
       "lockfile.py",
