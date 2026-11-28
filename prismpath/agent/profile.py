@@ -98,6 +98,25 @@ AGENT_DOMAIN = ReadingDomain(
     defaults={"session_protected_changes": "some", "session_shell_runs": "many"},
 )
 KNOWN_CATEGORIES = AGENT_DOMAIN.categories
+
+
+def agent_domain(points=()) -> ReadingDomain:
+    """The agent's reading domain with the evidence fields of the information points named: the classifier's fields,
+    and the fields each point declares (`prismpath.information.catalog`), a category with its values and every one with
+    its restrictive value as the default a reading that lacks it is given. With no point it is `AGENT_DOMAIN` itself.
+    ValueError for a name that is no point."""
+    names = tuple(points)
+    if not names:
+        return AGENT_DOMAIN
+    from dataclasses import replace
+    from prismpath.information import catalog
+    found = catalog.fields_of(names)
+    clash = sorted(set(found) & set(AGENT_DOMAIN.categories) | set(found) & set(AGENT_DOMAIN.defaults))
+    if clash:
+        raise ValueError(f"the evidence field {clash[0]} is also a field of the classifier")
+    categories = {**AGENT_DOMAIN.categories, **{n: f.values for n, f in found.items() if f.kind == "category"}}
+    defaults = {**AGENT_DOMAIN.defaults, **{n: f.restrictive for n, f in found.items()}}
+    return replace(AGENT_DOMAIN, name="agent+" + "+".join(sorted(names)), categories=categories, defaults=defaults)
 REQUIRED_FIELDS = ("path_scope", "command_class", "git_op")
 # What the classifier never produces, so the walk does not decide it (`ReadingDomain.unproduced`)
 CLASSIFIER_ONLY = AGENT_DOMAIN.unproduced
@@ -200,9 +219,9 @@ def reading_outside_domain(fields, reading) -> Optional[str]:
     return _kernel_domain.reading_outside_domain(fields, reading, AGENT_DOMAIN)
 
 
-def outside_domain(doc) -> Optional[str]:
-    """`kernel.domain.outside_domain` over the agent's domain."""
-    return _kernel_domain.outside_domain(doc, AGENT_DOMAIN)
+def outside_domain(doc, points=()) -> Optional[str]:
+    """`kernel.domain.outside_domain` over the agent's domain, with the evidence fields of the points named."""
+    return _kernel_domain.outside_domain(doc, agent_domain(points))
 
 
 
@@ -261,7 +280,7 @@ def needs_all(policy, read_also: Tuple[str, ...] = ()) -> Tuple[bool, bool, bool
     when it is allowed, every value of the group is allowed alike, and the need of each reading of the group
     (a product of its members) is counted. A group whose readings need nothing not already found is not
     decided at all, since its answer could not change the result."""
-    names, constant, groups = domain_classes([policy.doc], read_also)
+    names, constant, groups = _kernel_domain.domain_classes([policy.doc], policy.domain, read_also)
     found = [False] * 5
     for combo in itertools.product(*groups):
         if _unproduced(names, combo):
@@ -282,7 +301,7 @@ def allow_set(policy):
     """Every reading of the finite domain the reference decides `allow`, as dicts (the whole set, undeduplicated;
     for inspection and tests, `needs` is what the compile uses). Raises ProfileError."""
     fields = policy.doc["fields"]
-    domains = {name: _domain(name, text) for name, text in sorted(fields.items())}
+    domains = {name: _kernel_domain.field_values(name, text, policy.domain) for name, text in sorted(fields.items())}
     read = set()
     for rule in policy.doc["rules"]:
         read |= _names_read(rule["when"], fields)

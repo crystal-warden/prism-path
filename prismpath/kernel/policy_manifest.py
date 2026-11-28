@@ -114,6 +114,8 @@ KEYS: Dict[str, Tuple[str, bool]] = {
     "ro_mounts": ("list:hostpath", False),
     "local_model": ("token", False),
     "grant_classes": ("list:grantclass", False),
+    # information points: the points the rules are built with, so a field only a point supplies may be read
+    "points": ("list:token", False),
     # Context Cloud
     "cc_protected": ("list:zonename", False),
     "cc_index": ("path", False), "cc_index_sha256": ("sha256", False),
@@ -552,14 +554,18 @@ def expiry(manifest: Manifest, created: Optional[int]) -> Optional[int]:
 
 
 def check(manifest: Manifest, signature: Signature, read: Callable[[str], Optional[bytes]], *,
-          known_targets: Optional[Collection[str]] = None, now: Optional[int] = None) -> List[Finding]:
+          known_targets: Optional[Collection[str]] = None, now: Optional[int] = None,
+          point_findings: Optional[Callable[[bytes, Tuple[str, ...]], List[Tuple[Any, str]]]] = None) -> List[Finding]:
     """What is wrong with a release, in the order the proposal gives: the signature, then the rules and the
     image, then each side input. An empty list means the manifest holds. `read(path)` returns the bytes of a
     path the manifest names (relative to the manifest), or None when there is no such file; it is the caller's
     to confine to the manifest's directory. A failed signature is the only finding returned, since nothing a
     manifest says counts without it. `known_targets` is the set of target kinds the caller can seal for; a
     target outside it is a finding. With `now` (Unix seconds, the caller's clock) a manifest before `not_before` or
-    past its end (`expiry`) is a finding, and so is one with `valid_days` whose start the signature does not give."""
+    past its end (`expiry`) is a finding, and so is one with `valid_days` whose start the signature does not give. `point_findings(image,
+    points)` answers what is wrong with an image's evidence fields given the points `policy.points` names, as (field,
+    message); the surface that has the information points passes it, and each answer is a `points` finding on the
+    line of the rules the field is declared in."""
     if not signature.ok:
         return [check_signature_only(signature)]
     if signature.flow_sha256 and signature.flow_sha256 != manifest.sha256:
@@ -614,6 +620,11 @@ def check(manifest: Manifest, signature: Signature, read: Callable[[str], Option
                                      f"{manifest.rules}:{line}: {message}" if line else f"{manifest.rules}: {message}"))
         else:
             image_sha = _sha(compiled.image)
+            if point_findings is not None:
+                for where, message in point_findings(compiled.image, tuple(manifest.get("points", ()))):
+                    at = compiled.field_lines.get(where, 0) if isinstance(where, str) else 0
+                    found.append(Finding("points", lines.get("points", lines["rules"]),
+                                         f"{manifest.rules}:{at}: {message}" if at else f"{manifest.rules}: {message}"))
             if image_sha != manifest.image_sha256:
                 found.append(Finding("image-sha256", lines["image_sha256"],
                                      f"{manifest.rules} compiles to image sha256 {image_sha}, and the manifest says "

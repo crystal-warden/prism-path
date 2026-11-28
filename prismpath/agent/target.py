@@ -24,15 +24,50 @@ compiler runs what the registry holds for `--target`.
 """
 from __future__ import annotations
 
-from typing import List, Tuple, Union
+from typing import List, Sequence, Tuple, Union
 
 from prismpath.agent import fields as agent_fields
+from prismpath.information import catalog
 
 Where = Union[None, str, int]       # a field name, a rule index, or the whole policy
 
 
-def check(image: bytes) -> List[Tuple[Where, str]]:
-    """What stops the governed agent from running this image as its policy, in source order. Empty when nothing does."""
+def _evidence_finding(name, text, have, bound) -> List[Tuple[Where, str]]:
+    if have.point not in bound:
+        return [(name, f"{name} is a field of the information point {have.point}, and no point of that name is "
+                       f"bound, so nothing would supply it; build the policy with `--point {have.point}` or write "
+                       f"`policy.points: {have.point}` in its manifest")]
+    if text.split()[:1] != [have.kind]:
+        return [(name, f"the information point {have.point} gives {name} as a {have.kind}, not a "
+                       f"{(text.split() or ['nothing'])[0]}")]
+    return []
+
+
+def evidence_findings(image: bytes, points: Sequence[str] = ()) -> List[Tuple[Where, str]]:
+    """Only the findings about evidence fields: one for each field the image declares that an information point
+    supplies and `points` does not name, or declares as another kind than the point gives it, and one for a point
+    name that is no point. The manifest check runs this on the image its rules compile to."""
+    from prismpath.agent import profile
+    from prismpath.kernel import canon2
+
+    declared = canon2.loads(image)["fields"]
+    try:
+        profile.agent_domain(tuple(points))
+    except ValueError as error:
+        return [(None, str(error))]
+    known = agent_fields.by_name()
+    evidence = catalog.evidence_fields()
+    found: List[Tuple[Where, str]] = []
+    for name, text in declared.items():
+        if name not in known and name in evidence:
+            found.extend(_evidence_finding(name, text, evidence[name], tuple(points)))
+    return found
+
+
+def check(image: bytes, points: Sequence[str] = ()) -> List[Tuple[Where, str]]:
+    """What stops the governed agent from running this image as its policy, in source order. Empty when nothing does.
+    `points` are the information points the policy is built with (`--point`, or `policy.points` of a manifest): a field
+    that only a point supplies is read when its point is named and refused when it is not."""
     from prismpath.agent import policy as agent_policy
     from prismpath.agent import profile
     from prismpath.kernel import canon2
@@ -41,15 +76,23 @@ def check(image: bytes) -> List[Tuple[Where, str]]:
     declared = doc["fields"]
     found: List[Tuple[Where, str]] = []
     known = agent_fields.by_name()
+    try:
+        domain_points = tuple(points)
+        profile.agent_domain(domain_points)
+    except ValueError as error:
+        return [(None, str(error))]
+    evidence = catalog.evidence_fields()
     for name, text in declared.items():
-        if name not in known:
+        if name not in known and name in evidence:
+            found.extend(_evidence_finding(name, text, evidence[name], domain_points))
+        elif name not in known:
             found.append((name, f"the agent's classifier reads no field {name}, so every call would be refused as a "
                                 f"contract violation (route:contract-violation)"))
         elif text.split()[:1] != [known[name][0]]:
             found.append((name, f"the agent's classifier gives {name} as a {known[name][0]}, not a "
                                 f"{(text.split() or ['nothing'])[0]}"))
     for index, rule in enumerate(doc["rules"]):
-        outside = profile.outside_domain({"fields": declared, "rules": [rule]})
+        outside = profile.outside_domain({"fields": declared, "rules": [rule]}, domain_points)
         if outside is not None:
             found.append((index, f"{outside} (policy:out-of-domain)"))
         if agent_policy.target_decision(rule["target"]) is None:
@@ -60,7 +103,7 @@ def check(image: bytes) -> List[Tuple[Where, str]]:
     if found:
         return found                   # the checks below load the image as the agent does, which these stop
     try:
-        loaded = agent_policy.Policy(image)
+        loaded = agent_policy.Policy(image, domain_points)
     except ValueError as error:
         return [(None, str(error))]
     mismatch = agent_policy.classifier_mismatch(loaded)
@@ -85,8 +128,11 @@ def check_listed(values) -> List[Tuple[Where, str]]:
     """A category whose source lists values other than the ones the agent's classifier produces, named on its
     declaration. The list never reaches the image, so this runs on the source (`Compiled.values`)."""
     found: List[Tuple[Where, str]] = []
+    evidence = catalog.evidence_fields()
     for name, listed in values.items():
         known = agent_fields.values(name)
+        if not known and name in evidence and evidence[name].kind == "category":
+            known = tuple(evidence[name].values)
         if known and tuple(listed) != known:
             found.append((name, f"{name} lists {'|'.join(listed)}, but the agent's classifier gives "
                                 f"{'|'.join(known)}"))

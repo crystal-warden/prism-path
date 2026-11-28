@@ -41,7 +41,7 @@ HERE = Path(__file__).resolve().parent
 
 from prismpath.kernel import decision  # noqa: E402
 from prismpath.kernel.decision import Decision, OutsideDomain, kind_of, target_decision  # noqa: E402,F401
-from prismpath.agent.profile import AGENT_DOMAIN  # noqa: E402
+from prismpath.agent.profile import AGENT_DOMAIN, agent_domain  # noqa: E402,F401
 
 POLICY_PATH = HERE / "policy" / "agent_rules.core.json"
 SOURCE_PATH = HERE / "policy" / "agent_rules.rules.md"   # the readable rules the image compiles from
@@ -298,9 +298,11 @@ class Policy(decision.Policy):
     classifier produces, and the session defaults (`session_state.RESTRICTIVE`, given to a reading that lacks the
     session fields when the policy reads the session's history)."""
 
-    def __init__(self, image: bytes):
-        super().__init__(image, AGENT_DOMAIN)
+    def __init__(self, image: bytes, points=()):
+        """`points` are the names of the information points the policy is built with (`profile.agent_domain`); none for
+        a policy that reads the classifier's fields only."""
+        super().__init__(image, agent_domain(points))
 
     @classmethod
-    def load(cls, path: Path = POLICY_PATH) -> "Policy":
-        return cls(Path(path).read_bytes())
+    def load(cls, path: Path = POLICY_PATH, points=()) -> "Policy":
+        return cls(Path(path).read_bytes(), points)
